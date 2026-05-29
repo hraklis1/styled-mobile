@@ -1,0 +1,27 @@
+export type Profile = {
+  id: number;
+  userId: number;
+  displayName: string | null;
+  photoUrl: string | null;
+  stylePreference: string[] | null;
+  colorPalette: string[] | null;
+  budgetRange: string | null;
+  bodyType: string | null;
+  fitPreference: string | null;
+  sizingRegion: string | null;
+  location: string | null;
+  favoriteRetailers: string[] | null;
+  stylistVoice: string | null;
+  tempUnit: string | null;
+  occasions: string[] | null;
+  fitNotes: string | null;
+  sizeTop: string | null;
+  sizeBottom: string | null;
+  sizeDress: string | null;
+  sizeShoe: string | null;
+  suitJacket: string | null;
+  measurementChest: string | null;
+  measurementWaist: string | null;
+  measurementHips: string | null;
+  measurementHeight: string | null;
+};
