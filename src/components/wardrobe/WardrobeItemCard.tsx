@@ -64,7 +64,7 @@ export function WardrobeItemCard({
           <TouchableOpacity
             style={styles.favoriteBadge}
             onPress={onFavorite}
-            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <Ionicons
               name={item.isFavorite ? 'heart' : 'heart-outline'}

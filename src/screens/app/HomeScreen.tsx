@@ -19,6 +19,7 @@ import { useOutfitLogs, useDeleteOutfitLog } from '../../hooks/useOutfitLogs';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
 import { QuickCaptureSheet } from '../../components/wardrobe/QuickCaptureSheet';
 import { useGlobalOutfitLogger } from '../../contexts/GlobalOutfitLoggerContext';
+import { WeatherWidget } from '../../components/home/WeatherWidget';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { HomeScreenProps } from '../../navigation/types';
@@ -162,6 +163,11 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* ── Weather ───────────────────────────────────────────────── */}
+      <WeatherWidget
+        onPress={() => navigation.navigate('Suggestions')}
+      />
 
       {/* ── AI Stylist prompt ──────────────────────────────────────── */}
       <TouchableOpacity

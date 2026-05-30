@@ -1,6 +1,22 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Alert } from 'react-native';
 import { api } from '../lib/api';
 import { ITEMS_QUERY_KEY } from './useItems';
+
+export type OutfitScanResult = {
+  detected_type: string;
+  match_id: number | null;
+  confidence: 'High' | 'Medium' | 'Low';
+  suggested_metadata: {
+    name: string;
+    color: string;
+    category: string;
+    material?: string | null;
+    style?: string | null;
+  };
+  potential_match_ids: number[];
+  bbox: { x: number; y: number; width: number; height: number } | null;
+};
 
 export type OutfitLog = {
   id: number;
@@ -38,6 +54,18 @@ export function useCreateOutfitLog() {
       // Logging wear increments wearCount on the server
       qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
     },
+    onError: () => {
+      Alert.alert('Error', "Couldn't log outfit. Please try again.");
+    },
+  });
+}
+
+export function useScanOutfitLog() {
+  return useMutation({
+    mutationFn: (imageData: string) =>
+      api
+        .post<{ items: OutfitScanResult[] }>('/api/outfit-logs/scan', { imageData })
+        .then((r) => r.data.items),
   });
 }
 
@@ -56,6 +84,7 @@ export function useDeleteOutfitLog() {
     },
     onError: (_err, _id, ctx) => {
       if (ctx?.previous) qc.setQueryData(OUTFIT_LOGS_QUERY_KEY, ctx.previous);
+      Alert.alert('Error', "Couldn't delete log entry. Please try again.");
     },
     onSettled: () => qc.invalidateQueries({ queryKey: OUTFIT_LOGS_QUERY_KEY }),
   });

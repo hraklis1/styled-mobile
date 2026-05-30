@@ -1,6 +1,7 @@
 export type Outfit = {
   id: number;
   name: string;
+  description: string | null;
   userId: number;
   event: string | null;
   topId: number | null;

@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Alert } from 'react-native';
 import { api } from '../lib/api';
 import type { Event } from '../types/event';
 
@@ -28,6 +29,9 @@ export function useCreateEvent() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: EVENTS_QUERY_KEY });
     },
+    onError: () => {
+      Alert.alert('Error', "Couldn't create event. Please try again.");
+    },
   });
 }
 
@@ -36,9 +40,19 @@ export function useUpdateEvent() {
   return useMutation({
     mutationFn: ({ id, ...input }: EventInput & { id: number }) =>
       api.patch<Event>(`/api/events/${id}`, input).then((r) => r.data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: EVENTS_QUERY_KEY });
+    onMutate: async ({ id, ...input }) => {
+      await qc.cancelQueries({ queryKey: EVENTS_QUERY_KEY });
+      const previous = qc.getQueryData<Event[]>(EVENTS_QUERY_KEY);
+      qc.setQueryData<Event[]>(EVENTS_QUERY_KEY, (old) =>
+        old?.map((e) => (e.id === id ? { ...e, ...input, date: input.date.toISOString() } : e)) ?? []
+      );
+      return { previous };
     },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous) qc.setQueryData(EVENTS_QUERY_KEY, ctx.previous);
+      Alert.alert('Error', "Couldn't update event. Please try again.");
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: EVENTS_QUERY_KEY }),
   });
 }
 
@@ -47,9 +61,19 @@ export function useAssignEventItems() {
   return useMutation({
     mutationFn: ({ id, itemIds }: { id: number; itemIds: number[] | null }) =>
       api.patch<Event>(`/api/events/${id}`, { itemIds }).then((r) => r.data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: EVENTS_QUERY_KEY });
+    onMutate: async ({ id, itemIds }) => {
+      await qc.cancelQueries({ queryKey: EVENTS_QUERY_KEY });
+      const previous = qc.getQueryData<Event[]>(EVENTS_QUERY_KEY);
+      qc.setQueryData<Event[]>(EVENTS_QUERY_KEY, (old) =>
+        old?.map((e) => (e.id === id ? { ...e, itemIds } : e)) ?? []
+      );
+      return { previous };
     },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous) qc.setQueryData(EVENTS_QUERY_KEY, ctx.previous);
+      Alert.alert('Error', "Couldn't assign items to event. Please try again.");
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: EVENTS_QUERY_KEY }),
   });
 }
 
@@ -65,6 +89,7 @@ export function useDeleteEvent() {
     },
     onError: (_err, _id, ctx) => {
       if (ctx?.previous) qc.setQueryData(EVENTS_QUERY_KEY, ctx.previous);
+      Alert.alert('Error', "Couldn't delete event. Please try again.");
     },
     onSettled: () => qc.invalidateQueries({ queryKey: EVENTS_QUERY_KEY }),
   });

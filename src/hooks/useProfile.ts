@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Alert } from 'react-native';
 import { api } from '../lib/api';
 import type { Profile } from '../types/profile';
 
@@ -46,6 +47,9 @@ export function useUpdateProfile() {
       api.patch<Profile>('/api/profile', input).then((r) => r.data),
     onSuccess: (data) => {
       qc.setQueryData(PROFILE_QUERY_KEY, data);
+    },
+    onError: () => {
+      Alert.alert('Error', "Couldn't save profile. Please try again.");
     },
   });
 }

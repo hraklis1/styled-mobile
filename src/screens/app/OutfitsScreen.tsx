@@ -303,7 +303,7 @@ export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
         {search.length > 0 && (
           <TouchableOpacity
             onPress={() => setSearch('')}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
           >
             <Ionicons name="close-circle" size={16} color={colors.mutedForeground} />
           </TouchableOpacity>
@@ -700,7 +700,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   headerBtn: {
-    padding: spacing.sm,
+    padding: spacing.md,
     marginTop: 4,
     position: 'relative',
   },
@@ -745,7 +745,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   tagPill: {
-    height: 34,
+    height: 44,
     paddingHorizontal: spacing.md,
     borderRadius: radii.full,
     backgroundColor: colors.muted,
@@ -764,7 +764,7 @@ const styles = StyleSheet.create({
     color: colors.primaryForeground,
   },
   tagPillReset: {
-    height: 34,
+    height: 44,
     paddingHorizontal: spacing.md,
     borderRadius: radii.full,
     backgroundColor: '#FEE2E2',

@@ -23,6 +23,7 @@ import { resolveImageUri } from '../../lib/resolveImageUri';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { Item, ItemCategory } from '../../types/item';
 import type { Outfit } from '../../types/outfit';
+import * as Haptics from 'expo-haptics';
 
 // ─── Slot config ──────────────────────────────────────────────────────────────
 
@@ -142,6 +143,7 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated }: Props) {
       },
       {
         onSuccess: (outfit) => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           reset();
           onCreated?.(outfit);
         },

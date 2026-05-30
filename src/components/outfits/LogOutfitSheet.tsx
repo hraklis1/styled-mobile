@@ -12,13 +12,15 @@ import {
   Platform,
   KeyboardAvoidingView,
   ActivityIndicator,
+  Alert,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useItems } from '../../hooks/useItems';
-import { useCreateOutfitLog } from '../../hooks/useOutfitLogs';
+import { useCreateOutfitLog, useScanOutfitLog, type OutfitScanResult } from '../../hooks/useOutfitLogs';
+import { useCameraLaunch, useLibraryLaunch } from '../../hooks/useCameraLaunch';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { LocationAutocompleteInput } from '../primitives/LocationAutocompleteInput';
 import { colors, spacing, typography, radii } from '../../theme';
@@ -59,7 +61,7 @@ function displayLogDate(d: Date): string {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type DateMode = 'today' | 'yesterday' | 'custom';
-type SheetView = 'form' | 'picker';
+type SheetView = 'form' | 'picker' | 'scan-review';
 
 type Props = {
   visible: boolean;
@@ -74,6 +76,9 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
   const { width: screenWidth } = useWindowDimensions();
   const { data: allItems = [] } = useItems();
   const createLog = useCreateOutfitLog();
+  const scanOutfit = useScanOutfitLog();
+  const launchCamera = useCameraLaunch();
+  const launchLibrary = useLibraryLaunch();
 
   // Date
   const [dateMode, setDateMode] = useState<DateMode>('today');
@@ -93,6 +98,10 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
   // View
   const [view, setView] = useState<SheetView>('form');
   const [search, setSearch] = useState('');
+
+  // Scan state
+  const [scanResults, setScanResults] = useState<OutfitScanResult[] | null>(null);
+  const [scanSel, setScanSel] = useState<Set<number>>(new Set());
 
   const notesRef = useRef<TextInput>(null);
 
@@ -156,6 +165,52 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
     );
   }, []);
 
+  const runScan = useCallback(async (source: 'camera' | 'library') => {
+    const image =
+      source === 'camera'
+        ? await launchCamera({ maxDim: 1600 })
+        : await launchLibrary({ maxDim: 1600 });
+    if (!image) return;
+
+    try {
+      const results = await scanOutfit.mutateAsync(image.dataUrl);
+      const preSelected = new Set(
+        results
+          .filter((r) => r.match_id !== null && r.confidence !== 'Low')
+          .map((r) => r.match_id as number),
+      );
+      setScanSel(preSelected);
+      setScanResults(results);
+      setView('scan-review');
+    } catch {
+      Alert.alert('Scan failed', 'Could not analyze the photo. Please try again.');
+    }
+  }, [launchCamera, launchLibrary, scanOutfit]);
+
+  const handleScanPress = useCallback(() => {
+    Alert.alert('Scan Worn Outfit', 'Choose a photo source', [
+      { text: 'Camera', onPress: () => runScan('camera') },
+      { text: 'Photo Library', onPress: () => runScan('library') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }, [runScan]);
+
+  const applyScanResults = useCallback(() => {
+    setSelectedIds((prev) => Array.from(new Set([...prev, ...scanSel])));
+    setScanResults(null);
+    setScanSel(new Set());
+    setView('form');
+  }, [scanSel]);
+
+  const toggleScanSel = useCallback((id: number) => {
+    setScanSel((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
   const reset = useCallback(() => {
     setDateMode('today');
     setCustomDate(() => {
@@ -168,6 +223,8 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
     setLocation('');
     setView('form');
     setSearch('');
+    setScanResults(null);
+    setScanSel(new Set());
   }, []);
 
   const handleClose = () => {
@@ -341,6 +398,22 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
                 )}
 
                 <TouchableOpacity
+                  style={[styles.addItemsBtn, styles.scanBtn]}
+                  onPress={handleScanPress}
+                  disabled={scanOutfit.isPending}
+                  activeOpacity={0.7}
+                >
+                  {scanOutfit.isPending ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <Ionicons name="camera-outline" size={20} color={colors.primary} />
+                  )}
+                  <Text style={styles.addItemsBtnText}>
+                    {scanOutfit.isPending ? 'Scanning photo…' : 'Scan worn outfit photo'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
                   style={styles.addItemsBtn}
                   onPress={() => {
                     setSearch('');
@@ -502,6 +575,114 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
                   );
                 }}
               />
+            </>
+          )}
+
+          {/* ════════════════════════════════════════
+              SCAN REVIEW VIEW
+          ════════════════════════════════════════ */}
+          {view === 'scan-review' && scanResults !== null && (
+            <>
+              <View style={styles.header}>
+                <TouchableOpacity
+                  onPress={() => { setScanResults(null); setScanSel(new Set()); setView('form'); }}
+                  style={styles.backBtn}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="chevron-back-outline" size={20} color={colors.foreground} />
+                  <Text style={styles.backText}>Back</Text>
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>Detected Items</Text>
+                <TouchableOpacity
+                  onPress={applyScanResults}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={[styles.headerSave, scanSel.size === 0 && styles.headerSaveDisabled]}>
+                    {scanSel.size > 0 ? `Add ${scanSel.size}` : 'Add'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                style={styles.scroll}
+                contentContainerStyle={styles.scanReviewContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {scanResults.length === 0 ? (
+                  <View style={styles.scanEmpty}>
+                    <Ionicons name="shirt-outline" size={44} color={colors.border} />
+                    <Text style={styles.scanEmptyTitle}>No items detected</Text>
+                    <Text style={styles.scanEmptySubtitle}>
+                      Try a clearer photo with good lighting and visible clothing.
+                    </Text>
+                  </View>
+                ) : (
+                  <>
+                    <Text style={styles.scanHint}>
+                      Select items you wore. High and Medium confidence matches are pre-selected.
+                    </Text>
+                    {scanResults.map((result, idx) => {
+                      const matched = result.match_id !== null
+                        ? allItems.find((it) => it.id === result.match_id) ?? null
+                        : null;
+                      const isSelected = result.match_id !== null && scanSel.has(result.match_id);
+                      const isMatchable = result.match_id !== null;
+                      const imgUri = matched ? resolveImageUri(matched.imageUrl) : null;
+
+                      return (
+                        <TouchableOpacity
+                          key={idx}
+                          style={[styles.scanRow, !isMatchable && styles.scanRowDim]}
+                          onPress={() => isMatchable && toggleScanSel(result.match_id!)}
+                          activeOpacity={isMatchable ? 0.7 : 1}
+                        >
+                          <View style={styles.scanThumb}>
+                            {imgUri ? (
+                              <Image
+                                source={{ uri: imgUri }}
+                                style={StyleSheet.absoluteFill}
+                                resizeMode="cover"
+                              />
+                            ) : (
+                              <Ionicons name="shirt-outline" size={20} color={colors.mutedForeground} />
+                            )}
+                          </View>
+
+                          <View style={styles.scanInfo}>
+                            <Text style={styles.scanItemName} numberOfLines={1}>
+                              {matched ? matched.name : result.detected_type}
+                            </Text>
+                            <View style={styles.scanBadgeRow}>
+                              {matched ? (
+                                <Text style={styles.scanCategory}>{matched.category}</Text>
+                              ) : (
+                                <Text style={styles.scanNotInWardrobe}>Not in wardrobe</Text>
+                              )}
+                              <View style={[
+                                styles.scanConfBadge,
+                                result.confidence === 'High' && styles.scanConfHigh,
+                                result.confidence === 'Medium' && styles.scanConfMed,
+                                result.confidence === 'Low' && styles.scanConfLow,
+                              ]}>
+                                <Text style={styles.scanConfText}>{result.confidence}</Text>
+                              </View>
+                            </View>
+                          </View>
+
+                          {isMatchable && (
+                            <View style={[styles.scanCheck, isSelected && styles.scanCheckActive]}>
+                              {isSelected && (
+                                <Ionicons name="checkmark" size={14} color={colors.primaryForeground} />
+                              )}
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                    <View style={{ height: 32 }} />
+                  </>
+                )}
+              </ScrollView>
             </>
           )}
 
@@ -816,6 +997,125 @@ const styles = StyleSheet.create({
     color: colors.foreground,
   },
   pickerEmptySubtitle: {
+    fontSize: typography.size.md,
+    color: colors.mutedForeground,
+    textAlign: 'center',
+    lineHeight: typography.size.md * 1.5,
+  },
+
+  // ── Scan button variant
+  scanBtn: {
+    borderColor: `${colors.primary}30`,
+    backgroundColor: `${colors.primary}08`,
+    marginBottom: spacing.sm,
+  },
+
+  // ── Scan review
+  scanReviewContent: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+  },
+  scanHint: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+    marginBottom: spacing.md,
+    lineHeight: typography.size.xs * 1.5,
+  },
+  scanRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    minHeight: 60,
+  },
+  scanRowDim: {
+    opacity: 0.5,
+  },
+  scanThumb: {
+    width: 44,
+    height: 52,
+    borderRadius: radii.sm,
+    overflow: 'hidden',
+    backgroundColor: colors.muted,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  scanInfo: {
+    flex: 1,
+  },
+  scanItemName: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.foreground,
+  },
+  scanBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: 2,
+  },
+  scanCategory: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+    textTransform: 'capitalize',
+  },
+  scanNotInWardrobe: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+    fontStyle: 'italic',
+  },
+  scanConfBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radii.full,
+  },
+  scanConfHigh: {
+    backgroundColor: '#dcfce7',
+  },
+  scanConfMed: {
+    backgroundColor: '#fef9c3',
+  },
+  scanConfLow: {
+    backgroundColor: '#fee2e2',
+  },
+  scanConfText: {
+    fontSize: 10,
+    fontWeight: typography.weight.semibold,
+    color: colors.foreground,
+  },
+  scanCheck: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  scanCheckActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  scanEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.xxxl,
+  },
+  scanEmptyTitle: {
+    fontSize: typography.size.lg,
+    fontWeight: typography.weight.semibold,
+    color: colors.foreground,
+  },
+  scanEmptySubtitle: {
     fontSize: typography.size.md,
     color: colors.mutedForeground,
     textAlign: 'center',

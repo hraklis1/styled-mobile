@@ -111,7 +111,7 @@ export function WardrobeListRow({
         <View style={styles.actions}>
           <TouchableOpacity
             onPress={onFavorite}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            hitSlop={{ top: 13, bottom: 13, left: 13, right: 13 }}
           >
             <Ionicons
               name={item.isFavorite ? 'heart' : 'heart-outline'}

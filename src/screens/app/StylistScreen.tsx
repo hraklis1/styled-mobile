@@ -19,6 +19,7 @@ import { Audio } from 'expo-av';
 import { File, Paths, EncodingType } from 'expo-file-system';
 import { api } from '../../lib/api';
 import { compressImageToDataUrl } from '../../lib/compressImage';
+import { useWeatherCurrent } from '../../hooks/useWeather';
 import { addToWishlist } from '../../lib/wishlist';
 import { VoiceInputButton } from '../../components/primitives/VoiceInputButton';
 import { ShopOutfitCard } from '../../components/outfits/ShopOutfitCard';
@@ -55,6 +56,8 @@ function makeId() {
 export function StylistScreen({ route, navigation }: StylistScreenProps) {
   const insets = useSafeAreaInsets();
   const initialQuery = route.params?.query ?? '';
+
+  const weather = useWeatherCurrent();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
@@ -150,12 +153,17 @@ export function StylistScreen({ route, navigation }: StylistScreenProps) {
       try {
         const history = buildHistory(messages);
 
+        const weatherSummary = weather.data
+          ? `${weather.data.summary} ${weather.data.temperatureF}°F`
+          : undefined;
+
         const { data } = await api.post<StylistAskResponse>(
           '/api/stylist/ask',
           {
             ...(text ? { text } : {}),
             ...(audio ? { audio } : {}),
             ...(photoData ? { photoData } : {}),
+            ...(weatherSummary ? { weatherSummary } : {}),
             history,
           },
           { timeout: 60_000 },

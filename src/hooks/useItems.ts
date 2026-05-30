@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
+import { Alert } from 'react-native';
 import { api, isNetworkError } from '../lib/api';
 import { FASHION_BRANDS } from '../lib/fashionBrands';
 import type { Item, ItemCategory, ScanResult } from '../types/item';
@@ -19,6 +20,7 @@ export type PoseScanItem = {
 export const ITEMS_QUERY_KEY = ['items'] as const;
 export const ARCHIVED_ITEMS_QUERY_KEY = ['items', 'archived'] as const;
 export const BRANDS_QUERY_KEY = ['brands'] as const;
+export const CLOSET_REFRESH_QUERY_KEY = ['closet', 'refresh'] as const;
 
 function invalidateItemQueries(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
@@ -136,6 +138,7 @@ export function useUpdateItem() {
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.previous) qc.setQueryData(ITEMS_QUERY_KEY, ctx.previous);
+      Alert.alert('Error', "Couldn't update item. Please try again.");
     },
     onSettled: () => invalidateItemQueries(qc),
   });
@@ -153,8 +156,12 @@ export function useDeleteItem() {
     },
     onError: (_err, _id, ctx) => {
       if (ctx?.previous) qc.setQueryData(ITEMS_QUERY_KEY, ctx.previous);
+      Alert.alert('Error', "Couldn't delete item. Please try again.");
     },
-    onSettled: () => invalidateItemQueries(qc),
+    onSettled: () => {
+      invalidateItemQueries(qc);
+      qc.invalidateQueries({ queryKey: CLOSET_REFRESH_QUERY_KEY });
+    },
   });
 }
 
@@ -165,6 +172,9 @@ export function useCreateItem() {
       api.post<Item>('/api/items', input).then((r) => r.data),
     onSuccess: (newItem) => {
       qc.setQueryData<Item[]>(ITEMS_QUERY_KEY, (old = []) => [newItem, ...old]);
+    },
+    onError: () => {
+      Alert.alert('Error', "Couldn't save item. Please try again.");
     },
     onSettled: () => invalidateItemQueries(qc),
   });
@@ -225,6 +235,7 @@ export function useArchiveItems() {
     onError: (_err, _vars, ctx) => {
       if (ctx?.prevActive) qc.setQueryData(ITEMS_QUERY_KEY, ctx.prevActive);
       if (ctx?.prevArchived) qc.setQueryData(ARCHIVED_ITEMS_QUERY_KEY, ctx.prevArchived);
+      Alert.alert('Error', "Couldn't archive items. Please try again.");
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
@@ -251,7 +262,39 @@ export function useMarkItemWorn() {
     },
     onError: (_err, _id, ctx) => {
       if (ctx?.previous) qc.setQueryData(ITEMS_QUERY_KEY, ctx.previous);
+      Alert.alert('Error', "Couldn't mark as worn. Please try again.");
     },
-    onSettled: () => invalidateItemQueries(qc),
+    onSettled: () => {
+      invalidateItemQueries(qc);
+      qc.invalidateQueries({ queryKey: CLOSET_REFRESH_QUERY_KEY });
+    },
+  });
+}
+
+export type ClosetRefreshData = {
+  summary: {
+    totalItems: number;
+    neverWornCount: number;
+    staleCount: number;
+    duplicateCount: number;
+    staleThresholdDays: number;
+  };
+  staleItems: Array<{
+    item: Item;
+    daysSinceWorn: number | null;
+    reason: 'never_worn' | 'stale';
+  }>;
+  similarGroups: Array<{
+    key: string;
+    label: string;
+    items: Item[];
+  }>;
+};
+
+export function useClosetRefresh() {
+  return useQuery<ClosetRefreshData>({
+    queryKey: CLOSET_REFRESH_QUERY_KEY,
+    queryFn: () => api.get('/api/closet/refresh').then((r) => r.data as ClosetRefreshData),
+    staleTime: 60 * 1000,
   });
 }

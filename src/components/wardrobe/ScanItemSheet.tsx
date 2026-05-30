@@ -32,6 +32,8 @@ import { SizeProfileInput } from '../primitives/SizeProfileInput';
 import type { SizeProfile } from '../../lib/sizes';
 import { CropAdjustModal, type Bbox } from './CropAdjustModal';
 import { cropImage } from '../../lib/cropImage';
+import { AnimatedProgressBar } from '../primitives/AnimatedProgressBar';
+import * as Haptics from 'expo-haptics';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -240,6 +242,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved }: ScanItemSheetP
     }
 
     setDetectedItems(extracted);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPhase('review');
   };
 
@@ -313,6 +316,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved }: ScanItemSheetP
     if (sessionRef.current !== session) return;
 
     if (savedItems.length > 0) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onItemsSaved?.(savedItems);
       onClose();
     } else {
@@ -508,6 +512,24 @@ const idleStyles = StyleSheet.create({
 
 // ─── ScanProgress ─────────────────────────────────────────────────────────────
 
+const SCAN_MESSAGES = [
+  'Analyzing your outfit…',
+  'Identifying clothing items…',
+  'Detecting colors & patterns…',
+  'Reading style details…',
+  'Almost there…',
+];
+
+function useCyclingScanStatus(active: boolean): string {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    if (!active) { setIdx(0); return; }
+    const id = setInterval(() => setIdx((i) => (i + 1) % SCAN_MESSAGES.length), 2500);
+    return () => clearInterval(id);
+  }, [active]);
+  return SCAN_MESSAGES[idx];
+}
+
 function ScanProgress({
   phase,
   imageDataUrl,
@@ -519,10 +541,11 @@ function ScanProgress({
   extractionProgress: { current: number; total: number };
   extractedThumbs: string[];
 }) {
-  const progressPercent =
+  const statusMsg = useCyclingScanStatus(phase === 'scanning');
+  const progressNum =
     extractionProgress.total > 0
-      ? `${Math.round((extractionProgress.current / extractionProgress.total) * 100)}%`
-      : '0%';
+      ? Math.round((extractionProgress.current / extractionProgress.total) * 100)
+      : 0;
 
   return (
     <View style={scanStyles.container}>
@@ -541,7 +564,7 @@ function ScanProgress({
         <View style={scanStyles.statusBox}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={scanStyles.statusTitle}>Detecting items…</Text>
-          <Text style={scanStyles.statusSub}>About 5–10 seconds</Text>
+          <Text style={scanStyles.statusSub}>{statusMsg}</Text>
           <View style={scanStyles.stepRow}>
             <View style={[scanStyles.stepDot, scanStyles.stepDotActive]} />
             <View style={scanStyles.stepLine} />
@@ -567,9 +590,7 @@ function ScanProgress({
           )}
 
           <View style={scanStyles.progressContainer}>
-            <View style={scanStyles.progressTrack}>
-              <View style={[scanStyles.progressFill, { width: progressPercent as any }]} />
-            </View>
+            <AnimatedProgressBar progress={progressNum} style={scanStyles.progressTrackFlex} />
             <Text style={scanStyles.progressText}>
               {extractionProgress.current} / {extractionProgress.total}
             </Text>
@@ -641,17 +662,8 @@ const scanStyles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  progressTrack: {
+  progressTrackFlex: {
     flex: 1,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.muted,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 3,
-    backgroundColor: colors.primary,
   },
   progressText: {
     fontSize: typography.size.xs,

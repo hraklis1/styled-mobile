@@ -39,6 +39,7 @@ export type WardrobeStackParamList = {
     scanData?: ScanResult;
     scanImageUrl?: string;
   };
+  ClosetRefresh: undefined;
 };
 
 // Outfits nested stack
@@ -65,6 +66,7 @@ export type ProfileScreenProps = BottomTabScreenProps<AppTabParamList, 'Profile'
 
 export type WardrobeListScreenProps = NativeStackScreenProps<WardrobeStackParamList, 'WardrobeList'>;
 export type ItemDetailScreenProps = NativeStackScreenProps<WardrobeStackParamList, 'ItemDetail'>;
+export type ClosetRefreshScreenProps = NativeStackScreenProps<WardrobeStackParamList, 'ClosetRefresh'>;
 
 export type OutfitsListScreenProps = NativeStackScreenProps<OutfitsStackParamList, 'OutfitsList'>;
 export type OutfitDetailScreenProps = NativeStackScreenProps<OutfitsStackParamList, 'OutfitDetail'>;

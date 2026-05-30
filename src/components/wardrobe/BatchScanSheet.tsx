@@ -18,6 +18,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { AnimatedProgressBar } from '../primitives/AnimatedProgressBar';
 import { compressImageToDataUrl } from '../../lib/compressImage';
 import {
   scanVisionPoseDirect,
@@ -32,6 +33,7 @@ import { BrandAutocompleteInput } from '../primitives/BrandAutocompleteInput';
 import { TaxonomySelector } from '../primitives/TaxonomySelector';
 import { SizeProfileInput } from '../primitives/SizeProfileInput';
 import type { SizeProfile } from '../../lib/sizes';
+import * as Haptics from 'expo-haptics';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -257,6 +259,7 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
     }
 
     setAllItems(accumulatedItems);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPhase('review');
   };
 
@@ -317,6 +320,7 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
     if (sessionRef.current !== session) return;
 
     if (savedItems.length > 0) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onItemsSaved?.(savedItems);
       onClose();
     } else {
@@ -503,9 +507,7 @@ function ProcessingContent({
     <View style={procStyles.container}>
       {/* Overall progress bar */}
       <View style={procStyles.progressSection}>
-        <View style={procStyles.progressTrack}>
-          <View style={[procStyles.progressFill, { width: `${progressPct}%` as any }]} />
-        </View>
+        <AnimatedProgressBar progress={progressPct} />
         <Text style={procStyles.progressLabel}>
           {doneCount} of {totalCount} photos
           {errorCount > 0 ? ` · ${errorCount} failed` : ''}
@@ -575,17 +577,6 @@ function PhotoJobCard({ job }: { job: PhotoJob }) {
 const procStyles = StyleSheet.create({
   container: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: spacing.lg },
   progressSection: { gap: spacing.xs },
-  progressTrack: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.muted,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 3,
-    backgroundColor: colors.primary,
-  },
   progressLabel: {
     fontSize: typography.size.xs,
     color: colors.mutedForeground,

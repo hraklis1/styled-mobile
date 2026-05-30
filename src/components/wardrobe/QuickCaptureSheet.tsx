@@ -16,12 +16,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useCameraLaunch, useLibraryLaunch } from '../../hooks/useCameraLaunch';
+import { AnimatedProgressBar } from '../primitives/AnimatedProgressBar';
 import {
   useScanVisionPose,
   scanItemDirect,
   useCreateItem,
   type PoseScanItem,
 } from '../../hooks/useItems';
+import * as Haptics from 'expo-haptics';
 import { colors, spacing, typography, radii } from '../../theme';
 import {
   CATEGORY_LABELS,
@@ -220,6 +222,7 @@ export function QuickCaptureSheet({ visible, onClose, onItemsSaved }: QuickCaptu
     }
 
     setDetectedItems(extracted);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setMode('review');
   };
 
@@ -269,6 +272,7 @@ export function QuickCaptureSheet({ visible, onClose, onItemsSaved }: QuickCaptu
     if (sessionRef.current !== session) return;
 
     if (savedItems.length > 0) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onItemsSaved?.(savedItems);
       onClose();
     } else {
@@ -292,6 +296,7 @@ export function QuickCaptureSheet({ visible, onClose, onItemsSaved }: QuickCaptu
       {
         onSuccess: (created) => {
           if (sessionRef.current !== session) return;
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           onItemsSaved?.([created]);
           onClose();
         },
@@ -521,6 +526,24 @@ const menuStyles = StyleSheet.create({
 
 // ─── ScanProgressView ─────────────────────────────────────────────────────────
 
+const SCAN_MESSAGES = [
+  'Analyzing your outfit…',
+  'Identifying clothing items…',
+  'Detecting colors & patterns…',
+  'Reading style details…',
+  'Almost there…',
+];
+
+function useCyclingScanStatus(active: boolean): string {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    if (!active) { setIdx(0); return; }
+    const id = setInterval(() => setIdx((i) => (i + 1) % SCAN_MESSAGES.length), 2500);
+    return () => clearInterval(id);
+  }, [active]);
+  return SCAN_MESSAGES[idx];
+}
+
 function ScanProgressView({
   mode,
   imageDataUrl,
@@ -530,6 +553,7 @@ function ScanProgressView({
   imageDataUrl: string | null;
   progress: { current: number; total: number };
 }) {
+  const statusMsg = useCyclingScanStatus(mode === 'scanning');
   const pct = progress.total > 0
     ? Math.round((progress.current / progress.total) * 100)
     : 0;
@@ -550,16 +574,14 @@ function ScanProgressView({
         </Text>
         <Text style={progressStyles.statusSub}>
           {mode === 'scanning'
-            ? 'About 5–10 seconds'
+            ? statusMsg
             : progress.total > 0
             ? `${progress.current} / ${progress.total} items`
             : 'Working…'}
         </Text>
         {mode === 'extracting' && progress.total > 0 && (
           <View style={progressStyles.trackWrap}>
-            <View style={progressStyles.track}>
-              <View style={[progressStyles.fill, { width: `${pct}%` }]} />
-            </View>
+            <AnimatedProgressBar progress={pct} style={progressStyles.trackFlex} />
             <Text style={progressStyles.pct}>{pct}%</Text>
           </View>
         )}
@@ -592,14 +614,7 @@ const progressStyles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  track: {
-    flex: 1,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.muted,
-    overflow: 'hidden',
-  },
-  fill: { height: '100%', borderRadius: 3, backgroundColor: colors.primary },
+  trackFlex: { flex: 1 },
   pct: { fontSize: typography.size.xs, color: colors.mutedForeground, minWidth: 28, textAlign: 'right' },
 });
 

@@ -15,6 +15,7 @@ import { HomeScreen } from '../screens/app/HomeScreen';
 import { StylistScreen } from '../screens/app/StylistScreen';
 import { WardrobeScreen } from '../screens/app/WardrobeScreen';
 import { ItemDetailScreen } from '../screens/app/ItemDetailScreen';
+import { ClosetRefreshScreen } from '../screens/app/ClosetRefreshScreen';
 import { OutfitsScreen } from '../screens/app/OutfitsScreen';
 import { OutfitDetailScreen } from '../screens/app/OutfitDetailScreen';
 import { CalendarScreen } from '../screens/app/CalendarScreen';
@@ -72,6 +73,7 @@ function WardrobeNavigator() {
     <WardrobeStack.Navigator screenOptions={{ headerShown: false }}>
       <WardrobeStack.Screen name="WardrobeList" component={WardrobeScreen} />
       <WardrobeStack.Screen name="ItemDetail" component={ItemDetailScreen} />
+      <WardrobeStack.Screen name="ClosetRefresh" component={ClosetRefreshScreen} />
     </WardrobeStack.Navigator>
   );
 }

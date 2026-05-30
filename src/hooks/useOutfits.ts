@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Alert } from 'react-native';
 import { api, isNetworkError } from '../lib/api';
 import type { Outfit } from '../types/outfit';
 
@@ -10,6 +11,7 @@ function invalidateOutfitQueries(qc: ReturnType<typeof useQueryClient>) {
 
 export type CreateOutfitInput = {
   name: string;
+  description?: string | null;
   event?: string | null;
   notes?: string | null;
   tags?: string[];
@@ -35,6 +37,9 @@ export function useCreateOutfit() {
     onSuccess: (newOutfit) => {
       qc.setQueryData<Outfit[]>(OUTFITS_QUERY_KEY, (old = []) => [newOutfit, ...old]);
     },
+    onError: () => {
+      Alert.alert('Error', "Couldn't save outfit. Please try again.");
+    },
     onSettled: () => invalidateOutfitQueries(qc),
   });
 }
@@ -54,6 +59,7 @@ export function useUpdateOutfit() {
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.previous) qc.setQueryData(OUTFITS_QUERY_KEY, ctx.previous);
+      Alert.alert('Error', "Couldn't update outfit. Please try again.");
     },
     onSettled: () => invalidateOutfitQueries(qc),
   });
@@ -77,6 +83,7 @@ export function useMarkOutfitWorn() {
     },
     onError: (_err, _id, ctx) => {
       if (ctx?.previous) qc.setQueryData(OUTFITS_QUERY_KEY, ctx.previous);
+      Alert.alert('Error', "Couldn't mark outfit as worn. Please try again.");
     },
     onSettled: () => invalidateOutfitQueries(qc),
   });
@@ -122,6 +129,7 @@ export function useDeleteOutfit() {
     },
     onError: (_err, _id, ctx) => {
       if (ctx?.previous) qc.setQueryData(OUTFITS_QUERY_KEY, ctx.previous);
+      Alert.alert('Error', "Couldn't delete outfit. Please try again.");
     },
     onSettled: () => invalidateOutfitQueries(qc),
   });

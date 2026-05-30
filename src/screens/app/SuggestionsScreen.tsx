@@ -161,10 +161,11 @@ export function SuggestionsScreen({ navigation, route }: SuggestionsScreenProps)
     if (!generateMutation.data) return;
     const name = saveName.trim();
     if (!name) return;
-    const { outfit } = generateMutation.data;
+    const { outfit, suggestion } = generateMutation.data;
     createOutfit.mutate(
       {
         name,
+        description: suggestion,
         event:      occasion,
         topId:      outfit.topId      ?? null,
         bottomId:   outfit.bottomId   ?? null,

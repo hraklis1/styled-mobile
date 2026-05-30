@@ -29,8 +29,11 @@ import {
 } from '../../hooks/useEvents';
 import { useGenerateOutfit, type GenerateOutfitResult } from '../../hooks/useOutfits';
 import { useItems } from '../../hooks/useItems';
+import { useWeatherForecast, type ForecastWeather, type WeatherCondition } from '../../hooks/useWeather';
 import { CATEGORY_ORDER, CATEGORY_LABELS, type Item } from '../../types/item';
 import { LocationAutocompleteInput } from '../../components/primitives/LocationAutocompleteInput';
+import { CalendarSyncSheet } from '../../components/calendar/CalendarSyncSheet';
+import * as Location from 'expo-location';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { CalendarScreenProps } from '../../navigation/types';
 import type { Event } from '../../types/event';
@@ -699,6 +702,13 @@ const fm = StyleSheet.create({
 
 // ── EventDetailModal ──────────────────────────────────────────────────────────
 
+const WEATHER_ICONS: Record<WeatherCondition, keyof typeof Ionicons.glyphMap> = {
+  sunny: 'sunny-outline',
+  rainy: 'rainy-outline',
+  cold: 'snow-outline',
+  mild: 'partly-sunny-outline',
+};
+
 function EventDetailModal({
   event,
   visible,
@@ -709,6 +719,7 @@ function EventDetailModal({
   allItems,
   generateOutfit,
   onViewOutfits,
+  deviceCoords,
 }: {
   event: Event | null;
   visible: boolean;
@@ -719,7 +730,15 @@ function EventDetailModal({
   allItems: Item[];
   generateOutfit: ReturnType<typeof useGenerateOutfit>;
   onViewOutfits: () => void;
+  deviceCoords: { lat: number; lon: number } | null;
 }) {
+  const eventDateStr = event ? event.date.slice(0, 10) : null;
+  const forecast = useWeatherForecast(
+    deviceCoords?.lat ?? null,
+    deviceCoords?.lon ?? null,
+    eventDateStr,
+  );
+
   if (!event) return null;
   const d = new Date(event.date);
   const countdown = formatCountdown(d);
@@ -747,6 +766,14 @@ function EventDetailModal({
             {countdown && (
               <View style={dm.countdownBadge}>
                 <Text style={dm.countdownText}>{countdown}</Text>
+              </View>
+            )}
+            {forecast.data && (
+              <View style={dm.forecastChip}>
+                <Ionicons name={WEATHER_ICONS[forecast.data.condition]} size={12} color={colors.mutedForeground} />
+                <Text style={dm.forecastText}>
+                  {forecast.data.tempMinF}–{forecast.data.tempMaxF}°F
+                </Text>
               </View>
             )}
           </View>
@@ -876,6 +903,18 @@ const dm = StyleSheet.create({
     paddingVertical: 2,
   },
   countdownText: { fontSize: 11, fontWeight: typography.weight.semibold, color: colors.primary },
+  forecastChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: colors.muted,
+    borderRadius: radii.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  forecastText: { fontSize: 11, color: colors.mutedForeground },
   notesCard: {
     flexDirection: 'row',
     gap: spacing.sm,
@@ -1220,6 +1259,17 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
   const deleteEventMutation = useDeleteEvent();
   const generateOutfit = useGenerateOutfit();
 
+  const [deviceCoords, setDeviceCoords] = useState<{ lat: number; lon: number } | null>(null);
+
+  useEffect(() => {
+    Location.getForegroundPermissionsAsync().then(({ status }) => {
+      if (status !== 'granted') return;
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+        .then((pos) => setDeviceCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude }))
+        .catch(() => {});
+    }).catch(() => {});
+  }, []);
+
   const [selectedDate, setSelectedDate]     = useState(() => toDateStr(new Date()));
   const [weekOffset, setWeekOffset]         = useState(0);
   const [formVisible, setFormVisible]       = useState(false);
@@ -1228,6 +1278,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
   const [pickerEvent, setPickerEvent]       = useState<Event | null>(null);
   const [showAllUpcoming, setShowAllUpcoming] = useState(false);
   const [showAllPast, setShowAllPast]       = useState(false);
+  const [syncVisible, setSyncVisible]       = useState(false);
 
   const UPCOMING_LIMIT = 4;
   const PAST_LIMIT = 5;
@@ -1302,7 +1353,17 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Calendar</Text>
+          <View style={styles.headerRow}>
+            <Text style={styles.title}>Calendar</Text>
+            <TouchableOpacity
+              style={styles.syncIconBtn}
+              onPress={() => setSyncVisible(true)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="sync-outline" size={20} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
           <Text style={styles.subtitle}>Plan ahead for every occasion.</Text>
         </View>
 
@@ -1465,6 +1526,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         allItems={allItems}
         generateOutfit={generateOutfit}
         onViewOutfits={() => navigation.navigate('Outfits')}
+        deviceCoords={deviceCoords}
       />
       <EventFormModal
         visible={formVisible}
@@ -1475,6 +1537,10 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         event={pickerEvent}
         visible={pickerEvent !== null}
         onClose={() => setPickerEvent(null)}
+      />
+      <CalendarSyncSheet
+        visible={syncVisible}
+        onClose={() => setSyncVisible(false)}
       />
     </View>
   );
@@ -1488,7 +1554,14 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: spacing.lg, paddingBottom: 120 },
 
   header: { marginBottom: spacing.xl },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: typography.size.xxl, fontWeight: typography.weight.bold, color: colors.foreground, letterSpacing: -0.5 },
+  syncIconBtn: {
+    width: 36, height: 36,
+    borderRadius: radii.full,
+    backgroundColor: colors.muted,
+    alignItems: 'center', justifyContent: 'center',
+  },
   subtitle: { fontSize: typography.size.sm, color: colors.mutedForeground, marginTop: 2 },
 
   section: { marginBottom: spacing.xl },

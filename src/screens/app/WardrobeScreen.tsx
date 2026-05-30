@@ -35,6 +35,7 @@ import { QuickCaptureSheet } from '../../components/wardrobe/QuickCaptureSheet';
 import { colors, spacing, typography, radii } from '../../theme';
 import { CATEGORY_LABELS, CATEGORY_ORDER, type Item, type ItemCategory } from '../../types/item';
 import type { WardrobeListScreenProps } from '../../navigation/types';
+import * as Haptics from 'expo-haptics';
 
 // ─── Sort ────────────────────────────────────────────────────────────────────
 
@@ -246,6 +247,7 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
             selectedIds.forEach((id) => deleteItem.mutate(id));
             exitSelectionMode();
           },
@@ -281,6 +283,7 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
 
   const handleFavoriteToggle = useCallback(
     (item: Item) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       updateItem.mutate({ id: item.id, isFavorite: !item.isFavorite });
     },
     [updateItem]
@@ -385,6 +388,13 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
         <View style={styles.headerActions}>
           <TouchableOpacity
             style={styles.headerBtn}
+            onPress={() => navigation.navigate('ClosetRefresh')}
+            testID="link-closet-insights"
+          >
+            <Ionicons name="sparkles-outline" size={20} color={colors.foreground} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.headerBtn}
             onPress={() => setViewMode((v) => (v === 'grid' ? 'list' : 'grid'))}
           >
             <Ionicons
@@ -423,7 +433,7 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
         {search.length > 0 && (
           <TouchableOpacity
             onPress={() => setSearch('')}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
           >
             <Ionicons name="close-circle" size={16} color={colors.mutedForeground} />
           </TouchableOpacity>
@@ -581,7 +591,7 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
                       {!selectionMode && (
                         <TouchableOpacity
                           onPress={() => archiveItems.mutate({ ids: [item.id], archive: false })}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                         >
                           <Text style={styles.unarchiveBtn}>Restore</Text>
                         </TouchableOpacity>
@@ -1167,7 +1177,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   headerBtn: {
-    padding: spacing.sm,
+    padding: spacing.md,
     position: 'relative',
   },
   filterBadge: {
@@ -1221,12 +1231,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    height: 36,
+    height: 44,
     borderRadius: radii.full,
     backgroundColor: colors.muted,
   },
   pillIcon: {
-    width: 36,
+    width: 44,
     paddingHorizontal: 0,
     justifyContent: 'center',
   },
@@ -1252,7 +1262,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    height: 36,
+    height: 44,
     borderRadius: radii.full,
     backgroundColor: '#FEE2E2',
     gap: 4,

@@ -28,6 +28,7 @@ import { CATEGORY_LABELS, CATEGORY_ORDER } from '../../types/item';
 import type { ItemCategory, Item } from '../../types/item';
 import { getSubcategories, getStyles } from '../../lib/taxonomy';
 import type { ItemDetailScreenProps } from '../../navigation/types';
+import * as Haptics from 'expo-haptics';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -509,6 +510,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
 
   const handleToggleFavorite = () => {
     if (!item) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     updateItem.mutate({ id: item.id, isFavorite: !item.isFavorite });
   };
 
@@ -528,6 +530,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           text: 'Remove',
           style: 'destructive',
           onPress: () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
             deleteItem.mutate(item.id);
             navigation.goBack();
           },
@@ -1714,8 +1717,8 @@ const styles = StyleSheet.create({
     left: spacing.lg,
     backgroundColor: colors.white,
     borderRadius: radii.full,
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -1728,8 +1731,8 @@ const styles = StyleSheet.create({
     right: spacing.lg,
     backgroundColor: colors.white,
     borderRadius: radii.full,
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -1743,8 +1746,8 @@ const styles = StyleSheet.create({
     right: spacing.md,
     backgroundColor: colors.primary,
     borderRadius: radii.full,
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
