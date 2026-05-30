@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   Text,
+  Image,
   ScrollView,
   TouchableOpacity,
   TextInput,
@@ -16,6 +17,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation } from '@tanstack/react-query';
+import * as ImagePicker from 'expo-image-picker';
+import { compressImageToDataUrl } from '../../lib/compressImage';
 import { useAuth } from '../../contexts/AuthContext';
 import { useProfile, useUpdateProfile } from '../../hooks/useProfile';
 import { api } from '../../lib/api';
@@ -340,6 +343,7 @@ export function ProfileScreen(_props: ProfileScreenProps) {
   const [measurementHeightIn, setMeasurementHeightIn] = useState('');
   const [showDressSize, setShowDressSize]       = useState(false);
   const [advancedOpen, setAdvancedOpen]         = useState(false);
+  const [photoPreview, setPhotoPreview]         = useState<string | null>(null);
 
   // ── Password / delete ────────────────────────────────────────────────────
   const [currentPassword, setCurrentPassword] = useState('');
@@ -358,6 +362,7 @@ export function ProfileScreen(_props: ProfileScreenProps) {
   useEffect(() => {
     if (!profile) return;
 
+    setPhotoPreview(profile.photoUrl ?? null);
     setDisplayName(profile.displayName ?? '');
     setStylePreference(profile.stylePreference ?? []);
     setColorPalette(profile.colorPalette ?? []);
@@ -407,6 +412,7 @@ export function ProfileScreen(_props: ProfileScreenProps) {
     }
 
     initialValues.current = {
+      photoUrl: profile.photoUrl ?? null,
       displayName: profile.displayName ?? '',
       stylePreference: JSON.stringify(profile.stylePreference ?? []),
       colorPalette: JSON.stringify(profile.colorPalette ?? []),
@@ -452,6 +458,7 @@ export function ProfileScreen(_props: ProfileScreenProps) {
     const iv = initialValues.current;
     if (!Object.prototype.hasOwnProperty.call(iv, 'displayName')) return false;
     return (
+      photoPreview !== iv.photoUrl ||
       displayName !== iv.displayName ||
       JSON.stringify(stylePreference) !== iv.stylePreference ||
       JSON.stringify(colorPalette) !== iv.colorPalette ||
@@ -472,7 +479,7 @@ export function ProfileScreen(_props: ProfileScreenProps) {
       measurementHeightIn !== iv.measurementHeightIn
     );
   }, [
-    displayName, stylePreference, colorPalette, budgetRange, bodyType,
+    photoPreview, displayName, stylePreference, colorPalette, budgetRange, bodyType,
     fitPreference, sizingRegion, location, retailers, stylistVoice, tempUnit,
     occasions, fitNotes, sizeTop, sizeBottomWaist, sizeBottomInseam, sizeDress,
     sizeShoe, sizeJacket, sizeJacketLength, measurementChest, measurementWaistM,
@@ -483,6 +490,7 @@ export function ProfileScreen(_props: ProfileScreenProps) {
   const handleSave = () => {
     updateProfile.mutate(
       {
+        photoUrl: photoPreview || null,
         displayName: displayName.trim() || null,
         stylePreference: stylePreference.length > 0 ? stylePreference : null,
         colorPalette: colorPalette.length > 0 ? colorPalette : null,
@@ -521,6 +529,7 @@ export function ProfileScreen(_props: ProfileScreenProps) {
         onSuccess: () => {
           Alert.alert('Saved', 'Profile updated successfully.');
           initialValues.current = {
+            photoUrl: photoPreview,
             displayName, stylePreference: JSON.stringify(stylePreference),
             colorPalette: JSON.stringify(colorPalette), budgetRange, bodyType,
             fitPreference, sizingRegion, location, retailers: JSON.stringify(retailers),
@@ -533,6 +542,20 @@ export function ProfileScreen(_props: ProfileScreenProps) {
         onError: (err: Error) => Alert.alert('Error', err.message),
       }
     );
+  };
+
+  // ── Photo pick ───────────────────────────────────────────────────────────
+  const handlePickPhoto = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 1,
+    });
+    if (!result.canceled && result.assets[0]) {
+      const { dataUrl } = await compressImageToDataUrl(result.assets[0]);
+      setPhotoPreview(dataUrl);
+    }
   };
 
   // ── Change password ───────────────────────────────────────────────────────
@@ -600,13 +623,21 @@ export function ProfileScreen(_props: ProfileScreenProps) {
   }
 
   return (
-    <View style={styles.root}>
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
 
       {/* ── Fixed header ──────────────────────────────────────────────────── */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{initials}</Text>
-        </View>
+        <TouchableOpacity style={styles.avatar} onPress={handlePickPhoto} activeOpacity={0.8}>
+          {photoPreview
+            ? <Image source={{ uri: photoPreview }} style={styles.avatarPhoto} />
+            : <Text style={styles.avatarText}>{initials}</Text>}
+          <View style={styles.avatarBadge}>
+            <Ionicons name="camera" size={9} color={colors.white} />
+          </View>
+        </TouchableOpacity>
         <View style={styles.headerInfo}>
           <Text style={styles.headerTitle}>Style Profile</Text>
           <View style={styles.progressTrack}>
@@ -1173,7 +1204,7 @@ export function ProfileScreen(_props: ProfileScreenProps) {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -1195,6 +1226,14 @@ const styles = StyleSheet.create({
     width: 48, height: 48, borderRadius: radii.lg,
     backgroundColor: `${colors.primary}18`,
     alignItems: 'center', justifyContent: 'center',
+  },
+  avatarPhoto: { width: 48, height: 48, borderRadius: radii.lg },
+  avatarBadge: {
+    position: 'absolute', bottom: 0, right: 0,
+    width: 16, height: 16, borderRadius: 8,
+    backgroundColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: colors.card,
   },
   avatarText:    { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.primary },
   headerInfo:    { flex: 1, gap: 4 },

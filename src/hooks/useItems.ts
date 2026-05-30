@@ -1,10 +1,23 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '../lib/api';
+import { useMemo } from 'react';
+import { api, isNetworkError } from '../lib/api';
+import { FASHION_BRANDS } from '../lib/fashionBrands';
 import type { Item, ItemCategory, ScanResult } from '../types/item';
+import type { SizeProfile } from '../lib/sizes';
 
 export type { ScanResult };
 
+export type PoseScanItem = {
+  name: string;
+  category: string;
+  color: string;
+  description?: string;
+  croppedWebP?: string | null;
+  bbox_pct?: { x: number; y: number; width: number; height: number } | null;
+};
+
 export const ITEMS_QUERY_KEY = ['items'] as const;
+export const ARCHIVED_ITEMS_QUERY_KEY = ['items', 'archived'] as const;
 export const BRANDS_QUERY_KEY = ['brands'] as const;
 
 function invalidateItemQueries(qc: ReturnType<typeof useQueryClient>) {
@@ -32,13 +45,73 @@ export type CreateItemInput = {
   notableDetails?: string[];
   colorPalette?: string[];
   notes?: string | null;
+  sizeProfile?: SizeProfile | null;
 };
+
+type ScanInput = { uri: string; brandHint?: string; outfitContext?: string };
 
 export function useScanItem() {
   return useMutation({
-    mutationFn: (imageData: string) =>
-      api.post<ScanResult>('/api/items/scan', { imageData }).then((r) => r.data),
+    mutationFn: ({ uri, brandHint, outfitContext }: ScanInput) => {
+      const formData = new FormData();
+      formData.append('image', { uri, type: 'image/jpeg', name: 'scan.jpg' } as unknown as Blob);
+      if (brandHint) formData.append('brandHint', brandHint);
+      if (outfitContext) formData.append('outfitContext', outfitContext);
+      return api
+        .post<ScanResult>('/api/items/scan', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+        .then((r) => r.data);
+    },
+    retry: (failureCount, error) => isNetworkError(error) && failureCount < 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
   });
+}
+
+/** Direct API call for parallel multi-item extraction (no hook — avoids shared mutation state). */
+export async function scanItemDirect(input: {
+  imageData: string;
+  brandHint?: string;
+  outfitContext?: string;
+}): Promise<ScanResult> {
+  return api
+    .post<ScanResult>('/api/items/scan', input)
+    .then((r) => r.data);
+}
+
+function useWardrobeBrands() {
+  return useQuery({
+    queryKey: BRANDS_QUERY_KEY,
+    queryFn: () => api.get<string[]>('/api/items/brands').then((r) => r.data),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useBrandSuggestions(): string[] {
+  const { data: wardrobeBrands = [] } = useWardrobeBrands();
+  return useMemo(() => {
+    const wardrobeSet = new Set(wardrobeBrands.map((b) => b.toLowerCase()));
+    const extras = FASHION_BRANDS.filter((b) => !wardrobeSet.has(b.toLowerCase()));
+    return [...wardrobeBrands, ...extras];
+  }, [wardrobeBrands]);
+}
+
+export function useScanVisionPose() {
+  return useMutation({
+    mutationFn: ({ imageBase64 }: { imageBase64: string }) =>
+      api
+        .post<{ items: PoseScanItem[] }>('/api/scan-vision-pose', { imageBase64 })
+        .then((r) => r.data),
+    retry: (failureCount, error) => isNetworkError(error) && failureCount < 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
+  });
+}
+
+/** Direct API call for batch processing (no shared mutation state). */
+export async function scanVisionPoseDirect(imageBase64: string): Promise<{ items: PoseScanItem[] }> {
+  return api
+    .post<{ items: PoseScanItem[] }>('/api/scan-vision-pose', { imageBase64 })
+    .then((r) => r.data);
 }
 
 export function useItems() {
@@ -94,6 +167,69 @@ export function useCreateItem() {
       qc.setQueryData<Item[]>(ITEMS_QUERY_KEY, (old = []) => [newItem, ...old]);
     },
     onSettled: () => invalidateItemQueries(qc),
+  });
+}
+
+export type TagScanResult = {
+  brand: string | null;
+  size: string | null;
+  material: string | null;
+  care: string | null;
+};
+
+export function useScanTag() {
+  return useMutation({
+    mutationFn: ({ imageData }: { imageData: string }) =>
+      api.post<TagScanResult>('/api/items/scan-tag', { imageData }).then((r) => r.data),
+  });
+}
+
+export type RefineImageInput = {
+  name: string;
+  color: string;
+  brand?: string | null;
+  category: ItemCategory;
+};
+
+export function useRefineImage() {
+  return useMutation({
+    mutationFn: (input: RefineImageInput) =>
+      api.post<{ imageData: string }>('/api/items/refine-image', input).then((r) => r.data),
+  });
+}
+
+export function useArchivedItems() {
+  return useQuery({
+    queryKey: ARCHIVED_ITEMS_QUERY_KEY,
+    queryFn: () => api.get<Item[]>('/api/items/archived').then((r) => r.data),
+  });
+}
+
+export function useArchiveItems() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ids, archive }: { ids: number[]; archive: boolean }) =>
+      Promise.all(ids.map((id) => api.patch<Item>(`/api/items/${id}`, { isArchived: archive }).then((r) => r.data))),
+    onMutate: async ({ ids, archive }) => {
+      await qc.cancelQueries({ queryKey: ITEMS_QUERY_KEY });
+      await qc.cancelQueries({ queryKey: ARCHIVED_ITEMS_QUERY_KEY });
+      const prevActive = qc.getQueryData<Item[]>(ITEMS_QUERY_KEY);
+      const prevArchived = qc.getQueryData<Item[]>(ARCHIVED_ITEMS_QUERY_KEY);
+      if (archive) {
+        qc.setQueryData<Item[]>(ITEMS_QUERY_KEY, (old) => old?.filter((i) => !ids.includes(i.id)) ?? []);
+      } else {
+        qc.setQueryData<Item[]>(ARCHIVED_ITEMS_QUERY_KEY, (old) => old?.filter((i) => !ids.includes(i.id)) ?? []);
+      }
+      return { prevActive, prevArchived };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prevActive) qc.setQueryData(ITEMS_QUERY_KEY, ctx.prevActive);
+      if (ctx?.prevArchived) qc.setQueryData(ARCHIVED_ITEMS_QUERY_KEY, ctx.prevArchived);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: ARCHIVED_ITEMS_QUERY_KEY });
+    },
   });
 }
 

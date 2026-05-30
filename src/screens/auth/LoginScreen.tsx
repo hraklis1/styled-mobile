@@ -8,10 +8,12 @@ import {
   KeyboardAvoidingView,
   ScrollView,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Google from 'expo-auth-session/providers/google';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import * as SecureStore from 'expo-secure-store';
 import { makeRedirectUri } from 'expo-auth-session';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth, LAST_LOGIN_EMAIL_KEY } from '../../contexts/AuthContext';
 import { Button } from '../../components/primitives/Button';
 import { Input } from '../../components/primitives/Input';
 import { colors, spacing, typography, radii } from '../../theme';
@@ -21,11 +23,18 @@ const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ?? '';
 
 export function LoginScreen({ navigation }: LoginScreenProps) {
   const { loginWithEmail, loginWithGoogleToken, loginWithAppleToken } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    SecureStore.getItemAsync(LAST_LOGIN_EMAIL_KEY).then((stored) => {
+      if (stored) setEmail(stored);
+    });
+  }, []);
 
   const [request, response, promptAsync] = Google.useAuthRequest({
     clientId: GOOGLE_CLIENT_ID,
@@ -50,6 +59,7 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
     setError(null);
     try {
       await loginWithEmail(email.trim(), password);
+      SecureStore.setItemAsync(LAST_LOGIN_EMAIL_KEY, email.trim()).catch(() => {});
     } catch (e: any) {
       setError(e?.response?.data?.message ?? 'Incorrect email or password.');
     } finally {
@@ -93,7 +103,7 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
 
   return (
     <KeyboardAvoidingView
-      style={styles.flex}
+      style={[styles.flex, { paddingTop: insets.top }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView

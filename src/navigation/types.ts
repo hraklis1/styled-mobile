@@ -5,6 +5,7 @@ import type { ScanResult } from '../types/item';
 
 export type RootStackParamList = {
   Auth: undefined;
+  Onboarding: undefined;
   App: undefined;
 };
 
@@ -18,6 +19,7 @@ export type AppTabParamList = {
   Home: undefined;
   Wardrobe: undefined;
   Outfits: undefined;
+  Shop: undefined;
   Calendar: undefined;
   Profile: undefined;
 };
@@ -26,6 +28,7 @@ export type AppTabParamList = {
 export type HomeStackParamList = {
   HomeMain: undefined;
   Stylist: { query?: string };
+  Suggestions: { eventId?: number } | undefined;
 };
 
 // Wardrobe nested stack
@@ -55,6 +58,8 @@ export type HomeScreenProps = CompositeScreenProps<
   BottomTabScreenProps<AppTabParamList>
 >;
 export type StylistScreenProps = NativeStackScreenProps<HomeStackParamList, 'Stylist'>;
+export type SuggestionsScreenProps = NativeStackScreenProps<HomeStackParamList, 'Suggestions'>;
+export type ShopScreenProps = BottomTabScreenProps<AppTabParamList, 'Shop'>;
 export type CalendarScreenProps = BottomTabScreenProps<AppTabParamList, 'Calendar'>;
 export type ProfileScreenProps = BottomTabScreenProps<AppTabParamList, 'Profile'>;
 

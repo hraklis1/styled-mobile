@@ -5,6 +5,9 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '../contexts/AuthContext';
+import { useProfile } from '../hooks/useProfile';
+import { GlobalOutfitLoggerProvider } from '../contexts/GlobalOutfitLoggerContext';
+import { OnboardingScreen } from '../screens/onboarding/OnboardingScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
 import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
 import { ResetPasswordScreen } from '../screens/auth/ResetPasswordScreen';
@@ -16,6 +19,8 @@ import { OutfitsScreen } from '../screens/app/OutfitsScreen';
 import { OutfitDetailScreen } from '../screens/app/OutfitDetailScreen';
 import { CalendarScreen } from '../screens/app/CalendarScreen';
 import { ProfileScreen } from '../screens/app/ProfileScreen';
+import { SuggestionsScreen } from '../screens/app/SuggestionsScreen';
+import { ShopScreen } from '../screens/app/ShopScreen';
 
 import type {
   AuthStackParamList,
@@ -37,6 +42,7 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Home: 'home-outline',
   Wardrobe: 'shirt-outline',
   Outfits: 'layers-outline',
+  Shop: 'bag-handle-outline',
   Calendar: 'calendar-outline',
   Profile: 'person-outline',
 };
@@ -56,6 +62,7 @@ function HomeNavigator() {
     <HomeStack.Navigator screenOptions={{ headerShown: false }}>
       <HomeStack.Screen name="HomeMain" component={HomeScreen} />
       <HomeStack.Screen name="Stylist" component={StylistScreen} />
+      <HomeStack.Screen name="Suggestions" component={SuggestionsScreen} />
     </HomeStack.Navigator>
   );
 }
@@ -91,9 +98,32 @@ function AppTabNavigator() {
       <AppTab.Screen name="Home" component={HomeNavigator} />
       <AppTab.Screen name="Wardrobe" component={WardrobeNavigator} />
       <AppTab.Screen name="Outfits" component={OutfitsNavigator} />
+      <AppTab.Screen name="Shop" component={ShopScreen} />
       <AppTab.Screen name="Calendar" component={CalendarScreen} />
       <AppTab.Screen name="Profile" component={ProfileScreen} />
     </AppTab.Navigator>
+  );
+}
+
+function AppGate() {
+  const { data: profile, isLoading } = useProfile();
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  if (!profile?.onboardingComplete) {
+    return <OnboardingScreen />;
+  }
+
+  return (
+    <GlobalOutfitLoggerProvider>
+      <AppTabNavigator />
+    </GlobalOutfitLoggerProvider>
   );
 }
 
@@ -112,7 +142,7 @@ export function RootNavigator() {
     <NavigationContainer>
       <RootStack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (
-          <RootStack.Screen name="App" component={AppTabNavigator} />
+          <RootStack.Screen name="App" component={AppGate} />
         ) : (
           <RootStack.Screen name="Auth" component={AuthNavigator} />
         )}

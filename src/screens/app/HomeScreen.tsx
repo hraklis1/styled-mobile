@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   TextInput,
   StyleSheet,
+  Image,
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,7 +15,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useItems } from '../../hooks/useItems';
 import { useOutfits } from '../../hooks/useOutfits';
 import { useEvents } from '../../hooks/useEvents';
+import { useOutfitLogs, useDeleteOutfitLog } from '../../hooks/useOutfitLogs';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
+import { QuickCaptureSheet } from '../../components/wardrobe/QuickCaptureSheet';
+import { useGlobalOutfitLogger } from '../../contexts/GlobalOutfitLoggerContext';
+import { resolveImageUri } from '../../lib/resolveImageUri';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { HomeScreenProps } from '../../navigation/types';
 
@@ -63,15 +68,32 @@ function formatEventDate(isoDate: string): string {
 
 // ── Screen ───────────────────────────────────────────────────────────────────
 
+function formatLogDate(dateStr: string): string {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  // Add T12:00:00 so the date isn't shifted by timezone offset
+  const d = new Date(dateStr + 'T12:00:00');
+  d.setHours(0, 0, 0, 0);
+  if (d.getTime() === today.getTime()) return 'Today';
+  if (d.getTime() === yesterday.getTime()) return 'Yesterday';
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
 export function HomeScreen({ navigation }: HomeScreenProps) {
   const { user } = useAuth();
   const { data: items   = [] } = useItems();
   const { data: outfits = [] } = useOutfits();
   const { data: events  = [] } = useEvents();
+  const { data: logs    = [] } = useOutfitLogs();
+  const deleteLog = useDeleteOutfitLog();
 
+  const { openLogger } = useGlobalOutfitLogger();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / 2;
+
+  // Quick capture sheet
+  const [quickCaptureVisible, setQuickCaptureVisible] = useState(false);
 
   // Stylist prompt
   const [query, setQuery] = useState('');
@@ -116,16 +138,29 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     >
       {/* ── Greeting ──────────────────────────────────────────────── */}
       <View style={styles.greetingSection}>
-        <Text style={styles.greeting}>{getGreeting(user?.displayName)}</Text>
-        {(items.length > 0 || outfits.length > 0) ? (
-          <Text style={styles.stats}>
-            {items.length} {items.length === 1 ? 'item' : 'items'}
-            {favoriteCount > 0 ? ` · ${favoriteCount} favourited` : ''}
-            {outfits.length > 0 ? ` · ${outfits.length} ${outfits.length === 1 ? 'outfit' : 'outfits'}` : ''}
-          </Text>
-        ) : (
-          <Text style={styles.greetingSubtitle}>Your style, at a glance.</Text>
-        )}
+        <View style={styles.greetingRow}>
+          <View style={styles.greetingText}>
+            <Text style={styles.greeting}>{getGreeting(user?.displayName)}</Text>
+            {(items.length > 0 || outfits.length > 0) ? (
+              <Text style={styles.stats}>
+                {items.length} {items.length === 1 ? 'item' : 'items'}
+                {favoriteCount > 0 ? ` · ${favoriteCount} favourited` : ''}
+                {outfits.length > 0 ? ` · ${outfits.length} ${outfits.length === 1 ? 'outfit' : 'outfits'}` : ''}
+              </Text>
+            ) : (
+              <Text style={styles.greetingSubtitle}>Your style, at a glance.</Text>
+            )}
+          </View>
+          <TouchableOpacity
+            style={styles.quickAddBtn}
+            onPress={() => setQuickCaptureVisible(true)}
+            activeOpacity={0.8}
+            accessibilityLabel="Quick add item to wardrobe"
+          >
+            <Ionicons name="camera-outline" size={15} color={colors.primary} />
+            <Text style={styles.quickAddBtnText}>Add item</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* ── AI Stylist prompt ──────────────────────────────────────── */}
@@ -223,6 +258,38 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         </TouchableOpacity>
       </View>
 
+      {/* ── Outfit Suggestions ───────────────────────────────────── */}
+      <TouchableOpacity
+        style={styles.nudgeCard}
+        onPress={() => navigation.navigate('Suggestions')}
+        activeOpacity={0.8}
+      >
+        <View style={[styles.nudgeIcon, { backgroundColor: `${colors.primary}18` }]}>
+          <Ionicons name="sparkles" size={18} color={colors.primary} />
+        </View>
+        <View style={styles.nudgeText}>
+          <Text style={styles.nudgeTitle}>What should I wear?</Text>
+          <Text style={styles.nudgeSub}>Get an AI-curated outfit for today</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+      </TouchableOpacity>
+
+      {/* ── Log Today's Look ─────────────────────────────────────── */}
+      <TouchableOpacity
+        style={styles.logNudgeCard}
+        onPress={openLogger}
+        activeOpacity={0.8}
+      >
+        <View style={[styles.nudgeIcon, { backgroundColor: `${colors.primary}18` }]}>
+          <Ionicons name="journal-outline" size={18} color={colors.primary} />
+        </View>
+        <View style={styles.nudgeText}>
+          <Text style={styles.nudgeTitle}>Log today's look</Text>
+          <Text style={styles.nudgeSub}>Track what you wear to keep your style history</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+      </TouchableOpacity>
+
       {/* ── Upcoming Events ───────────────────────────────────────── */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -285,6 +352,78 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         )}
       </View>
 
+      {/* ── Outfit Log History ───────────────────────────────────── */}
+      {logs.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Outfit Log</Text>
+            <TouchableOpacity onPress={openLogger}>
+              <Text style={styles.sectionLink}>+ Log look</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.logList}>
+            {logs.slice(0, 5).map((log) => {
+              const logItems = (log.itemIds ?? [])
+                .map((id) => items.find((it) => it.id === id))
+                .filter((it): it is NonNullable<typeof it> => !!it);
+              return (
+                <View key={log.id} style={styles.logRow}>
+                  {/* Stacked thumbnails */}
+                  <View style={styles.logThumbs}>
+                    {logItems.slice(0, 4).map((item, idx) => {
+                      const imgUri = resolveImageUri(item.imageUrl);
+                      return (
+                        <View
+                          key={item.id}
+                          style={[
+                            styles.logThumb,
+                            { marginLeft: idx > 0 ? -10 : 0, zIndex: 4 - idx },
+                          ]}
+                        >
+                          {imgUri ? (
+                            <Image
+                              source={{ uri: imgUri }}
+                              style={StyleSheet.absoluteFill}
+                              resizeMode="cover"
+                            />
+                          ) : (
+                            <Ionicons name="shirt-outline" size={12} color={colors.mutedForeground} />
+                          )}
+                        </View>
+                      );
+                    })}
+                    {logItems.length > 4 && (
+                      <View style={[styles.logThumb, styles.logThumbMore, { marginLeft: -10 }]}>
+                        <Text style={styles.logThumbMoreText}>+{logItems.length - 4}</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Date + count */}
+                  <View style={styles.logInfo}>
+                    <Text style={styles.logDate}>{formatLogDate(log.date)}</Text>
+                    <Text style={styles.logCount}>
+                      {log.itemIds?.length ?? 0} item{(log.itemIds?.length ?? 0) !== 1 ? 's' : ''}
+                    </Text>
+                  </View>
+
+                  {/* Delete */}
+                  <TouchableOpacity
+                    onPress={() => deleteLog.mutate(log.id)}
+                    disabled={deleteLog.isPending}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    style={styles.logDeleteBtn}
+                  >
+                    <Ionicons name="trash-outline" size={15} color={colors.mutedForeground} />
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
       {/* ── Recent Outfits ────────────────────────────────────────── */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -327,6 +466,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           </View>
         )}
       </View>
+      <QuickCaptureSheet
+        visible={quickCaptureVisible}
+        onClose={() => setQuickCaptureVisible(false)}
+      />
     </ScrollView>
   );
 }
@@ -343,6 +486,15 @@ const styles = StyleSheet.create({
   // Greeting
   greetingSection: {
     marginBottom: spacing.lg,
+  },
+  greetingRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  greetingText: {
+    flex: 1,
     gap: 4,
   },
   greeting: {
@@ -358,6 +510,24 @@ const styles = StyleSheet.create({
   stats: {
     fontSize: typography.size.xs,
     color: colors.mutedForeground,
+  },
+  quickAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.full,
+    backgroundColor: colors.accent,
+    borderWidth: 1,
+    borderColor: `${colors.primary}30`,
+    flexShrink: 0,
+    marginTop: 6,
+  },
+  quickAddBtnText: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
   },
 
   // Stylist prompt
@@ -624,5 +794,76 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     maxWidth: 220,
     lineHeight: typography.size.xs * 1.5,
+  },
+
+  // Log today's look nudge card
+  logNudgeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: `${colors.primary}30`,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+
+  // Outfit log history
+  logList: {
+    gap: spacing.sm,
+  },
+  logRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    minHeight: 56,
+  },
+  logThumbs: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  logThumb: {
+    width: 32,
+    height: 32,
+    borderRadius: radii.sm,
+    overflow: 'hidden',
+    backgroundColor: colors.muted,
+    borderWidth: 2,
+    borderColor: colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logThumbMore: {
+    backgroundColor: colors.secondary,
+  },
+  logThumbMoreText: {
+    fontSize: 9,
+    fontWeight: typography.weight.semibold,
+    color: colors.mutedForeground,
+  },
+  logInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  logDate: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.medium,
+    color: colors.foreground,
+  },
+  logCount: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+  },
+  logDeleteBtn: {
+    padding: spacing.xs,
+    flexShrink: 0,
   },
 });

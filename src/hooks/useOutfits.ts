@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '../lib/api';
+import { api, isNetworkError } from '../lib/api';
 import type { Outfit } from '../types/outfit';
 
 export const OUTFITS_QUERY_KEY = ['outfits'] as const;
@@ -13,6 +13,11 @@ export type CreateOutfitInput = {
   event?: string | null;
   notes?: string | null;
   tags?: string[];
+  topId?: number | null;
+  bottomId?: number | null;
+  shoesId?: number | null;
+  outerwearId?: number | null;
+  accessoryId?: number | null;
 };
 
 export function useOutfits() {
@@ -74,6 +79,34 @@ export function useMarkOutfitWorn() {
       if (ctx?.previous) qc.setQueryData(OUTFITS_QUERY_KEY, ctx.previous);
     },
     onSettled: () => invalidateOutfitQueries(qc),
+  });
+}
+
+export type GenerateOutfitResult = {
+  outfit: { id: number; name: string };
+  outfitName: string;
+  stylistNotes: string | null;
+  itemIds: number[];
+};
+
+export function useGenerateOutfit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { eventId: number; lat?: number; lon?: number }) =>
+      api.post<GenerateOutfitResult>('/api/outfits/generate', args).then((r) => r.data),
+    retry: (failureCount, error) => isNetworkError(error) && failureCount < 2,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: OUTFITS_QUERY_KEY });
+    },
+  });
+}
+
+export function useVisualizeOutfit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) =>
+      api.post<{ aiGeneratedImageUrl: string }>(`/api/outfits/${id}/visualize`).then((r) => r.data),
+    onSuccess: () => invalidateOutfitQueries(qc),
   });
 }
 

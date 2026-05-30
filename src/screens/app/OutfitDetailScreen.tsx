@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useOutfits, useDeleteOutfit, useMarkOutfitWorn } from '../../hooks/useOutfits';
 import { useItems } from '../../hooks/useItems';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
+import { OutfitVisualizationCard } from '../../components/outfits/OutfitVisualizationCard';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { colors, spacing, typography, radii } from '../../theme';
 import { CATEGORY_LABELS } from '../../types/item';
@@ -158,6 +159,9 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
             <Text style={[styles.actionLabel, { color: colors.error }]}>Delete</Text>
           </TouchableOpacity>
         </View>
+
+        {/* AI Visualization */}
+        <OutfitVisualizationCard outfit={outfit} />
 
         {/* Details */}
         <View style={styles.sectionCard}>

@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import * as SecureStore from 'expo-secure-store';
 import { api } from '../lib/api';
 import type { User } from '../types/user';
+
+export const LAST_LOGIN_EMAIL_KEY = 'lastLoginEmail';
 
 type AuthContextValue = {
   user: User | null;
@@ -43,6 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     await api.post('/api/auth/logout').catch(() => {});
     setUser(null);
+    SecureStore.deleteItemAsync(LAST_LOGIN_EMAIL_KEY).catch(() => {});
   }, []);
 
   return (

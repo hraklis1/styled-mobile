@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -12,6 +13,7 @@ import {
   ActivityIndicator,
   Platform,
   KeyboardAvoidingView,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,12 +24,23 @@ import {
   useMarkOutfitWorn,
   useCreateOutfit,
 } from '../../hooks/useOutfits';
-import { OutfitCard } from '../../components/outfits/OutfitCard';
+import { OutfitCard, type OutfitViewMode } from '../../components/outfits/OutfitCard';
+import { OutfitBuilderSheet } from '../../components/outfits/OutfitBuilderSheet';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { Outfit } from '../../types/outfit';
 import type { OutfitsListScreenProps } from '../../navigation/types';
 
 // ─── Sort ────────────────────────────────────────────────────────────────────
+
+const SORT_STORAGE_KEY = 'outfitsSortOrder';
+const VIEW_MODE_KEY = 'outfitsViewMode';
+
+const NEXT_VIEW_MODE: Record<OutfitViewMode, OutfitViewMode> = { grid: 'list', list: 'dense', dense: 'grid' };
+const VIEW_MODE_ICON: Record<OutfitViewMode, 'grid-outline' | 'list-outline' | 'apps-outline'> = {
+  grid: 'grid-outline',
+  list: 'list-outline',
+  dense: 'apps-outline',
+};
 
 type SortKey = 'newest' | 'oldest' | 'most_worn' | 'recently_worn' | 'name_asc';
 
@@ -66,7 +79,7 @@ function sortOutfits(outfits: Outfit[], key: SortKey): Outfit[] {
 
 export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
   const insets = useSafeAreaInsets();
-  const { data: outfits = [], isLoading, isError, refetch } = useOutfits();
+  const { data: outfits = [], isLoading, isError, refetch, isRefetching } = useOutfits();
   const deleteOutfit = useDeleteOutfit();
   const markWorn = useMarkOutfitWorn();
   const createOutfit = useCreateOutfit();
@@ -76,10 +89,35 @@ export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
   const [sortKey, setSortKey] = useState<SortKey>('newest');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
+  useEffect(() => {
+    AsyncStorage.getItem(SORT_STORAGE_KEY).then((stored) => {
+      if (stored) setSortKey(stored as SortKey);
+    });
+  }, []);
+
+  const persistSortKey = useCallback((key: SortKey) => {
+    setSortKey(key);
+    AsyncStorage.setItem(SORT_STORAGE_KEY, key);
+  }, []);
+
+  const [viewMode, setViewMode] = useState<OutfitViewMode>('grid');
+
+  useEffect(() => {
+    AsyncStorage.getItem(VIEW_MODE_KEY).then((stored) => {
+      if (stored) setViewMode(stored as OutfitViewMode);
+    });
+  }, []);
+
+  const persistViewMode = useCallback((mode: OutfitViewMode) => {
+    setViewMode(mode);
+    AsyncStorage.setItem(VIEW_MODE_KEY, mode);
+  }, []);
+
   // ── UI state ───────────────────────────────────────────────────────────
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [fabOpen, setFabOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [builderOpen, setBuilderOpen] = useState(false);
 
   // ── Create outfit form ─────────────────────────────────────────────────
   const [newName, setNewName] = useState('');
@@ -229,17 +267,25 @@ export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
               : `${filteredOutfits.length} of ${outfits.length} looks`}
           </Text>
         </View>
-        <TouchableOpacity
-          style={styles.headerBtn}
-          onPress={() => setFilterSheetOpen(true)}
-        >
-          <Ionicons
-            name="options-outline"
-            size={20}
-            color={sortKey !== 'newest' ? colors.primary : colors.foreground}
-          />
-          {sortKey !== 'newest' && <View style={styles.filterDot} />}
-        </TouchableOpacity>
+        <View style={styles.headerBtns}>
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={() => persistViewMode(NEXT_VIEW_MODE[viewMode])}
+          >
+            <Ionicons name={VIEW_MODE_ICON[viewMode]} size={20} color={colors.foreground} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={() => setFilterSheetOpen(true)}
+          >
+            <Ionicons
+              name="options-outline"
+              size={20}
+              color={sortKey !== 'newest' ? colors.primary : colors.foreground}
+            />
+            {sortKey !== 'newest' && <View style={styles.filterDot} />}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* ── Search bar ── */}
@@ -296,7 +342,7 @@ export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
               onPress={() => {
                 setSelectedTags([]);
                 setSearch('');
-                setSortKey('newest');
+                persistSortKey('newest');
               }}
             >
               <Ionicons name="close-outline" size={13} color={colors.error} />
@@ -306,14 +352,18 @@ export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
         </ScrollView>
       )}
 
-      {/* ── Grid ── */}
+      {/* ── Grid / List / Dense ── */}
       <FlatList
+        key={viewMode}
         data={filteredOutfits}
         keyExtractor={(o) => String(o.id)}
-        numColumns={2}
-        columnWrapperStyle={styles.gridRow}
-        contentContainerStyle={styles.gridContent}
+        numColumns={viewMode === 'dense' ? 3 : viewMode === 'grid' ? 2 : 1}
+        columnWrapperStyle={viewMode !== 'list' ? styles.gridRow : undefined}
+        contentContainerStyle={viewMode === 'list' ? styles.listContent : styles.gridContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />
+        }
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name="layers-outline" size={48} color={colors.border} />
@@ -330,6 +380,7 @@ export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
         renderItem={({ item }) => (
           <OutfitCard
             outfit={item}
+            viewMode={viewMode}
             onPress={() => navigation.navigate('OutfitDetail', { outfitId: item.id })}
             onLongPress={() => {
               setSelectionMode(true);
@@ -428,7 +479,7 @@ export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
                 style={[styles.fabOption, styles.fabOptionPrimary]}
                 onPress={() => {
                   setFabOpen(false);
-                  Alert.alert('Coming soon', 'The outfit builder — pick items for each slot — is coming in the next update.');
+                  setBuilderOpen(true);
                 }}
               >
                 <Ionicons name="layers-outline" size={16} color={colors.primaryForeground} />
@@ -479,7 +530,7 @@ export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
               <TouchableOpacity
                 key={key}
                 style={styles.sheetRow}
-                onPress={() => { setSortKey(key); setFilterSheetOpen(false); }}
+                onPress={() => { persistSortKey(key); setFilterSheetOpen(false); }}
               >
                 <View style={[styles.radio, sortKey === key && styles.radioActive]}>
                   {sortKey === key && <View style={styles.radioInner} />}
@@ -491,6 +542,18 @@ export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
           </View>
         </View>
       </Modal>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          Outfit Builder sheet
+      ═══════════════════════════════════════════════════════════════════ */}
+      <OutfitBuilderSheet
+        visible={builderOpen}
+        onClose={() => setBuilderOpen(false)}
+        onCreated={(outfit) => {
+          setBuilderOpen(false);
+          navigation.navigate('OutfitDetail', { outfitId: outfit.id });
+        }}
+      />
 
       {/* ═══════════════════════════════════════════════════════════════════
           Quick Create modal
@@ -631,6 +694,11 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     marginTop: 2,
   },
+  headerBtns: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
   headerBtn: {
     padding: spacing.sm,
     marginTop: 4,
@@ -710,12 +778,15 @@ const styles = StyleSheet.create({
     color: colors.error,
   },
 
-  // ── Grid
+  // ── Grid / List
   gridRow: {
     paddingHorizontal: spacing.lg,
     gap: spacing.md,
   },
   gridContent: {
+    paddingBottom: 96,
+  },
+  listContent: {
     paddingBottom: 96,
   },
 

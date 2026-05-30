@@ -2,14 +2,17 @@ import {
   View,
   Text,
   ScrollView,
+  FlatList,
   TouchableOpacity,
   Modal,
   TextInput,
+  Image,
   StyleSheet,
   Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,8 +24,13 @@ import {
   useCreateEvent,
   useUpdateEvent,
   useDeleteEvent,
+  useAssignEventItems,
   type EventInput,
 } from '../../hooks/useEvents';
+import { useGenerateOutfit, type GenerateOutfitResult } from '../../hooks/useOutfits';
+import { useItems } from '../../hooks/useItems';
+import { CATEGORY_ORDER, CATEGORY_LABELS, type Item } from '../../types/item';
+import { LocationAutocompleteInput } from '../../components/primitives/LocationAutocompleteInput';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { CalendarScreenProps } from '../../navigation/types';
 import type { Event } from '../../types/event';
@@ -155,6 +163,255 @@ const ps = StyleSheet.create({
   },
   cancelBtn: { fontSize: typography.size.md, color: colors.mutedForeground },
   doneBtn: { fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: colors.primary },
+});
+
+// ── ItemThumbStack ────────────────────────────────────────────────────────────
+
+function ItemThumbStack({ itemIds, allItems, onPress }: { itemIds: number[]; allItems: Item[]; onPress: () => void }) {
+  const visible = itemIds
+    .map((id) => allItems.find((i) => i.id === id))
+    .filter(Boolean)
+    .slice(0, 3) as Item[];
+  const overflow = itemIds.length - 3;
+  if (visible.length === 0) return null;
+  return (
+    <TouchableOpacity style={its.row} onPress={onPress} activeOpacity={0.7}>
+      <View style={its.stack}>
+        {visible.map((item, idx) => (
+          <View key={item.id} style={[its.thumb, { marginLeft: idx === 0 ? 0 : -8, zIndex: visible.length - idx }]}>
+            {item.imageUrl
+              ? <Image source={{ uri: item.imageUrl }} style={its.thumbImg} />
+              : <View style={its.thumbFallback}><Text style={its.thumbInitials}>{item.name.slice(0, 2).toUpperCase()}</Text></View>
+            }
+          </View>
+        ))}
+      </View>
+      {overflow > 0 && <Text style={its.overflow}>+{overflow}</Text>}
+    </TouchableOpacity>
+  );
+}
+
+const its = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  stack: { flexDirection: 'row' },
+  thumb: {
+    width: 28, height: 28, borderRadius: 14,
+    borderWidth: 2, borderColor: colors.card,
+    overflow: 'hidden',
+  },
+  thumbImg: { width: '100%', height: '100%' },
+  thumbFallback: {
+    width: '100%', height: '100%',
+    backgroundColor: colors.muted, alignItems: 'center', justifyContent: 'center',
+  },
+  thumbInitials: { fontSize: 8, fontWeight: typography.weight.bold, color: colors.mutedForeground },
+  overflow: { fontSize: typography.size.xs, color: colors.mutedForeground, fontWeight: typography.weight.medium },
+});
+
+// ── EventItemPickerModal ──────────────────────────────────────────────────────
+
+function EventItemPickerModal({
+  event,
+  visible,
+  onClose,
+}: {
+  event: Event | null;
+  visible: boolean;
+  onClose: () => void;
+}) {
+  const { data: allItems = [], isLoading } = useItems();
+  const assignItems = useAssignEventItems();
+
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [query, setQuery] = useState('');
+  const [catFilter, setCatFilter] = useState<string>('all');
+
+  useEffect(() => {
+    if (visible && event) {
+      setSelected(new Set(event.itemIds ?? []));
+      setQuery('');
+      setCatFilter('all');
+    }
+  }, [visible, event]);
+
+  const filtered = allItems.filter((item) => {
+    const matchesCat = catFilter === 'all' || item.category === catFilter;
+    const matchesQ = !query.trim() || item.name.toLowerCase().includes(query.toLowerCase()) || (item.brand ?? '').toLowerCase().includes(query.toLowerCase());
+    return matchesCat && matchesQ;
+  });
+
+  const toggle = (id: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const handleConfirm = () => {
+    if (!event) return;
+    const itemIds = selected.size > 0 ? Array.from(selected) : null;
+    assignItems.mutate({ id: event.id, itemIds }, { onSuccess: onClose });
+  };
+
+  const catFilters = [{ id: 'all', label: 'All' }, ...CATEGORY_ORDER.map((c) => ({ id: c, label: CATEGORY_LABELS[c] }))];
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <View style={ipm.root}>
+          {/* Header */}
+          <View style={ipm.header}>
+            <TouchableOpacity onPress={onClose} style={ipm.headerSide}>
+              <Text style={ipm.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={ipm.headerTitle}>Assign Outfit</Text>
+            <TouchableOpacity onPress={handleConfirm} disabled={assignItems.isPending} style={[ipm.headerSide, { alignItems: 'flex-end' }]}>
+              {assignItems.isPending
+                ? <ActivityIndicator color={colors.primary} />
+                : <Text style={ipm.saveText}>Save{selected.size > 0 ? ` (${selected.size})` : ''}</Text>
+              }
+            </TouchableOpacity>
+          </View>
+
+          {/* Search */}
+          <View style={ipm.searchRow}>
+            <TextInput
+              style={ipm.searchInput}
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search items…"
+              placeholderTextColor={colors.mutedForeground}
+              returnKeyType="search"
+              clearButtonMode="while-editing"
+            />
+          </View>
+
+          {/* Category filter */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={ipm.catRow}>
+            {catFilters.map((f) => (
+              <TouchableOpacity
+                key={f.id}
+                style={[ipm.catChip, catFilter === f.id && ipm.catChipActive]}
+                onPress={() => setCatFilter(f.id)}
+                activeOpacity={0.7}
+              >
+                <Text style={[ipm.catLabel, catFilter === f.id && ipm.catLabelActive]}>{f.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* Item list */}
+          {isLoading ? (
+            <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xxxl }} />
+          ) : filtered.length === 0 ? (
+            <View style={ipm.empty}>
+              <Text style={ipm.emptyText}>{query ? 'No items match your search.' : 'No items in this category.'}</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={filtered}
+              keyExtractor={(item) => String(item.id)}
+              contentContainerStyle={ipm.listContent}
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item }) => {
+                const isSelected = selected.has(item.id);
+                return (
+                  <TouchableOpacity
+                    style={[ipm.itemRow, isSelected && ipm.itemRowSelected]}
+                    onPress={() => toggle(item.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={ipm.itemThumb}>
+                      {item.imageUrl
+                        ? <Image source={{ uri: item.imageUrl }} style={ipm.itemThumbImg} />
+                        : <View style={ipm.itemThumbFallback}><Text style={ipm.itemThumbInitials}>{item.name.slice(0, 2).toUpperCase()}</Text></View>
+                      }
+                    </View>
+                    <View style={ipm.itemInfo}>
+                      <Text style={ipm.itemName} numberOfLines={1}>{item.name}</Text>
+                      <Text style={ipm.itemMeta} numberOfLines={1}>
+                        {[item.brand, item.category ? CATEGORY_LABELS[item.category] : null].filter(Boolean).join(' · ')}
+                      </Text>
+                    </View>
+                    <View style={[ipm.checkbox, isSelected && ipm.checkboxSelected]}>
+                      {isSelected && <Text style={ipm.checkmark}>✓</Text>}
+                    </View>
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          )}
+
+          {/* Clear button */}
+          {selected.size > 0 && (
+            <TouchableOpacity style={ipm.clearBtn} onPress={() => setSelected(new Set())}>
+              <Text style={ipm.clearBtnText}>Clear selection</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+const ipm = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.background },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
+  },
+  headerSide: { minWidth: 70 },
+  headerTitle: { fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: colors.foreground },
+  cancelText: { fontSize: typography.size.md, color: colors.mutedForeground },
+  saveText: { fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: colors.primary, textAlign: 'right' },
+  searchRow: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+  searchInput: {
+    height: 40, backgroundColor: colors.muted, borderRadius: radii.md,
+    paddingHorizontal: spacing.md, fontSize: typography.size.sm, color: colors.foreground,
+  },
+  catRow: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.sm },
+  catChip: {
+    paddingHorizontal: spacing.md, paddingVertical: 6,
+    borderRadius: radii.full, borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  catChipActive: { borderColor: colors.primary, backgroundColor: `${colors.primary}15` },
+  catLabel: { fontSize: typography.size.xs, fontWeight: typography.weight.medium, color: colors.mutedForeground },
+  catLabelActive: { color: colors.primary },
+  listContent: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxxl },
+  itemRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
+  },
+  itemRowSelected: { backgroundColor: `${colors.primary}08` },
+  itemThumb: {
+    width: 48, height: 48, borderRadius: radii.md, overflow: 'hidden',
+    backgroundColor: colors.muted, flexShrink: 0,
+  },
+  itemThumbImg: { width: '100%', height: '100%' },
+  itemThumbFallback: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
+  itemThumbInitials: { fontSize: typography.size.xs, fontWeight: typography.weight.bold, color: colors.mutedForeground },
+  itemInfo: { flex: 1, gap: 2 },
+  itemName: { fontSize: typography.size.sm, fontWeight: typography.weight.medium, color: colors.foreground },
+  itemMeta: { fontSize: typography.size.xs, color: colors.mutedForeground },
+  checkbox: {
+    width: 24, height: 24, borderRadius: 12,
+    borderWidth: 2, borderColor: colors.border,
+    backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center',
+  },
+  checkboxSelected: { borderColor: colors.primary, backgroundColor: colors.primary },
+  checkmark: { color: colors.white, fontSize: 13, fontWeight: typography.weight.bold },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxxl },
+  emptyText: { fontSize: typography.size.sm, color: colors.mutedForeground, textAlign: 'center' },
+  clearBtn: {
+    margin: spacing.lg, paddingVertical: spacing.md,
+    borderRadius: radii.md, borderWidth: 1, borderColor: colors.border,
+    alignItems: 'center',
+  },
+  clearBtnText: { fontSize: typography.size.sm, color: colors.mutedForeground },
 });
 
 // ── EventFormModal ────────────────────────────────────────────────────────────
@@ -331,15 +588,13 @@ function EventFormModal({
             </View>
 
             {/* Location */}
-            <View style={fm.field}>
+            <View style={[fm.field, { zIndex: 10 }]}>
               <Text style={fm.label}>Location (Optional)</Text>
-              <TextInput
-                style={fm.input}
+              <LocationAutocompleteInput
                 value={location}
                 onChangeText={setLocation}
+                onSelect={setLocation}
                 placeholder="e.g. Downtown Seattle"
-                placeholderTextColor={colors.mutedForeground}
-                returnKeyType="next"
               />
             </View>
 
@@ -450,12 +705,20 @@ function EventDetailModal({
   onClose,
   onEdit,
   onDelete,
+  onAssign,
+  allItems,
+  generateOutfit,
+  onViewOutfits,
 }: {
   event: Event | null;
   visible: boolean;
   onClose: () => void;
   onEdit: (ev: Event) => void;
   onDelete: (ev: Event) => void;
+  onAssign: (ev: Event) => void;
+  allItems: Item[];
+  generateOutfit: ReturnType<typeof useGenerateOutfit>;
+  onViewOutfits: () => void;
 }) {
   if (!event) return null;
   const d = new Date(event.date);
@@ -513,17 +776,67 @@ function EventDetailModal({
               <Text style={dm.notesText}>{event.notes}</Text>
             </View>
           ) : null}
+
+          {(event.itemIds ?? []).length > 0 ? (
+            <View style={dm.outfitCard}>
+              <Text style={dm.outfitLabel}>Outfit</Text>
+              <View style={dm.outfitRow}>
+                <ItemThumbStack itemIds={event.itemIds!} allItems={allItems} onPress={() => onAssign(event)} />
+                <TouchableOpacity onPress={() => onAssign(event)} style={dm.changeOutfitBtn}>
+                  <Text style={dm.changeOutfitText}>Change</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
         </ScrollView>
 
         <View style={dm.actions}>
-          <TouchableOpacity style={dm.deleteBtn} onPress={() => onDelete(event)} activeOpacity={0.8}>
-            <Ionicons name="trash-outline" size={18} color={colors.error} />
-            <Text style={dm.deleteBtnText}>Delete</Text>
+          <TouchableOpacity
+            style={[dm.generateBtn, generateOutfit.isPending && dm.generateBtnDisabled]}
+            onPress={() => {
+              generateOutfit.mutate({ eventId: event.id }, {
+                onSuccess: (result: GenerateOutfitResult) => {
+                  Alert.alert(
+                    'Outfit Generated',
+                    `"${result.outfitName}"${result.stylistNotes ? `\n\n${result.stylistNotes}` : ''}`,
+                    [
+                      { text: 'View in Outfits', onPress: () => { onClose(); onViewOutfits(); } },
+                      { text: 'Done', style: 'cancel' },
+                    ]
+                  );
+                },
+                onError: (err: any) => {
+                  const msg = err?.response?.data?.message ?? 'Could not generate an outfit. Please try again.';
+                  Alert.alert('Generation Failed', msg);
+                },
+              });
+            }}
+            disabled={generateOutfit.isPending}
+            activeOpacity={0.85}
+          >
+            {generateOutfit.isPending ? (
+              <ActivityIndicator size="small" color={colors.white} />
+            ) : (
+              <Ionicons name="sparkles-outline" size={18} color={colors.white} />
+            )}
+            <Text style={dm.generateBtnText}>
+              {generateOutfit.isPending ? 'Generating…' : 'Generate Outfit with AI'}
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={dm.editBtnFull} onPress={() => onEdit(event)} activeOpacity={0.8}>
-            <Ionicons name="pencil-outline" size={18} color={colors.foreground} />
-            <Text style={dm.editBtnText}>Edit Event</Text>
-          </TouchableOpacity>
+          <View style={dm.actionRow}>
+            <TouchableOpacity style={dm.deleteBtn} onPress={() => onDelete(event)} activeOpacity={0.8}>
+              <Ionicons name="trash-outline" size={18} color={colors.error} />
+              <Text style={dm.deleteBtnText}>Delete</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={dm.assignBtn} onPress={() => onAssign(event)} activeOpacity={0.8}>
+              <Ionicons name="shirt-outline" size={18} color={colors.foreground} />
+              <Text style={dm.assignBtnText}>{(event.itemIds ?? []).length > 0 ? 'Edit Outfit' : 'Assign Outfit'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={dm.editBtnFull} onPress={() => onEdit(event)} activeOpacity={0.8}>
+              <Ionicons name="pencil-outline" size={18} color={colors.foreground} />
+              <Text style={dm.editBtnText}>Edit</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </Modal>
@@ -573,11 +886,29 @@ const dm = StyleSheet.create({
   },
   notesText: { fontSize: typography.size.sm, color: colors.foreground, flex: 1, lineHeight: typography.size.sm * 1.5 },
   actions: {
-    flexDirection: 'row',
-    gap: spacing.md,
+    gap: spacing.sm,
     padding: spacing.lg,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+  },
+  generateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    borderRadius: radii.md,
+    backgroundColor: colors.primary,
+  },
+  generateBtnDisabled: { opacity: 0.7 },
+  generateBtnText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.white,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
   },
   deleteBtn: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
@@ -585,6 +916,13 @@ const dm = StyleSheet.create({
     borderRadius: radii.md, borderWidth: 1, borderColor: colors.border,
   },
   deleteBtnText: { fontSize: typography.size.sm, color: colors.error, fontWeight: typography.weight.medium },
+  assignBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.md,
+    borderRadius: radii.md, borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  assignBtnText: { fontSize: typography.size.sm, color: colors.foreground, fontWeight: typography.weight.medium },
   editBtnFull: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
     paddingVertical: spacing.md,
@@ -592,6 +930,21 @@ const dm = StyleSheet.create({
     borderWidth: 1, borderColor: colors.border,
   },
   editBtnText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.foreground },
+  outfitCard: {
+    backgroundColor: colors.muted, borderRadius: radii.md, padding: spacing.md,
+    marginTop: spacing.xs, gap: spacing.sm,
+  },
+  outfitLabel: {
+    fontSize: typography.size.xs, fontWeight: typography.weight.semibold,
+    color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 0.5,
+  },
+  outfitRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  changeOutfitBtn: {
+    paddingHorizontal: spacing.sm, paddingVertical: 4,
+    borderRadius: radii.sm, borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  changeOutfitText: { fontSize: typography.size.xs, color: colors.mutedForeground, fontWeight: typography.weight.medium },
 });
 
 // ── WeekStrip ─────────────────────────────────────────────────────────────────
@@ -860,16 +1213,19 @@ const ws = StyleSheet.create({
 
 // ── CalendarScreen ────────────────────────────────────────────────────────────
 
-export function CalendarScreen(_props: CalendarScreenProps) {
+export function CalendarScreen({ navigation }: CalendarScreenProps) {
   const insets = useSafeAreaInsets();
-  const { data: events = [], isLoading } = useEvents();
+  const { data: events = [], isLoading, refetch, isRefetching } = useEvents();
+  const { data: allItems = [] } = useItems();
   const deleteEventMutation = useDeleteEvent();
+  const generateOutfit = useGenerateOutfit();
 
   const [selectedDate, setSelectedDate]     = useState(() => toDateStr(new Date()));
   const [weekOffset, setWeekOffset]         = useState(0);
   const [formVisible, setFormVisible]       = useState(false);
   const [editingEvent, setEditingEvent]     = useState<Event | null>(null);
   const [detailEvent, setDetailEvent]       = useState<Event | null>(null);
+  const [pickerEvent, setPickerEvent]       = useState<Event | null>(null);
   const [showAllUpcoming, setShowAllUpcoming] = useState(false);
   const [showAllPast, setShowAllPast]       = useState(false);
 
@@ -940,6 +1296,9 @@ export function CalendarScreen(_props: CalendarScreenProps) {
         style={styles.flex}
         contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + spacing.lg }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />
+        }
       >
         {/* Header */}
         <View style={styles.header}>
@@ -1023,7 +1382,10 @@ export function CalendarScreen(_props: CalendarScreenProps) {
                                 </Text>
                               </View>
                             </View>
-                            <Ionicons name="chevron-forward" size={16} color={colors.border} />
+                            {(event.itemIds ?? []).length > 0
+                              ? <ItemThumbStack itemIds={event.itemIds!} allItems={allItems} onPress={() => setPickerEvent(event)} />
+                              : <Ionicons name="chevron-forward" size={16} color={colors.border} />
+                            }
                           </TouchableOpacity>
                         );
                       })}
@@ -1099,11 +1461,20 @@ export function CalendarScreen(_props: CalendarScreenProps) {
         onClose={() => setDetailEvent(null)}
         onEdit={handleEdit}
         onDelete={handleDelete}
+        onAssign={(ev) => { setDetailEvent(null); setPickerEvent(ev); }}
+        allItems={allItems}
+        generateOutfit={generateOutfit}
+        onViewOutfits={() => navigation.navigate('Outfits')}
       />
       <EventFormModal
         visible={formVisible}
         event={editingEvent}
         onClose={() => { setFormVisible(false); setEditingEvent(null); }}
+      />
+      <EventItemPickerModal
+        event={pickerEvent}
+        visible={pickerEvent !== null}
+        onClose={() => setPickerEvent(null)}
       />
     </View>
   );

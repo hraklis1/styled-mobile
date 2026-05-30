@@ -66,5 +66,6 @@ export type Item = {
   wearCount: number;
   lastWornAt: string | null;
   isFavorite: boolean;
+  isArchived: boolean;
   createdAt: string;
 };

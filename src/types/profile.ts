@@ -1,6 +1,7 @@
 export type Profile = {
   id: number;
   userId: number;
+  onboardingComplete: boolean;
   displayName: string | null;
   photoUrl: string | null;
   stylePreference: string[] | null;

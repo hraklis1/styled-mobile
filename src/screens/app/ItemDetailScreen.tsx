@@ -18,12 +18,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { useItems, useCreateItem, useUpdateItem, useDeleteItem, useMarkItemWorn } from '../../hooks/useItems';
+import { compressImageToDataUrl } from '../../lib/compressImage';
+import { useItems, useCreateItem, useUpdateItem, useDeleteItem, useMarkItemWorn, useScanTag, useRefineImage } from '../../hooks/useItems';
+import type { TagScanResult } from '../../hooks/useItems';
 import { api } from '../../lib/api';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { colors, spacing, typography, radii } from '../../theme';
 import { CATEGORY_LABELS, CATEGORY_ORDER } from '../../types/item';
-import type { ItemCategory } from '../../types/item';
+import type { ItemCategory, Item } from '../../types/item';
 import { getSubcategories, getStyles } from '../../lib/taxonomy';
 import type { ItemDetailScreenProps } from '../../navigation/types';
 
@@ -426,6 +428,8 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const updateItem = useUpdateItem();
   const deleteItem = useDeleteItem();
   const markWorn = useMarkItemWorn();
+  const scanTag = useScanTag();
+  const refineImage = useRefineImage();
 
   const { width } = useWindowDimensions();
   const imageHeight = width * 0.85;
@@ -438,6 +442,10 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
 
   // ── Re-scan state ────────────────────────────────────────────────────────────
   const [rescanning, setRescanning] = useState(false);
+
+  // ── Tag-scan state ───────────────────────────────────────────────────────────
+  const [tagResult, setTagResult] = useState<TagScanResult | null>(null);
+  const [tagSelectedFields, setTagSelectedFields] = useState<Set<string>>(new Set());
 
   // ── Edit modal state ─────────────────────────────────────────────────────────
   const [editOpen, setEditOpen] = useState(false);
@@ -548,13 +556,22 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
 
   // ── Re-scan handler ───────────────────────────────────────────────────────────
 
-  const handleRescan = async (overrideImageData?: string) => {
+  const handleRescan = async (overrideImageData?: string, fileUri?: string) => {
     if (!item) return;
     const imageData = overrideImageData ?? item.imageUrl;
     if (!imageData) return;
     setRescanning(true);
     try {
-      const res = await api.post('/api/items/scan', { imageData });
+      let res: { data: any };
+      if (fileUri) {
+        const formData = new FormData();
+        formData.append('image', { uri: fileUri, type: 'image/jpeg', name: 'scan.jpg' } as unknown as Blob);
+        res = await api.post('/api/items/scan', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      } else {
+        res = await api.post('/api/items/scan', { imageData });
+      }
       const scanned = res.data as any;
       updateItem.mutate({
         id: item.id,
@@ -591,24 +608,47 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     const result = await pickFn({
       mediaTypes: ['images'],
       allowsEditing: true,
-      quality: 0.7,
-      base64: true,
+      quality: 1,
     });
 
     if (result.canceled || !result.assets[0]) return;
-    const asset = result.assets[0];
-    const mimeType = asset.mimeType ?? 'image/jpeg';
-    const dataUrl = `data:${mimeType};base64,${asset.base64}`;
-    await handleRescan(dataUrl);
+    const { uri, dataUrl } = await compressImageToDataUrl(result.assets[0]);
+    await handleRescan(dataUrl, uri);
+  };
+
+  const handleRefineImage = () => {
+    if (!item) return;
+    if (!item.category) {
+      Alert.alert('Category required', 'Please set a category for this item before generating an AI image.');
+      return;
+    }
+    refineImage.mutate(
+      {
+        name: item.name,
+        color: item.color || 'neutral',
+        brand: item.brand,
+        category: item.category,
+      },
+      {
+        onSuccess: ({ imageData }) => {
+          updateItem.mutate({ id: item.id, imageUrl: imageData });
+        },
+        onError: (err: any) => {
+          const msg = err?.response?.data?.message ?? 'Could not generate image. Please try again.';
+          Alert.alert('Generation failed', msg);
+        },
+      }
+    );
   };
 
   const handleChangePhoto = () => {
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
-        { options: ['Cancel', 'Take Photo', 'Choose from Library'], cancelButtonIndex: 0 },
+        { options: ['Cancel', 'Take Photo', 'Choose from Library', 'Generate AI Image'], cancelButtonIndex: 0 },
         (idx) => {
           if (idx === 1) pickAndChangePhoto('camera');
           if (idx === 2) pickAndChangePhoto('library');
+          if (idx === 3) handleRefineImage();
         }
       );
     } else {
@@ -616,6 +656,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         { text: 'Cancel', style: 'cancel' },
         { text: 'Camera', onPress: () => pickAndChangePhoto('camera') },
         { text: 'Photo Library', onPress: () => pickAndChangePhoto('library') },
+        { text: 'Generate AI Image', onPress: handleRefineImage },
       ]);
     }
   };
@@ -749,6 +790,74 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         }
       );
     }
+  };
+
+  // ── Tag-scan handlers ────────────────────────────────────────────────────────
+
+  const handleScanLabel = () => {
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options: ['Cancel', 'Take Photo', 'Choose from Library'], cancelButtonIndex: 0 },
+        (idx) => {
+          if (idx === 1) pickLabelPhoto('camera');
+          if (idx === 2) pickLabelPhoto('library');
+        }
+      );
+    } else {
+      Alert.alert('Scan clothing label', 'Choose a source', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Camera', onPress: () => pickLabelPhoto('camera') },
+        { text: 'Photo Library', onPress: () => pickLabelPhoto('library') },
+      ]);
+    }
+  };
+
+  const pickLabelPhoto = async (source: 'camera' | 'library') => {
+    const pickFn = source === 'camera'
+      ? ImagePicker.launchCameraAsync
+      : ImagePicker.launchImageLibraryAsync;
+    const result = await pickFn({ mediaTypes: ['images'], quality: 1 });
+    if (result.canceled || !result.assets[0]) return;
+    const { dataUrl } = await compressImageToDataUrl(result.assets[0]);
+    scanTag.mutate(
+      { imageData: dataUrl },
+      {
+        onSuccess: (data) => {
+          const hasAny = data.brand || data.size || data.material || data.care;
+          if (!hasAny) {
+            Alert.alert('No label found', "Couldn't read any label info. Try getting closer to the tag.");
+            return;
+          }
+          const initial = new Set<string>();
+          if (data.brand) initial.add('brand');
+          if (data.size) initial.add('size');
+          if (data.material) initial.add('material');
+          if (data.care) initial.add('care');
+          setTagSelectedFields(initial);
+          setTagResult(data);
+        },
+        onError: () => {
+          Alert.alert('Scan failed', 'Could not read the label. Please try again.');
+        },
+      }
+    );
+  };
+
+  const handleApplyTagScan = () => {
+    if (!tagResult || !item) return;
+    const patch: Partial<Item> & { id: number } = { id: item.id };
+    if (tagSelectedFields.has('brand') && tagResult.brand) patch.brand = tagResult.brand;
+    if (tagSelectedFields.has('material') && tagResult.material) patch.material = tagResult.material;
+    if (tagSelectedFields.has('care') && tagResult.care) patch.care = tagResult.care;
+    if (tagSelectedFields.has('size') && tagResult.size) {
+      const sizeTag = tagResult.size.toLowerCase();
+      const existing = item.tags ?? [];
+      if (!existing.includes(sizeTag)) patch.tags = [...existing, sizeTag];
+    }
+    updateItem.mutate(patch, {
+      onSuccess: () => setTagResult(null),
+      onError: () => Alert.alert('Update failed', 'Could not apply label details.'),
+    });
   };
 
   // ─── Render ───────────────────────────────────────────────────────────────────
@@ -949,7 +1058,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     viewItem.subcategory || viewItem.style || viewItem.pattern || viewItem.material || viewItem.fit ||
     (viewItem.formalityStyles?.length > 0) || (viewItem.notableDetails?.length > 0)
   );
-  const isBusy = updateItem.isPending || markWorn.isPending || deleteItem.isPending;
+  const isBusy = updateItem.isPending || markWorn.isPending || deleteItem.isPending || refineImage.isPending;
 
   return (
     <View style={styles.flex}>
@@ -984,9 +1093,9 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           <TouchableOpacity
             style={styles.changePhotoBtn}
             onPress={handleChangePhoto}
-            disabled={rescanning}
+            disabled={rescanning || refineImage.isPending}
           >
-            {rescanning ? (
+            {rescanning || refineImage.isPending ? (
               <ActivityIndicator size="small" color={colors.primaryForeground} />
             ) : (
               <Ionicons name="camera" size={16} color={colors.primaryForeground} />
@@ -1186,22 +1295,35 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         </SectionCard>
 
         {/* Fabric & Care */}
-        {(viewItem.material || viewItem.care) ? (
-          <SectionCard title="Fabric & Care">
-            {viewItem.material && (
-              <View style={styles.careRow}>
-                <Text style={styles.detailLabel}>Material</Text>
-                <Text style={[styles.detailValue, { flex: 3 }]}>{viewItem.material}</Text>
-              </View>
+        <SectionCard title="Fabric & Care">
+          {viewItem.material && (
+            <View style={styles.careRow}>
+              <Text style={styles.detailLabel}>Material</Text>
+              <Text style={[styles.detailValue, { flex: 3 }]}>{viewItem.material}</Text>
+            </View>
+          )}
+          {viewItem.care && (
+            <View style={styles.careRow}>
+              <Text style={styles.detailLabel}>Care</Text>
+              <Text style={[styles.detailValue, { flex: 3 }]}>{viewItem.care}</Text>
+            </View>
+          )}
+          <TouchableOpacity
+            style={[styles.scanLabelBtn, scanTag.isPending && styles.actionDisabled]}
+            onPress={handleScanLabel}
+            disabled={scanTag.isPending}
+            activeOpacity={0.7}
+          >
+            {scanTag.isPending ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Ionicons name="barcode-outline" size={15} color={colors.primary} />
             )}
-            {viewItem.care && (
-              <View style={styles.careRow}>
-                <Text style={styles.detailLabel}>Care</Text>
-                <Text style={[styles.detailValue, { flex: 3 }]}>{viewItem.care}</Text>
-              </View>
-            )}
-          </SectionCard>
-        ) : null}
+            <Text style={styles.scanLabelBtnText}>
+              {scanTag.isPending ? 'Reading label…' : 'Scan clothing label'}
+            </Text>
+          </TouchableOpacity>
+        </SectionCard>
 
         {/* Notes */}
         {viewItem.notes ? (
@@ -1220,6 +1342,72 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           <Text style={styles.editButtonText}>Edit details</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* ── Label scan result sheet ─────────────────────────────────────── */}
+      <Modal
+        visible={!!tagResult}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setTagResult(null)}
+      >
+        <View style={lsStyles.overlay}>
+          <TouchableOpacity style={lsStyles.backdrop} onPress={() => setTagResult(null)} activeOpacity={1} />
+          <View style={[lsStyles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
+            <View style={lsStyles.handle} />
+            <Text style={lsStyles.sheetTitle}>Label Detected</Text>
+            <Text style={lsStyles.sheetSubtitle}>Select fields to apply to this item</Text>
+            {tagResult && (['brand', 'size', 'material', 'care'] as const).map((field) => {
+              const val = tagResult[field];
+              if (!val) return null;
+              const active = tagSelectedFields.has(field);
+              const fieldLabels: Record<string, string> = {
+                brand: 'Brand', size: 'Size (as tag)', material: 'Material', care: 'Care',
+              };
+              return (
+                <TouchableOpacity
+                  key={field}
+                  style={[lsStyles.row, active && lsStyles.rowActive]}
+                  onPress={() => setTagSelectedFields((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(field)) next.delete(field); else next.add(field);
+                    return next;
+                  })}
+                  activeOpacity={0.7}
+                >
+                  <View style={lsStyles.rowLeft}>
+                    <Text style={lsStyles.rowLabel}>{fieldLabels[field]}</Text>
+                    <Text style={lsStyles.rowValue}>{val}</Text>
+                  </View>
+                  <View style={[lsStyles.checkbox, active && lsStyles.checkboxActive]}>
+                    {active && <Ionicons name="checkmark" size={14} color={colors.background} />}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+            <View style={lsStyles.sheetActions}>
+              <TouchableOpacity
+                style={[lsStyles.applyBtn, tagSelectedFields.size === 0 && { opacity: 0.4 }]}
+                onPress={handleApplyTagScan}
+                disabled={tagSelectedFields.size === 0 || updateItem.isPending}
+                activeOpacity={0.8}
+              >
+                {updateItem.isPending ? (
+                  <ActivityIndicator size="small" color={colors.primaryForeground} />
+                ) : (
+                  <Text style={lsStyles.applyBtnText}>Apply selected</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={lsStyles.dismissBtn}
+                onPress={() => setTagResult(null)}
+                activeOpacity={0.7}
+              >
+                <Text style={lsStyles.dismissBtnText}>Dismiss</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── Edit modal ──────────────────────────────────────────────────── */}
       <Modal
@@ -1758,6 +1946,26 @@ const styles = StyleSheet.create({
     lineHeight: typography.size.md * typography.lineHeight.normal,
   },
 
+  // Scan label button (inside Fabric & Care card)
+  scanLabelBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  scanLabelBtnText: {
+    fontSize: typography.size.sm,
+    color: colors.primary,
+    fontWeight: typography.weight.medium,
+  },
+
   // Edit button
   editButton: {
     flexDirection: 'row',
@@ -1934,5 +2142,100 @@ const editStyles = StyleSheet.create({
     color: colors.foreground,
     paddingHorizontal: 4,
     marginBottom: spacing.xs,
+  },
+});
+
+const lsStyles = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: 'flex-end' },
+  backdrop: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  sheet: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: radii.lg + 4,
+    borderTopRightRadius: radii.lg + 4,
+    paddingTop: spacing.sm,
+    paddingHorizontal: spacing.lg,
+  },
+  handle: {
+    width: 36, height: 4, borderRadius: 2,
+    backgroundColor: colors.border,
+    alignSelf: 'center',
+    marginBottom: spacing.md,
+  },
+  sheetTitle: {
+    fontSize: typography.size.lg,
+    fontWeight: typography.weight.semibold,
+    color: colors.foreground,
+    marginBottom: 4,
+  },
+  sheetSubtitle: {
+    fontSize: typography.size.sm,
+    color: colors.mutedForeground,
+    marginBottom: spacing.lg,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    marginBottom: spacing.xs,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  rowActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary + '11',
+  },
+  rowLeft: { flex: 1, gap: 2 },
+  rowLabel: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    color: colors.mutedForeground,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  rowValue: {
+    fontSize: typography.size.md,
+    color: colors.foreground,
+    fontWeight: typography.weight.medium,
+  },
+  checkbox: {
+    width: 22, height: 22, borderRadius: 11,
+    borderWidth: 2, borderColor: colors.border,
+    alignItems: 'center', justifyContent: 'center',
+    marginLeft: spacing.md,
+  },
+  checkboxActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  sheetActions: {
+    marginTop: spacing.lg,
+    gap: spacing.sm,
+  },
+  applyBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: radii.lg,
+    paddingVertical: spacing.md + 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  applyBtnText: {
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.semibold,
+    color: colors.primaryForeground,
+  },
+  dismissBtn: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+  },
+  dismissBtnText: {
+    fontSize: typography.size.md,
+    color: colors.mutedForeground,
   },
 });

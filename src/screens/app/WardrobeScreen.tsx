@@ -9,26 +9,29 @@ import {
   Modal,
   ScrollView,
   Alert,
-  ActionSheetIOS,
   ActivityIndicator,
   Platform,
   KeyboardAvoidingView,
   Image,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
 
 import {
   useItems,
+  useArchivedItems,
+  useArchiveItems,
   useCreateItem,
   useUpdateItem,
   useDeleteItem,
   useMarkItemWorn,
-  useScanItem,
 } from '../../hooks/useItems';
 import { WardrobeItemCard } from '../../components/wardrobe/WardrobeItemCard';
 import { WardrobeListRow } from '../../components/wardrobe/WardrobeListRow';
+import { ScanItemSheet } from '../../components/wardrobe/ScanItemSheet';
+import { BatchScanSheet } from '../../components/wardrobe/BatchScanSheet';
+import { QuickCaptureSheet } from '../../components/wardrobe/QuickCaptureSheet';
 import { colors, spacing, typography, radii } from '../../theme';
 import { CATEGORY_LABELS, CATEGORY_ORDER, type Item, type ItemCategory } from '../../types/item';
 import type { WardrobeListScreenProps } from '../../navigation/types';
@@ -85,12 +88,13 @@ function sortItems(items: Item[], key: SortKey): Item[] {
 
 export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
   const insets = useSafeAreaInsets();
-  const { data: items = [], isLoading, isError, refetch } = useItems();
+  const { data: items = [], isLoading, isError, refetch, isRefetching } = useItems();
+  const { data: archivedItems = [], refetch: refetchArchived, isRefetching: isRefetchingArchived } = useArchivedItems();
+  const archiveItems = useArchiveItems();
   const createItem = useCreateItem();
   const updateItem = useUpdateItem();
   const deleteItem = useDeleteItem();
   const markWorn = useMarkItemWorn();
-  const scanItem = useScanItem();
 
   // ── View & sort ────────────────────────────────────────────────────────
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -110,9 +114,10 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
   const [fabOpen, setFabOpen] = useState(false);
   const [addItemOpen, setAddItemOpen] = useState(false);
 
-  // ── Scan overlay ───────────────────────────────────────────────────────
-  const [scanOverlayVisible, setScanOverlayVisible] = useState(false);
-  const [pendingScanImageUrl, setPendingScanImageUrl] = useState<string | null>(null);
+  // ── Scan sheet ─────────────────────────────────────────────────────────
+  const [scanSheetVisible, setScanSheetVisible] = useState(false);
+  const [batchScanVisible, setBatchScanVisible] = useState(false);
+  const [quickCaptureVisible, setQuickCaptureVisible] = useState(false);
 
   // ── Add item form ──────────────────────────────────────────────────────
   const [newName, setNewName] = useState('');
@@ -125,6 +130,7 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
   // ── Selection mode ─────────────────────────────────────────────────────
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [showArchived, setShowArchived] = useState(false);
 
   // ── Derived data ───────────────────────────────────────────────────────
 
@@ -263,6 +269,16 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
     exitSelectionMode();
   };
 
+  const handleBulkArchive = () => {
+    if (selectedIds.size === 0) return;
+    archiveItems.mutate({ ids: Array.from(selectedIds), archive: true }, { onSuccess: exitSelectionMode });
+  };
+
+  const handleBulkUnarchive = () => {
+    if (selectedIds.size === 0) return;
+    archiveItems.mutate({ ids: Array.from(selectedIds), archive: false }, { onSuccess: exitSelectionMode });
+  };
+
   const handleFavoriteToggle = useCallback(
     (item: Item) => {
       updateItem.mutate({ id: item.id, isFavorite: !item.isFavorite });
@@ -303,68 +319,9 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
     );
   };
 
-  const pickAndScanImage = async (source: 'camera' | 'library') => {
-    const pickFn =
-      source === 'camera'
-        ? ImagePicker.launchCameraAsync
-        : ImagePicker.launchImageLibraryAsync;
-
-    const result = await pickFn({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      quality: 0.7,
-      base64: true,
-    });
-
-    if (result.canceled || !result.assets[0]) return;
-
-    const asset = result.assets[0];
-    const mimeType = asset.mimeType ?? 'image/jpeg';
-    const dataUrl = `data:${mimeType};base64,${asset.base64}`;
-
-    setPendingScanImageUrl(dataUrl);
-    setScanOverlayVisible(true);
-
-    scanItem.mutate(dataUrl, {
-      onSuccess: (scanned) => {
-        setScanOverlayVisible(false);
-        setPendingScanImageUrl(null);
-        navigation.navigate('ItemDetail', { scanData: scanned, scanImageUrl: dataUrl });
-      },
-      onError: () => {
-        setScanOverlayVisible(false);
-        Alert.alert('Scan failed', "Couldn't analyse the photo.", [
-          {
-            text: 'Add Manually',
-            onPress: () => {
-              setNewImageUrl(dataUrl);
-              setAddItemOpen(true);
-            },
-          },
-          { text: 'Cancel', style: 'cancel' },
-        ]);
-        setPendingScanImageUrl(null);
-      },
-    });
-  };
-
   const handleScanCloset = () => {
     setFabOpen(false);
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options: ['Cancel', 'Take Photo', 'Choose from Library'], cancelButtonIndex: 0 },
-        (idx) => {
-          if (idx === 1) pickAndScanImage('camera');
-          if (idx === 2) pickAndScanImage('library');
-        }
-      );
-    } else {
-      Alert.alert('Add photo', 'Choose a source', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Camera', onPress: () => pickAndScanImage('camera') },
-        { text: 'Photo Library', onPress: () => pickAndScanImage('library') },
-      ]);
-    }
+    setScanSheetVisible(true);
   };
 
   const clearAllFilters = () => {
@@ -549,6 +506,9 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
           viewMode === 'grid' ? styles.gridContent : styles.listContent,
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />
+        }
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name="shirt-outline" size={48} color={colors.border} />
@@ -561,6 +521,77 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
                 : 'Tap + to add your first piece.'}
             </Text>
           </View>
+        }
+        ListFooterComponent={
+          archivedItems.length > 0 ? (
+            <View style={styles.archiveSection}>
+              <TouchableOpacity
+                style={styles.archiveToggle}
+                onPress={() => setShowArchived((v) => !v)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="archive-outline" size={16} color={colors.mutedForeground} />
+                <Text style={styles.archiveToggleText}>
+                  Archived ({archivedItems.length})
+                </Text>
+                <Ionicons
+                  name={showArchived ? 'chevron-up' : 'chevron-down'}
+                  size={14}
+                  color={colors.mutedForeground}
+                />
+              </TouchableOpacity>
+
+              {showArchived && (
+                <View style={styles.archiveList}>
+                  {(isRefetchingArchived ? [] : archivedItems).map((item) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[
+                        styles.archiveRow,
+                        selectionMode && selectedIds.has(item.id) && styles.archiveRowSelected,
+                      ]}
+                      onPress={() => {
+                        if (selectionMode) {
+                          toggleSelectItem(item.id);
+                        } else {
+                          navigation.navigate('ItemDetail', { itemId: item.id });
+                        }
+                      }}
+                      onLongPress={() => {
+                        setSelectionMode(true);
+                        toggleSelectItem(item.id);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.archiveThumb}>
+                        {item.imageUrl
+                          ? <Image source={{ uri: item.imageUrl }} style={styles.archiveThumbImg} />
+                          : <Ionicons name="shirt-outline" size={18} color={colors.mutedForeground} />
+                        }
+                      </View>
+                      <View style={styles.archiveInfo}>
+                        <Text style={styles.archiveName} numberOfLines={1}>{item.name}</Text>
+                        {item.brand ? <Text style={styles.archiveMeta} numberOfLines={1}>{item.brand}</Text> : null}
+                      </View>
+                      {selectionMode && (
+                        <View style={[styles.archiveCheck, selectedIds.has(item.id) && styles.archiveCheckSel]}>
+                          {selectedIds.has(item.id) && <Text style={styles.archiveCheckMark}>✓</Text>}
+                        </View>
+                      )}
+                      {!selectionMode && (
+                        <TouchableOpacity
+                          onPress={() => archiveItems.mutate({ ids: [item.id], archive: false })}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Text style={styles.unarchiveBtn}>Restore</Text>
+                        </TouchableOpacity>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+          ) : null
         }
         renderItem={({ item }) =>
           viewMode === 'list' ? (
@@ -618,70 +649,65 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
               </Text>
             </TouchableOpacity>
           </View>
-          <View style={styles.bulkActions}>
-            <TouchableOpacity
-              style={[styles.bulkBtn, selectedIds.size === 0 && styles.bulkBtnDisabled]}
-              onPress={handleBulkFavorite}
-              disabled={selectedIds.size === 0}
-            >
-              <Ionicons
-                name="heart-outline"
-                size={17}
-                color={selectedIds.size === 0 ? colors.border : colors.foreground}
-              />
-              <Text
-                style={[
-                  styles.bulkBtnText,
-                  selectedIds.size === 0 && styles.bulkBtnTextDisabled,
-                ]}
-              >
-                Favourite
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.bulkBtn, selectedIds.size === 0 && styles.bulkBtnDisabled]}
-              onPress={handleBulkMarkWorn}
-              disabled={selectedIds.size === 0}
-            >
-              <Ionicons
-                name="shirt-outline"
-                size={17}
-                color={selectedIds.size === 0 ? colors.border : colors.foreground}
-              />
-              <Text
-                style={[
-                  styles.bulkBtnText,
-                  selectedIds.size === 0 && styles.bulkBtnTextDisabled,
-                ]}
-              >
-                Worn today
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.bulkBtn,
-                styles.bulkBtnDelete,
-                selectedIds.size === 0 && styles.bulkBtnDisabled,
-              ]}
-              onPress={handleBulkDelete}
-              disabled={selectedIds.size === 0}
-            >
-              <Ionicons
-                name="trash-outline"
-                size={17}
-                color={selectedIds.size === 0 ? colors.border : colors.error}
-              />
-              <Text
-                style={[
-                  styles.bulkBtnText,
-                  styles.bulkBtnTextDelete,
-                  selectedIds.size === 0 && styles.bulkBtnTextDisabled,
-                ]}
-              >
-                Delete
-              </Text>
-            </TouchableOpacity>
-          </View>
+          {/* Determine which actions to show based on selected items */}
+          {(() => {
+            const archivedIdSet = new Set(archivedItems.map((i) => i.id));
+            const anyArchived = [...selectedIds].some((id) => archivedIdSet.has(id));
+            const anyActive = [...selectedIds].some((id) => !archivedIdSet.has(id));
+            const dis = selectedIds.size === 0;
+            return (
+              <View style={styles.bulkActions}>
+                {anyActive && (
+                  <TouchableOpacity
+                    style={[styles.bulkBtn, dis && styles.bulkBtnDisabled]}
+                    onPress={handleBulkFavorite}
+                    disabled={dis}
+                  >
+                    <Ionicons name="heart-outline" size={17} color={dis ? colors.border : colors.foreground} />
+                    <Text style={[styles.bulkBtnText, dis && styles.bulkBtnTextDisabled]}>Favourite</Text>
+                  </TouchableOpacity>
+                )}
+                {anyActive && (
+                  <TouchableOpacity
+                    style={[styles.bulkBtn, dis && styles.bulkBtnDisabled]}
+                    onPress={handleBulkMarkWorn}
+                    disabled={dis}
+                  >
+                    <Ionicons name="shirt-outline" size={17} color={dis ? colors.border : colors.foreground} />
+                    <Text style={[styles.bulkBtnText, dis && styles.bulkBtnTextDisabled]}>Worn today</Text>
+                  </TouchableOpacity>
+                )}
+                {anyActive && (
+                  <TouchableOpacity
+                    style={[styles.bulkBtn, dis && styles.bulkBtnDisabled]}
+                    onPress={handleBulkArchive}
+                    disabled={dis}
+                  >
+                    <Ionicons name="archive-outline" size={17} color={dis ? colors.border : colors.foreground} />
+                    <Text style={[styles.bulkBtnText, dis && styles.bulkBtnTextDisabled]}>Archive</Text>
+                  </TouchableOpacity>
+                )}
+                {anyArchived && (
+                  <TouchableOpacity
+                    style={[styles.bulkBtn, dis && styles.bulkBtnDisabled]}
+                    onPress={handleBulkUnarchive}
+                    disabled={dis}
+                  >
+                    <Ionicons name="arrow-up-outline" size={17} color={dis ? colors.border : colors.foreground} />
+                    <Text style={[styles.bulkBtnText, dis && styles.bulkBtnTextDisabled]}>Restore</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.bulkBtn, styles.bulkBtnDelete, dis && styles.bulkBtnDisabled]}
+                  onPress={handleBulkDelete}
+                  disabled={dis}
+                >
+                  <Ionicons name="trash-outline" size={17} color={dis ? colors.border : colors.error} />
+                  <Text style={[styles.bulkBtnText, styles.bulkBtnTextDelete, dis && styles.bulkBtnTextDisabled]}>Delete</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          })()}
         </View>
       )}
 
@@ -704,11 +730,11 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
                 style={styles.fabOption}
                 onPress={() => {
                   setFabOpen(false);
-                  setAddItemOpen(true);
+                  setQuickCaptureVisible(true);
                 }}
               >
                 <Ionicons name="add-outline" size={16} color={colors.foreground} />
-                <Text style={styles.fabOptionText}>Add Manually</Text>
+                <Text style={styles.fabOptionText}>Quick Add</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.fabOption, styles.fabOptionPrimary]}
@@ -718,6 +744,13 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
                 <Text style={[styles.fabOptionText, styles.fabOptionTextPrimary]}>
                   Scan Closet
                 </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.fabOption}
+                onPress={() => { setFabOpen(false); setBatchScanVisible(true); }}
+              >
+                <Ionicons name="images-outline" size={16} color={colors.foreground} />
+                <Text style={styles.fabOptionText}>Batch Scan</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -1076,24 +1109,20 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── AI Scan overlay ── */}
-      <Modal visible={scanOverlayVisible} transparent animationType="fade" statusBarTranslucent>
-        <View style={styles.scanOverlay}>
-          {pendingScanImageUrl && (
-            <Image
-              source={{ uri: pendingScanImageUrl }}
-              style={StyleSheet.absoluteFill}
-              resizeMode="cover"
-            />
-          )}
-          <View style={styles.scanOverlayDim} />
-          <View style={styles.scanOverlayCard}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.scanOverlayTitle}>Analysing your item…</Text>
-            <Text style={styles.scanOverlaySubtitle}>AI is reading the details</Text>
-          </View>
-        </View>
-      </Modal>
+      <ScanItemSheet
+        visible={scanSheetVisible}
+        onClose={() => setScanSheetVisible(false)}
+      />
+
+      <BatchScanSheet
+        visible={batchScanVisible}
+        onClose={() => setBatchScanVisible(false)}
+      />
+
+      <QuickCaptureSheet
+        visible={quickCaptureVisible}
+        onClose={() => setQuickCaptureVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -1565,36 +1594,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  // ── Scan overlay
-  scanOverlay: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scanOverlayDim: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
-  scanOverlayCard: {
-    backgroundColor: colors.card,
-    borderRadius: radii.xl,
-    paddingVertical: spacing.xxl,
-    paddingHorizontal: spacing.xl,
-    alignItems: 'center',
-    gap: spacing.md,
-    minWidth: 220,
-  },
-  scanOverlayTitle: {
-    fontSize: typography.size.md,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-    textAlign: 'center',
-  },
-  scanOverlaySubtitle: {
-    fontSize: typography.size.sm,
-    color: colors.mutedForeground,
-    textAlign: 'center',
-  },
   addImagePreview: {
     marginHorizontal: spacing.lg,
     marginTop: spacing.lg,
@@ -1685,5 +1684,74 @@ const styles = StyleSheet.create({
   },
   addCatPillTextActive: {
     color: colors.primaryForeground,
+  },
+
+  // ── Archived section
+  archiveSection: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xxxl,
+    paddingTop: spacing.md,
+  },
+  archiveToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  archiveToggleText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.medium,
+    color: colors.mutedForeground,
+    flex: 1,
+  },
+  archiveList: {
+    marginTop: spacing.sm,
+    borderRadius: radii.lg,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  archiveRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.card,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+    opacity: 0.65,
+  },
+  archiveRowSelected: {
+    backgroundColor: `${colors.primary}10`,
+    opacity: 1,
+  },
+  archiveThumb: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.sm,
+    backgroundColor: colors.muted,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  archiveThumbImg: { width: '100%', height: '100%' },
+  archiveInfo: { flex: 1, gap: 2 },
+  archiveName: { fontSize: typography.size.sm, fontWeight: typography.weight.medium, color: colors.foreground },
+  archiveMeta: { fontSize: typography.size.xs, color: colors.mutedForeground },
+  archiveCheck: {
+    width: 22, height: 22, borderRadius: 11,
+    borderWidth: 2, borderColor: colors.border,
+    backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center',
+  },
+  archiveCheckSel: { borderColor: colors.primary, backgroundColor: colors.primary },
+  archiveCheckMark: { color: colors.white, fontSize: 12, fontWeight: typography.weight.bold },
+  unarchiveBtn: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
   },
 });

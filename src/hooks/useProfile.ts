@@ -12,6 +12,7 @@ export function useProfile() {
 }
 
 export type ProfileInput = {
+  onboardingComplete?: boolean;
   displayName?: string | null;
   photoUrl?: string | null;
   stylePreference?: string[] | null;

@@ -4,9 +4,11 @@ import { OutfitCollage } from './OutfitCollage';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { Outfit } from '../../types/outfit';
 
-const COLUMN_COUNT = 2;
+export type OutfitViewMode = 'grid' | 'list' | 'dense';
+
 const COLUMN_GAP = spacing.md;
 const SIDE_PADDING = spacing.lg;
+const COLUMNS: Record<OutfitViewMode, number> = { grid: 2, list: 1, dense: 3 };
 
 type Props = {
   outfit: Outfit;
@@ -15,6 +17,7 @@ type Props = {
   selectionMode?: boolean;
   isSelected?: boolean;
   onToggleSelect?: () => void;
+  viewMode?: OutfitViewMode;
 };
 
 export function OutfitCard({
@@ -24,11 +27,45 @@ export function OutfitCard({
   selectionMode = false,
   isSelected = false,
   onToggleSelect,
+  viewMode = 'grid',
 }: Props) {
   const { width } = useWindowDimensions();
-  const cardWidth = (width - SIDE_PADDING * 2 - COLUMN_GAP) / COLUMN_COUNT;
+  const columns = COLUMNS[viewMode];
+  const cardWidth = (width - SIDE_PADDING * 2 - COLUMN_GAP * (columns - 1)) / columns;
 
   const handlePress = selectionMode ? onToggleSelect : onPress;
+
+  if (viewMode === 'list') {
+    const thumbSize = 72;
+    return (
+      <TouchableOpacity
+        style={[styles.listRow, isSelected && styles.cardSelected]}
+        onPress={handlePress}
+        onLongPress={selectionMode ? undefined : onLongPress}
+        delayLongPress={450}
+        activeOpacity={0.85}
+      >
+        <View style={[styles.listThumb, { width: thumbSize, height: thumbSize }]}>
+          <OutfitCollage outfit={outfit} size={thumbSize} />
+          {selectionMode && isSelected && <View style={styles.selectedOverlay} />}
+          {selectionMode && (
+            <View style={[styles.selectionBadge, isSelected && styles.selectionBadgeActive]}>
+              {isSelected && <Ionicons name="checkmark" size={11} color={colors.primaryForeground} />}
+            </View>
+          )}
+        </View>
+        <View style={styles.listInfo}>
+          <Text style={styles.name} numberOfLines={1}>{outfit.name}</Text>
+          {outfit.event ? <Text style={styles.event} numberOfLines={1}>{outfit.event}</Text> : null}
+          {outfit.wearCount > 0 ? <Text style={styles.worn}>Worn {outfit.wearCount}×</Text> : null}
+          {outfit.isDraft ? (
+            <View style={styles.draftBadge}><Text style={styles.draftText}>Draft</Text></View>
+          ) : null}
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={colors.border} />
+      </TouchableOpacity>
+    );
+  }
 
   return (
     <TouchableOpacity
@@ -38,37 +75,28 @@ export function OutfitCard({
       delayLongPress={450}
       activeOpacity={0.85}
     >
-      {/* Collage image */}
       <View style={styles.collageWrapper}>
         <OutfitCollage outfit={outfit} size={cardWidth} />
-
-        {/* Selection badge */}
         {selectionMode && (
           <View style={[styles.selectionBadge, isSelected && styles.selectionBadgeActive]}>
             {isSelected && <Ionicons name="checkmark" size={13} color={colors.primaryForeground} />}
           </View>
         )}
-
-        {/* Selected overlay tint */}
         {selectionMode && isSelected && <View style={styles.selectedOverlay} />}
       </View>
 
-      <View style={styles.info}>
-        <Text style={styles.name} numberOfLines={1}>
+      <View style={viewMode === 'dense' ? styles.infoDense : styles.info}>
+        <Text style={viewMode === 'dense' ? styles.nameDense : styles.name} numberOfLines={1}>
           {outfit.name}
         </Text>
-        {outfit.event ? (
-          <Text style={styles.event} numberOfLines={1}>
-            {outfit.event}
-          </Text>
+        {viewMode !== 'dense' && outfit.event ? (
+          <Text style={styles.event} numberOfLines={1}>{outfit.event}</Text>
         ) : null}
-        {outfit.wearCount > 0 ? (
+        {viewMode !== 'dense' && outfit.wearCount > 0 ? (
           <Text style={styles.worn}>Worn {outfit.wearCount}×</Text>
         ) : null}
         {outfit.isDraft ? (
-          <View style={styles.draftBadge}>
-            <Text style={styles.draftText}>Draft</Text>
-          </View>
+          <View style={styles.draftBadge}><Text style={styles.draftText}>Draft</Text></View>
         ) : null}
       </View>
     </TouchableOpacity>
@@ -81,6 +109,38 @@ const styles = StyleSheet.create({
   },
   cardSelected: {
     opacity: 0.92,
+  },
+
+  // ── List row
+  listRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SIDE_PADDING,
+    paddingVertical: spacing.sm,
+    gap: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  listThumb: {
+    borderRadius: radii.md,
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  listInfo: {
+    flex: 1,
+    gap: 2,
+  },
+
+  // ── Dense info
+  infoDense: {
+    paddingTop: 4,
+    paddingHorizontal: 2,
+    gap: 1,
+  },
+  nameDense: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    color: colors.foreground,
   },
   collageWrapper: {
     position: 'relative',

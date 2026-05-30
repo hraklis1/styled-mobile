@@ -42,6 +42,17 @@ export function useUpdateEvent() {
   });
 }
 
+export function useAssignEventItems() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, itemIds }: { id: number; itemIds: number[] | null }) =>
+      api.patch<Event>(`/api/events/${id}`, { itemIds }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: EVENTS_QUERY_KEY });
+    },
+  });
+}
+
 export function useDeleteEvent() {
   const qc = useQueryClient();
   return useMutation({
