@@ -39,7 +39,7 @@
         }
       ],
       [
-        "expo-av",
+        "expo-audio",
         {
           "microphonePermission": "Styled needs microphone access to record your voice for the AI stylist."
         }

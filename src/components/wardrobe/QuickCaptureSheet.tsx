@@ -61,11 +61,12 @@ export interface QuickCaptureSheetProps {
   visible: boolean;
   onClose: () => void;
   onItemsSaved?: (items: Item[]) => void;
+  onLogOutfit?: () => void;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function QuickCaptureSheet({ visible, onClose, onItemsSaved }: QuickCaptureSheetProps) {
+export function QuickCaptureSheet({ visible, onClose, onItemsSaved, onLogOutfit }: QuickCaptureSheetProps) {
   const insets = useSafeAreaInsets();
 
   const [mode, setMode] = useState<Mode>('menu');
@@ -312,7 +313,7 @@ export function QuickCaptureSheet({ visible, onClose, onItemsSaved }: QuickCaptu
   const canClose = mode === 'menu' || mode === 'review' || mode === 'manual';
 
   const headerTitle =
-    mode === 'menu' ? 'Quick Add'
+    mode === 'menu' ? 'Add to Styled'
     : mode === 'scanning' ? 'Scanning…'
     : mode === 'extracting' ? 'Extracting details…'
     : mode === 'saving' ? 'Adding to wardrobe…'
@@ -345,7 +346,6 @@ export function QuickCaptureSheet({ visible, onClose, onItemsSaved }: QuickCaptu
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerLeft}>
-              <Ionicons name="camera" size={16} color={colors.primary} />
               <Text style={styles.headerTitle}>{headerTitle}</Text>
             </View>
             {canClose && (
@@ -370,6 +370,7 @@ export function QuickCaptureSheet({ visible, onClose, onItemsSaved }: QuickCaptu
                 onCamera={() => pickAndScan('camera')}
                 onLibrary={() => pickAndScan('library')}
                 onManual={() => setMode('manual')}
+                onLogOutfit={onLogOutfit}
               />
             )}
 
@@ -438,16 +439,16 @@ function MenuContent({
   onCamera,
   onLibrary,
   onManual,
+  onLogOutfit,
 }: {
   onCamera: () => void;
   onLibrary: () => void;
   onManual: () => void;
+  onLogOutfit?: () => void;
 }) {
   return (
     <View style={menuStyles.container}>
-      <Text style={menuStyles.subtitle}>
-        Snap a photo to instantly add items with AI, or enter details manually.
-      </Text>
+      <Text style={menuStyles.sectionLabel}>Add to Wardrobe</Text>
 
       <TouchableOpacity style={menuStyles.option} onPress={onCamera} activeOpacity={0.75}>
         <View style={[menuStyles.iconBox, { backgroundColor: `${colors.primary}18` }]}>
@@ -481,17 +482,39 @@ function MenuContent({
         </View>
         <Ionicons name="chevron-forward" size={16} color={colors.border} />
       </TouchableOpacity>
+
+      <View style={menuStyles.divider} />
+
+      <Text style={menuStyles.sectionLabel}>Log Outfit</Text>
+
+      <TouchableOpacity style={menuStyles.option} onPress={onLogOutfit} activeOpacity={0.75}>
+        <View style={[menuStyles.iconBox, { backgroundColor: `${colors.primary}18` }]}>
+          <Ionicons name="layers-outline" size={22} color={colors.primary} />
+        </View>
+        <View style={menuStyles.optionText}>
+          <Text style={menuStyles.optionTitle}>Log an Outfit</Text>
+          <Text style={menuStyles.optionSub}>Record what you wore today</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={colors.border} />
+      </TouchableOpacity>
     </View>
   );
 }
 
 const menuStyles = StyleSheet.create({
   container: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: spacing.md },
-  subtitle: {
-    fontSize: typography.size.sm,
+  sectionLabel: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
-    lineHeight: typography.size.sm * 1.5,
-    marginBottom: spacing.xs,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: -spacing.xs,
+  },
+  divider: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    marginVertical: spacing.xs,
   },
   option: {
     flexDirection: 'row',

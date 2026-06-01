@@ -4,6 +4,7 @@ import {
   FlatList,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,6 +16,7 @@ import {
   removeFromWishlist,
   type WishlistEntry,
 } from '../../lib/wishlist';
+import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { AppTabParamList } from '../../navigation/types';
@@ -23,6 +25,7 @@ type Props = BottomTabScreenProps<AppTabParamList, 'Shop'>;
 
 export function ShopScreen(_props: Props) {
   const insets = useSafeAreaInsets();
+  const { openStylist } = useGlobalAIStylist();
   const [entries, setEntries] = useState<WishlistEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -57,10 +60,19 @@ export function ShopScreen(_props: Props) {
     <View style={[styles.root, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Shop Wishlist</Text>
-        <Text style={styles.headerSub}>
-          {entries.length === 0 ? 'No saved outfits yet' : `${entries.length} saved outfit${entries.length !== 1 ? 's' : ''}`}
-        </Text>
+        <View style={styles.headerLeft}>
+          <Text style={styles.headerTitle}>Shop Wishlist</Text>
+          <Text style={styles.headerSub}>
+            {entries.length === 0 ? 'No saved outfits yet' : `${entries.length} saved outfit${entries.length !== 1 ? 's' : ''}`}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.headerBtn}
+          onPress={() => openStylist()}
+          accessibilityLabel="Open AI Stylist"
+        >
+          <Ionicons name="sparkles" size={22} color={colors.primary} />
+        </TouchableOpacity>
       </View>
 
       {entries.length === 0 ? (
@@ -112,11 +124,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  headerLeft: {
+    flex: 1,
+    gap: 2,
+  },
+  headerBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   headerTitle: {
     fontSize: typography.size.xl,
@@ -127,7 +152,6 @@ const styles = StyleSheet.create({
   headerSub: {
     fontSize: typography.size.sm,
     color: colors.mutedForeground,
-    marginTop: 2,
   },
   listContent: {
     padding: spacing.lg,

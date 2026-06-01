@@ -12,30 +12,37 @@ type ConditionMeta = {
   textColor: string;
 };
 
+const CONDITION_LABELS: Record<WeatherCondition, string> = {
+  sunny: 'Sunny',
+  rainy: 'Rainy',
+  cold: 'Cold',
+  mild: 'Mild',
+};
+
 const CONDITION_META: Record<WeatherCondition, ConditionMeta> = {
   sunny: {
     icon: 'sunny-outline',
-    bg: '#fffbeb',
-    iconColor: '#d97706',
-    textColor: '#92620a',
+    bg: '#F5EDE5',        // warm clay
+    iconColor: '#956D51', // theme primary
+    textColor: '#6B4232', // deep clay
   },
   rainy: {
     icon: 'rainy-outline',
-    bg: '#eff6ff',
-    iconColor: '#2563eb',
-    textColor: '#1e40af',
+    bg: '#EBF0F2',        // cool slate
+    iconColor: '#5B7A87', // blue-slate
+    textColor: '#3D5560', // dark slate
   },
   cold: {
     icon: 'snow-outline',
-    bg: '#f0f9ff',
-    iconColor: '#0284c7',
-    textColor: '#0369a1',
+    bg: '#EDF1F4',        // frost-mist
+    iconColor: '#5C7A8A', // icy slate
+    textColor: '#3D5A64', // deep frost
   },
   mild: {
     icon: 'partly-sunny-outline',
-    bg: '#f0fdf4',
-    iconColor: '#16a34a',
-    textColor: '#15803d',
+    bg: '#EAF0E8',        // sage-sand
+    iconColor: '#6E8C62', // sage-green
+    textColor: '#445A3C', // deep sage
   },
 };
 
@@ -81,12 +88,18 @@ export function WeatherWidget({ onPress }: Props) {
 
       <View style={styles.textBlock}>
         <Text style={[styles.temp, { color: meta.textColor }]}>
-          {data.temperatureC}°C
-          <Text style={styles.tempAlt}> · {data.temperatureF}°F</Text>
+          {CONDITION_LABELS[data.condition]} · {data.temperatureC}°C
+          <Text style={styles.tempAlt}> / {data.temperatureF}°F</Text>
         </Text>
-        <Text style={[styles.summary, { color: meta.textColor }]} numberOfLines={1}>
-          {data.summary}
-        </Text>
+        {onPress ? (
+          <Text style={[styles.cta, { color: meta.textColor }]} numberOfLines={1}>
+            Tap to style a look for today's weather
+          </Text>
+        ) : (
+          <Text style={[styles.summary, { color: meta.textColor }]} numberOfLines={1}>
+            {data.summary}
+          </Text>
+        )}
         {data.locationLabel ? (
           <Text style={[styles.location, { color: meta.textColor }]} numberOfLines={1}>
             {data.locationLabel}
@@ -143,6 +156,12 @@ const styles = StyleSheet.create({
   summary: {
     fontSize: typography.size.xs,
     lineHeight: typography.size.xs * 1.4,
+  },
+  cta: {
+    fontSize: typography.size.xs,
+    lineHeight: typography.size.xs * 1.4,
+    fontStyle: 'italic',
+    opacity: 0.8,
   },
   location: {
     fontSize: 10,

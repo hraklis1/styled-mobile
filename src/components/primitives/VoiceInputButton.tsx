@@ -1,7 +1,12 @@
 import { useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
+import {
+  useAudioRecorder,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+} from 'expo-audio';
 import { File } from 'expo-file-system';
 import { colors, radii } from '../../theme';
 
@@ -12,21 +17,19 @@ type Props = {
 
 export function VoiceInputButton({ onAudioReady, disabled }: Props) {
   const [isRecording, setIsRecording] = useState(false);
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const animLoopRef = useRef<Animated.CompositeAnimation | null>(null);
 
   async function handlePressIn() {
     try {
-      const { granted } = await Audio.requestPermissionsAsync();
+      const { granted } = await requestRecordingPermissionsAsync();
       if (!granted) return;
 
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
 
-      const rec = new Audio.Recording();
-      await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      await rec.startAsync();
-      recordingRef.current = rec;
+      await recorder.prepareToRecordAsync();
+      recorder.record();
       setIsRecording(true);
 
       animLoopRef.current = Animated.loop(
@@ -46,20 +49,16 @@ export function VoiceInputButton({ onAudioReady, disabled }: Props) {
     pulseAnim.setValue(1);
     setIsRecording(false);
 
-    const rec = recordingRef.current;
-    recordingRef.current = null;
-    if (!rec) return;
-
     try {
-      await rec.stopAndUnloadAsync();
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
-      const uri = rec.getURI();
+      await recorder.stop();
+      await setAudioModeAsync({ allowsRecording: false });
+      const uri = recorder.uri;
       if (uri) {
         const base64 = await new File(uri).base64();
         onAudioReady(base64);
       }
     } catch {
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+      await setAudioModeAsync({ allowsRecording: false }).catch(() => {});
     }
   }
 

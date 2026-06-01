@@ -1525,7 +1525,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         onAssign={(ev) => { setDetailEvent(null); setPickerEvent(ev); }}
         allItems={allItems}
         generateOutfit={generateOutfit}
-        onViewOutfits={() => navigation.navigate('Outfits')}
+        onViewOutfits={() => navigation.navigate('Closet')}
         deviceCoords={deviceCoords}
       />
       <EventFormModal

@@ -55,3 +55,37 @@ export const radii = {
   xl:   24,
   full: 9999,
 } as const;
+
+// iOS uses shadowColor/shadowOffset/shadowOpacity/shadowRadius.
+// Android uses elevation only — colored shadows are not supported on Android;
+// elevation always casts a black shadow regardless of shadowColor.
+export const shadows = {
+  xs: {
+    shadowColor:   '#28231F',
+    shadowOffset:  { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius:  2,
+    elevation: 1,
+  },
+  sm: {
+    shadowColor:   '#28231F',
+    shadowOffset:  { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius:  6,
+    elevation: 2,
+  },
+  md: {
+    shadowColor:   '#28231F',
+    shadowOffset:  { width: 0, height: 3 },
+    shadowOpacity: 0.09,
+    shadowRadius:  10,
+    elevation: 3,
+  },
+  warm: {
+    shadowColor:   '#956D51',
+    shadowOffset:  { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius:  8,
+    elevation: 3,
+  },
+} as const;

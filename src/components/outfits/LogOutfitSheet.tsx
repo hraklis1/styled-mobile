@@ -434,6 +434,7 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
                   onChangeText={setLocation}
                   onSelect={setLocation}
                   placeholder="Where did you wear this?"
+                  containerStyle={{ marginHorizontal: spacing.lg }}
                 />
 
                 {/* ── Notes ────────────────────────────────────────── */}
@@ -752,7 +753,7 @@ const styles = StyleSheet.create({
   },
   headerSave: {
     fontSize: typography.size.md,
-    fontWeight: typography.weight.semibold,
+    fontWeight: typography.weight.bold,
     color: colors.primary,
     minWidth: 44,
     textAlign: 'right',
@@ -876,8 +877,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm + 2,
     backgroundColor: colors.card,
     borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 1.5,
+    borderColor: '#C5B8AC',
     minHeight: 48,
   },
   notesField: {

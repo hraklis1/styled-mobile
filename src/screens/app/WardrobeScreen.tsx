@@ -32,7 +32,8 @@ import { WardrobeListRow } from '../../components/wardrobe/WardrobeListRow';
 import { ScanItemSheet } from '../../components/wardrobe/ScanItemSheet';
 import { BatchScanSheet } from '../../components/wardrobe/BatchScanSheet';
 import { QuickCaptureSheet } from '../../components/wardrobe/QuickCaptureSheet';
-import { colors, spacing, typography, radii } from '../../theme';
+import { colors, shadows, spacing, typography, radii } from '../../theme';
+import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { CATEGORY_LABELS, CATEGORY_ORDER, type Item, type ItemCategory } from '../../types/item';
 import type { WardrobeListScreenProps } from '../../navigation/types';
 import * as Haptics from 'expo-haptics';
@@ -89,6 +90,7 @@ function sortItems(items: Item[], key: SortKey): Item[] {
 
 export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
   const insets = useSafeAreaInsets();
+  const { openStylist } = useGlobalAIStylist();
   const { data: items = [], isLoading, isError, refetch, isRefetching } = useItems();
   const { data: archivedItems = [], refetch: refetchArchived, isRefetching: isRefetchingArchived } = useArchivedItems();
   const archiveItems = useArchiveItems();
@@ -112,7 +114,6 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
 
   // ── UI state ───────────────────────────────────────────────────────────
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
-  const [fabOpen, setFabOpen] = useState(false);
   const [addItemOpen, setAddItemOpen] = useState(false);
 
   // ── Scan sheet ─────────────────────────────────────────────────────────
@@ -322,11 +323,6 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
     );
   };
 
-  const handleScanCloset = () => {
-    setFabOpen(false);
-    setScanSheetVisible(true);
-  };
-
   const clearAllFilters = () => {
     setSearch('');
     setSelectedCategory(null);
@@ -370,8 +366,6 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
 
   // ── Render ─────────────────────────────────────────────────────────────
 
-  const FAB_BOTTOM = Math.max(insets.bottom, 8) + 12;
-
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
 
@@ -388,56 +382,67 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
         <View style={styles.headerActions}>
           <TouchableOpacity
             style={styles.headerBtn}
+            onPress={() => openStylist()}
+            accessibilityLabel="Open AI Stylist"
+          >
+            <Ionicons name="sparkles" size={20} color={colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.headerBtn}
             onPress={() => navigation.navigate('ClosetRefresh')}
             testID="link-closet-insights"
           >
             <Ionicons name="sparkles-outline" size={20} color={colors.foreground} />
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.headerBtn}
-            onPress={() => setViewMode((v) => (v === 'grid' ? 'list' : 'grid'))}
-          >
-            <Ionicons
-              name={viewMode === 'grid' ? 'list-outline' : 'grid-outline'}
-              size={20}
-              color={colors.foreground}
-            />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.headerBtn} onPress={() => setFilterSheetOpen(true)}>
+        </View>
+      </View>
+
+      {/* ── Search bar + view toggle row ── */}
+      <View style={styles.searchRow}>
+        <View style={styles.searchBar}>
+          <Ionicons name="search-outline" size={16} color={colors.mutedForeground} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search by name, brand, colour, tag…"
+            placeholderTextColor={colors.mutedForeground}
+            value={search}
+            onChangeText={setSearch}
+            autoCapitalize="none"
+            returnKeyType="search"
+          />
+          {search.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setSearch('')}
+              hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            >
+              <Ionicons name="close-circle" size={16} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          )}
+          <View style={styles.searchDivider} />
+          <TouchableOpacity style={styles.searchFilterBtn} onPress={() => setFilterSheetOpen(true)}>
             <Ionicons
               name="options-outline"
-              size={20}
-              color={activeFilterCount > 0 ? colors.primary : colors.foreground}
+              size={18}
+              color={activeFilterCount > 0 ? colors.primary : colors.mutedForeground}
             />
             {activeFilterCount > 0 && (
-              <View style={styles.filterBadge}>
-                <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+              <View style={styles.searchFilterBadge}>
+                <Text style={styles.searchFilterBadgeText}>{activeFilterCount}</Text>
               </View>
             )}
           </TouchableOpacity>
         </View>
-      </View>
 
-      {/* ── Search bar ── */}
-      <View style={styles.searchBar}>
-        <Ionicons name="search-outline" size={16} color={colors.mutedForeground} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search by name, brand, colour, tag…"
-          placeholderTextColor={colors.mutedForeground}
-          value={search}
-          onChangeText={setSearch}
-          autoCapitalize="none"
-          returnKeyType="search"
-        />
-        {search.length > 0 && (
-          <TouchableOpacity
-            onPress={() => setSearch('')}
-            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
-          >
-            <Ionicons name="close-circle" size={16} color={colors.mutedForeground} />
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          style={styles.viewToggleBtn}
+          onPress={() => setViewMode((v) => (v === 'grid' ? 'list' : 'grid'))}
+        >
+          <Ionicons
+            name={viewMode === 'grid' ? 'list-outline' : 'grid-outline'}
+            size={20}
+            color={colors.foreground}
+          />
+        </TouchableOpacity>
       </View>
 
       {/* ── Category pills ── */}
@@ -520,17 +525,36 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
           <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />
         }
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="shirt-outline" size={48} color={colors.border} />
-            <Text style={styles.emptyTitle}>
-              {hasActiveFilters ? 'No items match' : 'Your wardrobe is empty'}
-            </Text>
-            <Text style={styles.emptySubtitle}>
-              {hasActiveFilters
-                ? 'Try adjusting your filters.'
-                : 'Tap + to add your first piece.'}
-            </Text>
-          </View>
+          hasActiveFilters ? (
+            // Filtered empty — keep it minimal
+            <View style={styles.emptyState}>
+              <Ionicons name="shirt-outline" size={48} color={colors.border} />
+              <Text style={styles.emptyTitle}>No items match</Text>
+              <Text style={styles.emptySubtitle}>Try adjusting your filters.</Text>
+            </View>
+          ) : (
+            // True empty — interactive canvas with CTA
+            <View style={styles.emptyState}>
+              <View style={styles.emptyCanvas}>
+                <View style={styles.emptyIllustration}>
+                  <Ionicons name="shirt-outline" size={52} color={`${colors.primary}60`} />
+                </View>
+                <Text style={styles.emptyTitle}>Your wardrobe awaits</Text>
+                <Text style={styles.emptySubtitle}>
+                  Add your first piece to start building your style profile.
+                </Text>
+                <TouchableOpacity
+                  style={styles.emptyActionBtn}
+                  onPress={() => setQuickCaptureVisible(true)}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Add your first wardrobe item"
+                >
+                  <Ionicons name="camera-outline" size={16} color={colors.primaryForeground} />
+                  <Text style={styles.emptyActionText}>Add your first item</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )
         }
         ListFooterComponent={
           archivedItems.length > 0 ? (
@@ -721,63 +745,6 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
         </View>
       )}
 
-      {/* ── FAB backdrop (closes speed-dial) ── */}
-      {fabOpen && !selectionMode && (
-        <TouchableOpacity
-          style={StyleSheet.absoluteFill}
-          activeOpacity={1}
-          onPress={() => setFabOpen(false)}
-        />
-      )}
-
-      {/* ── FAB ── */}
-      {!selectionMode && (
-        <View style={[styles.fabContainer, { bottom: FAB_BOTTOM }]}>
-          {/* Speed-dial options */}
-          {fabOpen && (
-            <View style={styles.fabSpeedDial}>
-              <TouchableOpacity
-                style={styles.fabOption}
-                onPress={() => {
-                  setFabOpen(false);
-                  setQuickCaptureVisible(true);
-                }}
-              >
-                <Ionicons name="add-outline" size={16} color={colors.foreground} />
-                <Text style={styles.fabOptionText}>Quick Add</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.fabOption, styles.fabOptionPrimary]}
-                onPress={handleScanCloset}
-              >
-                <Ionicons name="camera-outline" size={16} color={colors.primaryForeground} />
-                <Text style={[styles.fabOptionText, styles.fabOptionTextPrimary]}>
-                  Scan Closet
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.fabOption}
-                onPress={() => { setFabOpen(false); setBatchScanVisible(true); }}
-              >
-                <Ionicons name="images-outline" size={16} color={colors.foreground} />
-                <Text style={styles.fabOptionText}>Batch Scan</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-          {/* Main FAB button */}
-          <TouchableOpacity
-            style={[styles.fab, fabOpen && styles.fabOpen]}
-            onPress={() => setFabOpen((v) => !v)}
-            activeOpacity={0.85}
-          >
-            <Ionicons
-              name={fabOpen ? 'close-outline' : 'add-outline'}
-              size={28}
-              color={fabOpen ? colors.foreground : colors.primaryForeground}
-            />
-          </TouchableOpacity>
-        </View>
-      )}
 
       {/* ═══════════════════════════════════════════════════════════════════
           Filter / Sort sheet
@@ -1198,11 +1165,17 @@ const styles = StyleSheet.create({
   },
 
   // ── Search
-  searchBar: {
+  searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.sm,
     marginHorizontal: spacing.lg,
     marginBottom: spacing.sm,
+  },
+  searchBar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.muted,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
@@ -1213,6 +1186,40 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: typography.size.md,
     color: colors.foreground,
+  },
+  searchDivider: {
+    width: 1,
+    height: 18,
+    backgroundColor: colors.border,
+    marginHorizontal: spacing.xs,
+  },
+  searchFilterBtn: {
+    position: 'relative',
+    padding: 4,
+  },
+  searchFilterBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchFilterBadgeText: {
+    fontSize: 9,
+    fontWeight: typography.weight.bold,
+    color: colors.primaryForeground,
+  },
+  viewToggleBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: radii.md,
+    backgroundColor: colors.muted,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   // ── Category pills
@@ -1289,19 +1296,59 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: 'center',
     paddingTop: 80,
-    gap: spacing.sm,
     paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xl,
+  },
+  // Dashed canvas card — shown only when wardrobe is truly empty
+  emptyCanvas: {
+    width: '100%',
+    alignItems: 'center',
+    gap: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xxl,
+    backgroundColor: colors.card,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    ...shadows.sm,
+  },
+  emptyIllustration: {
+    width: 80,
+    height: 80,
+    borderRadius: radii.xl,
+    backgroundColor: `${colors.primary}12`,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyTitle: {
     fontSize: typography.size.lg,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
     textAlign: 'center',
+    letterSpacing: -0.3,
   },
   emptySubtitle: {
-    fontSize: typography.size.md,
+    fontSize: typography.size.sm,
     color: colors.mutedForeground,
     textAlign: 'center',
+    lineHeight: typography.size.sm * 1.6,
+    maxWidth: 260,
+  },
+  emptyActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: radii.full,
+    marginTop: spacing.sm,
+  },
+  emptyActionText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.primaryForeground,
   },
 
   // ── Error
@@ -1385,65 +1432,6 @@ const styles = StyleSheet.create({
   },
   bulkBtnTextDelete: {
     color: colors.error,
-  },
-
-  // ── FAB
-  fabContainer: {
-    position: 'absolute',
-    right: spacing.lg,
-    alignItems: 'flex-end',
-  },
-  fabSpeedDial: {
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-    alignItems: 'flex-end',
-  },
-  fabOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: radii.lg,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: spacing.sm,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-  },
-  fabOptionPrimary: {
-    backgroundColor: colors.foreground,
-    borderColor: colors.foreground,
-  },
-  fabOptionText: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.medium,
-    color: colors.foreground,
-  },
-  fabOptionTextPrimary: {
-    color: colors.primaryForeground,
-  },
-  fab: {
-    width: 56,
-    height: 56,
-    borderRadius: radii.full,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
-  },
-  fabOpen: {
-    backgroundColor: colors.secondary,
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowOpacity: 0.08,
   },
 
   // ── Filter sheet

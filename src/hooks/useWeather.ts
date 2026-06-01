@@ -47,6 +47,32 @@ export function useWeatherCurrent(enabled = true) {
   });
 }
 
+// Combined current + today's forecast in a single hook (fetches coords once)
+export type TodayWeather = {
+  current: CurrentWeather;
+  forecast: ForecastWeather;
+};
+
+export const WEATHER_TODAY_KEY = ['weather', 'today'] as const;
+
+export function useWeatherToday(enabled = true) {
+  return useQuery<TodayWeather, Error>({
+    queryKey: WEATHER_TODAY_KEY,
+    enabled,
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+    queryFn: async () => {
+      const { lat, lon } = await getDeviceCoords();
+      const today = new Date().toISOString().slice(0, 10);
+      const [currentRes, forecastRes] = await Promise.all([
+        api.get<CurrentWeather>(`/api/weather?lat=${lat}&lon=${lon}`),
+        api.get<ForecastWeather>(`/api/weather/forecast?lat=${lat}&lon=${lon}&date=${today}`),
+      ]);
+      return { current: currentRes.data, forecast: forecastRes.data };
+    },
+  });
+}
+
 export function useWeatherForecast(
   lat: number | null,
   lon: number | null,

@@ -26,6 +26,7 @@ import {
 } from '../../hooks/useOutfits';
 import { OutfitCard, type OutfitViewMode } from '../../components/outfits/OutfitCard';
 import { OutfitBuilderSheet } from '../../components/outfits/OutfitBuilderSheet';
+import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { Outfit } from '../../types/outfit';
 import type { OutfitsListScreenProps } from '../../navigation/types';
@@ -79,6 +80,7 @@ function sortOutfits(outfits: Outfit[], key: SortKey): Outfit[] {
 
 export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
   const insets = useSafeAreaInsets();
+  const { openStylist } = useGlobalAIStylist();
   const { data: outfits = [], isLoading, isError, refetch, isRefetching } = useOutfits();
   const deleteOutfit = useDeleteOutfit();
   const markWorn = useMarkOutfitWorn();
@@ -115,7 +117,6 @@ export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
 
   // ── UI state ───────────────────────────────────────────────────────────
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
-  const [fabOpen, setFabOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [builderOpen, setBuilderOpen] = useState(false);
 
@@ -157,8 +158,6 @@ export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
     search.trim().length > 0 ||
     selectedTags.length > 0 ||
     sortKey !== 'newest';
-
-  const FAB_BOTTOM = Math.max(insets.bottom, 8) + 12;
 
   // ── Handlers ───────────────────────────────────────────────────────────
 
@@ -268,6 +267,13 @@ export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
           </Text>
         </View>
         <View style={styles.headerBtns}>
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={() => openStylist()}
+            accessibilityLabel="Open AI Stylist"
+          >
+            <Ionicons name="sparkles" size={20} color={colors.primary} />
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.headerBtn}
             onPress={() => persistViewMode(NEXT_VIEW_MODE[viewMode])}
@@ -451,57 +457,6 @@ export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
         </View>
       )}
 
-      {/* ── FAB backdrop ── */}
-      {fabOpen && !selectionMode && (
-        <TouchableOpacity
-          style={StyleSheet.absoluteFill}
-          activeOpacity={1}
-          onPress={() => setFabOpen(false)}
-        />
-      )}
-
-      {/* ── FAB ── */}
-      {!selectionMode && (
-        <View style={[styles.fabContainer, { bottom: FAB_BOTTOM }]}>
-          {fabOpen && (
-            <View style={styles.fabSpeedDial}>
-              <TouchableOpacity
-                style={styles.fabOption}
-                onPress={() => {
-                  setFabOpen(false);
-                  setCreateOpen(true);
-                }}
-              >
-                <Ionicons name="add-outline" size={16} color={colors.foreground} />
-                <Text style={styles.fabOptionText}>Quick Create</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.fabOption, styles.fabOptionPrimary]}
-                onPress={() => {
-                  setFabOpen(false);
-                  setBuilderOpen(true);
-                }}
-              >
-                <Ionicons name="layers-outline" size={16} color={colors.primaryForeground} />
-                <Text style={[styles.fabOptionText, styles.fabOptionTextPrimary]}>
-                  Outfit Builder
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-          <TouchableOpacity
-            style={[styles.fab, fabOpen && styles.fabOpen]}
-            onPress={() => setFabOpen((v) => !v)}
-            activeOpacity={0.85}
-          >
-            <Ionicons
-              name={fabOpen ? 'close-outline' : 'add-outline'}
-              size={28}
-              color={fabOpen ? colors.foreground : colors.primaryForeground}
-            />
-          </TouchableOpacity>
-        </View>
-      )}
 
       {/* ═══════════════════════════════════════════════════════════════════
           Sort sheet
@@ -883,65 +838,6 @@ const styles = StyleSheet.create({
   },
   bulkBtnTextDisabled: { color: colors.border },
   bulkBtnTextDelete: { color: colors.error },
-
-  // ── FAB
-  fabContainer: {
-    position: 'absolute',
-    right: spacing.lg,
-    alignItems: 'flex-end',
-  },
-  fabSpeedDial: {
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-    alignItems: 'flex-end',
-  },
-  fabOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: radii.lg,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: spacing.sm,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-  },
-  fabOptionPrimary: {
-    backgroundColor: colors.foreground,
-    borderColor: colors.foreground,
-  },
-  fabOptionText: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.medium,
-    color: colors.foreground,
-  },
-  fabOptionTextPrimary: {
-    color: colors.primaryForeground,
-  },
-  fab: {
-    width: 56,
-    height: 56,
-    borderRadius: radii.full,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
-  },
-  fabOpen: {
-    backgroundColor: colors.secondary,
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowOpacity: 0.08,
-  },
 
   // ── Sort sheet
   sheetOverlay: {

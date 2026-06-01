@@ -17,11 +17,23 @@ export type AuthStackParamList = {
 
 export type AppTabParamList = {
   Home: undefined;
-  Wardrobe: undefined;
-  Outfits: undefined;
+  Closet: undefined;
+  AddMenu: undefined;
   Shop: undefined;
   Calendar: undefined;
   Profile: undefined;
+};
+
+// Unified closet stack (items + outfits + their detail screens)
+export type ClosetStackParamList = {
+  ClosetMain: undefined;
+  ItemDetail: {
+    itemId?: number;
+    scanData?: ScanResult;
+    scanImageUrl?: string;
+  };
+  ClosetRefresh: undefined;
+  OutfitDetail: { outfitId: number };
 };
 
 // Home nested stack
@@ -48,12 +60,14 @@ export type OutfitsStackParamList = {
   OutfitDetail: { outfitId: number };
 };
 
+export type ClosetScreenProps = NativeStackScreenProps<ClosetStackParamList, 'ClosetMain'>;
+
 export type LoginScreenProps = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 export type ForgotPasswordScreenProps = NativeStackScreenProps<AuthStackParamList, 'ForgotPassword'>;
 export type ResetPasswordScreenProps = NativeStackScreenProps<AuthStackParamList, 'ResetPassword'>;
 
 // CompositeScreenProps lets HomeMain navigate both within HomeStack (→ Stylist)
-// and across to sibling tabs (→ Wardrobe, Outfits, Calendar)
+// and across to sibling tabs (→ Closet, Calendar)
 export type HomeScreenProps = CompositeScreenProps<
   NativeStackScreenProps<HomeStackParamList, 'HomeMain'>,
   BottomTabScreenProps<AppTabParamList>
@@ -64,9 +78,12 @@ export type ShopScreenProps = BottomTabScreenProps<AppTabParamList, 'Shop'>;
 export type CalendarScreenProps = BottomTabScreenProps<AppTabParamList, 'Calendar'>;
 export type ProfileScreenProps = BottomTabScreenProps<AppTabParamList, 'Profile'>;
 
-export type WardrobeListScreenProps = NativeStackScreenProps<WardrobeStackParamList, 'WardrobeList'>;
-export type ItemDetailScreenProps = NativeStackScreenProps<WardrobeStackParamList, 'ItemDetail'>;
-export type ClosetRefreshScreenProps = NativeStackScreenProps<WardrobeStackParamList, 'ClosetRefresh'>;
+// Screens now registered in ClosetStack
+export type ItemDetailScreenProps = NativeStackScreenProps<ClosetStackParamList, 'ItemDetail'>;
+export type ClosetRefreshScreenProps = NativeStackScreenProps<ClosetStackParamList, 'ClosetRefresh'>;
+export type OutfitDetailScreenProps = NativeStackScreenProps<ClosetStackParamList, 'OutfitDetail'>;
 
+// Legacy — WardrobeScreen and OutfitsScreen are no longer tab destinations
+// but their files still compile against these types
+export type WardrobeListScreenProps = NativeStackScreenProps<WardrobeStackParamList, 'WardrobeList'>;
 export type OutfitsListScreenProps = NativeStackScreenProps<OutfitsStackParamList, 'OutfitsList'>;
-export type OutfitDetailScreenProps = NativeStackScreenProps<OutfitsStackParamList, 'OutfitDetail'>;

@@ -355,6 +355,9 @@ export function ProfileScreen(_props: ProfileScreenProps) {
   // ── Active picker ────────────────────────────────────────────────────────
   const [activePicker, setActivePicker] = useState<PickerKey | null>(null);
 
+  // ── Scroll ref ──────────────────────────────────────────────────────────────
+  const scrollRef = useRef<import('react-native').ScrollView>(null);
+
   // ── Dirty tracking ────────────────────────────────────────────────────────
   const initialValues = useRef<Record<string, unknown>>({});
 
@@ -646,21 +649,19 @@ export function ProfileScreen(_props: ProfileScreenProps) {
           <Text style={styles.progressLabel}>{completionPct}% complete</Text>
         </View>
         <TouchableOpacity
-          style={[styles.saveBtn, isDirty && styles.saveBtnActive]}
-          onPress={handleSave}
-          disabled={updateProfile.isPending || !isDirty}
-          activeOpacity={0.8}
+          onPress={() => scrollRef.current?.scrollToEnd({ animated: true })}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityLabel="Jump to account settings"
         >
-          {updateProfile.isPending
-            ? <ActivityIndicator size="small" color={isDirty ? colors.primaryForeground : colors.mutedForeground} />
-            : <Text style={[styles.saveBtnText, isDirty && styles.saveBtnTextActive]}>Save</Text>}
+          <Ionicons name="settings-outline" size={20} color={colors.mutedForeground} />
         </TouchableOpacity>
       </View>
 
       {/* ── Scrollable content ────────────────────────────────────────────── */}
       <ScrollView
+        ref={scrollRef}
         style={styles.scroll}
-        contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + spacing.xxxl * 2 }}
+        contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xl }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -1146,6 +1147,22 @@ export function ProfileScreen(_props: ProfileScreenProps) {
         </SectionCard>
       </ScrollView>
 
+      {/* ── Sticky Save footer ───────────────────────────────────────────── */}
+      <View style={[styles.stickyFooter, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+        <TouchableOpacity
+          style={[styles.saveFooterBtn, isDirty && styles.saveFooterBtnActive]}
+          onPress={handleSave}
+          disabled={updateProfile.isPending || !isDirty}
+          activeOpacity={0.8}
+        >
+          {updateProfile.isPending
+            ? <ActivityIndicator size="small" color={isDirty ? colors.primaryForeground : colors.mutedForeground} />
+            : <Text style={[styles.saveFooterBtnText, isDirty && styles.saveFooterBtnTextActive]}>
+                Save Changes
+              </Text>}
+        </TouchableOpacity>
+      </View>
+
       {/* ── Picker sheet ──────────────────────────────────────────────────── */}
       {activeCfg && (
         <PickerModal
@@ -1241,13 +1258,23 @@ const styles = StyleSheet.create({
   progressTrack: { height: 4, backgroundColor: colors.muted, borderRadius: 2, overflow: 'hidden' },
   progressFill:  { height: '100%' as any, backgroundColor: colors.primary, borderRadius: 2 },
   progressLabel: { fontSize: 10, color: colors.mutedForeground },
-  saveBtn: {
-    paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2,
-    borderRadius: radii.full, backgroundColor: colors.muted, minWidth: 56, alignItems: 'center',
+  stickyFooter: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    backgroundColor: colors.card,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
-  saveBtnActive:     { backgroundColor: colors.primary },
-  saveBtnText:       { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.mutedForeground },
-  saveBtnTextActive: { color: colors.primaryForeground },
+  saveFooterBtn: {
+    height: 50,
+    borderRadius: radii.md,
+    backgroundColor: colors.muted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveFooterBtnActive:     { backgroundColor: colors.primary },
+  saveFooterBtnText:       { fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: colors.mutedForeground },
+  saveFooterBtnTextActive: { color: colors.primaryForeground },
 
   // Scroll
   scroll: { flex: 1 },

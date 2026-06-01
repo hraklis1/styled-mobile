@@ -17,11 +17,11 @@ import { useOutfits } from '../../hooks/useOutfits';
 import { useEvents } from '../../hooks/useEvents';
 import { useOutfitLogs, useDeleteOutfitLog } from '../../hooks/useOutfitLogs';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
-import { QuickCaptureSheet } from '../../components/wardrobe/QuickCaptureSheet';
 import { useGlobalOutfitLogger } from '../../contexts/GlobalOutfitLoggerContext';
-import { WeatherWidget } from '../../components/home/WeatherWidget';
+import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
+import { useWeatherToday } from '../../hooks/useWeather';
 import { resolveImageUri } from '../../lib/resolveImageUri';
-import { colors, spacing, typography, radii } from '../../theme';
+import { colors, shadows, spacing, typography, radii } from '../../theme';
 import type { HomeScreenProps } from '../../navigation/types';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -29,7 +29,7 @@ import type { HomeScreenProps } from '../../navigation/types';
 const SIDE_PAD = spacing.lg;
 const COL_GAP  = spacing.md;
 
-const PLACEHOLDERS = [
+const STATIC_PLACEHOLDERS = [
   'What should I wear tonight?',
   'Style an outfit with my gray blazer…',
   'Something casual for a Sunday brunch?',
@@ -37,6 +37,13 @@ const PLACEHOLDERS = [
   'Help me dress for a dinner party…',
   'Cozy weekend outfit ideas?',
 ];
+
+const WEATHER_EMOJI: Record<string, string> = {
+  sunny: '☀️',
+  rainy: '🌧️',
+  cold:  '❄️',
+  mild:  '⛅',
+};
 
 const OCCASION_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   casual:       'cafe-outline',
@@ -55,6 +62,10 @@ function getGreeting(name?: string | null): string {
   const h = new Date().getHours();
   const period = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   return name ? `${period}, ${name.split(' ')[0]}.` : `${period}.`;
+}
+
+function stripTempFromSummary(summary: string): string {
+  return summary.replace(/\s+at\s+\d+°[CF]\.?/gi, '').replace(/\.$/, '');
 }
 
 function formatEventDate(isoDate: string): string {
@@ -87,32 +98,20 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const { data: events  = [] } = useEvents();
   const { data: logs    = [] } = useOutfitLogs();
   const deleteLog = useDeleteOutfitLog();
+  const weather = useWeatherToday();
 
   const { openLogger } = useGlobalOutfitLogger();
+  const { openStylist } = useGlobalAIStylist();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / 2;
-
-  // Quick capture sheet
-  const [quickCaptureVisible, setQuickCaptureVisible] = useState(false);
 
   // Stylist prompt
   const [query, setQuery] = useState('');
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
   const inputRef = useRef<TextInput>(null);
 
-  useEffect(() => {
-    const id = setInterval(() => setPlaceholderIdx((i) => (i + 1) % PLACEHOLDERS.length), 4000);
-    return () => clearInterval(id);
-  }, []);
-
-  const handleStylistSubmit = () => {
-    const q = query.trim();
-    setQuery('');
-    navigation.navigate('Stylist', { query: q });
-  };
-
-  // Derived data
+  // Derived data (must come before contextualPlaceholders which depends on upcomingEvents)
   const upcomingEvents = useMemo(() => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     return events
@@ -121,6 +120,50 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       .slice(0, 10);
   }, [events]);
 
+  const contextualPlaceholders = useMemo(() => {
+    const prompts: string[] = [];
+
+    // Event-based prompts
+    const [nextEvent, secondEvent] = upcomingEvents;
+    if (nextEvent) {
+      const when = formatEventDate(nextEvent.date) === 'Today' ? 'tonight'
+        : formatEventDate(nextEvent.date) === 'Tomorrow' ? 'tomorrow' : '';
+      prompts.push(`Style a look for ${nextEvent.title}${when ? ` ${when}` : ''}`);
+    }
+    if (secondEvent) {
+      prompts.push(`What to wear for ${secondEvent.title}?`);
+    }
+
+    // Weather-based prompts
+    if (weather.data) {
+      const { condition, temperatureF } = weather.data.current;
+      if (condition === 'rainy') {
+        prompts.push("What's a good outfit for a rainy day?");
+      } else if (condition === 'cold') {
+        prompts.push(`Cozy layered look for ${temperatureF}°F weather`);
+      } else if (condition === 'sunny') {
+        prompts.push(`Light outfit for a sunny ${temperatureF}°F day`);
+      } else {
+        prompts.push(`Style tip for today's ${weather.data.current.summary.toLowerCase()} weather?`);
+      }
+    }
+
+    return [...prompts, ...STATIC_PLACEHOLDERS];
+  }, [upcomingEvents, weather.data]);
+
+  useEffect(() => {
+    const len = contextualPlaceholders.length;
+    const id = setInterval(() => setPlaceholderIdx((i) => (i + 1) % len), 4000);
+    return () => clearInterval(id);
+  }, [contextualPlaceholders.length]);
+
+  const handleStylistSubmit = () => {
+    const q = query.trim();
+    setQuery('');
+    openStylist(q || undefined);
+  };
+
+  // Derived data
   const recentOutfits = useMemo(
     () => [...outfits]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -131,6 +174,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const favoriteCount = items.filter((i) => i.isFavorite).length;
 
   return (
+    <View style={{ flex: 1 }}>
     <ScrollView
       style={styles.root}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}
@@ -142,50 +186,67 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         <View style={styles.greetingRow}>
           <View style={styles.greetingText}>
             <Text style={styles.greeting}>{getGreeting(user?.displayName)}</Text>
-            {(items.length > 0 || outfits.length > 0) ? (
-              <Text style={styles.stats}>
-                {items.length} {items.length === 1 ? 'item' : 'items'}
-                {favoriteCount > 0 ? ` · ${favoriteCount} favourited` : ''}
-                {outfits.length > 0 ? ` · ${outfits.length} ${outfits.length === 1 ? 'outfit' : 'outfits'}` : ''}
-              </Text>
+            {(items.length > 0 || outfits.length > 0 || weather.data) ? (
+              <View style={styles.headerMeta}>
+                {weather.data && (
+                  <Text style={styles.weatherLine}>
+                    {WEATHER_EMOJI[weather.data.current.condition] ?? '🌡️'}{' '}
+                    {weather.data.current.temperatureC}°C,{' '}
+                    {stripTempFromSummary(weather.data.current.summary)} · ↑{weather.data.forecast.tempMaxC}° ↓{weather.data.forecast.tempMinC}°
+                  </Text>
+                )}
+                <View style={styles.chipsRow}>
+                  <View style={styles.chip}>
+                    <Text style={styles.chipText}>
+                      {items.length} {items.length === 1 ? 'item' : 'items'}
+                    </Text>
+                  </View>
+                  {favoriteCount > 0 && (
+                    <View style={styles.chip}>
+                      <Text style={styles.chipText}>{favoriteCount} favourited</Text>
+                    </View>
+                  )}
+                  {outfits.length > 0 && (
+                    <View style={styles.chip}>
+                      <Text style={styles.chipText}>
+                        {outfits.length} {outfits.length === 1 ? 'outfit' : 'outfits'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
             ) : (
               <Text style={styles.greetingSubtitle}>Your style, at a glance.</Text>
             )}
           </View>
           <TouchableOpacity
-            style={styles.quickAddBtn}
-            onPress={() => setQuickCaptureVisible(true)}
-            activeOpacity={0.8}
-            accessibilityLabel="Quick add item to wardrobe"
+            style={styles.settingsBtn}
+            onPress={() => navigation.navigate('Profile')}
+            activeOpacity={0.7}
+            accessibilityLabel="Open settings"
           >
-            <Ionicons name="camera-outline" size={15} color={colors.primary} />
-            <Text style={styles.quickAddBtnText}>Add item</Text>
+            <Ionicons name="settings-outline" size={20} color={colors.mutedForeground} />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* ── Weather ───────────────────────────────────────────────── */}
-      <WeatherWidget
-        onPress={() => navigation.navigate('Suggestions')}
-      />
-
       {/* ── AI Stylist prompt ──────────────────────────────────────── */}
       <TouchableOpacity
         style={styles.promptCard}
-        activeOpacity={1}
-        onPress={() => inputRef.current?.focus()}
+        activeOpacity={0.9}
+        onPress={handleStylistSubmit}
       >
         <View style={styles.promptInner}>
-          <View style={[styles.promptIconWrap, { backgroundColor: `${colors.primary}18` }]}>
-            <Ionicons name="sparkles" size={18} color={colors.primary} />
+          <View style={styles.promptIconWrap}>
+            <Ionicons name="sparkles" size={18} color="#FAF8F5" />
           </View>
           <TextInput
             ref={inputRef}
             style={styles.promptInput}
             value={query}
             onChangeText={setQuery}
-            placeholder={PLACEHOLDERS[placeholderIdx]}
-            placeholderTextColor={colors.mutedForeground}
+            placeholder={contextualPlaceholders[placeholderIdx % contextualPlaceholders.length]}
+            placeholderTextColor="rgba(250,248,245,0.45)"
             returnKeyType="send"
             onSubmitEditing={handleStylistSubmit}
             multiline={false}
@@ -207,78 +268,19 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       {items.length === 0 && (
         <TouchableOpacity
           style={styles.nudgeCard}
-          onPress={() => navigation.navigate('Wardrobe')}
+          onPress={() => navigation.navigate('Closet')}
           activeOpacity={0.8}
         >
           <View style={styles.nudgeIcon}>
-            <Ionicons name="shirt-outline" size={18} color="#92620a" />
+            <Ionicons name="shirt-outline" size={18} color={colors.primary} />
           </View>
           <View style={styles.nudgeText}>
             <Text style={styles.nudgeTitle}>Your wardrobe is empty</Text>
             <Text style={styles.nudgeSub}>Add items to unlock outfit suggestions</Text>
           </View>
-          <Ionicons name="chevron-forward" size={16} color="#c8922a" />
+          <Ionicons name="chevron-forward" size={16} color={colors.primary} />
         </TouchableOpacity>
       )}
-
-      {/* ── Quick Actions ─────────────────────────────────────────── */}
-      <View style={styles.quickRow}>
-        <TouchableOpacity
-          style={styles.quickCard}
-          onPress={() => navigation.navigate('Wardrobe')}
-          activeOpacity={0.8}
-        >
-          <View style={[styles.quickIcon, { backgroundColor: `${colors.primary}18` }]}>
-            <Ionicons name="shirt-outline" size={22} color={colors.primary} />
-          </View>
-          <Text style={styles.quickLabel}>Wardrobe</Text>
-          <Text style={styles.quickSub}>{items.length} {items.length === 1 ? 'item' : 'items'}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.quickCard}
-          onPress={() => navigation.navigate('Outfits')}
-          activeOpacity={0.8}
-        >
-          <View style={[styles.quickIcon, { backgroundColor: `${colors.primary}18` }]}>
-            <Ionicons name="layers-outline" size={22} color={colors.primary} />
-          </View>
-          <Text style={styles.quickLabel}>Outfits</Text>
-          <Text style={styles.quickSub}>
-            {outfits.length === 0 ? 'None yet' : `${outfits.length} saved`}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.quickCard}
-          onPress={() => navigation.navigate('Calendar')}
-          activeOpacity={0.8}
-        >
-          <View style={[styles.quickIcon, { backgroundColor: `${colors.primary}18` }]}>
-            <Ionicons name="calendar-outline" size={22} color={colors.primary} />
-          </View>
-          <Text style={styles.quickLabel}>Calendar</Text>
-          <Text style={styles.quickSub}>
-            {upcomingEvents.length === 0 ? 'No events' : `${upcomingEvents.length} upcoming`}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* ── Outfit Suggestions ───────────────────────────────────── */}
-      <TouchableOpacity
-        style={styles.nudgeCard}
-        onPress={() => navigation.navigate('Suggestions')}
-        activeOpacity={0.8}
-      >
-        <View style={[styles.nudgeIcon, { backgroundColor: `${colors.primary}18` }]}>
-          <Ionicons name="sparkles" size={18} color={colors.primary} />
-        </View>
-        <View style={styles.nudgeText}>
-          <Text style={styles.nudgeTitle}>What should I wear?</Text>
-          <Text style={styles.nudgeSub}>Get an AI-curated outfit for today</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={16} color={colors.primary} />
-      </TouchableOpacity>
 
       {/* ── Log Today's Look ─────────────────────────────────────── */}
       <TouchableOpacity
@@ -343,7 +345,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                   ]}>
                     <Ionicons name={iconName} size={18} color={colors.primary} />
                   </View>
-                  <Text style={styles.eventTitle} numberOfLines={2}>{event.title}</Text>
+                  <Text style={styles.eventTitle} numberOfLines={2}>{event.title.trim()}</Text>
                   <Text style={[styles.eventDate, isToday && styles.eventDateToday]}>
                     {formatEventDate(event.date)}
                   </Text>
@@ -433,8 +435,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       {/* ── Recent Outfits ────────────────────────────────────────── */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Outfits</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Outfits')}>
+          <Text style={styles.sectionTitle}>Stylist Picks for Today</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Closet')}>
             <Text style={styles.sectionLink}>View all</Text>
           </TouchableOpacity>
         </View>
@@ -455,7 +457,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               <TouchableOpacity
                 key={outfit.id}
                 style={[styles.outfitCard, { width: cardWidth }]}
-                onPress={() => navigation.navigate('Outfits')}
+                onPress={() => navigation.navigate('Closet')}
                 activeOpacity={0.85}
               >
                 <View style={styles.collageWrapper}>
@@ -472,11 +474,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           </View>
         )}
       </View>
-      <QuickCaptureSheet
-        visible={quickCaptureVisible}
-        onClose={() => setQuickCaptureVisible(false)}
-      />
     </ScrollView>
+    </View>
   );
 }
 
@@ -513,48 +512,52 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
     color: colors.mutedForeground,
   },
-  stats: {
+  headerMeta: {
+    gap: 6,
+  },
+  weatherLine: {
     fontSize: typography.size.xs,
     color: colors.mutedForeground,
   },
-  quickAddBtn: {
+  chipsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.full,
-    backgroundColor: colors.accent,
-    borderWidth: 1,
-    borderColor: `${colors.primary}30`,
-    flexShrink: 0,
-    marginTop: 6,
+    flexWrap: 'wrap',
+    gap: spacing.xs,
   },
-  quickAddBtnText: {
+  chip: {
+    backgroundColor: colors.muted,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
+  chipText: {
     fontSize: typography.size.xs,
-    fontWeight: typography.weight.semibold,
-    color: colors.primary,
+    color: colors.mutedForeground,
+    fontWeight: typography.weight.medium,
+  },
+  settingsBtn: {
+    padding: spacing.sm,
+    marginTop: 2,
   },
 
-  // Stylist prompt
+  // Stylist prompt — hero card
   promptCard: {
-    backgroundColor: colors.card,
+    backgroundColor: '#2C2420',
     borderRadius: radii.lg + 2,
-    borderWidth: 1,
-    borderColor: `${colors.primary}40`,
+    borderWidth: 0,
     marginBottom: spacing.lg,
     overflow: 'hidden',
-    shadowColor: colors.primary,
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    shadowColor: '#2C2420',
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
   },
   promptInner: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
+    paddingTop: spacing.lg,
     paddingBottom: spacing.sm,
     gap: spacing.sm,
   },
@@ -565,11 +568,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+    backgroundColor: 'rgba(255,255,255,0.12)',
   },
   promptInput: {
     flex: 1,
     fontSize: typography.size.md,
-    color: colors.foreground,
+    color: '#FAF8F5',
     paddingVertical: 0,
   },
   sendButton: {
@@ -583,10 +587,9 @@ const styles = StyleSheet.create({
   },
   promptHint: {
     fontSize: typography.size.xs,
-    color: colors.mutedForeground,
+    color: 'rgba(250,248,245,0.65)',
     paddingHorizontal: spacing.md,
-    paddingBottom: spacing.sm,
-    opacity: 0.7,
+    paddingBottom: spacing.lg,
   },
 
   // Empty wardrobe nudge
@@ -594,10 +597,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: '#fffbeb',
+    backgroundColor: colors.accent,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: '#fde68a',
+    borderColor: `${colors.primary}30`,
     padding: spacing.md,
     marginBottom: spacing.lg,
   },
@@ -605,7 +608,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: radii.md,
-    backgroundColor: '#fef3c7',
+    backgroundColor: `${colors.primary}15`,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
@@ -614,43 +617,10 @@ const styles = StyleSheet.create({
   nudgeTitle: {
     fontSize: typography.size.sm,
     fontWeight: typography.weight.semibold,
-    color: '#92620a',
+    color: colors.primary,
   },
   nudgeSub: {
     fontSize: typography.size.xs,
-    color: '#b87b22',
-  },
-
-  // Quick actions — 3 equal cards
-  quickRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.xl,
-  },
-  quickCard: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    gap: 3,
-  },
-  quickIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radii.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.xs,
-  },
-  quickLabel: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  quickSub: {
-    fontSize: 10,
     color: colors.mutedForeground,
   },
 
@@ -677,11 +647,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: colors.card,
+    backgroundColor: colors.white,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.lg,
+    ...shadows.sm,
   },
   emptyIcon: {
     width: 36,
@@ -708,12 +679,13 @@ const styles = StyleSheet.create({
   carouselContent: { paddingHorizontal: SIDE_PAD, gap: COL_GAP },
   eventCard: {
     width: 148,
-    backgroundColor: colors.card,
+    backgroundColor: colors.white,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
     gap: 4,
+    ...shadows.sm,
   },
   eventCardToday: {
     borderColor: `${colors.primary}40`,
@@ -760,7 +732,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   outfitInfo: {
-    paddingTop: spacing.sm,
+    paddingTop: spacing.md,
     paddingHorizontal: 2,
     gap: 2,
   },
@@ -807,12 +779,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: colors.card,
+    backgroundColor: colors.white,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: `${colors.primary}30`,
     padding: spacing.md,
     marginBottom: spacing.lg,
+    ...shadows.sm,
   },
 
   // Outfit log history
@@ -823,13 +796,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: colors.card,
+    backgroundColor: colors.white,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
     minHeight: 56,
+    ...shadows.xs,
   },
   logThumbs: {
     flexDirection: 'row',
@@ -843,7 +817,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: colors.muted,
     borderWidth: 2,
-    borderColor: colors.card,
+    borderColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -872,4 +846,5 @@ const styles = StyleSheet.create({
     padding: spacing.xs,
     flexShrink: 0,
   },
+
 });

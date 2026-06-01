@@ -112,7 +112,9 @@ export function useVisualizeOutfit() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) =>
-      api.post<{ aiGeneratedImageUrl: string }>(`/api/outfits/${id}/visualize`).then((r) => r.data),
+      api
+        .post<{ aiGeneratedImageUrl: string }>(`/api/outfits/${id}/visualize`, undefined, { timeout: 120_000 })
+        .then((r) => r.data),
     onSuccess: () => invalidateOutfitQueries(qc),
   });
 }
