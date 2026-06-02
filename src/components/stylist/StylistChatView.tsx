@@ -4,6 +4,7 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -535,6 +536,16 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, onToggleAud
 
 // ── OutfitSuggestionCard ──────────────────────────────────────────────────────
 
+const OUTFIT_CATEGORY_ORDER = ['full_body', 'top', 'bottom', 'shoes', 'outerwear', 'accessory'];
+
+function outfitNameFromItems(items: Item[]): string {
+  if (items.length === 0) return 'AI Outfit';
+  const sorted = [...items].sort(
+    (a, b) => OUTFIT_CATEGORY_ORDER.indexOf(a.category) - OUTFIT_CATEGORY_ORDER.indexOf(b.category),
+  );
+  return sorted.slice(0, 2).map((i) => i.name).join(' · ');
+}
+
 type OutfitSuggestionCardProps = {
   messageText: string;
   itemIds: number[];
@@ -545,6 +556,7 @@ type OutfitSuggestionCardProps = {
 function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit }: OutfitSuggestionCardProps) {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
 
   const matchedItems = useMemo(
     () => itemIds.map((id) => allItems.find((i) => i.id === id)).filter((i): i is Item => !!i),
@@ -556,7 +568,7 @@ function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit }: 
     setSaving(true);
     try {
       const input: CreateOutfitInput = {
-        name: messageText.slice(0, 60).replace(/\n/g, ' ').trim() || 'AI Suggestion',
+        name: outfitNameFromItems(matchedItems),
         description: messageText.slice(0, 200) || null,
         topId: matchedItems.find((i) => i.category === 'top')?.id ?? null,
         bottomId: matchedItems.find((i) => i.category === 'bottom')?.id ?? null,
@@ -585,18 +597,18 @@ function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit }: 
           {matchedItems.map((item) => {
             const imgUri = resolveImageUri(item.imageUrl);
             return (
-              <View key={item.id} style={styles.outfitItemThumb}>
-                {imgUri ? (
-                  <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                ) : (
-                  <Ionicons name="shirt-outline" size={18} color={colors.mutedForeground} />
-                )}
-                <View style={styles.outfitItemLabel}>
-                  <Text style={styles.outfitItemLabelText} numberOfLines={1}>
-                    {item.name}
-                  </Text>
+              <Pressable key={item.id} style={styles.outfitThumbWrap} onPress={() => setSelectedItem(item)}>
+                <View style={styles.outfitItemThumb}>
+                  {imgUri ? (
+                    <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                  ) : (
+                    <Ionicons name="shirt-outline" size={18} color={colors.mutedForeground} />
+                  )}
                 </View>
-              </View>
+                <Text style={styles.outfitThumbLabel} numberOfLines={1} ellipsizeMode="tail">
+                  {item.name}
+                </Text>
+              </Pressable>
             );
           })}
         </ScrollView>
@@ -615,13 +627,85 @@ function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit }: 
         <Ionicons
           name={saved ? 'checkmark-circle' : 'bookmark-outline'}
           size={15}
-          color={saved ? colors.primaryForeground : colors.primaryForeground}
+          color={saved ? colors.primaryForeground : colors.primary}
         />
-        <Text style={styles.saveBtnText}>
+        <Text style={[styles.saveBtnText, saved && styles.saveBtnTextDone]}>
           {saving ? 'Saving…' : saved ? 'Saved to Outfits' : 'Save to Outfits'}
         </Text>
       </TouchableOpacity>
+      <ItemDetailSheet item={selectedItem} onClose={() => setSelectedItem(null)} />
     </View>
+  );
+}
+
+// ── ItemDetailSheet ───────────────────────────────────────────────────────────
+
+type ItemDetailSheetProps = {
+  item: Item | null;
+  onClose: () => void;
+};
+
+function ItemDetailSheet({ item, onClose }: ItemDetailSheetProps) {
+  const insets = useSafeAreaInsets();
+  const imgUri = item ? resolveImageUri(item.imageUrl) : null;
+
+  const metaRows = item
+    ? ([
+        item.category && { label: 'Category', value: item.category.replace(/_/g, ' ') },
+        item.brand    && { label: 'Brand',    value: item.brand },
+        item.color    && { label: 'Color',    value: item.color },
+        item.style    && { label: 'Style',    value: item.style },
+        item.occasion && { label: 'Occasion', value: item.occasion },
+      ].filter(Boolean) as { label: string; value: string }[])
+    : [];
+
+  return (
+    <Modal
+      visible={!!item}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
+      {item && (
+        <View style={[styles.sheetRoot, { paddingTop: insets.top + spacing.md }]}>
+          <View style={styles.sheetHeader}>
+            <Text style={styles.sheetTitle} numberOfLines={2}>{item.name}</Text>
+            <TouchableOpacity style={styles.sheetCloseBtn} onPress={onClose}>
+              <Ionicons name="close" size={20} color={colors.foreground} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            contentContainerStyle={styles.sheetContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.sheetImageWrap}>
+              {imgUri ? (
+                <Image source={{ uri: imgUri }} style={styles.sheetImage} resizeMode="contain" />
+              ) : (
+                <View style={styles.sheetImagePlaceholder}>
+                  <Ionicons name="shirt-outline" size={48} color={colors.border} />
+                </View>
+              )}
+            </View>
+
+            {metaRows.length > 0 && (
+              <View style={styles.sheetMeta}>
+                {metaRows.map((row, i) => (
+                  <View
+                    key={row.label}
+                    style={[styles.sheetMetaRow, i < metaRows.length - 1 && styles.sheetMetaRowBorder]}
+                  >
+                    <Text style={styles.sheetMetaLabel}>{row.label}</Text>
+                    <Text style={styles.sheetMetaValue} numberOfLines={1}>{row.value}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      )}
+    </Modal>
   );
 }
 
@@ -919,28 +1003,25 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingBottom: spacing.xs,
   },
+  outfitThumbWrap: {
+    alignItems: 'center',
+    width: 72,
+    gap: spacing.xs,
+  },
   outfitItemThumb: {
-    width: 56,
-    height: 56,
+    width: 72,
+    height: 72,
     borderRadius: radii.md,
     backgroundColor: colors.muted,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  outfitItemLabel: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    paddingHorizontal: 3,
-    paddingVertical: 2,
-  },
-  outfitItemLabelText: {
-    fontSize: 8,
-    color: '#fff',
+  outfitThumbLabel: {
+    fontSize: 10,
+    color: colors.mutedForeground,
     textAlign: 'center',
+    width: 72,
   },
   outfitCardText: {
     fontSize: typography.size.sm,
@@ -952,18 +1033,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.muted,
+    borderWidth: 1,
+    borderColor: colors.border,
     borderRadius: radii.full,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
     alignSelf: 'flex-start',
   },
   saveBtnDone: {
-    backgroundColor: `${colors.primary}80`,
+    backgroundColor: colors.primary,
+    borderWidth: 0,
   },
   saveBtnText: {
     fontSize: typography.size.xs,
     fontWeight: typography.weight.semibold,
+    color: colors.foreground,
+  },
+  saveBtnTextDone: {
     color: colors.white,
   },
   // Typing indicator
@@ -1019,5 +1106,92 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
     color: colors.foreground,
     textAlign: 'center',
+  },
+  // Item detail sheet
+  sheetRoot: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    gap: spacing.md,
+  },
+  sheetTitle: {
+    flex: 1,
+    fontSize: typography.size.lg,
+    fontWeight: typography.weight.semibold,
+    color: colors.foreground,
+    letterSpacing: -0.3,
+  },
+  sheetCloseBtn: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.full,
+    backgroundColor: colors.muted,
+    flexShrink: 0,
+  },
+  sheetContent: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xxxl,
+    alignItems: 'center',
+    gap: spacing.xl,
+  },
+  sheetImageWrap: {
+    width: '80%',
+    aspectRatio: 4 / 5,
+    borderRadius: radii.lg,
+    backgroundColor: colors.muted,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetImage: {
+    width: '100%',
+    height: '100%',
+  },
+  sheetImagePlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetMeta: {
+    width: '100%',
+    borderRadius: radii.md,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  sheetMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+  },
+  sheetMetaRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  sheetMetaLabel: {
+    fontSize: typography.size.sm,
+    color: colors.mutedForeground,
+    fontWeight: typography.weight.medium,
+  },
+  sheetMetaValue: {
+    fontSize: typography.size.sm,
+    color: colors.foreground,
+    textTransform: 'capitalize',
+    maxWidth: '60%',
+    textAlign: 'right',
   },
 });

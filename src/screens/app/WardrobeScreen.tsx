@@ -29,6 +29,7 @@ import {
 } from '../../hooks/useItems';
 import { WardrobeItemCard } from '../../components/wardrobe/WardrobeItemCard';
 import { WardrobeListRow } from '../../components/wardrobe/WardrobeListRow';
+import { FilterPanel } from '../../components/wardrobe/FilterPanel';
 import { ScanItemSheet } from '../../components/wardrobe/ScanItemSheet';
 import { BatchScanSheet } from '../../components/wardrobe/BatchScanSheet';
 import { QuickCaptureSheet } from '../../components/wardrobe/QuickCaptureSheet';
@@ -387,17 +388,10 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
           >
             <Ionicons name="sparkles" size={20} color={colors.primary} />
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.headerBtn}
-            onPress={() => navigation.navigate('ClosetRefresh')}
-            testID="link-closet-insights"
-          >
-            <Ionicons name="sparkles-outline" size={20} color={colors.foreground} />
-          </TouchableOpacity>
         </View>
       </View>
 
-      {/* ── Search bar + view toggle row ── */}
+      {/* ── Search bar ── */}
       <View style={styles.searchRow}>
         <View style={styles.searchBar}>
           <Ionicons name="search-outline" size={16} color={colors.mutedForeground} />
@@ -418,20 +412,49 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
               <Ionicons name="close-circle" size={16} color={colors.mutedForeground} />
             </TouchableOpacity>
           )}
-          <View style={styles.searchDivider} />
-          <TouchableOpacity style={styles.searchFilterBtn} onPress={() => setFilterSheetOpen(true)}>
-            <Ionicons
-              name="options-outline"
-              size={18}
-              color={activeFilterCount > 0 ? colors.primary : colors.mutedForeground}
-            />
-            {activeFilterCount > 0 && (
-              <View style={styles.searchFilterBadge}>
-                <Text style={styles.searchFilterBadgeText}>{activeFilterCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
         </View>
+      </View>
+
+      {/* ── Action row: Sort · Filter · AI Stylist · View toggle ── */}
+      <View style={styles.actionRow}>
+        <TouchableOpacity
+          style={[styles.actionChip, sortKey !== 'newest' && styles.actionChipActive]}
+          onPress={() => setFilterSheetOpen(true)}
+        >
+          <Ionicons
+            name="swap-vertical-outline"
+            size={14}
+            color={sortKey !== 'newest' ? colors.primaryForeground : colors.mutedForeground}
+          />
+          <Text style={[styles.actionChipText, sortKey !== 'newest' && styles.actionChipTextActive]}>
+            {sortKey !== 'newest' ? (SORT_OPTIONS.find((o) => o.key === sortKey)?.label ?? 'Sort') : 'Sort'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.actionChip, activeFilterCount > 0 && styles.actionChipActive]}
+          onPress={() => setFilterSheetOpen(true)}
+        >
+          <Ionicons
+            name="options-outline"
+            size={14}
+            color={activeFilterCount > 0 ? colors.primaryForeground : colors.mutedForeground}
+          />
+          <Text style={[styles.actionChipText, activeFilterCount > 0 && styles.actionChipTextActive]}>
+            {activeFilterCount > 0 ? `Filter · ${activeFilterCount}` : 'Filter'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.actionChip, styles.actionChipStylist]}
+          onPress={() => openStylist()}
+          accessibilityLabel="Open AI Stylist"
+        >
+          <Ionicons name="sparkles" size={14} color={colors.primary} />
+          <Text style={[styles.actionChipText, styles.actionChipTextStylist]}>AI Stylist</Text>
+        </TouchableOpacity>
+
+        <View style={{ flex: 1 }} />
 
         <TouchableOpacity
           style={styles.viewToggleBtn}
@@ -439,7 +462,7 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
         >
           <Ionicons
             name={viewMode === 'grid' ? 'list-outline' : 'grid-outline'}
-            size={20}
+            size={18}
             color={colors.foreground}
           />
         </TouchableOpacity>
@@ -746,209 +769,44 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
       )}
 
 
-      {/* ═══════════════════════════════════════════════════════════════════
-          Filter / Sort sheet
-      ═══════════════════════════════════════════════════════════════════ */}
-      <Modal
+      <FilterPanel
         visible={filterSheetOpen}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setFilterSheetOpen(false)}
-      >
-        <View style={styles.sheetOverlay}>
-          {/* Backdrop — tap to close */}
-          <TouchableOpacity
-            style={styles.sheetBackdrop}
-            activeOpacity={1}
-            onPress={() => setFilterSheetOpen(false)}
-          />
-          {/* Sheet */}
-          <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-            {/* Handle */}
-            <View style={styles.sheetHandle} />
-
-            {/* Header */}
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Sort & Filter</Text>
-              <TouchableOpacity onPress={() => setFilterSheetOpen(false)}>
-                <Ionicons name="close-outline" size={22} color={colors.foreground} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {/* Sort */}
-              <Text style={styles.sheetSection}>Sort by</Text>
-              {SORT_OPTIONS.map(({ key, label }) => (
-                <TouchableOpacity
-                  key={key}
-                  style={styles.sheetRow}
-                  onPress={() => setSortKey(key)}
-                >
-                  <View style={[styles.radio, sortKey === key && styles.radioActive]}>
-                    {sortKey === key && <View style={styles.radioInner} />}
-                  </View>
-                  <Text style={styles.sheetRowText}>{label}</Text>
-                </TouchableOpacity>
-              ))}
-
-              {/* Colors */}
-              {allColors.length > 0 && (
-                <>
-                  <Text style={styles.sheetSection}>Colour</Text>
-                  <View style={styles.sheetChips}>
-                    {allColors.map((color) => {
-                      const active = selectedColors.includes(color);
-                      return (
-                        <TouchableOpacity
-                          key={color}
-                          style={[styles.sheetChip, active && styles.sheetChipActive]}
-                          onPress={() =>
-                            setSelectedColors((prev) =>
-                              prev.includes(color)
-                                ? prev.filter((c) => c !== color)
-                                : [...prev, color]
-                            )
-                          }
-                        >
-                          <Text
-                            style={[
-                              styles.sheetChipText,
-                              active && styles.sheetChipTextActive,
-                            ]}
-                          >
-                            {color}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </>
-              )}
-
-              {/* Brands */}
-              {allBrands.length > 0 && (
-                <>
-                  <Text style={styles.sheetSection}>Brand</Text>
-                  {allBrands.map((brand) => {
-                    const active = selectedBrands.includes(brand);
-                    return (
-                      <TouchableOpacity
-                        key={brand}
-                        style={styles.sheetRow}
-                        onPress={() =>
-                          setSelectedBrands((prev) =>
-                            prev.includes(brand)
-                              ? prev.filter((b) => b !== brand)
-                              : [...prev, brand]
-                          )
-                        }
-                      >
-                        <View style={[styles.checkbox, active && styles.checkboxActive]}>
-                          {active && (
-                            <Ionicons name="checkmark" size={11} color={colors.primaryForeground} />
-                          )}
-                        </View>
-                        <Text style={styles.sheetRowText}>{brand}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </>
-              )}
-
-              {/* Seasons */}
-              {allSeasons.length > 0 && (
-                <>
-                  <Text style={styles.sheetSection}>Season</Text>
-                  <View style={styles.sheetChips}>
-                    {allSeasons.map((season) => {
-                      const active = selectedSeasons.includes(season);
-                      const label = season
-                        .replace(/_/g, ' ')
-                        .replace(/\b\w/g, (c) => c.toUpperCase());
-                      return (
-                        <TouchableOpacity
-                          key={season}
-                          style={[styles.sheetChip, active && styles.sheetChipActive]}
-                          onPress={() =>
-                            setSelectedSeasons((prev) =>
-                              prev.includes(season)
-                                ? prev.filter((s) => s !== season)
-                                : [...prev, season]
-                            )
-                          }
-                        >
-                          <Text
-                            style={[
-                              styles.sheetChipText,
-                              active && styles.sheetChipTextActive,
-                            ]}
-                          >
-                            {label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </>
-              )}
-
-              {/* Tags */}
-              {allTags.length > 0 && (
-                <>
-                  <Text style={styles.sheetSection}>Tags</Text>
-                  <View style={styles.sheetChips}>
-                    {allTags.map((tag) => {
-                      const active = selectedTags.includes(tag);
-                      return (
-                        <TouchableOpacity
-                          key={tag}
-                          style={[styles.sheetChip, active && styles.sheetChipActive]}
-                          onPress={() =>
-                            setSelectedTags((prev) =>
-                              prev.includes(tag)
-                                ? prev.filter((t) => t !== tag)
-                                : [...prev, tag]
-                            )
-                          }
-                        >
-                          <Text
-                            style={[
-                              styles.sheetChipText,
-                              active && styles.sheetChipTextActive,
-                            ]}
-                          >
-                            {tag}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </>
-              )}
-
-              <View style={{ height: 24 }} />
-            </ScrollView>
-
-            {/* Footer */}
-            <View style={styles.sheetFooter}>
-              {activeFilterCount > 0 && (
-                <TouchableOpacity style={styles.sheetClearBtn} onPress={clearSheetFilters}>
-                  <Text style={styles.sheetClearText}>Clear filters</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={[styles.sheetApplyBtn, activeFilterCount === 0 && styles.sheetApplyBtnFull]}
-                onPress={() => setFilterSheetOpen(false)}
-              >
-                <Text style={styles.sheetApplyText}>
-                  Show {filteredItems.length}{' '}
-                  {filteredItems.length === 1 ? 'piece' : 'pieces'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setFilterSheetOpen(false)}
+        sortOptions={SORT_OPTIONS}
+        sortKey={sortKey}
+        onSortChange={(key) => setSortKey(key as SortKey)}
+        allColors={allColors}
+        selectedColors={selectedColors}
+        onToggleColor={(color) =>
+          setSelectedColors((prev) =>
+            prev.includes(color) ? prev.filter((c) => c !== color) : [...prev, color]
+          )
+        }
+        allBrands={allBrands}
+        selectedBrands={selectedBrands}
+        onToggleBrand={(brand) =>
+          setSelectedBrands((prev) =>
+            prev.includes(brand) ? prev.filter((b) => b !== brand) : [...prev, brand]
+          )
+        }
+        allSeasons={allSeasons}
+        selectedSeasons={selectedSeasons}
+        onToggleSeason={(season) =>
+          setSelectedSeasons((prev) =>
+            prev.includes(season) ? prev.filter((s) => s !== season) : [...prev, season]
+          )
+        }
+        allTags={allTags}
+        selectedTags={selectedTags}
+        onToggleTag={(tag) =>
+          setSelectedTags((prev) =>
+            prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+          )
+        }
+        filteredCount={filteredItems.length}
+        activeFilterCount={activeFilterCount}
+        onClearAll={clearSheetFilters}
+      />
 
       {/* ═══════════════════════════════════════════════════════════════════
           Add Item modal
@@ -1187,32 +1045,6 @@ const styles = StyleSheet.create({
     fontSize: typography.size.md,
     color: colors.foreground,
   },
-  searchDivider: {
-    width: 1,
-    height: 18,
-    backgroundColor: colors.border,
-    marginHorizontal: spacing.xs,
-  },
-  searchFilterBtn: {
-    position: 'relative',
-    padding: 4,
-  },
-  searchFilterBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  searchFilterBadgeText: {
-    fontSize: 9,
-    fontWeight: typography.weight.bold,
-    color: colors.primaryForeground,
-  },
   viewToggleBtn: {
     width: 42,
     height: 42,
@@ -1222,9 +1054,45 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
+  // ── Action row
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  actionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: radii.full,
+    backgroundColor: colors.muted,
+    gap: 4,
+  },
+  actionChipActive: {
+    backgroundColor: colors.foreground,
+  },
+  actionChipText: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.medium,
+    color: colors.mutedForeground,
+  },
+  actionChipTextActive: {
+    color: colors.primaryForeground,
+  },
+  actionChipStylist: {
+    backgroundColor: `${colors.primary}18`,
+  },
+  actionChipTextStylist: {
+    color: colors.primary,
+  },
+
   // ── Category pills
   pillsScroll: {
     flexGrow: 0,
+    flexShrink: 0,
   },
   pillsRow: {
     flexDirection: 'row',
@@ -1432,159 +1300,6 @@ const styles = StyleSheet.create({
   },
   bulkBtnTextDelete: {
     color: colors.error,
-  },
-
-  // ── Filter sheet
-  sheetOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  sheetBackdrop: {
-    flex: 1,
-  },
-  sheet: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius: radii.xl,
-    borderTopRightRadius: radii.xl,
-    maxHeight: '75%',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: -4 },
-    elevation: 16,
-  },
-  sheetHandle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    alignSelf: 'center',
-    marginTop: spacing.sm,
-    marginBottom: spacing.xs,
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  sheetTitle: {
-    fontSize: typography.size.lg,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  sheetSection: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.semibold,
-    color: colors.mutedForeground,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
-  },
-  sheetRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 11,
-    gap: spacing.md,
-  },
-  sheetRowText: {
-    fontSize: typography.size.md,
-    color: colors.foreground,
-  },
-  radio: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 2,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioActive: {
-    borderColor: colors.primary,
-  },
-  radioInner: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.primary,
-  },
-  checkbox: {
-    width: 18,
-    height: 18,
-    borderRadius: radii.sm,
-    borderWidth: 2,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  sheetChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: spacing.lg,
-    gap: spacing.sm,
-  },
-  sheetChip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: 7,
-    borderRadius: radii.full,
-    backgroundColor: colors.muted,
-  },
-  sheetChipActive: {
-    backgroundColor: colors.primary,
-  },
-  sheetChipText: {
-    fontSize: typography.size.sm,
-    color: colors.foreground,
-  },
-  sheetChipTextActive: {
-    color: colors.primaryForeground,
-  },
-  sheetFooter: {
-    flexDirection: 'row',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
-    gap: spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-  sheetClearBtn: {
-    flex: 1,
-    paddingVertical: spacing.md,
-    borderRadius: radii.md,
-    backgroundColor: colors.secondary,
-    alignItems: 'center',
-  },
-  sheetClearText: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.medium,
-    color: colors.foreground,
-  },
-  sheetApplyBtn: {
-    flex: 2,
-    paddingVertical: spacing.md,
-    borderRadius: radii.md,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-  },
-  sheetApplyBtnFull: {
-    flex: 1,
-  },
-  sheetApplyText: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-    color: colors.primaryForeground,
   },
 
   // ── Add item modal

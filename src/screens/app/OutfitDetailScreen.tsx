@@ -2,24 +2,27 @@ import {
   View,
   Text,
   ScrollView,
+  TextInput,
   TouchableOpacity,
   Image,
   StyleSheet,
   Alert,
   useWindowDimensions,
   ActivityIndicator,
+  Animated,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useOutfits, useDeleteOutfit, useMarkOutfitWorn } from '../../hooks/useOutfits';
+import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import { useOutfits, useDeleteOutfit, useMarkOutfitWorn, useVisualizeOutfit, useUpdateOutfit } from '../../hooks/useOutfits';
 import { useItems } from '../../hooks/useItems';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
-import { OutfitVisualizationCard } from '../../components/outfits/OutfitVisualizationCard';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { colors, spacing, typography, radii } from '../../theme';
 import { CATEGORY_LABELS } from '../../types/item';
 import type { OutfitDetailScreenProps } from '../../navigation/types';
-import { useMemo } from 'react';
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', {
@@ -53,6 +56,81 @@ const chipStyles = StyleSheet.create({
   },
 });
 
+const LOADING_PHRASES = [
+  'Analyzing pieces...',
+  'Arranging layout...',
+  'Adding final polish...',
+  'Styling your look...',
+];
+
+function FlatLayLoadingOverlay({ width }: { width: number }) {
+  const pulseAnim = useRef(new Animated.Value(0.3)).current;
+  const textOpacity = useRef(new Animated.Value(1)).current;
+  const [phraseIndex, setPhraseIndex] = useState(0);
+
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 0.75, duration: 900, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0.3, duration: 900, useNativeDriver: true }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [pulseAnim]);
+
+  useEffect(() => {
+    const cycle = setInterval(() => {
+      Animated.timing(textOpacity, { toValue: 0, duration: 280, useNativeDriver: true }).start(() => {
+        setPhraseIndex((i) => (i + 1) % LOADING_PHRASES.length);
+        Animated.timing(textOpacity, { toValue: 1, duration: 280, useNativeDriver: true }).start();
+      });
+    }, 2500);
+    return () => clearInterval(cycle);
+  }, [textOpacity]);
+
+  return (
+    <View style={[overlayStyles.container, { width, height: width }]}>
+      <Animated.View
+        style={{ ...StyleSheet.absoluteFill, opacity: pulseAnim, backgroundColor: colors.muted }}
+      />
+      <View style={overlayStyles.textBox}>
+        <ActivityIndicator size="small" color={colors.mutedForeground} />
+        <Animated.Text style={[overlayStyles.phrase, { opacity: textOpacity }]}>
+          {LOADING_PHRASES[phraseIndex]}
+        </Animated.Text>
+      </View>
+    </View>
+  );
+}
+
+const overlayStyles = StyleSheet.create({
+  container: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  textBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.xl,
+    backgroundColor: 'rgba(250, 248, 245, 0.85)',
+    borderRadius: radii.full,
+  },
+  phrase: {
+    fontSize: typography.size.sm,
+    color: colors.mutedForeground,
+    fontWeight: typography.weight.medium,
+  },
+});
+
 export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProps) {
   const { outfitId } = route.params;
   const { data: outfits = [] } = useOutfits();
@@ -61,6 +139,59 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
 
   const deleteOutfit = useDeleteOutfit();
   const markWorn = useMarkOutfitWorn();
+  const visualize = useVisualizeOutfit();
+  const updateOutfit = useUpdateOutfit();
+
+  const [localNotes, setLocalNotes] = useState(outfit?.notes ?? '');
+  const [localTags, setLocalTags] = useState<string[]>(outfit?.tags ?? []);
+  const [tagDraft, setTagDraft] = useState('');
+
+  useEffect(() => {
+    if (outfit) {
+      setLocalNotes(outfit.notes ?? '');
+      setLocalTags(outfit.tags ?? []);
+    }
+  }, [outfit?.id]);
+
+  const addTag = useCallback((raw: string) => {
+    if (!outfit) return;
+    const tag = raw.trim().toLowerCase();
+    if (!tag || localTags.includes(tag)) {
+      setTagDraft('');
+      return;
+    }
+    const next = [...localTags, tag];
+    setLocalTags(next);
+    setTagDraft('');
+    updateOutfit.mutate({ id: outfit.id, tags: next });
+  }, [localTags, outfit, updateOutfit]);
+
+  const removeTag = useCallback((tag: string) => {
+    if (!outfit) return;
+    const next = localTags.filter(t => t !== tag);
+    setLocalTags(next);
+    updateOutfit.mutate({ id: outfit.id, tags: next });
+  }, [localTags, outfit, updateOutfit]);
+
+  const [notesSaved, setNotesSaved] = useState(false);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tagInputRef = useRef<TextInput>(null);
+  const notesInputRef = useRef<TextInput>(null);
+
+  const saveNotes = useCallback(() => {
+    if (!outfit) return;
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+    updateOutfit.mutate(
+      { id: outfit.id, notes: localNotes.trim() || null },
+      {
+        onSuccess: () => {
+          notesInputRef.current?.blur();
+          setNotesSaved(true);
+          savedTimerRef.current = setTimeout(() => setNotesSaved(false), 2000);
+        },
+      }
+    );
+  }, [localNotes, outfit, updateOutfit]);
 
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -90,8 +221,8 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   }
 
   const isBusy = deleteOutfit.isPending || markWorn.isPending;
-
   const handleMarkWorn = () => markWorn.mutate(outfit.id);
+  const handleGenerate = () => visualize.mutate(outfit.id);
 
   const handleDelete = () => {
     Alert.alert(
@@ -111,26 +242,75 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
     );
   };
 
+  const hasAiImage = !!outfit.aiGeneratedImageUrl;
+
   return (
-    <View style={styles.flex}>
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       <ScrollView
         style={styles.flex}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        {/* Collage / AI image header */}
+        {/* ── Hero ── */}
         <View style={{ position: 'relative' }}>
           <OutfitCollage outfit={outfit} size={width} borderRadius={0} />
+
+          {/* Dark tint over collage grid — before generation only */}
+          {!hasAiImage && !visualize.isPending && (
+            <View style={[StyleSheet.absoluteFill, styles.collageOverlay]} />
+          )}
+
+          {/* Shimmer + cycling text — while generating */}
+          {visualize.isPending && <FlatLayLoadingOverlay width={width} />}
+
+          {/* Back */}
           <TouchableOpacity
             style={[styles.backButton, { top: insets.top + spacing.sm }]}
             onPress={() => navigation.goBack()}
           >
             <Ionicons name="chevron-back" size={22} color={colors.foreground} />
           </TouchableOpacity>
+
+          {/* Delete — top-right */}
+          <TouchableOpacity
+            style={[styles.headerIconButton, { top: insets.top + spacing.sm }]}
+            onPress={handleDelete}
+            disabled={isBusy}
+          >
+            <Ionicons name="trash-outline" size={20} color={colors.foreground} />
+          </TouchableOpacity>
         </View>
 
-        {/* Header */}
-        <View style={styles.header}>
+        {/* ── Generate / Regenerate ── */}
+        {!hasAiImage && !visualize.isPending && !visualize.isError && (
+          <TouchableOpacity style={styles.generateCta} onPress={handleGenerate}>
+            <Ionicons name="sparkles-outline" size={14} color={colors.primary} />
+            <Text style={styles.generateCtaLabel}>Generate flat-lay</Text>
+          </TouchableOpacity>
+        )}
+
+        {visualize.isError && (
+          <View style={styles.generateErrorRow}>
+            <Text style={styles.generateErrorText}>Generation failed</Text>
+            <TouchableOpacity onPress={handleGenerate}>
+              <Text style={styles.retryLabel}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {hasAiImage && !visualize.isPending && (
+          <TouchableOpacity style={styles.regenRow} onPress={handleGenerate}>
+            <Ionicons name="refresh-outline" size={13} color={colors.mutedForeground} />
+            <Text style={styles.regenLabel}>Regenerate</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* ── Title ── */}
+        <View style={[styles.header, { maxWidth: width }]}>
           <Text style={styles.name}>{outfit.name}</Text>
           {outfit.event ? (
             <View style={styles.eventRow}>
@@ -140,30 +320,23 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
           ) : null}
         </View>
 
-        {/* Actions */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[styles.actionButton, markWorn.isPending && styles.actionDisabled]}
-            onPress={handleMarkWorn}
-            disabled={isBusy}
-          >
-            <Ionicons name="checkmark-circle-outline" size={20} color={colors.primary} />
-            <Text style={styles.actionLabel}>Worn today</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={handleDelete}
-            disabled={isBusy}
-          >
-            <Ionicons name="trash-outline" size={20} color={colors.error} />
-            <Text style={[styles.actionLabel, { color: colors.error }]}>Delete</Text>
-          </TouchableOpacity>
-        </View>
+        {/* ── Primary CTA ── */}
+        <TouchableOpacity
+          style={[styles.wornButton, isBusy && styles.actionDisabled]}
+          onPress={handleMarkWorn}
+          disabled={isBusy}
+        >
+          {markWorn.isPending ? (
+            <ActivityIndicator size="small" color={colors.primaryForeground} />
+          ) : (
+            <>
+              <Ionicons name="checkmark-circle-outline" size={20} color={colors.primaryForeground} />
+              <Text style={styles.wornButtonLabel}>Worn today</Text>
+            </>
+          )}
+        </TouchableOpacity>
 
-        {/* AI Visualization */}
-        <OutfitVisualizationCard outfit={outfit} />
-
-        {/* Details */}
+        {/* ── Details ── */}
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Details</Text>
           <View style={styles.detailGrid}>
@@ -180,7 +353,7 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
           </View>
         </View>
 
-        {/* Pieces */}
+        {/* ── Pieces ── */}
         {pieces.length > 0 && (
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Pieces ({pieces.length})</Text>
@@ -189,7 +362,12 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
                 if (!item) return null;
                 const uri = resolveImageUri(item.imageUrl);
                 return (
-                  <View key={item.id} style={styles.pieceItem}>
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.pieceItem}
+                    onPress={() => navigation.navigate('ItemDetail', { itemId: item.id })}
+                    activeOpacity={0.75}
+                  >
                     <View style={styles.pieceImageContainer}>
                       {uri ? (
                         <Image
@@ -209,32 +387,91 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
                         {CATEGORY_LABELS[item.category]}
                       </Text>
                     ) : null}
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
             </View>
           </View>
         )}
 
-        {/* Tags */}
-        {outfit.tags?.length > 0 && (
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Tags</Text>
+        {/* ── Tags ── */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Tags</Text>
+          {localTags.length > 0 && (
             <View style={styles.chipRow}>
-              {outfit.tags.map((tag) => <Chip key={tag} label={tag} />)}
+              {localTags.map((tag) => (
+                <TouchableOpacity
+                  key={tag}
+                  style={[chipStyles.chip, styles.tagChip]}
+                  onPress={() => removeTag(tag)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={chipStyles.label}>{tag}</Text>
+                  <Ionicons name="close-circle" size={13} color={colors.mutedForeground} />
+                </TouchableOpacity>
+              ))}
             </View>
+          )}
+          <View style={styles.tagAddRow}>
+            <TextInput
+              ref={tagInputRef}
+              style={styles.tagAddInput}
+              value={tagDraft}
+              onChangeText={setTagDraft}
+              placeholder="e.g. summer, casual, linen…"
+              placeholderTextColor={colors.mutedForeground}
+              autoCapitalize="none"
+              returnKeyType="done"
+              onSubmitEditing={() => addTag(tagDraft)}
+              blurOnSubmit={false}
+            />
+            <TouchableOpacity
+              style={[styles.tagAddBtn, !tagDraft.trim() && styles.tagAddBtnDisabled]}
+              onPress={() => addTag(tagDraft)}
+              disabled={!tagDraft.trim()}
+              activeOpacity={0.75}
+            >
+              <Text style={[styles.tagAddBtnLabel, !tagDraft.trim() && styles.tagAddBtnLabelDisabled]}>
+                Add
+              </Text>
+            </TouchableOpacity>
           </View>
-        )}
+        </View>
 
-        {/* Notes */}
-        {outfit.notes ? (
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Notes</Text>
-            <Text style={styles.notes}>{outfit.notes}</Text>
+        {/* ── Notes ── */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Notes</Text>
+          <TextInput
+            ref={notesInputRef}
+            style={styles.notesTextArea}
+            value={localNotes}
+            onChangeText={setLocalNotes}
+            placeholder="Add styling notes, reminders, or outfit inspiration…"
+            placeholderTextColor={colors.mutedForeground}
+            multiline
+            textAlignVertical="top"
+            autoCapitalize="sentences"
+          />
+          <View style={styles.notesFooter}>
+            {notesSaved ? (
+              <View style={styles.notesSavedBadge}>
+                <Ionicons name="checkmark" size={13} color={colors.primary} />
+                <Text style={styles.notesSavedText}>Saved</Text>
+              </View>
+            ) : localNotes.trim() !== (outfit.notes ?? '') ? (
+              <TouchableOpacity
+                style={[styles.notesSaveBtn, updateOutfit.isPending && styles.actionDisabled]}
+                onPress={saveNotes}
+                disabled={updateOutfit.isPending}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.notesSaveBtnLabel}>Save</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
-        ) : null}
+        </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -245,6 +482,7 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scrollContent: { paddingBottom: spacing.xxxl },
 
+  // ── Hero buttons ──
   backButton: {
     position: 'absolute',
     left: spacing.lg,
@@ -259,7 +497,77 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
   },
+  headerIconButton: {
+    position: 'absolute',
+    right: spacing.lg,
+    backgroundColor: colors.white,
+    borderRadius: radii.full,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+  },
 
+  // ── Collage overlay ──
+  collageOverlay: {
+    backgroundColor: 'rgba(0, 0, 0, 0.22)',
+  },
+
+  // ── Generate / Regenerate ──
+  generateCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    backgroundColor: colors.accent,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  generateCtaLabel: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
+  },
+  generateErrorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.md,
+    marginTop: spacing.sm,
+    marginHorizontal: spacing.lg,
+  },
+  generateErrorText: {
+    fontSize: typography.size.sm,
+    color: colors.error,
+  },
+  retryLabel: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
+  },
+  regenRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+    paddingTop: spacing.sm,
+    paddingHorizontal: spacing.lg,
+  },
+  regenLabel: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+  },
+
+  // ── Header / Title ──
   header: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
@@ -271,6 +579,8 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.bold,
     color: colors.foreground,
     letterSpacing: -0.3,
+    lineHeight: typography.size.xl * typography.lineHeight.normal,
+    flexShrink: 1,
   },
   eventRow: {
     flexDirection: 'row',
@@ -283,30 +593,26 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
   },
 
-  actionRow: {
+  // ── Primary CTA ──
+  wornButton: {
     flexDirection: 'row',
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.lg,
-    gap: spacing.sm,
-  },
-  actionButton: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.card,
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+    paddingVertical: spacing.md + 2,
+    backgroundColor: colors.primary,
     borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
+  },
+  wornButtonLabel: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.primaryForeground,
   },
   actionDisabled: { opacity: 0.5 },
-  actionLabel: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.medium,
-    color: colors.foreground,
-  },
 
+  // ── Section cards ──
   sectionCard: {
     backgroundColor: colors.card,
     borderRadius: radii.lg,
@@ -379,10 +685,90 @@ const styles = StyleSheet.create({
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
   },
-  notes: {
+  tagChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  tagAddRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  tagAddInput: {
+    flex: 1,
+    height: 42,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    fontSize: typography.size.sm,
+    color: colors.foreground,
+    backgroundColor: colors.background,
+  },
+  tagAddBtn: {
+    height: 42,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.md,
+    backgroundColor: colors.foreground,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tagAddBtnDisabled: {
+    backgroundColor: colors.muted,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  tagAddBtnLabel: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.white,
+  },
+  tagAddBtnLabelDisabled: {
+    color: colors.mutedForeground,
+  },
+  notesTextArea: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
     fontSize: typography.size.md,
     color: colors.foreground,
-    lineHeight: typography.size.md * typography.lineHeight.normal,
+    lineHeight: typography.size.md * 1.5,
+    minHeight: 100,
+    backgroundColor: colors.background,
+    textAlignVertical: 'top',
+  },
+  notesFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    minHeight: 36,
+    marginTop: spacing.sm,
+  },
+  notesSaveBtn: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
+    backgroundColor: colors.primary,
+  },
+  notesSaveBtnLabel: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.primaryForeground,
+  },
+  notesSavedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  notesSavedText: {
+    fontSize: typography.size.sm,
+    color: colors.primary,
+    fontWeight: typography.weight.medium,
   },
 });

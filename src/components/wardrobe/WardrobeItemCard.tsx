@@ -79,7 +79,7 @@ export function WardrobeItemCard({
       </View>
 
       <View style={styles.info}>
-        <Text style={styles.name} numberOfLines={1}>
+        <Text style={styles.name} numberOfLines={2}>
           {item.name}
         </Text>
         {item.brand ? (

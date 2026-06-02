@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'react-native';
+import * as FileSystem from 'expo-file-system';
 import { api, isNetworkError } from '../lib/api';
 import type { Outfit } from '../types/outfit';
 
@@ -111,11 +112,26 @@ export function useGenerateOutfit() {
 export function useVisualizeOutfit() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) =>
-      api
-        .post<{ aiGeneratedImageUrl: string }>(`/api/outfits/${id}/visualize`, undefined, { timeout: 120_000 })
-        .then((r) => r.data),
-    onSuccess: () => invalidateOutfitQueries(qc),
+    mutationFn: async (id: number) => {
+      // MOCK — bypass DALL-E backend during simulator prototyping
+      // return api
+      //   .post<{ aiGeneratedImageUrl: string }>(`/api/outfits/${id}/visualize`, undefined, { timeout: 120_000 })
+      //   .then((r) => r.data);
+
+      // Simulate 3–4 s network delay to test FlatLayLoadingOverlay animations
+      await new Promise<void>((resolve) =>
+        setTimeout(resolve, 3000 + Math.random() * 1000)
+      );
+
+      const dest = `${FileSystem.documentDirectory}mock-flatlay-${id}-${Date.now()}.jpg`;
+      const { uri } = await FileSystem.downloadAsync('https://picsum.photos/1024', dest);
+      return { aiGeneratedImageUrl: uri };
+    },
+    onSuccess: (data, id) => {
+      qc.setQueryData<Outfit[]>(OUTFITS_QUERY_KEY, (old) =>
+        old?.map((o) => (o.id === id ? { ...o, aiGeneratedImageUrl: data.aiGeneratedImageUrl } : o)) ?? []
+      );
+    },
   });
 }
 

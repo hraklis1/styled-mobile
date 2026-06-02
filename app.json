@@ -49,7 +49,8 @@
         {
           "locationWhenInUsePermission": "Styled uses your location to autofill event locations and give weather-aware outfit suggestions."
         }
-      ]
+      ],
+      "expo-image"
     ]
   }
 }
