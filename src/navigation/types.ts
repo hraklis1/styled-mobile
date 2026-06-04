@@ -1,4 +1,4 @@
-import type { CompositeScreenProps } from '@react-navigation/native';
+import type { CompositeScreenProps, NavigatorScreenParams } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { ScanResult } from '../types/item';
@@ -17,7 +17,7 @@ export type AuthStackParamList = {
 
 export type AppTabParamList = {
   Home: undefined;
-  Closet: undefined;
+  Closet: NavigatorScreenParams<ClosetStackParamList> | undefined;
   AddMenu: undefined;
   Shop: undefined;
   Calendar: undefined;

@@ -200,15 +200,8 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
 
   const pieces = useMemo(() => {
     if (!outfit) return [];
-    return [
-      outfit.topId,
-      outfit.bottomId,
-      outfit.shoesId,
-      outfit.outerwearId,
-      outfit.accessoryId,
-    ]
-      .filter((id): id is number => id !== null)
-      .map((id) => itemMap.get(id))
+    return (outfit.itemIds ?? [])
+      .map((e) => itemMap.get(e.id))
       .filter(Boolean);
   }, [outfit, itemMap]);
 
@@ -222,7 +215,7 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
 
   const isBusy = deleteOutfit.isPending || markWorn.isPending;
   const handleMarkWorn = () => markWorn.mutate(outfit.id);
-  const handleGenerate = () => visualize.mutate(outfit.id);
+  const handleGenerate = (force = false) => visualize.mutate({ id: outfit.id, force });
 
   const handleDelete = () => {
     Alert.alert(
@@ -287,7 +280,7 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
 
         {/* ── Generate / Regenerate ── */}
         {!hasAiImage && !visualize.isPending && !visualize.isError && (
-          <TouchableOpacity style={styles.generateCta} onPress={handleGenerate}>
+          <TouchableOpacity style={styles.generateCta} onPress={() => handleGenerate()}>
             <Ionicons name="sparkles-outline" size={14} color={colors.primary} />
             <Text style={styles.generateCtaLabel}>Generate flat-lay</Text>
           </TouchableOpacity>
@@ -296,14 +289,14 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
         {visualize.isError && (
           <View style={styles.generateErrorRow}>
             <Text style={styles.generateErrorText}>Generation failed</Text>
-            <TouchableOpacity onPress={handleGenerate}>
+            <TouchableOpacity onPress={() => handleGenerate()}>
               <Text style={styles.retryLabel}>Retry</Text>
             </TouchableOpacity>
           </View>
         )}
 
         {hasAiImage && !visualize.isPending && (
-          <TouchableOpacity style={styles.regenRow} onPress={handleGenerate}>
+          <TouchableOpacity style={styles.regenRow} onPress={() => handleGenerate(true)}>
             <Ionicons name="refresh-outline" size={13} color={colors.mutedForeground} />
             <Text style={styles.regenLabel}>Regenerate</Text>
           </TouchableOpacity>

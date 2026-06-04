@@ -10,10 +10,7 @@ const NUM_COLS = 2;
 const SIDE_PAD = spacing.lg;
 const COL_GAP  = spacing.sm;
 
-function getAspectRatio(id: number): number {
-  const ratios = [1, 0.8, 0.75];
-  return ratios[id % 3];
-}
+const CARD_ASPECT_RATIO = 0.85;
 
 type ExtraData = {
   selectedIds: Set<number>;
@@ -56,7 +53,7 @@ function ClosetGridComponent({
     ({ item }: ListRenderItemInfo<Item>) => (
       <GarmentCard
         item={item}
-        aspectRatio={getAspectRatio(item.id)}
+        aspectRatio={CARD_ASPECT_RATIO}
         cardWidth={cardWidth}
         selectionMode={selectionMode}
         isSelected={selectedIds.has(item.id)}
@@ -69,11 +66,10 @@ function ClosetGridComponent({
   );
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, paddingHorizontal: SIDE_PAD - COL_GAP / 2 }}>
       <FlashList
         data={items}
         numColumns={NUM_COLS}
-        masonry
         renderItem={renderItem}
         keyExtractor={(item: Item) => String(item.id)}
         extraData={extraData}
@@ -84,7 +80,6 @@ function ClosetGridComponent({
         scrollEventThrottle={scrollEventThrottle}
         contentInset={contentInset}
         contentContainerStyle={{
-          paddingHorizontal: SIDE_PAD - COL_GAP / 2,
           paddingBottom: spacing.xxxl * 2,
         }}
       />

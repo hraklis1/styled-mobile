@@ -13,10 +13,7 @@ export type SuggestionRequest = {
 export type SuggestionResult = {
   suggestion: string;
   outfit: {
-    topId?: number | null;
-    bottomId?: number | null;
-    shoesId?: number | null;
-    outerwearId?: number | null;
+    itemIds?: Array<{ id: number; category: string }>;
   };
 };
 

@@ -1,6 +1,5 @@
-import { useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 import {
-  Animated,
   Platform,
   Pressable,
   type GestureResponderEvent,
@@ -8,6 +7,11 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+} from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 
 type Props = Omit<PressableProps, 'children'> & {
@@ -19,6 +23,8 @@ type Props = Omit<PressableProps, 'children'> & {
   scaleTo?: number;
   /** Fire a light haptic on press-in. Defaults to true. No-op on web. */
   haptic?: boolean;
+  /** Reanimated layout transition. If not provided, it won't animate layout changes automatically. */
+  layout?: any;
 };
 
 export function PressableScale({
@@ -27,23 +33,24 @@ export function PressableScale({
   contentStyle,
   scaleTo = 0.96,
   haptic = true,
+  layout,
   onPressIn: onPressInProp,
   onPressOut: onPressOutProp,
   ...rest
 }: Props) {
-  const scale = useRef(new Animated.Value(1)).current;
+  const scale = useSharedValue(1);
 
   const handlePressIn = useCallback(
     (e: GestureResponderEvent) => {
       if (haptic && Platform.OS !== 'web') {
         try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch { /* ignore */ }
       }
-      Animated.spring(scale, {
-        toValue: scaleTo,
-        useNativeDriver: true,
-        speed: 50,
-        bounciness: 2,
-      }).start();
+      scale.value = withSpring(scaleTo, {
+        mass: 1,
+        damping: 15,
+        stiffness: 300,
+        overshootClamping: false,
+      });
       onPressInProp?.(e);
     },
     [haptic, scale, scaleTo, onPressInProp],
@@ -51,16 +58,21 @@ export function PressableScale({
 
   const handlePressOut = useCallback(
     (e: GestureResponderEvent) => {
-      Animated.spring(scale, {
-        toValue: 1,
-        useNativeDriver: true,
-        speed: 30,
-        bounciness: 4,
-      }).start();
+      scale.value = withSpring(1, {
+        mass: 1,
+        damping: 12,
+        stiffness: 250,
+      });
       onPressOutProp?.(e);
     },
     [scale, onPressOutProp],
   );
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: scale.value }],
+    };
+  });
 
   return (
     <Pressable
@@ -69,7 +81,7 @@ export function PressableScale({
       onPressOut={handlePressOut}
       {...rest}
     >
-      <Animated.View style={[contentStyle, { transform: [{ scale }] }]}>
+      <Animated.View style={[contentStyle, animatedStyle]} layout={layout}>
         {children}
       </Animated.View>
     </Pressable>

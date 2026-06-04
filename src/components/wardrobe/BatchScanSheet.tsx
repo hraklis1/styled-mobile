@@ -63,8 +63,8 @@ type EditableItem = {
   subcategory: string | null;
   color: string | null;
   style: string | null;
-  season: string | null;
-  occasion: string | null;
+  seasons: string[];
+  occasions: string[];
   material: string | null;
   fit: string | null;
   pattern: string | null;
@@ -227,8 +227,8 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
           subcategory: result.subcategory ?? null,
           color: result.color ?? null,
           style: result.style ?? null,
-          season: result.season ?? 'all',
-          occasion: result.occasion ?? 'casual',
+          seasons: result.seasons ?? [],
+          occasions: result.occasions ?? [],
           material: result.material ?? null,
           fit: result.fit ?? null,
           pattern: result.pattern ?? null,
@@ -294,8 +294,8 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
               subcategory: item.subcategory || null,
               color: item.color || null,
               style: item.style || null,
-              season: item.season || null,
-              occasion: item.occasion || null,
+              seasons: item.seasons ?? [],
+              occasions: item.occasions ?? [],
               material: item.material || null,
               fit: item.fit || null,
               pattern: item.pattern || null,
@@ -651,10 +651,10 @@ const reviewStyles = StyleSheet.create({
 // ─── ItemCard ─────────────────────────────────────────────────────────────────
 
 const SEASON_OPTIONS = [
+  { label: 'Spring', value: 'spring' },
   { label: 'Summer', value: 'summer' },
+  { label: 'Fall',   value: 'fall' },
   { label: 'Winter', value: 'winter' },
-  { label: 'Fall/Spring', value: 'spring_fall' },
-  { label: 'All-Season', value: 'all' },
 ] as const;
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -785,12 +785,15 @@ function ItemCard({
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View style={cardStyles.pillRow}>
                 {SEASON_OPTIONS.map(({ label, value }) => {
-                  const active = item.season === value;
+                  const active = (item.seasons ?? []).includes(value);
                   return (
                     <TouchableOpacity
                       key={value}
                       style={[cardStyles.pill, active && cardStyles.pillActive]}
-                      onPress={() => onUpdate({ season: value })}
+                      onPress={() => {
+                        const cur = item.seasons ?? [];
+                        onUpdate({ seasons: active ? cur.filter((s) => s !== value) : [...cur, value] });
+                      }}
                       disabled={disabled}
                     >
                       <Text style={[cardStyles.pillText, active && cardStyles.pillTextActive]}>

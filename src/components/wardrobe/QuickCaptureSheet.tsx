@@ -45,8 +45,8 @@ type QuickItem = {
   brand: string | null;
   subcategory: string | null;
   style: string | null;
-  season: string | null;
-  occasion: string | null;
+  seasons: string[];
+  occasions: string[];
   material: string | null;
   fit: string | null;
   pattern: string | null;
@@ -200,8 +200,8 @@ export function QuickCaptureSheet({ visible, onClose, onItemsSaved, onLogOutfit 
         brand: result.brand ?? null,
         subcategory: result.subcategory ?? null,
         style: result.style ?? null,
-        season: result.season ?? 'all',
-        occasion: result.occasion ?? 'casual',
+        seasons: result.seasons ?? [],
+        occasions: result.occasions ?? [],
         material: result.material ?? null,
         fit: result.fit ?? null,
         pattern: result.pattern ?? null,
@@ -248,8 +248,8 @@ export function QuickCaptureSheet({ visible, onClose, onItemsSaved, onLogOutfit 
               subcategory: item.subcategory || null,
               color: item.color || null,
               style: item.style || null,
-              season: item.season || null,
-              occasion: item.occasion || null,
+              seasons: item.seasons ?? [],
+              occasions: item.occasions ?? [],
               material: item.material || null,
               fit: item.fit || null,
               pattern: item.pattern || null,

@@ -91,9 +91,10 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
   // Items
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
-  // Notes & location
+  // Notes, location & rating
   const [notes, setNotes] = useState('');
   const [location, setLocation] = useState('');
+  const [rating, setRating] = useState<number | null>(null);
 
   // View
   const [view, setView] = useState<SheetView>('form');
@@ -221,6 +222,7 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
     setSelectedIds([]);
     setNotes('');
     setLocation('');
+    setRating(null);
     setView('form');
     setSearch('');
     setScanResults(null);
@@ -240,6 +242,7 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
         date: toISODate(logDate),
         notes: notes.trim() || undefined,
         location: location.trim() || undefined,
+        rating: rating ?? undefined,
       },
       {
         onSuccess: () => {
@@ -436,6 +439,25 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
                   placeholder="Where did you wear this?"
                   containerStyle={{ marginHorizontal: spacing.lg }}
                 />
+
+                {/* ── Rating ───────────────────────────────────────── */}
+                <Text style={[styles.label, styles.itemsLabel]}>How did it go?</Text>
+                <View style={styles.ratingRow}>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <TouchableOpacity
+                      key={star}
+                      onPress={() => setRating(rating === star ? null : star)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name={rating != null && rating >= star ? 'star' : 'star-outline'}
+                        size={28}
+                        color={rating != null && rating >= star ? '#F59E0B' : colors.border}
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </View>
 
                 {/* ── Notes ────────────────────────────────────────── */}
                 <Text style={[styles.label, styles.itemsLabel]}>Notes</Text>
@@ -880,6 +902,12 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#C5B8AC',
     minHeight: 48,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
   },
   notesField: {
     alignItems: 'flex-start',

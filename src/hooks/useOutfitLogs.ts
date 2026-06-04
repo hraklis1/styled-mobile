@@ -25,6 +25,7 @@ export type OutfitLog = {
   itemIds: number[];
   notes: string | null;
   location: string | null;
+  rating: number | null;
   createdAt: string;
 };
 
@@ -42,6 +43,7 @@ export type CreateOutfitLogInput = {
   date?: string;
   notes?: string;
   location?: string;
+  rating?: number | null;
 };
 
 export function useCreateOutfitLog() {

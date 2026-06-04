@@ -43,8 +43,10 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
 
   useEffect(() => {
     if (response?.type === 'success') {
-      const accessToken = response.authentication?.accessToken;
-      if (accessToken) handleGoogleToken(accessToken);
+      // Supabase signInWithIdToken requires the OpenID Connect id_token (JWT),
+      // not the OAuth2 accessToken
+      const idToken = response.authentication?.idToken;
+      if (idToken) handleGoogleToken(idToken);
     } else if (response?.type === 'error') {
       setError('Google sign-in failed. Please try again.');
     }
@@ -61,7 +63,7 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
       await loginWithEmail(email.trim(), password);
       SecureStore.setItemAsync(LAST_LOGIN_EMAIL_KEY, email.trim()).catch(() => {});
     } catch (e: any) {
-      setError(e?.response?.data?.message ?? 'Incorrect email or password.');
+      setError(e?.message ?? 'Incorrect email or password.');
     } finally {
       setLoading(false);
     }

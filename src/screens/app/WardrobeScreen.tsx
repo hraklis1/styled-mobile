@@ -158,10 +158,11 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
     () => [...new Set(items.filter((i) => i.brand).map((i) => i.brand!))].sort(),
     [items]
   );
-  const allSeasons = useMemo(
-    () => [...new Set(items.filter((i) => i.season).map((i) => i.season!))].sort(),
-    [items]
-  );
+  const allSeasons = useMemo(() => {
+    const s = new Set<string>();
+    items.forEach((i) => (i.seasons ?? []).forEach((v) => s.add(v)));
+    return [...s].sort();
+  }, [items]);
   const allTags = useMemo(
     () => [...new Set(items.flatMap((i) => i.tags))].sort(),
     [items]
@@ -200,7 +201,7 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
     if (selectedBrands.length)
       result = result.filter((i) => i.brand && selectedBrands.includes(i.brand));
     if (selectedSeasons.length)
-      result = result.filter((i) => i.season && selectedSeasons.includes(i.season));
+      result = result.filter((i) => (i.seasons ?? []).some((s) => selectedSeasons.includes(s)));
     if (selectedTags.length)
       result = result.filter((i) => selectedTags.some((t) => i.tags.includes(t)));
     return sortItems(result, sortKey);

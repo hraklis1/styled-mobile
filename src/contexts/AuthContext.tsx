@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import { api } from '../lib/api';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabase';
 import type { User } from '../types/user';
 
 export const LAST_LOGIN_EMAIL_KEY = 'lastLoginEmail';
@@ -9,43 +10,66 @@ type AuthContextValue = {
   user: User | null;
   isLoading: boolean;
   loginWithEmail: (email: string, password: string) => Promise<void>;
-  loginWithGoogleToken: (accessToken: string) => Promise<void>;
+  loginWithGoogleToken: (idToken: string) => Promise<void>;
   loginWithAppleToken: (identityToken: string) => Promise<void>;
   logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function mapSupabaseUser(su: SupabaseUser): User {
+  const provider = su.app_metadata?.provider ?? 'email';
+  return {
+    id: su.id,
+    email: su.email ?? '',
+    displayName: su.user_metadata?.full_name ?? su.email?.split('@')[0] ?? '',
+    photoUrl: su.user_metadata?.avatar_url ?? null,
+    isPremium: su.user_metadata?.is_premium ?? false,
+    onboardingComplete: su.user_metadata?.onboarding_complete ?? false,
+    authProvider: provider === 'google' ? 'google' : provider === 'apple' ? 'apple' : 'local',
+  };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    api
-      .get<User>('/api/auth/me')
-      .then((res) => setUser(res.data))
-      .catch(() => setUser(null))
-      .finally(() => setIsLoading(false));
+    // Restore existing session on cold start
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session ? mapSupabaseUser(session.user) : null);
+      setIsLoading(false);
+    });
+
+    // Keep in sync for all subsequent auth events (sign-in, sign-out, token refresh)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session ? mapSupabaseUser(session.user) : null);
+      setIsLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const loginWithEmail = useCallback(async (email: string, password: string) => {
-    const res = await api.post<User>('/api/auth/login', { email, password });
-    setUser(res.data);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
   }, []);
 
-  const loginWithGoogleToken = useCallback(async (accessToken: string) => {
-    const res = await api.post<User>('/api/auth/google/mobile', { accessToken });
-    setUser(res.data);
+  // Expects the OpenID Connect id_token (JWT) from Google, not the OAuth access_token
+  const loginWithGoogleToken = useCallback(async (idToken: string) => {
+    const { error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: idToken });
+    if (error) throw error;
   }, []);
 
   const loginWithAppleToken = useCallback(async (identityToken: string) => {
-    const res = await api.post<User>('/api/auth/apple/mobile', { identityToken });
-    setUser(res.data);
+    const { error } = await supabase.auth.signInWithIdToken({ provider: 'apple', token: identityToken });
+    if (error) throw error;
   }, []);
 
   const logout = useCallback(async () => {
-    await api.post('/api/auth/logout').catch(() => {});
-    setUser(null);
+    await supabase.auth.signOut();
     SecureStore.deleteItemAsync(LAST_LOGIN_EMAIL_KEY).catch(() => {});
   }, []);
 

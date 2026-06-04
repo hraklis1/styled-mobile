@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { useCameraLaunch, useLibraryLaunch } from '../../hooks/useCameraLaunch';
 import {
   useScanVisionPose,
@@ -24,6 +25,8 @@ import {
   useBrandSuggestions,
   type PoseScanItem,
 } from '../../hooks/useItems';
+import { useAuth } from '../../contexts/AuthContext';
+import { api } from '../../lib/api';
 import { colors, spacing, typography, radii } from '../../theme';
 import { CATEGORY_LABELS, type Item, type ItemCategory } from '../../types/item';
 import { BrandAutocompleteInput } from '../primitives/BrandAutocompleteInput';
@@ -51,8 +54,8 @@ type EditableItem = {
   subcategory: string | null;
   color: string | null;
   style: string | null;
-  season: string | null;
-  occasion: string | null;
+  seasons: string[];
+  occasions: string[];
   material: string | null;
   fit: string | null;
   pattern: string | null;
@@ -61,6 +64,9 @@ type EditableItem = {
   formalityStyles: string[];
   notableDetails: string[];
   colorPalette: string[];
+  colorNormalized: string | null;
+  colorTemperature: string | null;
+  warmthRating: number | null;
   croppedImage: string | null;
   expanded: boolean;
   sizeProfile: SizeProfile | null;
@@ -91,6 +97,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved }: ScanItemSheetP
     itemName: string;
   } | null>(null);
 
+  const { user } = useAuth();
   const poseScan = useScanVisionPose();
   const createItem = useCreateItem();
   const launchCamera = useCameraLaunch();
@@ -124,14 +131,22 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved }: ScanItemSheetP
     if (!captured) return;
 
     setImageDataUrl(captured.dataUrl);
-    await runPoseScan(captured.dataUrl);
+    // Pass the local file URI so runPoseScan can downscale without re-encoding the data URL
+    await runPoseScan(captured.uri, captured.dataUrl);
   };
 
-  const runPoseScan = async (dataUrl: string) => {
+  const runPoseScan = async (sourceUri: string, displayDataUrl: string) => {
     const session = sessionRef.current;
     setPhase('scanning');
 
-    const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+    // Downscale to 512 px for pose detection — bounding boxes don't benefit from higher res
+    // and this roughly halves token cost at the OpenAI Vision "low" detail tier.
+    const poseFrame = await ImageManipulator.manipulateAsync(
+      sourceUri,
+      [{ resize: { width: 512 } }],
+      { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+    );
+    const base64 = poseFrame.base64!;
 
     try {
       const result = await poseScan.mutateAsync({ imageBase64: base64 });
@@ -146,7 +161,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved }: ScanItemSheetP
         return;
       }
 
-      await runExtraction(result.items, dataUrl, session);
+      await runExtraction(result.items, displayDataUrl, session);
     } catch (err: any) {
       if (sessionRef.current !== session) return;
       Alert.alert(
@@ -214,8 +229,8 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved }: ScanItemSheetP
         subcategory: result.subcategory ?? null,
         color: result.color ?? null,
         style: result.style ?? null,
-        season: result.season ?? 'all',
-        occasion: result.occasion ?? 'casual',
+        seasons: result.seasons?.length ? result.seasons : [],
+        occasions: result.occasions?.length ? result.occasions : [],
         material: result.material ?? null,
         fit: result.fit ?? null,
         pattern: result.pattern ?? null,
@@ -224,6 +239,9 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved }: ScanItemSheetP
         formalityStyles: result.formalityStyles ?? [],
         notableDetails: result.notableDetails ?? [],
         colorPalette: result.colorPalette ?? [],
+        colorNormalized: result.colorNormalized ?? null,
+        colorTemperature: result.colorTemperature ?? null,
+        warmthRating: result.warmthRating ?? null,
         croppedImage,
         expanded: false,
         sizeProfile: null,
@@ -272,14 +290,53 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved }: ScanItemSheetP
     setCropAdjustTarget(null);
   }, [cropAdjustTarget, updateItem]);
 
+  const uploadImageToR2 = async (dataUrl: string): Promise<string> => {
+    const blob = await fetch(dataUrl).then((r) => r.blob());
+    const ext = blob.type.includes('webp') ? 'webp' : 'jpg';
+    const fileName = `users/${user!.id}/items/${Date.now()}-${crypto.randomUUID()}.${ext}`;
+
+    const { presignedUrl, publicUrl } = await api
+      .post<{ presignedUrl: string; publicUrl: string }>('/api/upload-url', {
+        fileName,
+        fileType: blob.type,
+      })
+      .then((r) => r.data);
+
+    await fetch(presignedUrl, {
+      method: 'PUT',
+      body: blob,
+      headers: { 'Content-Type': blob.type },
+    });
+
+    return publicUrl;
+  };
+
   const handleSaveAll = async () => {
     if (detectedItems.length === 0) return;
+    if (!user) {
+      console.error('User not authenticated');
+      return;
+    }
     const session = sessionRef.current;
     setPhase('saving');
 
     const savedItems: Item[] = [];
 
     for (const item of detectedItems) {
+      // Progressive profiling: flag items whose enrichment fields are sparse so
+      // the backend (and future UI prompts) know to ask for more details later.
+      const enrichmentFields = [item.brand, item.material, item.fit, item.subcategory];
+      const needsDetails = enrichmentFields.filter(Boolean).length === 0;
+
+      let imageUrl: string | null = null;
+      if (item.croppedImage) {
+        try {
+          imageUrl = await uploadImageToR2(item.croppedImage);
+        } catch {
+          // non-fatal: save item without image rather than aborting
+        }
+      }
+
       try {
         const created = await new Promise<Item>((resolve, reject) => {
           createItem.mutate(
@@ -290,8 +347,11 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved }: ScanItemSheetP
               subcategory: item.subcategory || null,
               color: item.color || null,
               style: item.style || null,
-              season: item.season || null,
-              occasion: item.occasion || null,
+              seasons: item.seasons.length > 0 ? item.seasons : [],
+              occasions: item.occasions.length > 0 ? item.occasions : [],
+              colorNormalized: item.colorNormalized ?? null,
+              colorTemperature: item.colorTemperature ?? null,
+              warmthRating: item.warmthRating ?? null,
               material: item.material || null,
               fit: item.fit || null,
               pattern: item.pattern || null,
@@ -300,8 +360,9 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved }: ScanItemSheetP
               formalityStyles: item.formalityStyles.length > 0 ? item.formalityStyles : undefined,
               notableDetails: item.notableDetails.length > 0 ? item.notableDetails : undefined,
               colorPalette: item.colorPalette.length > 0 ? item.colorPalette : undefined,
-              imageUrl: item.croppedImage,
+              imageUrl,
               sizeProfile: item.sizeProfile ?? null,
+              needsDetails,
             },
             { onSuccess: resolve, onError: reject },
           );
@@ -868,12 +929,15 @@ function ItemCard({
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View style={cardStyles.pillRow}>
                     {SEASON_OPTIONS.map(({ label, value }) => {
-                      const active = item.season === value;
+                      const active = (item.seasons ?? []).includes(value);
                       return (
                         <TouchableOpacity
                           key={value}
                           style={[cardStyles.pill, active && cardStyles.pillActive]}
-                          onPress={() => onUpdate({ season: value })}
+                          onPress={() => {
+                            const cur = item.seasons ?? [];
+                            onUpdate({ seasons: active ? cur.filter((s) => s !== value) : [...cur, value] });
+                          }}
                           disabled={disabled}
                         >
                           <Text style={[cardStyles.pillText, active && cardStyles.pillTextActive]}>
@@ -930,10 +994,10 @@ function ItemCard({
 }
 
 const SEASON_OPTIONS = [
+  { label: 'Spring', value: 'spring' },
   { label: 'Summer', value: 'summer' },
+  { label: 'Fall',   value: 'fall' },
   { label: 'Winter', value: 'winter' },
-  { label: 'Fall/Spring', value: 'spring_fall' },
-  { label: 'All-Season', value: 'all' },
 ] as const;
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

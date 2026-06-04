@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -301,8 +302,14 @@ export function StylistChatView({ initialQuery, onClose }: Props) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={insets.bottom}
     >
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top }]}>
+      {/* Header — glassmorphism via BlurView; falls back to a semi-opaque view on
+          older Android devices where hardware blur isn't available. */}
+      <BlurView
+        intensity={20}
+        tint="light"
+        style={[styles.header, { paddingTop: insets.top }]}
+        {...(Platform.OS === 'android' && { experimentalBlurMethod: 'dimezisBlurView' })}
+      >
         <TouchableOpacity style={styles.headerBtn} onPress={onClose}>
           <Ionicons name="chevron-down" size={22} color={colors.foreground} />
         </TouchableOpacity>
@@ -320,7 +327,7 @@ export function StylistChatView({ initialQuery, onClose }: Props) {
         >
           <Ionicons name="refresh-outline" size={20} color={colors.mutedForeground} />
         </TouchableOpacity>
-      </View>
+      </BlurView>
 
       {/* Messages */}
       <ScrollView
@@ -541,7 +548,7 @@ const OUTFIT_CATEGORY_ORDER = ['full_body', 'top', 'bottom', 'shoes', 'outerwear
 function outfitNameFromItems(items: Item[]): string {
   if (items.length === 0) return 'AI Outfit';
   const sorted = [...items].sort(
-    (a, b) => OUTFIT_CATEGORY_ORDER.indexOf(a.category) - OUTFIT_CATEGORY_ORDER.indexOf(b.category),
+    (a, b) => OUTFIT_CATEGORY_ORDER.indexOf(a.category ?? '') - OUTFIT_CATEGORY_ORDER.indexOf(b.category ?? ''),
   );
   return sorted.slice(0, 2).map((i) => i.name).join(' · ');
 }
@@ -570,11 +577,7 @@ function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit }: 
       const input: CreateOutfitInput = {
         name: outfitNameFromItems(matchedItems),
         description: messageText.slice(0, 200) || null,
-        topId: matchedItems.find((i) => i.category === 'top')?.id ?? null,
-        bottomId: matchedItems.find((i) => i.category === 'bottom')?.id ?? null,
-        shoesId: matchedItems.find((i) => i.category === 'shoes')?.id ?? null,
-        outerwearId: matchedItems.find((i) => i.category === 'outerwear')?.id ?? null,
-        accessoryId: matchedItems.find((i) => i.category === 'accessory')?.id ?? null,
+        itemIds: matchedItems.map((i) => ({ id: i.id, category: i.category as string })),
       };
       await createOutfit.mutateAsync(input);
       setSaved(true);
@@ -655,7 +658,7 @@ function ItemDetailSheet({ item, onClose }: ItemDetailSheetProps) {
         item.brand    && { label: 'Brand',    value: item.brand },
         item.color    && { label: 'Color',    value: item.color },
         item.style    && { label: 'Style',    value: item.style },
-        item.occasion && { label: 'Occasion', value: item.occasion },
+        item.occasions?.[0] && { label: 'Occasion', value: item.occasions[0] },
       ].filter(Boolean) as { label: string; value: string }[])
     : [];
 
@@ -794,7 +797,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  // Header
+  // Header — backgroundColor intentionally omitted; BlurView owns the background.
+  // On Android devices that don't support hardware blur, expo-blur renders a
+  // semi-transparent tinted surface automatically, so no explicit fallback is needed.
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -802,8 +807,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.background,
+    borderBottomColor: '#DDD6CD',
   },
   headerBtn: {
     width: 36,

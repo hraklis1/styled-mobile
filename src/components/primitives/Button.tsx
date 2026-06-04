@@ -1,27 +1,33 @@
 import {
-  TouchableOpacity,
   Text,
   ActivityIndicator,
   StyleSheet,
-  type TouchableOpacityProps,
+  type ViewStyle,
+  type StyleProp,
 } from 'react-native';
 import { colors, spacing, typography, radii } from '../../theme';
+import { PressableScale } from './PressableScale';
 
 type Variant = 'primary' | 'secondary' | 'outline' | 'ghost';
 
-type Props = TouchableOpacityProps & {
+// Need to match PressableScale's style interface for proper typings
+type Props = {
   label: string;
   variant?: Variant;
   loading?: boolean;
+  disabled?: boolean;
+  style?: StyleProp<ViewStyle>;
+  onPress?: () => void;
+  accessibilityLabel?: string;
 };
 
 export function Button({ label, variant = 'primary', loading = false, disabled, style, ...rest }: Props) {
   const isDisabled = disabled || loading;
   return (
-    <TouchableOpacity
-      style={[styles.base, styles[variant], isDisabled && styles.disabled, style]}
+    <PressableScale
+      contentStyle={[styles.base, styles[variant], isDisabled && styles.disabled]}
+      style={style}
       disabled={isDisabled}
-      activeOpacity={0.75}
       {...rest}
     >
       {loading ? (
@@ -29,7 +35,7 @@ export function Button({ label, variant = 'primary', loading = false, disabled, 
       ) : (
         <Text style={[styles.label, styles[`${variant}Label`]]}>{label}</Text>
       )}
-    </TouchableOpacity>
+    </PressableScale>
   );
 }
 

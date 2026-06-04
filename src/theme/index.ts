@@ -57,8 +57,8 @@ export const radii = {
 } as const;
 
 // iOS uses shadowColor/shadowOffset/shadowOpacity/shadowRadius.
-// Android uses elevation only — colored shadows are not supported on Android;
-// elevation always casts a black shadow regardless of shadowColor.
+// Android uses elevation only — colored shadows are not supported natively.
+// We apply a very subtle border/opacity to offset harsh Android elevations.
 export const shadows = {
   xs: {
     shadowColor:   '#28231F',
@@ -66,6 +66,7 @@ export const shadows = {
     shadowOpacity: 0.05,
     shadowRadius:  2,
     elevation: 1,
+    // Add subtle border properties here if we spread them directly onto cards
   },
   sm: {
     shadowColor:   '#28231F',
@@ -76,10 +77,17 @@ export const shadows = {
   },
   md: {
     shadowColor:   '#28231F',
-    shadowOffset:  { width: 0, height: 3 },
+    shadowOffset:  { width: 0, height: 4 },
     shadowOpacity: 0.09,
-    shadowRadius:  10,
+    shadowRadius:  12,
     elevation: 3,
+  },
+  lg: {
+    shadowColor:   '#28231F',
+    shadowOffset:  { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius:  20,
+    elevation: 5,
   },
   warm: {
     shadowColor:   '#956D51',

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   Modal,
   View,
@@ -46,17 +46,29 @@ const SLOTS: SlotDef[] = [
 
 type SlotMap = Partial<Record<SlotKey, Item>>;
 
+function inferSlotKey(item: Item): SlotKey | null {
+  const text = `${item.name} ${item.subcategory ?? ''}`.toLowerCase();
+  if (/shoe|sneaker|boot|sandal|heel|loafer|pump|flat|footwear|mule|clog|slipper/i.test(text)) return 'shoesId';
+  if (/jacket|coat|blazer|hoodie|cardigan|sweater|outerwear|parka|anorak|trench/i.test(text)) return 'outerwearId';
+  if (/dress|jumpsuit|romper|playsuit|overall|dungaree/i.test(text)) return 'topId';
+  if (/jeans|pants|trousers|shorts|skirt|legging|chino|bottom/i.test(text)) return 'bottomId';
+  if (/top|shirt|blouse|tee|tank|polo|sweatshirt|crop|tube/i.test(text)) return 'topId';
+  if (/bag|watch|necklace|ring|bracelet|hat|scarf|belt|earring|sunglasses|purse|clutch/i.test(text)) return 'accessoryId';
+  return null;
+}
+
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 type Props = {
   visible: boolean;
   onClose: () => void;
   onCreated?: (outfit: Outfit) => void;
+  initialItems?: Item[];
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function OutfitBuilderSheet({ visible, onClose, onCreated }: Props) {
+export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }: Props) {
   const { width: screenWidth } = useWindowDimensions();
   const { data: allItems = [] } = useItems();
   const createOutfit = useCreateOutfit();
@@ -67,6 +79,7 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated }: Props) {
   const [tags, setTags] = useState('');
   const [notes, setNotes] = useState('');
   const [slots, setSlots] = useState<SlotMap>({});
+  const [unmatchedItems, setUnmatchedItems] = useState<Item[]>([]);
 
   // ── Picker ─────────────────────────────────────────────────────────────
   const [view, setView] = useState<'form' | 'picker'>('form');
@@ -114,9 +127,44 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated }: Props) {
     setTags('');
     setNotes('');
     setSlots({});
+    setUnmatchedItems([]);
     setView('form');
     setActiveSlot(null);
   }, []);
+
+  // Pre-seed slots when the sheet opens with pre-selected items.
+  // Use a ref so the effect only depends on `visible`, not the array identity.
+  const initialItemsRef = useRef(initialItems);
+  initialItemsRef.current = initialItems;
+  useEffect(() => {
+    if (!visible) return;
+    const items = initialItemsRef.current;
+    if (!items || items.length === 0) return;
+    const newSlots: SlotMap = {};
+    const unmatched: Item[] = [];
+    for (const item of items) {
+      let placed = false;
+      // Primary: match by category
+      for (const slot of SLOTS) {
+        if (item.category && (slot.categories as string[]).includes(item.category) && !newSlots[slot.key]) {
+          newSlots[slot.key] = item;
+          placed = true;
+          break;
+        }
+      }
+      // Fallback: infer slot from item name / subcategory for uncategorized items
+      if (!placed) {
+        const inferredKey = inferSlotKey(item);
+        if (inferredKey && !newSlots[inferredKey]) {
+          newSlots[inferredKey] = item;
+          placed = true;
+        }
+      }
+      if (!placed) unmatched.push(item);
+    }
+    setSlots(newSlots);
+    setUnmatchedItems(unmatched);
+  }, [visible]);
 
   const handleClose = () => {
     reset();
@@ -129,17 +177,17 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated }: Props) {
       .split(',')
       .map((t) => t.trim().toLowerCase())
       .filter(Boolean);
+    const outfitItemIds = SLOTS
+      .filter((s) => !!slots[s.key])
+      .map((s) => ({ id: slots[s.key]!.id, category: slots[s.key]!.category as string }));
+
     createOutfit.mutate(
       {
         name: name.trim(),
         event: occasion.trim() || null,
         notes: notes.trim() || null,
         tags: parsedTags,
-        topId: slots.topId?.id ?? null,
-        bottomId: slots.bottomId?.id ?? null,
-        shoesId: slots.shoesId?.id ?? null,
-        outerwearId: slots.outerwearId?.id ?? null,
-        accessoryId: slots.accessoryId?.id ?? null,
+        itemIds: outfitItemIds,
       },
       {
         onSuccess: (outfit) => {
@@ -344,6 +392,32 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated }: Props) {
                     </TouchableOpacity>
                   );
                 })}
+
+                {unmatchedItems.length > 0 && (
+                  <>
+                    <Text style={[styles.label, styles.piecesLabel]}>Unassigned Pieces</Text>
+                    <Text style={styles.unmatchedNote}>
+                      {unmatchedItems.length === 1
+                        ? 'This item has no category — tap a slot above to add it manually.'
+                        : 'These items have no category — tap a slot above to add them manually.'}
+                    </Text>
+                    {unmatchedItems.map((item) => {
+                      const imgUri = resolveImageUri(item.imageUrl);
+                      return (
+                        <View key={item.id} style={styles.unmatchedRow}>
+                          <View style={styles.slotThumb}>
+                            {imgUri ? (
+                              <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                            ) : (
+                              <Ionicons name="shirt-outline" size={20} color={colors.mutedForeground} />
+                            )}
+                          </View>
+                          <Text style={styles.unmatchedName} numberOfLines={1}>{item.name}</Text>
+                        </View>
+                      );
+                    })}
+                  </>
+                )}
 
                 <View style={{ height: 48 }} />
               </ScrollView>
@@ -607,6 +681,32 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   slotSubSelected: {
+    color: colors.foreground,
+  },
+
+  // ── Unmatched items
+  unmatchedNote: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    lineHeight: typography.size.xs * 1.5,
+  },
+  unmatchedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.muted,
+    borderRadius: radii.md,
+    gap: spacing.md,
+    opacity: 0.7,
+  },
+  unmatchedName: {
+    flex: 1,
+    fontSize: typography.size.sm,
     color: colors.foreground,
   },
 

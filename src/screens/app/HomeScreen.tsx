@@ -3,10 +3,10 @@ import {
   View,
   Text,
   ScrollView,
-  TouchableOpacity,
   TextInput,
   StyleSheet,
   Image,
+  TouchableOpacity,
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +22,7 @@ import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { useWeatherToday } from '../../hooks/useWeather';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { colors, shadows, spacing, typography, radii } from '../../theme';
+import { PressableScale } from '../../components/primitives/PressableScale';
 import type { HomeScreenProps } from '../../navigation/types';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -219,21 +220,19 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               <Text style={styles.greetingSubtitle}>Your style, at a glance.</Text>
             )}
           </View>
-          <TouchableOpacity
-            style={styles.settingsBtn}
+          <PressableScale
+            contentStyle={styles.settingsBtn}
             onPress={() => navigation.navigate('Profile')}
-            activeOpacity={0.7}
             accessibilityLabel="Open settings"
           >
             <Ionicons name="settings-outline" size={20} color={colors.mutedForeground} />
-          </TouchableOpacity>
+          </PressableScale>
         </View>
       </View>
 
       {/* ── AI Stylist prompt ──────────────────────────────────────── */}
-      <TouchableOpacity
-        style={styles.promptCard}
-        activeOpacity={0.9}
+      <PressableScale
+        contentStyle={styles.promptCard}
         onPress={handleStylistSubmit}
       >
         <View style={styles.promptInner}>
@@ -252,24 +251,22 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             multiline={false}
           />
           {query.trim().length > 0 && (
-            <TouchableOpacity
-              style={styles.sendButton}
+            <PressableScale
+              contentStyle={styles.sendButton}
               onPress={handleStylistSubmit}
-              activeOpacity={0.8}
             >
               <Ionicons name="arrow-up" size={16} color={colors.primaryForeground} />
-            </TouchableOpacity>
+            </PressableScale>
           )}
         </View>
         <Text style={styles.promptHint}>Ask your AI stylist anything</Text>
-      </TouchableOpacity>
+      </PressableScale>
 
       {/* ── Empty wardrobe nudge ───────────────────────────────────── */}
       {items.length === 0 && (
-        <TouchableOpacity
-          style={styles.nudgeCard}
+        <PressableScale
+          contentStyle={styles.nudgeCard}
           onPress={() => navigation.navigate('Closet')}
-          activeOpacity={0.8}
         >
           <View style={styles.nudgeIcon}>
             <Ionicons name="shirt-outline" size={18} color={colors.primary} />
@@ -279,14 +276,13 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             <Text style={styles.nudgeSub}>Add items to unlock outfit suggestions</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.primary} />
-        </TouchableOpacity>
+        </PressableScale>
       )}
 
       {/* ── Log Today's Look ─────────────────────────────────────── */}
-      <TouchableOpacity
-        style={styles.logNudgeCard}
+      <PressableScale
+        contentStyle={styles.logNudgeCard}
         onPress={openLogger}
-        activeOpacity={0.8}
       >
         <View style={[styles.nudgeIcon, { backgroundColor: `${colors.primary}18` }]}>
           <Ionicons name="journal-outline" size={18} color={colors.primary} />
@@ -296,7 +292,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           <Text style={styles.nudgeSub}>Track what you wear to keep your style history</Text>
         </View>
         <Ionicons name="chevron-forward" size={16} color={colors.primary} />
-      </TouchableOpacity>
+      </PressableScale>
 
       {/* ── Upcoming Events ───────────────────────────────────────── */}
       <View style={styles.section}>
@@ -308,10 +304,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         </View>
 
         {upcomingEvents.length === 0 ? (
-          <TouchableOpacity
-            style={styles.emptyCard}
+          <PressableScale
+            contentStyle={styles.emptyCard}
             onPress={() => navigation.navigate('Calendar')}
-            activeOpacity={0.8}
           >
             <View style={styles.emptyIcon}>
               <Ionicons name="calendar-outline" size={18} color={colors.mutedForeground} />
@@ -321,7 +316,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               <Text style={styles.emptySubtitle}>Add events to plan outfits ahead</Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color={colors.border} />
-          </TouchableOpacity>
+          </PressableScale>
         ) : (
           <ScrollView
             horizontal
@@ -333,11 +328,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               const iconName = OCCASION_ICONS[event.occasion] ?? 'calendar-outline';
               const isToday = formatEventDate(event.date) === 'Today';
               return (
-                <TouchableOpacity
+                <PressableScale
                   key={event.id}
-                  style={[styles.eventCard, isToday && styles.eventCardToday]}
+                  contentStyle={[styles.eventCard, isToday && styles.eventCardToday]}
                   onPress={() => navigation.navigate('Calendar')}
-                  activeOpacity={0.8}
                 >
                   <View style={[
                     styles.eventIcon,
@@ -352,7 +346,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                   <Text style={styles.eventOccasion}>
                     {event.occasion.replace('_', ' ')}
                   </Text>
-                </TouchableOpacity>
+                </PressableScale>
               );
             })}
             <View style={{ width: SIDE_PAD }} />
@@ -417,14 +411,14 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                   </View>
 
                   {/* Delete */}
-                  <TouchableOpacity
+                  <PressableScale
                     onPress={() => deleteLog.mutate(log.id)}
                     disabled={deleteLog.isPending}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    style={styles.logDeleteBtn}
+                    contentStyle={styles.logDeleteBtn}
                   >
                     <Ionicons name="trash-outline" size={15} color={colors.mutedForeground} />
-                  </TouchableOpacity>
+                  </PressableScale>
                 </View>
               );
             })}
@@ -454,11 +448,13 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         ) : (
           <View style={styles.outfitGrid}>
             {recentOutfits.map((outfit) => (
-              <TouchableOpacity
+              <PressableScale
                 key={outfit.id}
-                style={[styles.outfitCard, { width: cardWidth }]}
-                onPress={() => navigation.navigate('Closet')}
-                activeOpacity={0.85}
+                contentStyle={[styles.outfitCard, { width: cardWidth }]}
+                onPress={() => navigation.navigate('Closet', {
+                  screen: 'OutfitDetail',
+                  params: { outfitId: outfit.id },
+                })}
               >
                 <View style={styles.collageWrapper}>
                   <OutfitCollage outfit={outfit} size={cardWidth} />
@@ -469,7 +465,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                     <Text style={styles.outfitEvent} numberOfLines={1}>{outfit.event}</Text>
                   ) : null}
                 </View>
-              </TouchableOpacity>
+              </PressableScale>
             ))}
           </View>
         )}

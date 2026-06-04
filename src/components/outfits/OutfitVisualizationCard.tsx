@@ -1,4 +1,5 @@
-import { View, Text, Image, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useVisualizeOutfit } from '../../hooks/useOutfits';
 import { resolveImageUri } from '../../lib/resolveImageUri';
@@ -11,14 +12,14 @@ export function OutfitVisualizationCard({ outfit }: Props) {
   const visualize = useVisualizeOutfit();
   const imageUri = resolveImageUri(outfit.aiGeneratedImageUrl);
 
-  const handleGenerate = () => visualize.mutate(outfit.id);
+  const handleGenerate = (force = false) => visualize.mutate({ id: outfit.id, force });
 
   return (
     <View style={styles.card}>
       <View style={styles.titleRow}>
         <Text style={styles.sectionTitle}>AI Visualization</Text>
         {imageUri && !visualize.isPending && (
-          <TouchableOpacity onPress={handleGenerate} style={styles.regenButton}>
+          <TouchableOpacity onPress={() => handleGenerate(true)} style={styles.regenButton}>
             <Ionicons name="refresh-outline" size={14} color={colors.mutedForeground} />
             <Text style={styles.regenLabel}>Regenerate</Text>
           </TouchableOpacity>
@@ -35,12 +36,12 @@ export function OutfitVisualizationCard({ outfit }: Props) {
           <Text style={styles.errorText}>
             {(visualize.error as Error)?.message ?? 'Generation failed'}
           </Text>
-          <TouchableOpacity onPress={handleGenerate} style={styles.retryButton}>
+          <TouchableOpacity onPress={() => handleGenerate(true)} style={styles.retryButton}>
             <Text style={styles.retryLabel}>Try again</Text>
           </TouchableOpacity>
         </View>
       ) : imageUri ? (
-        <Image source={{ uri: imageUri }} style={styles.image} resizeMode="cover" />
+        <Image source={{ uri: imageUri }} style={styles.image} contentFit="cover" transition={200} />
       ) : (
         <TouchableOpacity style={styles.emptyBox} onPress={handleGenerate}>
           <Ionicons name="sparkles-outline" size={28} color={colors.primary} />

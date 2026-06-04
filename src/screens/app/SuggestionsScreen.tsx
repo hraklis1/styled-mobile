@@ -47,7 +47,6 @@ const OCCASION_OPTIONS: { id: OccasionId; label: string; icon: keyof typeof Ioni
   { id: 'workout',      label: 'Active',       icon: 'bicycle-outline' },
 ];
 
-const SLOT_KEYS = ['topId', 'bottomId', 'shoesId', 'outerwearId'] as const;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -166,11 +165,8 @@ export function SuggestionsScreen({ navigation, route }: SuggestionsScreenProps)
       {
         name,
         description: suggestion,
-        event:      occasion,
-        topId:      outfit.topId      ?? null,
-        bottomId:   outfit.bottomId   ?? null,
-        shoesId:    outfit.shoesId    ?? null,
-        outerwearId: outfit.outerwearId ?? null,
+        event:   occasion,
+        itemIds: outfit.itemIds ?? [],
       },
       {
         onSuccess: () => {
@@ -186,11 +182,8 @@ export function SuggestionsScreen({ navigation, route }: SuggestionsScreenProps)
 
   // Resolve item objects from the suggestion result
   const resultItems: Item[] = generateMutation.data
-    ? SLOT_KEYS
-        .map((key) => {
-          const id = generateMutation.data!.outfit[key];
-          return id ? (items ?? []).find((i) => i.id === id) : undefined;
-        })
+    ? (generateMutation.data.outfit.itemIds ?? [])
+        .map((e) => (items ?? []).find((i) => i.id === e.id))
         .filter((i): i is Item => i != null)
     : [];
 

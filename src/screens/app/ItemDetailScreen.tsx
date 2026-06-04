@@ -24,19 +24,28 @@ import type { TagScanResult } from '../../hooks/useItems';
 import { api } from '../../lib/api';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { colors, spacing, typography, radii } from '../../theme';
-import { CATEGORY_LABELS, CATEGORY_ORDER } from '../../types/item';
-import type { ItemCategory, Item } from '../../types/item';
+import {
+  CATEGORY_LABELS, CATEGORY_ORDER, NORMALIZED_COLORS,
+  PATTERN_OPTIONS, NECKLINE_OPTIONS_BY_CATEGORY,
+  COLOR_TEMPERATURE_OPTIONS, MATERIAL_OPTIONS, CARE_OPTIONS,
+  SEASON_LABELS,
+} from '../../types/item';
+import type { ItemCategory, Item, NormalizedColor, Season } from '../../types/item';
 import { getSubcategories, getStyles } from '../../lib/taxonomy';
 import type { ItemDetailScreenProps } from '../../navigation/types';
 import * as Haptics from 'expo-haptics';
+import { EditSection, EditLabel, EditInput, OptionChips } from '../../components/primitives/EditAtoms';
+import { FitDropdown } from '../../components/primitives/FitDropdown';
+import { BottomSheetDropdown } from '../../components/primitives/BottomSheetDropdown';
+import { NORMALIZED_COLOR_HEX, isColorLight, normalizedColorDisplayName, parseMaterialString } from '../../lib/colorUtils';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const SEASONS: { value: string; label: string }[] = [
+  { value: 'spring', label: 'Spring' },
   { value: 'summer', label: 'Summer' },
+  { value: 'fall',   label: 'Fall' },
   { value: 'winter', label: 'Winter' },
-  { value: 'spring_fall', label: 'Spring/Fall' },
-  { value: 'all', label: 'All Season' },
 ];
 
 const OCCASIONS: { value: string; label: string }[] = [
@@ -46,6 +55,22 @@ const OCCASIONS: { value: string; label: string }[] = [
   { value: 'formal', label: 'Formal' },
   { value: 'party', label: 'Party' },
   { value: 'workout', label: 'Workout' },
+];
+
+const CONDITIONS: { value: string; label: string }[] = [
+  { value: 'new', label: 'New' },
+  { value: 'good', label: 'Good' },
+  { value: 'worn', label: 'Worn' },
+  { value: 'needs_repair', label: 'Needs Repair' },
+  { value: 'donate', label: 'Donate' },
+];
+
+const WARMTH_OPTIONS: { value: number; label: string }[] = [
+  { value: 1, label: 'Very Light' },
+  { value: 2, label: 'Light' },
+  { value: 3, label: 'Medium' },
+  { value: 4, label: 'Warm' },
+  { value: 5, label: 'Very Warm' },
 ];
 
 const FORMALITY_OPTIONS = [
@@ -91,6 +116,14 @@ const FIT_OPTIONS_DEFAULT = [
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function seedCareOptions(raw: string | null): { matched: string[]; custom: string } {
+  if (!raw) return { matched: [], custom: '' };
+  const tokens = raw.split(',').map(t => t.trim()).filter(Boolean);
+  const matched = tokens.filter(t => (CARE_OPTIONS as readonly string[]).includes(t));
+  const unmatched = tokens.filter(t => !(CARE_OPTIONS as readonly string[]).includes(t));
+  return { matched, custom: unmatched.join(', ') };
+}
 
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return 'Never';
@@ -171,250 +204,7 @@ const sectionStyles = StyleSheet.create({
   },
 });
 
-// ─── Edit form atoms ──────────────────────────────────────────────────────────
 
-function EditSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <View style={editStyles.section}>
-      <Text style={editStyles.sectionTitle}>{title}</Text>
-      {children}
-    </View>
-  );
-}
-
-function EditLabel({ children }: { children: React.ReactNode }) {
-  return <Text style={editStyles.label}>{children}</Text>;
-}
-
-function EditInput({
-  value, onChangeText, placeholder, multiline, maxLength, autoCapitalize,
-}: {
-  value: string;
-  onChangeText: (v: string) => void;
-  placeholder?: string;
-  multiline?: boolean;
-  maxLength?: number;
-  autoCapitalize?: 'none' | 'sentences' | 'words';
-}) {
-  return (
-    <TextInput
-      style={[editStyles.input, multiline && editStyles.inputMultiline]}
-      value={value}
-      onChangeText={onChangeText}
-      placeholder={placeholder}
-      placeholderTextColor={colors.mutedForeground}
-      multiline={multiline}
-      maxLength={maxLength}
-      autoCapitalize={autoCapitalize ?? 'sentences'}
-      returnKeyType={multiline ? 'default' : 'done'}
-    />
-  );
-}
-
-function OptionChips<T extends string>({
-  options,
-  value,
-  onSelect,
-  multi,
-  multiValue,
-  onMultiToggle,
-}: {
-  options: { value: T; label: string }[] | string[];
-  value?: T | null;
-  onSelect?: (v: T) => void;
-  multi?: boolean;
-  multiValue?: string[];
-  onMultiToggle?: (v: string) => void;
-}) {
-  return (
-    <View style={editStyles.optionChipsRow}>
-      {(options as any[]).map((opt) => {
-        const val = typeof opt === 'string' ? opt : opt.value;
-        const lbl = typeof opt === 'string' ? opt : opt.label;
-        const active = multi
-          ? (multiValue ?? []).includes(val)
-          : value === val;
-        return (
-          <TouchableOpacity
-            key={val}
-            style={[editStyles.optionChip, active && editStyles.optionChipActive]}
-            onPress={() => {
-              if (multi && onMultiToggle) onMultiToggle(val);
-              else if (onSelect) onSelect(val as T);
-            }}
-            activeOpacity={0.7}
-          >
-            <Text style={[editStyles.optionChipText, active && editStyles.optionChipTextActive]}>
-              {lbl}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
-  );
-}
-
-// ─── Fit Dropdown ────────────────────────────────────────────────────────────
-
-function FitDropdown({ value, options, onChange }: {
-  value: string;
-  options: string[];
-  onChange: (v: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const insets = useSafeAreaInsets();
-  const noOptions = options.length === 0;
-
-  return (
-    <>
-      <TouchableOpacity
-        style={[ddStyles.button, noOptions && ddStyles.buttonDisabled]}
-        onPress={() => { if (!noOptions) setOpen(true); }}
-        activeOpacity={0.7}
-        disabled={noOptions}
-      >
-        <Text style={[ddStyles.buttonText, !value && ddStyles.placeholder]}>
-          {noOptions ? 'N/A for this category' : (value || 'Select fit…')}
-        </Text>
-        {!noOptions && (
-          <Ionicons name="chevron-down" size={16} color={colors.mutedForeground} />
-        )}
-      </TouchableOpacity>
-
-      <Modal
-        visible={open}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setOpen(false)}
-      >
-        <View style={ddStyles.overlay}>
-          <TouchableOpacity style={ddStyles.backdrop} onPress={() => setOpen(false)} activeOpacity={1} />
-          <View style={[ddStyles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
-            <View style={ddStyles.handle} />
-            <Text style={ddStyles.sheetTitle}>Fit</Text>
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              style={ddStyles.list}
-            >
-              {/* None option */}
-              <TouchableOpacity
-                style={ddStyles.option}
-                onPress={() => { onChange(''); setOpen(false); }}
-                activeOpacity={0.7}
-              >
-                <Text style={[ddStyles.optionText, ddStyles.optionTextMuted]}>— None —</Text>
-                {!value && <Ionicons name="checkmark" size={18} color={colors.primary} />}
-              </TouchableOpacity>
-              {options.map((opt) => (
-                <TouchableOpacity
-                  key={opt}
-                  style={[ddStyles.option, value === opt && ddStyles.optionSelected]}
-                  onPress={() => { onChange(opt); setOpen(false); }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[ddStyles.optionText, value === opt && ddStyles.optionTextSelected]}>
-                    {opt}
-                  </Text>
-                  {value === opt && <Ionicons name="checkmark" size={18} color={colors.primary} />}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-    </>
-  );
-}
-
-const ddStyles = StyleSheet.create({
-  button: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
-    backgroundColor: colors.card,
-    minHeight: 44,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    fontSize: typography.size.md,
-    color: colors.foreground,
-    flex: 1,
-  },
-  placeholder: {
-    color: colors.mutedForeground,
-  },
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  backdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
-  sheet: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius: radii.lg + 4,
-    borderTopRightRadius: radii.lg + 4,
-    paddingTop: spacing.sm,
-    maxHeight: '70%',
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    alignSelf: 'center',
-    marginBottom: spacing.md,
-  },
-  sheetTitle: {
-    fontSize: typography.size.md,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  list: {
-    paddingTop: spacing.xs,
-  },
-  option: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  optionSelected: {
-    backgroundColor: colors.muted,
-  },
-  optionText: {
-    fontSize: typography.size.md,
-    color: colors.foreground,
-  },
-  optionTextSelected: {
-    fontWeight: typography.weight.semibold,
-    color: colors.primary,
-  },
-  optionTextMuted: {
-    color: colors.mutedForeground,
-    fontStyle: 'italic',
-  },
-});
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 
@@ -456,8 +246,12 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const [editSubcategory, setEditSubcategory] = useState('');
   const [editStyle, setEditStyle] = useState('');
   const [editColor, setEditColor] = useState('');
-  const [editSeason, setEditSeason] = useState('');
-  const [editOccasion, setEditOccasion] = useState('');
+  const [editSeasons, setEditSeasons] = useState<string[]>([]);
+  const [editOccasions, setEditOccasions] = useState<string[]>([]);
+  const [editCondition, setEditCondition] = useState('good');
+  const [editWarmthRating, setEditWarmthRating] = useState<number | null>(null);
+  const [editPurchasePrice, setEditPurchasePrice] = useState('');
+  const [editPurchaseDate, setEditPurchaseDate] = useState('');
   const [editPattern, setEditPattern] = useState('');
   const [editFit, setEditFit] = useState('');
   const [editNeckline, setEditNeckline] = useState('');
@@ -467,6 +261,11 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const [editNotes, setEditNotes] = useState('');
   const [editMaterial, setEditMaterial] = useState('');
   const [editCare, setEditCare] = useState('');
+  const [editColorNormalized, setEditColorNormalized] = useState<NormalizedColor | null>(null);
+  const [editColorTemperature, setEditColorTemperature] = useState<string | null>(null);
+  const [editMaterials, setEditMaterials] = useState<string[]>([]);
+  const [editCareOptions, setEditCareOptions] = useState<string[]>([]);
+  const [editCareCustom, setEditCareCustom] = useState('');
 
   const [createModeInitialized, setCreateModeInitialized] = useState(false);
 
@@ -480,8 +279,8 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
       setEditSubcategory(scanData.subcategory ?? '');
       setEditStyle(scanData.style ?? '');
       setEditColor(scanData.color ?? '');
-      setEditSeason(scanData.season ?? '');
-      setEditOccasion(scanData.occasion ?? '');
+      setEditSeasons(Array.isArray(scanData.seasons) ? [...scanData.seasons] : []);
+      setEditOccasions(Array.isArray(scanData.occasions) ? [...scanData.occasions] : []);
       setEditPattern(scanData.pattern ?? '');
       setEditFit(scanData.fit ?? '');
       setEditNeckline(scanData.neckline ?? '');
@@ -491,6 +290,13 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
       setEditCare(scanData.care ?? '');
       setEditNotes('');
       setEditTagInput('');
+      // New structured fields
+      setEditColorNormalized((scanData.colorNormalized as NormalizedColor | null) ?? null);
+      setEditColorTemperature(scanData.colorTemperature ?? null);
+      setEditMaterials(parseMaterialString(scanData.material ?? ''));
+      const careSeeded = seedCareOptions(scanData.care);
+      setEditCareOptions(careSeeded.matched);
+      setEditCareCustom(careSeeded.custom);
       setEditOpen(true);
       setCreateModeInitialized(true);
     }, 0);
@@ -585,8 +391,11 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         color: scanned.color || item.color,
         subcategory: scanned.subcategory || null,
         style: scanned.style || null,
-        season: scanned.season || item.season,
-        occasion: scanned.occasion || item.occasion,
+        seasons: Array.isArray(scanned.seasons) && scanned.seasons.length > 0 ? scanned.seasons : item.seasons,
+        occasions: Array.isArray(scanned.occasions) && scanned.occasions.length > 0 ? scanned.occasions : item.occasions,
+        colorNormalized: scanned.colorNormalized ?? item.colorNormalized,
+        colorTemperature: scanned.colorTemperature ?? item.colorTemperature,
+        warmthRating: scanned.warmthRating ?? item.warmthRating,
         pattern: scanned.pattern || null,
         material: scanned.material || null,
         fit: scanned.fit || null,
@@ -674,8 +483,12 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     setEditSubcategory(item.subcategory ?? '');
     setEditStyle(item.style ?? '');
     setEditColor(item.color ?? '');
-    setEditSeason(item.season ?? '');
-    setEditOccasion(item.occasion ?? '');
+    setEditSeasons(Array.isArray(item.seasons) ? [...item.seasons] : []);
+    setEditOccasions(Array.isArray(item.occasions) ? [...item.occasions] : []);
+    setEditCondition(item.condition ?? 'good');
+    setEditWarmthRating(item.warmthRating ?? null);
+    setEditPurchasePrice(item.purchasePrice != null ? String(item.purchasePrice) : '');
+    setEditPurchaseDate(item.purchaseDate ?? '');
     setEditPattern(item.pattern ?? '');
     setEditFit(item.fit ?? '');
     setEditNeckline(item.neckline ?? '');
@@ -685,6 +498,13 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     setEditNotes(item.notes ?? '');
     setEditMaterial(item.material ?? '');
     setEditCare(item.care ?? '');
+    // New structured fields
+    setEditColorNormalized((item.colorNormalized as NormalizedColor | null) ?? null);
+    setEditColorTemperature(item.colorTemperature ?? null);
+    setEditMaterials(parseMaterialString(item.material ?? ''));
+    const { matched, custom } = seedCareOptions(item.care);
+    setEditCareOptions(matched);
+    setEditCareCustom(custom);
     setEditOpen(true);
   };
 
@@ -732,9 +552,13 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
       ? dedupeTags([...editTags, pendingTag])
       : dedupeTags(editTags);
 
-    const necklineValue = (editCategory === 'top' || editCategory === 'outerwear')
-      ? (editNeckline.trim() || null)
+    const necklineValue = (editCategory ? NECKLINE_OPTIONS_BY_CATEGORY[editCategory] : undefined)
+      ? (editNeckline || null)
       : null;
+
+    const parsedPrice = editPurchasePrice.trim() ? parseFloat(editPurchasePrice.trim()) : null;
+    const derivedMaterial = editMaterials.length ? editMaterials.join(', ') : null;
+    const derivedCare = [...editCareOptions, editCareCustom.trim()].filter(Boolean).join(', ') || null;
 
     if (isCreateMode) {
       createItem.mutate(
@@ -745,16 +569,22 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           subcategory: editSubcategory || null,
           style: editStyle || null,
           color: editColor.trim() || null,
-          season: editSeason || null,
-          occasion: editOccasion || null,
-          pattern: editPattern.trim() || null,
+          colorNormalized: editColorNormalized,
+          colorTemperature: editColorTemperature,
+          seasons: editSeasons,
+          occasions: editOccasions,
+          condition: editCondition || null,
+          warmthRating: editWarmthRating,
+          purchasePrice: parsedPrice && !isNaN(parsedPrice) ? parsedPrice : null,
+          purchaseDate: editPurchaseDate.trim() || null,
+          pattern: editPattern || null,
           fit: editFit.trim() || null,
           neckline: necklineValue,
           formalityStyles: editFormalityStyles,
           tags: finalTags,
           notes: editNotes.trim() || null,
-          material: editMaterial.trim() || null,
-          care: editCare.trim() || null,
+          material: derivedMaterial,
+          care: derivedCare,
           imageUrl: scanImageUrl ?? null,
           notableDetails: scanData?.notableDetails ?? [],
           colorPalette: scanData?.colorPalette ?? [],
@@ -777,16 +607,22 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           subcategory: editSubcategory || null,
           style: editStyle || null,
           color: editColor.trim() || null,
-          season: editSeason || null,
-          occasion: editOccasion || null,
-          pattern: editPattern.trim() || null,
+          colorNormalized: editColorNormalized,
+          colorTemperature: editColorTemperature,
+          seasons: editSeasons,
+          occasions: editOccasions,
+          condition: editCondition || null,
+          warmthRating: editWarmthRating,
+          purchasePrice: parsedPrice && !isNaN(parsedPrice) ? parsedPrice : null,
+          purchaseDate: editPurchaseDate.trim() || null,
+          pattern: editPattern || null,
           fit: editFit.trim() || null,
           neckline: necklineValue,
           formalityStyles: editFormalityStyles,
           tags: finalTags,
           notes: editNotes.trim() || null,
-          material: editMaterial.trim() || null,
-          care: editCare.trim() || null,
+          material: derivedMaterial,
+          care: derivedCare,
         },
         {
           onSuccess: () => setEditOpen(false),
@@ -976,29 +812,82 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
                   </>
                 )}
               </EditSection>
-              <EditSection title="Colour & Season">
-                <EditLabel>Colour</EditLabel>
-                <EditInput value={editColor} onChangeText={setEditColor} placeholder="e.g. Navy Blue" maxLength={80} />
-                <View style={editStyles.spacer} />
-                <EditLabel>Season</EditLabel>
-                <OptionChips options={SEASONS} value={editSeason} onSelect={(v) => setEditSeason(v === editSeason ? '' : v)} />
-                <View style={editStyles.spacer} />
-                <EditLabel>Occasion</EditLabel>
-                <OptionChips options={OCCASIONS} value={editOccasion} onSelect={(v) => setEditOccasion(v === editOccasion ? '' : v)} />
-              </EditSection>
               <EditSection title="Fit & Cut">
                 <EditLabel>Pattern</EditLabel>
-                <EditInput value={editPattern} onChangeText={setEditPattern} placeholder="e.g. Solid, Striped, Floral" maxLength={60} />
+                <OptionChips
+                  options={[...PATTERN_OPTIONS]}
+                  value={editPattern as any}
+                  onSelect={(v: any) => setEditPattern(editPattern === v ? '' : v)}
+                />
                 <View style={editStyles.spacer} />
                 <EditLabel>Fit</EditLabel>
                 <FitDropdown value={editFit} options={editCategory ? (FIT_OPTIONS_BY_CATEGORY[editCategory] ?? []) : FIT_OPTIONS_DEFAULT} onChange={setEditFit} />
-                {(editCategory === 'top' || editCategory === 'outerwear') && (
+                {(editCategory ? NECKLINE_OPTIONS_BY_CATEGORY[editCategory] : undefined) && (
                   <>
                     <View style={editStyles.spacer} />
                     <EditLabel>Neckline</EditLabel>
-                    <EditInput value={editNeckline} onChangeText={setEditNeckline} placeholder="e.g. V-neck, Crew neck" maxLength={60} />
+                    <BottomSheetDropdown
+                      title="Neckline"
+                      options={(editCategory ? NECKLINE_OPTIONS_BY_CATEGORY[editCategory] : undefined) ?? []}
+                      value={editNeckline}
+                      onChange={setEditNeckline}
+                      placeholder="Select neckline…"
+                    />
                   </>
                 )}
+              </EditSection>
+              <EditSection title="Colour & Season">
+                <EditLabel>Colour</EditLabel>
+                <View style={editStyles.swatchGrid}>
+                  {NORMALIZED_COLORS.map((nc) => {
+                    const hex = NORMALIZED_COLOR_HEX[nc];
+                    const isSelected = editColorNormalized === nc;
+                    const light = isColorLight(hex);
+                    return (
+                      <TouchableOpacity
+                        key={nc}
+                        style={[editStyles.swatch, { backgroundColor: hex }, isSelected && editStyles.swatchSelected]}
+                        onPress={() => { setEditColorNormalized(nc); setEditColor(normalizedColorDisplayName(nc)); }}
+                        activeOpacity={0.75}
+                      >
+                        {isSelected && (
+                          <Ionicons name="checkmark" size={14} color={light ? '#28231F' : '#FFFFFF'} />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <View style={editStyles.spacer} />
+                <EditLabel>Custom colour name (optional)</EditLabel>
+                <EditInput
+                  value={editColor}
+                  onChangeText={(v) => { setEditColor(v); if (!v.trim()) setEditColorNormalized(null); }}
+                  placeholder="e.g. Dusty Rose"
+                  maxLength={80}
+                />
+                <View style={editStyles.spacer} />
+                <EditLabel>Colour temperature</EditLabel>
+                <OptionChips
+                  options={[...COLOR_TEMPERATURE_OPTIONS] as { value: string; label: string }[]}
+                  value={editColorTemperature as any}
+                  onSelect={(v: any) => setEditColorTemperature(editColorTemperature === v ? null : v)}
+                />
+                <View style={editStyles.spacer} />
+                <EditLabel>Season (select all that apply)</EditLabel>
+                <OptionChips
+                  options={SEASONS}
+                  multi
+                  multiValue={editSeasons}
+                  onMultiToggle={(v) => setEditSeasons((prev) => prev.includes(v) ? prev.filter((s) => s !== v) : [...prev, v])}
+                />
+                <View style={editStyles.spacer} />
+                <EditLabel>Occasion (select all that apply)</EditLabel>
+                <OptionChips
+                  options={OCCASIONS}
+                  multi
+                  multiValue={editOccasions}
+                  onMultiToggle={(v) => setEditOccasions((prev) => prev.includes(v) ? prev.filter((o) => o !== v) : [...prev, v])}
+                />
               </EditSection>
               <EditSection title="Style Context">
                 <OptionChips options={FORMALITY_OPTIONS} multi multiValue={editFormalityStyles} onMultiToggle={toggleEditFormality} />
@@ -1030,16 +919,31 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
                 <EditInput value={editNotes} onChangeText={setEditNotes} placeholder="Fit, fabric, care, anything memorable…" multiline maxLength={500} />
               </EditSection>
               <EditSection title="Fabric & Care">
-                <View style={editStyles.row}>
-                  <View style={editStyles.rowHalf}>
-                    <EditLabel>Material</EditLabel>
-                    <EditInput value={editMaterial} onChangeText={setEditMaterial} placeholder="e.g. 100% Cotton" maxLength={120} />
-                  </View>
-                  <View style={editStyles.rowHalf}>
-                    <EditLabel>Care</EditLabel>
-                    <EditInput value={editCare} onChangeText={setEditCare} placeholder="e.g. Wash cold" maxLength={120} />
-                  </View>
-                </View>
+                <EditLabel>Fabric</EditLabel>
+                <BottomSheetDropdown
+                  title="Fabric"
+                  options={[...MATERIAL_OPTIONS]}
+                  multi
+                  multiValue={editMaterials}
+                  onMultiToggle={(v) => setEditMaterials((prev) => prev.includes(v) ? prev.filter((m) => m !== v) : [...prev, v])}
+                  placeholder="Select fabrics…"
+                />
+                <View style={editStyles.spacer} />
+                <EditLabel>Care instructions</EditLabel>
+                <OptionChips
+                  options={[...CARE_OPTIONS]}
+                  multi
+                  multiValue={editCareOptions}
+                  onMultiToggle={(v) => setEditCareOptions((prev) => prev.includes(v) ? prev.filter((c) => c !== v) : [...prev, v])}
+                />
+                <View style={editStyles.spacer} />
+                <EditLabel>Additional care notes</EditLabel>
+                <EditInput
+                  value={editCareCustom}
+                  onChangeText={setEditCareCustom}
+                  placeholder="Any other care instructions…"
+                  maxLength={120}
+                />
               </EditSection>
             </ScrollView>
           </KeyboardAvoidingView>
@@ -1222,16 +1126,40 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
                 <Text style={styles.detailValue}>{viewItem.color}</Text>
               </View>
             )}
-            {viewItem.season && (
+            {viewItem.seasons?.length > 0 && (
               <View style={styles.detailItem}>
                 <Text style={styles.detailLabel}>Season</Text>
-                <Text style={styles.detailValue}>{viewItem.season.replace('_', '/')}</Text>
+                <Text style={styles.detailValue}>{(viewItem.seasons ?? []).map((s) => SEASON_LABELS[s as Season] ?? (s.charAt(0).toUpperCase() + s.slice(1))).join(', ')}</Text>
               </View>
             )}
-            {viewItem.occasion && (
+            {viewItem.occasions?.length > 0 && (
               <View style={styles.detailItem}>
                 <Text style={styles.detailLabel}>Occasion</Text>
-                <Text style={styles.detailValue}>{viewItem.occasion.replace('_', ' ')}</Text>
+                <Text style={styles.detailValue}>{viewItem.occasions.map((o) => o.replace('_', ' ')).join(', ')}</Text>
+              </View>
+            )}
+            {viewItem.condition && viewItem.condition !== 'good' && (
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Condition</Text>
+                <Text style={styles.detailValue}>{viewItem.condition.replace('_', ' ')}</Text>
+              </View>
+            )}
+            {viewItem.warmthRating != null && (
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Warmth</Text>
+                <Text style={styles.detailValue}>{['Very Light','Light','Medium','Warm','Very Warm'][viewItem.warmthRating - 1] ?? String(viewItem.warmthRating)}</Text>
+              </View>
+            )}
+            {viewItem.purchasePrice != null && (
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Paid</Text>
+                <Text style={styles.detailValue}>${viewItem.purchasePrice}</Text>
+              </View>
+            )}
+            {viewItem.wearCount > 0 && viewItem.purchasePrice != null && (
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Cost/Wear</Text>
+                <Text style={styles.detailValue}>${(viewItem.purchasePrice / viewItem.wearCount).toFixed(2)}</Text>
               </View>
             )}
             <View style={styles.detailItem}>
@@ -1543,39 +1471,13 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
               )}
             </EditSection>
 
-            {/* Colour & Season */}
-            <EditSection title="Colour & Season">
-              <EditLabel>Colour</EditLabel>
-              <EditInput
-                value={editColor}
-                onChangeText={setEditColor}
-                placeholder="e.g. Navy Blue"
-                maxLength={80}
-              />
-              <View style={editStyles.spacer} />
-              <EditLabel>Season</EditLabel>
-              <OptionChips
-                options={SEASONS}
-                value={editSeason}
-                onSelect={(v) => setEditSeason(v === editSeason ? '' : v)}
-              />
-              <View style={editStyles.spacer} />
-              <EditLabel>Occasion</EditLabel>
-              <OptionChips
-                options={OCCASIONS}
-                value={editOccasion}
-                onSelect={(v) => setEditOccasion(v === editOccasion ? '' : v)}
-              />
-            </EditSection>
-
             {/* Fit & Cut */}
             <EditSection title="Fit & Cut">
               <EditLabel>Pattern</EditLabel>
-              <EditInput
-                value={editPattern}
-                onChangeText={setEditPattern}
-                placeholder="e.g. Solid, Striped, Floral"
-                maxLength={60}
+              <OptionChips
+                options={[...PATTERN_OPTIONS]}
+                value={editPattern as any}
+                onSelect={(v: any) => setEditPattern(editPattern === v ? '' : v)}
               />
               <View style={editStyles.spacer} />
               <EditLabel>Fit</EditLabel>
@@ -1584,18 +1486,74 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
                 options={editCategory ? (FIT_OPTIONS_BY_CATEGORY[editCategory] ?? []) : FIT_OPTIONS_DEFAULT}
                 onChange={setEditFit}
               />
-              {(editCategory === 'top' || editCategory === 'outerwear') && (
+              {(editCategory ? NECKLINE_OPTIONS_BY_CATEGORY[editCategory] : undefined) && (
                 <>
                   <View style={editStyles.spacer} />
                   <EditLabel>Neckline</EditLabel>
-                  <EditInput
+                  <BottomSheetDropdown
+                    title="Neckline"
+                    options={(editCategory ? NECKLINE_OPTIONS_BY_CATEGORY[editCategory] : undefined) ?? []}
                     value={editNeckline}
-                    onChangeText={setEditNeckline}
-                    placeholder="e.g. V-neck, Crew neck"
-                    maxLength={60}
+                    onChange={setEditNeckline}
+                    placeholder="Select neckline…"
                   />
                 </>
               )}
+            </EditSection>
+
+            {/* Colour & Season */}
+            <EditSection title="Colour & Season">
+              <EditLabel>Colour</EditLabel>
+              <View style={editStyles.swatchGrid}>
+                {NORMALIZED_COLORS.map((nc) => {
+                  const hex = NORMALIZED_COLOR_HEX[nc];
+                  const isSelected = editColorNormalized === nc;
+                  const light = isColorLight(hex);
+                  return (
+                    <TouchableOpacity
+                      key={nc}
+                      style={[editStyles.swatch, { backgroundColor: hex }, isSelected && editStyles.swatchSelected]}
+                      onPress={() => { setEditColorNormalized(nc); setEditColor(normalizedColorDisplayName(nc)); }}
+                      activeOpacity={0.75}
+                    >
+                      {isSelected && (
+                        <Ionicons name="checkmark" size={14} color={light ? '#28231F' : '#FFFFFF'} />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <View style={editStyles.spacer} />
+              <EditLabel>Custom colour name (optional)</EditLabel>
+              <EditInput
+                value={editColor}
+                onChangeText={(v) => { setEditColor(v); if (!v.trim()) setEditColorNormalized(null); }}
+                placeholder="e.g. Dusty Rose"
+                maxLength={80}
+              />
+              <View style={editStyles.spacer} />
+              <EditLabel>Colour temperature</EditLabel>
+              <OptionChips
+                options={[...COLOR_TEMPERATURE_OPTIONS] as { value: string; label: string }[]}
+                value={editColorTemperature as any}
+                onSelect={(v: any) => setEditColorTemperature(editColorTemperature === v ? null : v)}
+              />
+              <View style={editStyles.spacer} />
+              <EditLabel>Season (select all that apply)</EditLabel>
+              <OptionChips
+                options={SEASONS}
+                multi
+                multiValue={editSeasons}
+                onMultiToggle={(v) => setEditSeasons((prev) => prev.includes(v) ? prev.filter((s) => s !== v) : [...prev, v])}
+              />
+              <View style={editStyles.spacer} />
+              <EditLabel>Occasion (select all that apply)</EditLabel>
+              <OptionChips
+                options={OCCASIONS}
+                multi
+                multiValue={editOccasions}
+                onMultiToggle={(v) => setEditOccasions((prev) => prev.includes(v) ? prev.filter((o) => o !== v) : [...prev, v])}
+              />
             </EditSection>
 
             {/* Style Context */}
@@ -1605,6 +1563,71 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
                 multi
                 multiValue={editFormalityStyles}
                 onMultiToggle={toggleEditFormality}
+              />
+            </EditSection>
+
+            {/* Condition & Warmth */}
+            <EditSection title="Condition & Warmth">
+              <EditLabel>Condition</EditLabel>
+              <OptionChips
+                options={CONDITIONS}
+                value={editCondition as any}
+                onSelect={(v) => setEditCondition(v)}
+              />
+              <View style={editStyles.spacer} />
+              <EditLabel>Warmth Rating</EditLabel>
+              <OptionChips
+                options={WARMTH_OPTIONS.map((w) => ({ value: String(w.value), label: w.label }))}
+                value={editWarmthRating != null ? String(editWarmthRating) : null}
+                onSelect={(v) => setEditWarmthRating(editWarmthRating === Number(v) ? null : Number(v))}
+              />
+            </EditSection>
+
+            {/* Fabric & Care */}
+            <EditSection title="Fabric & Care">
+              <EditLabel>Fabric</EditLabel>
+              <BottomSheetDropdown
+                title="Fabric"
+                options={[...MATERIAL_OPTIONS]}
+                multi
+                multiValue={editMaterials}
+                onMultiToggle={(v) => setEditMaterials((prev) => prev.includes(v) ? prev.filter((m) => m !== v) : [...prev, v])}
+                placeholder="Select fabrics…"
+              />
+              <View style={editStyles.spacer} />
+              <EditLabel>Care instructions</EditLabel>
+              <OptionChips
+                options={[...CARE_OPTIONS]}
+                multi
+                multiValue={editCareOptions}
+                onMultiToggle={(v) => setEditCareOptions((prev) => prev.includes(v) ? prev.filter((c) => c !== v) : [...prev, v])}
+              />
+              <View style={editStyles.spacer} />
+              <EditLabel>Additional care notes</EditLabel>
+              <EditInput
+                value={editCareCustom}
+                onChangeText={setEditCareCustom}
+                placeholder="Any other care instructions…"
+                maxLength={120}
+              />
+            </EditSection>
+
+            {/* Purchase Info */}
+            <EditSection title="Purchase Info">
+              <EditLabel>Purchase Price</EditLabel>
+              <EditInput
+                value={editPurchasePrice}
+                onChangeText={setEditPurchasePrice}
+                placeholder="e.g. 89.99"
+                maxLength={12}
+              />
+              <View style={editStyles.spacer} />
+              <EditLabel>Purchase Date</EditLabel>
+              <EditInput
+                value={editPurchaseDate}
+                onChangeText={setEditPurchaseDate}
+                placeholder="YYYY-MM-DD"
+                maxLength={10}
               />
             </EditSection>
 
@@ -1647,30 +1670,6 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
                 multiline
                 maxLength={500}
               />
-            </EditSection>
-
-            {/* Fabric & Care */}
-            <EditSection title="Fabric & Care">
-              <View style={editStyles.row}>
-                <View style={editStyles.rowHalf}>
-                  <EditLabel>Material</EditLabel>
-                  <EditInput
-                    value={editMaterial}
-                    onChangeText={setEditMaterial}
-                    placeholder="e.g. 100% Cotton"
-                    maxLength={120}
-                  />
-                </View>
-                <View style={editStyles.rowHalf}>
-                  <EditLabel>Care</EditLabel>
-                  <EditInput
-                    value={editCare}
-                    onChangeText={setEditCare}
-                    placeholder="e.g. Wash cold"
-                    maxLength={120}
-                  />
-                </View>
-              </View>
             </EditSection>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -2105,6 +2104,27 @@ const editStyles = StyleSheet.create({
   },
   optionChipTextActive: {
     color: colors.background,
+  },
+
+  // Colour swatch grid
+  swatchGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginBottom: 2,
+  },
+  swatch: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  swatchSelected: {
+    borderWidth: 2.5,
+    borderColor: colors.primary,
   },
 
   // Tags box

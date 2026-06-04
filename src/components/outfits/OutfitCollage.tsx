@@ -1,4 +1,5 @@
-import { View, Image, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { colors, radii } from '../../theme';
@@ -25,18 +26,12 @@ export function OutfitCollage({ outfit, size, borderRadius = radii.md }: Props) 
     const uri = resolveImageUri(outfit.aiGeneratedImageUrl);
     return (
       <View style={[styles.container, { width: size, height: size, borderRadius }]}>
-        <Image source={{ uri }} style={styles.fill} resizeMode="cover" />
+        <Image source={{ uri }} style={styles.fill} contentFit="cover" />
       </View>
     );
   }
 
-  const slotIds = [
-    outfit.topId,
-    outfit.bottomId,
-    outfit.shoesId,
-    outfit.outerwearId,
-    outfit.accessoryId,
-  ].filter((id): id is number => id !== null);
+  const slotIds = (outfit.itemIds ?? []).map((e) => e.id);
 
   const imageUris = slotIds
     .map((id) => resolveImageUri(itemMap.get(id)?.imageUrl ?? null))
@@ -50,7 +45,7 @@ export function OutfitCollage({ outfit, size, borderRadius = radii.md }: Props) 
     return (
       <View style={[styles.container, { width: size, height: size, borderRadius }]}>
         {imageUris[0] ? (
-          <Image source={{ uri: imageUris[0] }} style={styles.fill} resizeMode="cover" />
+          <Image source={{ uri: imageUris[0] }} style={styles.fill} contentFit="cover" />
         ) : (
           <View style={styles.placeholder}>
             <Ionicons name="layers-outline" size={size * 0.3} color={colors.border} />
@@ -71,7 +66,7 @@ export function OutfitCollage({ outfit, size, borderRadius = radii.md }: Props) 
             <Image
               source={{ uri: imageUris[i] }}
               style={styles.fill}
-              resizeMode="cover"
+              contentFit="cover"
             />
           ) : (
             <View style={[styles.fill, { backgroundColor: colors.muted }]} />
