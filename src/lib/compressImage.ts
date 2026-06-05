@@ -14,6 +14,7 @@ export type CompressedImage = {
 export async function compressImageToDataUrl(
   asset: PickedAsset,
   maxDim: number = DEFAULT_MAX_DIM,
+  compress?: number,
 ): Promise<CompressedImage> {
   const { uri, width, height } = asset;
 
@@ -27,7 +28,7 @@ export async function compressImageToDataUrl(
   }
 
   const result = await ImageManipulator.manipulateAsync(uri, actions, {
-    compress: 0.75,
+    compress: compress ?? 0.75,
     format: ImageManipulator.SaveFormat.JPEG,
     base64: true,
   });

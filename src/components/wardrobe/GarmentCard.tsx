@@ -65,7 +65,7 @@ function GarmentCardComponent({
           <Image
             source={{ uri: imageUri }}
             style={StyleSheet.absoluteFill}
-            contentFit="cover"
+            contentFit="contain"
             transition={200}
           />
         ) : (
@@ -112,7 +112,7 @@ function GarmentCardComponent({
             <View style={[styles.colorDot, { backgroundColor: colorHex }]} />
           )}
           <Text style={styles.name} numberOfLines={1}>
-            {item.name}
+            {item.name || 'Unnamed Item'}
           </Text>
         </View>
         {item.brand ? (

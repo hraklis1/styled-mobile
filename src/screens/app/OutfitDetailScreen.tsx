@@ -20,6 +20,7 @@ import { useOutfits, useDeleteOutfit, useMarkOutfitWorn, useVisualizeOutfit, use
 import { useItems } from '../../hooks/useItems';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
 import { resolveImageUri } from '../../lib/resolveImageUri';
+import { CommonActions } from '@react-navigation/native';
 import { colors, spacing, typography, radii } from '../../theme';
 import { CATEGORY_LABELS } from '../../types/item';
 import type { OutfitDetailScreenProps } from '../../navigation/types';
@@ -217,6 +218,19 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   const handleMarkWorn = () => markWorn.mutate(outfit.id);
   const handleGenerate = (force = false) => visualize.mutate({ id: outfit.id, force });
 
+  // When OutfitDetail is the only screen in the ClosetStack (opened from the Home tab),
+  // goBack() would bubble up to the tab navigator and go to Home — but leave OutfitDetail
+  // at the top of the ClosetStack. Reset to ClosetMain first so the Closet tab is clean.
+  const handleBack = () => {
+    const { routes } = navigation.getState();
+    if (routes.length > 1) {
+      navigation.goBack();
+    } else {
+      navigation.reset({ index: 0, routes: [{ name: 'ClosetMain' }] });
+      navigation.dispatch(CommonActions.navigate({ name: 'Home' }));
+    }
+  };
+
   const handleDelete = () => {
     Alert.alert(
       'Delete outfit',
@@ -228,7 +242,7 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
           style: 'destructive',
           onPress: () => {
             deleteOutfit.mutate(outfit.id);
-            navigation.goBack();
+            handleBack();
           },
         },
       ]
@@ -263,7 +277,7 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
           {/* Back */}
           <TouchableOpacity
             style={[styles.backButton, { top: insets.top + spacing.sm }]}
-            onPress={() => navigation.goBack()}
+            onPress={handleBack}
           >
             <Ionicons name="chevron-back" size={22} color={colors.foreground} />
           </TouchableOpacity>
@@ -288,8 +302,10 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
 
         {visualize.isError && (
           <View style={styles.generateErrorRow}>
-            <Text style={styles.generateErrorText}>Generation failed</Text>
-            <TouchableOpacity onPress={() => handleGenerate()}>
+            <Text style={styles.generateErrorText}>
+              {(visualize.error as any)?.response?.data?.message ?? 'Generation failed'}
+            </Text>
+            <TouchableOpacity onPress={() => handleGenerate(hasAiImage)}>
               <Text style={styles.retryLabel}>Retry</Text>
             </TouchableOpacity>
           </View>

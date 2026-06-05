@@ -13,6 +13,8 @@ type Options = {
   maxDim?: number;
   /** Whether to allow editing after capture (default: false) */
   allowsEditing?: boolean;
+  /** JPEG compress quality 0–1 (default: 0.75) */
+  compress?: number;
 };
 
 /**
@@ -25,7 +27,7 @@ type Options = {
 export function useCameraLaunch() {
   const launchCamera = useCallback(
     async (options: Options = {}): Promise<CapturedImage | null> => {
-      const { maxDim = 1600, allowsEditing = false } = options;
+      const { maxDim = 1600, allowsEditing = false, compress } = options;
 
       // Check permission status first
       const { status } = await ImagePicker.getCameraPermissionsAsync();
@@ -56,6 +58,7 @@ export function useCameraLaunch() {
         const compressed = await compressImageToDataUrl(
           { uri: asset.uri, width: asset.width ?? maxDim, height: asset.height ?? maxDim },
           maxDim,
+          compress,
         );
         return compressed;
       } catch {
@@ -75,7 +78,7 @@ export function useCameraLaunch() {
 export function useLibraryLaunch() {
   const launchLibrary = useCallback(
     async (options: Options = {}): Promise<CapturedImage | null> => {
-      const { maxDim = 1600, allowsEditing = false } = options;
+      const { maxDim = 1600, allowsEditing = false, compress } = options;
 
       // Request photo library permission if not already granted
       const { status } = await ImagePicker.getMediaLibraryPermissionsAsync();
@@ -104,6 +107,7 @@ export function useLibraryLaunch() {
         const compressed = await compressImageToDataUrl(
           { uri: asset.uri, width: asset.width ?? maxDim, height: asset.height ?? maxDim },
           maxDim,
+          compress,
         );
         return compressed;
       } catch {

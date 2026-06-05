@@ -1,19 +1,16 @@
-import { useRef, useMemo, useCallback } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
+  Modal,
+  FlatList,
   StyleSheet,
+  Pressable,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  BottomSheetModal,
-  BottomSheetFlatList,
-  BottomSheetBackdrop,
-  BottomSheetFooter,
-  type BottomSheetFooterProps,
-} from '@gorhom/bottom-sheet';
 import { colors, spacing, typography, radii } from '../../theme';
 import { PressableScale } from './PressableScale';
 
@@ -44,49 +41,39 @@ type Props = SingleProps | MultiProps;
 export function BottomSheetDropdown(props: Props) {
   const { title, options, placeholder } = props;
   const insets = useSafeAreaInsets();
+  const [open, setOpen] = useState(false);
 
-  const bottomSheetRef = useRef<BottomSheetModal>(null);
-  const snapPoints = useMemo(() => ['50%', '75%'], []);
+  const backdropAnim = useRef(new Animated.Value(0)).current;
+  const sheetAnim = useRef(new Animated.Value(600)).current;
 
-  const handleOpen = useCallback(() => {
-    bottomSheetRef.current?.present();
-  }, []);
+  const openSheet = useCallback(() => {
+    backdropAnim.setValue(0);
+    sheetAnim.setValue(600);
+    setOpen(true);
+    Animated.parallel([
+      Animated.timing(backdropAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+      Animated.spring(sheetAnim, { toValue: 0, damping: 22, stiffness: 220, useNativeDriver: true }),
+    ]).start();
+  }, [backdropAnim, sheetAnim]);
+
+  const closeSheet = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(backdropAnim, { toValue: 0, duration: 180, useNativeDriver: true }),
+      Animated.timing(sheetAnim, { toValue: 600, duration: 220, useNativeDriver: true }),
+    ]).start(() => setOpen(false));
+  }, [backdropAnim, sheetAnim]);
 
   const handleSelect = useCallback(
     (opt: string) => {
       if (!props.multi) {
         props.onChange?.(opt);
-        bottomSheetRef.current?.dismiss();
+        closeSheet();
       } else {
         props.onMultiToggle?.(opt);
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [props.multi, (props as any).onChange, (props as any).onMultiToggle]
-  );
-
-  const renderBackdrop = useCallback(
-    (bsProps: any) => (
-      <BottomSheetBackdrop {...bsProps} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.4} />
-    ),
-    []
-  );
-
-  const renderFooter = useCallback(
-    (footerProps: BottomSheetFooterProps) => (
-      <BottomSheetFooter {...footerProps} bottomInset={insets.bottom}>
-        <View style={styles.footer}>
-          <TouchableOpacity
-            style={styles.doneButton}
-            onPress={() => bottomSheetRef.current?.dismiss()}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.doneButtonText}>Done</Text>
-          </TouchableOpacity>
-        </View>
-      </BottomSheetFooter>
-    ),
-    [insets.bottom]
+    [props.multi, (props as any).onChange, (props as any).onMultiToggle, closeSheet]
   );
 
   const buttonLabel = useMemo(() => {
@@ -102,8 +89,6 @@ export function BottomSheetDropdown(props: Props) {
   const hasValue = props.multi
     ? (props.multiValue?.length ?? 0) > 0
     : !!props.value;
-
-  // ── List item renderer ───────────────────────────────────────────────────────
 
   const isMulti = props.multi;
   const multiValue = isMulti ? ((props as MultiProps).multiValue ?? []) : [];
@@ -134,14 +119,12 @@ export function BottomSheetDropdown(props: Props) {
     [isMulti, multiValue, singleValue, handleSelect]
   );
 
-  const keyExtractor = useCallback((item: string) => item, []);
-
   const listHeader = !isMulti ? (
     <TouchableOpacity
       style={styles.option}
       onPress={() => {
         (props as SingleProps).onChange?.('');
-        bottomSheetRef.current?.dismiss();
+        closeSheet();
       }}
       activeOpacity={0.7}
     >
@@ -152,7 +135,7 @@ export function BottomSheetDropdown(props: Props) {
 
   return (
     <>
-      <PressableScale contentStyle={styles.button} onPress={handleOpen}>
+      <PressableScale contentStyle={styles.button} onPress={openSheet}>
         <Text
           style={[styles.buttonText, !hasValue && styles.placeholder]}
           numberOfLines={1}
@@ -162,30 +145,46 @@ export function BottomSheetDropdown(props: Props) {
         <Ionicons name="chevron-down" size={16} color={colors.mutedForeground} />
       </PressableScale>
 
-      <BottomSheetModal
-        ref={bottomSheetRef}
-        snapPoints={snapPoints}
-        backdropComponent={renderBackdrop}
-        footerComponent={isMulti ? renderFooter : undefined}
-        handleIndicatorStyle={styles.handle}
-        backgroundStyle={styles.sheetBackground}
+      <Modal
+        visible={open}
+        transparent
+        animationType="none"
+        onRequestClose={closeSheet}
       >
-        <View style={styles.sheetContent}>
-          <Text style={styles.sheetTitle}>{title}</Text>
-          <BottomSheetFlatList
-            data={options}
-            keyExtractor={keyExtractor}
-            renderItem={renderItem}
-            showsVerticalScrollIndicator={false}
-            ListHeaderComponent={listHeader}
-            contentContainerStyle={{
-              paddingBottom: isMulti
-                ? Math.max(insets.bottom, spacing.lg) + 64
-                : Math.max(insets.bottom, spacing.lg),
-            }}
-          />
+        <View style={styles.overlay}>
+          {/* Backdrop fades in independently */}
+          <Animated.View style={[styles.backdrop, { opacity: backdropAnim }]}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={closeSheet} />
+          </Animated.View>
+
+          {/* Sheet slides up independently */}
+          <Animated.View style={{ transform: [{ translateY: sheetAnim }] }}>
+            <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
+              <View style={styles.handle} />
+              <Text style={styles.sheetTitle}>{title}</Text>
+              <FlatList
+                data={options}
+                keyExtractor={(item) => item}
+                renderItem={renderItem}
+                showsVerticalScrollIndicator={false}
+                ListHeaderComponent={listHeader}
+                contentContainerStyle={{ paddingBottom: isMulti ? 72 : 0 }}
+              />
+              {isMulti && (
+                <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+                  <TouchableOpacity
+                    style={styles.doneButton}
+                    onPress={closeSheet}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.doneButtonText}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </Animated.View>
         </View>
-      </BottomSheetModal>
+      </Modal>
     </>
   );
 }
@@ -214,23 +213,39 @@ const styles = StyleSheet.create({
   placeholder: {
     color: colors.mutedForeground,
   },
-  sheetBackground: {
+  overlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  sheet: {
     backgroundColor: colors.background,
+    borderTopLeftRadius: radii.lg + 4,
+    borderTopRightRadius: radii.lg + 4,
+    maxHeight: '75%',
   },
   handle: {
-    backgroundColor: colors.border,
     width: 36,
-  },
-  sheetContent: {
-    flex: 1,
-    backgroundColor: colors.background,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    alignSelf: 'center',
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
   },
   sheetTitle: {
     fontSize: typography.size.md,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.sm,
+    paddingVertical: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -273,8 +288,12 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingTop: spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.border,
     backgroundColor: colors.background,

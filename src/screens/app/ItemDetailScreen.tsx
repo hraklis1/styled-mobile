@@ -424,7 +424,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     });
 
     if (result.canceled || !result.assets[0]) return;
-    const { uri, dataUrl } = await compressImageToDataUrl(result.assets[0]);
+    const { uri, dataUrl } = await compressImageToDataUrl(result.assets[0], 1024, 0.8);
     await handleRescan(dataUrl, uri);
   };
 
@@ -1013,13 +1013,13 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerText}>
-            <Text style={styles.name}>{viewItem.name}</Text>
+            <Text style={styles.name}>{viewItem.name || 'Unnamed Item'}</Text>
             {viewItem.brand ? <Text style={styles.brand}>{viewItem.brand}</Text> : null}
             {breadcrumb ? <Text style={styles.breadcrumb}>{breadcrumb}</Text> : null}
           </View>
         </View>
 
-        {/* Action row */}
+        {/* Action row — positive actions */}
         <View style={styles.actionRow}>
           <TouchableOpacity
             style={[styles.actionButton, markWorn.isPending && styles.actionDisabled]}
@@ -1042,16 +1042,18 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
             />
             <Text style={styles.actionLabel}>{viewItem.isFavorite ? 'Favourited' : 'Favourite'}</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={handleDelete}
-            disabled={isBusy}
-          >
-            <Ionicons name="trash-outline" size={20} color={colors.error} />
-            <Text style={[styles.actionLabel, { color: colors.error }]}>Remove</Text>
-          </TouchableOpacity>
         </View>
+
+        {/* Destructive action — text-only, visually subordinate */}
+        <TouchableOpacity
+          style={[styles.removeRow, isBusy && styles.actionDisabled]}
+          onPress={handleDelete}
+          disabled={isBusy}
+          activeOpacity={0.6}
+        >
+          <Ionicons name="trash-outline" size={14} color={colors.error} />
+          <Text style={styles.removeText}>Remove from wardrobe</Text>
+        </TouchableOpacity>
 
         {/* AI Style Profile */}
         <SectionCard title="AI Style Profile">
@@ -1177,51 +1179,63 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
 
         {/* Tags (with inline add/remove) */}
         <SectionCard title="Tags">
-          <View style={styles.chipRow}>
-            {(viewItem.tags ?? []).map((tag) => (
-              <TouchableOpacity
-                key={tag}
-                style={styles.tagChip}
-                onPress={() => removeTagInline(tag)}
-                activeOpacity={0.7}
-                disabled={updateItem.isPending}
-              >
-                <Text style={styles.tagChipText}>{tag}</Text>
-                <Ionicons name="close" size={11} color={colors.mutedForeground} style={{ marginLeft: 3 }} />
-              </TouchableOpacity>
-            ))}
+          {(viewItem.tags ?? []).length === 0 && !inlineTagActive ? (
+            <TouchableOpacity
+              style={styles.tagDropzone}
+              onPress={() => {
+                setInlineTagActive(true);
+                setTimeout(() => inlineTagRef.current?.focus(), 50);
+              }}
+              activeOpacity={0.7}
+              disabled={updateItem.isPending}
+            >
+              <Ionicons name="add-circle-outline" size={20} color={colors.mutedForeground} />
+              <Text style={styles.tagDropzoneText}>No tags yet — tap to add one</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.chipRow}>
+              {(viewItem.tags ?? []).map((tag) => (
+                <TouchableOpacity
+                  key={tag}
+                  style={styles.tagChip}
+                  onPress={() => removeTagInline(tag)}
+                  activeOpacity={0.7}
+                  disabled={updateItem.isPending}
+                >
+                  <Text style={styles.tagChipText}>{tag}</Text>
+                  <Ionicons name="close" size={11} color={colors.mutedForeground} style={{ marginLeft: 3 }} />
+                </TouchableOpacity>
+              ))}
 
-            {inlineTagActive ? (
-              <TextInput
-                ref={inlineTagRef}
-                style={styles.inlineTagInput}
-                value={inlineTagValue}
-                onChangeText={setInlineTagValue}
-                onSubmitEditing={commitInlineTag}
-                onBlur={commitInlineTag}
-                placeholder="tag name…"
-                placeholderTextColor={colors.mutedForeground}
-                autoFocus
-                maxLength={40}
-                autoCapitalize="none"
-                returnKeyType="done"
-              />
-            ) : (
-              <TouchableOpacity
-                style={styles.addTagButton}
-                onPress={() => {
-                  setInlineTagActive(true);
-                  setTimeout(() => inlineTagRef.current?.focus(), 50);
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="add" size={13} color={colors.mutedForeground} />
-                <Text style={styles.addTagText}>Add tag</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-          {(viewItem.tags ?? []).length === 0 && !inlineTagActive && (
-            <Text style={styles.emptyHint}>No tags yet — tap Add tag to add one.</Text>
+              {inlineTagActive ? (
+                <TextInput
+                  ref={inlineTagRef}
+                  style={styles.inlineTagInput}
+                  value={inlineTagValue}
+                  onChangeText={setInlineTagValue}
+                  onSubmitEditing={commitInlineTag}
+                  onBlur={commitInlineTag}
+                  placeholder="tag name…"
+                  placeholderTextColor={colors.mutedForeground}
+                  autoFocus
+                  maxLength={40}
+                  autoCapitalize="none"
+                  returnKeyType="done"
+                />
+              ) : (
+                <TouchableOpacity
+                  style={styles.addTagButton}
+                  onPress={() => {
+                    setInlineTagActive(true);
+                    setTimeout(() => inlineTagRef.current?.focus(), 50);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="add" size={13} color={colors.mutedForeground} />
+                  <Text style={styles.addTagText}>Add tag</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           )}
         </SectionCard>
 
@@ -1780,7 +1794,7 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: 'row',
     marginHorizontal: spacing.lg,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.xs,
     gap: spacing.sm,
   },
   actionButton: {
@@ -1793,6 +1807,19 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  removeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  removeText: {
+    fontSize: typography.size.sm,
+    color: colors.error,
   },
   actionDisabled: { opacity: 0.5 },
   actionLabel: {
@@ -1864,11 +1891,15 @@ const styles = StyleSheet.create({
   },
 
   // Details
-  detailGrid: { gap: spacing.sm },
-  detailItem: {
+  detailGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexWrap: 'wrap',
+    columnGap: spacing.md,
+    rowGap: spacing.sm,
+  },
+  detailItem: {
+    flexBasis: '48%',
+    flexGrow: 1,
   },
   careRow: {
     flexDirection: 'row',
@@ -1878,16 +1909,14 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
   },
   detailLabel: {
-    fontSize: typography.size.sm,
+    fontSize: typography.size.xs,
     color: colors.mutedForeground,
-    flex: 1,
+    marginBottom: 2,
   },
   detailValue: {
     fontSize: typography.size.sm,
     color: colors.foreground,
     fontWeight: typography.weight.medium,
-    flex: 2,
-    textAlign: 'right',
     textTransform: 'capitalize',
   },
 
@@ -1936,10 +1965,18 @@ const styles = StyleSheet.create({
     fontSize: typography.size.xs,
     color: colors.mutedForeground,
   },
-  emptyHint: {
-    fontSize: typography.size.xs,
+  tagDropzone: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    paddingVertical: spacing.md + 2,
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  tagDropzoneText: {
+    fontSize: typography.size.sm,
     color: colors.mutedForeground,
-    fontStyle: 'italic',
   },
 
   notes: {
@@ -1952,9 +1989,9 @@ const styles = StyleSheet.create({
   scanLabelBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: spacing.xs,
     marginTop: spacing.sm,
-    alignSelf: 'flex-start',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radii.full,

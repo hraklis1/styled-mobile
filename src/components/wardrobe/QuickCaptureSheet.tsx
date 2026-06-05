@@ -109,8 +109,8 @@ export function QuickCaptureSheet({ visible, onClose, onItemsSaved, onLogOutfit 
   const pickAndScan = async (source: 'camera' | 'library') => {
     const captured =
       source === 'camera'
-        ? await launchCamera({ maxDim: 1600 })
-        : await launchLibrary({ maxDim: 1600 });
+        ? await launchCamera({ maxDim: 1024, compress: 0.8 })
+        : await launchLibrary({ maxDim: 1024, compress: 0.8 });
 
     if (!captured) return;
 

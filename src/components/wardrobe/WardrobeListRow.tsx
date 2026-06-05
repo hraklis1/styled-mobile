@@ -71,7 +71,7 @@ export function WardrobeListRow({
       {/* Info */}
       <View style={styles.info}>
         <Text style={styles.name} numberOfLines={1}>
-          {item.name}
+          {item.name || 'Unnamed Item'}
         </Text>
         {item.brand ? (
           <Text style={styles.brand} numberOfLines={1}>

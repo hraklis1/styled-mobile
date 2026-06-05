@@ -164,8 +164,9 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
       let compressed: { uri: string; dataUrl: string };
       try {
         compressed = await compressImageToDataUrl(
-          { uri: asset.uri, width: asset.width ?? 1600, height: asset.height ?? 1600 },
-          1600,
+          { uri: asset.uri, width: asset.width ?? 1024, height: asset.height ?? 1024 },
+          1024,
+          0.8,
         );
       } catch {
         updateJob(jobId, { thumbDataUrl: asset.uri, status: 'error', errorMsg: 'Compression failed' });

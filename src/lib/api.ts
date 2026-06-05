@@ -12,14 +12,23 @@ export const api = axios.create({
   },
 });
 
+// Keep the active JWT in memory, refreshed via onAuthStateChange.
+// This makes the request interceptor fully synchronous — no await, no risk of
+// a hanging Supabase token-refresh call blocking every outgoing request.
+let _accessToken: string | null = null;
+
+supabase.auth.getSession().then(({ data: { session } }) => {
+  _accessToken = session?.access_token ?? null;
+});
+
+supabase.auth.onAuthStateChange((_event, session) => {
+  _accessToken = session?.access_token ?? null;
+});
+
 // Attach the active Supabase JWT so the backend can validate requests.
-// No-op when the user is signed out.
-api.interceptors.request.use(async (config) => {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (session?.access_token) {
-    config.headers.Authorization = `Bearer ${session.access_token}`;
+api.interceptors.request.use((config) => {
+  if (_accessToken) {
+    config.headers.Authorization = `Bearer ${_accessToken}`;
   }
   return config;
 });
