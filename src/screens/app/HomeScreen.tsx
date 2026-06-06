@@ -1,9 +1,8 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useMemo, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   ScrollView,
-  TextInput,
   StyleSheet,
   Image,
   TouchableOpacity,
@@ -19,6 +18,8 @@ import { useOutfitLogs, useDeleteOutfitLog } from '../../hooks/useOutfitLogs';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
 import { useGlobalOutfitLogger } from '../../contexts/GlobalOutfitLoggerContext';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
+import { useFabScroll } from '../../contexts/FabScrollContext';
+import { useFocusEffect } from '@react-navigation/native';
 import { useWeatherToday } from '../../hooks/useWeather';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { colors, shadows, spacing, typography, radii } from '../../theme';
@@ -29,15 +30,6 @@ import type { HomeScreenProps } from '../../navigation/types';
 
 const SIDE_PAD = spacing.lg;
 const COL_GAP  = spacing.md;
-
-const STATIC_PLACEHOLDERS = [
-  'What should I wear tonight?',
-  'Style an outfit with my gray blazer…',
-  'Something casual for a Sunday brunch?',
-  'Smart-casual look for the office?',
-  'Help me dress for a dinner party…',
-  'Cozy weekend outfit ideas?',
-];
 
 const WEATHER_EMOJI: Record<string, string> = {
   sunny: '☀️',
@@ -103,16 +95,36 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
   const { openLogger } = useGlobalOutfitLogger();
   const { openStylist } = useGlobalAIStylist();
+  const { fabCollapsed } = useFabScroll();
   const insets = useSafeAreaInsets();
+  const lastHomeScrollY = useRef(0);
+  const fabIsCollapsed = useRef(false);
+
+  useFocusEffect(useCallback(() => {
+    fabIsCollapsed.current = false;
+    fabCollapsed.value = 0;
+  }, [fabCollapsed]));
+
+  const handleHomeScroll = useCallback((e: any) => {
+    const y = e.nativeEvent.contentOffset.y;
+    const delta = y - lastHomeScrollY.current;
+    lastHomeScrollY.current = y;
+    if (y <= 10 || delta < -6) {
+      if (fabIsCollapsed.current) {
+        fabIsCollapsed.current = false;
+        fabCollapsed.value = 0;
+      }
+    } else if (delta > 6) {
+      if (!fabIsCollapsed.current) {
+        fabIsCollapsed.current = true;
+        fabCollapsed.value = 1;
+      }
+    }
+  }, [fabCollapsed]);
   const { width } = useWindowDimensions();
   const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / 2;
 
-  // Stylist prompt
-  const [query, setQuery] = useState('');
-  const [placeholderIdx, setPlaceholderIdx] = useState(0);
-  const inputRef = useRef<TextInput>(null);
-
-  // Derived data (must come before contextualPlaceholders which depends on upcomingEvents)
+  // Derived data
   const upcomingEvents = useMemo(() => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     return events
@@ -121,50 +133,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       .slice(0, 10);
   }, [events]);
 
-  const contextualPlaceholders = useMemo(() => {
-    const prompts: string[] = [];
-
-    // Event-based prompts
-    const [nextEvent, secondEvent] = upcomingEvents;
-    if (nextEvent) {
-      const when = formatEventDate(nextEvent.date) === 'Today' ? 'tonight'
-        : formatEventDate(nextEvent.date) === 'Tomorrow' ? 'tomorrow' : '';
-      prompts.push(`Style a look for ${nextEvent.title}${when ? ` ${when}` : ''}`);
-    }
-    if (secondEvent) {
-      prompts.push(`What to wear for ${secondEvent.title}?`);
-    }
-
-    // Weather-based prompts
-    if (weather.data) {
-      const { condition, temperatureF } = weather.data.current;
-      if (condition === 'rainy') {
-        prompts.push("What's a good outfit for a rainy day?");
-      } else if (condition === 'cold') {
-        prompts.push(`Cozy layered look for ${temperatureF}°F weather`);
-      } else if (condition === 'sunny') {
-        prompts.push(`Light outfit for a sunny ${temperatureF}°F day`);
-      } else {
-        prompts.push(`Style tip for today's ${weather.data.current.summary.toLowerCase()} weather?`);
-      }
-    }
-
-    return [...prompts, ...STATIC_PLACEHOLDERS];
-  }, [upcomingEvents, weather.data]);
-
-  useEffect(() => {
-    const len = contextualPlaceholders.length;
-    const id = setInterval(() => setPlaceholderIdx((i) => (i + 1) % len), 4000);
-    return () => clearInterval(id);
-  }, [contextualPlaceholders.length]);
-
-  const handleStylistSubmit = () => {
-    const q = query.trim();
-    setQuery('');
-    openStylist(q || undefined);
-  };
-
-  // Derived data
   const recentOutfits = useMemo(
     () => [...outfits]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -181,6 +149,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
+      onScroll={handleHomeScroll}
+      scrollEventThrottle={16}
     >
       {/* ── Greeting ──────────────────────────────────────────────── */}
       <View style={styles.greetingSection}>
@@ -230,37 +200,20 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         </View>
       </View>
 
-      {/* ── AI Stylist prompt ──────────────────────────────────────── */}
-      <PressableScale
-        contentStyle={styles.promptCard}
-        onPress={handleStylistSubmit}
+      {/* ── AI Stylist fake input ─────────────────────────────── */}
+      <TouchableOpacity
+        style={styles.stylistPill}
+        onPress={() => openStylist()}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel="Open AI Stylist"
       >
-        <View style={styles.promptInner}>
-          <View style={styles.promptIconWrap}>
-            <Ionicons name="sparkles" size={18} color="#FAF8F5" />
-          </View>
-          <TextInput
-            ref={inputRef}
-            style={styles.promptInput}
-            value={query}
-            onChangeText={setQuery}
-            placeholder={contextualPlaceholders[placeholderIdx % contextualPlaceholders.length]}
-            placeholderTextColor="rgba(250,248,245,0.45)"
-            returnKeyType="send"
-            onSubmitEditing={handleStylistSubmit}
-            multiline={false}
-          />
-          {query.trim().length > 0 && (
-            <PressableScale
-              contentStyle={styles.sendButton}
-              onPress={handleStylistSubmit}
-            >
-              <Ionicons name="arrow-up" size={16} color={colors.primaryForeground} />
-            </PressableScale>
-          )}
-        </View>
-        <Text style={styles.promptHint}>Ask your AI stylist anything</Text>
-      </PressableScale>
+        <Ionicons name="sparkles" size={16} color="#B08040" />
+        <Text style={styles.stylistPillText} numberOfLines={1}>
+          Ask your AI stylist... or type a question
+        </Text>
+        <Ionicons name="arrow-forward" size={16} color="#C2A68D" />
+      </TouchableOpacity>
 
       {/* ── Empty wardrobe nudge ───────────────────────────────────── */}
       {items.length === 0 && (
@@ -359,9 +312,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Outfit Log</Text>
-            <TouchableOpacity onPress={openLogger}>
-              <Text style={styles.sectionLink}>+ Log look</Text>
-            </TouchableOpacity>
           </View>
 
           <View style={styles.logList}>
@@ -536,56 +486,28 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  // Stylist prompt — hero card
-  promptCard: {
-    backgroundColor: '#2C2420',
-    borderRadius: radii.lg + 2,
-    borderWidth: 0,
-    marginBottom: spacing.lg,
-    overflow: 'hidden',
-    shadowColor: '#2C2420',
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
-  },
-  promptInner: {
+  // AI Stylist fake-input pill
+  stylistPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.sm,
     gap: spacing.sm,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 100,
+    borderWidth: 1,
+    borderColor: '#EBE7E0',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 14,
+    marginBottom: spacing.xl,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.09,
+    shadowRadius: 14,
+    elevation: 5,
   },
-  promptIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: radii.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-  },
-  promptInput: {
+  stylistPillText: {
     flex: 1,
     fontSize: typography.size.md,
-    color: '#FAF8F5',
-    paddingVertical: 0,
-  },
-  sendButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  promptHint: {
-    fontSize: typography.size.xs,
-    color: 'rgba(250,248,245,0.65)',
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.lg,
+    color: '#7A7269',
   },
 
   // Empty wardrobe nudge
@@ -775,7 +697,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: colors.white,
+    backgroundColor: '#F7F4F0',
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: `${colors.primary}30`,

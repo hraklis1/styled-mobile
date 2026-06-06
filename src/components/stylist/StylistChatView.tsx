@@ -14,7 +14,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
+import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -23,8 +25,9 @@ import { File, Paths, EncodingType } from 'expo-file-system';
 import { api } from '../../lib/api';
 import { compressImageToDataUrl } from '../../lib/compressImage';
 import { resolveImageUri } from '../../lib/resolveImageUri';
-import { useWeatherCurrent } from '../../hooks/useWeather';
+import { useWeatherCurrent, type CurrentWeather } from '../../hooks/useWeather';
 import { useItems } from '../../hooks/useItems';
+import { useProfile } from '../../hooks/useProfile';
 import { useCreateOutfit, type CreateOutfitInput } from '../../hooks/useOutfits';
 import { addToWishlist } from '../../lib/wishlist';
 import { VoiceInputButton } from '../primitives/VoiceInputButton';
@@ -37,6 +40,12 @@ import type { Item } from '../../types/item';
 
 type Role = 'user' | 'assistant';
 
+type MissingEssential = {
+  label: string;
+  category: string;
+  reason: string;
+};
+
 type ChatMessage = {
   id: string;
   role: Role;
@@ -44,6 +53,7 @@ type ChatMessage = {
   transcript?: string;
   shopOutfit?: ShopOutfit;
   suggestedItemIds?: number[];
+  missingEssential?: MissingEssential;
 };
 
 type StylistAskResponse = {
@@ -51,6 +61,7 @@ type StylistAskResponse = {
   response: string;
   itemIds?: number[];
   shopOutfit?: ShopOutfit | null;
+  missingEssential?: MissingEssential | null;
 };
 
 type TtsResponse = {
@@ -59,15 +70,35 @@ type TtsResponse = {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const FOLLOWUP_CHIPS = [
+const CHIPS_CLOSET = [
   'Make it more casual',
   'Make it more formal',
   'Swap the shoes',
-  'Add a jacket',
   'What accessories work?',
-  'Try bolder colors',
-  'Show me another option',
 ];
+
+const CHIPS_SHOP = [
+  'Try a different budget',
+  'More casual version',
+  'Show me from my closet',
+  'Different occasion',
+];
+
+const CHIPS_DEFAULT = [
+  'What should I wear today?',
+  'Build me a casual outfit',
+  'What goes with my blue jeans?',
+  'Help me dress for a dinner date',
+];
+
+function useContextualChips(lastMessage: ChatMessage | undefined): string[] {
+  return useMemo(() => {
+    if (!lastMessage || lastMessage.role !== 'assistant') return CHIPS_DEFAULT;
+    if (lastMessage.shopOutfit) return CHIPS_SHOP;
+    if (lastMessage.suggestedItemIds?.length) return CHIPS_CLOSET;
+    return CHIPS_DEFAULT;
+  }, [lastMessage]);
+}
 
 function makeId() {
   return Math.random().toString(36).slice(2);
@@ -78,12 +109,14 @@ function makeId() {
 type Props = {
   initialQuery?: string;
   onClose: () => void;
+  onNavigateToShop?: () => void;
 };
 
-export function StylistChatView({ initialQuery, onClose }: Props) {
+export function StylistChatView({ initialQuery, onClose, onNavigateToShop }: Props) {
   const insets = useSafeAreaInsets();
   const weather = useWeatherCurrent();
   const { data: allItems = [] } = useItems();
+  const { data: profile } = useProfile();
   const createOutfit = useCreateOutfit();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -97,6 +130,8 @@ export function StylistChatView({ initialQuery, onClose }: Props) {
   const playingFileRef = useRef<File | null>(null);
   const sessionRef = useRef(0);
   const hasSentInitialRef = useRef(false);
+
+  const SESSION_KEY = 'stylist_last_session';
 
   // ── Mention filtering ──────────────────────────────────────────────────────
 
@@ -183,9 +218,28 @@ export function StylistChatView({ initialQuery, onClose }: Props) {
 
       try {
         const history = buildHistory(messages);
-        const weatherSummary = weather.data
-          ? `${weather.data.summary} ${weather.data.temperatureF}°F`
-          : undefined;
+
+        // Build weather summary in the user's preferred temperature unit
+        let weatherSummary: string | undefined;
+        if (weather.data) {
+          const useCelsius = profile?.tempUnit === 'C';
+          const tempStr = useCelsius
+            ? `${weather.data.temperatureC}°C`
+            : `${weather.data.temperatureF}°F`;
+          weatherSummary = `${weather.data.summary} ${tempStr}`;
+        }
+
+        // Attach GPS coordinates if permission is already granted (no prompt)
+        let liveLocation: { lat: number; lon: number } | undefined;
+        try {
+          const { status } = await Location.getForegroundPermissionsAsync();
+          if (status === 'granted') {
+            const pos = await Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+            });
+            liveLocation = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+          }
+        } catch { /* location is non-fatal */ }
 
         const { data } = await api.post<StylistAskResponse>(
           '/api/stylist/ask',
@@ -194,6 +248,7 @@ export function StylistChatView({ initialQuery, onClose }: Props) {
             ...(audio ? { audio } : {}),
             ...(photoData ? { photoData } : {}),
             ...(weatherSummary ? { weatherSummary } : {}),
+            ...(liveLocation ? { liveLocation } : {}),
             history,
           },
           { timeout: 60_000 },
@@ -217,8 +272,15 @@ export function StylistChatView({ initialQuery, onClose }: Props) {
           text: data.response,
           ...(data.shopOutfit ? { shopOutfit: data.shopOutfit } : {}),
           ...(data.itemIds?.length ? { suggestedItemIds: data.itemIds } : {}),
+          ...(data.missingEssential ? { missingEssential: data.missingEssential } : {}),
         };
-        setMessages((prev) => [...prev, assistantMsg]);
+
+        setMessages((prev) => {
+          const next = [...prev, assistantMsg];
+          // Persist the last 6 messages for session continuity
+          AsyncStorage.setItem(SESSION_KEY, JSON.stringify(next.slice(-6))).catch(() => {});
+          return next;
+        });
         playTts(assistantId, data.response);
       } catch (err: unknown) {
         if (sessionRef.current !== session) return;
@@ -231,10 +293,22 @@ export function StylistChatView({ initialQuery, onClose }: Props) {
         if (sessionRef.current === session) setIsLoading(false);
       }
     },
-    [isLoading, messages],
+    [isLoading, messages, profile?.tempUnit, weather.data],
   );
 
   // ── Effects ────────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    AsyncStorage.getItem(SESSION_KEY).then((raw) => {
+      if (!raw) return;
+      try {
+        const saved: ChatMessage[] = JSON.parse(raw);
+        if (Array.isArray(saved) && saved.length > 0) {
+          setMessages(saved.slice(-6));
+        }
+      } catch { /* ignore corrupt data */ }
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (initialQuery && !hasSentInitialRef.current) {
@@ -295,6 +369,8 @@ export function StylistChatView({ initialQuery, onClose }: Props) {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   const isEmpty = messages.length === 0 && !isLoading;
+  const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant');
+  const contextualChips = useContextualChips(lastAssistantMsg);
 
   return (
     <KeyboardAvoidingView
@@ -322,6 +398,7 @@ export function StylistChatView({ initialQuery, onClose }: Props) {
             setMessages([]);
             setIsLoading(false);
             setMentionQuery(null);
+            AsyncStorage.removeItem(SESSION_KEY).catch(() => {});
           }}
           accessibilityLabel="Clear conversation"
         >
@@ -341,7 +418,7 @@ export function StylistChatView({ initialQuery, onClose }: Props) {
         showsVerticalScrollIndicator={false}
       >
         {isEmpty ? (
-          <EmptyState onPrompt={(q) => sendMessage({ text: q })} />
+          <EmptyState weather={weather.data} onPrompt={(q) => sendMessage({ text: q })} />
         ) : (
           <>
             {messages.map((msg) => (
@@ -351,6 +428,7 @@ export function StylistChatView({ initialQuery, onClose }: Props) {
                 allItems={allItems}
                 isPlaying={playingId === msg.id}
                 createOutfit={createOutfit}
+                onNavigateToShop={onNavigateToShop}
                 onToggleAudio={
                   msg.role === 'assistant'
                     ? () =>
@@ -375,7 +453,7 @@ export function StylistChatView({ initialQuery, onClose }: Props) {
           contentContainerStyle={styles.chipsContent}
           keyboardShouldPersistTaps="always"
         >
-          {FOLLOWUP_CHIPS.map((chip) => (
+          {contextualChips.map((chip) => (
             <TouchableOpacity
               key={chip}
               style={styles.chip}
@@ -459,9 +537,10 @@ type BubbleProps = {
   isPlaying: boolean;
   createOutfit: ReturnType<typeof useCreateOutfit>;
   onToggleAudio?: () => void;
+  onNavigateToShop?: () => void;
 };
 
-function MessageBubble({ message, allItems, isPlaying, createOutfit, onToggleAudio }: BubbleProps) {
+function MessageBubble({ message, allItems, isPlaying, createOutfit, onToggleAudio, onNavigateToShop }: BubbleProps) {
   const isUser = message.role === 'user';
 
   if (!isUser && message.suggestedItemIds?.length) {
@@ -476,6 +555,8 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, onToggleAud
             itemIds={message.suggestedItemIds}
             allItems={allItems}
             createOutfit={createOutfit}
+            missingEssential={message.missingEssential}
+            onNavigateToShop={onNavigateToShop}
           />
           {onToggleAudio && (
             <TouchableOpacity style={styles.ttsBtn} onPress={onToggleAudio}>
@@ -558,12 +639,15 @@ type OutfitSuggestionCardProps = {
   itemIds: number[];
   allItems: Item[];
   createOutfit: ReturnType<typeof useCreateOutfit>;
+  missingEssential?: MissingEssential;
+  onNavigateToShop?: () => void;
 };
 
-function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit }: OutfitSuggestionCardProps) {
+function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, missingEssential, onNavigateToShop }: OutfitSuggestionCardProps) {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+  const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
 
   const matchedItems = useMemo(
     () => itemIds.map((id) => allItems.find((i) => i.id === id)).filter((i): i is Item => !!i),
@@ -586,6 +670,12 @@ function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit }: 
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleFeedback(rating: 'up' | 'down') {
+    if (feedback) return;
+    setFeedback(rating);
+    api.post('/api/stylist/feedback', { itemIds, rating }).catch(() => {});
   }
 
   return (
@@ -620,22 +710,69 @@ function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit }: 
       {/* AI response text */}
       <Text style={styles.outfitCardText}>{messageText}</Text>
 
-      {/* Save button */}
-      <TouchableOpacity
-        style={[styles.saveBtn, (saved || saving) && styles.saveBtnDone]}
-        onPress={handleSave}
-        disabled={saved || saving}
-        activeOpacity={0.8}
-      >
-        <Ionicons
-          name={saved ? 'checkmark-circle' : 'bookmark-outline'}
-          size={15}
-          color={saved ? colors.primaryForeground : colors.primary}
-        />
-        <Text style={[styles.saveBtnText, saved && styles.saveBtnTextDone]}>
-          {saving ? 'Saving…' : saved ? 'Saved to Outfits' : 'Save to Outfits'}
-        </Text>
-      </TouchableOpacity>
+      {/* Save button + feedback row */}
+      <View style={styles.outfitCardActions}>
+        <TouchableOpacity
+          style={[styles.saveBtn, (saved || saving) && styles.saveBtnDone]}
+          onPress={handleSave}
+          disabled={saved || saving}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name={saved ? 'checkmark-circle' : 'bookmark-outline'}
+            size={15}
+            color={saved ? colors.primaryForeground : colors.primary}
+          />
+          <Text style={[styles.saveBtnText, saved && styles.saveBtnTextDone]}>
+            {saving ? 'Saving…' : saved ? 'Saved to Outfits' : 'Save to Outfits'}
+          </Text>
+        </TouchableOpacity>
+
+        <View style={styles.feedbackRow}>
+          <TouchableOpacity
+            style={[styles.feedbackBtn, feedback === 'up' && styles.feedbackBtnActive]}
+            onPress={() => handleFeedback('up')}
+            disabled={!!feedback}
+            accessibilityLabel="This outfit works for me"
+          >
+            <Ionicons
+              name="thumbs-up-outline"
+              size={16}
+              color={feedback === 'up' ? colors.primary : colors.mutedForeground}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.feedbackBtn, feedback === 'down' && styles.feedbackBtnActive]}
+            onPress={() => handleFeedback('down')}
+            disabled={!!feedback}
+            accessibilityLabel="This outfit doesn't work for me"
+          >
+            <Ionicons
+              name="thumbs-down-outline"
+              size={16}
+              color={feedback === 'down' ? colors.primary : colors.mutedForeground}
+            />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Wardrobe gap banner */}
+      {missingEssential && (
+        <TouchableOpacity
+          style={styles.missingEssentialBanner}
+          onPress={onNavigateToShop}
+          activeOpacity={onNavigateToShop ? 0.7 : 1}
+        >
+          <Ionicons name="bag-handle-outline" size={14} color={colors.primary} />
+          <Text style={styles.missingEssentialText} numberOfLines={1}>
+            Consider adding: {missingEssential.label}
+          </Text>
+          {onNavigateToShop && (
+            <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />
+          )}
+        </TouchableOpacity>
+      )}
+
       <ItemDetailSheet item={selectedItem} onClose={() => setSelectedItem(null)} />
     </View>
   );
@@ -761,14 +898,33 @@ function TypingIndicator() {
 
 // ── EmptyState ────────────────────────────────────────────────────────────────
 
-const PROMPTS = [
-  'What should I wear today?',
-  'Build me a casual weekend outfit',
-  'What goes with my blue jeans?',
-  'Help me dress for a dinner date',
-];
+function buildEmptyStatePrompts(weather: CurrentWeather | undefined): string[] {
+  const day = new Date().toLocaleDateString('en', { weekday: 'long' });
+  const prompts: string[] = [];
 
-function EmptyState({ onPrompt }: { onPrompt: (q: string) => void }) {
+  if (weather) {
+    const { condition, summary } = weather;
+    if (condition === 'rainy') {
+      prompts.push(`It's ${summary.toLowerCase()} — what should I wear?`);
+    } else if (condition === 'cold') {
+      prompts.push(`It's ${summary.toLowerCase()} — help me stay warm and stylish`);
+    } else {
+      prompts.push(`What should I wear on this ${summary.toLowerCase()} ${day}?`);
+    }
+  } else {
+    prompts.push(`What should I wear today?`);
+  }
+
+  prompts.push('Build me a casual weekend outfit');
+  prompts.push('What goes with my blue jeans?');
+  prompts.push('Help me dress for a dinner date');
+
+  return prompts;
+}
+
+function EmptyState({ weather, onPrompt }: { weather: CurrentWeather | undefined; onPrompt: (q: string) => void }) {
+  const prompts = buildEmptyStatePrompts(weather);
+
   return (
     <View style={styles.emptyState}>
       <View style={styles.emptyIconCircle}>
@@ -780,7 +936,7 @@ function EmptyState({ onPrompt }: { onPrompt: (q: string) => void }) {
         Type @ to tag items from your wardrobe.
       </Text>
       <View style={styles.promptList}>
-        {PROMPTS.map((p) => (
+        {prompts.map((p) => (
           <TouchableOpacity key={p} style={styles.promptChip} onPress={() => onPrompt(p)}>
             <Text style={styles.promptChipText}>{p}</Text>
           </TouchableOpacity>
@@ -1056,6 +1212,46 @@ const styles = StyleSheet.create({
   },
   saveBtnTextDone: {
     color: colors.white,
+  },
+  outfitCardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  feedbackRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  feedbackBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: radii.full,
+    backgroundColor: colors.muted,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  feedbackBtnActive: {
+    backgroundColor: `${colors.primary}18`,
+    borderColor: colors.primary,
+  },
+  missingEssentialBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs + 2,
+    backgroundColor: `${colors.primary}0D`,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: `${colors.primary}22`,
+  },
+  missingEssentialText: {
+    flex: 1,
+    fontSize: typography.size.xs,
+    color: colors.foreground,
+    fontWeight: typography.weight.medium,
   },
   // Typing indicator
   typingBubble: {

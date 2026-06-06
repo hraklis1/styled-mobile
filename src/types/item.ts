@@ -94,11 +94,12 @@ export const COLOR_TEMPERATURE_OPTIONS = [
 export type ColorTemperature = typeof COLOR_TEMPERATURE_OPTIONS[number]['value'];
 
 export const MATERIAL_OPTIONS = [
-  'Cotton', 'Polyester', 'Spandex', 'Elastane', 'Nylon', 'Wool', 'Cashmere',
-  'Silk', 'Linen', 'Rayon', 'Viscose', 'Modal', 'Lyocell', 'Tencel', 'Bamboo',
-  'Leather', 'Suede', 'Velvet', 'Denim', 'Fleece', 'Acrylic', 'Latex',
-  'Rubber', 'Neoprene', 'Mesh', 'Organza', 'Chiffon', 'Satin', 'Tweed',
-  'Corduroy', 'Flannel', 'Hemp', 'Polyamide',
+  'Acrylic', 'Bamboo', 'Cashmere', 'Chiffon', 'Corduroy', 'Cotton',
+  'Denim', 'Elastane', 'Flannel', 'Fleece', 'Hemp', 'Latex',
+  'Leather', 'Linen', 'Lyocell', 'Mesh', 'Modal', 'Neoprene',
+  'Nylon', 'Organza', 'Polyamide', 'Polyester', 'Rayon', 'Rubber',
+  'Satin', 'Silk', 'Spandex', 'Suede', 'Tencel', 'Tweed',
+  'Velvet', 'Viscose', 'Wool',
 ] as const;
 
 export const CARE_OPTIONS = [

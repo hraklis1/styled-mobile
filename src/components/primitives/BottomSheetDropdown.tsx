@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Pressable,
   Animated,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,6 +24,7 @@ type SingleProps = {
   onChange?: (v: string) => void;
   placeholder?: string;
   multi?: false;
+  searchable?: boolean;
 };
 
 type MultiProps = {
@@ -32,6 +34,7 @@ type MultiProps = {
   multiValue?: string[];
   onMultiToggle?: (v: string) => void;
   placeholder?: string;
+  searchable?: boolean;
 };
 
 type Props = SingleProps | MultiProps;
@@ -39,16 +42,24 @@ type Props = SingleProps | MultiProps;
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function BottomSheetDropdown(props: Props) {
-  const { title, options, placeholder } = props;
+  const { title, options, placeholder, searchable } = props;
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
 
   const backdropAnim = useRef(new Animated.Value(0)).current;
   const sheetAnim = useRef(new Animated.Value(600)).current;
 
+  const filteredOptions = useMemo(() => {
+    if (!searchable || !query.trim()) return options;
+    const lower = query.toLowerCase();
+    return options.filter((o) => o.toLowerCase().includes(lower));
+  }, [options, query, searchable]);
+
   const openSheet = useCallback(() => {
     backdropAnim.setValue(0);
     sheetAnim.setValue(600);
+    setQuery('');
     setOpen(true);
     Animated.parallel([
       Animated.timing(backdropAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
@@ -60,7 +71,7 @@ export function BottomSheetDropdown(props: Props) {
     Animated.parallel([
       Animated.timing(backdropAnim, { toValue: 0, duration: 180, useNativeDriver: true }),
       Animated.timing(sheetAnim, { toValue: 600, duration: 220, useNativeDriver: true }),
-    ]).start(() => setOpen(false));
+    ]).start(() => { setOpen(false); setQuery(''); });
   }, [backdropAnim, sheetAnim]);
 
   const handleSelect = useCallback(
@@ -162,13 +173,29 @@ export function BottomSheetDropdown(props: Props) {
             <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
               <View style={styles.handle} />
               <Text style={styles.sheetTitle}>{title}</Text>
+              {searchable && (
+                <View style={styles.searchContainer}>
+                  <Ionicons name="search" size={16} color={colors.mutedForeground} style={styles.searchIcon} />
+                  <TextInput
+                    style={styles.searchInput}
+                    value={query}
+                    onChangeText={setQuery}
+                    placeholder="Search…"
+                    placeholderTextColor={colors.mutedForeground}
+                    autoCorrect={false}
+                    autoCapitalize="none"
+                    clearButtonMode="while-editing"
+                  />
+                </View>
+              )}
               <FlatList
-                data={options}
+                data={filteredOptions}
                 keyExtractor={(item) => item}
                 renderItem={renderItem}
                 showsVerticalScrollIndicator={false}
                 ListHeaderComponent={listHeader}
                 contentContainerStyle={{ paddingBottom: isMulti ? 72 : 0 }}
+                keyboardShouldPersistTaps="handled"
               />
               {isMulti && (
                 <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
@@ -248,6 +275,26 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: spacing.lg,
+    marginVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    backgroundColor: colors.card,
+  },
+  searchIcon: {
+    marginRight: spacing.xs,
+  },
+  searchInput: {
+    flex: 1,
+    height: 38,
+    fontSize: typography.size.md,
+    color: colors.foreground,
   },
   option: {
     flexDirection: 'row',

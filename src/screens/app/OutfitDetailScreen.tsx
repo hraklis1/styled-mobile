@@ -143,12 +143,14 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   const visualize = useVisualizeOutfit();
   const updateOutfit = useUpdateOutfit();
 
+  const [localName, setLocalName] = useState(outfit?.name ?? '');
   const [localNotes, setLocalNotes] = useState(outfit?.notes ?? '');
   const [localTags, setLocalTags] = useState<string[]>(outfit?.tags ?? []);
   const [tagDraft, setTagDraft] = useState('');
 
   useEffect(() => {
     if (outfit) {
+      setLocalName(outfit.name);
       setLocalNotes(outfit.notes ?? '');
       setLocalTags(outfit.tags ?? []);
     }
@@ -178,6 +180,13 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tagInputRef = useRef<TextInput>(null);
   const notesInputRef = useRef<TextInput>(null);
+
+  const saveName = useCallback(() => {
+    if (!outfit) return;
+    const trimmed = localName.trim();
+    if (!trimmed || trimmed === outfit.name) return;
+    updateOutfit.mutate({ id: outfit.id, name: trimmed });
+  }, [localName, outfit, updateOutfit]);
 
   const saveNotes = useCallback(() => {
     if (!outfit) return;
@@ -320,7 +329,16 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
 
         {/* ── Title ── */}
         <View style={[styles.header, { maxWidth: width }]}>
-          <Text style={styles.name}>{outfit.name}</Text>
+          <TextInput
+            style={styles.name}
+            value={localName}
+            onChangeText={setLocalName}
+            onBlur={saveName}
+            onSubmitEditing={saveName}
+            returnKeyType="done"
+            autoCapitalize="words"
+            selectTextOnFocus
+          />
           {outfit.event ? (
             <View style={styles.eventRow}>
               <Ionicons name="calendar-outline" size={14} color={colors.mutedForeground} />

@@ -927,6 +927,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
                   multiValue={editMaterials}
                   onMultiToggle={(v) => setEditMaterials((prev) => prev.includes(v) ? prev.filter((m) => m !== v) : [...prev, v])}
                   placeholder="Select fabrics…"
+                  searchable
                 />
                 <View style={editStyles.spacer} />
                 <EditLabel>Care instructions</EditLabel>

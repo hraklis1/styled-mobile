@@ -1,8 +1,7 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
-  Modal,
   TouchableOpacity,
   Image,
   StyleSheet,
@@ -15,6 +14,13 @@ import {
   Alert,
   Linking,
 } from 'react-native';
+import {
+  BottomSheetModal,
+  BottomSheetScrollView,
+  BottomSheetBackdrop,
+  BottomSheetFooter,
+  type BottomSheetFooterProps,
+} from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -27,12 +33,16 @@ import {
   useBrandSuggestions,
   type PoseScanItem,
 } from '../../hooks/useItems';
+import { useAuth } from '../../contexts/AuthContext';
+import { api } from '../../lib/api';
 import { colors, spacing, typography, radii } from '../../theme';
 import { CATEGORY_LABELS, type Item, type ItemCategory } from '../../types/item';
 import { BrandAutocompleteInput } from '../primitives/BrandAutocompleteInput';
 import { TaxonomySelector } from '../primitives/TaxonomySelector';
 import { SizeProfileInput } from '../primitives/SizeProfileInput';
 import type { SizeProfile } from '../../lib/sizes';
+import { CropAdjustModal, type Bbox } from './CropAdjustModal';
+import { cropImage } from '../../lib/cropImage';
 import * as Haptics from 'expo-haptics';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -43,9 +53,9 @@ const MAX_PHOTOS = 10;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Phase = 'idle' | 'processing' | 'review' | 'saving';
+type Phase = 'idle' | 'processing' | 'pre-extract' | 'extracting' | 'review' | 'saving';
 
-type PhotoStatus = 'pending' | 'scanning' | 'extracting' | 'done' | 'error';
+type PhotoStatus = 'pending' | 'scanning' | 'done' | 'error';
 
 type PhotoJob = {
   id: string;
@@ -53,6 +63,16 @@ type PhotoJob = {
   status: PhotoStatus;
   itemCount: number;
   errorMsg: string | null;
+};
+
+type PreExtractItemData = {
+  tempId: string;
+  name: string;
+  category: string;
+  croppedImage: string | null;
+  bbox: Bbox | null;
+  sourceImage: string;
+  brandHint: string;
 };
 
 type EditableItem = {
@@ -73,7 +93,12 @@ type EditableItem = {
   formalityStyles: string[];
   notableDetails: string[];
   colorPalette: string[];
+  colorNormalized: string | null;
+  colorTemperature: string | null;
+  warmthRating: number | null;
   croppedImage: string | null;
+  bbox: Bbox | null;
+  sourceImage: string | null;
   expanded: boolean;
   sizeProfile: SizeProfile | null;
 };
@@ -90,27 +115,54 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
   const insets = useSafeAreaInsets();
   const [phase, setPhase] = useState<Phase>('idle');
   const [photoJobs, setPhotoJobs] = useState<PhotoJob[]>([]);
+  const [preExtractItems, setPreExtractItems] = useState<PreExtractItemData[]>([]);
   const [allItems, setAllItems] = useState<EditableItem[]>([]);
+  const [extractionProgress, setExtractionProgress] = useState({ current: 0, total: 0 });
+  const [extractedThumbs, setExtractedThumbs] = useState<string[]>([]);
+  const [cropAdjustTarget, setCropAdjustTarget] = useState<{
+    tempId: string;
+    sourceImage: string;
+    bbox: Bbox;
+    itemName: string;
+    scope: 'pre-extract' | 'review';
+  } | null>(null);
   const sessionRef = useRef(0);
 
+  const { user } = useAuth();
   const createItem = useCreateItem();
 
   const reset = useCallback(() => {
     sessionRef.current += 1;
     setPhase('idle');
     setPhotoJobs([]);
+    setPreExtractItems([]);
     setAllItems([]);
+    setExtractionProgress({ current: 0, total: 0 });
+    setExtractedThumbs([]);
   }, []);
 
   const handleClose = useCallback(() => {
-    if (phase === 'processing' || phase === 'saving') return;
-    onClose();
-  }, [phase, onClose]);
+    if (phase === 'processing' || phase === 'saving' || phase === 'extracting') return;
+    bottomSheetRef.current?.dismiss();
+  }, [phase]);
 
-  // Reset when hidden
-  React.useEffect(() => {
-    if (!visible) reset();
-  }, [visible]);
+  const handleDismiss = useCallback(() => {
+    onClose();
+  }, [onClose]);
+
+  const canClose = phase === 'idle' || phase === 'review' || phase === 'pre-extract';
+
+  // ── BottomSheetModal ──────────────────────────────────────────────────────────
+  const bottomSheetRef = useRef<BottomSheetModal>(null);
+  const snapPoints = useMemo(() => ['92%'], []);
+
+  useEffect(() => {
+    bottomSheetRef.current?.present();
+  }, []);
+
+  const updateJob = (id: string, patch: Partial<PhotoJob>) => {
+    setPhotoJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...patch } : j)));
+  };
 
   const pickPhotos = async () => {
     const { status } = await ImagePicker.getMediaLibraryPermissionsAsync();
@@ -152,7 +204,7 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
     setPhotoJobs(jobs);
     setPhase('processing');
 
-    const accumulatedItems: EditableItem[] = [];
+    const accumulated: PreExtractItemData[] = [];
 
     for (let i = 0; i < assets.length; i++) {
       if (sessionRef.current !== session) return;
@@ -160,7 +212,6 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
       const asset = assets[i];
       const jobId = jobs[i].id;
 
-      // Compress photo
       let compressed: { uri: string; dataUrl: string };
       try {
         compressed = await compressImageToDataUrl(
@@ -175,7 +226,6 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
 
       updateJob(jobId, { thumbDataUrl: compressed.dataUrl, status: 'scanning' });
 
-      // Pose scan
       let poseItems: PoseScanItem[] = [];
       try {
         const base64 = compressed.dataUrl.includes(',')
@@ -190,67 +240,32 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
 
       if (sessionRef.current !== session) return;
 
-      if (poseItems.length === 0) {
-        updateJob(jobId, { status: 'done', itemCount: 0 });
-        continue;
-      }
+      const preItems: PreExtractItemData[] = poseItems.map((poseItem) => ({
+        tempId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: poseItem.name,
+        category: poseItem.category,
+        croppedImage: poseItem.croppedWebP
+          ? `data:image/webp;base64,${poseItem.croppedWebP}`
+          : null,
+        bbox: poseItem.bbox_pct
+          ? {
+              x: poseItem.bbox_pct.x,
+              y: poseItem.bbox_pct.y,
+              width: poseItem.bbox_pct.width,
+              height: poseItem.bbox_pct.height,
+            }
+          : null,
+        sourceImage: compressed.dataUrl,
+        brandHint: '',
+      }));
 
-      updateJob(jobId, { status: 'extracting' });
-
-      // Extract item details in parallel
-      const settled = await Promise.allSettled(
-        poseItems.map(async (poseItem) => {
-          const croppedImage = poseItem.croppedWebP
-            ? `data:image/webp;base64,${poseItem.croppedWebP}`
-            : null;
-          const imageData = croppedImage ?? compressed.dataUrl;
-          const otherItems = poseItems
-            .filter((p) => p !== poseItem)
-            .map((p) => `${p.name} (${p.category})`)
-            .join(', ');
-
-          const result = await scanItemDirect({ imageData, outfitContext: otherItems || undefined });
-          return { result, croppedImage };
-        }),
-      );
-
-      if (sessionRef.current !== session) return;
-
-      const extracted: EditableItem[] = [];
-      for (const s of settled) {
-        if (s.status !== 'fulfilled') continue;
-        const { result, croppedImage } = s.value;
-        extracted.push({
-          tempId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          name: result.name || 'Unknown Item',
-          brand: result.brand ?? null,
-          category: result.category ?? null,
-          subcategory: result.subcategory ?? null,
-          color: result.color ?? null,
-          style: result.style ?? null,
-          seasons: result.seasons ?? [],
-          occasions: result.occasions ?? [],
-          material: result.material ?? null,
-          fit: result.fit ?? null,
-          pattern: result.pattern ?? null,
-          neckline: result.neckline ?? null,
-          care: result.care ?? null,
-          formalityStyles: result.formalityStyles ?? [],
-          notableDetails: result.notableDetails ?? [],
-          colorPalette: result.colorPalette ?? [],
-          croppedImage,
-          expanded: false,
-          sizeProfile: null,
-        });
-      }
-
-      accumulatedItems.push(...extracted);
-      updateJob(jobId, { status: 'done', itemCount: extracted.length });
+      accumulated.push(...preItems);
+      updateJob(jobId, { status: 'done', itemCount: preItems.length });
     }
 
     if (sessionRef.current !== session) return;
 
-    if (accumulatedItems.length === 0) {
+    if (accumulated.length === 0) {
       Alert.alert(
         'Nothing detected',
         'No clothing items were found in the selected photos. Try photos with better lighting or clearer clothing.',
@@ -259,14 +274,102 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
       return;
     }
 
-    setAllItems(accumulatedItems);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setPhase('review');
+    setPreExtractItems(accumulated);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setPhase('pre-extract');
   };
 
-  const updateJob = (id: string, patch: Partial<PhotoJob>) => {
-    setPhotoJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...patch } : j)));
-  };
+  const runExtraction = useCallback(async () => {
+    if (preExtractItems.length === 0) return;
+    const session = sessionRef.current;
+    const total = preExtractItems.length;
+    setPhase('extracting');
+    setExtractionProgress({ current: 0, total });
+    setExtractedThumbs([]);
+
+    let completedCount = 0;
+
+    const settled = await Promise.allSettled(
+      preExtractItems.map(async (preItem, idx) => {
+        if (sessionRef.current !== session) throw new Error('session_changed');
+
+        const imageData = preItem.croppedImage ?? preItem.sourceImage;
+        const otherItems = preExtractItems
+          .filter((_, i) => i !== idx)
+          .map((o) => `${o.name} (${o.category})`)
+          .join(', ');
+
+        const result = await scanItemDirect({
+          imageData,
+          outfitContext: otherItems || undefined,
+          brandHint: preItem.brandHint || undefined,
+        });
+
+        if (sessionRef.current !== session) throw new Error('session_changed');
+
+        completedCount += 1;
+        setExtractionProgress({ current: completedCount, total });
+        if (preItem.croppedImage) {
+          setExtractedThumbs((prev) => [...prev, preItem.croppedImage!]);
+        }
+
+        return {
+          result,
+          croppedImage: preItem.croppedImage,
+          bbox: preItem.bbox,
+          sourceImage: preItem.sourceImage,
+        };
+      }),
+    );
+
+    if (sessionRef.current !== session) return;
+
+    const extracted: EditableItem[] = [];
+    for (const s of settled) {
+      if (s.status !== 'fulfilled') continue;
+      const { result, croppedImage, bbox, sourceImage } = s.value;
+      extracted.push({
+        tempId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: result.name || 'Unknown Item',
+        brand: result.brand ?? null,
+        category: result.category ?? null,
+        subcategory: result.subcategory ?? null,
+        color: result.color ?? null,
+        style: result.style ?? null,
+        seasons: result.seasons?.length ? result.seasons : [],
+        occasions: result.occasions?.length ? result.occasions : [],
+        material: result.material ?? null,
+        fit: result.fit ?? null,
+        pattern: result.pattern ?? null,
+        neckline: result.neckline ?? null,
+        care: result.care ?? null,
+        formalityStyles: result.formalityStyles ?? [],
+        notableDetails: result.notableDetails ?? [],
+        colorPalette: result.colorPalette ?? [],
+        colorNormalized: result.colorNormalized ?? null,
+        colorTemperature: result.colorTemperature ?? null,
+        warmthRating: result.warmthRating ?? null,
+        croppedImage,
+        bbox,
+        sourceImage,
+        expanded: false,
+        sizeProfile: null,
+      });
+    }
+
+    if (extracted.length === 0) {
+      Alert.alert(
+        'Extraction failed',
+        "Couldn't extract details for any items. Please try again.",
+        [{ text: 'OK', onPress: () => setPhase('pre-extract') }],
+      );
+      return;
+    }
+
+    setAllItems(extracted);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setPhase('review');
+  }, [preExtractItems]);
 
   const updateItem = useCallback((tempId: string, patch: Partial<EditableItem>) => {
     setAllItems((prev) => prev.map((it) => (it.tempId === tempId ? { ...it, ...patch } : it)));
@@ -277,14 +380,130 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
     setAllItems((prev) => prev.filter((it) => it.tempId !== tempId));
   }, []);
 
-  const handleSaveAll = async () => {
+  const updatePreExtractItem = useCallback((tempId: string, patch: Partial<PreExtractItemData>) => {
+    setPreExtractItems((prev) =>
+      prev.map((it) => (it.tempId === tempId ? { ...it, ...patch } : it)),
+    );
+  }, []);
+
+  const removePreExtractItem = useCallback((tempId: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setPreExtractItems((prev) => {
+      const next = prev.filter((it) => it.tempId !== tempId);
+      if (next.length === 0) {
+        setPhase('idle');
+        setPhotoJobs([]);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleAdjustCrop = useCallback(
+    (tempId: string) => {
+      const item = allItems.find((it) => it.tempId === tempId);
+      if (!item?.sourceImage || !item.bbox) return;
+      setCropAdjustTarget({
+        tempId,
+        sourceImage: item.sourceImage,
+        bbox: item.bbox,
+        itemName: item.name,
+        scope: 'review',
+      });
+    },
+    [allItems],
+  );
+
+  const handlePreExtractAdjustCrop = useCallback(
+    (tempId: string) => {
+      const item = preExtractItems.find((it) => it.tempId === tempId);
+      if (!item?.bbox) return;
+      setCropAdjustTarget({
+        tempId,
+        sourceImage: item.sourceImage,
+        bbox: item.bbox,
+        itemName: item.name,
+        scope: 'pre-extract',
+      });
+    },
+    [preExtractItems],
+  );
+
+  const handleCropApply = useCallback(
+    async (newBbox: Bbox) => {
+      if (!cropAdjustTarget) return;
+      const newCrop = await cropImage(cropAdjustTarget.sourceImage, newBbox, { maxDim: 800 });
+      if (newCrop) {
+        if (cropAdjustTarget.scope === 'pre-extract') {
+          updatePreExtractItem(cropAdjustTarget.tempId, { croppedImage: newCrop, bbox: newBbox });
+        } else {
+          updateItem(cropAdjustTarget.tempId, { croppedImage: newCrop, bbox: newBbox });
+        }
+      }
+      setCropAdjustTarget(null);
+    },
+    [cropAdjustTarget, updatePreExtractItem, updateItem],
+  );
+
+  const uploadImageToR2 = async (dataUrl: string): Promise<string> => {
+    const commaIdx = dataUrl.indexOf(',');
+    const meta = dataUrl.slice(0, commaIdx);
+    const base64 = dataUrl.slice(commaIdx + 1);
+    const mimeType = meta.slice(5).replace(';base64', '') || 'image/jpeg';
+    const ext = mimeType.includes('webp') ? 'webp' : 'jpg';
+    const fileName = `users/${user!.id}/items/${Date.now()}-${crypto.randomUUID()}.${ext}`;
+
+    const { presignedUrl, publicUrl } = await api
+      .post<{ presignedUrl: string; publicUrl: string }>('/api/upload-url', {
+        fileName,
+        fileType: mimeType,
+      })
+      .then((r) => r.data);
+
+    const binaryStr = atob(base64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i);
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('PUT', presignedUrl);
+      xhr.setRequestHeader('Content-Type', mimeType);
+      xhr.onload = () =>
+        xhr.status >= 200 && xhr.status < 300
+          ? resolve()
+          : reject(new Error(`R2 upload failed: ${xhr.status}`));
+      xhr.onerror = () => reject(new Error('R2 upload network error'));
+      xhr.send(bytes.buffer);
+    });
+
+    return publicUrl;
+  };
+
+  const handleSaveAll = useCallback(async () => {
     if (allItems.length === 0) return;
+    if (!user) {
+      console.error('User not authenticated');
+      return;
+    }
     const session = sessionRef.current;
     setPhase('saving');
 
     const savedItems: Item[] = [];
 
     for (const item of allItems) {
+      const enrichmentFields = [item.brand, item.material, item.fit, item.subcategory];
+      const needsDetails = enrichmentFields.filter(Boolean).length === 0;
+
+      let imageUrl: string | null = null;
+      if (item.croppedImage) {
+        try {
+          imageUrl = await uploadImageToR2(item.croppedImage);
+        } catch {
+          imageUrl = item.croppedImage;
+        }
+      }
+
       try {
         const created = await new Promise<Item>((resolve, reject) => {
           createItem.mutate(
@@ -297,6 +516,9 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
               style: item.style || null,
               seasons: item.seasons ?? [],
               occasions: item.occasions ?? [],
+              colorNormalized: item.colorNormalized ?? null,
+              colorTemperature: item.colorTemperature ?? null,
+              warmthRating: item.warmthRating ?? null,
               material: item.material || null,
               fit: item.fit || null,
               pattern: item.pattern || null,
@@ -305,8 +527,9 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
               formalityStyles: item.formalityStyles.length > 0 ? item.formalityStyles : undefined,
               notableDetails: item.notableDetails.length > 0 ? item.notableDetails : undefined,
               colorPalette: item.colorPalette.length > 0 ? item.colorPalette : undefined,
-              imageUrl: item.croppedImage,
+              imageUrl,
               sizeProfile: item.sizeProfile ?? null,
+              needsDetails,
             },
             { onSuccess: resolve, onError: reject },
           );
@@ -328,7 +551,69 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
       Alert.alert('Save failed', 'Could not save any items. Please try again.');
       setPhase('review');
     }
-  };
+  }, [allItems, user, createItem, onItemsSaved, onClose]);
+
+  const renderBackdrop = useCallback(
+    (props: any) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        opacity={0.5}
+        pressBehavior={canClose ? 'close' : 'none'}
+      />
+    ),
+    [canClose],
+  );
+
+  const renderFooter = useCallback(
+    (props: BottomSheetFooterProps) => {
+      if (phase === 'pre-extract' && preExtractItems.length > 0) {
+        return (
+          <BottomSheetFooter {...props} bottomInset={insets.bottom}>
+            <View style={styles.footer}>
+              <TouchableOpacity
+                style={styles.saveBtn}
+                onPress={runExtraction}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="sparkles" size={20} color={colors.primaryForeground} />
+                <Text style={styles.saveBtnText}>Extract Details</Text>
+              </TouchableOpacity>
+            </View>
+          </BottomSheetFooter>
+        );
+      }
+
+      if ((phase !== 'review' && phase !== 'saving') || allItems.length === 0) return null;
+      return (
+        <BottomSheetFooter {...props} bottomInset={insets.bottom}>
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={[styles.saveBtn, phase === 'saving' && styles.saveBtnBusy]}
+              onPress={handleSaveAll}
+              disabled={phase === 'saving'}
+              activeOpacity={0.85}
+            >
+              {phase === 'saving' ? (
+                <ActivityIndicator size="small" color={colors.primaryForeground} />
+              ) : (
+                <Ionicons name="checkmark" size={20} color={colors.primaryForeground} />
+              )}
+              <Text style={styles.saveBtnText}>
+                {phase === 'saving'
+                  ? 'Adding to wardrobe…'
+                  : allItems.length === 1
+                  ? 'Add to wardrobe'
+                  : `Add all ${allItems.length} to wardrobe`}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </BottomSheetFooter>
+      );
+    },
+    [phase, preExtractItems.length, allItems.length, runExtraction, handleSaveAll, insets.bottom],
+  );
 
   const doneCount = photoJobs.filter((j) => j.status === 'done' || j.status === 'error').length;
   const totalCount = photoJobs.length;
@@ -337,31 +622,37 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
   const headerTitle =
     phase === 'idle' ? 'Batch Scan'
     : phase === 'processing' ? `Scanning ${doneCount}/${totalCount} photos…`
+    : phase === 'pre-extract'
+      ? preExtractItems.length === 1
+        ? 'Verify & add details'
+        : `${preExtractItems.length} items — verify & add details`
+    : phase === 'extracting' ? 'Extracting details…'
     : phase === 'saving' ? 'Adding to wardrobe…'
     : allItems.length === 1 ? '1 item detected'
     : `${allItems.length} items detected`;
 
-  const canClose = phase === 'idle' || phase === 'review';
-
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      statusBarTranslucent
-      onRequestClose={handleClose}
-    >
-      <View style={styles.overlay}>
-        <TouchableOpacity
-          style={styles.backdrop}
-          activeOpacity={1}
-          onPress={canClose ? handleClose : undefined}
-        />
-
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-          <View style={styles.handle} />
-
-          {/* Header */}
+    <>
+      <BottomSheetModal
+        ref={bottomSheetRef}
+        snapPoints={snapPoints}
+        onDismiss={handleDismiss}
+        backdropComponent={renderBackdrop}
+        footerComponent={renderFooter}
+        handleIndicatorStyle={styles.handle}
+        backgroundStyle={styles.sheetBackground}
+        enablePanDownToClose={canClose}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+      >
+        <BottomSheetScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.bodyContent}
+          enableFooterMarginAdjustment
+          stickyHeaderIndices={[0]}
+        >
+          {/* Sticky header */}
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <Ionicons name="images-outline" size={18} color={colors.primary} />
@@ -378,60 +669,54 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
           </View>
 
           {/* Body */}
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            style={styles.body}
-            contentContainerStyle={styles.bodyContent}
-          >
-            {phase === 'idle' && <IdleContent onPickPhotos={pickPhotos} />}
+          {phase === 'idle' && <IdleContent onPickPhotos={pickPhotos} />}
 
-            {phase === 'processing' && (
-              <ProcessingContent
-                jobs={photoJobs}
-                doneCount={doneCount}
-                totalCount={totalCount}
-                errorCount={errorCount}
-              />
-            )}
-
-            {(phase === 'review' || phase === 'saving') && allItems.length > 0 && (
-              <ReviewContent
-                items={allItems}
-                onUpdateItem={updateItem}
-                onRemoveItem={removeItem}
-                disabled={phase === 'saving'}
-              />
-            )}
-          </ScrollView>
-
-          {/* Footer */}
-          {(phase === 'review' || phase === 'saving') && allItems.length > 0 && (
-            <View style={styles.footer}>
-              <TouchableOpacity
-                style={[styles.saveBtn, phase === 'saving' && styles.saveBtnBusy]}
-                onPress={handleSaveAll}
-                disabled={phase === 'saving'}
-                activeOpacity={0.85}
-              >
-                {phase === 'saving' ? (
-                  <ActivityIndicator size="small" color={colors.primaryForeground} />
-                ) : (
-                  <Ionicons name="checkmark" size={20} color={colors.primaryForeground} />
-                )}
-                <Text style={styles.saveBtnText}>
-                  {phase === 'saving'
-                    ? 'Adding to wardrobe…'
-                    : allItems.length === 1
-                    ? 'Add to wardrobe'
-                    : `Add all ${allItems.length} to wardrobe`}
-                </Text>
-              </TouchableOpacity>
-            </View>
+          {phase === 'processing' && (
+            <ProcessingContent
+              jobs={photoJobs}
+              doneCount={doneCount}
+              totalCount={totalCount}
+              errorCount={errorCount}
+            />
           )}
-        </View>
-      </View>
-    </Modal>
+
+          {phase === 'pre-extract' && preExtractItems.length > 0 && (
+            <PreExtractList
+              items={preExtractItems}
+              onUpdateItem={updatePreExtractItem}
+              onRemoveItem={removePreExtractItem}
+              onAdjustCrop={handlePreExtractAdjustCrop}
+            />
+          )}
+
+          {phase === 'extracting' && (
+            <ExtractingContent
+              progress={extractionProgress}
+              thumbs={extractedThumbs}
+            />
+          )}
+
+          {(phase === 'review' || phase === 'saving') && allItems.length > 0 && (
+            <ReviewContent
+              items={allItems}
+              onUpdateItem={updateItem}
+              onRemoveItem={removeItem}
+              onAdjustCrop={handleAdjustCrop}
+              disabled={phase === 'saving'}
+            />
+          )}
+        </BottomSheetScrollView>
+      </BottomSheetModal>
+
+      <CropAdjustModal
+        visible={cropAdjustTarget !== null}
+        sourceImage={cropAdjustTarget?.sourceImage ?? ''}
+        initialBbox={cropAdjustTarget?.bbox ?? null}
+        itemName={cropAdjustTarget?.itemName ?? ''}
+        onApply={handleCropApply}
+        onCancel={() => setCropAdjustTarget(null)}
+      />
+    </>
   );
 }
 
@@ -506,7 +791,6 @@ function ProcessingContent({
 
   return (
     <View style={procStyles.container}>
-      {/* Overall progress bar */}
       <View style={procStyles.progressSection}>
         <AnimatedProgressBar progress={progressPct} />
         <Text style={procStyles.progressLabel}>
@@ -515,7 +799,6 @@ function ProcessingContent({
         </Text>
       </View>
 
-      {/* Per-photo grid */}
       <View style={procStyles.photoGrid}>
         {jobs.map((job) => (
           <PhotoJobCard key={job.id} job={job} />
@@ -529,21 +812,18 @@ function PhotoJobCard({ job }: { job: PhotoJob }) {
   const statusIcon: Record<PhotoStatus, string> = {
     pending: 'ellipse-outline',
     scanning: 'search-outline',
-    extracting: 'color-wand-outline',
     done: 'checkmark-circle',
     error: 'alert-circle',
   };
   const statusColor: Record<PhotoStatus, string> = {
     pending: colors.mutedForeground,
     scanning: colors.primary,
-    extracting: colors.primary,
     done: colors.primary,
     error: colors.error,
   };
   const statusLabel: Record<PhotoStatus, string> = {
     pending: 'Waiting…',
     scanning: 'Scanning…',
-    extracting: 'Extracting…',
     done: job.itemCount === 0 ? 'No items' : `${job.itemCount} item${job.itemCount === 1 ? '' : 's'}`,
     error: job.errorMsg ?? 'Failed',
   };
@@ -558,7 +838,7 @@ function PhotoJobCard({ job }: { job: PhotoJob }) {
         </View>
       )}
       <View style={procStyles.photoStatus}>
-        {job.status === 'scanning' || job.status === 'extracting' ? (
+        {job.status === 'scanning' ? (
           <ActivityIndicator size="small" color={colors.primary} />
         ) : (
           <Ionicons
@@ -613,33 +893,248 @@ const procStyles = StyleSheet.create({
   },
 });
 
+// ─── PreExtractList ───────────────────────────────────────────────────────────
+
+function PreExtractList({
+  items,
+  onUpdateItem,
+  onRemoveItem,
+  onAdjustCrop,
+}: {
+  items: PreExtractItemData[];
+  onUpdateItem: (id: string, patch: Partial<PreExtractItemData>) => void;
+  onRemoveItem: (id: string) => void;
+  onAdjustCrop: (id: string) => void;
+}) {
+  const brandSuggestions = useBrandSuggestions();
+
+  return (
+    <View style={preExtractStyles.container}>
+      <Text style={preExtractStyles.hint}>
+        Optionally enter the brand to improve AI accuracy, then tap Extract Details.
+      </Text>
+      {items.map((item, idx) => (
+        <View key={item.tempId} style={{ zIndex: items.length - idx }}>
+          <PreExtractCard
+            item={item}
+            brandSuggestions={brandSuggestions}
+            onUpdate={(patch) => onUpdateItem(item.tempId, patch)}
+            onRemove={() => onRemoveItem(item.tempId)}
+            onAdjustCrop={() => onAdjustCrop(item.tempId)}
+          />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function PreExtractCard({
+  item,
+  brandSuggestions,
+  onUpdate,
+  onRemove,
+  onAdjustCrop,
+}: {
+  item: PreExtractItemData;
+  brandSuggestions: string[];
+  onUpdate: (patch: Partial<PreExtractItemData>) => void;
+  onRemove: () => void;
+  onAdjustCrop: () => void;
+}) {
+  return (
+    <View style={preExtractCardStyles.card}>
+      <View style={cardStyles.thumb}>
+        {item.croppedImage ? (
+          <Image source={{ uri: item.croppedImage }} style={cardStyles.thumbImg} resizeMode="cover" />
+        ) : (
+          <Ionicons name="shirt-outline" size={22} color={colors.mutedForeground} />
+        )}
+        {item.bbox && (
+          <TouchableOpacity
+            style={cardStyles.cropBtn}
+            onPress={onAdjustCrop}
+            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            accessibilityLabel="Adjust crop"
+          >
+            <Ionicons name="crop-outline" size={11} color={colors.white} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <View style={preExtractCardStyles.content}>
+        <Text style={preExtractCardStyles.itemName} numberOfLines={1}>{item.name}</Text>
+        <BrandAutocompleteInput
+          value={item.brandHint}
+          onChangeText={(v) => onUpdate({ brandHint: v })}
+          onSelect={(v) => onUpdate({ brandHint: v })}
+          suggestions={brandSuggestions}
+          placeholder="Brand (optional)"
+        />
+      </View>
+
+      <TouchableOpacity
+        onPress={onRemove}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        accessibilityLabel="Remove item"
+      >
+        <Ionicons name="trash-outline" size={18} color={colors.error} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const preExtractStyles = StyleSheet.create({
+  container: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, gap: spacing.sm },
+  hint: {
+    fontSize: typography.size.sm,
+    color: colors.mutedForeground,
+    lineHeight: typography.size.sm * 1.5,
+    marginBottom: spacing.xs,
+  },
+});
+
+const preExtractCardStyles = StyleSheet.create({
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+  },
+  content: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  itemName: {
+    fontSize: typography.size.sm,
+    color: colors.mutedForeground,
+    fontWeight: typography.weight.medium,
+  },
+});
+
+// ─── ExtractingContent ────────────────────────────────────────────────────────
+
+function ExtractingContent({
+  progress,
+  thumbs,
+}: {
+  progress: { current: number; total: number };
+  thumbs: string[];
+}) {
+  const progressPct =
+    progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
+
+  const statusMsg =
+    progress.current === 0
+      ? 'Analysing items in parallel…'
+      : progress.current < progress.total
+      ? 'Extracting styling details…'
+      : 'Wrapping up…';
+
+  return (
+    <View style={extractStyles.container}>
+      {thumbs.length > 0 ? (
+        <View style={extractStyles.thumbRow}>
+          {thumbs.map((uri, idx) => (
+            <Image key={idx} source={{ uri }} style={extractStyles.thumb} resizeMode="cover" />
+          ))}
+        </View>
+      ) : (
+        <ActivityIndicator size="large" color={colors.primary} />
+      )}
+
+      <View style={extractStyles.progressRow}>
+        <AnimatedProgressBar progress={progressPct} style={extractStyles.progressBar} />
+        <Text style={extractStyles.progressCount}>
+          {progress.current} / {progress.total}
+        </Text>
+      </View>
+
+      <Text style={extractStyles.statusMsg}>{statusMsg}</Text>
+    </View>
+  );
+}
+
+const extractStyles = StyleSheet.create({
+  container: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.lg,
+    alignItems: 'center',
+    gap: spacing.lg,
+  },
+  thumbRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    maxWidth: 280,
+  },
+  thumb: {
+    width: 60,
+    height: 60,
+    borderRadius: radii.md,
+    backgroundColor: colors.muted,
+    borderWidth: 2,
+    borderColor: colors.border,
+  },
+  progressRow: {
+    width: '100%',
+    maxWidth: 240,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  progressBar: { flex: 1 },
+  progressCount: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+    minWidth: 32,
+    textAlign: 'right',
+  },
+  statusMsg: {
+    fontSize: typography.size.sm,
+    color: colors.mutedForeground,
+  },
+});
+
 // ─── ReviewContent ────────────────────────────────────────────────────────────
 
 function ReviewContent({
   items,
   onUpdateItem,
   onRemoveItem,
+  onAdjustCrop,
   disabled,
 }: {
   items: EditableItem[];
   onUpdateItem: (id: string, patch: Partial<EditableItem>) => void;
   onRemoveItem: (id: string) => void;
+  onAdjustCrop: (id: string) => void;
   disabled: boolean;
 }) {
   const brandSuggestions = useBrandSuggestions();
 
   return (
     <View style={reviewStyles.container}>
+      <Text style={reviewStyles.hint}>
+        AI has extracted clothing details — tap any item to review or add more.
+      </Text>
       {items.map((item, idx) => (
-        <ItemCard
-          key={item.tempId}
-          item={item}
-          index={idx}
-          disabled={disabled}
-          brandSuggestions={brandSuggestions}
-          onUpdate={(patch) => onUpdateItem(item.tempId, patch)}
-          onRemove={() => onRemoveItem(item.tempId)}
-        />
+        <View key={item.tempId} style={{ zIndex: items.length - idx }}>
+          <ItemCard
+            item={item}
+            index={idx}
+            disabled={disabled}
+            brandSuggestions={brandSuggestions}
+            onUpdate={(patch) => onUpdateItem(item.tempId, patch)}
+            onRemove={() => onRemoveItem(item.tempId)}
+            onAdjustCrop={() => onAdjustCrop(item.tempId)}
+          />
+        </View>
       ))}
     </View>
   );
@@ -647,6 +1142,12 @@ function ReviewContent({
 
 const reviewStyles = StyleSheet.create({
   container: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, gap: spacing.sm },
+  hint: {
+    fontSize: typography.size.sm,
+    color: colors.mutedForeground,
+    lineHeight: typography.size.sm * 1.5,
+    marginBottom: spacing.xs,
+  },
 });
 
 // ─── ItemCard ─────────────────────────────────────────────────────────────────
@@ -685,6 +1186,7 @@ function ItemCard({
   brandSuggestions,
   onUpdate,
   onRemove,
+  onAdjustCrop,
 }: {
   item: EditableItem;
   index: number;
@@ -692,6 +1194,7 @@ function ItemCard({
   brandSuggestions: string[];
   onUpdate: (patch: Partial<EditableItem>) => void;
   onRemove: () => void;
+  onAdjustCrop: () => void;
 }) {
   const toggleExpand = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -711,6 +1214,16 @@ function ItemCard({
             <Image source={{ uri: item.croppedImage }} style={cardStyles.thumbImg} resizeMode="cover" />
           ) : (
             <Ionicons name="shirt-outline" size={22} color={colors.mutedForeground} />
+          )}
+          {!disabled && item.sourceImage && item.bbox && (
+            <TouchableOpacity
+              style={cardStyles.cropBtn}
+              onPress={onAdjustCrop}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+              accessibilityLabel="Adjust crop"
+            >
+              <Ionicons name="crop-outline" size={11} color={colors.white} />
+            </TouchableOpacity>
           )}
         </View>
 
@@ -793,7 +1306,9 @@ function ItemCard({
                       style={[cardStyles.pill, active && cardStyles.pillActive]}
                       onPress={() => {
                         const cur = item.seasons ?? [];
-                        onUpdate({ seasons: active ? cur.filter((s) => s !== value) : [...cur, value] });
+                        onUpdate({
+                          seasons: active ? cur.filter((s) => s !== value) : [...cur, value],
+                        });
                       }}
                       disabled={disabled}
                     >
@@ -854,7 +1369,6 @@ const cardStyles = StyleSheet.create({
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    overflow: 'hidden',
   },
   row: {
     flexDirection: 'row',
@@ -873,6 +1387,17 @@ const cardStyles = StyleSheet.create({
     flexShrink: 0,
   },
   thumbImg: { width: '100%', height: '100%' },
+  cropBtn: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   info: { flex: 1, gap: 3 },
   name: {
     fontSize: typography.size.md,
@@ -941,31 +1466,12 @@ function showLibraryDeniedAlert() {
 // ─── Sheet styles ─────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  backdrop: { ...StyleSheet.absoluteFill },
-  sheet: {
+  sheetBackground: {
     backgroundColor: colors.background,
-    borderTopLeftRadius: radii.xl,
-    borderTopRightRadius: radii.xl,
-    maxHeight: '92%',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: -4 },
-    elevation: 16,
   },
   handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
     backgroundColor: colors.border,
-    alignSelf: 'center',
-    marginTop: spacing.sm,
-    marginBottom: spacing.xs,
+    width: 36,
   },
   header: {
     flexDirection: 'row',
@@ -982,7 +1488,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
-  body: { flexGrow: 0 },
   bodyContent: { paddingBottom: spacing.xl },
   footer: {
     paddingHorizontal: spacing.lg,

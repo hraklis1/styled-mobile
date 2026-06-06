@@ -32,9 +32,7 @@ import { WardrobeListRow } from '../../components/wardrobe/WardrobeListRow';
 import { FilterPanel } from '../../components/wardrobe/FilterPanel';
 import { ScanItemSheet } from '../../components/wardrobe/ScanItemSheet';
 import { BatchScanSheet } from '../../components/wardrobe/BatchScanSheet';
-import { QuickCaptureSheet } from '../../components/wardrobe/QuickCaptureSheet';
 import { colors, shadows, spacing, typography, radii } from '../../theme';
-import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { CATEGORY_LABELS, CATEGORY_ORDER, type Item, type ItemCategory } from '../../types/item';
 import type { WardrobeListScreenProps } from '../../navigation/types';
 import * as Haptics from 'expo-haptics';
@@ -91,7 +89,6 @@ function sortItems(items: Item[], key: SortKey): Item[] {
 
 export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
   const insets = useSafeAreaInsets();
-  const { openStylist } = useGlobalAIStylist();
   const { data: items = [], isLoading, isError, refetch, isRefetching } = useItems();
   const { data: archivedItems = [], refetch: refetchArchived, isRefetching: isRefetchingArchived } = useArchivedItems();
   const archiveItems = useArchiveItems();
@@ -120,7 +117,6 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
   // ── Scan sheet ─────────────────────────────────────────────────────────
   const [scanSheetVisible, setScanSheetVisible] = useState(false);
   const [batchScanVisible, setBatchScanVisible] = useState(false);
-  const [quickCaptureVisible, setQuickCaptureVisible] = useState(false);
 
   // ── Add item form ──────────────────────────────────────────────────────
   const [newName, setNewName] = useState('');
@@ -381,15 +377,6 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
               : `${filteredItems.length} of ${items.length} pieces`}
           </Text>
         </View>
-        <View style={styles.headerActions}>
-          <TouchableOpacity
-            style={styles.headerBtn}
-            onPress={() => openStylist()}
-            accessibilityLabel="Open AI Stylist"
-          >
-            <Ionicons name="sparkles" size={20} color={colors.primary} />
-          </TouchableOpacity>
-        </View>
       </View>
 
       {/* ── Search bar ── */}
@@ -444,15 +431,6 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
           <Text style={[styles.actionChipText, activeFilterCount > 0 && styles.actionChipTextActive]}>
             {activeFilterCount > 0 ? `Filter · ${activeFilterCount}` : 'Filter'}
           </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.actionChip, styles.actionChipStylist]}
-          onPress={() => openStylist()}
-          accessibilityLabel="Open AI Stylist"
-        >
-          <Ionicons name="sparkles" size={14} color={colors.primary} />
-          <Text style={[styles.actionChipText, styles.actionChipTextStylist]}>AI Stylist</Text>
         </TouchableOpacity>
 
         <View style={{ flex: 1 }} />
@@ -569,7 +547,7 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
                 </Text>
                 <TouchableOpacity
                   style={styles.emptyActionBtn}
-                  onPress={() => setQuickCaptureVisible(true)}
+                  onPress={() => setAddItemOpen(true)}
                   activeOpacity={0.8}
                   accessibilityLabel="Add your first wardrobe item"
                 >
@@ -955,10 +933,6 @@ export function WardrobeScreen({ navigation }: WardrobeListScreenProps) {
         onClose={() => setBatchScanVisible(false)}
       />
 
-      <QuickCaptureSheet
-        visible={quickCaptureVisible}
-        onClose={() => setQuickCaptureVisible(false)}
-      />
     </SafeAreaView>
   );
 }

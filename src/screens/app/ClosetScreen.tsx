@@ -20,17 +20,29 @@ import { useOutfits } from '../../hooks/useOutfits';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
 import { OutfitBuilderSheet } from '../../components/outfits/OutfitBuilderSheet';
 import { FilterPanel, parseMaterialString } from '../../components/wardrobe/FilterPanel';
+import { OutfitFilterPanel } from '../../components/outfits/OutfitFilterPanel';
 import { ClosetGrid } from '../../components/wardrobe/ClosetGrid';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { CATEGORY_LABELS, CATEGORY_ORDER, SEASON_OPTIONS, type ItemCategory } from '../../types/item';
 import { colors, shadows, spacing, typography, radii } from '../../theme';
-import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
+import { useGlobalScan } from '../../contexts/GlobalScanContext';
+import { useFabScroll } from '../../contexts/FabScrollContext';
+import { useFocusEffect } from '@react-navigation/native';
 import { PressableScale } from '../../components/primitives/PressableScale';
 import type { ClosetScreenProps } from '../../navigation/types';
 
 type SortKey = 'newest' | 'oldest' | 'name_asc' | 'name_desc' | 'most_worn' | 'least_worn' | 'recently_worn' | 'cost_per_wear';
+type OutfitSortKey = 'newest' | 'oldest' | 'most_worn' | 'recently_worn' | 'name_asc';
 type ViewMode = 'grid' | 'list';
 type Segment = 'pieces' | 'outfits';
+
+const OUTFIT_SORT_OPTIONS: { key: OutfitSortKey; label: string }[] = [
+  { key: 'newest',        label: 'Newest first' },
+  { key: 'oldest',        label: 'Oldest first' },
+  { key: 'most_worn',     label: 'Most worn' },
+  { key: 'recently_worn', label: 'Recently worn' },
+  { key: 'name_asc',      label: 'Name A → Z' },
+];
 
 const SIDE_PAD = spacing.lg;
 const COL_GAP  = spacing.sm;
@@ -54,7 +66,8 @@ const PILL_ROW_H   = 52;
 export function ClosetScreen({ navigation }: ClosetScreenProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { openStylist } = useGlobalAIStylist();
+  const { openScanItem } = useGlobalScan();
+  const { fabCollapsed } = useFabScroll();
 
   const [segment, setSegment]               = useState<Segment>('pieces');
   const [search, setSearch]                 = useState('');
@@ -71,6 +84,14 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
   const [selectedOccasions, setSelectedOccasions]   = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses]     = useState<string[]>([]);
   const [selectedMaterials, setSelectedMaterials]   = useState<string[]>([]);
+
+  // ── Outfit-segment filters ─────────────────────────────────────────────
+  const [outfitSortKey, setOutfitSortKey]         = useState<OutfitSortKey>('newest');
+  const [outfitSelectedTags, setOutfitSelectedTags]   = useState<string[]>([]);
+  const [outfitSelectedEvents, setOutfitSelectedEvents] = useState<string[]>([]);
+  const [outfitShowNeverWorn, setOutfitShowNeverWorn]   = useState(false);
+  const [outfitFilterSheetOpen, setOutfitFilterSheetOpen] = useState(false);
+
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds]     = useState<Set<number>>(new Set());
   const justLongPressedRef = useRef(false);
@@ -116,6 +137,23 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
      selectedOccasions, selectedStatuses, selectedMaterials],
   );
 
+  const allOutfitTags = useMemo(
+    () => [...new Set(outfits.flatMap(o => o.tags ?? []))].sort(),
+    [outfits],
+  );
+  const allOutfitEvents = useMemo(
+    () => [...new Set(outfits.filter(o => o.event).map(o => o.event!))].sort(),
+    [outfits],
+  );
+  const outfitActiveFilterCount = useMemo(
+    () =>
+      (outfitSortKey !== 'newest' ? 1 : 0) +
+      outfitSelectedTags.length +
+      outfitSelectedEvents.length +
+      (outfitShowNeverWorn ? 1 : 0),
+    [outfitSortKey, outfitSelectedTags, outfitSelectedEvents, outfitShowNeverWorn],
+  );
+
   // ── Hide-on-scroll ─────────────────────────────────────────────────────────
   // collapsibleAnim drives maxHeight on the search+pills container.
   // Collapses on downward scroll past a threshold, re-expands on upward scroll.
@@ -123,6 +161,10 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
   const lastScrollY      = useRef(0);
   const isCollapsed      = useRef(false);
   const collapsibleAnim  = useRef(new Animated.Value(SEARCH_ROW_H + PILL_ROW_H)).current;
+
+  useFocusEffect(useCallback(() => {
+    fabCollapsed.value = 0;
+  }, [fabCollapsed]));
 
   const expandCollapsible = useCallback(() => {
     if (!isCollapsed.current) return;
@@ -153,14 +195,17 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
       lastScrollY.current = y;
 
       if (y <= 10) {
+        if (isCollapsed.current) fabCollapsed.value = 0;
         expandCollapsible();
       } else if (delta > 6) {
+        if (!isCollapsed.current) fabCollapsed.value = 1;
         collapseCollapsible();
       } else if (delta < -6) {
+        if (isCollapsed.current) fabCollapsed.value = 0;
         expandCollapsible();
       }
     },
-    [expandCollapsible, collapseCollapsible],
+    [fabCollapsed, expandCollapsible, collapseCollapsible],
   );
 
   // ── Category data ──────────────────────────────────────────────────────────
@@ -244,15 +289,41 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
       selectedStatuses, selectedMaterials]);
 
   const filteredOutfits = useMemo(() => {
-    if (!search.trim()) return outfits;
-    const q = search.trim().toLowerCase();
-    return outfits.filter(
-      o =>
-        o.name.toLowerCase().includes(q) ||
-        (o.event ?? '').toLowerCase().includes(q) ||
-        (o.tags ?? []).some(t => t.toLowerCase().includes(q)),
-    );
-  }, [outfits, search]);
+    let result = outfits;
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      result = result.filter(
+        o =>
+          o.name.toLowerCase().includes(q) ||
+          (o.event ?? '').toLowerCase().includes(q) ||
+          (o.tags ?? []).some(t => t.toLowerCase().includes(q)),
+      );
+    }
+    if (outfitSelectedTags.length)
+      result = result.filter(o => outfitSelectedTags.every(t => (o.tags ?? []).includes(t)));
+    if (outfitSelectedEvents.length)
+      result = result.filter(o => o.event && outfitSelectedEvents.includes(o.event));
+    if (outfitShowNeverWorn)
+      result = result.filter(o => o.wearCount === 0);
+
+    const arr = [...result];
+    if (outfitSortKey === 'oldest')
+      arr.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    else if (outfitSortKey === 'most_worn')
+      arr.sort((a, b) => b.wearCount - a.wearCount);
+    else if (outfitSortKey === 'recently_worn')
+      arr.sort((a, b) => {
+        if (!a.lastWornAt && !b.lastWornAt) return 0;
+        if (!a.lastWornAt) return 1;
+        if (!b.lastWornAt) return -1;
+        return new Date(b.lastWornAt).getTime() - new Date(a.lastWornAt).getTime();
+      });
+    else if (outfitSortKey === 'name_asc')
+      arr.sort((a, b) => a.name.localeCompare(b.name));
+    else
+      arr.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return arr;
+  }, [outfits, search, outfitSelectedTags, outfitSelectedEvents, outfitShowNeverWorn, outfitSortKey]);
 
   // ── Segment switch ─────────────────────────────────────────────────────────
 
@@ -271,6 +342,10 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
       setSelectedOccasions([]);
       setSelectedStatuses([]);
       setSelectedMaterials([]);
+      setOutfitSortKey('newest');
+      setOutfitSelectedTags([]);
+      setOutfitSelectedEvents([]);
+      setOutfitShowNeverWorn(false);
       setSegment(next);
       expandCollapsible();
     },
@@ -484,16 +559,18 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
     </View>
   );
 
+  const hasActiveOutfitFilters = search.trim().length > 0 || outfitActiveFilterCount > 0;
+
   const emptyOutfits = (
     <View style={styles.emptyState}>
       <View style={styles.emptyIcon}>
         <Ionicons name="layers-outline" size={32} color={colors.mutedForeground} />
       </View>
       <Text style={styles.emptyTitle}>
-        {search ? 'No outfits match' : 'No outfits yet'}
+        {hasActiveOutfitFilters ? 'No outfits match' : 'No outfits yet'}
       </Text>
       <Text style={styles.emptySub}>
-        {search ? 'Try a different search' : 'Build outfits from your pieces'}
+        {hasActiveOutfitFilters ? 'Try adjusting your search or filters' : 'Build outfits from your pieces'}
       </Text>
     </View>
   );
@@ -512,10 +589,10 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
         <View style={styles.headerActions}>
           <PressableScale
             contentStyle={styles.headerBtn}
-            onPress={() => openStylist()}
-            accessibilityLabel="Open AI Stylist"
+            onPress={() => openScanItem()}
+            accessibilityLabel="Add to wardrobe"
           >
-            <Ionicons name="sparkles" size={20} color={colors.primary} />
+            <Ionicons name="add" size={22} color={colors.foreground} />
           </PressableScale>
           <PressableScale
             contentStyle={styles.headerBtn}
@@ -592,6 +669,24 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
               {activeFilterCount > 0 && (
                 <View style={styles.filterBadge}>
                   <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+                </View>
+              )}
+            </PressableScale>
+          )}
+          {segment === 'outfits' && (
+            <PressableScale
+              contentStyle={[styles.filterBtn, outfitActiveFilterCount > 0 && styles.filterBtnActive]}
+              onPress={() => setOutfitFilterSheetOpen(true)}
+              accessibilityLabel="Sort and filter outfits"
+            >
+              <Ionicons
+                name="options-outline"
+                size={18}
+                color={outfitActiveFilterCount > 0 ? colors.primaryForeground : colors.foreground}
+              />
+              {outfitActiveFilterCount > 0 && (
+                <View style={styles.filterBadge}>
+                  <Text style={styles.filterBadgeText}>{outfitActiveFilterCount}</Text>
                 </View>
               )}
             </PressableScale>
@@ -814,6 +909,39 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
         activeFilterCount={activeFilterCount}
         onClearAll={clearSheetFilters}
       />}
+
+      {outfitFilterSheetOpen && (
+        <OutfitFilterPanel
+          onClose={() => setOutfitFilterSheetOpen(false)}
+          sortOptions={OUTFIT_SORT_OPTIONS}
+          sortKey={outfitSortKey}
+          onSortChange={(key) => setOutfitSortKey(key as OutfitSortKey)}
+          allEvents={allOutfitEvents}
+          selectedEvents={outfitSelectedEvents}
+          onToggleEvent={(event) =>
+            setOutfitSelectedEvents(prev =>
+              prev.includes(event) ? prev.filter(e => e !== event) : [...prev, event]
+            )
+          }
+          allTags={allOutfitTags}
+          selectedTags={outfitSelectedTags}
+          onToggleTag={(tag) =>
+            setOutfitSelectedTags(prev =>
+              prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+            )
+          }
+          showNeverWorn={outfitShowNeverWorn}
+          onToggleNeverWorn={() => setOutfitShowNeverWorn(v => !v)}
+          filteredCount={filteredOutfits.length}
+          activeFilterCount={outfitActiveFilterCount}
+          onClearAll={() => {
+            setOutfitSortKey('newest');
+            setOutfitSelectedTags([]);
+            setOutfitSelectedEvents([]);
+            setOutfitShowNeverWorn(false);
+          }}
+        />
+      )}
 
       <OutfitBuilderSheet
         visible={outfitBuilderVisible}

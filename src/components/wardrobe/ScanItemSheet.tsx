@@ -1,8 +1,7 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
-  Modal,
   TouchableOpacity,
   Image,
   StyleSheet,
@@ -14,6 +13,13 @@ import {
   UIManager,
   Alert,
 } from 'react-native';
+import {
+  BottomSheetModal,
+  BottomSheetScrollView,
+  BottomSheetBackdrop,
+  BottomSheetFooter,
+  type BottomSheetFooterProps,
+} from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -44,7 +50,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Phase = 'idle' | 'scanning' | 'extracting' | 'review' | 'saving';
+type Phase = 'idle' | 'scanning' | 'pre-extract' | 'extracting' | 'review' | 'saving';
 
 type EditableItem = {
   tempId: string;
@@ -74,15 +80,26 @@ type EditableItem = {
   sourceImage: string | null;
 };
 
+type PreExtractItemData = {
+  tempId: string;
+  name: string;
+  category: string;
+  croppedImage: string | null;
+  bbox: Bbox | null;
+  sourceImage: string;
+  brandHint: string;
+};
+
 interface ScanItemSheetProps {
   visible: boolean;
   onClose: () => void;
   onItemsSaved?: (items: Item[]) => void;
+  autoLaunch?: 'camera' | 'library';
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function ScanItemSheet({ visible, onClose, onItemsSaved }: ScanItemSheetProps) {
+export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: ScanItemSheetProps) {
   const insets = useSafeAreaInsets();
   const [phase, setPhase] = useState<Phase>('idle');
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
@@ -90,11 +107,13 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved }: ScanItemSheetP
   const [extractionProgress, setExtractionProgress] = useState({ current: 0, total: 0 });
   const [extractedThumbs, setExtractedThumbs] = useState<string[]>([]);
   const sessionRef = useRef(0);
+  const [preExtractItems, setPreExtractItems] = useState<PreExtractItemData[]>([]);
   const [cropAdjustTarget, setCropAdjustTarget] = useState<{
     tempId: string;
     sourceImage: string;
     bbox: Bbox;
     itemName: string;
+    scope: 'pre-extract' | 'review';
   } | null>(null);
 
   const { user } = useAuth();
@@ -102,210 +121,94 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved }: ScanItemSheetP
   const createItem = useCreateItem();
   const launchCamera = useCameraLaunch();
   const launchLibrary = useLibraryLaunch();
+  const brandSuggestions = useBrandSuggestions();
+
+  // ── BottomSheetModal ──────────────────────────────────────────────────────────
+  const bottomSheetRef = useRef<BottomSheetModal>(null);
+  const snapPoints = useMemo(() => ['90%'], []);
 
   useEffect(() => {
-    if (!visible) {
-      sessionRef.current += 1;
-      setPhase('idle');
-      setImageDataUrl(null);
-      setDetectedItems([]);
-      setExtractedThumbs([]);
-      setExtractionProgress({ current: 0, total: 0 });
-      setCropAdjustTarget(null);
-      poseScan.reset();
+    if (!autoLaunch) {
+      bottomSheetRef.current?.present();
+      return;
     }
-  }, [visible]);
+    let active = true;
+    (async () => {
+      const captured =
+        autoLaunch === 'camera'
+          ? await launchCamera({ maxDim: 1024, compress: 0.8 })
+          : await launchLibrary({ maxDim: 1024, compress: 0.8 });
+      if (!active) return;
+      if (!captured) { onClose(); return; }
+      setImageDataUrl(captured.dataUrl);
+      setPhase('scanning');
+      bottomSheetRef.current?.present();
+      await runPoseScan(captured.uri, captured.dataUrl);
+    })();
+    return () => { active = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const canClose = phase === 'idle' || phase === 'review' || phase === 'pre-extract';
+
+  const headerTitle =
+    phase === 'idle' ? 'Add to Wardrobe'
+    : phase === 'scanning' ? 'Scanning outfit…'
+    : phase === 'pre-extract'
+      ? preExtractItems.length === 1
+        ? 'Verify & add details'
+        : `${preExtractItems.length} items — verify & add details`
+    : phase === 'extracting' ? 'Extracting details…'
+    : phase === 'saving' ? 'Adding to wardrobe…'
+    : detectedItems.length === 1 ? '1 item detected'
+    : `${detectedItems.length} items detected`;
 
   const handleClose = useCallback(() => {
     if (phase === 'saving' || phase === 'extracting') return;
+    bottomSheetRef.current?.dismiss();
+  }, [phase]);
+
+  const handleDismiss = useCallback(() => {
+    poseScan.reset();
+    setPreExtractItems([]);
     onClose();
-  }, [phase, onClose]);
-
-  const pickImage = async (source: 'camera' | 'library') => {
-    // Both hooks handle permission checks, denial alerts, and compression internally
-    const captured =
-      source === 'camera'
-        ? await launchCamera({ maxDim: 1024, compress: 0.8 })
-        : await launchLibrary({ maxDim: 1024, compress: 0.8 });
-
-    if (!captured) return;
-
-    setImageDataUrl(captured.dataUrl);
-    // Pass the local file URI so runPoseScan can downscale without re-encoding the data URL
-    await runPoseScan(captured.uri, captured.dataUrl);
-  };
-
-  const runPoseScan = async (sourceUri: string, displayDataUrl: string) => {
-    const session = sessionRef.current;
-    setPhase('scanning');
-
-    // Downscale to 512 px for pose detection — bounding boxes don't benefit from higher res
-    // and this roughly halves token cost at the OpenAI Vision "low" detail tier.
-    const poseFrame = await ImageManipulator.manipulateAsync(
-      sourceUri,
-      [{ resize: { width: 512 } }],
-      { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG, base64: true },
-    );
-    const base64 = poseFrame.base64!;
-
-    try {
-      const result = await poseScan.mutateAsync({ imageBase64: base64 });
-      if (sessionRef.current !== session) return;
-
-      if (!result.items || result.items.length === 0) {
-        Alert.alert(
-          'No clothing detected',
-          'Try a full-body photo with better lighting, or add items manually.',
-          [{ text: 'OK', onPress: () => { setPhase('idle'); setImageDataUrl(null); } }],
-        );
-        return;
-      }
-
-      await runExtraction(result.items, displayDataUrl, session);
-    } catch (err: any) {
-      if (sessionRef.current !== session) return;
-      Alert.alert(
-        'Scan failed',
-        err?.message || 'Something went wrong. Please try again.',
-        [{ text: 'OK', onPress: () => { setPhase('idle'); setImageDataUrl(null); } }],
-      );
-    }
-  };
-
-  const runExtraction = async (
-    poseItems: PoseScanItem[],
-    fullImageDataUrl: string,
-    session: number,
-  ) => {
-    const total = poseItems.length;
-    setPhase('extracting');
-    setExtractionProgress({ current: 0, total });
-    setExtractedThumbs([]);
-
-    let completedCount = 0;
-
-    const settled = await Promise.allSettled(
-      poseItems.map(async (poseItem, idx) => {
-        if (sessionRef.current !== session) throw new Error('session_changed');
-
-        const croppedImage = poseItem.croppedWebP
-          ? `data:image/webp;base64,${poseItem.croppedWebP}`
-          : null;
-
-        const imageData = croppedImage ?? fullImageDataUrl;
-        const otherItems = poseItems
-          .filter((_, i) => i !== idx)
-          .map((other) => `${other.name} (${other.category})`)
-          .join(', ');
-
-        const result = await scanItemDirect({
-          imageData,
-          outfitContext: otherItems || undefined,
-        });
-
-        if (sessionRef.current !== session) throw new Error('session_changed');
-
-        completedCount += 1;
-        setExtractionProgress({ current: completedCount, total });
-        if (croppedImage) {
-          setExtractedThumbs((prev) => [...prev, croppedImage]);
-        }
-
-        return { result, croppedImage, bbox: poseItem.bbox_pct ?? null };
-      }),
-    );
-
-    if (sessionRef.current !== session) return;
-
-    const extracted: EditableItem[] = [];
-    for (const s of settled) {
-      if (s.status !== 'fulfilled') continue;
-      const { result, croppedImage, bbox } = s.value;
-      extracted.push({
-        tempId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        name: result.name || 'Unknown Item',
-        brand: result.brand ?? null,
-        category: result.category ?? null,
-        subcategory: result.subcategory ?? null,
-        color: result.color ?? null,
-        style: result.style ?? null,
-        seasons: result.seasons?.length ? result.seasons : [],
-        occasions: result.occasions?.length ? result.occasions : [],
-        material: result.material ?? null,
-        fit: result.fit ?? null,
-        pattern: result.pattern ?? null,
-        neckline: result.neckline ?? null,
-        care: result.care ?? null,
-        formalityStyles: result.formalityStyles ?? [],
-        notableDetails: result.notableDetails ?? [],
-        colorPalette: result.colorPalette ?? [],
-        colorNormalized: result.colorNormalized ?? null,
-        colorTemperature: result.colorTemperature ?? null,
-        warmthRating: result.warmthRating ?? null,
-        croppedImage,
-        expanded: false,
-        sizeProfile: null,
-        bbox: bbox ? { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height } : null,
-        sourceImage: fullImageDataUrl,
-      });
-    }
-
-    if (extracted.length === 0) {
-      Alert.alert(
-        'Extraction failed',
-        "Couldn't extract details for any items. Please try again.",
-        [{ text: 'OK', onPress: () => { setPhase('idle'); setImageDataUrl(null); } }],
-      );
-      return;
-    }
-
-    setDetectedItems(extracted);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setPhase('review');
-  };
-
-  const updateItem = useCallback((tempId: string, patch: Partial<EditableItem>) => {
-    setDetectedItems((prev) =>
-      prev.map((it) => (it.tempId === tempId ? { ...it, ...patch } : it)),
-    );
-  }, []);
-
-  const removeItem = useCallback((tempId: string) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setDetectedItems((prev) => prev.filter((it) => it.tempId !== tempId));
-  }, []);
-
-  const handleAdjustCrop = useCallback((tempId: string) => {
-    const item = detectedItems.find((it) => it.tempId === tempId);
-    if (!item?.sourceImage || !item.bbox) return;
-    setCropAdjustTarget({ tempId, sourceImage: item.sourceImage, bbox: item.bbox, itemName: item.name });
-  }, [detectedItems]);
-
-  const handleCropApply = useCallback(async (newBbox: Bbox) => {
-    if (!cropAdjustTarget) return;
-    const newCrop = await cropImage(cropAdjustTarget.sourceImage, newBbox, { maxDim: 800 });
-    if (newCrop) {
-      updateItem(cropAdjustTarget.tempId, { croppedImage: newCrop, bbox: newBbox });
-    }
-    setCropAdjustTarget(null);
-  }, [cropAdjustTarget, updateItem]);
+  }, [poseScan, onClose]);
 
   const uploadImageToR2 = async (dataUrl: string): Promise<string> => {
-    const blob = await fetch(dataUrl).then((r) => r.blob());
-    const ext = blob.type.includes('webp') ? 'webp' : 'jpg';
+    // React Native's fetch does not support data: URIs (the native networking
+    // layer only handles http/https/file). Parse the data URL manually instead.
+    const commaIdx = dataUrl.indexOf(',');
+    const meta = dataUrl.slice(0, commaIdx); // e.g. "data:image/webp;base64"
+    const base64 = dataUrl.slice(commaIdx + 1);
+    const mimeType = meta.slice(5).replace(';base64', '') || 'image/jpeg';
+    const ext = mimeType.includes('webp') ? 'webp' : 'jpg';
     const fileName = `users/${user!.id}/items/${Date.now()}-${crypto.randomUUID()}.${ext}`;
 
     const { presignedUrl, publicUrl } = await api
       .post<{ presignedUrl: string; publicUrl: string }>('/api/upload-url', {
         fileName,
-        fileType: blob.type,
+        fileType: mimeType,
       })
       .then((r) => r.data);
 
-    await fetch(presignedUrl, {
-      method: 'PUT',
-      body: blob,
-      headers: { 'Content-Type': blob.type },
+    // Decode base64 → binary ArrayBuffer, then upload to the presigned R2 URL.
+    // We use XMLHttpRequest.send(ArrayBuffer) rather than fetch(Blob) because
+    // React Native's Blob implementation can silently re-encode binary data as
+    // base64 when serialised through XHR, corrupting the upload on some Android
+    // devices. Sending the raw ArrayBuffer avoids that codepath entirely.
+    const binaryStr = atob(base64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i);
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('PUT', presignedUrl);
+      xhr.setRequestHeader('Content-Type', mimeType);
+      xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`R2 upload failed: ${xhr.status}`)));
+      xhr.onerror = () => reject(new Error('R2 upload network error'));
+      xhr.send(bytes.buffer);
     });
 
     return publicUrl;
@@ -333,7 +236,9 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved }: ScanItemSheetP
         try {
           imageUrl = await uploadImageToR2(item.croppedImage);
         } catch {
-          // non-fatal: save item without image rather than aborting
+          // R2 upload failed — fall back to storing the base64 data URL directly
+          // so the item always has a photo even if cloud storage is unavailable.
+          imageUrl = item.croppedImage;
         }
       }
 
@@ -386,36 +291,308 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved }: ScanItemSheetP
     }
   };
 
-  const headerTitle =
-    phase === 'idle' ? 'Add to Wardrobe'
-    : phase === 'scanning' ? 'Scanning outfit…'
-    : phase === 'extracting' ? 'Extracting details…'
-    : phase === 'saving' ? 'Adding to wardrobe…'
-    : detectedItems.length === 1 ? '1 item detected'
-    : `${detectedItems.length} items detected`;
+  const runExtraction = async (
+    preItems: PreExtractItemData[],
+    fullImageDataUrl: string,
+    session: number,
+  ) => {
+    const total = preItems.length;
+    setPhase('extracting');
+    setExtractionProgress({ current: 0, total });
+    setExtractedThumbs([]);
 
-  const canClose = phase === 'idle' || phase === 'review';
+    let completedCount = 0;
+
+    const settled = await Promise.allSettled(
+      preItems.map(async (preItem, idx) => {
+        if (sessionRef.current !== session) throw new Error('session_changed');
+
+        const imageData = preItem.croppedImage ?? fullImageDataUrl;
+        const otherItems = preItems
+          .filter((_, i) => i !== idx)
+          .map((other) => `${other.name} (${other.category})`)
+          .join(', ');
+
+        const result = await scanItemDirect({
+          imageData,
+          outfitContext: otherItems || undefined,
+          brandHint: preItem.brandHint || undefined,
+        });
+
+        if (sessionRef.current !== session) throw new Error('session_changed');
+
+        completedCount += 1;
+        setExtractionProgress({ current: completedCount, total });
+        if (preItem.croppedImage) {
+          setExtractedThumbs((prev) => [...prev, preItem.croppedImage!]);
+        }
+
+        return { result, croppedImage: preItem.croppedImage, bbox: preItem.bbox };
+      }),
+    );
+
+    if (sessionRef.current !== session) return;
+
+    const extracted: EditableItem[] = [];
+    for (const s of settled) {
+      if (s.status !== 'fulfilled') continue;
+      const { result, croppedImage, bbox } = s.value;
+      extracted.push({
+        tempId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: result.name || 'Unknown Item',
+        brand: result.brand ?? null,
+        category: result.category ?? null,
+        subcategory: result.subcategory ?? null,
+        color: result.color ?? null,
+        style: result.style ?? null,
+        seasons: result.seasons?.length ? result.seasons : [],
+        occasions: result.occasions?.length ? result.occasions : [],
+        material: result.material ?? null,
+        fit: result.fit ?? null,
+        pattern: result.pattern ?? null,
+        neckline: result.neckline ?? null,
+        care: result.care ?? null,
+        formalityStyles: result.formalityStyles ?? [],
+        notableDetails: result.notableDetails ?? [],
+        colorPalette: result.colorPalette ?? [],
+        colorNormalized: result.colorNormalized ?? null,
+        colorTemperature: result.colorTemperature ?? null,
+        warmthRating: result.warmthRating ?? null,
+        croppedImage,
+        expanded: false,
+        sizeProfile: null,
+        bbox,
+        sourceImage: fullImageDataUrl,
+      });
+    }
+
+    if (extracted.length === 0) {
+      Alert.alert(
+        'Extraction failed',
+        "Couldn't extract details for any items. Please try again.",
+        [{ text: 'OK', onPress: () => { setPhase('idle'); setImageDataUrl(null); } }],
+      );
+      return;
+    }
+
+    setDetectedItems(extracted);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setPhase('review');
+  };
+
+  const handleStartExtraction = useCallback(async () => {
+    if (preExtractItems.length === 0 || !imageDataUrl) return;
+    const session = sessionRef.current;
+    await runExtraction(preExtractItems, imageDataUrl, session);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preExtractItems, imageDataUrl]);
+
+  const renderBackdrop = useCallback(
+    (props: any) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        opacity={0.5}
+        pressBehavior={canClose ? 'close' : 'none'}
+      />
+    ),
+    [canClose],
+  );
+
+  const renderFooter = useCallback(
+    (props: BottomSheetFooterProps) => {
+      if (phase === 'pre-extract' && preExtractItems.length > 0) {
+        return (
+          <BottomSheetFooter {...props} bottomInset={insets.bottom}>
+            <View style={styles.footer}>
+              <TouchableOpacity
+                style={styles.saveBtn}
+                onPress={handleStartExtraction}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="sparkles" size={20} color={colors.primaryForeground} />
+                <Text style={styles.saveBtnText}>Extract Details</Text>
+              </TouchableOpacity>
+            </View>
+          </BottomSheetFooter>
+        );
+      }
+
+      if ((phase !== 'review' && phase !== 'saving') || detectedItems.length === 0) return null;
+      return (
+        <BottomSheetFooter {...props} bottomInset={insets.bottom}>
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={[styles.saveBtn, phase === 'saving' && styles.saveBtnBusy]}
+              onPress={handleSaveAll}
+              disabled={phase === 'saving'}
+              activeOpacity={0.85}
+            >
+              {phase === 'saving' ? (
+                <ActivityIndicator size="small" color={colors.primaryForeground} />
+              ) : (
+                <Ionicons name="checkmark" size={20} color={colors.primaryForeground} />
+              )}
+              <Text style={styles.saveBtnText}>
+                {phase === 'saving'
+                  ? 'Adding to wardrobe…'
+                  : detectedItems.length === 1
+                  ? 'Add to wardrobe'
+                  : `Add all ${detectedItems.length} to wardrobe`}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </BottomSheetFooter>
+      );
+    },
+    [phase, preExtractItems.length, detectedItems.length, handleStartExtraction, handleSaveAll, insets.bottom],
+  );
+
+  const pickImage = async (source: 'camera' | 'library') => {
+    // Both hooks handle permission checks, denial alerts, and compression internally
+    const captured =
+      source === 'camera'
+        ? await launchCamera({ maxDim: 1024, compress: 0.8 })
+        : await launchLibrary({ maxDim: 1024, compress: 0.8 });
+
+    if (!captured) return;
+
+    setImageDataUrl(captured.dataUrl);
+    // Pass the local file URI so runPoseScan can downscale without re-encoding the data URL
+    await runPoseScan(captured.uri, captured.dataUrl);
+  };
+
+  const runPoseScan = async (sourceUri: string, displayDataUrl: string) => {
+    const session = sessionRef.current;
+    setPhase('scanning');
+
+    // Downscale to 512 px for pose detection — bounding boxes don't benefit from higher res
+    // and this roughly halves token cost at the OpenAI Vision "low" detail tier.
+    const poseFrame = await ImageManipulator.manipulateAsync(
+      sourceUri,
+      [{ resize: { width: 512 } }],
+      { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+    );
+    const base64 = poseFrame.base64!;
+
+    try {
+      const result = await poseScan.mutateAsync({ imageBase64: base64 });
+      if (sessionRef.current !== session) return;
+
+      if (!result.items || result.items.length === 0) {
+        Alert.alert(
+          'No clothing detected',
+          'Try a full-body photo with better lighting, or add items manually.',
+          [{ text: 'OK', onPress: () => { setPhase('idle'); setImageDataUrl(null); } }],
+        );
+        return;
+      }
+
+      // Build per-item pre-extract data and let the user verify crops + add brand hints
+      const preItems: PreExtractItemData[] = result.items.map((poseItem) => ({
+        tempId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: poseItem.name,
+        category: poseItem.category,
+        croppedImage: poseItem.croppedWebP
+          ? `data:image/webp;base64,${poseItem.croppedWebP}`
+          : null,
+        bbox: poseItem.bbox_pct
+          ? { x: poseItem.bbox_pct.x, y: poseItem.bbox_pct.y, width: poseItem.bbox_pct.width, height: poseItem.bbox_pct.height }
+          : null,
+        sourceImage: displayDataUrl,
+        brandHint: '',
+      }));
+
+      setPreExtractItems(preItems);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setPhase('pre-extract');
+    } catch (err: any) {
+      if (sessionRef.current !== session) return;
+      Alert.alert(
+        'Scan failed',
+        err?.message || 'Something went wrong. Please try again.',
+        [{ text: 'OK', onPress: () => { setPhase('idle'); setImageDataUrl(null); } }],
+      );
+    }
+  };
+
+  const updateItem = useCallback((tempId: string, patch: Partial<EditableItem>) => {
+    setDetectedItems((prev) =>
+      prev.map((it) => (it.tempId === tempId ? { ...it, ...patch } : it)),
+    );
+  }, []);
+
+  const removeItem = useCallback((tempId: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setDetectedItems((prev) => prev.filter((it) => it.tempId !== tempId));
+  }, []);
+
+  const updatePreExtractItem = useCallback((tempId: string, patch: Partial<PreExtractItemData>) => {
+    setPreExtractItems((prev) =>
+      prev.map((it) => (it.tempId === tempId ? { ...it, ...patch } : it)),
+    );
+  }, []);
+
+  const removePreExtractItem = useCallback((tempId: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setPreExtractItems((prev) => {
+      const next = prev.filter((it) => it.tempId !== tempId);
+      if (next.length === 0) {
+        setPhase('idle');
+        setImageDataUrl(null);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleAdjustCrop = useCallback((tempId: string) => {
+    const item = detectedItems.find((it) => it.tempId === tempId);
+    if (!item?.sourceImage || !item.bbox) return;
+    setCropAdjustTarget({ tempId, sourceImage: item.sourceImage, bbox: item.bbox, itemName: item.name, scope: 'review' });
+  }, [detectedItems]);
+
+  const handlePreExtractAdjustCrop = useCallback((tempId: string) => {
+    const item = preExtractItems.find((it) => it.tempId === tempId);
+    if (!item?.bbox) return;
+    setCropAdjustTarget({ tempId, sourceImage: item.sourceImage, bbox: item.bbox, itemName: item.name, scope: 'pre-extract' });
+  }, [preExtractItems]);
+
+  const handleCropApply = useCallback(async (newBbox: Bbox) => {
+    if (!cropAdjustTarget) return;
+    const newCrop = await cropImage(cropAdjustTarget.sourceImage, newBbox, { maxDim: 800 });
+    if (newCrop) {
+      if (cropAdjustTarget.scope === 'pre-extract') {
+        updatePreExtractItem(cropAdjustTarget.tempId, { croppedImage: newCrop, bbox: newBbox });
+      } else {
+        updateItem(cropAdjustTarget.tempId, { croppedImage: newCrop, bbox: newBbox });
+      }
+    }
+    setCropAdjustTarget(null);
+  }, [cropAdjustTarget, updatePreExtractItem, updateItem]);
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      statusBarTranslucent
-      onRequestClose={handleClose}
-    >
-      <View style={styles.overlay}>
-        <TouchableOpacity
-          style={styles.backdrop}
-          activeOpacity={1}
-          onPress={canClose ? handleClose : undefined}
-        />
-
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-          {/* Drag handle */}
-          <View style={styles.handle} />
-
-          {/* Header */}
+    <>
+      <BottomSheetModal
+        ref={bottomSheetRef}
+        snapPoints={snapPoints}
+        onDismiss={handleDismiss}
+        backdropComponent={renderBackdrop}
+        footerComponent={renderFooter}
+        handleIndicatorStyle={styles.handle}
+        backgroundStyle={styles.sheetBackground}
+        enablePanDownToClose={canClose}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+      >
+        <BottomSheetScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.bodyContent}
+          enableFooterMarginAdjustment
+          stickyHeaderIndices={[0]}
+        >
+          {/* Sticky header */}
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <Ionicons name="sparkles" size={18} color={colors.primary} />
@@ -432,60 +609,39 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved }: ScanItemSheetP
           </View>
 
           {/* Body */}
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            style={styles.body}
-            contentContainerStyle={styles.bodyContent}
-          >
-            {phase === 'idle' && <IdleContent onPickImage={pickImage} />}
+          {phase === 'idle' && <IdleContent onPickImage={pickImage} />}
 
-            {(phase === 'scanning' || phase === 'extracting') && (
-              <ScanProgress
-                phase={phase}
-                imageDataUrl={imageDataUrl}
-                extractionProgress={extractionProgress}
-                extractedThumbs={extractedThumbs}
-              />
-            )}
-
-            {(phase === 'review' || phase === 'saving') && detectedItems.length > 0 && (
-              <ReviewList
-                items={detectedItems}
-                onUpdateItem={updateItem}
-                onRemoveItem={removeItem}
-                onAdjustCrop={handleAdjustCrop}
-                disabled={phase === 'saving'}
-              />
-            )}
-          </ScrollView>
-
-          {/* Save footer */}
-          {(phase === 'review' || phase === 'saving') && detectedItems.length > 0 && (
-            <View style={styles.footer}>
-              <TouchableOpacity
-                style={[styles.saveBtn, phase === 'saving' && styles.saveBtnBusy]}
-                onPress={handleSaveAll}
-                disabled={phase === 'saving'}
-                activeOpacity={0.85}
-              >
-                {phase === 'saving' ? (
-                  <ActivityIndicator size="small" color={colors.primaryForeground} />
-                ) : (
-                  <Ionicons name="checkmark" size={20} color={colors.primaryForeground} />
-                )}
-                <Text style={styles.saveBtnText}>
-                  {phase === 'saving'
-                    ? 'Adding to wardrobe…'
-                    : detectedItems.length === 1
-                    ? 'Add to wardrobe'
-                    : `Add all ${detectedItems.length} to wardrobe`}
-                </Text>
-              </TouchableOpacity>
-            </View>
+          {(phase === 'scanning' || phase === 'extracting') && (
+            <ScanProgress
+              phase={phase}
+              imageDataUrl={imageDataUrl}
+              extractionProgress={extractionProgress}
+              extractedThumbs={extractedThumbs}
+            />
           )}
-        </View>
-      </View>
+
+          {phase === 'pre-extract' && preExtractItems.length > 0 && (
+            <PreExtractList
+              items={preExtractItems}
+              brandSuggestions={brandSuggestions}
+              onUpdateItem={updatePreExtractItem}
+              onRemoveItem={removePreExtractItem}
+              onAdjustCrop={handlePreExtractAdjustCrop}
+            />
+          )}
+
+          {(phase === 'review' || phase === 'saving') && detectedItems.length > 0 && (
+            <ReviewList
+              items={detectedItems}
+              brandSuggestions={brandSuggestions}
+              onUpdateItem={updateItem}
+              onRemoveItem={removeItem}
+              onAdjustCrop={handleAdjustCrop}
+              disabled={phase === 'saving'}
+            />
+          )}
+        </BottomSheetScrollView>
+      </BottomSheetModal>
 
       <CropAdjustModal
         visible={cropAdjustTarget !== null}
@@ -495,7 +651,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved }: ScanItemSheetP
         onApply={handleCropApply}
         onCancel={() => setCropAdjustTarget(null)}
       />
-    </Modal>
+    </>
   );
 }
 
@@ -760,36 +916,165 @@ const scanStyles = StyleSheet.create({
   stepLabelActive: { color: colors.primary, fontWeight: typography.weight.semibold },
 });
 
+// ─── PreExtractList ───────────────────────────────────────────────────────────
+
+function PreExtractList({
+  items,
+  brandSuggestions,
+  onUpdateItem,
+  onRemoveItem,
+  onAdjustCrop,
+}: {
+  items: PreExtractItemData[];
+  brandSuggestions: string[];
+  onUpdateItem: (id: string, patch: Partial<PreExtractItemData>) => void;
+  onRemoveItem: (id: string) => void;
+  onAdjustCrop: (id: string) => void;
+}) {
+  return (
+    <View style={preExtractStyles.container}>
+      <Text style={preExtractStyles.hint}>
+        Optionally enter the brand to improve AI accuracy, then tap Extract Details.
+      </Text>
+      {items.map((item, idx) => (
+        <View key={item.tempId} style={{ zIndex: items.length - idx }}>
+          <PreExtractCard
+            item={item}
+            brandSuggestions={brandSuggestions}
+            onUpdate={(patch) => onUpdateItem(item.tempId, patch)}
+            onRemove={() => onRemoveItem(item.tempId)}
+            onAdjustCrop={() => onAdjustCrop(item.tempId)}
+          />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function PreExtractCard({
+  item,
+  brandSuggestions,
+  onUpdate,
+  onRemove,
+  onAdjustCrop,
+}: {
+  item: PreExtractItemData;
+  brandSuggestions: string[];
+  onUpdate: (patch: Partial<PreExtractItemData>) => void;
+  onRemove: () => void;
+  onAdjustCrop: () => void;
+}) {
+  return (
+    <View style={preExtractCardStyles.card}>
+      {/* Thumbnail with optional crop-adjust button */}
+      <View style={cardStyles.thumb}>
+        {item.croppedImage ? (
+          <Image source={{ uri: item.croppedImage }} style={cardStyles.thumbImg} resizeMode="cover" />
+        ) : (
+          <Ionicons name="shirt-outline" size={22} color={colors.mutedForeground} />
+        )}
+        {item.bbox && (
+          <TouchableOpacity
+            style={cardStyles.cropBtn}
+            onPress={onAdjustCrop}
+            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            accessibilityLabel="Adjust crop"
+          >
+            <Ionicons name="crop-outline" size={11} color={colors.white} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Right column: detected name + brand input */}
+      <View style={preExtractCardStyles.content}>
+        <Text style={preExtractCardStyles.itemName} numberOfLines={1}>{item.name}</Text>
+        <BrandAutocompleteInput
+          value={item.brandHint}
+          onChangeText={(v) => onUpdate({ brandHint: v })}
+          onSelect={(v) => onUpdate({ brandHint: v })}
+          suggestions={brandSuggestions}
+          placeholder="Brand (optional)"
+        />
+      </View>
+
+      {/* Remove button */}
+      <TouchableOpacity
+        onPress={onRemove}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        accessibilityLabel="Remove item"
+      >
+        <Ionicons name="trash-outline" size={18} color={colors.error} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const preExtractStyles = StyleSheet.create({
+  container: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, gap: spacing.sm },
+  hint: {
+    fontSize: typography.size.sm,
+    color: colors.mutedForeground,
+    lineHeight: typography.size.sm * 1.5,
+    marginBottom: spacing.xs,
+  },
+});
+
+const preExtractCardStyles = StyleSheet.create({
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+  },
+  content: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  itemName: {
+    fontSize: typography.size.sm,
+    color: colors.mutedForeground,
+    fontWeight: typography.weight.medium,
+  },
+});
+
 // ─── ReviewList ───────────────────────────────────────────────────────────────
 
 function ReviewList({
   items,
+  brandSuggestions,
   onUpdateItem,
   onRemoveItem,
   onAdjustCrop,
   disabled,
 }: {
   items: EditableItem[];
+  brandSuggestions: string[];
   onUpdateItem: (id: string, patch: Partial<EditableItem>) => void;
   onRemoveItem: (id: string) => void;
   onAdjustCrop: (id: string) => void;
   disabled: boolean;
 }) {
-  const brandSuggestions = useBrandSuggestions();
-
   return (
     <View style={reviewStyles.container}>
+      <Text style={reviewStyles.hint}>
+        AI has extracted clothing details — tap any item to review or add more.
+      </Text>
       {items.map((item, idx) => (
-        <ItemCard
-          key={item.tempId}
-          item={item}
-          index={idx}
-          disabled={disabled}
-          brandSuggestions={brandSuggestions}
-          onUpdate={(patch) => onUpdateItem(item.tempId, patch)}
-          onRemove={() => onRemoveItem(item.tempId)}
-          onAdjustCrop={() => onAdjustCrop(item.tempId)}
-        />
+        <View key={item.tempId} style={{ zIndex: items.length - idx }}>
+          <ItemCard
+            item={item}
+            index={idx}
+            disabled={disabled}
+            brandSuggestions={brandSuggestions}
+            onUpdate={(patch) => onUpdateItem(item.tempId, patch)}
+            onRemove={() => onRemoveItem(item.tempId)}
+            onAdjustCrop={() => onAdjustCrop(item.tempId)}
+          />
+        </View>
       ))}
     </View>
   );
@@ -797,6 +1082,12 @@ function ReviewList({
 
 const reviewStyles = StyleSheet.create({
   container: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, gap: spacing.sm },
+  hint: {
+    fontSize: typography.size.sm,
+    color: colors.mutedForeground,
+    lineHeight: typography.size.sm * 1.5,
+    marginBottom: spacing.xs,
+  },
 });
 
 // ─── ItemCard ─────────────────────────────────────────────────────────────────
@@ -1026,7 +1317,6 @@ const cardStyles = StyleSheet.create({
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    overflow: 'hidden',
   },
   row: {
     flexDirection: 'row',
@@ -1103,31 +1393,12 @@ const cardStyles = StyleSheet.create({
 // ─── Sheet styles ─────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  backdrop: { ...StyleSheet.absoluteFill },
-  sheet: {
+  sheetBackground: {
     backgroundColor: colors.background,
-    borderTopLeftRadius: radii.xl,
-    borderTopRightRadius: radii.xl,
-    maxHeight: '90%',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: -4 },
-    elevation: 16,
   },
   handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
     backgroundColor: colors.border,
-    alignSelf: 'center',
-    marginTop: spacing.sm,
-    marginBottom: spacing.xs,
+    width: 36,
   },
   header: {
     flexDirection: 'row',
@@ -1144,7 +1415,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
-  body: { flexGrow: 0 },
   bodyContent: { paddingBottom: spacing.xl },
   footer: {
     paddingHorizontal: spacing.lg,

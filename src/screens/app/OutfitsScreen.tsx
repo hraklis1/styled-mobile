@@ -26,7 +26,7 @@ import {
 } from '../../hooks/useOutfits';
 import { OutfitCard, type OutfitViewMode } from '../../components/outfits/OutfitCard';
 import { OutfitBuilderSheet } from '../../components/outfits/OutfitBuilderSheet';
-import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
+import { OutfitFilterPanel } from '../../components/outfits/OutfitFilterPanel';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { Outfit } from '../../types/outfit';
 import type { OutfitsListScreenProps } from '../../navigation/types';
@@ -80,7 +80,6 @@ function sortOutfits(outfits: Outfit[], key: SortKey): Outfit[] {
 
 export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
   const insets = useSafeAreaInsets();
-  const { openStylist } = useGlobalAIStylist();
   const { data: outfits = [], isLoading, isError, refetch, isRefetching } = useOutfits();
   const deleteOutfit = useDeleteOutfit();
   const markWorn = useMarkOutfitWorn();
@@ -90,6 +89,8 @@ export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('newest');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
+  const [showNeverWorn, setShowNeverWorn] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(SORT_STORAGE_KEY).then((stored) => {
@@ -137,6 +138,20 @@ export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
     [outfits]
   );
 
+  const allEvents = useMemo(
+    () => [...new Set(outfits.filter((o) => o.event).map((o) => o.event!))].sort(),
+    [outfits]
+  );
+
+  const activeFilterCount = useMemo(
+    () =>
+      (sortKey !== 'newest' ? 1 : 0) +
+      selectedTags.length +
+      selectedEvents.length +
+      (showNeverWorn ? 1 : 0),
+    [sortKey, selectedTags, selectedEvents, showNeverWorn]
+  );
+
   const filteredOutfits = useMemo(() => {
     let result = outfits;
     if (search.trim()) {
@@ -151,13 +166,16 @@ export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
     if (selectedTags.length) {
       result = result.filter((o) => selectedTags.every((t) => o.tags?.includes(t)));
     }
+    if (selectedEvents.length) {
+      result = result.filter((o) => o.event && selectedEvents.includes(o.event));
+    }
+    if (showNeverWorn) {
+      result = result.filter((o) => o.wearCount === 0);
+    }
     return sortOutfits(result, sortKey);
-  }, [outfits, search, selectedTags, sortKey]);
+  }, [outfits, search, selectedTags, selectedEvents, showNeverWorn, sortKey]);
 
-  const hasActiveFilters =
-    search.trim().length > 0 ||
-    selectedTags.length > 0 ||
-    sortKey !== 'newest';
+  const hasActiveFilters = search.trim().length > 0 || activeFilterCount > 0;
 
   // ── Handlers ───────────────────────────────────────────────────────────
 
@@ -269,27 +287,9 @@ export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
         <View style={styles.headerBtns}>
           <TouchableOpacity
             style={styles.headerBtn}
-            onPress={() => openStylist()}
-            accessibilityLabel="Open AI Stylist"
-          >
-            <Ionicons name="sparkles" size={20} color={colors.primary} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.headerBtn}
             onPress={() => persistViewMode(NEXT_VIEW_MODE[viewMode])}
           >
             <Ionicons name={VIEW_MODE_ICON[viewMode]} size={20} color={colors.foreground} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.headerBtn}
-            onPress={() => setFilterSheetOpen(true)}
-          >
-            <Ionicons
-              name="options-outline"
-              size={20}
-              color={sortKey !== 'newest' ? colors.primary : colors.foreground}
-            />
-            {sortKey !== 'newest' && <View style={styles.filterDot} />}
           </TouchableOpacity>
         </View>
       </View>
@@ -314,6 +314,53 @@ export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
             <Ionicons name="close-circle" size={16} color={colors.mutedForeground} />
           </TouchableOpacity>
         )}
+      </View>
+
+      {/* ── Action row: Sort · Filter ── */}
+      <View style={styles.actionRow}>
+        <TouchableOpacity
+          style={[styles.actionChip, sortKey !== 'newest' && styles.actionChipActive]}
+          onPress={() => setFilterSheetOpen(true)}
+        >
+          <Ionicons
+            name="swap-vertical-outline"
+            size={14}
+            color={sortKey !== 'newest' ? colors.primaryForeground : colors.mutedForeground}
+          />
+          <Text style={[styles.actionChipText, sortKey !== 'newest' && styles.actionChipTextActive]}>
+            {sortKey !== 'newest'
+              ? (SORT_OPTIONS.find((o) => o.key === sortKey)?.label ?? 'Sort')
+              : 'Sort'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.actionChip,
+            (activeFilterCount - (sortKey !== 'newest' ? 1 : 0)) > 0 && styles.actionChipActive,
+          ]}
+          onPress={() => setFilterSheetOpen(true)}
+        >
+          <Ionicons
+            name="options-outline"
+            size={14}
+            color={
+              (activeFilterCount - (sortKey !== 'newest' ? 1 : 0)) > 0
+                ? colors.primaryForeground
+                : colors.mutedForeground
+            }
+          />
+          <Text
+            style={[
+              styles.actionChipText,
+              (activeFilterCount - (sortKey !== 'newest' ? 1 : 0)) > 0 && styles.actionChipTextActive,
+            ]}
+          >
+            {(activeFilterCount - (sortKey !== 'newest' ? 1 : 0)) > 0
+              ? `Filter · ${activeFilterCount - (sortKey !== 'newest' ? 1 : 0)}`
+              : 'Filter'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* ── Tag filter pills ── */}
@@ -342,11 +389,13 @@ export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
               </TouchableOpacity>
             );
           })}
-          {(selectedTags.length > 0 || search.trim()) && (
+          {hasActiveFilters && (
             <TouchableOpacity
               style={styles.tagPillReset}
               onPress={() => {
                 setSelectedTags([]);
+                setSelectedEvents([]);
+                setShowNeverWorn(false);
                 setSearch('');
                 persistSortKey('newest');
               }}
@@ -459,44 +508,40 @@ export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
 
 
       {/* ═══════════════════════════════════════════════════════════════════
-          Sort sheet
+          Sort & Filter panel
       ═══════════════════════════════════════════════════════════════════ */}
-      <Modal
-        visible={filterSheetOpen}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setFilterSheetOpen(false)}
-      >
-        <View style={styles.sheetOverlay}>
-          <TouchableOpacity
-            style={styles.sheetBackdrop}
-            activeOpacity={1}
-            onPress={() => setFilterSheetOpen(false)}
-          />
-          <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Sort</Text>
-              <TouchableOpacity onPress={() => setFilterSheetOpen(false)}>
-                <Ionicons name="close-outline" size={22} color={colors.foreground} />
-              </TouchableOpacity>
-            </View>
-            {SORT_OPTIONS.map(({ key, label }) => (
-              <TouchableOpacity
-                key={key}
-                style={styles.sheetRow}
-                onPress={() => { persistSortKey(key); setFilterSheetOpen(false); }}
-              >
-                <View style={[styles.radio, sortKey === key && styles.radioActive]}>
-                  {sortKey === key && <View style={styles.radioInner} />}
-                </View>
-                <Text style={styles.sheetRowText}>{label}</Text>
-              </TouchableOpacity>
-            ))}
-            <View style={{ height: 8 }} />
-          </View>
-        </View>
-      </Modal>
+      {filterSheetOpen && (
+        <OutfitFilterPanel
+          onClose={() => setFilterSheetOpen(false)}
+          sortOptions={SORT_OPTIONS}
+          sortKey={sortKey}
+          onSortChange={(key) => persistSortKey(key as SortKey)}
+          allEvents={allEvents}
+          selectedEvents={selectedEvents}
+          onToggleEvent={(event) =>
+            setSelectedEvents((prev) =>
+              prev.includes(event) ? prev.filter((e) => e !== event) : [...prev, event]
+            )
+          }
+          allTags={allTags}
+          selectedTags={selectedTags}
+          onToggleTag={(tag) =>
+            setSelectedTags((prev) =>
+              prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+            )
+          }
+          showNeverWorn={showNeverWorn}
+          onToggleNeverWorn={() => setShowNeverWorn((v) => !v)}
+          filteredCount={filteredOutfits.length}
+          activeFilterCount={activeFilterCount}
+          onClearAll={() => {
+            setSelectedTags([]);
+            setSelectedEvents([]);
+            setShowNeverWorn(false);
+            persistSortKey('newest');
+          }}
+        />
+      )}
 
       {/* ═══════════════════════════════════════════════════════════════════
           Outfit Builder sheet
@@ -659,14 +704,33 @@ const styles = StyleSheet.create({
     marginTop: 4,
     position: 'relative',
   },
-  filterDot: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: colors.primary,
+  // ── Action row
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  actionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: radii.full,
+    backgroundColor: colors.muted,
+    gap: 4,
+  },
+  actionChipActive: {
+    backgroundColor: colors.foreground,
+  },
+  actionChipText: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.medium,
+    color: colors.mutedForeground,
+  },
+  actionChipTextActive: {
+    color: colors.primaryForeground,
   },
 
   // ── Search
@@ -838,77 +902,6 @@ const styles = StyleSheet.create({
   },
   bulkBtnTextDisabled: { color: colors.border },
   bulkBtnTextDelete: { color: colors.error },
-
-  // ── Sort sheet
-  sheetOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  sheetBackdrop: {
-    flex: 1,
-  },
-  sheet: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius: radii.xl,
-    borderTopRightRadius: radii.xl,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: -4 },
-    elevation: 16,
-  },
-  sheetHandle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    alignSelf: 'center',
-    marginTop: spacing.sm,
-    marginBottom: spacing.xs,
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  sheetTitle: {
-    fontSize: typography.size.lg,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  sheetRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 13,
-    gap: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  sheetRowText: {
-    fontSize: typography.size.md,
-    color: colors.foreground,
-  },
-  radio: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 2,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioActive: { borderColor: colors.primary },
-  radioInner: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.primary,
-  },
 
   // ── Quick Create modal
   createModal: {

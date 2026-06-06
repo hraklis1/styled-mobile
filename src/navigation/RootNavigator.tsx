@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { ActivityIndicator, View, StyleSheet, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import Animated, { useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -7,9 +8,11 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '../contexts/AuthContext';
 import { useProfile } from '../hooks/useProfile';
-import { GlobalOutfitLoggerProvider } from '../contexts/GlobalOutfitLoggerContext';
-import { useGlobalOutfitLogger } from '../contexts/GlobalOutfitLoggerContext';
+import { GlobalOutfitLoggerProvider, useGlobalOutfitLogger } from '../contexts/GlobalOutfitLoggerContext';
 import { GlobalAIStylistProvider } from '../contexts/GlobalAIStylistContext';
+import { GlobalScanProvider, useGlobalScan } from '../contexts/GlobalScanContext';
+import { useGlobalAddSheet } from '../contexts/GlobalAddSheetContext';
+import { FabScrollProvider, useFabScroll } from '../contexts/FabScrollContext';
 import { OnboardingScreen } from '../screens/onboarding/OnboardingScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
 import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
@@ -24,8 +27,8 @@ import { CalendarScreen } from '../screens/app/CalendarScreen';
 import { ProfileScreen } from '../screens/app/ProfileScreen';
 import { SuggestionsScreen } from '../screens/app/SuggestionsScreen';
 import { ShopScreen } from '../screens/app/ShopScreen';
-import { QuickCaptureSheet } from '../components/wardrobe/QuickCaptureSheet';
-import { colors, shadows } from '../theme';
+import { useGlobalAIStylist } from '../contexts/GlobalAIStylistContext';
+import { colors, spacing, typography, radii } from '../theme';
 
 import type {
   AuthStackParamList,
@@ -90,8 +93,27 @@ function ClosetNavigator() {
 }
 
 function AppTabNavigator() {
-  const [quickCaptureVisible, setQuickCaptureVisible] = useState(false);
+  const { openStylist } = useGlobalAIStylist();
+  const { openAddSheet } = useGlobalAddSheet();
+  const { openScanItem, openBatchScan } = useGlobalScan();
   const { openLogger } = useGlobalOutfitLogger();
+  const insets = useSafeAreaInsets();
+  const { fabCollapsed } = useFabScroll();
+
+  const EASE_OUT = { duration: 200, easing: Easing.out(Easing.quad) };
+
+  const fabAnimStyle = useAnimatedStyle(() => ({
+    paddingHorizontal: withTiming(
+      fabCollapsed.value ? spacing.sm : spacing.lg,
+      EASE_OUT,
+    ),
+  }));
+
+  const fabLabelContainerStyle = useAnimatedStyle(() => ({
+    opacity: withTiming(fabCollapsed.value ? 0 : 1, { duration: 150 }),
+    width: withTiming(fabCollapsed.value ? 0 : 48, EASE_OUT),
+    marginLeft: withTiming(fabCollapsed.value ? 0 : spacing.xs, EASE_OUT),
+  }));
 
   return (
     <View style={{ flex: 1 }}>
@@ -99,7 +121,8 @@ function AppTabNavigator() {
         screenOptions={({ route }) => ({
           headerShown: false,
           tabBarStyle: {
-            height: 60,
+            height: 60 + insets.bottom,
+            paddingBottom: insets.bottom,
             shadowColor: '#000',
             shadowOpacity: 0.06,
             shadowRadius: 8,
@@ -121,12 +144,17 @@ function AppTabNavigator() {
             tabBarButton: () => (
               <TouchableOpacity
                 style={tabStyles.addTabBtn}
-                onPress={() => setQuickCaptureVisible(true)}
-                activeOpacity={0.85}
+                onPress={() => openAddSheet({
+                  onTakePhoto: () => openScanItem('camera'),
+                  onFromLibrary: () => openScanItem('library'),
+                  onBatchImport: openBatchScan,
+                  onLogOutfit: openLogger,
+                })}
+                activeOpacity={0.8}
                 accessibilityLabel="Add item or log outfit"
               >
                 <View style={tabStyles.addTabCircle}>
-                  <Ionicons name="add" size={30} color={colors.primaryForeground} />
+                  <Ionicons name="add" size={26} color={colors.primaryForeground} />
                 </View>
               </TouchableOpacity>
             ),
@@ -144,11 +172,23 @@ function AppTabNavigator() {
         <AppTab.Screen name="Profile" component={ProfileScreen} />
       </AppTab.Navigator>
 
-      <QuickCaptureSheet
-        visible={quickCaptureVisible}
-        onClose={() => setQuickCaptureVisible(false)}
-        onLogOutfit={() => { setQuickCaptureVisible(false); openLogger(); }}
-      />
+      <Animated.View
+        style={[tabStyles.stylistFab, fabAnimStyle, { bottom: insets.bottom + 60 + spacing.xs }]}
+        pointerEvents="box-none"
+      >
+        <TouchableOpacity
+          onPress={() => openStylist()}
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+          activeOpacity={0.85}
+          accessibilityLabel="Open AI Stylist"
+        >
+          <Ionicons name="sparkles" size={22} color={colors.primaryForeground} />
+          <Animated.View style={[tabStyles.stylistFabLabelContainer, fabLabelContainerStyle]}>
+            <Text style={tabStyles.stylistFabLabel} numberOfLines={1}>Stylist</Text>
+          </Animated.View>
+        </TouchableOpacity>
+      </Animated.View>
+
     </View>
   );
 }
@@ -160,14 +200,36 @@ const tabStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   addTabCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 44,
+    height: 44,
+    borderRadius: radii.full,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    transform: [{ translateY: -12 }],
-    ...shadows.warm,
+  },
+  stylistFab: {
+    position: 'absolute',
+    right: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.xl,
+    backgroundColor: colors.primary,
+    shadowColor: '#000',
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 12,
+  },
+  stylistFabLabelContainer: {
+    overflow: 'hidden',
+  },
+  stylistFabLabel: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.primaryForeground,
   },
 });
 
@@ -189,7 +251,11 @@ function AppGate() {
   return (
     <GlobalOutfitLoggerProvider>
       <GlobalAIStylistProvider>
-        <AppTabNavigator />
+        <GlobalScanProvider>
+          <FabScrollProvider>
+            <AppTabNavigator />
+          </FabScrollProvider>
+        </GlobalScanProvider>
       </GlobalAIStylistProvider>
     </GlobalOutfitLoggerProvider>
   );
