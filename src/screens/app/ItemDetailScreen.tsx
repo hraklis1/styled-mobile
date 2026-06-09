@@ -32,6 +32,8 @@ import type { ItemDetailScreenProps } from '../../navigation/types';
 import * as Haptics from 'expo-haptics';
 import { useTagScanner } from '../../hooks/useTagScanner';
 import { EditItemModal } from '../../components/item/EditItemModal';
+import { SectionCard } from '../../components/primitives/SectionCard';
+import { Chip } from '../../components/primitives/Chip';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -42,61 +44,6 @@ function formatDate(iso: string | null | undefined): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-// ─── Sub-components ──────────────────────────────────────────────────────────
-
-function Chip({ label, color: bg }: { label: string; color?: string }) {
-  return (
-    <View style={[chipStyles.chip, bg ? { backgroundColor: bg + '22', borderColor: bg + '55' } : null]}>
-      <Text style={chipStyles.label}>{label}</Text>
-    </View>
-  );
-}
-
-const chipStyles = StyleSheet.create({
-  chip: {
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 4,
-    borderRadius: radii.full,
-    backgroundColor: colors.muted,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginRight: spacing.xs,
-    marginBottom: spacing.xs,
-  },
-  label: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.medium,
-    color: colors.foreground,
-    textTransform: 'capitalize',
-  },
-});
-
-function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <View style={sectionStyles.card}>
-      <Text style={sectionStyles.title}>{title}</Text>
-      {children}
-    </View>
-  );
-}
-
-const sectionStyles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: radii.lg,
-    padding: spacing.lg,
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  title: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.semibold,
-    color: colors.mutedForeground,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: spacing.md,
-  },
-});
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 
