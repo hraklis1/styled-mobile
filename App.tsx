@@ -1,9 +1,9 @@
 import { StatusBar } from 'expo-status-bar';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
-import { queryClient } from './src/lib/queryClient';
+import { queryClient, asyncStoragePersister } from './src/lib/queryClient';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { GlobalAddSheetProvider } from './src/contexts/GlobalAddSheetContext';
 import { RootNavigator } from './src/navigation/RootNavigator';
@@ -14,7 +14,10 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <ErrorBoundary>
-          <QueryClientProvider client={queryClient}>
+          <PersistQueryClientProvider
+            client={queryClient}
+            persistOptions={{ persister: asyncStoragePersister }}
+          >
             <AuthProvider>
               <BottomSheetModalProvider>
                 <GlobalAddSheetProvider>
@@ -23,7 +26,7 @@ export default function App() {
                 </GlobalAddSheetProvider>
               </BottomSheetModalProvider>
             </AuthProvider>
-          </QueryClientProvider>
+          </PersistQueryClientProvider>
         </ErrorBoundary>
       </SafeAreaProvider>
     </GestureHandlerRootView>

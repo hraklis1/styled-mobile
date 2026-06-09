@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 // Translated from the web app's HSL CSS variables (index.css)
 export const colors = {
   background:          '#FAF8F5', // HSL 30 20% 98% — warm off-white
@@ -56,44 +58,84 @@ export const radii = {
   full: 9999,
 } as const;
 
-// iOS uses shadowColor/shadowOffset/shadowOpacity/shadowRadius.
-// Android uses elevation only — colored shadows are not supported natively.
-// We apply a very subtle border/opacity to offset harsh Android elevations.
+// Cross-platform shadow tokens.
+//
+// iOS:     full warm shadow API (shadowColor + offset + opacity + radius)
+// Android: shadowColor/offset/opacity/radius are silently ignored by the
+//          native renderer. We use a modest elevation (for natural depth and
+//          correct z-order) combined with a warm hairline border so cards
+//          feel distinct without the harsh black Material shadows.
+//
+// "lg" is intentionally border-free on Android — it's reserved for floating
+// elements (FABs, modals) where borders would look incorrect and elevation
+// alone is needed for proper layer stacking.
 export const shadows = {
-  xs: {
-    shadowColor:   '#28231F',
-    shadowOffset:  { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius:  2,
-    elevation: 1,
-    // Add subtle border properties here if we spread them directly onto cards
-  },
-  sm: {
-    shadowColor:   '#28231F',
-    shadowOffset:  { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius:  6,
-    elevation: 2,
-  },
-  md: {
-    shadowColor:   '#28231F',
-    shadowOffset:  { width: 0, height: 4 },
-    shadowOpacity: 0.09,
-    shadowRadius:  12,
-    elevation: 3,
-  },
-  lg: {
-    shadowColor:   '#28231F',
-    shadowOffset:  { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius:  20,
-    elevation: 5,
-  },
-  warm: {
-    shadowColor:   '#956D51',
-    shadowOffset:  { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius:  8,
-    elevation: 3,
-  },
-} as const;
+  xs: Platform.select({
+    ios: {
+      shadowColor:   '#28231F',
+      shadowOffset:  { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius:  2,
+    },
+    android: {
+      elevation:   1,
+      borderWidth: 1,
+      borderColor: '#DDD6CD',
+    },
+    default: {},
+  }),
+  sm: Platform.select({
+    ios: {
+      shadowColor:   '#28231F',
+      shadowOffset:  { width: 0, height: 2 },
+      shadowOpacity: 0.07,
+      shadowRadius:  6,
+    },
+    android: {
+      elevation:   2,
+      borderWidth: 1,
+      borderColor: '#DDD6CD',
+    },
+    default: {},
+  }),
+  md: Platform.select({
+    ios: {
+      shadowColor:   '#28231F',
+      shadowOffset:  { width: 0, height: 4 },
+      shadowOpacity: 0.09,
+      shadowRadius:  12,
+    },
+    android: {
+      elevation:   3,
+      borderWidth: 1,
+      borderColor: '#DDD6CD',
+    },
+    default: {},
+  }),
+  lg: Platform.select({
+    ios: {
+      shadowColor:   '#28231F',
+      shadowOffset:  { width: 0, height: 8 },
+      shadowOpacity: 0.12,
+      shadowRadius:  20,
+    },
+    android: {
+      elevation: 5,
+    },
+    default: {},
+  }),
+  warm: Platform.select({
+    ios: {
+      shadowColor:   '#956D51',
+      shadowOffset:  { width: 0, height: 2 },
+      shadowOpacity: 0.12,
+      shadowRadius:  8,
+    },
+    android: {
+      elevation:   3,
+      borderWidth: 1,
+      borderColor: '#956D5133', // primary @ ~20% opacity
+    },
+    default: {},
+  }),
+};
