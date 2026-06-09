@@ -4,6 +4,8 @@ import { supabase } from './supabase';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001';
 
+export const API_BASE_URL = API_URL;
+
 export const api = axios.create({
   baseURL: API_URL,
   timeout: 15000,
@@ -16,6 +18,10 @@ export const api = axios.create({
 // This makes the request interceptor fully synchronous — no await, no risk of
 // a hanging Supabase token-refresh call blocking every outgoing request.
 let _accessToken: string | null = null;
+
+export function getAccessToken(): string | null {
+  return _accessToken;
+}
 
 supabase.auth.getSession().then(({ data: { session } }) => {
   _accessToken = session?.access_token ?? null;

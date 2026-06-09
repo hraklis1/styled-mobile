@@ -5,14 +5,14 @@ import {
   TextInput,
   Pressable,
   TouchableOpacity,
-  FlatList,
   ScrollView,
-  Image,
   StyleSheet,
   Animated,
   useWindowDimensions,
   Alert,
 } from 'react-native';
+import { Image } from 'expo-image';
+import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useItems, useUpdateItem, useDeleteItem, useMarkItemWorn } from '../../hooks/useItems';
@@ -474,7 +474,7 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
           )}
           <View style={styles.itemRowThumb}>
             {uri ? (
-              <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+              <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
             ) : (
               <View style={styles.itemThumbPlaceholder}>
                 <Ionicons name="shirt-outline" size={20} color={colors.mutedForeground} />
@@ -522,20 +522,22 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
         );
       }
       return (
-        <PressableScale
-          contentStyle={[styles.outfitCard, { width: cardWidth }]}
-          onPress={() => navigation.navigate('OutfitDetail', { outfitId: outfit.id })}
-        >
-          <View style={styles.collageWrapper}>
-            <OutfitCollage outfit={outfit} size={cardWidth} />
-          </View>
-          <View style={styles.outfitInfo}>
-            <Text style={styles.outfitName} numberOfLines={1}>{outfit.name}</Text>
-            {outfit.event ? (
-              <Text style={styles.outfitEvent} numberOfLines={1}>{outfit.event}</Text>
-            ) : null}
-          </View>
-        </PressableScale>
+        <View style={styles.outfitGridItem}>
+          <PressableScale
+            contentStyle={[styles.outfitCard, { width: cardWidth }]}
+            onPress={() => navigation.navigate('OutfitDetail', { outfitId: outfit.id })}
+          >
+            <View style={styles.collageWrapper}>
+              <OutfitCollage outfit={outfit} size={cardWidth} />
+            </View>
+            <View style={styles.outfitInfo}>
+              <Text style={styles.outfitName} numberOfLines={1}>{outfit.name}</Text>
+              {outfit.event ? (
+                <Text style={styles.outfitEvent} numberOfLines={1}>{outfit.event}</Text>
+              ) : null}
+            </View>
+          </PressableScale>
+        </View>
       );
     },
     [cardWidth, navigation, viewMode],
@@ -750,30 +752,31 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
             scrollEventThrottle={16}
           />
         ) : (
-          <FlatList
-            style={styles.list}
-            key="pieces-list"
+          <FlashList
             data={filteredItems}
             keyExtractor={item => String(item.id)}
             renderItem={renderItemRow}
+            style={styles.list}
             ListEmptyComponent={itemsLoading ? null : emptyPieces}
-            contentContainerStyle={[styles.listContent, styles.listContentRow]}
+            contentContainerStyle={{ ...styles.listContent, ...styles.listContentRow }}
             showsVerticalScrollIndicator={false}
             onScroll={handleScroll}
             scrollEventThrottle={16}
           />
         )
       ) : (
-        <FlatList
-          style={styles.list}
+        <FlashList
           key={`outfits-${viewMode}`}
           data={filteredOutfits}
           keyExtractor={outfit => String(outfit.id)}
           renderItem={renderOutfitCard}
           numColumns={viewMode === 'list' ? 1 : 2}
-          columnWrapperStyle={viewMode !== 'list' ? styles.columnWrapper : undefined}
           ListEmptyComponent={emptyOutfits}
-          contentContainerStyle={viewMode === 'list' ? styles.listContentRow : styles.listContent}
+          contentContainerStyle={
+            viewMode === 'list'
+              ? styles.listContentRow
+              : { paddingHorizontal: SIDE_PAD - COL_GAP / 2, paddingBottom: spacing.xxxl * 2 }
+          }
           showsVerticalScrollIndicator={false}
           onScroll={handleScroll}
           scrollEventThrottle={16}
@@ -1121,8 +1124,8 @@ const styles = StyleSheet.create({
   listContentRow: {
     paddingHorizontal: SIDE_PAD,
   },
-  columnWrapper: {
-    gap: COL_GAP,
+  outfitGridItem: {
+    paddingHorizontal: COL_GAP / 2,
     marginBottom: COL_GAP,
   },
 

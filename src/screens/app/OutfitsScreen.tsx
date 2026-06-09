@@ -4,7 +4,6 @@ import {
   View,
   Text,
   TextInput,
-  FlatList,
   TouchableOpacity,
   StyleSheet,
   Modal,
@@ -15,6 +14,7 @@ import {
   KeyboardAvoidingView,
   RefreshControl,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -408,13 +408,16 @@ export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
       )}
 
       {/* ── Grid / List / Dense ── */}
-      <FlatList
+      <FlashList
         key={viewMode}
         data={filteredOutfits}
         keyExtractor={(o) => String(o.id)}
         numColumns={viewMode === 'dense' ? 3 : viewMode === 'grid' ? 2 : 1}
-        columnWrapperStyle={viewMode !== 'list' ? styles.gridRow : undefined}
-        contentContainerStyle={viewMode === 'list' ? styles.listContent : styles.gridContent}
+        contentContainerStyle={
+          viewMode === 'list'
+            ? styles.listContent
+            : { paddingHorizontal: spacing.lg - spacing.md / 2, paddingBottom: 96 }
+        }
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />
@@ -433,18 +436,20 @@ export function OutfitsScreen({ navigation }: OutfitsListScreenProps) {
           </View>
         }
         renderItem={({ item }) => (
-          <OutfitCard
-            outfit={item}
-            viewMode={viewMode}
-            onPress={() => navigation.navigate('OutfitDetail', { outfitId: item.id })}
-            onLongPress={() => {
-              setSelectionMode(true);
-              toggleSelectOutfit(item.id);
-            }}
-            selectionMode={selectionMode}
-            isSelected={selectedIds.has(item.id)}
-            onToggleSelect={() => toggleSelectOutfit(item.id)}
-          />
+          <View style={viewMode !== 'list' ? styles.gridItemWrapper : undefined}>
+            <OutfitCard
+              outfit={item}
+              viewMode={viewMode}
+              onPress={() => navigation.navigate('OutfitDetail', { outfitId: item.id })}
+              onLongPress={() => {
+                setSelectionMode(true);
+                toggleSelectOutfit(item.id);
+              }}
+              selectionMode={selectionMode}
+              isSelected={selectedIds.has(item.id)}
+              onToggleSelect={() => toggleSelectOutfit(item.id)}
+            />
+          </View>
         )}
       />
 
@@ -798,12 +803,8 @@ const styles = StyleSheet.create({
   },
 
   // ── Grid / List
-  gridRow: {
-    paddingHorizontal: spacing.lg,
-    gap: spacing.md,
-  },
-  gridContent: {
-    paddingBottom: 96,
+  gridItemWrapper: {
+    paddingHorizontal: spacing.md / 2,
   },
   listContent: {
     paddingBottom: 96,

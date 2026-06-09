@@ -22,7 +22,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { File, Paths, EncodingType } from 'expo-file-system';
-import { api } from '../../lib/api';
+import { api, getAccessToken, API_BASE_URL } from '../../lib/api';
 import { compressImageToDataUrl } from '../../lib/compressImage';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { useWeatherCurrent, type CurrentWeather } from '../../hooks/useWeather';
@@ -50,18 +50,11 @@ type ChatMessage = {
   id: string;
   role: Role;
   text: string;
+  isStreaming?: boolean;
   transcript?: string;
   shopOutfit?: ShopOutfit;
   suggestedItemIds?: number[];
   missingEssential?: MissingEssential;
-};
-
-type StylistAskResponse = {
-  transcript: string;
-  response: string;
-  itemIds?: number[];
-  shopOutfit?: ShopOutfit | null;
-  missingEssential?: MissingEssential | null;
 };
 
 type TtsResponse = {
@@ -163,6 +156,24 @@ export function StylistChatView({ initialQuery, onClose, onNavigateToShop }: Pro
     setPlayingId(null);
   }
 
+  async function playAudioFromBase64(messageId: string, base64: string) {
+    const ttsFile = new File(Paths.cache, `stylist_tts_${Date.now()}.mp3`);
+    ttsFile.write(base64, { encoding: EncodingType.Base64 });
+    playingFileRef.current = ttsFile;
+    await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+    player.replace({ uri: ttsFile.uri });
+    player.play();
+    setPlayingId(messageId);
+    const sub = player.addListener('playbackStatusUpdate', (status) => {
+      if (status.didJustFinish) {
+        sub.remove();
+        try { ttsFile.delete(); } catch { /* ignore */ }
+        playingFileRef.current = null;
+        setPlayingId(null);
+      }
+    });
+  }
+
   async function playTts(messageId: string, text: string) {
     stopCurrentAudio();
     try {
@@ -172,24 +183,7 @@ export function StylistChatView({ initialQuery, onClose, onNavigateToShop }: Pro
         { timeout: 30_000 },
       );
       if (!data.audioReply) return;
-
-      const ttsFile = new File(Paths.cache, `stylist_tts_${Date.now()}.mp3`);
-      ttsFile.write(data.audioReply, { encoding: EncodingType.Base64 });
-      playingFileRef.current = ttsFile;
-
-      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
-      player.replace({ uri: ttsFile.uri });
-      player.play();
-      setPlayingId(messageId);
-
-      const sub = player.addListener('playbackStatusUpdate', (status) => {
-        if (status.didJustFinish) {
-          sub.remove();
-          try { ttsFile.delete(); } catch { /* ignore */ }
-          playingFileRef.current = null;
-          setPlayingId(null);
-        }
-      });
+      await playAudioFromBase64(messageId, data.audioReply);
     } catch {
       // TTS failure is non-fatal
     }
@@ -216,10 +210,26 @@ export function StylistChatView({ initialQuery, onClose, onNavigateToShop }: Pro
       setMentionQuery(null);
       setIsLoading(true);
 
+      const assistantId = makeId();
+      let assistantAdded = false;
+      let pendingText = '';
+      let flushTimer: ReturnType<typeof setTimeout> | null = null;
+      let finalResponseText = '';
+      let ttsReceivedFromStream = false;
+
+      const flushPending = () => {
+        const toFlush = pendingText;
+        pendingText = '';
+        flushTimer = null;
+        if (!toFlush) return;
+        setMessages((prev) =>
+          prev.map((m) => (m.id === assistantId ? { ...m, text: m.text + toFlush } : m)),
+        );
+      };
+
       try {
         const history = buildHistory(messages);
 
-        // Build weather summary in the user's preferred temperature unit
         let weatherSummary: string | undefined;
         if (weather.data) {
           const useCelsius = profile?.tempUnit === 'C';
@@ -229,7 +239,6 @@ export function StylistChatView({ initialQuery, onClose, onNavigateToShop }: Pro
           weatherSummary = `${weather.data.summary} ${tempStr}`;
         }
 
-        // Attach GPS coordinates if permission is already granted (no prompt)
         let liveLocation: { lat: number; lon: number } | undefined;
         try {
           const { status } = await Location.getForegroundPermissionsAsync();
@@ -241,54 +250,138 @@ export function StylistChatView({ initialQuery, onClose, onNavigateToShop }: Pro
           }
         } catch { /* location is non-fatal */ }
 
-        const { data } = await api.post<StylistAskResponse>(
-          '/api/stylist/ask',
-          {
+        const token = getAccessToken();
+        const response = await fetch(`${API_BASE_URL}/api/stylist/ask`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
             ...(text ? { text } : {}),
             ...(audio ? { audio } : {}),
             ...(photoData ? { photoData } : {}),
             ...(weatherSummary ? { weatherSummary } : {}),
             ...(liveLocation ? { liveLocation } : {}),
             history,
-          },
-          { timeout: 60_000 },
-        );
+            _stream: true,
+          }),
+        });
 
-        if (sessionRef.current !== session) return;
-
-        const transcript = data.transcript ?? text ?? '';
-        if (audio && transcript) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === userMsg.id ? { ...m, text: transcript, transcript } : m,
-            ),
-          );
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({})) as { message?: string };
+          throw new Error(errData.message ?? 'Could not reach the stylist. Please try again.');
         }
 
-        const assistantId = makeId();
-        const assistantMsg: ChatMessage = {
-          id: assistantId,
-          role: 'assistant',
-          text: data.response,
-          ...(data.shopOutfit ? { shopOutfit: data.shopOutfit } : {}),
-          ...(data.itemIds?.length ? { suggestedItemIds: data.itemIds } : {}),
-          ...(data.missingEssential ? { missingEssential: data.missingEssential } : {}),
-        };
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error('No response stream');
 
-        setMessages((prev) => {
-          const next = [...prev, assistantMsg];
-          // Persist the last 6 messages for session continuity
-          AsyncStorage.setItem(SESSION_KEY, JSON.stringify(next.slice(-6))).catch(() => {});
-          return next;
-        });
-        playTts(assistantId, data.response);
+        const decoder = new TextDecoder();
+        let sseBuffer = '';
+        let currentEvent = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (sessionRef.current !== session) { reader.cancel(); break; }
+
+          sseBuffer += decoder.decode(value, { stream: true });
+          const lines = sseBuffer.split('\n');
+          sseBuffer = lines.pop() ?? '';
+
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              currentEvent = line.slice(7).trim();
+            } else if (line.startsWith('data: ')) {
+              let parsed: Record<string, unknown>;
+              try { parsed = JSON.parse(line.slice(6)); } catch { continue; }
+
+              if (currentEvent === 'error') {
+                throw new Error((parsed.message as string) ?? 'Could not reach the stylist. Please try again.');
+              }
+
+              if (currentEvent === 'done') {
+                // Flush any remaining buffered text before processing the done event.
+                if (flushTimer) { clearTimeout(flushTimer); }
+                flushPending();
+
+                const { transcript, responseText, itemIds, missingEssential: me, shopOutfit } =
+                  parsed as { transcript: string; responseText: string; itemIds?: number[]; missingEssential?: MissingEssential | null; shopOutfit?: ShopOutfit | null };
+
+                finalResponseText = responseText ?? '';
+
+                if (audio && transcript) {
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === userMsg.id ? { ...m, text: transcript, transcript } : m,
+                    ),
+                  );
+                }
+
+                const finalMsg: ChatMessage = {
+                  id: assistantId,
+                  role: 'assistant',
+                  text: finalResponseText,
+                  isStreaming: false,
+                  ...(shopOutfit ? { shopOutfit } : {}),
+                  ...(itemIds?.length ? { suggestedItemIds: itemIds } : {}),
+                  ...(me ? { missingEssential: me } : {}),
+                };
+
+                if (!assistantAdded) {
+                  // shop_new or error case — no tokens were streamed; add message now
+                  setMessages((prev) => {
+                    const next = [...prev, finalMsg];
+                    AsyncStorage.setItem(SESSION_KEY, JSON.stringify(next.slice(-6))).catch(() => {});
+                    return next;
+                  });
+                } else {
+                  // Finalize the streaming bubble
+                  setMessages((prev) => {
+                    const next = prev.map((m) =>
+                      m.id === assistantId
+                        ? { ...finalMsg, text: finalResponseText || m.text }
+                        : m,
+                    );
+                    AsyncStorage.setItem(SESSION_KEY, JSON.stringify(next.slice(-6))).catch(() => {});
+                    return next;
+                  });
+                }
+
+              } else if (currentEvent === 'tts_ready') {
+                const { audioReply } = parsed as { audioReply: string };
+                ttsReceivedFromStream = true;
+                stopCurrentAudio();
+                playAudioFromBase64(assistantId, audioReply).catch(() => {});
+              } else if ('t' in parsed && typeof parsed.t === 'string') {
+                // Text token — show streaming bubble on first token
+                if (!assistantAdded) {
+                  assistantAdded = true;
+                  setMessages((prev) => [
+                    ...prev,
+                    { id: assistantId, role: 'assistant', text: '', isStreaming: true },
+                  ]);
+                }
+                pendingText += parsed.t;
+                if (!flushTimer) {
+                  flushTimer = setTimeout(flushPending, 32);
+                }
+              }
+
+              currentEvent = '';
+            }
+          }
+        }
+
+        if (!ttsReceivedFromStream && finalResponseText) {
+          playTts(assistantId, finalResponseText);
+        }
       } catch (err: unknown) {
+        if (flushTimer) clearTimeout(flushTimer);
         if (sessionRef.current !== session) return;
-        const msg =
-          (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-          'Could not reach the stylist. Please try again.';
+        const msg = (err as { message?: string })?.message ?? 'Could not reach the stylist. Please try again.';
         Alert.alert('Stylist unavailable', msg);
-        setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
+        setMessages((prev) => prev.filter((m) => m.id !== userMsg.id && m.id !== assistantId));
       } finally {
         if (sessionRef.current === session) setIsLoading(false);
       }
@@ -430,7 +523,7 @@ export function StylistChatView({ initialQuery, onClose, onNavigateToShop }: Pro
                 createOutfit={createOutfit}
                 onNavigateToShop={onNavigateToShop}
                 onToggleAudio={
-                  msg.role === 'assistant'
+                  msg.role === 'assistant' && !msg.isStreaming
                     ? () =>
                         playingId === msg.id
                           ? stopCurrentAudio()
@@ -439,7 +532,7 @@ export function StylistChatView({ initialQuery, onClose, onNavigateToShop }: Pro
                 }
               />
             ))}
-            {isLoading && <TypingIndicator />}
+            {isLoading && !messages.some((m) => m.isStreaming) && <TypingIndicator />}
           </>
         )}
       </ScrollView>
@@ -606,7 +699,7 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, onToggleAud
       )}
       <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAssistant]}>
         <Text style={[styles.bubbleText, isUser ? styles.bubbleTextUser : styles.bubbleTextAssistant]}>
-          {message.text}
+          {message.text}{message.isStreaming ? '▍' : ''}
         </Text>
         {!isUser && onToggleAudio && (
           <TouchableOpacity style={styles.ttsBtn} onPress={onToggleAudio}>

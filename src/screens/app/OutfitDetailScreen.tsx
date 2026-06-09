@@ -210,10 +210,13 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
 
   const pieces = useMemo(() => {
     if (!outfit) return [];
-    return (outfit.itemIds ?? [])
-      .map((e) => itemMap.get(e.id))
-      .filter(Boolean);
+    return (outfit.itemIds ?? []).map((e) => ({
+      entry: e,
+      item: itemMap.get(e.id) ?? null,
+    }));
   }, [outfit, itemMap]);
+
+  const hasDeletedPieces = pieces.some((p) => p.item === null);
 
   if (!outfit) {
     return (
@@ -385,8 +388,20 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Pieces ({pieces.length})</Text>
             <View style={styles.piecesGrid}>
-              {pieces.map((item) => {
-                if (!item) return null;
+              {pieces.map(({ entry, item }) => {
+                if (!item) {
+                  return (
+                    <View key={`deleted-${entry.id}`} style={[styles.pieceItem, styles.pieceGhost]}>
+                      <View style={[styles.pieceImageContainer, styles.pieceGhostImage]}>
+                        <Ionicons name="trash-outline" size={20} color={colors.mutedForeground} />
+                      </View>
+                      <Text style={[styles.pieceName, styles.pieceGhostText]} numberOfLines={1}>Deleted</Text>
+                      <Text style={styles.pieceCategory} numberOfLines={1}>
+                        {CATEGORY_LABELS[entry.category as keyof typeof CATEGORY_LABELS] ?? entry.category}
+                      </Text>
+                    </View>
+                  );
+                }
                 const uri = resolveImageUri(item.imageUrl);
                 return (
                   <TouchableOpacity
@@ -418,6 +433,19 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
                 );
               })}
             </View>
+            {hasDeletedPieces && (
+              <TouchableOpacity
+                style={styles.clearDeletedBtn}
+                onPress={() => {
+                  const validIds = pieces.filter((p) => p.item).map((p) => p.entry);
+                  updateOutfit.mutate({ id: outfit.id, itemIds: validIds });
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="trash-outline" size={13} color={colors.mutedForeground} />
+                <Text style={styles.clearDeletedText}>Clear deleted items</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -707,6 +735,30 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: colors.mutedForeground,
     textAlign: 'center',
+  },
+  pieceGhost: {
+    opacity: 0.5,
+  },
+  pieceGhostImage: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+  },
+  pieceGhostText: {
+    color: colors.mutedForeground,
+  },
+  clearDeletedBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+    alignSelf: 'flex-start',
+  },
+  clearDeletedText: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
   },
 
   chipRow: {

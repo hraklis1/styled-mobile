@@ -5,6 +5,7 @@ import { api, isNetworkError } from '../lib/api';
 import { FASHION_BRANDS } from '../lib/fashionBrands';
 import type { Item, ItemCategory, ScanResult } from '../types/item';
 import type { SizeProfile } from '../lib/sizes';
+import { OUTFITS_QUERY_KEY } from './useOutfits';
 
 export type { ScanResult };
 
@@ -168,6 +169,7 @@ export function useDeleteItem() {
     onSettled: () => {
       invalidateItemQueries(qc);
       qc.invalidateQueries({ queryKey: CLOSET_REFRESH_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: OUTFITS_QUERY_KEY });
     },
   });
 }

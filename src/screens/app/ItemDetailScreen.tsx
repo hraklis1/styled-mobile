@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
-  Image,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
@@ -10,142 +9,37 @@ import {
   ActionSheetIOS,
   Modal,
   TextInput,
-  KeyboardAvoidingView,
   Platform,
   useWindowDimensions,
   ActivityIndicator,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { compressImageToDataUrl } from '../../lib/compressImage';
-import { useItems, useCreateItem, useUpdateItem, useDeleteItem, useMarkItemWorn, useScanTag, useRefineImage } from '../../hooks/useItems';
-import type { TagScanResult } from '../../hooks/useItems';
+import { useQueryClient } from '@tanstack/react-query';
+import { useItems, useUpdateItem, useDeleteItem, useMarkItemWorn, useRefineImage } from '../../hooks/useItems';
+import { OUTFITS_QUERY_KEY } from '../../hooks/useOutfits';
+import type { Outfit } from '../../types/outfit';
 import { api } from '../../lib/api';
 import { resolveImageUri } from '../../lib/resolveImageUri';
+import { normalizeTag, dedupeTags } from '../../lib/tags';
 import { colors, spacing, typography, radii } from '../../theme';
-import {
-  CATEGORY_LABELS, CATEGORY_ORDER, NORMALIZED_COLORS,
-  PATTERN_OPTIONS, NECKLINE_OPTIONS_BY_CATEGORY,
-  COLOR_TEMPERATURE_OPTIONS, MATERIAL_OPTIONS, CARE_OPTIONS,
-  SEASON_LABELS,
-} from '../../types/item';
-import type { ItemCategory, Item, NormalizedColor, Season } from '../../types/item';
-import { getSubcategories, getStyles } from '../../lib/taxonomy';
+import { CATEGORY_LABELS, SEASON_LABELS } from '../../types/item';
+import type { Item, Season } from '../../types/item';
 import type { ItemDetailScreenProps } from '../../navigation/types';
 import * as Haptics from 'expo-haptics';
-import { EditSection, EditLabel, EditInput, OptionChips } from '../../components/primitives/EditAtoms';
-import { FitDropdown } from '../../components/primitives/FitDropdown';
-import { BottomSheetDropdown } from '../../components/primitives/BottomSheetDropdown';
-import { NORMALIZED_COLOR_HEX, isColorLight, normalizedColorDisplayName, parseMaterialString } from '../../lib/colorUtils';
-
-// ─── Constants ───────────────────────────────────────────────────────────────
-
-const SEASONS: { value: string; label: string }[] = [
-  { value: 'spring', label: 'Spring' },
-  { value: 'summer', label: 'Summer' },
-  { value: 'fall',   label: 'Fall' },
-  { value: 'winter', label: 'Winter' },
-];
-
-const OCCASIONS: { value: string; label: string }[] = [
-  { value: 'casual', label: 'Casual' },
-  { value: 'smart_casual', label: 'Smart Casual' },
-  { value: 'business', label: 'Business' },
-  { value: 'formal', label: 'Formal' },
-  { value: 'party', label: 'Party' },
-  { value: 'workout', label: 'Workout' },
-];
-
-const CONDITIONS: { value: string; label: string }[] = [
-  { value: 'new', label: 'New' },
-  { value: 'good', label: 'Good' },
-  { value: 'worn', label: 'Worn' },
-  { value: 'needs_repair', label: 'Needs Repair' },
-  { value: 'donate', label: 'Donate' },
-];
-
-const WARMTH_OPTIONS: { value: number; label: string }[] = [
-  { value: 1, label: 'Very Light' },
-  { value: 2, label: 'Light' },
-  { value: 3, label: 'Medium' },
-  { value: 4, label: 'Warm' },
-  { value: 5, label: 'Very Warm' },
-];
-
-const FORMALITY_OPTIONS = [
-  'Athleisure', 'Lounge', 'Casual', 'Smart Casual',
-  'Business Casual', 'Professional', 'Night Out', 'Formal',
-];
-
-// Fit options scoped to each garment category
-const FIT_OPTIONS_BY_CATEGORY: Record<string, string[]> = {
-  top: [
-    'Slim Fit', 'Regular Fit', 'Relaxed Fit', 'Oversized',
-    'Fitted', 'Tailored', 'Athletic Fit', 'Compression',
-    'Boxy', 'Cropped', 'Longline',
-  ],
-  bottom: [
-    'Slim Fit', 'Regular Fit', 'Relaxed Fit',
-    'Skinny', 'Straight Leg', 'Tapered', 'Wide Leg', 'Bootcut', 'Flared',
-    'Cropped', 'Athletic Fit', 'Compression',
-  ],
-  full_body: [
-    'Slim Fit', 'Regular Fit', 'Relaxed Fit', 'Oversized',
-    'Fitted', 'Tailored', 'Bodycon', 'A-Line', 'Wrap',
-    'Boxy', 'Cropped', 'Longline',
-  ],
-  outerwear: [
-    'Slim Fit', 'Regular Fit', 'Relaxed Fit', 'Oversized',
-    'Fitted', 'Tailored', 'Athletic Fit', 'Boxy', 'Cropped', 'Longline',
-  ],
-  shoes: [
-    'Regular Width', 'Wide Width', 'Narrow Width',
-    'Slim', 'Regular',
-  ],
-  accessory: [],
-  valuables: [],
-};
-
-// Shown when no category is selected yet
-const FIT_OPTIONS_DEFAULT = [
-  'Slim Fit', 'Regular Fit', 'Relaxed Fit', 'Oversized', 'Fitted', 'Tailored',
-  'Athletic Fit', 'Compression', 'Boxy', 'Cropped', 'Longline',
-  'Skinny', 'Straight Leg', 'Tapered', 'Wide Leg', 'Bootcut', 'Flared',
-  'A-Line', 'Bodycon', 'Wrap',
-];
+import { useTagScanner } from '../../hooks/useTagScanner';
+import { EditItemModal } from '../../components/item/EditItemModal';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function seedCareOptions(raw: string | null): { matched: string[]; custom: string } {
-  if (!raw) return { matched: [], custom: '' };
-  const tokens = raw.split(',').map(t => t.trim()).filter(Boolean);
-  const matched = tokens.filter(t => (CARE_OPTIONS as readonly string[]).includes(t));
-  const unmatched = tokens.filter(t => !(CARE_OPTIONS as readonly string[]).includes(t));
-  return { matched, custom: unmatched.join(', ') };
-}
 
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return 'Never';
   const d = new Date(iso);
   if (isNaN(d.getTime())) return 'Never';
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-function normalizeTag(s: string): string {
-  return s.trim().toLowerCase().slice(0, 40);
-}
-
-function dedupeTags(arr: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const t of arr) {
-    const n = normalizeTag(t);
-    if (!n || seen.has(n)) continue;
-    seen.add(n);
-    out.push(n);
-  }
-  return out;
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
@@ -204,8 +98,6 @@ const sectionStyles = StyleSheet.create({
   },
 });
 
-
-
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 
 export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
@@ -215,18 +107,20 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const { data: items = [] } = useItems();
   const item = items.find((i) => i.id === itemId);
 
-  const createItem = useCreateItem();
+  const qc = useQueryClient();
   const updateItem = useUpdateItem();
   const deleteItem = useDeleteItem();
   const markWorn = useMarkItemWorn();
-  const scanTag = useScanTag();
   const refineImage = useRefineImage();
 
   const { width } = useWindowDimensions();
   const imageHeight = width * 0.85;
   const insets = useSafeAreaInsets();
 
-  // ── Inline tag state ────────────────────────────────────────────────────────
+  // ── Edit modal visibility ────────────────────────────────────────────────────
+  const [editOpen, setEditOpen] = useState(false);
+
+  // ── Inline tag state ─────────────────────────────────────────────────────────
   const [inlineTagActive, setInlineTagActive] = useState(false);
   const [inlineTagValue, setInlineTagValue] = useState('');
   const inlineTagRef = useRef<TextInput>(null);
@@ -234,74 +128,15 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   // ── Re-scan state ────────────────────────────────────────────────────────────
   const [rescanning, setRescanning] = useState(false);
 
-  // ── Tag-scan state ───────────────────────────────────────────────────────────
-  const [tagResult, setTagResult] = useState<TagScanResult | null>(null);
-  const [tagSelectedFields, setTagSelectedFields] = useState<Set<string>>(new Set());
+  // ── Tag scanner ──────────────────────────────────────────────────────────────
+  const tagScanner = useTagScanner(item ?? null);
 
-  // ── Edit modal state ─────────────────────────────────────────────────────────
-  const [editOpen, setEditOpen] = useState(false);
-  const [editName, setEditName] = useState('');
-  const [editBrand, setEditBrand] = useState('');
-  const [editCategory, setEditCategory] = useState<ItemCategory | null>(null);
-  const [editSubcategory, setEditSubcategory] = useState('');
-  const [editStyle, setEditStyle] = useState('');
-  const [editColor, setEditColor] = useState('');
-  const [editSeasons, setEditSeasons] = useState<string[]>([]);
-  const [editOccasions, setEditOccasions] = useState<string[]>([]);
-  const [editCondition, setEditCondition] = useState('good');
-  const [editWarmthRating, setEditWarmthRating] = useState<number | null>(null);
-  const [editPurchasePrice, setEditPurchasePrice] = useState('');
-  const [editPurchaseDate, setEditPurchaseDate] = useState('');
-  const [editPattern, setEditPattern] = useState('');
-  const [editFit, setEditFit] = useState('');
-  const [editNeckline, setEditNeckline] = useState('');
-  const [editFormalityStyles, setEditFormalityStyles] = useState<string[]>([]);
-  const [editTags, setEditTags] = useState<string[]>([]);
-  const [editTagInput, setEditTagInput] = useState('');
-  const [editNotes, setEditNotes] = useState('');
-  const [editMaterial, setEditMaterial] = useState('');
-  const [editCare, setEditCare] = useState('');
-  const [editColorNormalized, setEditColorNormalized] = useState<NormalizedColor | null>(null);
-  const [editColorTemperature, setEditColorTemperature] = useState<string | null>(null);
-  const [editMaterials, setEditMaterials] = useState<string[]>([]);
-  const [editCareOptions, setEditCareOptions] = useState<string[]>([]);
-  const [editCareCustom, setEditCareCustom] = useState('');
-
-  const [createModeInitialized, setCreateModeInitialized] = useState(false);
-
+  // ── Open edit modal after navigation transition (create mode only) ───────────
   useEffect(() => {
-    if (!isCreateMode || createModeInitialized || !scanData) return;
-    // setTimeout(0) lets the navigation transition finish before batching 17 state updates + modal animation
-    setTimeout(() => {
-      setEditName(scanData.name ?? '');
-      setEditBrand(scanData.brand ?? '');
-      setEditCategory(scanData.category ?? null);
-      setEditSubcategory(scanData.subcategory ?? '');
-      setEditStyle(scanData.style ?? '');
-      setEditColor(scanData.color ?? '');
-      setEditSeasons(Array.isArray(scanData.seasons) ? [...scanData.seasons] : []);
-      setEditOccasions(Array.isArray(scanData.occasions) ? [...scanData.occasions] : []);
-      setEditPattern(scanData.pattern ?? '');
-      setEditFit(scanData.fit ?? '');
-      setEditNeckline(scanData.neckline ?? '');
-      setEditFormalityStyles(Array.isArray(scanData.formalityStyles) ? [...scanData.formalityStyles] : []);
-      setEditTags(Array.isArray(scanData.tags) ? [...scanData.tags] : []);
-      setEditMaterial(scanData.material ?? '');
-      setEditCare(scanData.care ?? '');
-      setEditNotes('');
-      setEditTagInput('');
-      // New structured fields
-      setEditColorNormalized((scanData.colorNormalized as NormalizedColor | null) ?? null);
-      setEditColorTemperature(scanData.colorTemperature ?? null);
-      setEditMaterials(parseMaterialString(scanData.material ?? ''));
-      const careSeeded = seedCareOptions(scanData.care);
-      setEditCareOptions(careSeeded.matched);
-      setEditCareCustom(careSeeded.custom);
-      setEditOpen(true);
-      setCreateModeInitialized(true);
-    }, 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    // Intentionally no deps — run once on mount; scanData is stable from nav params
+    if (!isCreateMode || !scanData) return;
+    const t = setTimeout(() => setEditOpen(true), 0);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (!item && !isCreateMode) {
@@ -327,9 +162,15 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
 
   const handleDelete = () => {
     if (!item) return;
+    const outfits = qc.getQueryData<Outfit[]>(OUTFITS_QUERY_KEY) ?? [];
+    const affectedCount = outfits.filter(o => o.itemIds.some(e => e.id === item.id)).length;
+    const warningSuffix = affectedCount > 0
+      ? `\n\nThis item appears in ${affectedCount} outfit${affectedCount === 1 ? '' : 's'}. A deleted placeholder will replace it until you clear it.`
+      : '';
+
     Alert.alert(
       'Remove item',
-      `Remove "${item.name}" from your wardrobe? This can't be undone.`,
+      `Remove "${item.name}" from your wardrobe? This can't be undone.${warningSuffix}`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -363,7 +204,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     updateItem.mutate({ id: item.id, tags: newTags });
   };
 
-  // ── Re-scan handler ───────────────────────────────────────────────────────────
+  // ── Re-scan / photo handlers ─────────────────────────────────────────────────
 
   const handleRescan = async (overrideImageData?: string, fileUri?: string) => {
     if (!item) return;
@@ -412,17 +253,10 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   };
 
   const pickAndChangePhoto = async (source: 'camera' | 'library') => {
-    const pickFn =
-      source === 'camera'
-        ? ImagePicker.launchCameraAsync
-        : ImagePicker.launchImageLibraryAsync;
-
-    const result = await pickFn({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      quality: 1,
-    });
-
+    const pickFn = source === 'camera'
+      ? ImagePicker.launchCameraAsync
+      : ImagePicker.launchImageLibraryAsync;
+    const result = await pickFn({ mediaTypes: ['images'], allowsEditing: true, quality: 1 });
     if (result.canceled || !result.assets[0]) return;
     const { uri, dataUrl } = await compressImageToDataUrl(result.assets[0], 1024, 0.8);
     await handleRescan(dataUrl, uri);
@@ -435,16 +269,9 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
       return;
     }
     refineImage.mutate(
+      { name: item.name, color: item.color || 'neutral', brand: item.brand, category: item.category },
       {
-        name: item.name,
-        color: item.color || 'neutral',
-        brand: item.brand,
-        category: item.category,
-      },
-      {
-        onSuccess: ({ imageData }) => {
-          updateItem.mutate({ id: item.id, imageUrl: imageData });
-        },
+        onSuccess: ({ imageData }) => updateItem.mutate({ id: item.id, imageUrl: imageData }),
         onError: (err: any) => {
           const msg = err?.response?.data?.message ?? 'Could not generate image. Please try again.';
           Alert.alert('Generation failed', msg);
@@ -473,244 +300,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     }
   };
 
-  // ── Edit modal handlers ───────────────────────────────────────────────────────
-
-  const openEdit = () => {
-    if (!item) return;
-    setEditName(item.name);
-    setEditBrand(item.brand ?? '');
-    setEditCategory(item.category);
-    setEditSubcategory(item.subcategory ?? '');
-    setEditStyle(item.style ?? '');
-    setEditColor(item.color ?? '');
-    setEditSeasons(Array.isArray(item.seasons) ? [...item.seasons] : []);
-    setEditOccasions(Array.isArray(item.occasions) ? [...item.occasions] : []);
-    setEditCondition(item.condition ?? 'good');
-    setEditWarmthRating(item.warmthRating ?? null);
-    setEditPurchasePrice(item.purchasePrice != null ? String(item.purchasePrice) : '');
-    setEditPurchaseDate(item.purchaseDate ?? '');
-    setEditPattern(item.pattern ?? '');
-    setEditFit(item.fit ?? '');
-    setEditNeckline(item.neckline ?? '');
-    setEditFormalityStyles(Array.isArray(item.formalityStyles) ? [...item.formalityStyles] : []);
-    setEditTags(Array.isArray(item.tags) ? [...item.tags] : []);
-    setEditTagInput('');
-    setEditNotes(item.notes ?? '');
-    setEditMaterial(item.material ?? '');
-    setEditCare(item.care ?? '');
-    // New structured fields
-    setEditColorNormalized((item.colorNormalized as NormalizedColor | null) ?? null);
-    setEditColorTemperature(item.colorTemperature ?? null);
-    setEditMaterials(parseMaterialString(item.material ?? ''));
-    const { matched, custom } = seedCareOptions(item.care);
-    setEditCareOptions(matched);
-    setEditCareCustom(custom);
-    setEditOpen(true);
-  };
-
-  const handleEditCategoryChange = (cat: ItemCategory) => {
-    setEditCategory(cat);
-    setEditSubcategory('');
-    setEditStyle('');
-    // Reset fit if it's no longer valid for the new category
-    const nextFitOptions = FIT_OPTIONS_BY_CATEGORY[cat] ?? [];
-    if (editFit && nextFitOptions.length > 0 && !nextFitOptions.includes(editFit)) {
-      setEditFit('');
-    }
-  };
-
-  const handleEditSubcategoryChange = (sub: string) => {
-    setEditSubcategory(sub === editSubcategory ? '' : sub);
-    setEditStyle('');
-  };
-
-  const handleEditStyleChange = (s: string) => {
-    setEditStyle(s === editStyle ? '' : s);
-  };
-
-  const commitEditTag = () => {
-    const next = normalizeTag(editTagInput);
-    setEditTagInput('');
-    if (!next || editTags.includes(next)) return;
-    setEditTags((prev) => [...prev, next]);
-  };
-
-  const removeEditTag = (tag: string) => {
-    setEditTags((prev) => prev.filter((t) => t !== tag));
-  };
-
-  const toggleEditFormality = (style: string) => {
-    setEditFormalityStyles((prev) =>
-      prev.includes(style) ? prev.filter((s) => s !== style) : [...prev, style]
-    );
-  };
-
-  const handleSaveEdit = () => {
-    // commit any pending tag input
-    const pendingTag = normalizeTag(editTagInput);
-    const finalTags = pendingTag && !editTags.includes(pendingTag)
-      ? dedupeTags([...editTags, pendingTag])
-      : dedupeTags(editTags);
-
-    const necklineValue = (editCategory ? NECKLINE_OPTIONS_BY_CATEGORY[editCategory] : undefined)
-      ? (editNeckline || null)
-      : null;
-
-    const parsedPrice = editPurchasePrice.trim() ? parseFloat(editPurchasePrice.trim()) : null;
-    const derivedMaterial = editMaterials.length ? editMaterials.join(', ') : null;
-    const derivedCare = [...editCareOptions, editCareCustom.trim()].filter(Boolean).join(', ') || null;
-
-    if (isCreateMode) {
-      createItem.mutate(
-        {
-          name: editName.trim() || 'Untitled',
-          brand: editBrand.trim() || null,
-          category: editCategory,
-          subcategory: editSubcategory || null,
-          style: editStyle || null,
-          color: editColor.trim() || null,
-          colorNormalized: editColorNormalized,
-          colorTemperature: editColorTemperature,
-          seasons: editSeasons,
-          occasions: editOccasions,
-          condition: editCondition || null,
-          warmthRating: editWarmthRating,
-          purchasePrice: parsedPrice && !isNaN(parsedPrice) ? parsedPrice : null,
-          purchaseDate: editPurchaseDate.trim() || null,
-          pattern: editPattern || null,
-          fit: editFit.trim() || null,
-          neckline: necklineValue,
-          formalityStyles: editFormalityStyles,
-          tags: finalTags,
-          notes: editNotes.trim() || null,
-          material: derivedMaterial,
-          care: derivedCare,
-          imageUrl: scanImageUrl ?? null,
-          notableDetails: scanData?.notableDetails ?? [],
-          colorPalette: scanData?.colorPalette ?? [],
-        },
-        {
-          onSuccess: (newItem) => {
-            setEditOpen(false);
-            navigation.replace('ItemDetail', { itemId: newItem.id });
-          },
-          onError: () => Alert.alert('Save failed', 'Could not save the item. Please try again.'),
-        }
-      );
-    } else {
-      updateItem.mutate(
-        {
-          id: item!.id,
-          name: editName.trim() || item!.name,
-          brand: editBrand.trim() || null,
-          category: editCategory,
-          subcategory: editSubcategory || null,
-          style: editStyle || null,
-          color: editColor.trim() || null,
-          colorNormalized: editColorNormalized,
-          colorTemperature: editColorTemperature,
-          seasons: editSeasons,
-          occasions: editOccasions,
-          condition: editCondition || null,
-          warmthRating: editWarmthRating,
-          purchasePrice: parsedPrice && !isNaN(parsedPrice) ? parsedPrice : null,
-          purchaseDate: editPurchaseDate.trim() || null,
-          pattern: editPattern || null,
-          fit: editFit.trim() || null,
-          neckline: necklineValue,
-          formalityStyles: editFormalityStyles,
-          tags: finalTags,
-          notes: editNotes.trim() || null,
-          material: derivedMaterial,
-          care: derivedCare,
-        },
-        {
-          onSuccess: () => setEditOpen(false),
-        }
-      );
-    }
-  };
-
-  // ── Tag-scan handlers ────────────────────────────────────────────────────────
-
-  const handleScanLabel = () => {
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options: ['Cancel', 'Take Photo', 'Choose from Library'], cancelButtonIndex: 0 },
-        (idx) => {
-          if (idx === 1) pickLabelPhoto('camera');
-          if (idx === 2) pickLabelPhoto('library');
-        }
-      );
-    } else {
-      Alert.alert('Scan clothing label', 'Choose a source', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Camera', onPress: () => pickLabelPhoto('camera') },
-        { text: 'Photo Library', onPress: () => pickLabelPhoto('library') },
-      ]);
-    }
-  };
-
-  const pickLabelPhoto = async (source: 'camera' | 'library') => {
-    const pickFn = source === 'camera'
-      ? ImagePicker.launchCameraAsync
-      : ImagePicker.launchImageLibraryAsync;
-    const result = await pickFn({ mediaTypes: ['images'], quality: 1 });
-    if (result.canceled || !result.assets[0]) return;
-    const { dataUrl } = await compressImageToDataUrl(result.assets[0]);
-    scanTag.mutate(
-      { imageData: dataUrl },
-      {
-        onSuccess: (data) => {
-          const hasAny = data.brand || data.size || data.material || data.care;
-          if (!hasAny) {
-            Alert.alert('No label found', "Couldn't read any label info. Try getting closer to the tag.");
-            return;
-          }
-          const initial = new Set<string>();
-          if (data.brand) initial.add('brand');
-          if (data.size) initial.add('size');
-          if (data.material) initial.add('material');
-          if (data.care) initial.add('care');
-          setTagSelectedFields(initial);
-          setTagResult(data);
-        },
-        onError: () => {
-          Alert.alert('Scan failed', 'Could not read the label. Please try again.');
-        },
-      }
-    );
-  };
-
-  const handleApplyTagScan = () => {
-    if (!tagResult || !item) return;
-    const patch: Partial<Item> & { id: number } = { id: item.id };
-    if (tagSelectedFields.has('brand') && tagResult.brand) patch.brand = tagResult.brand;
-    if (tagSelectedFields.has('material') && tagResult.material) patch.material = tagResult.material;
-    if (tagSelectedFields.has('care') && tagResult.care) patch.care = tagResult.care;
-    if (tagSelectedFields.has('size') && tagResult.size) {
-      const sizeTag = tagResult.size.toLowerCase();
-      const existing = item.tags ?? [];
-      if (!existing.includes(sizeTag)) patch.tags = [...existing, sizeTag];
-    }
-    updateItem.mutate(patch, {
-      onSuccess: () => setTagResult(null),
-      onError: () => Alert.alert('Update failed', 'Could not apply label details.'),
-    });
-  };
-
-  // ─── Render ───────────────────────────────────────────────────────────────────
-
-  // Needed by renderEditModal closure below
-  const editSubcats = editCategory ? getSubcategories(editCategory) : [];
-  const editStyleOptions = editCategory && editSubcategory
-    ? getStyles(editCategory, editSubcategory)
-    : [];
-
-  // ── Create mode early return ─────────────────────────────────────────────────
-  // Must come BEFORE view-mode variable declarations so item is guaranteed non-null
-  // for everything that follows. The edit modal is inlined here (same JSX as below)
-  // to avoid the runtime crash from item being undefined while viewItem vars are set.
+  // ── Create mode early return ──────────────────────────────────────────────────
   if (isCreateMode) {
     return (
       <View style={styles.flex}>
@@ -719,243 +309,27 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
             <Image
               source={{ uri: scanImageUrl }}
               style={styles.createImage}
-              resizeMode="contain"
+              contentFit="contain"
+              transition={200}
             />
           </View>
         )}
-        <Modal
+        <EditItemModal
           visible={editOpen}
-          animationType="slide"
-          presentationStyle="pageSheet"
-          onRequestClose={() => navigation.goBack()}
-        >
-          <KeyboardAvoidingView
-            style={styles.flex}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          >
-            <View style={[editStyles.header, { paddingTop: insets.top + spacing.md }]}>
-              <TouchableOpacity
-                onPress={() => navigation.goBack()}
-                style={editStyles.headerButton}
-                disabled={createItem.isPending}
-              >
-                <Text style={editStyles.headerCancel}>Cancel</Text>
-              </TouchableOpacity>
-              <Text style={editStyles.headerTitle}>Review Scan</Text>
-              <TouchableOpacity
-                onPress={handleSaveEdit}
-                style={[editStyles.headerButton, !editName.trim() && editStyles.headerButtonDisabled]}
-                disabled={createItem.isPending || !editName.trim()}
-              >
-                {createItem.isPending ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <Text style={editStyles.headerSave}>Add to Wardrobe</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-            <ScrollView
-              style={styles.flex}
-              contentContainerStyle={editStyles.scrollContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              <EditSection title="Basic Info">
-                <EditLabel>Name *</EditLabel>
-                <EditInput value={editName} onChangeText={setEditName} placeholder="e.g. White Linen Shirt" maxLength={120} />
-                <View style={editStyles.spacer} />
-                <EditLabel>Brand</EditLabel>
-                <EditInput value={editBrand} onChangeText={setEditBrand} placeholder="e.g. Zara" maxLength={80} />
-              </EditSection>
-              <EditSection title="Category">
-                <EditLabel>Type</EditLabel>
-                <View style={editStyles.optionChipsRow}>
-                  {CATEGORY_ORDER.map((cat) => {
-                    const active = editCategory === cat;
-                    return (
-                      <TouchableOpacity key={cat} style={[editStyles.optionChip, active && editStyles.optionChipActive]} onPress={() => handleEditCategoryChange(cat)} activeOpacity={0.7}>
-                        <Text style={[editStyles.optionChipText, active && editStyles.optionChipTextActive]}>{CATEGORY_LABELS[cat]}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-                {editSubcats.length > 0 && (
-                  <>
-                    <View style={editStyles.spacer} />
-                    <EditLabel>Sub-category</EditLabel>
-                    <View style={editStyles.optionChipsRow}>
-                      {editSubcats.map((sub) => {
-                        const active = editSubcategory === sub;
-                        return (
-                          <TouchableOpacity key={sub} style={[editStyles.optionChip, active && editStyles.optionChipActive]} onPress={() => handleEditSubcategoryChange(sub)} activeOpacity={0.7}>
-                            <Text style={[editStyles.optionChipText, active && editStyles.optionChipTextActive]}>{sub}</Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </>
-                )}
-                {editStyleOptions.length > 0 && (
-                  <>
-                    <View style={editStyles.spacer} />
-                    <EditLabel>Style</EditLabel>
-                    <View style={editStyles.optionChipsRow}>
-                      {editStyleOptions.map((s) => {
-                        const active = editStyle === s;
-                        return (
-                          <TouchableOpacity key={s} style={[editStyles.optionChip, active && editStyles.optionChipActive]} onPress={() => handleEditStyleChange(s)} activeOpacity={0.7}>
-                            <Text style={[editStyles.optionChipText, active && editStyles.optionChipTextActive]}>{s}</Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </>
-                )}
-              </EditSection>
-              <EditSection title="Fit & Cut">
-                <EditLabel>Pattern</EditLabel>
-                <OptionChips
-                  options={[...PATTERN_OPTIONS]}
-                  value={editPattern as any}
-                  onSelect={(v: any) => setEditPattern(editPattern === v ? '' : v)}
-                />
-                <View style={editStyles.spacer} />
-                <EditLabel>Fit</EditLabel>
-                <FitDropdown value={editFit} options={editCategory ? (FIT_OPTIONS_BY_CATEGORY[editCategory] ?? []) : FIT_OPTIONS_DEFAULT} onChange={setEditFit} />
-                {(editCategory ? NECKLINE_OPTIONS_BY_CATEGORY[editCategory] : undefined) && (
-                  <>
-                    <View style={editStyles.spacer} />
-                    <EditLabel>Neckline</EditLabel>
-                    <BottomSheetDropdown
-                      title="Neckline"
-                      options={(editCategory ? NECKLINE_OPTIONS_BY_CATEGORY[editCategory] : undefined) ?? []}
-                      value={editNeckline}
-                      onChange={setEditNeckline}
-                      placeholder="Select neckline…"
-                    />
-                  </>
-                )}
-              </EditSection>
-              <EditSection title="Colour & Season">
-                <EditLabel>Colour</EditLabel>
-                <View style={editStyles.swatchGrid}>
-                  {NORMALIZED_COLORS.map((nc) => {
-                    const hex = NORMALIZED_COLOR_HEX[nc];
-                    const isSelected = editColorNormalized === nc;
-                    const light = isColorLight(hex);
-                    return (
-                      <TouchableOpacity
-                        key={nc}
-                        style={[editStyles.swatch, { backgroundColor: hex }, isSelected && editStyles.swatchSelected]}
-                        onPress={() => { setEditColorNormalized(nc); setEditColor(normalizedColorDisplayName(nc)); }}
-                        activeOpacity={0.75}
-                      >
-                        {isSelected && (
-                          <Ionicons name="checkmark" size={14} color={light ? '#28231F' : '#FFFFFF'} />
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-                <View style={editStyles.spacer} />
-                <EditLabel>Custom colour name (optional)</EditLabel>
-                <EditInput
-                  value={editColor}
-                  onChangeText={(v) => { setEditColor(v); if (!v.trim()) setEditColorNormalized(null); }}
-                  placeholder="e.g. Dusty Rose"
-                  maxLength={80}
-                />
-                <View style={editStyles.spacer} />
-                <EditLabel>Colour temperature</EditLabel>
-                <OptionChips
-                  options={[...COLOR_TEMPERATURE_OPTIONS] as { value: string; label: string }[]}
-                  value={editColorTemperature as any}
-                  onSelect={(v: any) => setEditColorTemperature(editColorTemperature === v ? null : v)}
-                />
-                <View style={editStyles.spacer} />
-                <EditLabel>Season (select all that apply)</EditLabel>
-                <OptionChips
-                  options={SEASONS}
-                  multi
-                  multiValue={editSeasons}
-                  onMultiToggle={(v) => setEditSeasons((prev) => prev.includes(v) ? prev.filter((s) => s !== v) : [...prev, v])}
-                />
-                <View style={editStyles.spacer} />
-                <EditLabel>Occasion (select all that apply)</EditLabel>
-                <OptionChips
-                  options={OCCASIONS}
-                  multi
-                  multiValue={editOccasions}
-                  onMultiToggle={(v) => setEditOccasions((prev) => prev.includes(v) ? prev.filter((o) => o !== v) : [...prev, v])}
-                />
-              </EditSection>
-              <EditSection title="Style Context">
-                <OptionChips options={FORMALITY_OPTIONS} multi multiValue={editFormalityStyles} onMultiToggle={toggleEditFormality} />
-              </EditSection>
-              <EditSection title="Tags">
-                <View style={editStyles.tagsBox}>
-                  {editTags.map((tag) => (
-                    <TouchableOpacity key={tag} style={editStyles.tagChip} onPress={() => removeEditTag(tag)} activeOpacity={0.7}>
-                      <Text style={editStyles.tagChipText}>{tag}</Text>
-                      <Ionicons name="close" size={11} color={colors.mutedForeground} style={{ marginLeft: 3 }} />
-                    </TouchableOpacity>
-                  ))}
-                  <TextInput
-                    style={editStyles.tagInput}
-                    value={editTagInput}
-                    onChangeText={setEditTagInput}
-                    onSubmitEditing={commitEditTag}
-                    onBlur={commitEditTag}
-                    placeholder={editTags.length === 0 ? 'Add a tag (Enter to add)…' : 'Add tag…'}
-                    placeholderTextColor={colors.mutedForeground}
-                    maxLength={40}
-                    autoCapitalize="none"
-                    returnKeyType="done"
-                    blurOnSubmit={false}
-                  />
-                </View>
-              </EditSection>
-              <EditSection title="Notes">
-                <EditInput value={editNotes} onChangeText={setEditNotes} placeholder="Fit, fabric, care, anything memorable…" multiline maxLength={500} />
-              </EditSection>
-              <EditSection title="Fabric & Care">
-                <EditLabel>Fabric</EditLabel>
-                <BottomSheetDropdown
-                  title="Fabric"
-                  options={[...MATERIAL_OPTIONS]}
-                  multi
-                  multiValue={editMaterials}
-                  onMultiToggle={(v) => setEditMaterials((prev) => prev.includes(v) ? prev.filter((m) => m !== v) : [...prev, v])}
-                  placeholder="Select fabrics…"
-                  searchable
-                />
-                <View style={editStyles.spacer} />
-                <EditLabel>Care instructions</EditLabel>
-                <OptionChips
-                  options={[...CARE_OPTIONS]}
-                  multi
-                  multiValue={editCareOptions}
-                  onMultiToggle={(v) => setEditCareOptions((prev) => prev.includes(v) ? prev.filter((c) => c !== v) : [...prev, v])}
-                />
-                <View style={editStyles.spacer} />
-                <EditLabel>Additional care notes</EditLabel>
-                <EditInput
-                  value={editCareCustom}
-                  onChangeText={setEditCareCustom}
-                  placeholder="Any other care instructions…"
-                  maxLength={120}
-                />
-              </EditSection>
-            </ScrollView>
-          </KeyboardAvoidingView>
-        </Modal>
+          item={null}
+          isCreateMode
+          scanImageUrl={scanImageUrl}
+          scanData={scanData}
+          onClose={() => navigation.goBack()}
+          onCreateSuccess={(id) => navigation.replace('ItemDetail', { itemId: id })}
+        />
       </View>
     );
   }
 
-  // ── View mode: after both early returns, item is guaranteed non-null ────────────
+  // ── View mode: item is guaranteed non-null past this point ───────────────────
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const viewItem = item!; // TypeScript can't narrow across two separate if-guards above
+  const viewItem = item!;
   const imageUri = resolveImageUri(viewItem.imageUrl);
   const breadcrumb = [
     viewItem.category ? CATEGORY_LABELS[viewItem.category] : null,
@@ -978,26 +352,23 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         {/* Image */}
         <View style={[styles.imageContainer, { height: imageHeight }]}>
           {imageUri ? (
-            <Image source={{ uri: imageUri }} style={styles.image} resizeMode="cover" />
+            <Image source={{ uri: imageUri }} style={styles.image} contentFit="cover" transition={200} />
           ) : (
             <View style={[styles.imagePlaceholder, { height: imageHeight }]}>
               <Ionicons name="shirt-outline" size={64} color={colors.border} />
             </View>
           )}
-          {/* Back button */}
           <TouchableOpacity
             style={[styles.backButton, { top: insets.top + spacing.sm }]}
             onPress={() => navigation.goBack()}
           >
             <Ionicons name="chevron-back" size={22} color={colors.foreground} />
           </TouchableOpacity>
-          {/* Favourite badge */}
           {viewItem.isFavorite && (
             <View style={[styles.favBadge, { top: insets.top + spacing.sm }]}>
               <Ionicons name="heart" size={14} color={colors.primary} />
             </View>
           )}
-          {/* Change photo button */}
           <TouchableOpacity
             style={styles.changePhotoBtn}
             onPress={handleChangePhoto}
@@ -1020,7 +391,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           </View>
         </View>
 
-        {/* Action row — positive actions */}
+        {/* Actions */}
         <View style={styles.actionRow}>
           <TouchableOpacity
             style={[styles.actionButton, markWorn.isPending && styles.actionDisabled]}
@@ -1030,7 +401,6 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
             <Ionicons name="checkmark-circle-outline" size={20} color={colors.primary} />
             <Text style={styles.actionLabel}>Worn today</Text>
           </TouchableOpacity>
-
           <TouchableOpacity
             style={[styles.actionButton, updateItem.isPending && styles.actionDisabled]}
             onPress={handleToggleFavorite}
@@ -1045,7 +415,6 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           </TouchableOpacity>
         </View>
 
-        {/* Destructive action — text-only, visually subordinate */}
         <TouchableOpacity
           style={[styles.removeRow, isBusy && styles.actionDisabled]}
           onPress={handleDelete}
@@ -1083,7 +452,6 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
             </View>
           ) : (
             <>
-              {/* Re-scan button (small, in top-right of section) */}
               {viewItem.imageUrl && (
                 <TouchableOpacity
                   style={styles.rescanMini}
@@ -1098,14 +466,10 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
                   <Text style={styles.rescanMiniText}>Re-scan</Text>
                 </TouchableOpacity>
               )}
-
               {viewItem.colorPalette?.length > 0 && (
                 <View style={styles.swatchRow}>
                   {viewItem.colorPalette.map((hex, i) => (
-                    <View
-                      key={i}
-                      style={[styles.swatch, { backgroundColor: hex }]}
-                    />
+                    <View key={i} style={[styles.swatch, { backgroundColor: hex }]} />
                   ))}
                 </View>
               )}
@@ -1132,7 +496,9 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
             {viewItem.seasons?.length > 0 && (
               <View style={styles.detailItem}>
                 <Text style={styles.detailLabel}>Season</Text>
-                <Text style={styles.detailValue}>{(viewItem.seasons ?? []).map((s) => SEASON_LABELS[s as Season] ?? (s.charAt(0).toUpperCase() + s.slice(1))).join(', ')}</Text>
+                <Text style={styles.detailValue}>
+                  {(viewItem.seasons ?? []).map((s) => SEASON_LABELS[s as Season] ?? (s.charAt(0).toUpperCase() + s.slice(1))).join(', ')}
+                </Text>
               </View>
             )}
             {viewItem.occasions?.length > 0 && (
@@ -1150,7 +516,9 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
             {viewItem.warmthRating != null && (
               <View style={styles.detailItem}>
                 <Text style={styles.detailLabel}>Warmth</Text>
-                <Text style={styles.detailValue}>{['Very Light','Light','Medium','Warm','Very Warm'][viewItem.warmthRating - 1] ?? String(viewItem.warmthRating)}</Text>
+                <Text style={styles.detailValue}>
+                  {['Very Light', 'Light', 'Medium', 'Warm', 'Very Warm'][viewItem.warmthRating - 1] ?? String(viewItem.warmthRating)}
+                </Text>
               </View>
             )}
             {viewItem.purchasePrice != null && (
@@ -1178,7 +546,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           </View>
         </SectionCard>
 
-        {/* Tags (with inline add/remove) */}
+        {/* Tags */}
         <SectionCard title="Tags">
           {(viewItem.tags ?? []).length === 0 && !inlineTagActive ? (
             <TouchableOpacity
@@ -1207,7 +575,6 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
                   <Ionicons name="close" size={11} color={colors.mutedForeground} style={{ marginLeft: 3 }} />
                 </TouchableOpacity>
               ))}
-
               {inlineTagActive ? (
                 <TextInput
                   ref={inlineTagRef}
@@ -1255,18 +622,18 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
             </View>
           )}
           <TouchableOpacity
-            style={[styles.scanLabelBtn, scanTag.isPending && styles.actionDisabled]}
-            onPress={handleScanLabel}
-            disabled={scanTag.isPending}
+            style={[styles.scanLabelBtn, tagScanner.isScanning && styles.actionDisabled]}
+            onPress={tagScanner.handleScanLabel}
+            disabled={tagScanner.isScanning}
             activeOpacity={0.7}
           >
-            {scanTag.isPending ? (
+            {tagScanner.isScanning ? (
               <ActivityIndicator size="small" color={colors.primary} />
             ) : (
               <Ionicons name="barcode-outline" size={15} color={colors.primary} />
             )}
             <Text style={styles.scanLabelBtnText}>
-              {scanTag.isPending ? 'Reading label…' : 'Scan clothing label'}
+              {tagScanner.isScanning ? 'Reading label…' : 'Scan clothing label'}
             </Text>
           </TouchableOpacity>
         </SectionCard>
@@ -1281,7 +648,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         {/* Edit button */}
         <TouchableOpacity
           style={styles.editButton}
-          onPress={openEdit}
+          onPress={() => setEditOpen(true)}
           activeOpacity={0.8}
         >
           <Ionicons name="pencil-outline" size={18} color={colors.foreground} />
@@ -1289,23 +656,23 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* ── Label scan result sheet ─────────────────────────────────────── */}
+      {/* ── Label scan result sheet ─────────────────────────────────────────── */}
       <Modal
-        visible={!!tagResult}
+        visible={!!tagScanner.tagResult}
         transparent
         animationType="slide"
-        onRequestClose={() => setTagResult(null)}
+        onRequestClose={tagScanner.dismissTagResult}
       >
         <View style={lsStyles.overlay}>
-          <TouchableOpacity style={lsStyles.backdrop} onPress={() => setTagResult(null)} activeOpacity={1} />
+          <TouchableOpacity style={lsStyles.backdrop} onPress={tagScanner.dismissTagResult} activeOpacity={1} />
           <View style={[lsStyles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
             <View style={lsStyles.handle} />
             <Text style={lsStyles.sheetTitle}>Label Detected</Text>
             <Text style={lsStyles.sheetSubtitle}>Select fields to apply to this item</Text>
-            {tagResult && (['brand', 'size', 'material', 'care'] as const).map((field) => {
-              const val = tagResult[field];
+            {tagScanner.tagResult && (['brand', 'size', 'material', 'care'] as const).map((field) => {
+              const val = tagScanner.tagResult![field];
               if (!val) return null;
-              const active = tagSelectedFields.has(field);
+              const active = tagScanner.tagSelectedFields.has(field);
               const fieldLabels: Record<string, string> = {
                 brand: 'Brand', size: 'Size (as tag)', material: 'Material', care: 'Care',
               };
@@ -1313,7 +680,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
                 <TouchableOpacity
                   key={field}
                   style={[lsStyles.row, active && lsStyles.rowActive]}
-                  onPress={() => setTagSelectedFields((prev) => {
+                  onPress={() => tagScanner.setTagSelectedFields((prev) => {
                     const next = new Set(prev);
                     if (next.has(field)) next.delete(field); else next.add(field);
                     return next;
@@ -1332,12 +699,12 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
             })}
             <View style={lsStyles.sheetActions}>
               <TouchableOpacity
-                style={[lsStyles.applyBtn, tagSelectedFields.size === 0 && { opacity: 0.4 }]}
-                onPress={handleApplyTagScan}
-                disabled={tagSelectedFields.size === 0 || updateItem.isPending}
+                style={[lsStyles.applyBtn, tagScanner.tagSelectedFields.size === 0 && { opacity: 0.4 }]}
+                onPress={tagScanner.handleApplyTagScan}
+                disabled={tagScanner.tagSelectedFields.size === 0 || tagScanner.isApplying}
                 activeOpacity={0.8}
               >
-                {updateItem.isPending ? (
+                {tagScanner.isApplying ? (
                   <ActivityIndicator size="small" color={colors.primaryForeground} />
                 ) : (
                   <Text style={lsStyles.applyBtnText}>Apply selected</Text>
@@ -1345,7 +712,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
               </TouchableOpacity>
               <TouchableOpacity
                 style={lsStyles.dismissBtn}
-                onPress={() => setTagResult(null)}
+                onPress={tagScanner.dismissTagResult}
                 activeOpacity={0.7}
               >
                 <Text style={lsStyles.dismissBtnText}>Dismiss</Text>
@@ -1355,340 +722,14 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         </View>
       </Modal>
 
-      {/* ── Edit modal ──────────────────────────────────────────────────── */}
-      <Modal
+      {/* ── Edit modal ──────────────────────────────────────────────────────── */}
+      <EditItemModal
         visible={editOpen}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => isCreateMode ? navigation.goBack() : setEditOpen(false)}
-      >
-        <KeyboardAvoidingView
-          style={styles.flex}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          {/* Modal header */}
-          <View style={[editStyles.header, { paddingTop: insets.top + spacing.md }]}>
-            <TouchableOpacity
-              onPress={() => isCreateMode ? navigation.goBack() : setEditOpen(false)}
-              style={editStyles.headerButton}
-              disabled={updateItem.isPending || createItem.isPending}
-            >
-              <Text style={editStyles.headerCancel}>Cancel</Text>
-            </TouchableOpacity>
-            <Text style={editStyles.headerTitle}>{isCreateMode ? 'Review Scan' : 'Edit Item'}</Text>
-            <TouchableOpacity
-              onPress={handleSaveEdit}
-              style={[editStyles.headerButton, !editName.trim() && editStyles.headerButtonDisabled]}
-              disabled={updateItem.isPending || createItem.isPending || !editName.trim()}
-            >
-              {(updateItem.isPending || createItem.isPending) ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Text style={editStyles.headerSave}>
-                  {isCreateMode ? 'Add to Wardrobe' : 'Save'}
-                </Text>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView
-            style={styles.flex}
-            contentContainerStyle={editStyles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            {/* Basic Info */}
-            <EditSection title="Basic Info">
-              <EditLabel>Name *</EditLabel>
-              <EditInput
-                value={editName}
-                onChangeText={setEditName}
-                placeholder="e.g. White Linen Shirt"
-                maxLength={120}
-              />
-              <View style={editStyles.spacer} />
-              <EditLabel>Brand</EditLabel>
-              <EditInput
-                value={editBrand}
-                onChangeText={setEditBrand}
-                placeholder="e.g. Zara"
-                maxLength={80}
-              />
-            </EditSection>
-
-            {/* Category */}
-            <EditSection title="Category">
-              <EditLabel>Type</EditLabel>
-              <View style={editStyles.optionChipsRow}>
-                {CATEGORY_ORDER.map((cat) => {
-                  const active = editCategory === cat;
-                  return (
-                    <TouchableOpacity
-                      key={cat}
-                      style={[editStyles.optionChip, active && editStyles.optionChipActive]}
-                      onPress={() => handleEditCategoryChange(cat)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[editStyles.optionChipText, active && editStyles.optionChipTextActive]}>
-                        {CATEGORY_LABELS[cat]}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {editSubcats.length > 0 && (
-                <>
-                  <View style={editStyles.spacer} />
-                  <EditLabel>Sub-category</EditLabel>
-                  <View style={editStyles.optionChipsRow}>
-                    {editSubcats.map((sub) => {
-                      const active = editSubcategory === sub;
-                      return (
-                        <TouchableOpacity
-                          key={sub}
-                          style={[editStyles.optionChip, active && editStyles.optionChipActive]}
-                          onPress={() => handleEditSubcategoryChange(sub)}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={[editStyles.optionChipText, active && editStyles.optionChipTextActive]}>
-                            {sub}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </>
-              )}
-
-              {editStyleOptions.length > 0 && (
-                <>
-                  <View style={editStyles.spacer} />
-                  <EditLabel>Style</EditLabel>
-                  <View style={editStyles.optionChipsRow}>
-                    {editStyleOptions.map((s) => {
-                      const active = editStyle === s;
-                      return (
-                        <TouchableOpacity
-                          key={s}
-                          style={[editStyles.optionChip, active && editStyles.optionChipActive]}
-                          onPress={() => handleEditStyleChange(s)}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={[editStyles.optionChipText, active && editStyles.optionChipTextActive]}>
-                            {s}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </>
-              )}
-            </EditSection>
-
-            {/* Fit & Cut */}
-            <EditSection title="Fit & Cut">
-              <EditLabel>Pattern</EditLabel>
-              <OptionChips
-                options={[...PATTERN_OPTIONS]}
-                value={editPattern as any}
-                onSelect={(v: any) => setEditPattern(editPattern === v ? '' : v)}
-              />
-              <View style={editStyles.spacer} />
-              <EditLabel>Fit</EditLabel>
-              <FitDropdown
-                value={editFit}
-                options={editCategory ? (FIT_OPTIONS_BY_CATEGORY[editCategory] ?? []) : FIT_OPTIONS_DEFAULT}
-                onChange={setEditFit}
-              />
-              {(editCategory ? NECKLINE_OPTIONS_BY_CATEGORY[editCategory] : undefined) && (
-                <>
-                  <View style={editStyles.spacer} />
-                  <EditLabel>Neckline</EditLabel>
-                  <BottomSheetDropdown
-                    title="Neckline"
-                    options={(editCategory ? NECKLINE_OPTIONS_BY_CATEGORY[editCategory] : undefined) ?? []}
-                    value={editNeckline}
-                    onChange={setEditNeckline}
-                    placeholder="Select neckline…"
-                  />
-                </>
-              )}
-            </EditSection>
-
-            {/* Colour & Season */}
-            <EditSection title="Colour & Season">
-              <EditLabel>Colour</EditLabel>
-              <View style={editStyles.swatchGrid}>
-                {NORMALIZED_COLORS.map((nc) => {
-                  const hex = NORMALIZED_COLOR_HEX[nc];
-                  const isSelected = editColorNormalized === nc;
-                  const light = isColorLight(hex);
-                  return (
-                    <TouchableOpacity
-                      key={nc}
-                      style={[editStyles.swatch, { backgroundColor: hex }, isSelected && editStyles.swatchSelected]}
-                      onPress={() => { setEditColorNormalized(nc); setEditColor(normalizedColorDisplayName(nc)); }}
-                      activeOpacity={0.75}
-                    >
-                      {isSelected && (
-                        <Ionicons name="checkmark" size={14} color={light ? '#28231F' : '#FFFFFF'} />
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-              <View style={editStyles.spacer} />
-              <EditLabel>Custom colour name (optional)</EditLabel>
-              <EditInput
-                value={editColor}
-                onChangeText={(v) => { setEditColor(v); if (!v.trim()) setEditColorNormalized(null); }}
-                placeholder="e.g. Dusty Rose"
-                maxLength={80}
-              />
-              <View style={editStyles.spacer} />
-              <EditLabel>Colour temperature</EditLabel>
-              <OptionChips
-                options={[...COLOR_TEMPERATURE_OPTIONS] as { value: string; label: string }[]}
-                value={editColorTemperature as any}
-                onSelect={(v: any) => setEditColorTemperature(editColorTemperature === v ? null : v)}
-              />
-              <View style={editStyles.spacer} />
-              <EditLabel>Season (select all that apply)</EditLabel>
-              <OptionChips
-                options={SEASONS}
-                multi
-                multiValue={editSeasons}
-                onMultiToggle={(v) => setEditSeasons((prev) => prev.includes(v) ? prev.filter((s) => s !== v) : [...prev, v])}
-              />
-              <View style={editStyles.spacer} />
-              <EditLabel>Occasion (select all that apply)</EditLabel>
-              <OptionChips
-                options={OCCASIONS}
-                multi
-                multiValue={editOccasions}
-                onMultiToggle={(v) => setEditOccasions((prev) => prev.includes(v) ? prev.filter((o) => o !== v) : [...prev, v])}
-              />
-            </EditSection>
-
-            {/* Style Context */}
-            <EditSection title="Style Context">
-              <OptionChips
-                options={FORMALITY_OPTIONS}
-                multi
-                multiValue={editFormalityStyles}
-                onMultiToggle={toggleEditFormality}
-              />
-            </EditSection>
-
-            {/* Condition & Warmth */}
-            <EditSection title="Condition & Warmth">
-              <EditLabel>Condition</EditLabel>
-              <OptionChips
-                options={CONDITIONS}
-                value={editCondition as any}
-                onSelect={(v) => setEditCondition(v)}
-              />
-              <View style={editStyles.spacer} />
-              <EditLabel>Warmth Rating</EditLabel>
-              <OptionChips
-                options={WARMTH_OPTIONS.map((w) => ({ value: String(w.value), label: w.label }))}
-                value={editWarmthRating != null ? String(editWarmthRating) : null}
-                onSelect={(v) => setEditWarmthRating(editWarmthRating === Number(v) ? null : Number(v))}
-              />
-            </EditSection>
-
-            {/* Fabric & Care */}
-            <EditSection title="Fabric & Care">
-              <EditLabel>Fabric</EditLabel>
-              <BottomSheetDropdown
-                title="Fabric"
-                options={[...MATERIAL_OPTIONS]}
-                multi
-                multiValue={editMaterials}
-                onMultiToggle={(v) => setEditMaterials((prev) => prev.includes(v) ? prev.filter((m) => m !== v) : [...prev, v])}
-                placeholder="Select fabrics…"
-              />
-              <View style={editStyles.spacer} />
-              <EditLabel>Care instructions</EditLabel>
-              <OptionChips
-                options={[...CARE_OPTIONS]}
-                multi
-                multiValue={editCareOptions}
-                onMultiToggle={(v) => setEditCareOptions((prev) => prev.includes(v) ? prev.filter((c) => c !== v) : [...prev, v])}
-              />
-              <View style={editStyles.spacer} />
-              <EditLabel>Additional care notes</EditLabel>
-              <EditInput
-                value={editCareCustom}
-                onChangeText={setEditCareCustom}
-                placeholder="Any other care instructions…"
-                maxLength={120}
-              />
-            </EditSection>
-
-            {/* Purchase Info */}
-            <EditSection title="Purchase Info">
-              <EditLabel>Purchase Price</EditLabel>
-              <EditInput
-                value={editPurchasePrice}
-                onChangeText={setEditPurchasePrice}
-                placeholder="e.g. 89.99"
-                maxLength={12}
-              />
-              <View style={editStyles.spacer} />
-              <EditLabel>Purchase Date</EditLabel>
-              <EditInput
-                value={editPurchaseDate}
-                onChangeText={setEditPurchaseDate}
-                placeholder="YYYY-MM-DD"
-                maxLength={10}
-              />
-            </EditSection>
-
-            {/* Tags */}
-            <EditSection title="Tags">
-              <View style={editStyles.tagsBox}>
-                {editTags.map((tag) => (
-                  <TouchableOpacity
-                    key={tag}
-                    style={editStyles.tagChip}
-                    onPress={() => removeEditTag(tag)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={editStyles.tagChipText}>{tag}</Text>
-                    <Ionicons name="close" size={11} color={colors.mutedForeground} style={{ marginLeft: 3 }} />
-                  </TouchableOpacity>
-                ))}
-                <TextInput
-                  style={editStyles.tagInput}
-                  value={editTagInput}
-                  onChangeText={setEditTagInput}
-                  onSubmitEditing={commitEditTag}
-                  onBlur={commitEditTag}
-                  placeholder={editTags.length === 0 ? 'Add a tag (Enter to add)…' : 'Add tag…'}
-                  placeholderTextColor={colors.mutedForeground}
-                  maxLength={40}
-                  autoCapitalize="none"
-                  returnKeyType="done"
-                  blurOnSubmit={false}
-                />
-              </View>
-            </EditSection>
-
-            {/* Notes */}
-            <EditSection title="Notes">
-              <EditInput
-                value={editNotes}
-                onChangeText={setEditNotes}
-                placeholder="Fit, fabric, care, anything memorable…"
-                multiline
-                maxLength={500}
-              />
-            </EditSection>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
+        item={viewItem}
+        isCreateMode={false}
+        onClose={() => setEditOpen(false)}
+        onCreateSuccess={() => {}}
+      />
     </View>
   );
 }
@@ -1700,11 +741,6 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scrollContent: { paddingBottom: spacing.xxxl },
 
-  // ── Create mode scaffold
-  createScaffold: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
   createImageContainer: {
     width: '100%',
     height: 340,
@@ -1829,7 +865,6 @@ const styles = StyleSheet.create({
     color: colors.foreground,
   },
 
-  // Re-scan
   rescanEmpty: {
     alignItems: 'center',
     paddingVertical: spacing.sm,
@@ -1873,7 +908,6 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
   },
 
-  // Profile chips
   swatchRow: {
     flexDirection: 'row',
     gap: spacing.sm,
@@ -1891,7 +925,6 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
 
-  // Details
   detailGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1921,7 +954,6 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
   },
 
-  // Inline tags
   tagChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1986,7 +1018,6 @@ const styles = StyleSheet.create({
     lineHeight: typography.size.md * typography.lineHeight.normal,
   },
 
-  // Scan label button (inside Fabric & Care card)
   scanLabelBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2006,7 +1037,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.medium,
   },
 
-  // Edit button
   editButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2024,185 +1054,6 @@ const styles = StyleSheet.create({
     fontSize: typography.size.md,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
-  },
-});
-
-const editStyles = StyleSheet.create({
-  // Modal header
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  headerButton: {
-    minWidth: 60,
-  },
-  headerButtonDisabled: {
-    opacity: 0.4,
-  },
-  headerCancel: {
-    fontSize: typography.size.md,
-    color: colors.mutedForeground,
-  },
-  headerTitle: {
-    fontSize: typography.size.md,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  headerSave: {
-    fontSize: typography.size.md,
-    fontWeight: typography.weight.semibold,
-    color: colors.primary,
-    textAlign: 'right',
-  },
-
-  scrollContent: {
-    paddingBottom: 60,
-  },
-
-  // Section
-  section: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  sectionTitle: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.semibold,
-    color: colors.mutedForeground,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: spacing.md,
-  },
-
-  label: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.medium,
-    color: colors.foreground,
-    marginBottom: spacing.xs,
-  },
-
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
-    fontSize: typography.size.md,
-    color: colors.foreground,
-    backgroundColor: colors.card,
-  },
-  inputMultiline: {
-    minHeight: 90,
-    textAlignVertical: 'top',
-    paddingTop: spacing.sm + 2,
-  },
-
-  spacer: {
-    height: spacing.md,
-  },
-
-  row: {
-    flexDirection: 'row',
-    gap: spacing.md,
-  },
-  rowHalf: {
-    flex: 1,
-  },
-
-  // Option chips (radio / multi)
-  optionChipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs + 2,
-  },
-  optionChip: {
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 6,
-    borderRadius: radii.full,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-  },
-  optionChipActive: {
-    backgroundColor: colors.foreground,
-    borderColor: colors.foreground,
-  },
-  optionChipText: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.medium,
-    color: colors.mutedForeground,
-  },
-  optionChipTextActive: {
-    color: colors.background,
-  },
-
-  // Colour swatch grid
-  swatchGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-    marginBottom: 2,
-  },
-  swatch: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  swatchSelected: {
-    borderWidth: 2.5,
-    borderColor: colors.primary,
-  },
-
-  // Tags box
-  tagsBox: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.sm,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
-    backgroundColor: colors.card,
-    minHeight: 44,
-  },
-  tagChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: radii.full,
-    backgroundColor: colors.muted,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginRight: spacing.xs,
-    marginBottom: spacing.xs,
-  },
-  tagChipText: {
-    fontSize: typography.size.xs,
-    color: colors.foreground,
-    fontWeight: typography.weight.medium,
-  },
-  tagInput: {
-    flex: 1,
-    minWidth: 120,
-    height: 28,
-    fontSize: typography.size.sm,
-    color: colors.foreground,
-    paddingHorizontal: 4,
-    marginBottom: spacing.xs,
   },
 });
 

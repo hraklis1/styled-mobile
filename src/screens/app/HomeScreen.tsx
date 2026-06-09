@@ -4,10 +4,10 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  Image,
   TouchableOpacity,
   useWindowDimensions,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
@@ -54,7 +54,10 @@ const OCCASION_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 function getGreeting(name?: string | null): string {
   const h = new Date().getHours();
   const period = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-  return name ? `${period}, ${name.split(' ')[0]}.` : `${period}.`;
+  if (!name) return `${period}.`;
+  const first = name.split(' ')[0];
+  const capitalized = first.charAt(0).toUpperCase() + first.slice(1);
+  return `${period}, ${capitalized}.`;
 }
 
 function stripTempFromSummary(summary: string): string {
@@ -337,7 +340,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                             <Image
                               source={{ uri: imgUri }}
                               style={StyleSheet.absoluteFill}
-                              resizeMode="cover"
+                              contentFit="cover"
+                              transition={150}
                             />
                           ) : (
                             <Ionicons name="shirt-outline" size={12} color={colors.mutedForeground} />
@@ -463,7 +467,7 @@ const styles = StyleSheet.create({
   },
   weatherLine: {
     fontSize: typography.size.xs,
-    color: colors.mutedForeground,
+    color: '#5C5249',
   },
   chipsRow: {
     flexDirection: 'row',
@@ -701,7 +705,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: `${colors.primary}30`,
-    padding: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.lg,
     marginBottom: spacing.lg,
     ...shadows.sm,
   },

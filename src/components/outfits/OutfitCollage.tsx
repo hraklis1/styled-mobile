@@ -31,21 +31,29 @@ export function OutfitCollage({ outfit, size, borderRadius = radii.md }: Props) 
     );
   }
 
-  const slotIds = (outfit.itemIds ?? []).map((e) => e.id);
-
-  const imageUris = slotIds
-    .map((id) => resolveImageUri(itemMap.get(id)?.imageUrl ?? null))
-    .filter((uri): uri is string => !!uri)
-    .slice(0, 4);
+  const slots = (outfit.itemIds ?? [])
+    .slice(0, 4)
+    .map((e) => {
+      const resolved = itemMap.get(e.id);
+      return {
+        uri: resolveImageUri(resolved?.imageUrl ?? null),
+        ghost: !resolved,
+      };
+    });
 
   const cellSize = size / 2;
 
-  // Fewer than 2 items — show single large image or placeholder
-  if (imageUris.length <= 1) {
+  // Fewer than 2 items — show single large image, ghost, or empty placeholder
+  if (slots.length <= 1) {
+    const slot = slots[0];
     return (
       <View style={[styles.container, { width: size, height: size, borderRadius }]}>
-        {imageUris[0] ? (
-          <Image source={{ uri: imageUris[0] }} style={styles.fill} contentFit="cover" />
+        {slot?.uri ? (
+          <Image source={{ uri: slot.uri }} style={styles.fill} contentFit="cover" />
+        ) : slot?.ghost ? (
+          <View style={styles.placeholder}>
+            <Ionicons name="unlink-outline" size={size * 0.25} color={colors.border} />
+          </View>
         ) : (
           <View style={styles.placeholder}>
             <Ionicons name="layers-outline" size={size * 0.3} color={colors.border} />
@@ -60,19 +68,22 @@ export function OutfitCollage({ outfit, size, borderRadius = radii.md }: Props) 
 
   return (
     <View style={[styles.container, styles.grid, { width: size, height: size, borderRadius }]}>
-      {cells.map((i) => (
-        <View key={i} style={{ width: cellSize, height: cellSize }}>
-          {imageUris[i] ? (
-            <Image
-              source={{ uri: imageUris[i] }}
-              style={styles.fill}
-              contentFit="cover"
-            />
-          ) : (
-            <View style={[styles.fill, { backgroundColor: colors.muted }]} />
-          )}
-        </View>
-      ))}
+      {cells.map((i) => {
+        const slot = slots[i];
+        return (
+          <View key={i} style={{ width: cellSize, height: cellSize }}>
+            {slot?.uri ? (
+              <Image source={{ uri: slot.uri }} style={styles.fill} contentFit="cover" />
+            ) : slot?.ghost ? (
+              <View style={[styles.fill, styles.ghostCell]}>
+                <Ionicons name="unlink-outline" size={cellSize * 0.3} color={colors.border} />
+              </View>
+            ) : (
+              <View style={[styles.fill, { backgroundColor: colors.muted }]} />
+            )}
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -92,6 +103,11 @@ const styles = StyleSheet.create({
   },
   placeholder: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ghostCell: {
+    backgroundColor: colors.muted,
     alignItems: 'center',
     justifyContent: 'center',
   },
