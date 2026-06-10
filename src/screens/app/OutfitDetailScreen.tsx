@@ -177,7 +177,9 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   }, [localTags, outfit, updateOutfit]);
 
   const [notesSaved, setNotesSaved] = useState(false);
+  const [isNameFocused, setIsNameFocused] = useState(false);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nameInputRef = useRef<TextInput>(null);
   const tagInputRef = useRef<TextInput>(null);
   const notesInputRef = useRef<TextInput>(null);
 
@@ -332,16 +334,32 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
 
         {/* ── Title ── */}
         <View style={[styles.header, { maxWidth: width }]}>
-          <TextInput
-            style={styles.name}
-            value={localName}
-            onChangeText={setLocalName}
-            onBlur={saveName}
-            onSubmitEditing={saveName}
-            returnKeyType="done"
-            autoCapitalize="words"
-            selectTextOnFocus
-          />
+          <View style={[styles.nameRow, isNameFocused && styles.nameRowFocused]}>
+            <TextInput
+              ref={nameInputRef}
+              style={styles.name}
+              value={localName}
+              onChangeText={setLocalName}
+              onFocus={() => setIsNameFocused(true)}
+              onBlur={() => { setIsNameFocused(false); saveName(); }}
+              onSubmitEditing={saveName}
+              returnKeyType="done"
+              autoCapitalize="words"
+              selectTextOnFocus
+              editable={isNameFocused}
+            />
+            {!isNameFocused && (
+              <TouchableOpacity
+                onPress={() => {
+                  setIsNameFocused(true);
+                  setTimeout(() => nameInputRef.current?.focus(), 0);
+                }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="pencil-outline" size={16} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            )}
+          </View>
           {outfit.event ? (
             <View style={styles.eventRow}>
               <Ionicons name="calendar-outline" size={14} color={colors.mutedForeground} />
@@ -629,13 +647,27 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     gap: 4,
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderBottomWidth: 1.5,
+    borderBottomColor: 'transparent',
+    paddingBottom: 2,
+  },
+  nameRowFocused: {
+    borderBottomColor: colors.primary,
+  },
   name: {
+    flex: 1,
     fontSize: typography.size.xl,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
     letterSpacing: -0.3,
     lineHeight: typography.size.xl * typography.lineHeight.normal,
-    flexShrink: 1,
+  },
+  nameEditIcon: {
+    flexShrink: 0,
   },
   eventRow: {
     flexDirection: 'row',

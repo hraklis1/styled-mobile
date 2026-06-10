@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { Alert } from 'react-native';
 import { api, isNetworkError } from '../lib/api';
 import { FASHION_BRANDS } from '../lib/fashionBrands';
+import { track } from '../lib/analytics';
 import type { Item, ItemCategory, ScanResult } from '../types/item';
 import type { SizeProfile } from '../lib/sizes';
 import { OUTFITS_QUERY_KEY } from './useOutfits';
@@ -181,6 +182,7 @@ export function useCreateItem() {
       api.post<Item>('/api/items', input).then((r) => r.data),
     onSuccess: (newItem) => {
       qc.setQueryData<Item[]>(ITEMS_QUERY_KEY, (old = []) => [newItem, ...old]);
+      track('item_added', { category: newItem.category });
     },
     onError: () => {
       Alert.alert('Error', "Couldn't save item. Please try again.");

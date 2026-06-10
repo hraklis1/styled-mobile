@@ -34,6 +34,7 @@ import { useTagScanner } from '../../hooks/useTagScanner';
 import { EditItemModal } from '../../components/item/EditItemModal';
 import { SectionCard } from '../../components/primitives/SectionCard';
 import { Chip } from '../../components/primitives/Chip';
+import { ErrorState } from '../../components/primitives/ErrorState';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -51,7 +52,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const { itemId, scanData, scanImageUrl } = route.params;
   const isCreateMode = !itemId && !!scanData;
 
-  const { data: items = [] } = useItems();
+  const { data: items = [], isError: itemsError, refetch: refetchItems } = useItems();
   const item = items.find((i) => i.id === itemId);
 
   const qc = useQueryClient();
@@ -87,6 +88,9 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   }, []);
 
   if (!item && !isCreateMode) {
+    if (itemsError) {
+      return <ErrorState message="Couldn't load this item" onRetry={refetchItems} />;
+    }
     return (
       <View style={styles.centered}>
         <ActivityIndicator color={colors.primary} />

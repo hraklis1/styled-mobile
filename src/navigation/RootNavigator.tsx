@@ -1,7 +1,9 @@
+import { useEffect } from 'react';
 import { ActivityIndicator, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import * as SplashScreen from 'expo-splash-screen';
 import Animated, { useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, LinkingOptions } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
@@ -39,6 +41,20 @@ import type {
 } from './types';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
+
+const linking: LinkingOptions<RootStackParamList> = {
+  prefixes: ['styled://'],
+  config: {
+    screens: {
+      Auth: {
+        screens: {
+          // styled://reset-password?token_hash=...&type=recovery
+          ResetPassword: 'reset-password',
+        },
+      } as any,
+    },
+  },
+};
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const AppTab = createBottomTabNavigator<AppTabParamList>();
 const HomeStack = createNativeStackNavigator<HomeStackParamList>();
@@ -264,16 +280,18 @@ function AppGate() {
 export function RootNavigator() {
   const { user, isLoading } = useAuth();
 
+  useEffect(() => {
+    if (!isLoading) {
+      SplashScreen.hideAsync();
+    }
+  }, [isLoading]);
+
   if (isLoading) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
+    return null;
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer linking={linking}>
       <RootStack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (
           <RootStack.Screen name="App" component={AppGate} />

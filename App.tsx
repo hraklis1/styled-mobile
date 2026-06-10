@@ -1,3 +1,5 @@
+import * as Sentry from '@sentry/react-native';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -8,8 +10,16 @@ import { AuthProvider } from './src/contexts/AuthContext';
 import { GlobalAddSheetProvider } from './src/contexts/GlobalAddSheetContext';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { ErrorBoundary } from './src/components/primitives/ErrorBoundary';
+import { OfflineBanner } from './src/components/primitives/OfflineBanner';
 
-export default function App() {
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+  tracesSampleRate: 1.0,
+});
+
+SplashScreen.preventAutoHideAsync();
+
+function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
@@ -23,6 +33,7 @@ export default function App() {
                 <GlobalAddSheetProvider>
                   <StatusBar style="auto" />
                   <RootNavigator />
+                  <OfflineBanner />
                 </GlobalAddSheetProvider>
               </BottomSheetModalProvider>
             </AuthProvider>
@@ -32,3 +43,5 @@ export default function App() {
     </GestureHandlerRootView>
   );
 }
+
+export default Sentry.wrap(App);

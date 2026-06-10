@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../../components/primitives/Button';
 import { Input } from '../../components/primitives/Input';
 import { colors, spacing, typography, radii } from '../../theme';
-import { api } from '../../lib/api';
+import { supabase } from '../../lib/supabase';
 import type { ForgotPasswordScreenProps } from '../../navigation/types';
 
 export function ForgotPasswordScreen({ navigation }: ForgotPasswordScreenProps) {
@@ -32,11 +32,13 @@ export function ForgotPasswordScreen({ navigation }: ForgotPasswordScreenProps) 
     setLoading(true);
     setError(null);
     try {
-      await api.post('/api/auth/forgot-password', { email: email.trim() });
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: 'styled://reset-password',
+      });
+      if (error) throw error;
       setSubmitted(true);
     } catch (e: any) {
-      const msg = e?.response?.data?.message;
-      setError(msg ?? 'Something went wrong. Please try again.');
+      setError(e?.message ?? 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }

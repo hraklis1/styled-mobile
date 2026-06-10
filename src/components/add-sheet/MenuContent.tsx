@@ -24,7 +24,7 @@ export function MenuContent({
     <View style={[styles.container, { paddingBottom: Math.max(bottomInset, spacing.xl) }]}>
       <Text style={styles.sectionLabel}>Add to Wardrobe</Text>
 
-      <TouchableOpacity style={styles.option} onPress={onTakePhoto} activeOpacity={0.75}>
+      <TouchableOpacity style={styles.option} onPress={onTakePhoto} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Take photo to add item">
         <View style={[styles.iconBox, { backgroundColor: `${colors.primary}18` }]}>
           <Ionicons name="camera-outline" size={22} color={colors.primary} />
         </View>
@@ -35,7 +35,7 @@ export function MenuContent({
         <Ionicons name="chevron-forward" size={16} color={colors.border} />
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.option} onPress={onFromLibrary} activeOpacity={0.75}>
+      <TouchableOpacity style={styles.option} onPress={onFromLibrary} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Import from photo library">
         <View style={[styles.iconBox, { backgroundColor: `${colors.primary}18` }]}>
           <Ionicons name="image-outline" size={22} color={colors.primary} />
         </View>
@@ -46,7 +46,7 @@ export function MenuContent({
         <Ionicons name="chevron-forward" size={16} color={colors.border} />
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.option} onPress={onBatchImport} activeOpacity={0.75}>
+      <TouchableOpacity style={styles.option} onPress={onBatchImport} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Batch import up to 10 photos">
         <View style={[styles.iconBox, { backgroundColor: `${colors.primary}18` }]}>
           <Ionicons name="images-outline" size={22} color={colors.primary} />
         </View>
@@ -57,7 +57,7 @@ export function MenuContent({
         <Ionicons name="chevron-forward" size={16} color={colors.border} />
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.option} onPress={onManual} activeOpacity={0.75}>
+      <TouchableOpacity style={styles.option} onPress={onManual} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Enter item manually">
         <View style={[styles.iconBox, { backgroundColor: colors.muted }]}>
           <Ionicons name="pencil-outline" size={22} color={colors.mutedForeground} />
         </View>
@@ -71,7 +71,7 @@ export function MenuContent({
       <View style={styles.divider} />
       <Text style={styles.sectionLabel}>Log</Text>
 
-      <TouchableOpacity style={styles.option} onPress={onLogOutfit} activeOpacity={0.75}>
+      <TouchableOpacity style={styles.option} onPress={onLogOutfit} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Log an outfit">
         <View style={[styles.iconBox, { backgroundColor: `${colors.primary}18` }]}>
           <Ionicons name="layers-outline" size={22} color={colors.primary} />
         </View>

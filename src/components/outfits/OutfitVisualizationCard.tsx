@@ -43,7 +43,7 @@ export function OutfitVisualizationCard({ outfit }: Props) {
       ) : imageUri ? (
         <Image source={{ uri: imageUri }} style={styles.image} contentFit="cover" transition={200} />
       ) : (
-        <TouchableOpacity style={styles.emptyBox} onPress={handleGenerate}>
+        <TouchableOpacity style={styles.emptyBox} onPress={() => handleGenerate()}>
           <Ionicons name="sparkles-outline" size={28} color={colors.primary} />
           <Text style={styles.emptyTitle}>Generate flat-lay</Text>
           <Text style={styles.emptySubtitle}>

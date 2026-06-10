@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   View,
   Text,
@@ -7,46 +7,25 @@ import {
   Platform,
   KeyboardAvoidingView,
   ScrollView,
-  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../../components/primitives/Button';
 import { Input } from '../../components/primitives/Input';
 import { colors, spacing, typography, radii } from '../../theme';
-import { api } from '../../lib/api';
+import { supabase } from '../../lib/supabase';
 import type { ResetPasswordScreenProps } from '../../navigation/types';
 
 export function ResetPasswordScreen({ route, navigation }: ResetPasswordScreenProps) {
   const insets = useSafeAreaInsets();
-  const token = route.params?.token ?? '';
+  const token_hash = route.params?.token_hash ?? '';
+  const recoveryType = (route.params?.type ?? 'recovery') as 'recovery';
 
-  const [validating, setValidating] = useState(true);
-  const [tokenValid, setTokenValid] = useState(false);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
-
-  useEffect(() => {
-    if (!token) {
-      setTokenValid(false);
-      setValidating(false);
-      return;
-    }
-    api
-      .get(`/api/auth/reset-password/${token}`)
-      .then((res) => {
-        setTokenValid(res.data?.valid === true);
-      })
-      .catch(() => {
-        setTokenValid(false);
-      })
-      .finally(() => {
-        setValidating(false);
-      });
-  }, [token]);
 
   const handleSubmit = async () => {
     if (password.length < 8) {
@@ -60,23 +39,28 @@ export function ResetPasswordScreen({ route, navigation }: ResetPasswordScreenPr
     setLoading(true);
     setError(null);
     try {
-      await api.post(`/api/auth/reset-password/${token}`, { password });
+      // Exchange the one-time token for a recovery session
+      const { error: verifyError } = await supabase.auth.verifyOtp({
+        token_hash,
+        type: recoveryType,
+      });
+      if (verifyError) throw verifyError;
+
+      // Update the password using the just-established recovery session
+      const { error: updateError } = await supabase.auth.updateUser({ password });
+      if (updateError) throw updateError;
+
+      // Sign out so the user lands on Login with a clean state
+      await supabase.auth.signOut();
       setDone(true);
     } catch (e: any) {
-      const msg = e?.response?.data?.message;
-      setError(msg ?? 'Something went wrong. Please try again.');
+      setError(e?.message ?? 'Something went wrong. Please try again.');
+      // Clean up any partial session on error
+      supabase.auth.signOut().catch(() => {});
     } finally {
       setLoading(false);
     }
   };
-
-  if (validating) {
-    return (
-      <View style={[styles.centered, { paddingTop: insets.top }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
 
   return (
     <KeyboardAvoidingView
@@ -90,7 +74,7 @@ export function ResetPasswordScreen({ route, navigation }: ResetPasswordScreenPr
         <Text style={styles.wordmark}>Styled</Text>
 
         <View style={styles.card}>
-          {!tokenValid ? (
+          {!token_hash ? (
             <View style={styles.centeredContent}>
               <View style={[styles.iconCircle, styles.errorCircle]}>
                 <Text style={styles.iconText}>✕</Text>

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import * as SecureStore from 'expo-secure-store';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { identify, reset, track } from '../lib/analytics';
 import type { User } from '../types/user';
 
 export const LAST_LOGIN_EMAIL_KEY = 'lastLoginEmail';
@@ -44,9 +45,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Keep in sync for all subsequent auth events (sign-in, sign-out, token refresh)
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session ? mapSupabaseUser(session.user) : null);
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // PASSWORD_RECOVERY establishes a temporary session for updateUser — don't
+      // treat it as a normal sign-in or the app screen will mount mid-reset-flow.
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsLoading(false);
+        return;
+      }
+
+      const mapped = session ? mapSupabaseUser(session.user) : null;
+      setUser(mapped);
       setIsLoading(false);
+
+      if (event === 'SIGNED_IN' && mapped) {
+        identify(mapped.id, { email: mapped.email, authProvider: mapped.authProvider });
+        track('user_logged_in', { provider: mapped.authProvider });
+      } else if (event === 'SIGNED_OUT') {
+        reset();
+      }
     });
 
     return () => subscription.unsubscribe();

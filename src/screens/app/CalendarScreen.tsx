@@ -34,12 +34,13 @@ import {
 } from '../../components/calendar/calendarUtils';
 import * as Location from 'expo-location';
 import { colors, spacing, typography, radii } from '../../theme';
+import { ErrorState } from '../../components/primitives/ErrorState';
 import type { CalendarScreenProps } from '../../navigation/types';
 import type { Event } from '../../types/event';
 
 export function CalendarScreen({ navigation }: CalendarScreenProps) {
   const insets = useSafeAreaInsets();
-  const { data: events = [], isLoading, refetch, isRefetching } = useEvents();
+  const { data: events = [], isLoading, refetch, isRefetching, isError } = useEvents();
   const { data: allItems = [] } = useItems();
   const deleteEventMutation = useDeleteEvent();
   const generateOutfit = useGenerateOutfit();
@@ -145,6 +146,8 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
               onPress={() => setSyncVisible(true)}
               activeOpacity={0.7}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel="Sync calendar"
             >
               <Ionicons name="sync-outline" size={20} color={colors.mutedForeground} />
             </TouchableOpacity>
@@ -166,6 +169,8 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
 
         {isLoading ? (
           <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xxxl }} />
+        ) : isError ? (
+          <ErrorState message="Couldn't load events" onRetry={refetch} />
         ) : events.length === 0 ? (
           <View style={styles.empty}>
             <View style={styles.emptyIconBox}>
@@ -175,6 +180,16 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
             <Text style={styles.emptySubtitle}>
               Add upcoming events to plan the perfect outfit for each one.
             </Text>
+            <TouchableOpacity
+              style={styles.emptyBtn}
+              onPress={() => { setEditingEvent(null); setFormVisible(true); }}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Add your first event"
+            >
+              <Ionicons name="add" size={16} color={colors.white} />
+              <Text style={styles.emptyBtnText}>Add your first event</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <>
@@ -206,6 +221,8 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
                             style={styles.eventCard}
                             onPress={() => setDetailEvent(event)}
                             activeOpacity={0.8}
+                            accessibilityRole="button"
+                            accessibilityLabel={event.title}
                           >
                             <View style={styles.eventIconBox}>
                               <Ionicons name={iconName} size={18} color={colors.primary} />
@@ -263,6 +280,8 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
                     style={styles.pastCard}
                     onPress={() => setDetailEvent(event)}
                     activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel={event.title}
                   >
                     <View style={styles.pastIconBox}>
                       <Ionicons name="calendar-outline" size={16} color={colors.mutedForeground} />
@@ -273,7 +292,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
                         {new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </Text>
                     </View>
-                    <TouchableOpacity onPress={() => handleDelete(event)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <TouchableOpacity onPress={() => handleDelete(event)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel={`Delete ${event.title}`}>
                       <Ionicons name="trash-outline" size={16} color={colors.mutedForeground} />
                     </TouchableOpacity>
                   </TouchableOpacity>
@@ -295,6 +314,8 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         style={[styles.fab, { bottom: insets.bottom + spacing.xl }]}
         onPress={() => { setEditingEvent(null); setFormVisible(true); }}
         activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel="Add event"
       >
         <Ionicons name="add" size={20} color={colors.white} />
         <Text style={styles.fabText}>Add Event</Text>
@@ -408,6 +429,17 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.foreground },
   emptySubtitle: { fontSize: typography.size.sm, color: colors.mutedForeground, textAlign: 'center', maxWidth: 260 },
+  emptyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.primary,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + 2,
+    marginTop: spacing.sm,
+  },
+  emptyBtnText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.white },
 
   fab: {
     position: 'absolute', right: spacing.lg,

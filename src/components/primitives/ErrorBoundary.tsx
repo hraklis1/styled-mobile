@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/react-native';
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,7 +27,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    // TODO: pipe to a crash reporting service (Sentry, etc.) when one is wired up
+    Sentry.captureException(error, { extra: { componentStack: info.componentStack } });
     console.error('[ErrorBoundary] Unhandled render error', error, info.componentStack);
   }
 

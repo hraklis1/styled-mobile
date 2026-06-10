@@ -12,7 +12,7 @@ export type RootStackParamList = {
 export type AuthStackParamList = {
   Login: undefined;
   ForgotPassword: undefined;
-  ResetPassword: { token?: string };
+  ResetPassword: { token?: string; token_hash?: string; type?: string };
 };
 
 export type AppTabParamList = {

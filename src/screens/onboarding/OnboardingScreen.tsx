@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useUpdateProfile } from '../../hooks/useProfile';
+import { track } from '../../lib/analytics';
 import { colors, spacing, typography, radii } from '../../theme';
 
 // ── Options ───────────────────────────────────────────────────────────────────
@@ -398,22 +399,28 @@ export function OnboardingScreen() {
   };
 
   const handleSkip = () => {
-    updateProfile.mutate({ onboardingComplete: true });
+    updateProfile.mutate(
+      { onboardingComplete: true },
+      { onSuccess: () => track('onboarding_completed', { skipped: true }) },
+    );
   };
 
   const handleFinish = () => {
-    updateProfile.mutate({
-      occasions:       occasions.length > 0        ? occasions        : null,
-      stylePreference: stylePreferences.length > 0 ? stylePreferences : null,
-      colorPalette:    colorPalette                ? [colorPalette]   : null,
-      budgetRange:     budgetRange                 || null,
-      bodyType:        bodyType                    || null,
-      fitPreference:   fitPreference               || null,
-      location:        location.trim()             || null,
-      sizingRegion:    sizingRegion                || null,
-      sizeTop:         sizeTop                     || null,
-      onboardingComplete: true,
-    });
+    updateProfile.mutate(
+      {
+        occasions:       occasions.length > 0        ? occasions        : null,
+        stylePreference: stylePreferences.length > 0 ? stylePreferences : null,
+        colorPalette:    colorPalette                ? [colorPalette]   : null,
+        budgetRange:     budgetRange                 || null,
+        bodyType:        bodyType                    || null,
+        fitPreference:   fitPreference               || null,
+        location:        location.trim()             || null,
+        sizingRegion:    sizingRegion                || null,
+        sizeTop:         sizeTop                     || null,
+        onboardingComplete: true,
+      },
+      { onSuccess: () => track('onboarding_completed', { skipped: false }) },
+    );
   };
 
   const isLast    = step === STEPS.length - 1;

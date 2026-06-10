@@ -29,6 +29,8 @@ import {
   useProfileForm,
   JACKET_LENGTH_OPTIONS,
 } from '../../hooks/useProfileForm';
+import { useProfile } from '../../hooks/useProfile';
+import { ErrorState } from '../../components/primitives/ErrorState';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -101,6 +103,7 @@ export function ProfileScreen(_props: ProfileScreenProps) {
   const { user, logout } = useAuth();
 
   const form = useProfileForm();
+  const { isError: profileError, refetch: refetchProfile } = useProfile();
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
@@ -158,7 +161,11 @@ export function ProfileScreen(_props: ProfileScreenProps) {
 
   const activeCfg = form.activePicker ? form.pickerCfg[form.activePicker] : null;
 
-  // ── Loading state ──────────────────────────────────────────────────────────
+  // ── Loading / error states ────────────────────────────────────────────────
+  if (profileError) {
+    return <ErrorState message="Couldn't load your profile" onRetry={refetchProfile} />;
+  }
+
   if (form.isLoading) {
     return (
       <View style={styles.loading}>

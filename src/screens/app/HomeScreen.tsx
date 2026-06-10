@@ -12,6 +12,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useItems } from '../../hooks/useItems';
+import { SkeletonBlock } from '../../components/primitives/SkeletonLoader';
+import { GarmentCardSkeleton } from '../../components/primitives/GarmentCardSkeleton';
+import { ErrorState } from '../../components/primitives/ErrorState';
 import { useOutfits } from '../../hooks/useOutfits';
 import { useEvents } from '../../hooks/useEvents';
 import { useOutfitLogs, useDeleteOutfitLog } from '../../hooks/useOutfitLogs';
@@ -89,8 +92,8 @@ function formatLogDate(dateStr: string): string {
 
 export function HomeScreen({ navigation }: HomeScreenProps) {
   const { user } = useAuth();
-  const { data: items   = [] } = useItems();
-  const { data: outfits = [] } = useOutfits();
+  const { data: items = [], isLoading: itemsLoading, isError: itemsError, refetch: refetchItems } = useItems();
+  const { data: outfits = [], isLoading: outfitsLoading, isError: outfitsError, refetch: refetchOutfits } = useOutfits();
   const { data: events  = [] } = useEvents();
   const { data: logs    = [] } = useOutfitLogs();
   const deleteLog = useDeleteOutfitLog();
@@ -145,6 +148,34 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
   const favoriteCount = items.filter((i) => i.isFavorite).length;
 
+  if ((itemsError || outfitsError) && items.length === 0 && outfits.length === 0) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <ErrorState
+          message="Couldn't load your feed"
+          onRetry={() => { refetchItems(); refetchOutfits(); }}
+        />
+      </View>
+    );
+  }
+
+  if ((itemsLoading || outfitsLoading) && items.length === 0 && outfits.length === 0) {
+    const pillWidth = width - SIDE_PAD * 2;
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top + spacing.lg }}>
+        <View style={{ paddingHorizontal: SIDE_PAD, gap: spacing.sm, marginBottom: spacing.xl }}>
+          <SkeletonBlock width={220} height={32} borderRadius={6} />
+          <SkeletonBlock width={150} height={16} borderRadius={4} />
+        </View>
+        <SkeletonBlock width={pillWidth} height={52} borderRadius={100} style={{ marginHorizontal: SIDE_PAD, marginBottom: spacing.xl }} />
+        <View style={{ paddingHorizontal: SIDE_PAD, marginBottom: spacing.md }}>
+          <SkeletonBlock width={120} height={16} borderRadius={4} />
+        </View>
+        <GarmentCardSkeleton count={4} />
+      </View>
+    );
+  }
+
   return (
     <View style={{ flex: 1 }}>
     <ScrollView
@@ -167,6 +198,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                     {WEATHER_EMOJI[weather.data.current.condition] ?? '🌡️'}{' '}
                     {weather.data.current.temperatureC}°C,{' '}
                     {stripTempFromSummary(weather.data.current.summary)} · ↑{weather.data.forecast.tempMaxC}° ↓{weather.data.forecast.tempMinC}°
+                    {weather.data.current.locationLabel ? ` · 📍 ${weather.data.current.locationLabel}` : ''}
                   </Text>
                 )}
                 <View style={styles.chipsRow}>
@@ -223,6 +255,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         <PressableScale
           contentStyle={styles.nudgeCard}
           onPress={() => navigation.navigate('Closet')}
+          accessibilityRole="button"
+          accessibilityLabel="Your wardrobe is empty. Tap to add items"
         >
           <View style={styles.nudgeIcon}>
             <Ionicons name="shirt-outline" size={18} color={colors.primary} />
@@ -239,6 +273,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       <PressableScale
         contentStyle={styles.logNudgeCard}
         onPress={openLogger}
+        accessibilityRole="button"
+        accessibilityLabel="Log today's look"
       >
         <View style={[styles.nudgeIcon, { backgroundColor: `${colors.primary}18` }]}>
           <Ionicons name="journal-outline" size={18} color={colors.primary} />
@@ -254,7 +290,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Upcoming Events</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Calendar')}>
+          <TouchableOpacity onPress={() => navigation.navigate('Calendar')} accessibilityRole="button" accessibilityLabel="View all events">
             <Text style={styles.sectionLink}>View all</Text>
           </TouchableOpacity>
         </View>
@@ -263,6 +299,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           <PressableScale
             contentStyle={styles.emptyCard}
             onPress={() => navigation.navigate('Calendar')}
+            accessibilityRole="button"
+            accessibilityLabel="No upcoming events. Tap to add one"
           >
             <View style={styles.emptyIcon}>
               <Ionicons name="calendar-outline" size={18} color={colors.mutedForeground} />
@@ -288,6 +326,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                   key={event.id}
                   contentStyle={[styles.eventCard, isToday && styles.eventCardToday]}
                   onPress={() => navigation.navigate('Calendar')}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${event.title}, ${formatEventDate(event.date)}`}
                 >
                   <View style={[
                     styles.eventIcon,
@@ -370,6 +410,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                     disabled={deleteLog.isPending}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     contentStyle={styles.logDeleteBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete outfit log for ${formatLogDate(log.date)}`}
                   >
                     <Ionicons name="trash-outline" size={15} color={colors.mutedForeground} />
                   </PressableScale>
@@ -384,7 +426,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Stylist Picks for Today</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Closet')}>
+          <TouchableOpacity onPress={() => navigation.navigate('Closet')} accessibilityRole="button" accessibilityLabel="View all outfits">
             <Text style={styles.sectionLink}>View all</Text>
           </TouchableOpacity>
         </View>
@@ -409,6 +451,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                   screen: 'OutfitDetail',
                   params: { outfitId: outfit.id },
                 })}
+                accessibilityRole="button"
+                accessibilityLabel={outfit.name}
               >
                 <View style={styles.collageWrapper}>
                   <OutfitCollage outfit={outfit} size={cardWidth} />

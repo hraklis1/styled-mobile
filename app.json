@@ -10,17 +10,25 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.ttrypho.Styled-mobile",
+      "buildNumber": "1",
       "infoPlist": {
         "NSCameraUsageDescription": "Styled needs camera access to photograph your clothing items and add them to your wardrobe.",
         "NSPhotoLibraryUsageDescription": "Styled needs access to your photo library to import clothing images into your wardrobe."
       }
     },
     "android": {
+      "package": "com.ttrypho.styledmobile",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "splash": {
+        "image": "./assets/splash-icon.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#FAF8F5"
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
@@ -59,7 +67,23 @@
           "locationWhenInUsePermission": "Styled uses your location to autofill event locations and give weather-aware outfit suggestions."
         }
       ],
-      "expo-image"
+      "expo-image",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FAF8F5",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200
+        }
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "project": "styled-mobile",
+          "organization": "YOUR_SENTRY_ORG_SLUG"
+        }
+      ]
     ]
   }
 }

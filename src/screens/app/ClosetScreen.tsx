@@ -30,6 +30,8 @@ import { useGlobalScan } from '../../contexts/GlobalScanContext';
 import { useFabScroll } from '../../contexts/FabScrollContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { PressableScale } from '../../components/primitives/PressableScale';
+import { GarmentCardSkeleton } from '../../components/primitives/GarmentCardSkeleton';
+import { ErrorState } from '../../components/primitives/ErrorState';
 import type { ClosetScreenProps } from '../../navigation/types';
 
 type ViewMode = 'grid' | 'list';
@@ -84,7 +86,6 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
   const updateItem = useUpdateItem();
   const deleteItem = useDeleteItem();
   const markWorn = useMarkItemWorn();
-
   const {
     sortKey, setSortKey,
     filterSheetOpen, setFilterSheetOpen,
@@ -278,6 +279,9 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
           onPress={selectionMode ? () => toggleSelect(item.id) : () => navigation.navigate('ItemDetail', { itemId: item.id })}
           onLongPress={selectionMode ? undefined : () => handleLongPress(item)}
           delayLongPress={450}
+          accessibilityRole="button"
+          accessibilityLabel={[item.name, item.category ? CATEGORY_LABELS[item.category] : null].filter(Boolean).join(', ')}
+          accessibilityState={selectionMode ? { selected: isSelected } : undefined}
         >
           {selectionMode && (
             <View style={styles.itemRowCheck}>
@@ -320,6 +324,8 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
           <PressableScale
             contentStyle={styles.outfitRow}
             onPress={() => navigation.navigate('OutfitDetail', { outfitId: outfit.id })}
+            accessibilityRole="button"
+            accessibilityLabel={outfit.name}
           >
             <View style={[styles.outfitRowThumb, { width: thumbSize, height: thumbSize }]}>
               <OutfitCollage outfit={outfit} size={thumbSize} />
@@ -342,6 +348,8 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
           <PressableScale
             contentStyle={[styles.outfitCard, { width: cardWidth }]}
             onPress={() => navigation.navigate('OutfitDetail', { outfitId: outfit.id })}
+            accessibilityRole="button"
+            accessibilityLabel={outfit.name}
           >
             <View style={styles.collageWrapper}>
               <OutfitCollage outfit={outfit} size={cardWidth} />
@@ -367,13 +375,19 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
         <Ionicons name="shirt-outline" size={32} color={colors.mutedForeground} />
       </View>
       <Text style={styles.emptyTitle}>
-        {search || activeCategory ? 'No pieces match' : 'No pieces yet'}
+        {search || activeCategory ? 'No pieces match' : 'Your wardrobe is empty'}
       </Text>
       <Text style={styles.emptySub}>
         {search || activeCategory
           ? 'Try a different search or filter'
-          : 'Add items from the + button below'}
+          : 'Start by adding your first item'}
       </Text>
+      {!search && !activeCategory && (
+        <TouchableOpacity style={styles.emptyBtn} onPress={() => openScanItem()} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel="Add your first item">
+          <Ionicons name="add" size={16} color={colors.primaryForeground} />
+          <Text style={styles.emptyBtnText}>Add your first item</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 
@@ -433,6 +447,9 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
             style={[styles.segmentBtn, segment === 'pieces' && styles.segmentBtnActive]}
             onPress={() => handleSegmentChange('pieces')}
             activeOpacity={0.8}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: segment === 'pieces' }}
+            accessibilityLabel="Pieces"
           >
             <Text style={[styles.segmentLabel, segment === 'pieces' && styles.segmentLabelActive]}>
               Pieces
@@ -442,6 +459,9 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
             style={[styles.segmentBtn, segment === 'outfits' && styles.segmentBtnActive]}
             onPress={() => handleSegmentChange('outfits')}
             activeOpacity={0.8}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: segment === 'outfits' }}
+            accessibilityLabel="Outfits"
           >
             <Text style={[styles.segmentLabel, segment === 'outfits' && styles.segmentLabelActive]}>
               Outfits
@@ -467,7 +487,7 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
               clearButtonMode="while-editing"
             />
             {search.length > 0 && (
-              <Pressable onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Pressable onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Clear search" accessibilityRole="button">
                 <Ionicons name="close-circle" size={16} color={colors.mutedForeground} />
               </Pressable>
             )}
@@ -522,6 +542,9 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
             <PressableScale
               contentStyle={[styles.pill, activeCategory === null && styles.pillActive]}
               onPress={() => setActiveCategory(null)}
+              accessibilityRole="button"
+              accessibilityLabel="All categories"
+              accessibilityState={{ selected: activeCategory === null }}
             >
               <Text style={[styles.pillLabel, activeCategory === null && styles.pillLabelActive]}>
                 All
@@ -532,6 +555,9 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
                 key={cat}
                 contentStyle={[styles.pill, activeCategory === cat && styles.pillActive]}
                 onPress={() => setActiveCategory(activeCategory === cat ? null : cat)}
+                accessibilityRole="button"
+                accessibilityLabel={CATEGORY_LABELS[cat]}
+                accessibilityState={{ selected: activeCategory === cat }}
               >
                 <Text style={[styles.pillLabel, activeCategory === cat && styles.pillLabelActive]}>
                   {CATEGORY_LABELS[cat]}
@@ -543,17 +569,10 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
       </Animated.View>
 
       {/* ── Content ── */}
-      {segment === 'pieces' && itemsError ? (
-        <View style={styles.emptyState}>
-          <View style={styles.emptyIcon}>
-            <Ionicons name="cloud-offline-outline" size={32} color={colors.mutedForeground} />
-          </View>
-          <Text style={styles.emptyTitle}>Couldn't load your closet</Text>
-          <Text style={styles.emptySub}>Check your connection and try again</Text>
-          <Pressable onPress={() => refetchItems()} style={{ marginTop: 12 }}>
-            <Text style={{ color: colors.primary, fontSize: 14, fontWeight: '600' }}>Retry</Text>
-          </Pressable>
-        </View>
+      {segment === 'pieces' && itemsLoading && items.length === 0 ? (
+        <GarmentCardSkeleton />
+      ) : segment === 'pieces' && itemsError ? (
+        <ErrorState message="Couldn't load your closet" onRetry={refetchItems} />
       ) : segment === 'pieces' ? (
         viewMode === 'grid' ? (
           <ClosetGrid
@@ -603,7 +622,7 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
       {selectionMode && (
         <View style={[styles.bulkBar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
           <View style={styles.bulkBarTop}>
-            <TouchableOpacity onPress={exitSelectionMode}>
+            <TouchableOpacity onPress={exitSelectionMode} accessibilityRole="button" accessibilityLabel="Cancel selection">
               <Text style={styles.bulkCancel}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -614,6 +633,7 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
                   setSelectedIds(new Set(filteredItems.map(i => i.id)));
                 }
               }}
+              accessibilityRole="button"
             >
               <Text style={styles.bulkSelectAll}>
                 {selectedIds.size === 0
@@ -629,6 +649,9 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
               style={[styles.bulkBtn, selectedIds.size === 0 && styles.bulkBtnDisabled]}
               onPress={handleBulkFavorite}
               disabled={selectedIds.size === 0}
+              accessibilityRole="button"
+              accessibilityLabel="Favourite selected items"
+              accessibilityState={{ disabled: selectedIds.size === 0 }}
             >
               <Ionicons name="heart-outline" size={17} color={selectedIds.size === 0 ? colors.border : colors.foreground} />
               <Text style={[styles.bulkBtnText, selectedIds.size === 0 && styles.bulkBtnTextDisabled]}>Favourite</Text>
@@ -637,6 +660,9 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
               style={[styles.bulkBtn, selectedIds.size === 0 && styles.bulkBtnDisabled]}
               onPress={handleBulkMarkWorn}
               disabled={selectedIds.size === 0}
+              accessibilityRole="button"
+              accessibilityLabel="Mark selected items as worn today"
+              accessibilityState={{ disabled: selectedIds.size === 0 }}
             >
               <Ionicons name="shirt-outline" size={17} color={selectedIds.size === 0 ? colors.border : colors.foreground} />
               <Text style={[styles.bulkBtnText, selectedIds.size === 0 && styles.bulkBtnTextDisabled]}>Worn today</Text>
@@ -645,6 +671,9 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
               style={[styles.bulkBtn, selectedIds.size === 0 && styles.bulkBtnDisabled]}
               onPress={handleCreateOutfit}
               disabled={selectedIds.size === 0}
+              accessibilityRole="button"
+              accessibilityLabel="Create outfit from selected items"
+              accessibilityState={{ disabled: selectedIds.size === 0 }}
             >
               <Ionicons name="layers-outline" size={17} color={selectedIds.size === 0 ? colors.border : colors.foreground} />
               <Text style={[styles.bulkBtnText, selectedIds.size === 0 && styles.bulkBtnTextDisabled]}>Outfit</Text>
@@ -653,6 +682,9 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
               style={[styles.bulkBtn, styles.bulkBtnDelete, selectedIds.size === 0 && styles.bulkBtnDisabled]}
               onPress={handleBulkDelete}
               disabled={selectedIds.size === 0}
+              accessibilityRole="button"
+              accessibilityLabel="Delete selected items"
+              accessibilityState={{ disabled: selectedIds.size === 0 }}
             >
               <Ionicons name="trash-outline" size={17} color={selectedIds.size === 0 ? colors.border : colors.error} />
               <Text style={[styles.bulkBtnText, styles.bulkBtnTextDelete, selectedIds.size === 0 && styles.bulkBtnTextDisabled]}>Delete</Text>
@@ -869,7 +901,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: typography.size.sm,
     color: colors.foreground,
-    paddingVertical: 0,
   },
   filterBtn: {
     width: 42,
@@ -1142,6 +1173,21 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     textAlign: 'center',
     maxWidth: 220,
+  },
+  emptyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.primary,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + 2,
+    marginTop: spacing.sm,
+  },
+  emptyBtnText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.primaryForeground,
   },
 
 });

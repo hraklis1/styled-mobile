@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'react-native';
 
 import { api, isNetworkError } from '../lib/api';
+import { track } from '../lib/analytics';
 import type { Outfit, OutfitItemEntry } from '../types/outfit';
 
 export const OUTFITS_QUERY_KEY = ['outfits'] as const;
@@ -33,6 +34,7 @@ export function useCreateOutfit() {
       api.post<Outfit>('/api/outfits', input).then((r) => r.data),
     onSuccess: (newOutfit) => {
       qc.setQueryData<Outfit[]>(OUTFITS_QUERY_KEY, (old = []) => [newOutfit, ...old]);
+      track('outfit_created', { outfitId: newOutfit.id });
     },
     onError: () => {
       Alert.alert('Error', "Couldn't save outfit. Please try again.");
@@ -116,6 +118,7 @@ export function useVisualizeOutfit() {
       qc.setQueryData<Outfit[]>(OUTFITS_QUERY_KEY, (old) =>
         old?.map((o) => (o.id === id ? { ...o, aiGeneratedImageUrl: data.aiGeneratedImageUrl } : o)) ?? []
       );
+      track('outfit_visualized', { outfitId: id });
     },
   });
 }

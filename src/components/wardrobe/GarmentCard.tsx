@@ -52,6 +52,11 @@ function GarmentCardComponent({
   const showConditionDot = item.condition === 'needs_repair' || item.condition === 'donate';
   const conditionColor = item.condition === 'donate' ? colors.error : '#D97706';
 
+  const itemLabel = [
+    item.name || 'Unnamed item',
+    item.brand || (item.category && CATEGORY_LABELS[item.category]),
+  ].filter(Boolean).join(', ');
+
   return (
     <PressableScale
       contentStyle={[styles.card, { width: cardWidth }]}
@@ -59,6 +64,9 @@ function GarmentCardComponent({
       onLongPress={selectionMode ? undefined : onLongPress}
       delayLongPress={450}
       layout={LinearTransition.springify().damping(16).stiffness(200)}
+      accessibilityRole="button"
+      accessibilityLabel={selectionMode ? `${itemLabel}, ${isSelected ? 'selected' : 'not selected'}` : itemLabel}
+      accessibilityState={selectionMode ? { selected: isSelected } : undefined}
     >
       <View style={[styles.imageContainer, { height: imageHeight }]}>
         {imageUri ? (

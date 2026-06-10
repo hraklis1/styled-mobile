@@ -964,7 +964,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: typography.size.md,
     color: colors.foreground,
-    paddingVertical: 0,
   },
   pickerRow: {
     paddingHorizontal: spacing.lg,

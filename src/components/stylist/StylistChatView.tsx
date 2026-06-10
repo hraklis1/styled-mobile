@@ -97,6 +97,38 @@ function makeId() {
   return Math.random().toString(36).slice(2);
 }
 
+type OccasionHint = 'formal' | 'business' | 'smart_casual' | 'casual' | 'athletic';
+
+const OCCASION_PATTERNS: Array<{ hint: OccasionHint; pattern: RegExp }> = [
+  {
+    hint: 'athletic',
+    pattern: /\b(gym|workout|work.?out|run(ning)?|exercise|sport|yoga|hike|hiking|active|trail|cycling|swim)\b/i,
+  },
+  {
+    hint: 'formal',
+    pattern: /\b(date.?night|dinner date|gala|black.?tie|cocktail|wedding|formal|fancy|suave|elegant|evening wear|dressed up)\b/i,
+  },
+  {
+    hint: 'business',
+    pattern: /\b(work|office|meeting|interview|conference|professional|corporate|boardroom|business)\b/i,
+  },
+  {
+    hint: 'smart_casual',
+    pattern: /\b(brunch|dinner|restaurant|bar|drinks|going out|night out|date)\b/i,
+  },
+  {
+    hint: 'casual',
+    pattern: /\b(casual|chill|errand|weekend|relax|lounge|comfortable|everyday|laid.?back)\b/i,
+  },
+];
+
+function detectOccasionHint(text: string): OccasionHint | undefined {
+  for (const { hint, pattern } of OCCASION_PATTERNS) {
+    if (pattern.test(text)) return hint;
+  }
+  return undefined;
+}
+
 // ── Main Component ───────────────────────────────────────────────────────────
 
 type Props = {
@@ -241,7 +273,7 @@ export function StylistChatView({ initialQuery, onClose, onNavigateToShop }: Pro
 
         let liveLocation: { lat: number; lon: number } | undefined;
         try {
-          const { status } = await Location.getForegroundPermissionsAsync();
+          const { status } = await Location.requestForegroundPermissionsAsync();
           if (status === 'granted') {
             const pos = await Location.getCurrentPositionAsync({
               accuracy: Location.Accuracy.Balanced,
@@ -249,6 +281,8 @@ export function StylistChatView({ initialQuery, onClose, onNavigateToShop }: Pro
             liveLocation = { lat: pos.coords.latitude, lon: pos.coords.longitude };
           }
         } catch { /* location is non-fatal */ }
+
+        const occasionHint = text ? detectOccasionHint(text) : undefined;
 
         const token = getAccessToken();
         const response = await fetch(`${API_BASE_URL}/api/stylist/ask`, {
@@ -263,6 +297,7 @@ export function StylistChatView({ initialQuery, onClose, onNavigateToShop }: Pro
             ...(photoData ? { photoData } : {}),
             ...(weatherSummary ? { weatherSummary } : {}),
             ...(liveLocation ? { liveLocation } : {}),
+            ...(occasionHint ? { occasionHint } : {}),
             history,
             _stream: true,
           }),
