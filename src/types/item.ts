@@ -63,6 +63,14 @@ export const WARMTH_LABELS: Record<number, string> = {
   1: 'Very Light', 2: 'Light', 3: 'Medium', 4: 'Warm', 5: 'Very Warm',
 };
 
+export const SLEEVE_LENGTH_OPTIONS = ['short', 'long', 'sleeveless'] as const;
+export type SleeveLength = typeof SLEEVE_LENGTH_OPTIONS[number];
+export const SLEEVE_LENGTH_LABELS: Record<SleeveLength, string> = {
+  short:      'Short Sleeve',
+  long:       'Long Sleeve',
+  sleeveless: 'Sleeveless',
+};
+
 export const PATTERN_OPTIONS = [
   'Solid', 'Striped', 'Plaid / Tartan', 'Checked', 'Houndstooth',
   'Floral', 'Geometric', 'Abstract', 'Animal Print', 'Camouflage',
@@ -130,6 +138,7 @@ export type ScanResult = {
   pattern: string | null;
   fit: string | null;
   neckline: string | null;
+  sleeveLength: SleeveLength | null;
   material: string | null;
   care: string | null;
   formalityStyles: string[];
@@ -159,6 +168,7 @@ export type Item = {
   fit: string | null;
   pattern: string | null;
   neckline: string | null;
+  sleeveLength: SleeveLength | null;
   tags: string[];
   formalityStyles: string[];
   notableDetails: string[];

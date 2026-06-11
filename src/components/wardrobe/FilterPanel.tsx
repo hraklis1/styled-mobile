@@ -21,6 +21,7 @@ import {
   CATEGORY_ORDER, CATEGORY_LABELS,
   OCCASION_OPTIONS, OCCASION_LABELS,
   LAUNDRY_STATUS_OPTIONS, LAUNDRY_STATUS_LABELS,
+  SLEEVE_LENGTH_OPTIONS, SLEEVE_LENGTH_LABELS,
 } from '../../types/item';
 import {
   COLOR_HEX_MAP, getSwatchColor, isColorLight, parseMaterialString,
@@ -149,6 +150,9 @@ export interface FilterPanelProps {
   allMaterials?: string[];
   selectedMaterials?: string[];
   onToggleMaterial?: (m: string) => void;
+  allSleeveLengths?: string[];
+  selectedSleeveLengths?: string[];
+  onToggleSleeveLength?: (s: string) => void;
   selectedConditions?: string[];
   onToggleCondition?: (condition: string) => void;
   selectedWarmth?: number[];
@@ -200,6 +204,9 @@ export function FilterPanel({
   allMaterials,
   selectedMaterials,
   onToggleMaterial,
+  allSleeveLengths,
+  selectedSleeveLengths,
+  onToggleSleeveLength,
   selectedConditions,
   onToggleCondition,
   selectedWarmth,
@@ -380,6 +387,33 @@ export function FilterPanel({
                     activeOpacity={0.7}
                   >
                     <Text style={[styles.chipText, active && styles.chipTextActive]}>{mat}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </AccordionSection>
+        )}
+
+        {/* ── Sleeve Length ── */}
+        {allSleeveLengths && allSleeveLengths.length > 0 && (
+          <AccordionSection
+            title="Sleeve Length"
+            badge={(selectedSleeveLengths ?? []).length}
+            defaultExpanded={false}
+          >
+            <View style={styles.chips}>
+              {SLEEVE_LENGTH_OPTIONS.map(sl => {
+                const active = (selectedSleeveLengths ?? []).includes(sl);
+                return (
+                  <TouchableOpacity
+                    key={sl}
+                    style={[styles.chip, active && styles.chipActive]}
+                    onPress={() => onToggleSleeveLength?.(sl)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                      {SLEEVE_LENGTH_LABELS[sl]}
+                    </Text>
                   </TouchableOpacity>
                 );
               })}

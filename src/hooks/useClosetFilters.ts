@@ -29,6 +29,7 @@ export function useClosetFilters({ items, outfits, search, activeCategory, activ
   const [selectedOccasions, setSelectedOccasions] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses]   = useState<string[]>([]);
   const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]);
+  const [selectedSleeveLengths, setSelectedSleeveLengths] = useState<string[]>([]);
 
   // ── Outfit filter state ──────────────────────────────────────────────────
   const [outfitSortKey, setOutfitSortKey]               = useState<OutfitSortKey>('newest');
@@ -50,6 +51,11 @@ export function useClosetFilters({ items, outfits, search, activeCategory, activ
     [items],
   );
 
+  const allSleeveLengths = useMemo(
+    () => [...new Set(items.filter(i => i.sleeveLength).map(i => i.sleeveLength!))].sort(),
+    [items],
+  );
+
   const activeFilterCount = useMemo(
     () =>
       (sortKey !== 'newest' ? 1 : 0) +
@@ -61,10 +67,11 @@ export function useClosetFilters({ items, outfits, search, activeCategory, activ
       selectedCategories.length +
       selectedOccasions.length +
       selectedStatuses.length +
-      selectedMaterials.length,
+      selectedMaterials.length +
+      selectedSleeveLengths.length,
     [sortKey, selectedColors, selectedBrands, selectedSeasons,
      selectedConditions, selectedWarmth, selectedCategories,
-     selectedOccasions, selectedStatuses, selectedMaterials],
+     selectedOccasions, selectedStatuses, selectedMaterials, selectedSleeveLengths],
   );
 
   const allOutfitTags = useMemo(
@@ -145,6 +152,8 @@ export function useClosetFilters({ items, outfits, search, activeCategory, activ
       result = result.filter(i =>
         parseMaterialString(i.material ?? '').some(m => selectedMaterials.includes(m))
       );
+    if (selectedSleeveLengths.length)
+      result = result.filter(i => i.sleeveLength && selectedSleeveLengths.includes(i.sleeveLength));
 
     const arr = [...result];
     if (sortKey === 'oldest')
@@ -174,7 +183,7 @@ export function useClosetFilters({ items, outfits, search, activeCategory, activ
     return arr;
   }, [items, activeCategory, activeSubcategory, search, sortKey, selectedColors, selectedBrands, selectedSeasons,
       selectedConditions, selectedWarmth, selectedCategories, selectedOccasions,
-      selectedStatuses, selectedMaterials]);
+      selectedStatuses, selectedMaterials, selectedSleeveLengths]);
 
   const filteredOutfits = useMemo(() => {
     let result = outfits;
@@ -225,6 +234,7 @@ export function useClosetFilters({ items, outfits, search, activeCategory, activ
     setSelectedOccasions([]);
     setSelectedStatuses([]);
     setSelectedMaterials([]);
+    setSelectedSleeveLengths([]);
   }
 
   function clearOutfitFilters() {
@@ -252,6 +262,7 @@ export function useClosetFilters({ items, outfits, search, activeCategory, activ
     selectedOccasions, setSelectedOccasions,
     selectedStatuses, setSelectedStatuses,
     selectedMaterials, setSelectedMaterials,
+    selectedSleeveLengths, setSelectedSleeveLengths,
 
     // Outfit filter state
     outfitSortKey, setOutfitSortKey,
@@ -261,7 +272,7 @@ export function useClosetFilters({ items, outfits, search, activeCategory, activ
     outfitShowNeverWorn, setOutfitShowNeverWorn,
 
     // Filter metadata
-    allColors, allBrands, allSeasons, allMaterials,
+    allColors, allBrands, allSeasons, allMaterials, allSleeveLengths,
     activeFilterCount,
     allOutfitTags, allOutfitEvents,
     outfitActiveFilterCount,

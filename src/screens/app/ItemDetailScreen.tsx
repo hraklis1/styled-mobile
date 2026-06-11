@@ -34,6 +34,7 @@ import { useTagScanner } from '../../hooks/useTagScanner';
 import { EditItemModal } from '../../components/item/EditItemModal';
 import { SectionCard } from '../../components/primitives/SectionCard';
 import { Chip } from '../../components/primitives/Chip';
+import { SLEEVE_LENGTH_LABELS } from '../../types/item';
 import { ErrorState } from '../../components/primitives/ErrorState';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -192,6 +193,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         material: scanned.material || null,
         fit: scanned.fit || null,
         neckline: scanned.neckline || null,
+        sleeveLength: scanned.sleeveLength || item.sleeveLength,
         formalityStyles: Array.isArray(scanned.formalityStyles) ? scanned.formalityStyles : [],
         notableDetails: Array.isArray(scanned.notableDetails) ? scanned.notableDetails : [],
         colorPalette: Array.isArray(scanned.colorPalette) ? scanned.colorPalette : [],
@@ -428,6 +430,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
                 {viewItem.pattern ? <Chip label={viewItem.pattern} /> : null}
                 {viewItem.fit ? <Chip label={viewItem.fit} /> : null}
                 {viewItem.neckline ? <Chip label={viewItem.neckline} /> : null}
+                {viewItem.sleeveLength ? <Chip label={SLEEVE_LENGTH_LABELS[viewItem.sleeveLength]} /> : null}
                 {viewItem.formalityStyles?.map((s) => <Chip key={s} label={s} />)}
                 {viewItem.notableDetails?.map((d) => <Chip key={d} label={d} />)}
               </View>

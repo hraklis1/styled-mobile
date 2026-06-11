@@ -331,10 +331,13 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
         )}
 
         {hasAiImage && !visualize.isPending && (
-          <TouchableOpacity style={styles.regenRow} onPress={() => handleGenerate(true)}>
-            <Ionicons name="refresh-outline" size={13} color={colors.mutedForeground} />
-            <Text style={styles.regenLabel}>Regenerate</Text>
-          </TouchableOpacity>
+          <View style={styles.regenRow}>
+            <Text style={styles.aiDisclaimer}>AI-generated · approximate</Text>
+            <TouchableOpacity style={styles.regenBtn} onPress={() => handleGenerate(true)}>
+              <Ionicons name="refresh-outline" size={13} color={colors.mutedForeground} />
+              <Text style={styles.regenLabel}>Regenerate</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* ── Title ── */}
@@ -635,10 +638,19 @@ const styles = StyleSheet.create({
   regenRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 4,
+    justifyContent: 'space-between',
     paddingTop: spacing.sm,
     paddingHorizontal: spacing.lg,
+  },
+  aiDisclaimer: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+    fontStyle: 'italic',
+  },
+  regenBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   regenLabel: {
     fontSize: typography.size.xs,

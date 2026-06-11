@@ -45,6 +45,7 @@ export type CreateItemInput = {
   pattern?: string | null;
   fit?: string | null;
   neckline?: string | null;
+  sleeveLength?: string | null;
   material?: string | null;
   care?: string | null;
   condition?: string | null;

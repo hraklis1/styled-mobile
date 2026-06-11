@@ -100,12 +100,13 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
     selectedOccasions, setSelectedOccasions,
     selectedStatuses, setSelectedStatuses,
     selectedMaterials, setSelectedMaterials,
+    selectedSleeveLengths, setSelectedSleeveLengths,
     outfitSortKey, setOutfitSortKey,
     outfitFilterSheetOpen, setOutfitFilterSheetOpen,
     outfitSelectedTags, setOutfitSelectedTags,
     outfitSelectedEvents, setOutfitSelectedEvents,
     outfitShowNeverWorn, setOutfitShowNeverWorn,
-    allColors, allBrands, allSeasons, allMaterials,
+    allColors, allBrands, allSeasons, allMaterials, allSleeveLengths,
     activeFilterCount,
     allOutfitTags, allOutfitEvents,
     outfitActiveFilterCount,
@@ -579,7 +580,6 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
                 placeholder={segment === 'pieces' ? 'Search pieces…' : 'Search outfits…'}
                 placeholderTextColor={colors.mutedForeground}
                 returnKeyType="search"
-                clearButtonMode="while-editing"
               />
               {search.length > 0 && (
                 <Pressable onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Clear search" accessibilityRole="button">
@@ -817,6 +817,13 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
             prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]
           )
         }
+        allSleeveLengths={allSleeveLengths}
+        selectedSleeveLengths={selectedSleeveLengths}
+        onToggleSleeveLength={(s) =>
+          setSelectedSleeveLengths(prev =>
+            prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]
+          )
+        }
         selectedConditions={selectedConditions}
         onToggleCondition={(cond) =>
           setSelectedConditions(prev =>
@@ -979,6 +986,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: typography.size.sm,
     color: colors.foreground,
+    paddingVertical: 0,
   },
   filterBtn: {
     width: 42,

@@ -20,8 +20,9 @@ import {
   CATEGORY_LABELS, CATEGORY_ORDER, NORMALIZED_COLORS,
   PATTERN_OPTIONS, NECKLINE_OPTIONS_BY_CATEGORY,
   COLOR_TEMPERATURE_OPTIONS, MATERIAL_OPTIONS, CARE_OPTIONS,
+  SLEEVE_LENGTH_OPTIONS, SLEEVE_LENGTH_LABELS,
 } from '../../types/item';
-import type { ItemCategory, Item, NormalizedColor, ScanResult } from '../../types/item';
+import type { ItemCategory, Item, NormalizedColor, ScanResult, SleeveLength } from '../../types/item';
 import { getSubcategories, getStyles } from '../../lib/taxonomy';
 import { normalizeTag, dedupeTags } from '../../lib/tags';
 import { NORMALIZED_COLOR_HEX, isColorLight, normalizedColorDisplayName, parseMaterialString } from '../../lib/colorUtils';
@@ -153,6 +154,7 @@ export function EditItemModal({
   const [editPattern, setEditPattern] = useState('');
   const [editFit, setEditFit] = useState('');
   const [editNeckline, setEditNeckline] = useState('');
+  const [editSleeveLength, setEditSleeveLength] = useState('');
   const [editFormalityStyles, setEditFormalityStyles] = useState<string[]>([]);
   const [editTags, setEditTags] = useState<string[]>([]);
   const [editTagInput, setEditTagInput] = useState('');
@@ -183,6 +185,7 @@ export function EditItemModal({
       setEditPattern(scanData.pattern ?? '');
       setEditFit(scanData.fit ?? '');
       setEditNeckline(scanData.neckline ?? '');
+      setEditSleeveLength(scanData.sleeveLength ?? '');
       setEditFormalityStyles(Array.isArray(scanData.formalityStyles) ? [...scanData.formalityStyles] : []);
       setEditTags(Array.isArray(scanData.tags) ? [...scanData.tags] : []);
       setEditTagInput('');
@@ -210,6 +213,7 @@ export function EditItemModal({
       setEditPattern(item.pattern ?? '');
       setEditFit(item.fit ?? '');
       setEditNeckline(item.neckline ?? '');
+      setEditSleeveLength(item.sleeveLength ?? '');
       setEditFormalityStyles(Array.isArray(item.formalityStyles) ? [...item.formalityStyles] : []);
       setEditTags(Array.isArray(item.tags) ? [...item.tags] : []);
       setEditTagInput('');
@@ -272,6 +276,10 @@ export function EditItemModal({
       ? (editNeckline || null)
       : null;
 
+    const sleeveLengthValue: SleeveLength | null = (editCategory ? NECKLINE_OPTIONS_BY_CATEGORY[editCategory] : undefined)
+      ? ((editSleeveLength as SleeveLength) || null)
+      : null;
+
     const parsedPrice = editPurchasePrice.trim() ? parseFloat(editPurchasePrice.trim()) : null;
     const derivedMaterial = editMaterials.length ? editMaterials.join(', ') : null;
     const derivedCare = [...editCareOptions, editCareCustom.trim()].filter(Boolean).join(', ') || null;
@@ -296,6 +304,7 @@ export function EditItemModal({
           pattern: editPattern || null,
           fit: editFit.trim() || null,
           neckline: necklineValue,
+          sleeveLength: sleeveLengthValue,
           formalityStyles: editFormalityStyles,
           tags: finalTags,
           notes: editNotes.trim() || null,
@@ -331,6 +340,7 @@ export function EditItemModal({
           pattern: editPattern || null,
           fit: editFit.trim() || null,
           neckline: necklineValue,
+          sleeveLength: sleeveLengthValue,
           formalityStyles: editFormalityStyles,
           tags: finalTags,
           notes: editNotes.trim() || null,
@@ -493,6 +503,13 @@ export function EditItemModal({
                   value={editNeckline}
                   onChange={setEditNeckline}
                   placeholder="Select neckline…"
+                />
+                <View style={styles.spacer} />
+                <EditLabel>Sleeve Length</EditLabel>
+                <OptionChips
+                  options={[...SLEEVE_LENGTH_OPTIONS].map(v => ({ value: v, label: SLEEVE_LENGTH_LABELS[v] }))}
+                  value={editSleeveLength as any}
+                  onSelect={(v) => setEditSleeveLength(v === editSleeveLength ? '' : v)}
                 />
               </>
             )}
