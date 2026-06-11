@@ -41,7 +41,6 @@ export interface AddActionSheetProps {
   onTakePhoto?: () => void;
   onFromLibrary?: () => void;
   onBatchImport?: () => void;
-  onLogOutfit?: () => void;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -53,7 +52,6 @@ export function AddActionSheet({
   onTakePhoto: onTakePhotoProp,
   onFromLibrary: onFromLibraryProp,
   onBatchImport: onBatchImportProp,
-  onLogOutfit: onLogOutfitProp,
 }: AddActionSheetProps) {
   const insets = useSafeAreaInsets();
   const createItem = useCreateItem();
@@ -156,11 +154,6 @@ export function AddActionSheet({
     setTimeout(() => onBatchImportProp?.(), 300);
   }, [onBatchImportProp]);
 
-  const handleLogOutfit = useCallback(() => {
-    bottomSheetRef.current?.dismiss();
-    setTimeout(() => onLogOutfitProp?.(), 300);
-  }, [onLogOutfitProp]);
-
   const handleSaveManual = useCallback(() => {
     if (!manualName.trim()) return;
     setView('saving');
@@ -198,7 +191,7 @@ export function AddActionSheet({
   const headerTitle =
     view === 'manual' ? 'Add Manually'
       : view === 'saving' ? 'Adding to wardrobe…'
-        : 'Add to Styled';
+        : 'Add to Closet';
 
   const renderBackdrop = useCallback(
     (props: any) => (
@@ -232,7 +225,7 @@ export function AddActionSheet({
       {view === 'menu' && (
         <BottomSheetView style={styles.sheetContent}>
           <View style={styles.header}>
-            <Text style={styles.headerTitle}>Add to Styled</Text>
+            <Text style={styles.headerTitle}>Add to Closet</Text>
             <TouchableOpacity
               onPress={handleClose}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -245,7 +238,6 @@ export function AddActionSheet({
             onFromLibrary={handleFromLibrary}
             onBatchImport={handleBatchImport}
             onManual={() => setView('manual')}
-            onLogOutfit={handleLogOutfit}
             bottomInset={insets.bottom}
           />
         </BottomSheetView>

@@ -27,6 +27,8 @@ import { resolveImageUri } from '../../lib/resolveImageUri';
 import { CATEGORY_LABELS, type ItemCategory } from '../../types/item';
 import { colors, shadows, spacing, typography, radii } from '../../theme';
 import { useGlobalScan } from '../../contexts/GlobalScanContext';
+import { useGlobalAddSheet } from '../../contexts/GlobalAddSheetContext';
+import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { useFabScroll } from '../../contexts/FabScrollContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { PressableScale } from '../../components/primitives/PressableScale';
@@ -68,7 +70,9 @@ const SUBCATEGORY_ROW_H = 48;
 export function ClosetScreen({ navigation }: ClosetScreenProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { openScanItem } = useGlobalScan();
+  const { openScanItem, openBatchScan } = useGlobalScan();
+  const { openAddSheet } = useGlobalAddSheet();
+  const { openStylist } = useGlobalAIStylist();
   const { fabCollapsed } = useFabScroll();
 
   const [segment, setSegment]               = useState<Segment>('pieces');
@@ -292,6 +296,34 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
     setOutfitBuilderVisible(true);
   }, [selectedIds, items]);
 
+  const handleAddPieces = useCallback(() => {
+    openAddSheet({
+      onTakePhoto: () => openScanItem('camera'),
+      onFromLibrary: () => openScanItem('library'),
+      onBatchImport: openBatchScan,
+    });
+  }, [openAddSheet, openBatchScan, openScanItem]);
+
+  const handlePrimaryAction = useCallback(() => {
+    if (segment === 'pieces') {
+      handleAddPieces();
+      return;
+    }
+    setOutfitBuilderItems([]);
+    setOutfitBuilderVisible(true);
+  }, [handleAddPieces, segment]);
+
+  const handleStyleSelected = useCallback(() => {
+    if (selectedIds.size === 0) return;
+    const names = items.filter((item) => selectedIds.has(item.id)).map((item) => item.name);
+    const namedPieces = names.slice(0, 12).join(', ');
+    const remainingCount = Math.max(0, names.length - 12);
+    openStylist({
+      initialQuery: `Build an outfit using these pieces from my closet: ${namedPieces}${remainingCount ? `, plus ${remainingCount} more selected pieces` : ''}`,
+      source: 'closet_selection',
+    });
+  }, [items, openStylist, selectedIds]);
+
   const renderItemRow = useCallback(
     ({ item }: { item: (typeof items)[number] }) => {
       const uri = resolveImageUri(item.imageUrl);
@@ -406,7 +438,7 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
           : 'Start by adding your first item'}
       </Text>
       {!search && !activeCategory && (
-        <TouchableOpacity style={styles.emptyBtn} onPress={() => openScanItem()} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel="Add your first item">
+        <TouchableOpacity style={styles.emptyBtn} onPress={handleAddPieces} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel="Add your first item">
           <Ionicons name="add" size={16} color={colors.primaryForeground} />
           <Text style={styles.emptyBtnText}>Add your first item</Text>
         </TouchableOpacity>
@@ -430,7 +462,7 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
       {!hasActiveOutfitFilters && (
         <TouchableOpacity
           style={styles.emptyBtn}
-          onPress={() => setOutfitBuilderVisible(true)}
+          onPress={handlePrimaryAction}
           activeOpacity={0.8}
           accessibilityRole="button"
           accessibilityLabel="Create your first outfit"
@@ -455,11 +487,15 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
         </View>
         <View style={styles.headerActions}>
           <PressableScale
-            contentStyle={styles.headerBtn}
-            onPress={() => openScanItem()}
-            accessibilityLabel="Add to wardrobe"
+            contentStyle={styles.primaryHeaderBtn}
+            onPress={handlePrimaryAction}
+            accessibilityRole="button"
+            accessibilityLabel={segment === 'pieces' ? 'Add pieces' : 'Create outfit'}
           >
-            <Ionicons name="add" size={22} color={colors.foreground} />
+            <Ionicons name="add" size={16} color={colors.primaryForeground} />
+            <Text style={styles.primaryHeaderBtnText}>
+              {segment === 'pieces' ? 'Add pieces' : 'Create outfit'}
+            </Text>
           </PressableScale>
           <PressableScale
             contentStyle={styles.headerBtn}
@@ -715,6 +751,19 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
               </Text>
             </TouchableOpacity>
           </View>
+          <TouchableOpacity
+            style={[styles.bulkStylistBtn, selectedIds.size === 0 && styles.bulkBtnDisabled]}
+            onPress={handleStyleSelected}
+            disabled={selectedIds.size === 0}
+            accessibilityRole="button"
+            accessibilityLabel="Ask AI Stylist to build an outfit with selected items"
+            accessibilityState={{ disabled: selectedIds.size === 0 }}
+          >
+            <Ionicons name="sparkles" size={17} color={selectedIds.size === 0 ? colors.border : colors.primary} />
+            <Text style={[styles.bulkStylistBtnText, selectedIds.size === 0 && styles.bulkBtnTextDisabled]}>
+              Build an outfit with these
+            </Text>
+          </TouchableOpacity>
           <View style={styles.bulkActions}>
             <TouchableOpacity
               style={[styles.bulkBtn, selectedIds.size === 0 && styles.bulkBtnDisabled]}
@@ -905,6 +954,21 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  primaryHeaderBtn: {
+    height: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.full,
+    backgroundColor: colors.primary,
+  },
+  primaryHeaderBtnText: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    color: colors.primaryForeground,
   },
   title: {
     fontSize: typography.size.xxl,
@@ -1202,6 +1266,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
     paddingBottom: spacing.sm,
+  },
+  bulkStylistBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+    borderRadius: radii.md,
+    backgroundColor: colors.accent,
+    borderWidth: 1,
+    borderColor: `${colors.primary}30`,
+  },
+  bulkStylistBtnText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
   },
   bulkBtn: {
     flex: 1,

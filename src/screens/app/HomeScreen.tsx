@@ -21,6 +21,8 @@ import { useOutfitLogs, useDeleteOutfitLog } from '../../hooks/useOutfitLogs';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
 import { useGlobalOutfitLogger } from '../../contexts/GlobalOutfitLoggerContext';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
+import { useGlobalAddSheet } from '../../contexts/GlobalAddSheetContext';
+import { useGlobalScan } from '../../contexts/GlobalScanContext';
 import { useFabScroll } from '../../contexts/FabScrollContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { useWeatherToday } from '../../hooks/useWeather';
@@ -101,6 +103,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
   const { openLogger } = useGlobalOutfitLogger();
   const { openStylist } = useGlobalAIStylist();
+  const { openAddSheet } = useGlobalAddSheet();
+  const { openScanItem, openBatchScan } = useGlobalScan();
   const { fabCollapsed } = useFabScroll();
   const insets = useSafeAreaInsets();
   const lastHomeScrollY = useRef(0);
@@ -129,6 +133,14 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   }, [fabCollapsed]);
   const { width } = useWindowDimensions();
   const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / 2;
+
+  const handleAddToCloset = useCallback(() => {
+    openAddSheet({
+      onTakePhoto: () => openScanItem('camera'),
+      onFromLibrary: () => openScanItem('library'),
+      onBatchImport: openBatchScan,
+    });
+  }, [openAddSheet, openBatchScan, openScanItem]);
 
   // Derived data
   const upcomingEvents = useMemo(() => {
@@ -233,21 +245,13 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           >
             <Ionicons name="bag-handle-outline" size={20} color={colors.mutedForeground} />
           </PressableScale>
-          <PressableScale
-            contentStyle={styles.settingsBtn}
-            onPress={() => navigation.navigate('Profile')}
-            accessibilityRole="button"
-            accessibilityLabel="Open settings"
-          >
-            <Ionicons name="settings-outline" size={20} color={colors.mutedForeground} />
-          </PressableScale>
         </View>
       </View>
 
       {/* ── AI Stylist fake input ─────────────────────────────── */}
       <TouchableOpacity
         style={styles.stylistPill}
-        onPress={() => openStylist()}
+        onPress={() => openStylist({ source: 'home_prompt' })}
         activeOpacity={0.7}
         accessibilityRole="button"
         accessibilityLabel="Open AI Stylist"
@@ -259,11 +263,39 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         <Ionicons name="arrow-forward" size={16} color="#C2A68D" />
       </TouchableOpacity>
 
+      {/* ── Quick creation actions ─────────────────────────────── */}
+      <View style={styles.quickActions}>
+        <PressableScale
+          style={styles.quickActionPressable}
+          contentStyle={styles.quickAction}
+          onPress={handleAddToCloset}
+          accessibilityRole="button"
+          accessibilityLabel="Add to closet"
+        >
+          <View style={styles.quickActionIcon}>
+            <Ionicons name="add" size={18} color={colors.primary} />
+          </View>
+          <Text style={styles.quickActionText}>Add to closet</Text>
+        </PressableScale>
+        <PressableScale
+          style={styles.quickActionPressable}
+          contentStyle={styles.quickAction}
+          onPress={openLogger}
+          accessibilityRole="button"
+          accessibilityLabel="Log today's look"
+        >
+          <View style={styles.quickActionIcon}>
+            <Ionicons name="journal-outline" size={17} color={colors.primary} />
+          </View>
+          <Text style={styles.quickActionText}>Log today’s look</Text>
+        </PressableScale>
+      </View>
+
       {/* ── Empty wardrobe nudge ───────────────────────────────────── */}
       {items.length === 0 && (
         <PressableScale
           contentStyle={styles.nudgeCard}
-          onPress={() => navigation.navigate('Closet')}
+          onPress={handleAddToCloset}
           accessibilityRole="button"
           accessibilityLabel="Your wardrobe is empty. Tap to add items"
         >
@@ -277,23 +309,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           <Ionicons name="chevron-forward" size={16} color={colors.primary} />
         </PressableScale>
       )}
-
-      {/* ── Log Today's Look ─────────────────────────────────────── */}
-      <PressableScale
-        contentStyle={styles.logNudgeCard}
-        onPress={openLogger}
-        accessibilityRole="button"
-        accessibilityLabel="Log today's look"
-      >
-        <View style={[styles.nudgeIcon, { backgroundColor: `${colors.primary}18` }]}>
-          <Ionicons name="journal-outline" size={18} color={colors.primary} />
-        </View>
-        <View style={styles.nudgeText}>
-          <Text style={styles.nudgeTitle}>Log today's look</Text>
-          <Text style={styles.nudgeSub}>Track what you wear to keep your style history</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={16} color={colors.primary} />
-      </PressableScale>
 
       {/* ── Upcoming Events ───────────────────────────────────────── */}
       <View style={styles.section}>
@@ -566,6 +581,40 @@ const styles = StyleSheet.create({
     fontSize: typography.size.md,
     color: colors.mutedForeground,
   },
+  quickActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  quickActionPressable: {
+    flex: 1,
+  },
+  quickAction: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.xs,
+  },
+  quickActionIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: radii.full,
+    backgroundColor: `${colors.primary}15`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  quickActionText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.foreground,
+  },
 
   // Empty wardrobe nudge
   nudgeCard: {
@@ -755,21 +804,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     maxWidth: 220,
     lineHeight: typography.size.xs * 1.5,
-  },
-
-  // Log today's look nudge card
-  logNudgeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: '#F7F4F0',
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: `${colors.primary}30`,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.lg,
-    marginBottom: spacing.lg,
-    ...shadows.sm,
   },
 
   // Outfit log history

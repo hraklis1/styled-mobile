@@ -8,7 +8,6 @@ interface MenuContentProps {
   onFromLibrary: () => void;
   onBatchImport: () => void;
   onManual: () => void;
-  onLogOutfit: () => void;
   bottomInset: number;
 }
 
@@ -17,7 +16,6 @@ export function MenuContent({
   onFromLibrary,
   onBatchImport,
   onManual,
-  onLogOutfit,
   bottomInset,
 }: MenuContentProps) {
   return (
@@ -68,19 +66,6 @@ export function MenuContent({
         <Ionicons name="chevron-forward" size={16} color={colors.border} />
       </TouchableOpacity>
 
-      <View style={styles.divider} />
-      <Text style={styles.sectionLabel}>Log</Text>
-
-      <TouchableOpacity style={styles.option} onPress={onLogOutfit} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Log an outfit">
-        <View style={[styles.iconBox, { backgroundColor: `${colors.primary}18` }]}>
-          <Ionicons name="layers-outline" size={22} color={colors.primary} />
-        </View>
-        <View style={styles.optionText}>
-          <Text style={styles.optionTitle}>Log an Outfit</Text>
-          <Text style={styles.optionSub}>Record what you wore today</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={16} color={colors.border} />
-      </TouchableOpacity>
     </View>
   );
 }
@@ -94,11 +79,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.8,
     marginBottom: -spacing.xs,
-  },
-  divider: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    marginVertical: spacing.xs,
   },
   option: {
     flexDirection: 'row',

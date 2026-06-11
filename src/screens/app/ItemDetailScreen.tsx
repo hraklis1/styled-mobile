@@ -36,6 +36,7 @@ import { SectionCard } from '../../components/primitives/SectionCard';
 import { Chip } from '../../components/primitives/Chip';
 import { SLEEVE_LENGTH_LABELS } from '../../types/item';
 import { ErrorState } from '../../components/primitives/ErrorState';
+import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -61,6 +62,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const deleteItem = useDeleteItem();
   const markWorn = useMarkItemWorn();
   const refineImage = useRefineImage();
+  const { openStylist } = useGlobalAIStylist();
 
   const { width } = useWindowDimensions();
   const imageHeight = width * 0.85;
@@ -367,6 +369,20 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
             <Text style={styles.actionLabel}>{viewItem.isFavorite ? 'Favourited' : 'Favourite'}</Text>
           </TouchableOpacity>
         </View>
+
+        <TouchableOpacity
+          style={styles.stylistButton}
+          onPress={() => openStylist({
+            initialQuery: `How should I style my "${viewItem.name}"?`,
+            source: 'item_detail',
+          })}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={`Ask AI Stylist how to style ${viewItem.name}`}
+        >
+          <Ionicons name="sparkles" size={17} color={colors.primary} />
+          <Text style={styles.stylistButtonText}>How should I style this?</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.removeRow, isBusy && styles.actionDisabled]}
@@ -798,6 +814,24 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  stylistButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.xs,
+    backgroundColor: colors.accent,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: `${colors.primary}30`,
+  },
+  stylistButtonText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
   },
   removeRow: {
     flexDirection: 'row',

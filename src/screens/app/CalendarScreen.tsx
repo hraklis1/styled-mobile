@@ -37,6 +37,7 @@ import { colors, spacing, typography, radii } from '../../theme';
 import { ErrorState } from '../../components/primitives/ErrorState';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { presentPaywall } from '../../lib/paywall';
+import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import type { CalendarScreenProps } from '../../navigation/types';
 import type { Event } from '../../types/event';
 
@@ -45,6 +46,7 @@ const FREE_EVENT_LIMIT = 5;
 export function CalendarScreen({ navigation }: CalendarScreenProps) {
   const insets = useSafeAreaInsets();
   const { isPremium } = useEntitlement();
+  const { openStylist } = useGlobalAIStylist();
   const { data: events = [], isLoading, refetch, isRefetching, isError } = useEvents();
   const { data: allItems = [] } = useItems();
   const deleteEventMutation = useDeleteEvent();
@@ -369,6 +371,19 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         allItems={allItems}
         generateOutfit={generateOutfit}
         onViewOutfits={() => navigation.navigate('Closet')}
+        onOpenStylist={(event) => {
+          const details = [
+            `Dress me for "${event.title}"`,
+            `on ${new Date(event.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`,
+            event.occasion ? `for a ${event.occasion.replaceAll('_', ' ')} occasion` : null,
+            event.location ? `at ${event.location}` : null,
+            event.environment ? `in a ${event.environment} setting` : null,
+          ].filter(Boolean).join(' ');
+          setDetailEvent(null);
+          setTimeout(() => {
+            openStylist({ initialQuery: `${details}.`, source: 'event_detail' });
+          }, 300);
+        }}
         deviceCoords={deviceCoords}
       />
       <EventFormModal

@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ActivityIndicator, View, StyleSheet, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SplashScreen from 'expo-splash-screen';
+import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NavigationContainer, LinkingOptions } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -10,10 +11,9 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '../contexts/AuthContext';
 import { useProfile } from '../hooks/useProfile';
-import { GlobalOutfitLoggerProvider, useGlobalOutfitLogger } from '../contexts/GlobalOutfitLoggerContext';
-import { GlobalAIStylistProvider } from '../contexts/GlobalAIStylistContext';
-import { GlobalScanProvider, useGlobalScan } from '../contexts/GlobalScanContext';
-import { useGlobalAddSheet } from '../contexts/GlobalAddSheetContext';
+import { GlobalOutfitLoggerProvider } from '../contexts/GlobalOutfitLoggerContext';
+import { GlobalAIStylistProvider, useGlobalAIStylist } from '../contexts/GlobalAIStylistContext';
+import { GlobalScanProvider } from '../contexts/GlobalScanContext';
 import { FabScrollProvider } from '../contexts/FabScrollContext';
 import { OnboardingScreen } from '../screens/onboarding/OnboardingScreen';
 import { WelcomeScreen } from '../screens/onboarding/WelcomeScreen';
@@ -21,7 +21,6 @@ import { LoginScreen } from '../screens/auth/LoginScreen';
 import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
 import { ResetPasswordScreen } from '../screens/auth/ResetPasswordScreen';
 import { HomeScreen } from '../screens/app/HomeScreen';
-import { StylistScreen } from '../screens/app/StylistScreen';
 import { ItemDetailScreen } from '../screens/app/ItemDetailScreen';
 import { ClosetRefreshScreen } from '../screens/app/ClosetRefreshScreen';
 import { OutfitDetailScreen } from '../screens/app/OutfitDetailScreen';
@@ -30,7 +29,7 @@ import { CalendarScreen } from '../screens/app/CalendarScreen';
 import { ProfileScreen } from '../screens/app/ProfileScreen';
 import { SuggestionsScreen } from '../screens/app/SuggestionsScreen';
 import { ShopScreen } from '../screens/app/ShopScreen';
-import { colors, radii } from '../theme';
+import { colors, radii, spacing, typography } from '../theme';
 
 import type {
   AuthStackParamList,
@@ -60,17 +59,17 @@ const AppTab = createBottomTabNavigator<AppTabParamList>();
 const HomeStack = createNativeStackNavigator<HomeStackParamList>();
 const ClosetStack = createNativeStackNavigator<ClosetStackParamList>();
 
-const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
-  Home: 'home-outline',
-  Closet: 'file-tray-full-outline',
-  AddMenu: 'add-outline',
-  Calendar: 'calendar-outline',
-  Profile: 'person-outline',
+const TAB_ICONS: Record<string, { default: keyof typeof Ionicons.glyphMap; selected: keyof typeof Ionicons.glyphMap }> = {
+  Home: { default: 'home-outline', selected: 'home' },
+  Closet: { default: 'file-tray-full-outline', selected: 'file-tray-full' },
+  Stylist: { default: 'sparkles-outline', selected: 'sparkles' },
+  Calendar: { default: 'calendar-outline', selected: 'calendar' },
+  Profile: { default: 'person-outline', selected: 'person' },
 };
 
-// ── Placeholder screen for the center + tab (never shown) ────────────────────
+// ── Placeholder screen for the center Stylist tab (never shown) ──────────────
 
-function EmptyAddScreen() {
+function EmptyStylistScreen() {
   return <View style={{ flex: 1, backgroundColor: colors.background }} />;
 }
 
@@ -90,7 +89,6 @@ function HomeNavigator() {
   return (
     <HomeStack.Navigator screenOptions={{ headerShown: false }}>
       <HomeStack.Screen name="HomeMain" component={HomeScreen} />
-      <HomeStack.Screen name="Stylist" component={StylistScreen} />
       <HomeStack.Screen name="Suggestions" component={SuggestionsScreen} />
       <HomeStack.Screen name="Shop" component={ShopScreen} />
     </HomeStack.Navigator>
@@ -109,9 +107,7 @@ function ClosetNavigator() {
 }
 
 function AppTabNavigator() {
-  const { openAddSheet } = useGlobalAddSheet();
-  const { openScanItem, openBatchScan } = useGlobalScan();
-  const { openLogger } = useGlobalOutfitLogger();
+  const { openStylist } = useGlobalAIStylist();
   const insets = useSafeAreaInsets();
 
   return (
@@ -122,39 +118,58 @@ function AppTabNavigator() {
           tabBarStyle: {
             height: 60 + insets.bottom,
             paddingBottom: insets.bottom,
-            shadowColor: '#000',
-            shadowOpacity: 0.06,
-            shadowRadius: 8,
-            shadowOffset: { width: 0, height: -2 },
-            elevation: 8,
+            backgroundColor: colors.background,
+            borderTopColor: colors.border,
+            borderTopWidth: StyleSheet.hairlineWidth,
+            shadowColor: colors.foreground,
+            shadowOpacity: 0.04,
+            shadowRadius: 6,
+            shadowOffset: { width: 0, height: -1 },
+            elevation: 4,
           },
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name={TAB_ICONS[route.name]} size={size} color={color} />
+          tabBarActiveTintColor: colors.primary,
+          tabBarInactiveTintColor: colors.mutedForeground,
+          tabBarIcon: ({ color, focused, size }) => (
+            <Ionicons
+              name={focused ? TAB_ICONS[route.name].selected : TAB_ICONS[route.name].default}
+              size={size}
+              color={color}
+            />
+          ),
+          tabBarLabel: ({ children, color, focused }) => (
+            <Text
+              style={[
+                tabStyles.tabLabel,
+                { color, fontWeight: focused ? typography.weight.semibold : typography.weight.regular },
+              ]}
+            >
+              {children}
+            </Text>
           ),
         })}
       >
         <AppTab.Screen name="Home" component={HomeNavigator} />
         <AppTab.Screen name="Closet" component={ClosetNavigator} />
         <AppTab.Screen
-          name="AddMenu"
-          component={EmptyAddScreen}
+          name="Stylist"
+          component={EmptyStylistScreen}
           options={{
             tabBarLabel: () => null,
             tabBarButton: () => (
               <TouchableOpacity
-                style={tabStyles.addTabBtn}
-                onPress={() => openAddSheet({
-                  onTakePhoto: () => openScanItem('camera'),
-                  onFromLibrary: () => openScanItem('library'),
-                  onBatchImport: openBatchScan,
-                  onLogOutfit: openLogger,
-                })}
+                style={tabStyles.stylistTabBtn}
+                onPress={() => {
+                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  openStylist({ source: 'center_tab' });
+                }}
                 activeOpacity={0.8}
-                accessibilityLabel="Add item or log outfit"
+                accessibilityRole="button"
+                accessibilityLabel="Open AI Stylist"
               >
-                <View style={tabStyles.addTabCircle}>
-                  <Ionicons name="add" size={26} color={colors.primaryForeground} />
+                <View style={tabStyles.stylistTabCircle}>
+                  <Ionicons name="sparkles" size={22} color={colors.primaryForeground} />
                 </View>
+                <Text style={tabStyles.stylistTabLabel}>Stylist</Text>
               </TouchableOpacity>
             ),
           }}
@@ -167,18 +182,37 @@ function AppTabNavigator() {
 }
 
 const tabStyles = StyleSheet.create({
-  addTabBtn: {
+  tabLabel: {
+    fontSize: typography.size.xs,
+    lineHeight: 14,
+    marginBottom: spacing.xs,
+  },
+  stylistTabBtn: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addTabCircle: {
+  stylistTabCircle: {
     width: 44,
     height: 44,
     borderRadius: radii.full,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    transform: [{ translateY: -4 }],
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 7,
+    elevation: 4,
+  },
+  stylistTabLabel: {
+    fontSize: typography.size.xs,
+    lineHeight: 14,
+    color: colors.primary,
+    fontWeight: typography.weight.medium,
+    marginBottom: spacing.xs,
+    transform: [{ translateY: -6 }],
   },
 });
 

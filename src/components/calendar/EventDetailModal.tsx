@@ -34,6 +34,7 @@ export function EventDetailModal({
   allItems,
   generateOutfit,
   onViewOutfits,
+  onOpenStylist,
   deviceCoords,
 }: {
   event: Event | null;
@@ -45,6 +46,7 @@ export function EventDetailModal({
   allItems: Item[];
   generateOutfit: ReturnType<typeof useGenerateOutfit>;
   onViewOutfits: () => void;
+  onOpenStylist: (event: Event) => void;
   deviceCoords: { lat: number; lon: number } | null;
 }) {
   const eventDateStr = event ? event.date.slice(0, 10) : null;
@@ -133,6 +135,16 @@ export function EventDetailModal({
         </ScrollView>
 
         <View style={s.actions}>
+          <TouchableOpacity
+            style={s.stylistBtn}
+            onPress={() => onOpenStylist(event)}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={`Ask AI Stylist what to wear to ${event.title}`}
+          >
+            <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.primary} />
+            <Text style={s.stylistBtnText}>Dress me for this event</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={[s.generateBtn, generateOutfit.isPending && s.generateBtnDisabled]}
             onPress={() => {
@@ -253,6 +265,22 @@ const s = StyleSheet.create({
     paddingVertical: spacing.md,
     borderRadius: radii.md,
     backgroundColor: colors.primary,
+  },
+  stylistBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    borderRadius: radii.md,
+    backgroundColor: colors.accent,
+    borderWidth: 1,
+    borderColor: `${colors.primary}30`,
+  },
+  stylistBtnText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
   },
   generateBtnDisabled: { opacity: 0.7 },
   generateBtnText: {

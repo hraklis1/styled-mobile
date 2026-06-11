@@ -18,7 +18,7 @@ export type AuthStackParamList = {
 export type AppTabParamList = {
   Home: undefined;
   Closet: NavigatorScreenParams<ClosetStackParamList> | undefined;
-  AddMenu: undefined;
+  Stylist: undefined;
   Calendar: undefined;
   Profile: undefined;
 };
@@ -38,7 +38,6 @@ export type ClosetStackParamList = {
 // Home nested stack
 export type HomeStackParamList = {
   HomeMain: undefined;
-  Stylist: { query?: string };
   Suggestions: { eventId?: number } | undefined;
   Shop: undefined;
 };
@@ -66,13 +65,11 @@ export type LoginScreenProps = NativeStackScreenProps<AuthStackParamList, 'Login
 export type ForgotPasswordScreenProps = NativeStackScreenProps<AuthStackParamList, 'ForgotPassword'>;
 export type ResetPasswordScreenProps = NativeStackScreenProps<AuthStackParamList, 'ResetPassword'>;
 
-// CompositeScreenProps lets HomeMain navigate both within HomeStack (→ Stylist)
-// and across to sibling tabs (→ Closet, Calendar)
+// CompositeScreenProps lets HomeMain navigate within HomeStack and across to sibling tabs.
 export type HomeScreenProps = CompositeScreenProps<
   NativeStackScreenProps<HomeStackParamList, 'HomeMain'>,
   BottomTabScreenProps<AppTabParamList>
 >;
-export type StylistScreenProps = NativeStackScreenProps<HomeStackParamList, 'Stylist'>;
 export type SuggestionsScreenProps = NativeStackScreenProps<HomeStackParamList, 'Suggestions'>;
 export type ShopScreenProps = NativeStackScreenProps<HomeStackParamList, 'Shop'>;
 export type CalendarScreenProps = BottomTabScreenProps<AppTabParamList, 'Calendar'>;

@@ -136,11 +136,19 @@ function detectOccasionHint(text: string): OccasionHint | undefined {
 
 type Props = {
   initialQuery?: string;
+  promptRequestId?: number;
+  onPromptConsumed?: () => void;
   onClose: () => void;
   onNavigateToShop?: () => void;
 };
 
-export function StylistChatView({ initialQuery, onClose, onNavigateToShop }: Props) {
+export function StylistChatView({
+  initialQuery,
+  promptRequestId = 0,
+  onPromptConsumed,
+  onClose,
+  onNavigateToShop,
+}: Props) {
   const insets = useSafeAreaInsets();
   const weather = useWeatherCurrent();
   const { data: allItems = [] } = useItems();
@@ -157,7 +165,7 @@ export function StylistChatView({ initialQuery, onClose, onNavigateToShop }: Pro
   const player = useAudioPlayer(null);
   const playingFileRef = useRef<File | null>(null);
   const sessionRef = useRef(0);
-  const hasSentInitialRef = useRef(false);
+  const lastPromptRequestIdRef = useRef(0);
 
   const SESSION_KEY = 'stylist_last_session';
 
@@ -452,11 +460,12 @@ export function StylistChatView({ initialQuery, onClose, onNavigateToShop }: Pro
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (initialQuery && !hasSentInitialRef.current) {
-      hasSentInitialRef.current = true;
+    if (initialQuery && !isLoading && promptRequestId > lastPromptRequestIdRef.current) {
+      lastPromptRequestIdRef.current = promptRequestId;
       sendMessage({ text: initialQuery });
+      onPromptConsumed?.();
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [initialQuery, isLoading, onPromptConsumed, promptRequestId, sendMessage]);
 
   useEffect(() => {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);

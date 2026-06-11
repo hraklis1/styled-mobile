@@ -2,13 +2,28 @@ import { createContext, useCallback, useContext, useState } from 'react';
 import { Alert, Modal, View, StyleSheet } from 'react-native';
 
 import { StylistChatView } from '../components/stylist/StylistChatView';
-import { useAuth } from './AuthContext';
+import { useEntitlement } from '../hooks/useEntitlement';
+import { track } from '../lib/analytics';
 import { presentPaywall } from '../lib/paywall';
 
 // ─── Context ──────────────────────────────────────────────────────────────────
 
+export type StylistOpenSource =
+  | 'center_tab'
+  | 'home_prompt'
+  | 'shop'
+  | 'item_detail'
+  | 'outfit_detail'
+  | 'event_detail'
+  | 'closet_selection';
+
+type OpenStylistOptions = {
+  initialQuery?: string;
+  source: StylistOpenSource;
+};
+
 type GlobalAIStylistContextValue = {
-  openStylist: (initialQuery?: string) => void;
+  openStylist: (options: OpenStylistOptions) => void;
 };
 
 const GlobalAIStylistContext = createContext<GlobalAIStylistContextValue>({
@@ -28,10 +43,11 @@ type Props = {
 export function GlobalAIStylistProvider({ children }: Props) {
   const [visible, setVisible] = useState(false);
   const [initialQuery, setInitialQuery] = useState<string | undefined>(undefined);
-  const { user } = useAuth();
+  const [promptRequestId, setPromptRequestId] = useState(0);
+  const { isPremium } = useEntitlement();
 
-  const openStylist = useCallback(async (q?: string) => {
-    if (!user?.isPremium) {
+  const openStylist = useCallback(async ({ initialQuery: query, source }: OpenStylistOptions) => {
+    if (!isPremium) {
       const shouldUpgrade = await new Promise<boolean>((resolve) => {
         Alert.alert(
           'Unlock your AI Stylist',
@@ -46,11 +62,14 @@ export function GlobalAIStylistProvider({ children }: Props) {
       const purchased = await presentPaywall();
       if (!purchased) return;
     }
-    setInitialQuery(q);
+    track('stylist_opened', { source });
+    setInitialQuery(query);
+    if (query) setPromptRequestId((id) => id + 1);
     setVisible(true);
-  }, [user?.isPremium]);
+  }, [isPremium]);
 
   const closeStylist = useCallback(() => setVisible(false), []);
+  const consumePrompt = useCallback(() => setInitialQuery(undefined), []);
 
   return (
     <GlobalAIStylistContext.Provider value={{ openStylist }}>
@@ -62,7 +81,12 @@ export function GlobalAIStylistProvider({ children }: Props) {
         statusBarTranslucent
         onRequestClose={closeStylist}
       >
-        <StylistChatView initialQuery={initialQuery} onClose={closeStylist} />
+        <StylistChatView
+          initialQuery={initialQuery}
+          promptRequestId={promptRequestId}
+          onPromptConsumed={consumePrompt}
+          onClose={closeStylist}
+        />
       </Modal>
     </GlobalAIStylistContext.Provider>
   );

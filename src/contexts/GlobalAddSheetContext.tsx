@@ -9,7 +9,6 @@ type SheetCallbacks = {
   onTakePhoto?: () => void;
   onFromLibrary?: () => void;
   onBatchImport?: () => void;
-  onLogOutfit?: () => void;
   onItemsSaved?: (items: Item[]) => void;
 };
 
@@ -52,7 +51,6 @@ export function GlobalAddSheetProvider({ children }: Props) {
           onTakePhoto={callbacksRef.current.onTakePhoto}
           onFromLibrary={callbacksRef.current.onFromLibrary}
           onBatchImport={callbacksRef.current.onBatchImport}
-          onLogOutfit={callbacksRef.current.onLogOutfit}
           onItemsSaved={callbacksRef.current.onItemsSaved}
         />
       )}

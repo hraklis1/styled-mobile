@@ -76,7 +76,10 @@ export function ShopScreen(_props: ShopScreenProps) {
           </Text>
           <TouchableOpacity
             style={styles.emptyBtn}
-            onPress={() => openStylist('Shop for a new outfit for me')}
+            onPress={() => openStylist({
+              initialQuery: 'Shop for a new outfit for me',
+              source: 'shop',
+            })}
             activeOpacity={0.85}
             accessibilityLabel="Open AI Stylist"
           >

@@ -25,6 +25,7 @@ import { CommonActions } from '@react-navigation/native';
 import { colors, spacing, typography, radii } from '../../theme';
 import { CATEGORY_LABELS } from '../../types/item';
 import type { OutfitDetailScreenProps } from '../../navigation/types';
+import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', {
@@ -143,6 +144,7 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   const markWorn = useMarkOutfitWorn();
   const visualize = useVisualizeOutfit();
   const updateOutfit = useUpdateOutfit();
+  const { openStylist } = useGlobalAIStylist();
 
   const [localName, setLocalName] = useState(outfit?.name ?? '');
   const [localNotes, setLocalNotes] = useState(outfit?.notes ?? '');
@@ -390,6 +392,20 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
               <Text style={styles.wornButtonLabel}>Worn today</Text>
             </>
           )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.stylistButton}
+          onPress={() => openStylist({
+            initialQuery: `How can I improve my "${outfit.name}" outfit?`,
+            source: 'outfit_detail',
+          })}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={`Ask AI Stylist to improve ${outfit.name}`}
+        >
+          <Ionicons name="sparkles" size={17} color={colors.primary} />
+          <Text style={styles.stylistButtonLabel}>Improve this outfit</Text>
         </TouchableOpacity>
 
         {/* ── Details ── */}
@@ -713,6 +729,24 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
+  },
+  stylistButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.accent,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: `${colors.primary}30`,
+  },
+  stylistButtonLabel: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
   },
   actionDisabled: { opacity: 0.5 },
 
