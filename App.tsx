@@ -1,12 +1,12 @@
 import * as Sentry from '@sentry/react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { PostHogProvider } from 'posthog-react-native';
-import { queryClient, asyncStoragePersister } from './src/lib/queryClient';
+import { queryClient } from './src/lib/queryClient';
 import { posthog } from './src/lib/analytics';
 import { initPurchases } from './src/lib/purchases';
 import { AuthProvider } from './src/contexts/AuthContext';
@@ -17,7 +17,7 @@ import { OfflineBanner } from './src/components/primitives/OfflineBanner';
 
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
-  tracesSampleRate: 1.0,
+  tracesSampleRate: __DEV__ ? 1.0 : 0.1,
 });
 
 // Must be called before AuthProvider mounts so loginUser() can run immediately after auth
@@ -32,15 +32,9 @@ function App() {
         <ErrorBoundary>
           <PostHogProvider
             client={posthog}
-            autocapture={{
-              captureScreens: false,
-              captureTouches: true,
-            }}
+            autocapture={false}
           >
-            <PersistQueryClientProvider
-              client={queryClient}
-              persistOptions={{ persister: asyncStoragePersister }}
-            >
+            <QueryClientProvider client={queryClient}>
               <AuthProvider>
                 <BottomSheetModalProvider>
                   <GlobalAddSheetProvider>
@@ -50,7 +44,7 @@ function App() {
                   </GlobalAddSheetProvider>
                 </BottomSheetModalProvider>
               </AuthProvider>
-            </PersistQueryClientProvider>
+            </QueryClientProvider>
           </PostHogProvider>
         </ErrorBoundary>
       </SafeAreaProvider>

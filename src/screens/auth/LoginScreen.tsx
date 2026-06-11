@@ -11,9 +11,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Google from 'expo-auth-session/providers/google';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import * as SecureStore from 'expo-secure-store';
 import { makeRedirectUri } from 'expo-auth-session';
 import { track } from '../../lib/analytics';
+import { getDeviceValue, setDeviceValue } from '../../lib/deviceStorage';
 import { useAuth, LAST_LOGIN_EMAIL_KEY } from '../../contexts/AuthContext';
 import { Button } from '../../components/primitives/Button';
 import { Input } from '../../components/primitives/Input';
@@ -32,7 +32,7 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    SecureStore.getItemAsync(LAST_LOGIN_EMAIL_KEY).then((stored) => {
+    getDeviceValue(LAST_LOGIN_EMAIL_KEY).then((stored) => {
       if (stored) setEmail(stored);
     });
   }, []);
@@ -62,7 +62,7 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
     setError(null);
     try {
       await loginWithEmail(email.trim(), password);
-      SecureStore.setItemAsync(LAST_LOGIN_EMAIL_KEY, email.trim()).catch(() => {});
+      setDeviceValue(LAST_LOGIN_EMAIL_KEY, email.trim()).catch(() => {});
     } catch (e: any) {
       const msg = e?.message ?? 'Incorrect email or password.';
       setError(msg);

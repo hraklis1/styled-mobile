@@ -74,6 +74,7 @@ const ColorSwatch = memo(({ colorName, selected, onPress }: ColorSwatchProps) =>
     </TouchableOpacity>
   );
 });
+ColorSwatch.displayName = 'ColorSwatch';
 
 // ─── AccordionSection ─────────────────────────────────────────────────────────
 

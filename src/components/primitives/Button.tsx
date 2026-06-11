@@ -28,6 +28,9 @@ export function Button({ label, variant = 'primary', loading = false, disabled, 
       contentStyle={[styles.base, styles[variant], isDisabled && styles.disabled]}
       style={style}
       disabled={isDisabled}
+      accessibilityRole="button"
+      accessibilityLabel={rest.accessibilityLabel ?? label}
+      accessibilityState={{ disabled: isDisabled }}
       {...rest}
     >
       {loading ? (

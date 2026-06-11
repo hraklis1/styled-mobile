@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Linking,
 } from 'react-native';
 import Purchases from 'react-native-purchases';
 import { ENTITLEMENT_ID } from '../../lib/purchases';
@@ -99,6 +100,11 @@ const STYLIST_VOICES = [
   { value: 'shimmer', label: 'Shimmer', description: 'Soft & breezy' },
 ];
 
+const PRIVACY_URL = process.env.EXPO_PUBLIC_PRIVACY_URL;
+const TERMS_URL = process.env.EXPO_PUBLIC_TERMS_URL;
+const SUPPORT_URL = process.env.EXPO_PUBLIC_SUPPORT_URL;
+const ACCOUNT_DELETION_URL = process.env.EXPO_PUBLIC_ACCOUNT_DELETION_URL;
+
 // ── ProfileScreen ─────────────────────────────────────────────────────────────
 
 export function ProfileScreen(_props: ProfileScreenProps) {
@@ -183,6 +189,19 @@ export function ProfileScreen(_props: ProfileScreenProps) {
 
   const activeCfg = form.activePicker ? form.pickerCfg[form.activePicker] : null;
 
+  const openExternalUrl = async (label: string, url?: string) => {
+    if (!url) {
+      Alert.alert('Not configured', `${label} is not configured for this build.`);
+      return;
+    }
+    const supported = await Linking.canOpenURL(url);
+    if (!supported) {
+      Alert.alert('Unable to open link', `Could not open ${label.toLowerCase()}.`);
+      return;
+    }
+    await Linking.openURL(url);
+  };
+
   // ── Loading / error states ────────────────────────────────────────────────
   if (profileError) {
     return <ErrorState message="Couldn't load your profile" onRetry={refetchProfile} />;
@@ -204,7 +223,13 @@ export function ProfileScreen(_props: ProfileScreenProps) {
 
       {/* ── Fixed header ──────────────────────────────────────────────────── */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <TouchableOpacity style={styles.avatar} onPress={handlePickPhoto} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={styles.avatar}
+          onPress={handlePickPhoto}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Change profile photo"
+        >
           {form.photoPreview
             ? <Image source={{ uri: form.photoPreview }} style={styles.avatarPhoto} />
             : <Text style={styles.avatarText}>{initials}</Text>}
@@ -418,7 +443,7 @@ export function ProfileScreen(_props: ProfileScreenProps) {
         </SectionCard>
 
         {/* ─────────────────── Section 2: Your Size ─────────────────────── */}
-        <SectionCard icon="resize-outline" title="YOUR SIZE">
+        <SectionCard icon="resize-outline" title="YOUR SIZE" collapsible initiallyExpanded={false}>
           <Text style={[styles.hint, { marginTop: -spacing.sm }]}>All optional. Helps suggest pieces in your size.</Text>
 
           {/* Top */}
@@ -552,7 +577,7 @@ export function ProfileScreen(_props: ProfileScreenProps) {
         </SectionCard>
 
         {/* ─────────────────── Section 3: Preferences ───────────────────── */}
-        <SectionCard icon="star-outline" title="PREFERENCES">
+        <SectionCard icon="star-outline" title="PREFERENCES" collapsible initiallyExpanded={false}>
 
           {/* Location */}
           <View style={styles.field}>
@@ -655,7 +680,7 @@ export function ProfileScreen(_props: ProfileScreenProps) {
         </SectionCard>
 
         {/* ─────────────────── Section 4: Account ───────────────────────── */}
-        <SectionCard icon="settings-outline" title="ACCOUNT">
+        <SectionCard icon="settings-outline" title="ACCOUNT" collapsible initiallyExpanded={false}>
 
           {/* Change password (local auth only) */}
           {user?.authProvider === 'local' && (
@@ -675,6 +700,9 @@ export function ProfileScreen(_props: ProfileScreenProps) {
                 onPress={handleChangePassword}
                 disabled={changePasswordMutation.isPending || !currentPassword || !newPassword || !confirmPassword}
                 activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Update password"
+                accessibilityState={{ disabled: changePasswordMutation.isPending || !currentPassword || !newPassword || !confirmPassword }}
               >
                 {changePasswordMutation.isPending
                   ? <ActivityIndicator size="small" color={colors.foreground} />
@@ -689,6 +717,9 @@ export function ProfileScreen(_props: ProfileScreenProps) {
             onPress={handleRestorePurchases}
             disabled={isRestoring}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Restore purchases"
+            accessibilityState={{ disabled: isRestoring }}
           >
             {isRestoring
               ? <ActivityIndicator size="small" color={colors.mutedForeground} />
@@ -706,16 +737,50 @@ export function ProfileScreen(_props: ProfileScreenProps) {
               { text: 'Sign out', style: 'destructive', onPress: () => logout() },
             ])}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Sign out"
           >
             <Ionicons name="log-out-outline" size={18} color={colors.error} />
             <Text style={styles.signOutText}>Sign out</Text>
           </TouchableOpacity>
 
+          <View style={styles.legalSection}>
+            <Text style={styles.subTitle}>Privacy and support</Text>
+            <Text style={styles.hint}>
+              Styled processes wardrobe photos, profile preferences, location when requested,
+              and usage diagnostics to provide styling features and improve reliability.
+            </Text>
+            {[
+              { label: 'Privacy Policy', url: PRIVACY_URL },
+              { label: 'Terms of Service', url: TERMS_URL },
+              { label: 'Contact Support', url: SUPPORT_URL },
+              { label: 'Delete account outside the app', url: ACCOUNT_DELETION_URL },
+            ].map((link) => (
+              <TouchableOpacity
+                key={link.label}
+                style={styles.legalLink}
+                onPress={() => openExternalUrl(link.label, link.url)}
+                accessibilityRole="link"
+                accessibilityLabel={link.label}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.legalLinkText}>{link.label}</Text>
+                <Ionicons name="open-outline" size={16} color={colors.primary} />
+              </TouchableOpacity>
+            ))}
+          </View>
+
           {/* Danger zone */}
           <View style={styles.dangerZone}>
             <Text style={styles.dangerTitle}>Danger Zone</Text>
             <Text style={styles.hint}>Permanently delete your account and all wardrobe data. This cannot be undone.</Text>
-            <TouchableOpacity style={styles.deleteBtn} onPress={() => setDeleteModalVisible(true)} activeOpacity={0.8}>
+            <TouchableOpacity
+              style={styles.deleteBtn}
+              onPress={() => setDeleteModalVisible(true)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Delete my account"
+            >
               <Ionicons name="trash-outline" size={16} color={colors.error} />
               <Text style={styles.deleteBtnText}>Delete my account</Text>
             </TouchableOpacity>
@@ -730,6 +795,9 @@ export function ProfileScreen(_props: ProfileScreenProps) {
           onPress={form.handleSave}
           disabled={form.isSaving || !form.isDirty}
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Save profile changes"
+          accessibilityState={{ disabled: form.isSaving || !form.isDirty }}
         >
           {form.isSaving
             ? <ActivityIndicator size="small" color={form.isDirty ? colors.primaryForeground : colors.mutedForeground} />
@@ -972,6 +1040,12 @@ const styles = StyleSheet.create({
   },
   signOutText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.error },
   dangerZone: { borderTopWidth: 1, borderTopColor: `${colors.error}25`, paddingTop: spacing.lg, gap: spacing.sm },
+  legalSection: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.lg, gap: spacing.sm },
+  legalLink: {
+    minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderBottomWidth: 1, borderBottomColor: colors.border,
+  },
+  legalLinkText: { fontSize: typography.size.sm, fontWeight: typography.weight.medium, color: colors.primary },
   dangerTitle: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.error },
   deleteBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,

@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import * as SecureStore from 'expo-secure-store';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { identify, reset, track } from '../lib/analytics';
+import { clearUserQueryCache } from '../lib/queryClient';
+import { deleteDeviceValue, getDeviceValue, setDeviceValue } from '../lib/deviceStorage';
 import {
   Purchases,
   ENTITLEMENT_ID,
@@ -55,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // This handles renewals, cancellations, and grace period transitions without restart.
     const handleCustomerInfoUpdate: Parameters<typeof Purchases.addCustomerInfoUpdateListener>[0] = (info) => {
       const premium = !!info.entitlements.active[ENTITLEMENT_ID];
-      SecureStore.setItemAsync(IS_PREMIUM_CACHE_KEY, String(premium)).catch(() => {});
+      setDeviceValue(IS_PREMIUM_CACHE_KEY, String(premium)).catch(() => {});
       setUser((u) => {
         if (!u) return u;
         if (u.isPremium !== premium) {
@@ -73,12 +74,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session) {
         const mapped = mapSupabaseUser(session.user);
-        const cached = await SecureStore.getItemAsync(IS_PREMIUM_CACHE_KEY).catch(() => null);
+        const cached = await getDeviceValue(IS_PREMIUM_CACHE_KEY).catch(() => null);
         setUser({ ...mapped, isPremium: cached === 'true' });
         setIsLoading(false);
         hydrateRcPremium(session.user.id)
           .then((live) => {
-            SecureStore.setItemAsync(IS_PREMIUM_CACHE_KEY, String(live)).catch(() => {});
+            setDeviceValue(IS_PREMIUM_CACHE_KEY, String(live)).catch(() => {});
             setUser((u) => (u ? { ...u, isPremium: live } : u));
           })
           .catch(() => {});
@@ -102,20 +103,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const mapped = session ? mapSupabaseUser(session.user) : null;
 
       if (event === 'SIGNED_IN' && mapped) {
-        const cached = await SecureStore.getItemAsync(IS_PREMIUM_CACHE_KEY).catch(() => null);
+        await clearUserQueryCache();
+        const cached = await getDeviceValue(IS_PREMIUM_CACHE_KEY).catch(() => null);
         setUser({ ...mapped, isPremium: cached === 'true' });
         setIsLoading(false);
         identify(mapped.id, { email: mapped.email, authProvider: mapped.authProvider });
         track('user_logged_in', { provider: mapped.authProvider });
         hydrateRcPremium(mapped.id)
           .then((live) => {
-            SecureStore.setItemAsync(IS_PREMIUM_CACHE_KEY, String(live)).catch(() => {});
+            setDeviceValue(IS_PREMIUM_CACHE_KEY, String(live)).catch(() => {});
             setUser((u) => (u ? { ...u, isPremium: live } : u));
           })
           .catch(() => {});
       } else if (event === 'SIGNED_OUT') {
+        await clearUserQueryCache();
         logoutUser().catch(() => {});
-        SecureStore.deleteItemAsync(IS_PREMIUM_CACHE_KEY).catch(() => {});
+        deleteDeviceValue(IS_PREMIUM_CACHE_KEY).catch(() => {});
         setUser(null);
         setIsLoading(false);
         reset();
@@ -154,7 +157,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     await supabase.auth.signOut();
-    SecureStore.deleteItemAsync(LAST_LOGIN_EMAIL_KEY).catch(() => {});
+    deleteDeviceValue(LAST_LOGIN_EMAIL_KEY).catch(() => {});
   }, []);
 
   return (

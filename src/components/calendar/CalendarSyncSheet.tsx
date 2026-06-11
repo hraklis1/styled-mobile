@@ -27,10 +27,9 @@ import {
   CALENDAR_CONNECTIONS_KEY,
   type CalendarPreviewEvent,
 } from '../../hooks/useCalendarSync';
-import { api } from '../../lib/api';
+import { api, API_BASE_URL } from '../../lib/api';
 import { colors, spacing, typography, radii } from '../../theme';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
 const GREEN = '#22c55e';
 
 // ── Preview event list ─────────────────────────────────────────────────────────
@@ -149,7 +148,7 @@ export function CalendarSyncSheet({
     try {
       const { data } = await api.get<{ token: string }>('/api/calendar/google/mobile-token');
       const result = await WebBrowser.openAuthSessionAsync(
-        `${API_URL}/api/calendar/google/mobile-connect?token=${data.token}`,
+        `${API_BASE_URL}/api/calendar/google/mobile-connect?token=${data.token}`,
         'styled://',
       );
       if (result.type === 'success') {

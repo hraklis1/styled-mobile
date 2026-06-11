@@ -227,7 +227,16 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           </View>
           <PressableScale
             contentStyle={styles.settingsBtn}
+            onPress={() => navigation.navigate('Shop')}
+            accessibilityRole="button"
+            accessibilityLabel="Open shop wishlist"
+          >
+            <Ionicons name="bag-handle-outline" size={20} color={colors.mutedForeground} />
+          </PressableScale>
+          <PressableScale
+            contentStyle={styles.settingsBtn}
             onPress={() => navigation.navigate('Profile')}
+            accessibilityRole="button"
             accessibilityLabel="Open settings"
           >
             <Ionicons name="settings-outline" size={20} color={colors.mutedForeground} />

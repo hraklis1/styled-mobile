@@ -1,6 +1,4 @@
 import { QueryClient } from '@tanstack/react-query';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import { isNetworkError } from './api';
 
 export const queryClient = new QueryClient({
@@ -17,10 +15,8 @@ export const queryClient = new QueryClient({
   },
 });
 
-// Persists the full query cache to AsyncStorage between app sessions.
-// Bump the `key` string whenever query shapes change to invalidate stale caches.
-export const asyncStoragePersister = createAsyncStoragePersister({
-  storage: AsyncStorage,
-  key: 'STYLED_QUERY_CACHE_v1',
-  throttleTime: 1000, // debounce writes to AsyncStorage (ms)
-});
+// User-owned API responses must never survive an auth boundary.
+export async function clearUserQueryCache(): Promise<void> {
+  await queryClient.cancelQueries();
+  queryClient.clear();
+}

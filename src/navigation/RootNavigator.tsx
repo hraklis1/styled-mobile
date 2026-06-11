@@ -1,8 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ActivityIndicator, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SplashScreen from 'expo-splash-screen';
-import Animated, { useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NavigationContainer, LinkingOptions } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -15,7 +14,7 @@ import { GlobalOutfitLoggerProvider, useGlobalOutfitLogger } from '../contexts/G
 import { GlobalAIStylistProvider } from '../contexts/GlobalAIStylistContext';
 import { GlobalScanProvider, useGlobalScan } from '../contexts/GlobalScanContext';
 import { useGlobalAddSheet } from '../contexts/GlobalAddSheetContext';
-import { FabScrollProvider, useFabScroll } from '../contexts/FabScrollContext';
+import { FabScrollProvider } from '../contexts/FabScrollContext';
 import { OnboardingScreen } from '../screens/onboarding/OnboardingScreen';
 import { WelcomeScreen } from '../screens/onboarding/WelcomeScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
@@ -31,8 +30,7 @@ import { CalendarScreen } from '../screens/app/CalendarScreen';
 import { ProfileScreen } from '../screens/app/ProfileScreen';
 import { SuggestionsScreen } from '../screens/app/SuggestionsScreen';
 import { ShopScreen } from '../screens/app/ShopScreen';
-import { useGlobalAIStylist } from '../contexts/GlobalAIStylistContext';
-import { colors, spacing, typography, radii } from '../theme';
+import { colors, radii } from '../theme';
 
 import type {
   AuthStackParamList,
@@ -66,7 +64,6 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Home: 'home-outline',
   Closet: 'file-tray-full-outline',
   AddMenu: 'add-outline',
-  Shop: 'bag-handle-outline',
   Calendar: 'calendar-outline',
   Profile: 'person-outline',
 };
@@ -95,6 +92,7 @@ function HomeNavigator() {
       <HomeStack.Screen name="HomeMain" component={HomeScreen} />
       <HomeStack.Screen name="Stylist" component={StylistScreen} />
       <HomeStack.Screen name="Suggestions" component={SuggestionsScreen} />
+      <HomeStack.Screen name="Shop" component={ShopScreen} />
     </HomeStack.Navigator>
   );
 }
@@ -111,27 +109,10 @@ function ClosetNavigator() {
 }
 
 function AppTabNavigator() {
-  const { openStylist } = useGlobalAIStylist();
   const { openAddSheet } = useGlobalAddSheet();
   const { openScanItem, openBatchScan } = useGlobalScan();
   const { openLogger } = useGlobalOutfitLogger();
   const insets = useSafeAreaInsets();
-  const { fabCollapsed } = useFabScroll();
-
-  const EASE_OUT = { duration: 200, easing: Easing.out(Easing.quad) };
-
-  const fabAnimStyle = useAnimatedStyle(() => ({
-    paddingHorizontal: withTiming(
-      fabCollapsed.value ? spacing.sm : spacing.lg,
-      EASE_OUT,
-    ),
-  }));
-
-  const fabLabelContainerStyle = useAnimatedStyle(() => ({
-    opacity: withTiming(fabCollapsed.value ? 0 : 1, { duration: 150 }),
-    width: withTiming(fabCollapsed.value ? 0 : 48, EASE_OUT),
-    marginLeft: withTiming(fabCollapsed.value ? 0 : spacing.xs, EASE_OUT),
-  }));
 
   return (
     <View style={{ flex: 1 }}>
@@ -178,35 +159,9 @@ function AppTabNavigator() {
             ),
           }}
         />
-        <AppTab.Screen name="Shop" component={ShopScreen} />
-        <AppTab.Screen
-          name="Calendar"
-          component={CalendarScreen}
-          options={{
-            tabBarButton: () => null,
-            tabBarItemStyle: { display: 'none', width: 0, overflow: 'hidden' },
-          }}
-        />
+        <AppTab.Screen name="Calendar" component={CalendarScreen} />
         <AppTab.Screen name="Profile" component={ProfileScreen} />
       </AppTab.Navigator>
-
-      <Animated.View
-        style={[tabStyles.stylistFab, fabAnimStyle, { bottom: insets.bottom + 60 + spacing.xs }]}
-        pointerEvents="box-none"
-      >
-        <TouchableOpacity
-          onPress={() => openStylist()}
-          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
-          activeOpacity={0.85}
-          accessibilityLabel="Open AI Stylist"
-        >
-          <Ionicons name="sparkles" size={22} color={colors.primaryForeground} />
-          <Animated.View style={[tabStyles.stylistFabLabelContainer, fabLabelContainerStyle]}>
-            <Text style={tabStyles.stylistFabLabel} numberOfLines={1}>Stylist</Text>
-          </Animated.View>
-        </TouchableOpacity>
-      </Animated.View>
-
     </View>
   );
 }
@@ -224,30 +179,6 @@ const tabStyles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  stylistFab: {
-    position: 'absolute',
-    right: spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.xl,
-    backgroundColor: colors.primary,
-    shadowColor: '#000',
-    shadowOpacity: 0.22,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 12,
-  },
-  stylistFabLabelContainer: {
-    overflow: 'hidden',
-  },
-  stylistFabLabel: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-    color: colors.primaryForeground,
   },
 });
 

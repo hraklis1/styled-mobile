@@ -43,6 +43,8 @@ type Props = SingleProps | MultiProps;
 
 export function BottomSheetDropdown(props: Props) {
   const { title, options, placeholder, searchable } = props;
+  const onChange = props.multi ? undefined : props.onChange;
+  const onMultiToggle = props.multi ? props.onMultiToggle : undefined;
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -77,14 +79,13 @@ export function BottomSheetDropdown(props: Props) {
   const handleSelect = useCallback(
     (opt: string) => {
       if (!props.multi) {
-        props.onChange?.(opt);
+        onChange?.(opt);
         closeSheet();
       } else {
-        props.onMultiToggle?.(opt);
+        onMultiToggle?.(opt);
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [props.multi, (props as any).onChange, (props as any).onMultiToggle, closeSheet]
+    [props.multi, onChange, onMultiToggle, closeSheet]
   );
 
   const buttonLabel = useMemo(() => {

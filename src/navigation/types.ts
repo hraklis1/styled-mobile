@@ -19,7 +19,6 @@ export type AppTabParamList = {
   Home: undefined;
   Closet: NavigatorScreenParams<ClosetStackParamList> | undefined;
   AddMenu: undefined;
-  Shop: undefined;
   Calendar: undefined;
   Profile: undefined;
 };
@@ -41,6 +40,7 @@ export type HomeStackParamList = {
   HomeMain: undefined;
   Stylist: { query?: string };
   Suggestions: { eventId?: number } | undefined;
+  Shop: undefined;
 };
 
 // Wardrobe nested stack
@@ -74,7 +74,7 @@ export type HomeScreenProps = CompositeScreenProps<
 >;
 export type StylistScreenProps = NativeStackScreenProps<HomeStackParamList, 'Stylist'>;
 export type SuggestionsScreenProps = NativeStackScreenProps<HomeStackParamList, 'Suggestions'>;
-export type ShopScreenProps = BottomTabScreenProps<AppTabParamList, 'Shop'>;
+export type ShopScreenProps = NativeStackScreenProps<HomeStackParamList, 'Shop'>;
 export type CalendarScreenProps = BottomTabScreenProps<AppTabParamList, 'Calendar'>;
 export type ProfileScreenProps = BottomTabScreenProps<AppTabParamList, 'Profile'>;
 

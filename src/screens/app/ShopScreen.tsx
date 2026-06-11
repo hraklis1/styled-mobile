@@ -18,12 +18,9 @@ import {
   type WishlistEntry,
 } from '../../lib/wishlist';
 import { colors, spacing, typography, radii } from '../../theme';
-import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import type { AppTabParamList } from '../../navigation/types';
+import type { ShopScreenProps } from '../../navigation/types';
 
-type Props = BottomTabScreenProps<AppTabParamList, 'Shop'>;
-
-export function ShopScreen(_props: Props) {
+export function ShopScreen(_props: ShopScreenProps) {
   const insets = useSafeAreaInsets();
   const { openStylist } = useGlobalAIStylist();
   const [entries, setEntries] = useState<WishlistEntry[]>([]);

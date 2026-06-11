@@ -92,7 +92,6 @@ function ClosetGridComponent({
         onScroll={onScroll}
         scrollEventThrottle={scrollEventThrottle}
         contentInset={contentInset}
-        estimatedItemSize={itemHeight}
         overrideItemLayout={overrideItemLayout}
         drawDistance={600}
         contentContainerStyle={{

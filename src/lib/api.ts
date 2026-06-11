@@ -2,7 +2,11 @@ import axios from 'axios';
 import type { AxiosError } from 'axios';
 import { supabase } from './supabase';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
+
+if (!API_URL) {
+  throw new Error('Missing required EXPO_PUBLIC_API_URL configuration.');
+}
 
 export const API_BASE_URL = API_URL;
 

@@ -10,7 +10,13 @@ export function SelectRow({ label, value, placeholder, onPress }: {
   onPress: () => void;
 }) {
   return (
-    <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity
+      style={styles.row}
+      onPress={onPress}
+      activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={`${label}: ${value || placeholder}`}
+    >
       <View style={styles.inner}>
         {!!label && <Text style={styles.label}>{label}</Text>}
         <Text style={value ? styles.value : styles.placeholder}>{value || placeholder}</Text>
@@ -24,6 +30,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: spacing.sm + 2,
+    minHeight: 44,
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   inner: { flex: 1, gap: 2 },

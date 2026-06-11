@@ -536,7 +536,6 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
               data={filteredItems}
               keyExtractor={item => String(item.id)}
               renderItem={renderItemRow}
-              estimatedItemSize={84}
               style={styles.list}
               ListEmptyComponent={itemsLoading ? null : emptyPieces}
               contentContainerStyle={{ paddingTop: listPaddingTop, ...styles.listContent }}
@@ -552,7 +551,6 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
             keyExtractor={outfit => String(outfit.id)}
             renderItem={renderOutfitCard}
             numColumns={viewMode === 'list' ? 1 : 2}
-            estimatedItemSize={viewMode === 'list' ? 84 : 220}
             ListEmptyComponent={emptyOutfits}
             contentContainerStyle={
               viewMode === 'list'
