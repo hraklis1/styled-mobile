@@ -35,11 +35,16 @@ import {
 import * as Location from 'expo-location';
 import { colors, spacing, typography, radii } from '../../theme';
 import { ErrorState } from '../../components/primitives/ErrorState';
+import { useEntitlement } from '../../hooks/useEntitlement';
+import { presentPaywall } from '../../lib/paywall';
 import type { CalendarScreenProps } from '../../navigation/types';
 import type { Event } from '../../types/event';
 
+const FREE_EVENT_LIMIT = 5;
+
 export function CalendarScreen({ navigation }: CalendarScreenProps) {
   const insets = useSafeAreaInsets();
+  const { isPremium } = useEntitlement();
   const { data: events = [], isLoading, refetch, isRefetching, isError } = useEvents();
   const { data: allItems = [] } = useItems();
   const deleteEventMutation = useDeleteEvent();
@@ -105,6 +110,15 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
   const visibleUpcoming = showAllUpcoming ? upcoming : upcoming.slice(0, UPCOMING_LIMIT);
   const groupedUpcoming = useMemo(() => groupByDate(visibleUpcoming), [visibleUpcoming]);
   const visiblePast = showAllPast ? past : past.slice(0, PAST_LIMIT);
+
+  const handleAddEvent = async () => {
+    if (!isPremium && events.length >= FREE_EVENT_LIMIT) {
+      await presentPaywall();
+      return;
+    }
+    setEditingEvent(null);
+    setFormVisible(true);
+  };
 
   const handleEdit = (ev: Event) => {
     setDetailEvent(null);
@@ -182,7 +196,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
             </Text>
             <TouchableOpacity
               style={styles.emptyBtn}
-              onPress={() => { setEditingEvent(null); setFormVisible(true); }}
+              onPress={handleAddEvent}
               activeOpacity={0.8}
               accessibilityRole="button"
               accessibilityLabel="Add your first event"
@@ -309,10 +323,33 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         )}
       </ScrollView>
 
+      {/* Free-tier event limit pill */}
+      {!isPremium && events.length > 0 && (
+        <TouchableOpacity
+          style={[styles.limitPill, { bottom: insets.bottom + spacing.xl + 56 }]}
+          onPress={events.length >= FREE_EVENT_LIMIT ? () => presentPaywall() : undefined}
+          activeOpacity={events.length >= FREE_EVENT_LIMIT ? 0.75 : 1}
+          accessibilityLabel={`${events.length} of ${FREE_EVENT_LIMIT} free events used`}
+        >
+          <Ionicons
+            name="lock-closed-outline"
+            size={11}
+            color={events.length >= FREE_EVENT_LIMIT - 1 ? '#D97706' : colors.mutedForeground}
+          />
+          <Text style={[
+            styles.limitPillText,
+            events.length >= FREE_EVENT_LIMIT - 1 && styles.limitPillWarn,
+          ]}>
+            {events.length} of {FREE_EVENT_LIMIT} free events
+            {events.length >= FREE_EVENT_LIMIT ? ' — Upgrade' : ''}
+          </Text>
+        </TouchableOpacity>
+      )}
+
       {/* FAB */}
       <TouchableOpacity
         style={[styles.fab, { bottom: insets.bottom + spacing.xl }]}
-        onPress={() => { setEditingEvent(null); setFormVisible(true); }}
+        onPress={handleAddEvent}
         activeOpacity={0.85}
         accessibilityRole="button"
         accessibilityLabel="Add event"
@@ -450,4 +487,15 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 }, elevation: 6,
   },
   fabText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.white },
+
+  limitPill: {
+    position: 'absolute', right: spacing.lg,
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+    borderRadius: radii.full,
+    backgroundColor: colors.card,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  limitPillText: { fontSize: 11, color: colors.mutedForeground, fontWeight: typography.weight.medium },
+  limitPillWarn: { color: '#D97706' },
 });

@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +25,7 @@ type Props = BottomTabScreenProps<AppTabParamList, 'Shop'>;
 
 export function ShopScreen(_props: Props) {
   const insets = useSafeAreaInsets();
+  const { openStylist } = useGlobalAIStylist();
   const [entries, setEntries] = useState<WishlistEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -75,6 +77,15 @@ export function ShopScreen(_props: Props) {
           <Text style={styles.emptySubtitle}>
             Ask your AI Stylist to shop for a new outfit. When it suggests one, tap "Save" to add it here.
           </Text>
+          <TouchableOpacity
+            style={styles.emptyBtn}
+            onPress={() => openStylist('Shop for a new outfit for me')}
+            activeOpacity={0.85}
+            accessibilityLabel="Open AI Stylist"
+          >
+            <Ionicons name="sparkles" size={15} color={colors.primaryForeground} />
+            <Text style={styles.emptyBtnText}>Chat with your Stylist</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -185,6 +196,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: typography.size.sm * 1.6,
     maxWidth: 280,
+  },
+  emptyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.primary,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + 2,
+    marginTop: spacing.xs,
+  },
+  emptyBtnText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.primaryForeground,
   },
   emptyPromptChip: {
     borderWidth: 1,

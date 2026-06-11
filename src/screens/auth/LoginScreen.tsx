@@ -13,6 +13,7 @@ import * as Google from 'expo-auth-session/providers/google';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as SecureStore from 'expo-secure-store';
 import { makeRedirectUri } from 'expo-auth-session';
+import { track } from '../../lib/analytics';
 import { useAuth, LAST_LOGIN_EMAIL_KEY } from '../../contexts/AuthContext';
 import { Button } from '../../components/primitives/Button';
 import { Input } from '../../components/primitives/Input';
@@ -63,7 +64,9 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
       await loginWithEmail(email.trim(), password);
       SecureStore.setItemAsync(LAST_LOGIN_EMAIL_KEY, email.trim()).catch(() => {});
     } catch (e: any) {
-      setError(e?.message ?? 'Incorrect email or password.');
+      const msg = e?.message ?? 'Incorrect email or password.';
+      setError(msg);
+      track('login_error', { provider: 'email', error: msg });
     } finally {
       setLoading(false);
     }
@@ -76,6 +79,7 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
       await loginWithGoogleToken(accessToken);
     } catch {
       setError('Google sign-in failed. Please try again.');
+      track('login_error', { provider: 'google' });
     } finally {
       setLoading(false);
     }
@@ -97,6 +101,7 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
     } catch (e: any) {
       if (e?.code !== 'ERR_REQUEST_CANCELED') {
         setError('Apple sign-in failed. Please try again.');
+        track('login_error', { provider: 'apple' });
       }
     } finally {
       setLoading(false);

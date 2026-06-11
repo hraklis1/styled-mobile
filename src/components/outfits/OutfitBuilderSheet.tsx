@@ -17,31 +17,40 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
+import { track } from '../../lib/analytics';
 import { useItems } from '../../hooks/useItems';
 import { useCreateOutfit } from '../../hooks/useOutfits';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { colors, spacing, typography, radii } from '../../theme';
+import { OutfitCollage } from './OutfitCollage';
+import { OCCASIONS } from '../../lib/occasions';
+import type { OccasionId } from '../../lib/occasions';
 import type { Item, ItemCategory } from '../../types/item';
 import type { Outfit } from '../../types/outfit';
 import * as Haptics from 'expo-haptics';
 
 // ─── Slot config ──────────────────────────────────────────────────────────────
 
-type SlotKey = 'topId' | 'bottomId' | 'shoesId' | 'outerwearId' | 'accessoryId';
+type SlotKey = 'topId' | 'bottomId' | 'shoesId' | 'outerwearId' | 'layerId' | 'headwearId' | 'bagId' | 'accessoryId';
 
 type SlotDef = {
   key: SlotKey;
   label: string;
   categories: ItemCategory[];
+  subcategories?: string[];
+  excludedSubcategories?: string[];
   icon: React.ComponentProps<typeof Ionicons>['name'];
 };
 
 const SLOTS: SlotDef[] = [
-  { key: 'topId',        label: 'Top / Dress',  categories: ['top', 'full_body'],  icon: 'shirt-outline' },
-  { key: 'bottomId',     label: 'Bottom',       categories: ['bottom'],             icon: 'body-outline' },
-  { key: 'shoesId',      label: 'Shoes',        categories: ['shoes'],              icon: 'footsteps-outline' },
-  { key: 'outerwearId',  label: 'Outerwear',    categories: ['outerwear'],          icon: 'layers-outline' },
-  { key: 'accessoryId',  label: 'Accessory',    categories: ['accessory'],          icon: 'watch-outline' },
+  { key: 'topId',       label: 'Top / Dress',    categories: ['top', 'full_body'],  icon: 'shirt-outline' },
+  { key: 'layerId',     label: 'Layer',          categories: ['top'],               icon: 'layers-outline' },
+  { key: 'bottomId',    label: 'Bottom',         categories: ['bottom'],            icon: 'body-outline' },
+  { key: 'shoesId',     label: 'Shoes',          categories: ['shoes'],             icon: 'footsteps-outline' },
+  { key: 'outerwearId', label: 'Outerwear',      categories: ['outerwear'],         icon: 'trending-up-outline' },
+  { key: 'headwearId',  label: 'Hat / Headwear', categories: ['accessory'], subcategories: ['Hats & Headwear'], icon: 'glasses-outline' },
+  { key: 'bagId',       label: 'Bag',            categories: ['accessory'], subcategories: ['Bags & Purses'],   icon: 'bag-outline' },
+  { key: 'accessoryId', label: 'Accessory',      categories: ['accessory'], excludedSubcategories: ['Hats & Headwear', 'Bags & Purses'], icon: 'watch-outline' },
 ];
 
 type SlotMap = Partial<Record<SlotKey, Item>>;
@@ -49,11 +58,14 @@ type SlotMap = Partial<Record<SlotKey, Item>>;
 function inferSlotKey(item: Item): SlotKey | null {
   const text = `${item.name} ${item.subcategory ?? ''}`.toLowerCase();
   if (/shoe|sneaker|boot|sandal|heel|loafer|pump|flat|footwear|mule|clog|slipper/i.test(text)) return 'shoesId';
-  if (/jacket|coat|blazer|hoodie|cardigan|sweater|outerwear|parka|anorak|trench/i.test(text)) return 'outerwearId';
+  if (/jacket|coat|blazer|parka|anorak|trench|outerwear/i.test(text)) return 'outerwearId';
+  if (/sweater|cardigan|hoodie|pullover|sweatshirt/i.test(text)) return 'layerId';
   if (/dress|jumpsuit|romper|playsuit|overall|dungaree/i.test(text)) return 'topId';
   if (/jeans|pants|trousers|shorts|skirt|legging|chino|bottom/i.test(text)) return 'bottomId';
-  if (/top|shirt|blouse|tee|tank|polo|sweatshirt|crop|tube/i.test(text)) return 'topId';
-  if (/bag|watch|necklace|ring|bracelet|hat|scarf|belt|earring|sunglasses|purse|clutch/i.test(text)) return 'accessoryId';
+  if (/top|shirt|blouse|tee|tank|polo|crop|tube/i.test(text)) return 'topId';
+  if (/hat|cap|beanie|beret|fedora|snapback|visor|bucket hat/i.test(text)) return 'headwearId';
+  if (/bag|purse|clutch|tote|backpack|handbag|satchel/i.test(text)) return 'bagId';
+  if (/watch|necklace|ring|bracelet|scarf|belt|earring|sunglasses/i.test(text)) return 'accessoryId';
   return null;
 }
 
@@ -75,8 +87,9 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
 
   // ── Form ───────────────────────────────────────────────────────────────
   const [name, setName] = useState('');
-  const [occasion, setOccasion] = useState('');
-  const [tags, setTags] = useState('');
+  const [occasion, setOccasion] = useState<OccasionId | null>(null);
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
   const [notes, setNotes] = useState('');
   const [slots, setSlots] = useState<SlotMap>({});
   const [unmatchedItems, setUnmatchedItems] = useState<Item[]>([]);
@@ -87,13 +100,38 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
 
   const isFullBodyTop = slots.topId?.category === 'full_body';
 
+  // Synthetic outfit fed to OutfitCollage so it can render a live preview
+  const previewOutfit = useMemo<Outfit>(() => ({
+    id: -1,
+    name: '',
+    description: null,
+    userId: 0,
+    event: null,
+    itemIds: Object.values(slots).map((item) => ({ id: item.id, category: item.category ?? '' })),
+    tags: [],
+    notes: null,
+    isDraft: false,
+    aiGeneratedImageUrl: null,
+    wearCount: 0,
+    lastWornAt: null,
+    createdAt: '',
+  }), [slots]);
+
   const pickerItems = useMemo(() => {
     if (!activeSlot) return [];
     const slot = SLOTS.find((s) => s.key === activeSlot);
     if (!slot) return [];
-    return allItems.filter(
-      (item) => item.category && (slot.categories as string[]).includes(item.category)
-    );
+    return allItems.filter((item) => {
+      if (!item.category || !(slot.categories as string[]).includes(item.category)) return false;
+      if (slot.subcategories) {
+        return item.subcategory != null &&
+          slot.subcategories.some((sc) => item.subcategory!.includes(sc));
+      }
+      if (slot.excludedSubcategories && item.subcategory != null) {
+        if (slot.excludedSubcategories.some((sc) => item.subcategory!.includes(sc))) return false;
+      }
+      return true;
+    });
   }, [activeSlot, allItems]);
 
   const openPicker = (slotKey: SlotKey) => {
@@ -123,8 +161,9 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
 
   const reset = useCallback(() => {
     setName('');
-    setOccasion('');
-    setTags('');
+    setOccasion(null);
+    setTags([]);
+    setTagInput('');
     setNotes('');
     setSlots({});
     setUnmatchedItems([]);
@@ -144,9 +183,14 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
     const unmatched: Item[] = [];
     for (const item of items) {
       let placed = false;
-      // Primary: match by category
+      // Primary: match by category (and subcategory when slot requires it)
       for (const slot of SLOTS) {
-        if (item.category && (slot.categories as string[]).includes(item.category) && !newSlots[slot.key]) {
+        const categoryMatch = item.category && (slot.categories as string[]).includes(item.category);
+        const subcategoryMatch = !slot.subcategories ||
+          (item.subcategory != null && slot.subcategories.some((sc) => item.subcategory!.includes(sc)));
+        const isExcluded = slot.excludedSubcategories && item.subcategory != null &&
+          slot.excludedSubcategories.some((sc) => item.subcategory!.includes(sc));
+        if (categoryMatch && subcategoryMatch && !isExcluded && !newSlots[slot.key]) {
           newSlots[slot.key] = item;
           placed = true;
           break;
@@ -171,12 +215,20 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
     onClose();
   };
 
+  const commitTagInput = useCallback((raw: string) => {
+    const trimmed = raw.trim().toLowerCase();
+    if (trimmed) {
+      setTags((prev) => prev.includes(trimmed) ? prev : [...prev, trimmed]);
+    }
+    setTagInput('');
+  }, []);
+
   const handleSave = () => {
     if (!name.trim() || createOutfit.isPending) return;
-    const parsedTags = tags
-      .split(',')
-      .map((t) => t.trim().toLowerCase())
-      .filter(Boolean);
+    const pendingTag = tagInput.trim().toLowerCase();
+    const parsedTags = pendingTag
+      ? tags.includes(pendingTag) ? tags : [...tags, pendingTag]
+      : tags;
     const outfitItemIds = SLOTS
       .filter((s) => !!slots[s.key])
       .map((s) => ({ id: slots[s.key]!.id, category: slots[s.key]!.category as string }));
@@ -184,13 +236,14 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
     createOutfit.mutate(
       {
         name: name.trim(),
-        event: occasion.trim() || null,
+        event: occasion ?? null,
         notes: notes.trim() || null,
         tags: parsedTags,
         itemIds: outfitItemIds,
       },
       {
         onSuccess: (outfit) => {
+          track('outfit_created', { item_count: Object.keys(slots).length });
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           reset();
           onCreated?.(outfit);
@@ -264,6 +317,19 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
+                {/* Live collage preview — visible once at least one slot is filled */}
+                {Object.keys(slots).length > 0 && (
+                  <View style={styles.previewRow}>
+                    <OutfitCollage outfit={previewOutfit} size={88} borderRadius={radii.lg} />
+                    <View style={styles.previewMeta}>
+                      <Text style={styles.previewCount}>
+                        {Object.keys(slots).length} piece{Object.keys(slots).length !== 1 ? 's' : ''} added
+                      </Text>
+                      <Text style={styles.previewHint}>Fill more slots below to complete the look</Text>
+                    </View>
+                  </View>
+                )}
+
                 <Text style={styles.label}>Name *</Text>
                 <TextInput
                   style={styles.input}
@@ -277,26 +343,57 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
                 />
 
                 <Text style={styles.label}>Occasion</Text>
-                <TextInput
-                  style={styles.input}
-                  value={occasion}
-                  onChangeText={setOccasion}
-                  placeholder="e.g. casual, work, dinner"
-                  placeholderTextColor={colors.mutedForeground}
-                  autoCapitalize="none"
-                  returnKeyType="next"
-                />
+                <View style={styles.occasionChips}>
+                  {OCCASIONS.map((o) => (
+                    <TouchableOpacity
+                      key={o.id}
+                      onPress={() => setOccasion(occasion === o.id ? null : o.id)}
+                      style={[styles.occasionChip, occasion === o.id && styles.occasionChipActive]}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name={o.icon}
+                        size={13}
+                        color={occasion === o.id ? colors.primaryForeground : colors.mutedForeground}
+                      />
+                      <Text style={[styles.occasionChipText, occasion === o.id && styles.occasionChipTextActive]}>
+                        {o.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
 
                 <Text style={styles.label}>Tags</Text>
-                <TextInput
-                  style={styles.input}
-                  value={tags}
-                  onChangeText={setTags}
-                  placeholder="summer, linen, minimal (comma-separated)"
-                  placeholderTextColor={colors.mutedForeground}
-                  autoCapitalize="none"
-                  returnKeyType="next"
-                />
+                <View style={styles.tagContainer}>
+                  {tags.map((tag) => (
+                    <TouchableOpacity
+                      key={tag}
+                      style={styles.tagChip}
+                      onPress={() => setTags((prev) => prev.filter((t) => t !== tag))}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.tagChipText}>{tag}</Text>
+                      <Ionicons name="close" size={12} color={colors.primary} />
+                    </TouchableOpacity>
+                  ))}
+                  <TextInput
+                    style={styles.tagInput}
+                    value={tagInput}
+                    onChangeText={(text) => {
+                      if (text.endsWith(',')) {
+                        commitTagInput(text.slice(0, -1));
+                      } else {
+                        setTagInput(text);
+                      }
+                    }}
+                    onSubmitEditing={() => commitTagInput(tagInput)}
+                    placeholder={tags.length === 0 ? 'Add a tag…' : ''}
+                    placeholderTextColor={colors.mutedForeground}
+                    autoCapitalize="none"
+                    returnKeyType="done"
+                    blurOnSubmit={false}
+                  />
+                </View>
 
                 <Text style={styles.label}>Notes</Text>
                 <TextInput
@@ -602,6 +699,35 @@ const styles = StyleSheet.create({
   scroll: {
     flex: 1,
   },
+
+  // ── Live preview
+  previewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  previewMeta: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  previewCount: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.foreground,
+  },
+  previewHint: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+    lineHeight: typography.size.xs * 1.5,
+  },
+
   label: {
     fontSize: typography.size.xs,
     fontWeight: typography.weight.semibold,
@@ -614,6 +740,36 @@ const styles = StyleSheet.create({
   },
   piecesLabel: {
     marginTop: spacing.xxl,
+  },
+  occasionChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginHorizontal: spacing.lg,
+  },
+  occasionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.full,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.secondary,
+    minHeight: 36,
+  },
+  occasionChipActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+  },
+  occasionChipText: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.medium,
+    color: colors.foreground,
+  },
+  occasionChipTextActive: {
+    color: colors.primaryForeground,
   },
   input: {
     borderWidth: 1,
@@ -779,5 +935,45 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     textAlign: 'center',
     lineHeight: typography.size.md * 1.5,
+  },
+
+  // ── Tag chip input
+  tagContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    backgroundColor: colors.card,
+    minHeight: 46,
+    alignItems: 'center',
+  },
+  tagChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radii.full,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.secondary,
+  },
+  tagChipText: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.medium,
+    color: colors.primary,
+  },
+  tagInput: {
+    flex: 1,
+    minWidth: 80,
+    fontSize: typography.size.md,
+    color: colors.foreground,
+    height: 30,
+    padding: 0,
   },
 });

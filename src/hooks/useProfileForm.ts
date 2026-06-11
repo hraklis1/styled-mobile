@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
+import { track } from '../lib/analytics';
 import { useProfile, useUpdateProfile } from './useProfile';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -305,6 +306,7 @@ export function useProfileForm() {
       },
       {
         onSuccess: () => {
+          track('profile_updated');
           Alert.alert('Saved', 'Profile updated successfully.');
           initialValues.current = {
             photoUrl: photoPreview,

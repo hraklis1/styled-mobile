@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import { track } from '../../lib/analytics';
 import { useOutfits, useDeleteOutfit, useMarkOutfitWorn, useVisualizeOutfit, useUpdateOutfit } from '../../hooks/useOutfits';
 import { useItems } from '../../hooks/useItems';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
@@ -155,6 +156,10 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
       setLocalTags(outfit.tags ?? []);
     }
   }, [outfit?.id]);
+
+  useEffect(() => {
+    if (outfitId) track('outfit_viewed', { outfit_id: outfitId });
+  }, [outfitId]);
 
   const addTag = useCallback((raw: string) => {
     if (!outfit) return;

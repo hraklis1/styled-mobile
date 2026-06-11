@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { ActivityIndicator, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SplashScreen from 'expo-splash-screen';
 import Animated, { useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +17,7 @@ import { GlobalScanProvider, useGlobalScan } from '../contexts/GlobalScanContext
 import { useGlobalAddSheet } from '../contexts/GlobalAddSheetContext';
 import { FabScrollProvider, useFabScroll } from '../contexts/FabScrollContext';
 import { OnboardingScreen } from '../screens/onboarding/OnboardingScreen';
+import { WelcomeScreen } from '../screens/onboarding/WelcomeScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
 import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
 import { ResetPasswordScreen } from '../screens/auth/ResetPasswordScreen';
@@ -249,15 +251,34 @@ const tabStyles = StyleSheet.create({
   },
 });
 
+const WELCOME_SEEN_KEY = 'welcome_seen';
+
 function AppGate() {
   const { data: profile, isLoading } = useProfile();
+  const [welcomeSeen, setWelcomeSeen] = useState<boolean | null>(null);
 
-  if (isLoading) {
+  useEffect(() => {
+    AsyncStorage.getItem(WELCOME_SEEN_KEY).then((val) => {
+      setWelcomeSeen(val === 'true');
+    });
+  }, []);
+
+  const handleWelcomeComplete = useCallback(async () => {
+    await AsyncStorage.setItem(WELCOME_SEEN_KEY, 'true');
+    setWelcomeSeen(true);
+  }, []);
+
+  if (isLoading || welcomeSeen === null) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
         <ActivityIndicator size="large" />
       </View>
     );
+  }
+
+  // Show welcome intro only to new users who haven't completed onboarding
+  if (!welcomeSeen && !profile?.onboardingComplete) {
+    return <WelcomeScreen onComplete={handleWelcomeComplete} />;
   }
 
   if (!profile?.onboardingComplete) {

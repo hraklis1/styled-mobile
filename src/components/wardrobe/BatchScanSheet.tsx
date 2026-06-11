@@ -109,6 +109,20 @@ interface BatchScanSheetProps {
   onItemsSaved?: (items: Item[]) => void;
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+async function buildUploadImage(item: {
+  sourceImage: string | null;
+  bbox: Bbox | null;
+  croppedImage: string | null;
+}): Promise<string | null> {
+  if (item.sourceImage && item.bbox) {
+    const hqCrop = await cropImage(item.sourceImage, item.bbox, { maxDim: 1200, quality: 0.88 });
+    if (hqCrop) return hqCrop;
+  }
+  return item.croppedImage;
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanSheetProps) {
@@ -496,11 +510,12 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
       const needsDetails = enrichmentFields.filter(Boolean).length === 0;
 
       let imageUrl: string | null = null;
-      if (item.croppedImage) {
+      const imageToUpload = await buildUploadImage(item);
+      if (imageToUpload) {
         try {
-          imageUrl = await uploadImageToR2(item.croppedImage);
+          imageUrl = await uploadImageToR2(imageToUpload);
         } catch {
-          imageUrl = item.croppedImage;
+          imageUrl = imageToUpload;
         }
       }
 

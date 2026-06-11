@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { parseMaterialString } from '../components/wardrobe/FilterPanel';
 import { SEASON_OPTIONS, CATEGORY_ORDER, CATEGORY_LABELS, type ItemCategory } from '../types/item';
+import { getSubcategories } from '../lib/taxonomy';
 import type { Item } from '../types/item';
 import type { Outfit } from '../types/outfit';
 
@@ -12,9 +13,10 @@ interface UseClosetFiltersParams {
   outfits: Outfit[];
   search: string;
   activeCategory: ItemCategory | null;
+  activeSubcategory: string | null;
 }
 
-export function useClosetFilters({ items, outfits, search, activeCategory }: UseClosetFiltersParams) {
+export function useClosetFilters({ items, outfits, search, activeCategory, activeSubcategory }: UseClosetFiltersParams) {
   // ── Pieces filter state ──────────────────────────────────────────────────
   const [sortKey, setSortKey]                     = useState<SortKey>('newest');
   const [filterSheetOpen, setFilterSheetOpen]     = useState(false);
@@ -96,10 +98,24 @@ export function useClosetFilters({ items, outfits, search, activeCategory }: Use
     [categoryCounts],
   );
 
+  const availableSubcategories = useMemo(() => {
+    if (!activeCategory) return [];
+    const subs = new Set(
+      items
+        .filter(i => i.category === activeCategory && i.subcategory)
+        .map(i => i.subcategory!)
+    );
+    const taxOrder = getSubcategories(activeCategory);
+    const result = taxOrder.filter(s => subs.has(s));
+    for (const sub of subs) if (!result.includes(sub)) result.push(sub);
+    return result;
+  }, [items, activeCategory]);
+
   // ── Filtered data ────────────────────────────────────────────────────────
   const filteredItems = useMemo(() => {
     let result = items.filter(i => !i.isArchived);
     if (activeCategory) result = result.filter(i => i.category === activeCategory);
+    if (activeSubcategory) result = result.filter(i => i.subcategory === activeSubcategory);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       result = result.filter(
@@ -156,7 +172,7 @@ export function useClosetFilters({ items, outfits, search, activeCategory }: Use
     else
       arr.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return arr;
-  }, [items, activeCategory, search, sortKey, selectedColors, selectedBrands, selectedSeasons,
+  }, [items, activeCategory, activeSubcategory, search, sortKey, selectedColors, selectedBrands, selectedSeasons,
       selectedConditions, selectedWarmth, selectedCategories, selectedOccasions,
       selectedStatuses, selectedMaterials]);
 
@@ -249,7 +265,7 @@ export function useClosetFilters({ items, outfits, search, activeCategory }: Use
     activeFilterCount,
     allOutfitTags, allOutfitEvents,
     outfitActiveFilterCount,
-    categoryCounts, availableCategories,
+    categoryCounts, availableCategories, availableSubcategories,
 
     // Filtered data
     filteredItems, filteredOutfits,

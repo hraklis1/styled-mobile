@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Alert,
   Dimensions,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   BottomSheetModal,
   BottomSheetView,
@@ -17,6 +18,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { track } from '../lib/analytics';
 import { useCreateItem, useBrandSuggestions } from '../hooks/useItems';
 import { colors, spacing, typography, radii } from '../theme';
 import {
@@ -26,6 +28,7 @@ import { MenuContent } from './add-sheet/MenuContent';
 import { ManualEntryForm } from './add-sheet/ManualEntryForm';
 
 const WINDOW_HEIGHT = Dimensions.get('window').height;
+const MANUAL_DRAFT_KEY = 'add_sheet_manual_draft';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -74,6 +77,51 @@ export function AddActionSheet({
   React.useEffect(() => {
     bottomSheetRef.current?.present();
   }, []);
+
+  // Restore manual draft on mount
+  useEffect(() => {
+    AsyncStorage.getItem(MANUAL_DRAFT_KEY).then((raw) => {
+      if (!raw) return;
+      try {
+        const d = JSON.parse(raw);
+        if (d.name) setManualName(d.name);
+        if (d.category) setManualCategory(d.category);
+        if (d.subcategory) setManualSubcategory(d.subcategory);
+        if (d.style) setManualStyle(d.style);
+        if (d.color) setManualColor(d.color);
+        if (d.colorNormalized) setManualColorNormalized(d.colorNormalized);
+        if (d.seasons?.length) setManualSeasons(d.seasons);
+        if (d.occasions?.length) setManualOccasions(d.occasions);
+        if (d.brand) setManualBrand(d.brand);
+        // Auto-open manual form if there was a draft
+        setView('manual');
+      } catch { /* malformed draft — ignore */ }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-save draft whenever manual form fields change (debounced 400ms)
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (view !== 'manual') return;
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    draftTimerRef.current = setTimeout(() => {
+      const hasContent = manualName || manualCategory || manualBrand;
+      if (!hasContent) return;
+      AsyncStorage.setItem(MANUAL_DRAFT_KEY, JSON.stringify({
+        name: manualName,
+        category: manualCategory,
+        subcategory: manualSubcategory,
+        style: manualStyle,
+        color: manualColor,
+        colorNormalized: manualColorNormalized,
+        seasons: manualSeasons,
+        occasions: manualOccasions,
+        brand: manualBrand,
+      }));
+    }, 400);
+    return () => { if (draftTimerRef.current) clearTimeout(draftTimerRef.current); };
+  }, [view, manualName, manualCategory, manualSubcategory, manualStyle, manualColor, manualColorNormalized, manualSeasons, manualOccasions, manualBrand]);
 
   // When switching to the manual form, snap to a tall fixed position so the
   // BottomSheetScrollView has a bounded height and all fields are reachable.
@@ -131,6 +179,8 @@ export function AddActionSheet({
       },
       {
         onSuccess: (created) => {
+          AsyncStorage.removeItem(MANUAL_DRAFT_KEY);
+          track('wardrobe_item_added_manually', { category: created.category ?? null });
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           onItemsSaved?.([created]);
           bottomSheetRef.current?.dismiss();

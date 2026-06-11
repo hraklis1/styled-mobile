@@ -18,6 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
+import { track } from '../../lib/analytics';
 import { useItems } from '../../hooks/useItems';
 import { useCreateOutfitLog, useScanOutfitLog, type OutfitScanResult } from '../../hooks/useOutfitLogs';
 import { useCameraLaunch, useLibraryLaunch } from '../../hooks/useCameraLaunch';
@@ -246,6 +247,7 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
       },
       {
         onSuccess: () => {
+          track('outfit_logged', { item_count: selectedIds.length });
           reset();
           onSaved?.();
           onClose();

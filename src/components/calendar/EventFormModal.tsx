@@ -13,6 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { track } from '../../lib/analytics';
 import { useCreateEvent, useUpdateEvent, type EventInput } from '../../hooks/useEvents';
 import { LocationAutocompleteInput } from '../primitives/LocationAutocompleteInput';
 import { CalendarPickerSheet } from './CalendarPickerSheet';
@@ -79,7 +80,12 @@ export function EventFormModal({
     if (event) {
       updateEvent.mutate({ id: event.id, ...input }, { onSuccess: onClose });
     } else {
-      createEvent.mutate(input, { onSuccess: onClose });
+      createEvent.mutate(input, {
+        onSuccess: () => {
+          track('calendar_event_created', { occasion: input.occasion });
+          onClose();
+        },
+      });
     }
   };
 

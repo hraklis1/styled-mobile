@@ -1,4 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import { OCCASIONS, OCCASION_ICON_MAP } from '../../lib/occasions';
+
+export { OCCASIONS };
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -43,24 +46,8 @@ export function groupByDate<T extends { date: string }>(evs: T[]): [string, T[]]
   return Array.from(map.entries());
 }
 
-// ── Occasion data ─────────────────────────────────────────────────────────────
+// ── Occasion icons (for backward-compat usage in CalendarScreen) ──────────────
 
-export const OCCASIONS = [
-  { id: 'casual', label: 'Casual', icon: 'cafe-outline' as const },
-  { id: 'smart_casual', label: 'Smart Casual', icon: 'shirt-outline' as const },
-  { id: 'business', label: 'Professional', icon: 'briefcase-outline' as const },
-  { id: 'formal', label: 'Formal', icon: 'star-outline' as const },
-  { id: 'party', label: 'Night Out', icon: 'musical-notes-outline' as const },
-  { id: 'workout', label: 'Active', icon: 'bicycle-outline' as const },
-];
-
-export const OCCASION_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
-  casual: 'cafe-outline',
-  smart_casual: 'shirt-outline',
-  business: 'briefcase-outline',
-  formal: 'star-outline',
-  party: 'musical-notes-outline',
-  workout: 'bicycle-outline',
-};
+export const OCCASION_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = OCCASION_ICON_MAP as Record<string, keyof typeof Ionicons.glyphMap>;
 
 export const ENVS = ['Indoor', 'Outdoor', 'Mixed'] as const;

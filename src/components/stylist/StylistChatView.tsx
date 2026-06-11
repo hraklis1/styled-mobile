@@ -23,6 +23,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { File, Paths, EncodingType } from 'expo-file-system';
 import { api, getAccessToken, API_BASE_URL } from '../../lib/api';
+import { track } from '../../lib/analytics';
 import { compressImageToDataUrl } from '../../lib/compressImage';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { useWeatherCurrent, type CurrentWeather } from '../../hooks/useWeather';
@@ -44,6 +45,8 @@ type MissingEssential = {
   label: string;
   category: string;
   reason: string;
+  context: string;
+  priority: number;
 };
 
 type ChatMessage = {
@@ -54,7 +57,7 @@ type ChatMessage = {
   transcript?: string;
   shopOutfit?: ShopOutfit;
   suggestedItemIds?: number[];
-  missingEssential?: MissingEssential;
+  missingEssentials?: MissingEssential[];
 };
 
 type TtsResponse = {
@@ -229,6 +232,10 @@ export function StylistChatView({ initialQuery, onClose, onNavigateToShop }: Pro
       if (!text && !audio && !photoData) return;
       if (isLoading) return;
 
+      track('stylist_message_sent', {
+        input_type: audio ? 'voice' : photoData ? 'photo' : 'text',
+      });
+
       const session = ++sessionRef.current;
 
       const userMsg: ChatMessage = {
@@ -340,8 +347,14 @@ export function StylistChatView({ initialQuery, onClose, onNavigateToShop }: Pro
                 if (flushTimer) { clearTimeout(flushTimer); }
                 flushPending();
 
-                const { transcript, responseText, itemIds, missingEssential: me, shopOutfit } =
-                  parsed as { transcript: string; responseText: string; itemIds?: number[]; missingEssential?: MissingEssential | null; shopOutfit?: ShopOutfit | null };
+                const { transcript, responseText, itemIds, missingEssentials: mes, missingEssential: legacyMe, shopOutfit } =
+                  parsed as { transcript: string; responseText: string; itemIds?: number[]; missingEssentials?: MissingEssential[]; missingEssential?: { label: string; category: string; reason: string } | null; shopOutfit?: ShopOutfit | null };
+                const hydratedEssentials: MissingEssential[] =
+                  Array.isArray(mes) && mes.length > 0
+                    ? mes
+                    : legacyMe && typeof legacyMe === 'object' && legacyMe.label
+                      ? [{ ...legacyMe, context: '', priority: 1 }]
+                      : [];
 
                 finalResponseText = responseText ?? '';
 
@@ -360,7 +373,7 @@ export function StylistChatView({ initialQuery, onClose, onNavigateToShop }: Pro
                   isStreaming: false,
                   ...(shopOutfit ? { shopOutfit } : {}),
                   ...(itemIds?.length ? { suggestedItemIds: itemIds } : {}),
-                  ...(me ? { missingEssential: me } : {}),
+                  ...(hydratedEssentials.length ? { missingEssentials: hydratedEssentials } : {}),
                 };
 
                 if (!assistantAdded) {
@@ -683,7 +696,7 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, onToggleAud
             itemIds={message.suggestedItemIds}
             allItems={allItems}
             createOutfit={createOutfit}
-            missingEssential={message.missingEssential}
+            missingEssentials={message.missingEssentials}
             onNavigateToShop={onNavigateToShop}
           />
           {onToggleAudio && (
@@ -709,7 +722,10 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, onToggleAud
         <View style={styles.shopCardContainer}>
           <ShopOutfitCard
             outfit={message.shopOutfit}
-            onSave={async () => { await addToWishlist(message.shopOutfit!); }}
+            onSave={async () => {
+              await addToWishlist(message.shopOutfit!);
+              track('outfit_saved_to_wishlist');
+            }}
           />
           {onToggleAudio && (
             <TouchableOpacity style={styles.ttsBtnShop} onPress={onToggleAudio}>
@@ -767,11 +783,11 @@ type OutfitSuggestionCardProps = {
   itemIds: number[];
   allItems: Item[];
   createOutfit: ReturnType<typeof useCreateOutfit>;
-  missingEssential?: MissingEssential;
+  missingEssentials?: MissingEssential[];
   onNavigateToShop?: () => void;
 };
 
-function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, missingEssential, onNavigateToShop }: OutfitSuggestionCardProps) {
+function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, missingEssentials, onNavigateToShop }: OutfitSuggestionCardProps) {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
@@ -884,22 +900,23 @@ function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, mi
         </View>
       </View>
 
-      {/* Wardrobe gap banner */}
-      {missingEssential && (
+      {/* Wardrobe gap banners — sorted by priority, max 3 */}
+      {(missingEssentials ?? []).map((item, i) => (
         <TouchableOpacity
+          key={i}
           style={styles.missingEssentialBanner}
           onPress={onNavigateToShop}
           activeOpacity={onNavigateToShop ? 0.7 : 1}
         >
           <Ionicons name="bag-handle-outline" size={14} color={colors.primary} />
           <Text style={styles.missingEssentialText} numberOfLines={1}>
-            Consider adding: {missingEssential.label}
+            {item.label}{item.context ? ` — ${item.context}` : ''}
           </Text>
           {onNavigateToShop && (
             <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />
           )}
         </TouchableOpacity>
-      )}
+      ))}
 
       <ItemDetailSheet item={selectedItem} onClose={() => setSelectedItem(null)} />
     </View>

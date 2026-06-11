@@ -139,7 +139,7 @@ export const GarmentCard = React.memo(GarmentCardComponent);
 
 const styles = StyleSheet.create({
   card: {
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
     marginHorizontal: spacing.sm / 2,
   },
   imageContainer: {

@@ -511,7 +511,7 @@ const styles = StyleSheet.create({
   },
   weatherLine: {
     fontSize: typography.size.xs,
-    color: '#5C5249',
+    color: colors.mutedForeground,
   },
   chipsRow: {
     flexDirection: 'row',
@@ -555,7 +555,7 @@ const styles = StyleSheet.create({
   stylistPillText: {
     flex: 1,
     fontSize: typography.size.md,
-    color: '#7A7269',
+    color: colors.mutedForeground,
   },
 
   // Empty wardrobe nudge
@@ -692,7 +692,15 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: COL_GAP,
   },
-  outfitCard: {},
+  outfitCard: {
+    borderRadius: radii.md,
+    // Shadow on outer card so overflow:hidden on inner wrapper doesn't clip it
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 2,
+  },
   collageWrapper: {
     borderRadius: radii.md,
     overflow: 'hidden',

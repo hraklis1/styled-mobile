@@ -3,6 +3,15 @@ import * as SecureStore from 'expo-secure-store';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { identify, reset, track } from '../lib/analytics';
+import {
+  Purchases,
+  ENTITLEMENT_ID,
+  IS_PREMIUM_CACHE_KEY,
+  loginUser,
+  logoutUser,
+  getIsPremium,
+  purchasesReady,
+} from '../lib/purchases';
 import type { User } from '../types/user';
 
 export const LAST_LOGIN_EMAIL_KEY = 'lastLoginEmail';
@@ -25,10 +34,16 @@ function mapSupabaseUser(su: SupabaseUser): User {
     email: su.email ?? '',
     displayName: su.user_metadata?.full_name ?? su.email?.split('@')[0] ?? '',
     photoUrl: su.user_metadata?.avatar_url ?? null,
-    isPremium: su.user_metadata?.is_premium ?? false,
+    isPremium: false, // RevenueCat is the sole source of truth; set via hydrateRcPremium
     onboardingComplete: su.user_metadata?.onboarding_complete ?? false,
     authProvider: provider === 'google' ? 'google' : provider === 'apple' ? 'apple' : 'local',
   };
+}
+
+async function hydrateRcPremium(userId: string): Promise<boolean> {
+  if (!purchasesReady()) return false;
+  await loginUser(userId);
+  return getIsPremium();
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -36,16 +51,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Restore existing session on cold start
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session ? mapSupabaseUser(session.user) : null);
-      setIsLoading(false);
+    // Listen for RC subscription changes and propagate them to user state in real-time.
+    // This handles renewals, cancellations, and grace period transitions without restart.
+    const handleCustomerInfoUpdate: Parameters<typeof Purchases.addCustomerInfoUpdateListener>[0] = (info) => {
+      const premium = !!info.entitlements.active[ENTITLEMENT_ID];
+      SecureStore.setItemAsync(IS_PREMIUM_CACHE_KEY, String(premium)).catch(() => {});
+      setUser((u) => {
+        if (!u) return u;
+        if (u.isPremium !== premium) {
+          identify(u.id, { isPremium: premium });
+          track(premium ? 'subscription_activated' : 'subscription_lapsed');
+        }
+        return { ...u, isPremium: premium };
+      });
+    };
+    if (purchasesReady()) Purchases.addCustomerInfoUpdateListener(handleCustomerInfoUpdate);
+
+    // Restore existing session on cold start.
+    // Hydrate isPremium from SecureStore immediately so the UI renders without flash,
+    // then refresh from RC in the background.
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session) {
+        const mapped = mapSupabaseUser(session.user);
+        const cached = await SecureStore.getItemAsync(IS_PREMIUM_CACHE_KEY).catch(() => null);
+        setUser({ ...mapped, isPremium: cached === 'true' });
+        setIsLoading(false);
+        hydrateRcPremium(session.user.id)
+          .then((live) => {
+            SecureStore.setItemAsync(IS_PREMIUM_CACHE_KEY, String(live)).catch(() => {});
+            setUser((u) => (u ? { ...u, isPremium: live } : u));
+          })
+          .catch(() => {});
+      } else {
+        setUser(null);
+        setIsLoading(false);
+      }
     });
 
-    // Keep in sync for all subsequent auth events (sign-in, sign-out, token refresh)
+    // Handle subsequent auth events (SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED, etc.)
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       // PASSWORD_RECOVERY establishes a temporary session for updateUser — don't
       // treat it as a normal sign-in or the app screen will mount mid-reset-flow.
       if (event === 'PASSWORD_RECOVERY') {
@@ -54,18 +100,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const mapped = session ? mapSupabaseUser(session.user) : null;
-      setUser(mapped);
-      setIsLoading(false);
 
       if (event === 'SIGNED_IN' && mapped) {
+        const cached = await SecureStore.getItemAsync(IS_PREMIUM_CACHE_KEY).catch(() => null);
+        setUser({ ...mapped, isPremium: cached === 'true' });
+        setIsLoading(false);
         identify(mapped.id, { email: mapped.email, authProvider: mapped.authProvider });
         track('user_logged_in', { provider: mapped.authProvider });
+        hydrateRcPremium(mapped.id)
+          .then((live) => {
+            SecureStore.setItemAsync(IS_PREMIUM_CACHE_KEY, String(live)).catch(() => {});
+            setUser((u) => (u ? { ...u, isPremium: live } : u));
+          })
+          .catch(() => {});
       } else if (event === 'SIGNED_OUT') {
+        logoutUser().catch(() => {});
+        SecureStore.deleteItemAsync(IS_PREMIUM_CACHE_KEY).catch(() => {});
+        setUser(null);
+        setIsLoading(false);
         reset();
+      } else if (mapped) {
+        // INITIAL_SESSION, TOKEN_REFRESHED, USER_UPDATED — update profile fields but
+        // preserve the RC-backed isPremium so we don't overwrite it with the Supabase default.
+        setUser((u) => (u ? { ...u, ...mapped, isPremium: u.isPremium } : { ...mapped }));
+        setIsLoading(false);
+      } else {
+        setUser(null);
+        setIsLoading(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      if (purchasesReady()) Purchases.removeCustomerInfoUpdateListener(handleCustomerInfoUpdate);
+    };
   }, []);
 
   const loginWithEmail = useCallback(async (email: string, password: string) => {

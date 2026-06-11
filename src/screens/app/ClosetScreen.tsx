@@ -61,8 +61,9 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 
 // Heights used to size the collapsible region and sheet detents.
 // These are rough constants; adjust if layout changes.
-const SEARCH_ROW_H = 58;
-const PILL_ROW_H   = 52;
+const SEARCH_ROW_H      = 58;
+const PILL_ROW_H        = 52;
+const SUBCATEGORY_ROW_H = 48;
 
 export function ClosetScreen({ navigation }: ClosetScreenProps) {
   const insets = useSafeAreaInsets();
@@ -73,6 +74,7 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
   const [segment, setSegment]               = useState<Segment>('pieces');
   const [search, setSearch]                 = useState('');
   const [activeCategory, setActiveCategory] = useState<ItemCategory | null>(null);
+  const [activeSubcategory, setActiveSubcategory] = useState<string | null>(null);
   const [viewMode, setViewMode]             = useState<ViewMode>('grid');
 
   const [selectionMode, setSelectionMode] = useState(false);
@@ -107,20 +109,32 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
     activeFilterCount,
     allOutfitTags, allOutfitEvents,
     outfitActiveFilterCount,
-    availableCategories,
+    availableCategories, availableSubcategories,
     filteredItems, filteredOutfits,
     clearSheetFilters, clearOutfitFilters, resetAll,
-  } = useClosetFilters({ items, outfits, search, activeCategory });
+  } = useClosetFilters({ items, outfits, search, activeCategory, activeSubcategory });
 
   const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / 2;
 
+  // Floating header height — drives the paddingTop that reserves space for the
+  // header inside the list. Changes only on category tap, never during scroll.
+  const hasCategoryPills = segment === 'pieces' && availableCategories.length > 0;
+  const subcatVisible    = hasCategoryPills && availableSubcategories.length > 0;
+  const listPaddingTop   =
+    SEARCH_ROW_H +
+    (hasCategoryPills ? PILL_ROW_H : 0) +
+    (subcatVisible ? SUBCATEGORY_ROW_H : 0);
+
   // ── Hide-on-scroll ─────────────────────────────────────────────────────────
-  // collapsibleAnim drives maxHeight on the search+pills container.
+  // headerTranslateY drives the floating header on the native UI thread.
   // Collapses on downward scroll past a threshold, re-expands on upward scroll.
 
-  const lastScrollY      = useRef(0);
-  const isCollapsed      = useRef(false);
-  const collapsibleAnim  = useRef(new Animated.Value(SEARCH_ROW_H + PILL_ROW_H)).current;
+  const lastScrollY    = useRef(0);
+  const isCollapsed    = useRef(false);
+  // translateY drives the floating header on the native UI thread.
+  // The FlashList container never resizes, so FlashList recycling stays in sync
+  // no matter how fast the user flings back to the top.
+  const headerTranslateY = useRef(new Animated.Value(0)).current;
 
   useFocusEffect(useCallback(() => {
     fabCollapsed.value = 0;
@@ -129,24 +143,26 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
   const expandCollapsible = useCallback(() => {
     if (!isCollapsed.current) return;
     isCollapsed.current = false;
-    Animated.spring(collapsibleAnim, {
-      toValue: SEARCH_ROW_H + PILL_ROW_H,
-      useNativeDriver: false,
-      tension: 80,
-      friction: 12,
+    Animated.spring(headerTranslateY, {
+      toValue: 0,
+      useNativeDriver: true,
+      tension: 150,
+      friction: 25,
     }).start();
-  }, [collapsibleAnim]);
+  }, [headerTranslateY]);
 
   const collapseCollapsible = useCallback(() => {
     if (isCollapsed.current) return;
     isCollapsed.current = true;
-    Animated.spring(collapsibleAnim, {
-      toValue: 0,
-      useNativeDriver: false,
-      tension: 80,
-      friction: 12,
+    // Translate by max possible height so the header always clears the viewport
+    // regardless of how many pill rows are currently visible.
+    Animated.spring(headerTranslateY, {
+      toValue: -(SEARCH_ROW_H + PILL_ROW_H + SUBCATEGORY_ROW_H),
+      useNativeDriver: true,
+      tension: 150,
+      friction: 25,
     }).start();
-  }, [collapsibleAnim]);
+  }, [headerTranslateY]);
 
   const handleScroll = useCallback(
     (e: any) => {
@@ -175,12 +191,18 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
       if (next === segment) return;
       setSearch('');
       setActiveCategory(null);
+      setActiveSubcategory(null);
       resetAll();
       setSegment(next);
       expandCollapsible();
     },
     [segment, expandCollapsible, resetAll],
   );
+
+  const handleCategoryPress = useCallback((cat: ItemCategory) => {
+    setActiveCategory(prev => (prev === cat ? null : cat));
+    setActiveSubcategory(null);
+  }, []);
 
   // ── Subtitle ───────────────────────────────────────────────────────────────
 
@@ -404,6 +426,18 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
       <Text style={styles.emptySub}>
         {hasActiveOutfitFilters ? 'Try adjusting your search or filters' : 'Build outfits from your pieces'}
       </Text>
+      {!hasActiveOutfitFilters && (
+        <TouchableOpacity
+          style={styles.emptyBtn}
+          onPress={() => setOutfitBuilderVisible(true)}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Create your first outfit"
+        >
+          <Ionicons name="add" size={16} color={colors.primaryForeground} />
+          <Text style={styles.emptyBtnText}>Create your first outfit</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 
@@ -470,153 +504,192 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
         </View>
       </View>
 
-      {/* ── Collapsible: search/filter row + category pills ── */}
-      <Animated.View style={[styles.collapsible, { maxHeight: collapsibleAnim }]}>
+      {/* ── Content area + floating header ── */}
+      <View style={{ flex: 1, overflow: 'hidden' }}>
 
-        {/* Search bar + Sort&Filter button */}
-        <View style={styles.searchRow}>
-          <View style={styles.searchWrap}>
-            <Ionicons name="search-outline" size={16} color={colors.mutedForeground} style={styles.searchIcon} />
-            <TextInput
-              style={styles.searchInput}
-              value={search}
-              onChangeText={setSearch}
-              placeholder={segment === 'pieces' ? 'Search pieces…' : 'Search outfits…'}
-              placeholderTextColor={colors.mutedForeground}
-              returnKeyType="search"
-              clearButtonMode="while-editing"
-            />
-            {search.length > 0 && (
-              <Pressable onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Clear search" accessibilityRole="button">
-                <Ionicons name="close-circle" size={16} color={colors.mutedForeground} />
-              </Pressable>
-            )}
+        {/* Lists — padded so first item starts below the floating header */}
+        {segment === 'pieces' && itemsLoading && items.length === 0 ? (
+          <View style={{ flex: 1, paddingTop: listPaddingTop }}>
+            <GarmentCardSkeleton />
           </View>
-
-          {segment === 'pieces' && (
-            <PressableScale
-              contentStyle={[styles.filterBtn, activeFilterCount > 0 && styles.filterBtnActive]}
-              onPress={() => setFilterSheetOpen(true)}
-              accessibilityLabel="Sort and filter"
-            >
-              <Ionicons
-                name="options-outline"
-                size={18}
-                color={activeFilterCount > 0 ? colors.primaryForeground : colors.foreground}
-              />
-              {activeFilterCount > 0 && (
-                <View style={styles.filterBadge}>
-                  <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
-                </View>
-              )}
-            </PressableScale>
-          )}
-          {segment === 'outfits' && (
-            <PressableScale
-              contentStyle={[styles.filterBtn, outfitActiveFilterCount > 0 && styles.filterBtnActive]}
-              onPress={() => setOutfitFilterSheetOpen(true)}
-              accessibilityLabel="Sort and filter outfits"
-            >
-              <Ionicons
-                name="options-outline"
-                size={18}
-                color={outfitActiveFilterCount > 0 ? colors.primaryForeground : colors.foreground}
-              />
-              {outfitActiveFilterCount > 0 && (
-                <View style={styles.filterBadge}>
-                  <Text style={styles.filterBadgeText}>{outfitActiveFilterCount}</Text>
-                </View>
-              )}
-            </PressableScale>
-          )}
-        </View>
-
-        {/* Category pills — pieces only */}
-        {segment === 'pieces' && availableCategories.length > 0 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.pillScroll}
-            contentContainerStyle={styles.pillContent}
-          >
-            <PressableScale
-              contentStyle={[styles.pill, activeCategory === null && styles.pillActive]}
-              onPress={() => setActiveCategory(null)}
-              accessibilityRole="button"
-              accessibilityLabel="All categories"
-              accessibilityState={{ selected: activeCategory === null }}
-            >
-              <Text style={[styles.pillLabel, activeCategory === null && styles.pillLabelActive]}>
-                All
-              </Text>
-            </PressableScale>
-            {availableCategories.map(cat => (
-              <PressableScale
-                key={cat}
-                contentStyle={[styles.pill, activeCategory === cat && styles.pillActive]}
-                onPress={() => setActiveCategory(activeCategory === cat ? null : cat)}
-                accessibilityRole="button"
-                accessibilityLabel={CATEGORY_LABELS[cat]}
-                accessibilityState={{ selected: activeCategory === cat }}
-              >
-                <Text style={[styles.pillLabel, activeCategory === cat && styles.pillLabelActive]}>
-                  {CATEGORY_LABELS[cat]}
-                </Text>
-              </PressableScale>
-            ))}
-          </ScrollView>
-        )}
-      </Animated.View>
-
-      {/* ── Content ── */}
-      {segment === 'pieces' && itemsLoading && items.length === 0 ? (
-        <GarmentCardSkeleton />
-      ) : segment === 'pieces' && itemsError ? (
-        <ErrorState message="Couldn't load your closet" onRetry={refetchItems} />
-      ) : segment === 'pieces' ? (
-        viewMode === 'grid' ? (
-          <ClosetGrid
-            items={filteredItems}
-            selectedIds={selectedIds}
-            selectionMode={selectionMode}
-            onItemPress={handleItemPress}
-            onItemLongPress={handleLongPress}
-            onToggleSelect={toggleSelect}
-            ListEmptyComponent={itemsLoading ? null : emptyPieces}
-            onScroll={handleScroll}
-            scrollEventThrottle={16}
-          />
+        ) : segment === 'pieces' && itemsError ? (
+          <View style={{ flex: 1, paddingTop: listPaddingTop }}>
+            <ErrorState message="Couldn't load your closet" onRetry={refetchItems} />
+          </View>
+        ) : segment === 'pieces' ? (
+          viewMode === 'grid' ? (
+            <ClosetGrid
+              items={filteredItems}
+              selectedIds={selectedIds}
+              selectionMode={selectionMode}
+              onItemPress={handleItemPress}
+              onItemLongPress={handleLongPress}
+              onToggleSelect={toggleSelect}
+              ListEmptyComponent={itemsLoading ? null : emptyPieces}
+              onScroll={handleScroll}
+              scrollEventThrottle={16}
+              listPaddingTop={listPaddingTop}
+            />
+          ) : (
+            <FlashList
+              data={filteredItems}
+              keyExtractor={item => String(item.id)}
+              renderItem={renderItemRow}
+              estimatedItemSize={84}
+              style={styles.list}
+              ListEmptyComponent={itemsLoading ? null : emptyPieces}
+              contentContainerStyle={{ paddingTop: listPaddingTop, ...styles.listContent }}
+              showsVerticalScrollIndicator={false}
+              onScroll={handleScroll}
+              scrollEventThrottle={16}
+            />
+          )
         ) : (
           <FlashList
-            data={filteredItems}
-            keyExtractor={item => String(item.id)}
-            renderItem={renderItemRow}
-            style={styles.list}
-            ListEmptyComponent={itemsLoading ? null : emptyPieces}
-            contentContainerStyle={{ ...styles.listContent, ...styles.listContentRow }}
+            key={`outfits-${viewMode}`}
+            data={filteredOutfits}
+            keyExtractor={outfit => String(outfit.id)}
+            renderItem={renderOutfitCard}
+            numColumns={viewMode === 'list' ? 1 : 2}
+            estimatedItemSize={viewMode === 'list' ? 84 : 220}
+            ListEmptyComponent={emptyOutfits}
+            contentContainerStyle={
+              viewMode === 'list'
+                ? { paddingTop: listPaddingTop, paddingHorizontal: SIDE_PAD }
+                : { paddingTop: listPaddingTop, paddingHorizontal: SIDE_PAD - COL_GAP / 2, paddingBottom: spacing.xxxl * 2 }
+            }
             showsVerticalScrollIndicator={false}
             onScroll={handleScroll}
             scrollEventThrottle={16}
           />
-        )
-      ) : (
-        <FlashList
-          key={`outfits-${viewMode}`}
-          data={filteredOutfits}
-          keyExtractor={outfit => String(outfit.id)}
-          renderItem={renderOutfitCard}
-          numColumns={viewMode === 'list' ? 1 : 2}
-          ListEmptyComponent={emptyOutfits}
-          contentContainerStyle={
-            viewMode === 'list'
-              ? styles.listContentRow
-              : { paddingHorizontal: SIDE_PAD - COL_GAP / 2, paddingBottom: spacing.xxxl * 2 }
-          }
-          showsVerticalScrollIndicator={false}
-          onScroll={handleScroll}
-          scrollEventThrottle={16}
-        />
-      )}
+        )}
+
+        {/* Floating header — absolute over the list, slides on native thread */}
+        <Animated.View
+          style={[styles.floatingHeader, { transform: [{ translateY: headerTranslateY }] }]}
+        >
+          {/* Search bar + Sort&Filter button */}
+          <View style={styles.searchRow}>
+            <View style={styles.searchWrap}>
+              <Ionicons name="search-outline" size={16} color={colors.mutedForeground} style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                value={search}
+                onChangeText={setSearch}
+                placeholder={segment === 'pieces' ? 'Search pieces…' : 'Search outfits…'}
+                placeholderTextColor={colors.mutedForeground}
+                returnKeyType="search"
+                clearButtonMode="while-editing"
+              />
+              {search.length > 0 && (
+                <Pressable onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Clear search" accessibilityRole="button">
+                  <Ionicons name="close-circle" size={16} color={colors.mutedForeground} />
+                </Pressable>
+              )}
+            </View>
+
+            {segment === 'pieces' && (
+              <PressableScale
+                contentStyle={[styles.filterBtn, activeFilterCount > 0 && styles.filterBtnActive]}
+                onPress={() => setFilterSheetOpen(true)}
+                accessibilityLabel="Sort and filter"
+              >
+                <Ionicons
+                  name="options-outline"
+                  size={18}
+                  color={activeFilterCount > 0 ? colors.primaryForeground : colors.foreground}
+                />
+                {activeFilterCount > 0 && (
+                  <View style={styles.filterBadge}>
+                    <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+                  </View>
+                )}
+              </PressableScale>
+            )}
+            {segment === 'outfits' && (
+              <PressableScale
+                contentStyle={[styles.filterBtn, outfitActiveFilterCount > 0 && styles.filterBtnActive]}
+                onPress={() => setOutfitFilterSheetOpen(true)}
+                accessibilityLabel="Sort and filter outfits"
+              >
+                <Ionicons
+                  name="options-outline"
+                  size={18}
+                  color={outfitActiveFilterCount > 0 ? colors.primaryForeground : colors.foreground}
+                />
+                {outfitActiveFilterCount > 0 && (
+                  <View style={styles.filterBadge}>
+                    <Text style={styles.filterBadgeText}>{outfitActiveFilterCount}</Text>
+                  </View>
+                )}
+              </PressableScale>
+            )}
+          </View>
+
+          {/* Category pills — pieces only */}
+          {hasCategoryPills && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.pillScroll}
+              contentContainerStyle={styles.pillContent}
+            >
+              <PressableScale
+                contentStyle={[styles.pill, activeCategory === null && styles.pillActive]}
+                onPress={() => { setActiveCategory(null); setActiveSubcategory(null); }}
+                accessibilityRole="button"
+                accessibilityLabel="All categories"
+                accessibilityState={{ selected: activeCategory === null }}
+              >
+                <Text style={[styles.pillLabel, activeCategory === null && styles.pillLabelActive]}>
+                  All
+                </Text>
+              </PressableScale>
+              {availableCategories.map(cat => (
+                <PressableScale
+                  key={cat}
+                  contentStyle={[styles.pill, activeCategory === cat && styles.pillActive]}
+                  onPress={() => handleCategoryPress(cat)}
+                  accessibilityRole="button"
+                  accessibilityLabel={CATEGORY_LABELS[cat]}
+                  accessibilityState={{ selected: activeCategory === cat }}
+                >
+                  <Text style={[styles.pillLabel, activeCategory === cat && styles.pillLabelActive]}>
+                    {CATEGORY_LABELS[cat]}
+                  </Text>
+                </PressableScale>
+              ))}
+            </ScrollView>
+          )}
+
+          {/* Subcategory pills — shown/hidden without animation; listPaddingTop
+              and subcatVisible update in the same render so there is no gap */}
+          {subcatVisible && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.pillScroll}
+              contentContainerStyle={styles.pillContent}
+            >
+              {availableSubcategories.map(sub => (
+                <PressableScale
+                  key={sub}
+                  contentStyle={[styles.pill, activeSubcategory === sub && styles.pillActive]}
+                  onPress={() => setActiveSubcategory(prev => (prev === sub ? null : sub))}
+                  accessibilityRole="button"
+                  accessibilityLabel={sub}
+                  accessibilityState={{ selected: activeSubcategory === sub }}
+                >
+                  <Text style={[styles.pillLabel, activeSubcategory === sub && styles.pillLabelActive]}>
+                    {sub}
+                  </Text>
+                </PressableScale>
+              ))}
+            </ScrollView>
+          )}
+        </Animated.View>
+
+      </View>
 
       {/* ── Bulk action bar ── */}
       {selectionMode && (
@@ -871,9 +944,14 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.semibold,
   },
 
-  // ── Collapsible wrapper
-  collapsible: {
-    overflow: 'hidden',
+  // ── Floating header (absolute, slides over the list)
+  floatingHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    backgroundColor: colors.background,
   },
 
   // ── Search row
@@ -943,8 +1021,8 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   pillActive: {
-    backgroundColor: colors.foreground,
-    borderColor: colors.foreground,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   pillLabel: {
     fontSize: typography.size.xs,
@@ -976,7 +1054,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
@@ -1066,7 +1144,7 @@ const styles = StyleSheet.create({
   outfitRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.md,
     gap: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,

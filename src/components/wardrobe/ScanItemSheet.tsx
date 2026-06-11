@@ -12,7 +12,10 @@ import {
   Platform,
   UIManager,
   Alert,
+  AppState,
+  type AppStateStatus,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   BottomSheetModal,
   BottomSheetScrollView,
@@ -42,6 +45,7 @@ import type { SizeProfile } from '../../lib/sizes';
 import { CropAdjustModal, type Bbox } from './CropAdjustModal';
 import { cropImage } from '../../lib/cropImage';
 import { AnimatedProgressBar } from '../primitives/AnimatedProgressBar';
+import { track } from '../../lib/analytics';
 import * as Haptics from 'expo-haptics';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -97,6 +101,22 @@ interface ScanItemSheetProps {
   autoLaunch?: 'camera' | 'library';
 }
 
+const SCAN_DRAFT_KEY = 'scan_review_draft';
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+async function buildUploadImage(item: {
+  sourceImage: string | null;
+  bbox: Bbox | null;
+  croppedImage: string | null;
+}): Promise<string | null> {
+  if (item.sourceImage && item.bbox) {
+    const hqCrop = await cropImage(item.sourceImage, item.bbox, { maxDim: 1200, quality: 0.88 });
+    if (hqCrop) return hqCrop;
+  }
+  return item.croppedImage;
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: ScanItemSheetProps) {
@@ -123,6 +143,56 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
   const launchLibrary = useLibraryLaunch();
   const brandSuggestions = useBrandSuggestions();
 
+  // ── Draft persistence ────────────────────────────────────────────────────────
+
+  // On mount: offer to restore a saved draft if one exists
+  useEffect(() => {
+    AsyncStorage.getItem(SCAN_DRAFT_KEY).then((raw) => {
+      if (!raw) return;
+      try {
+        const saved: EditableItem[] = JSON.parse(raw);
+        if (!saved.length) return;
+        Alert.alert(
+          'Resume previous scan?',
+          `You have ${saved.length} item${saved.length !== 1 ? 's' : ''} from a previous scan. Continue editing?`,
+          [
+            {
+              text: 'Discard',
+              style: 'destructive',
+              onPress: () => AsyncStorage.removeItem(SCAN_DRAFT_KEY),
+            },
+            {
+              text: 'Resume',
+              onPress: () => {
+                setDetectedItems(saved);
+                setPhase('review');
+              },
+            },
+          ],
+        );
+      } catch { AsyncStorage.removeItem(SCAN_DRAFT_KEY); }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Save review state to AsyncStorage whenever the app backgrounds during review
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
+  const detectedItemsRef = useRef(detectedItems);
+  detectedItemsRef.current = detectedItems;
+
+  useEffect(() => {
+    const handler = (nextState: AppStateStatus) => {
+      if (nextState === 'background' && phaseRef.current === 'review' && detectedItemsRef.current.length > 0) {
+        // Persist metadata only — skip croppedImage to avoid large writes
+        const slim = detectedItemsRef.current.map(({ croppedImage: _img, ...rest }) => rest);
+        AsyncStorage.setItem(SCAN_DRAFT_KEY, JSON.stringify(slim));
+      }
+    };
+    const sub = AppState.addEventListener('change', handler);
+    return () => sub.remove();
+  }, []);
+
   // ── BottomSheetModal ──────────────────────────────────────────────────────────
   const bottomSheetRef = useRef<BottomSheetModal>(null);
   const snapPoints = useMemo(() => ['90%'], []);
@@ -136,8 +206,8 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     (async () => {
       const captured =
         autoLaunch === 'camera'
-          ? await launchCamera({ maxDim: 1024, compress: 0.8 })
-          : await launchLibrary({ maxDim: 1024, compress: 0.8 });
+          ? await launchCamera({ maxDim: 1600, compress: 0.85 })
+          : await launchLibrary({ maxDim: 1600, compress: 0.85 });
       if (!active) return;
       if (!captured) { onClose(); return; }
       setImageDataUrl(captured.dataUrl);
@@ -169,6 +239,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
   }, [phase]);
 
   const handleDismiss = useCallback(() => {
+    AsyncStorage.removeItem(SCAN_DRAFT_KEY);
     poseScan.reset();
     setPreExtractItems([]);
     onClose();
@@ -232,13 +303,14 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
       const needsDetails = enrichmentFields.filter(Boolean).length === 0;
 
       let imageUrl: string | null = null;
-      if (item.croppedImage) {
+      const imageToUpload = await buildUploadImage(item);
+      if (imageToUpload) {
         try {
-          imageUrl = await uploadImageToR2(item.croppedImage);
+          imageUrl = await uploadImageToR2(imageToUpload);
         } catch {
           // R2 upload failed — fall back to storing the base64 data URL directly
           // so the item always has a photo even if cloud storage is unavailable.
-          imageUrl = item.croppedImage;
+          imageUrl = imageToUpload;
         }
       }
 
@@ -282,6 +354,8 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     if (sessionRef.current !== session) return;
 
     if (savedItems.length > 0) {
+      AsyncStorage.removeItem(SCAN_DRAFT_KEY);
+      track('wardrobe_items_added', { item_count: savedItems.length });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onItemsSaved?.(savedItems);
       onClose();
@@ -453,10 +527,11 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     // Both hooks handle permission checks, denial alerts, and compression internally
     const captured =
       source === 'camera'
-        ? await launchCamera({ maxDim: 1024, compress: 0.8 })
-        : await launchLibrary({ maxDim: 1024, compress: 0.8 });
+        ? await launchCamera({ maxDim: 1600, compress: 0.85 })
+        : await launchLibrary({ maxDim: 1600, compress: 0.85 });
 
     if (!captured) return;
+    track('item_scan_started', { source });
 
     setImageDataUrl(captured.dataUrl);
     // Pass the local file URI so runPoseScan can downscale without re-encoding the data URL

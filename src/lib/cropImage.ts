@@ -15,7 +15,7 @@ export async function cropImage(
   bbox: Bbox,
   options: { maxDim?: number; quality?: number } = {},
 ): Promise<string | null> {
-  const { maxDim = 600, quality = 0.82 } = options;
+  const { maxDim = 1200, quality = 0.82 } = options;
 
   try {
     const { w: natW, h: natH } = await getImageSize(uri);

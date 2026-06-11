@@ -13,6 +13,8 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import Purchases from 'react-native-purchases';
+import { ENTITLEMENT_ID } from '../../lib/purchases';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation } from '@tanstack/react-query';
@@ -25,6 +27,7 @@ import type { ProfileScreenProps } from '../../navigation/types';
 import { SectionCard } from '../../components/primitives/SectionCard';
 import { SelectRow } from '../../components/profile/SelectRow';
 import { ProfilePickerModal } from '../../components/profile/ProfilePickerModal';
+import { LocationAutocompleteInput } from '../../components/primitives/LocationAutocompleteInput';
 import {
   useProfileForm,
   JACKET_LENGTH_OPTIONS,
@@ -113,6 +116,7 @@ export function ProfileScreen(_props: ProfileScreenProps) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
 
   const scrollRef = useRef<import('react-native').ScrollView>(null);
 
@@ -145,6 +149,24 @@ export function ProfileScreen(_props: ProfileScreenProps) {
     if (newPassword.length < 8) { Alert.alert('Too short', 'New password must be at least 8 characters.'); return; }
     if (newPassword !== confirmPassword) { Alert.alert("Doesn't match", 'New password and confirmation must match.'); return; }
     changePasswordMutation.mutate({ currentPassword, newPassword });
+  };
+
+  // ── Restore purchases ──────────────────────────────────────────────────────
+  const handleRestorePurchases = async () => {
+    setIsRestoring(true);
+    try {
+      const info = await Purchases.restorePurchases();
+      const premium = !!info.entitlements.active[ENTITLEMENT_ID];
+      if (premium) {
+        Alert.alert('Restored', 'Your subscription has been restored successfully.');
+      } else {
+        Alert.alert('No Subscription Found', 'We couldn\'t find an active subscription to restore.');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message ?? 'Could not restore purchases. Please try again.');
+    } finally {
+      setIsRestoring(false);
+    }
   };
 
   // ── Delete account ─────────────────────────────────────────────────────────
@@ -535,12 +557,11 @@ export function ProfileScreen(_props: ProfileScreenProps) {
           {/* Location */}
           <View style={styles.field}>
             <Text style={styles.fieldLabel}>Location</Text>
-            <TextInput
-              style={styles.input}
+            <LocationAutocompleteInput
               value={form.location}
               onChangeText={form.setLocation}
+              onSelect={form.setLocation}
               placeholder="e.g. Brooklyn, NY"
-              placeholderTextColor={colors.mutedForeground}
             />
             <Text style={styles.hint}>Used as a fallback for weather-based suggestions.</Text>
           </View>
@@ -661,6 +682,21 @@ export function ProfileScreen(_props: ProfileScreenProps) {
               </TouchableOpacity>
             </View>
           )}
+
+          {/* Restore purchases — required by App Store guidelines */}
+          <TouchableOpacity
+            style={styles.restoreBtn}
+            onPress={handleRestorePurchases}
+            disabled={isRestoring}
+            activeOpacity={0.7}
+          >
+            {isRestoring
+              ? <ActivityIndicator size="small" color={colors.mutedForeground} />
+              : <Ionicons name="refresh-outline" size={18} color={colors.mutedForeground} />}
+            <Text style={styles.restoreBtnText}>
+              {isRestoring ? 'Restoring…' : 'Restore Purchases'}
+            </Text>
+          </TouchableOpacity>
 
           {/* Sign out */}
           <TouchableOpacity
@@ -923,6 +959,12 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.border, backgroundColor: colors.muted,
   },
   outlineBtnText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.foreground },
+  restoreBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
+    paddingVertical: spacing.lg, borderRadius: radii.lg,
+    borderWidth: 1, borderColor: colors.border, marginBottom: spacing.sm,
+  },
+  restoreBtnText: { fontSize: typography.size.sm, fontWeight: typography.weight.medium, color: colors.mutedForeground },
   signOutBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
     paddingVertical: spacing.lg, borderRadius: radii.lg,

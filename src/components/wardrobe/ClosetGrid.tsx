@@ -29,7 +29,11 @@ type Props = {
   onScroll?: (event: any) => void;
   scrollEventThrottle?: number;
   contentInset?: { top?: number; bottom?: number };
+  listPaddingTop?: number;
 };
+
+// Overhead = info paddingTop (6) + name line (17) + gap (2) + brand/cat line (16) + card marginBottom (12)
+const CARD_OVERHEAD = 53;
 
 function ClosetGridComponent({
   items,
@@ -43,9 +47,11 @@ function ClosetGridComponent({
   onScroll,
   scrollEventThrottle = 16,
   contentInset,
+  listPaddingTop = 0,
 }: Props) {
   const { width } = useWindowDimensions();
   const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / NUM_COLS;
+  const itemHeight = Math.round(cardWidth / CARD_ASPECT_RATIO) + CARD_OVERHEAD;
 
   const extraData: ExtraData = { selectedIds, selectionMode };
 
@@ -65,6 +71,13 @@ function ClosetGridComponent({
     [cardWidth, selectionMode, selectedIds, onItemPress, onItemLongPress, onToggleSelect],
   );
 
+  const overrideItemLayout = useCallback(
+    (layout: { span?: number; size?: number }) => {
+      layout.size = itemHeight;
+    },
+    [itemHeight],
+  );
+
   return (
     <View style={{ flex: 1, paddingHorizontal: SIDE_PAD - COL_GAP / 2 }}>
       <FlashList
@@ -79,7 +92,11 @@ function ClosetGridComponent({
         onScroll={onScroll}
         scrollEventThrottle={scrollEventThrottle}
         contentInset={contentInset}
+        estimatedItemSize={itemHeight}
+        overrideItemLayout={overrideItemLayout}
+        drawDistance={600}
         contentContainerStyle={{
+          paddingTop: listPaddingTop,
           paddingBottom: spacing.xxxl * 2,
         }}
       />

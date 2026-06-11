@@ -17,6 +17,10 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
+import { track } from '../../lib/analytics';
+import { OCCASIONS as SHARED_OCCASIONS, type OccasionId } from '../../lib/occasions';
+import { useEntitlement } from '../../hooks/useEntitlement';
+import { presentPaywall } from '../../lib/paywall';
 import { useGenerateSuggestion } from '../../hooks/useSuggestions';
 import { useCreateOutfit } from '../../hooks/useOutfits';
 import { useItems } from '../../hooks/useItems';
@@ -29,7 +33,6 @@ import type { Item } from '../../types/item';
 // ── Constants ────────────────────────────────────────────────────────────────
 
 type WeatherId = 'sunny' | 'rainy' | 'cold' | 'mild';
-type OccasionId = 'casual' | 'smart_casual' | 'business' | 'formal' | 'party' | 'workout';
 
 const WEATHER_OPTIONS: { id: WeatherId; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { id: 'sunny', label: 'Sunny & Warm',     icon: 'sunny-outline' },
@@ -38,14 +41,7 @@ const WEATHER_OPTIONS: { id: WeatherId; label: string; icon: keyof typeof Ionico
   { id: 'mild',  label: 'Mild / Overcast',   icon: 'cloud-outline' },
 ];
 
-const OCCASION_OPTIONS: { id: OccasionId; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { id: 'casual',       label: 'Casual',      icon: 'cafe-outline' },
-  { id: 'smart_casual', label: 'Smart Casual', icon: 'wine-outline' },
-  { id: 'business',     label: 'Work',         icon: 'briefcase-outline' },
-  { id: 'formal',       label: 'Formal',       icon: 'star-outline' },
-  { id: 'party',        label: 'Night Out',    icon: 'musical-notes-outline' },
-  { id: 'workout',      label: 'Active',       icon: 'bicycle-outline' },
-];
+const OCCASION_OPTIONS = SHARED_OCCASIONS;
 
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -83,6 +79,7 @@ function OutfitItemCard({ item }: { item: Item }) {
 
 export function SuggestionsScreen({ navigation, route }: SuggestionsScreenProps) {
   const insets = useSafeAreaInsets();
+  const { isPremium } = useEntitlement();
   const eventIdParam = route?.params?.eventId;
 
   const [weather, setWeather]             = useState<WeatherId>('sunny');
@@ -135,7 +132,23 @@ export function SuggestionsScreen({ navigation, route }: SuggestionsScreenProps)
     generateMutation.reset();
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
+    if (!isPremium) {
+      const shouldUpgrade = await new Promise<boolean>((resolve) => {
+        Alert.alert(
+          'Unlock Outfit Suggestions',
+          'Get AI-powered outfit suggestions tailored to the weather, occasion, and your actual wardrobe.',
+          [
+            { text: 'Not Now', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'See Plans', onPress: () => resolve(true) },
+          ],
+        );
+      });
+      if (!shouldUpgrade) return;
+      await presentPaywall();
+      return;
+    }
+    track('outfit_suggestion_generated', { weather, occasion });
     generateMutation.mutate({
       weather,
       event: occasion,
@@ -170,6 +183,7 @@ export function SuggestionsScreen({ navigation, route }: SuggestionsScreenProps)
       },
       {
         onSuccess: () => {
+          track('outfit_suggestion_saved', { occasion });
           setSaveModalOpen(false);
           Alert.alert('Saved', 'Outfit added to your history.');
         },
@@ -224,6 +238,26 @@ export function SuggestionsScreen({ navigation, route }: SuggestionsScreenProps)
               Tell us the weather and occasion — we'll do the rest.
             </Text>
           </View>
+
+          {/* No events nudge */}
+          {upcomingEvents.length === 0 && (
+            <TouchableOpacity
+              style={styles.noEventsCard}
+              onPress={() => navigation.getParent()?.navigate('Calendar' as never)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Add an event"
+            >
+              <View style={styles.noEventsIcon}>
+                <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.noEventsTitle}>Style ahead for an event</Text>
+                <Text style={styles.noEventsSub}>Add an upcoming occasion to plan the perfect outfit.</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          )}
 
           {/* Upcoming events */}
           {upcomingEvents.length > 0 && (
@@ -499,6 +533,38 @@ const styles = StyleSheet.create({
   scroll: {
     padding: spacing.lg,
     gap: spacing.xl,
+  },
+
+  // No events nudge
+  noEventsCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  noEventsIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.md,
+    backgroundColor: `${colors.primary}15`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  noEventsTitle: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.foreground,
+  },
+  noEventsSub: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+    marginTop: 2,
+    lineHeight: typography.size.xs * 1.5,
   },
 
   // Hero

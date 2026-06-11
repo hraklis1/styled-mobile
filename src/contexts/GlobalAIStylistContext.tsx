@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useState } from 'react';
-import { Modal, View, StyleSheet } from 'react-native';
+import { Alert, Modal, View, StyleSheet } from 'react-native';
 
 import { StylistChatView } from '../components/stylist/StylistChatView';
+import { useAuth } from './AuthContext';
+import { presentPaywall } from '../lib/paywall';
 
 // ─── Context ──────────────────────────────────────────────────────────────────
 
@@ -26,11 +28,27 @@ type Props = {
 export function GlobalAIStylistProvider({ children }: Props) {
   const [visible, setVisible] = useState(false);
   const [initialQuery, setInitialQuery] = useState<string | undefined>(undefined);
+  const { user } = useAuth();
 
-  const openStylist = useCallback((q?: string) => {
+  const openStylist = useCallback(async (q?: string) => {
+    if (!user?.isPremium) {
+      const shouldUpgrade = await new Promise<boolean>((resolve) => {
+        Alert.alert(
+          'Unlock your AI Stylist',
+          'Chat with your personal stylist for daily outfit advice, wardrobe insights, and event planning.',
+          [
+            { text: 'Not Now', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'See Plans', onPress: () => resolve(true) },
+          ],
+        );
+      });
+      if (!shouldUpgrade) return;
+      const purchased = await presentPaywall();
+      if (!purchased) return;
+    }
     setInitialQuery(q);
     setVisible(true);
-  }, []);
+  }, [user?.isPremium]);
 
   const closeStylist = useCallback(() => setVisible(false), []);
 
