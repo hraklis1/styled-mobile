@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Modal,
   View,
@@ -15,7 +15,8 @@ import {
 } from 'react-native';
 import { useItems } from '../../hooks/useItems';
 import { useAssignEventItems } from '../../hooks/useEvents';
-import { CATEGORY_ORDER, CATEGORY_LABELS } from '../../types/item';
+import { getSubcategories } from '../../lib/taxonomy';
+import { CATEGORY_ORDER, CATEGORY_LABELS, type ItemCategory } from '../../types/item';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { Event } from '../../types/event';
 
@@ -33,20 +34,38 @@ export function EventItemPickerModal({
 
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [query, setQuery] = useState('');
-  const [catFilter, setCatFilter] = useState<string>('all');
+  const [catFilter, setCatFilter] = useState<ItemCategory | null>(null);
+  const [subcatFilter, setSubcatFilter] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible && event) {
       setSelected(new Set(event.itemIds ?? []));
       setQuery('');
-      setCatFilter('all');
+      setCatFilter(null);
+      setSubcatFilter(null);
     }
   }, [visible, event]);
 
+  const availableSubcategories = useMemo(() => {
+    if (!catFilter) return [];
+    const subs = new Set(
+      allItems
+        .filter((item) => item.category === catFilter && item.subcategory)
+        .map((item) => item.subcategory!),
+    );
+    const taxonomyOrder = getSubcategories(catFilter);
+    const result = taxonomyOrder.filter((subcategory) => subs.has(subcategory));
+    for (const subcategory of subs) {
+      if (!result.includes(subcategory)) result.push(subcategory);
+    }
+    return result;
+  }, [allItems, catFilter]);
+
   const filtered = allItems.filter((item) => {
-    const matchesCat = catFilter === 'all' || item.category === catFilter;
+    const matchesCat = !catFilter || item.category === catFilter;
+    const matchesSubcat = !subcatFilter || item.subcategory === subcatFilter;
     const matchesQ = !query.trim() || item.name.toLowerCase().includes(query.toLowerCase()) || (item.brand ?? '').toLowerCase().includes(query.toLowerCase());
-    return matchesCat && matchesQ;
+    return matchesCat && matchesSubcat && matchesQ;
   });
 
   const toggle = (id: number) => {
@@ -63,7 +82,10 @@ export function EventItemPickerModal({
     assignItems.mutate({ id: event.id, itemIds }, { onSuccess: onClose });
   };
 
-  const catFilters = [{ id: 'all', label: 'All' }, ...CATEGORY_ORDER.map((c) => ({ id: c, label: CATEGORY_LABELS[c] }))];
+  const handleCategoryPress = (category: ItemCategory | null) => {
+    setCatFilter((current) => current === category ? null : category);
+    setSubcatFilter(null);
+  };
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -94,18 +116,63 @@ export function EventItemPickerModal({
             />
           </View>
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.catRow}>
-            {catFilters.map((f) => (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={s.catScroll}
+            contentContainerStyle={s.catRow}
+          >
+            <TouchableOpacity
+              style={[s.catChip, catFilter === null && s.catChipActive]}
+              onPress={() => handleCategoryPress(null)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="All categories"
+              accessibilityState={{ selected: catFilter === null }}
+            >
+              <Text style={[s.catLabel, catFilter === null && s.catLabelActive]}>All</Text>
+            </TouchableOpacity>
+            {CATEGORY_ORDER.map((category) => (
               <TouchableOpacity
-                key={f.id}
-                style={[s.catChip, catFilter === f.id && s.catChipActive]}
-                onPress={() => setCatFilter(f.id)}
+                key={category}
+                style={[s.catChip, catFilter === category && s.catChipActive]}
+                onPress={() => handleCategoryPress(category)}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={CATEGORY_LABELS[category]}
+                accessibilityState={{ selected: catFilter === category }}
               >
-                <Text style={[s.catLabel, catFilter === f.id && s.catLabelActive]}>{f.label}</Text>
+                <Text style={[s.catLabel, catFilter === category && s.catLabelActive]}>
+                  {CATEGORY_LABELS[category]}
+                </Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
+
+          {availableSubcategories.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={s.catScroll}
+              contentContainerStyle={s.subcatRow}
+            >
+              {availableSubcategories.map((subcategory) => (
+                <TouchableOpacity
+                  key={subcategory}
+                  style={[s.catChip, subcatFilter === subcategory && s.catChipActive]}
+                  onPress={() => setSubcatFilter((current) => current === subcategory ? null : subcategory)}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={subcategory}
+                  accessibilityState={{ selected: subcatFilter === subcategory }}
+                >
+                  <Text style={[s.catLabel, subcatFilter === subcategory && s.catLabelActive]}>
+                    {subcategory}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
 
           {isLoading ? (
             <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xxxl }} />
@@ -175,7 +242,9 @@ const s = StyleSheet.create({
     height: 40, backgroundColor: colors.muted, borderRadius: radii.md,
     paddingHorizontal: spacing.md, fontSize: typography.size.sm, color: colors.foreground,
   },
-  catRow: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.sm },
+  catScroll: { flexGrow: 0, flexShrink: 0 },
+  catRow: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, gap: spacing.sm },
+  subcatRow: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.sm },
   catChip: {
     paddingHorizontal: spacing.md, paddingVertical: 6,
     borderRadius: radii.full, borderWidth: 1, borderColor: colors.border,

@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   useEvents,
   useDeleteEvent,
@@ -52,6 +52,8 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
   const { data: allItems = [] } = useItems();
   const deleteEventMutation = useDeleteEvent();
   const generateOutfit = useGenerateOutfit();
+  const eventsRef = useRef(events);
+  eventsRef.current = events;
 
   const [deviceCoords, setDeviceCoords] = useState<{ lat: number; lon: number } | null>(null);
 
@@ -71,6 +73,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [detailEvent, setDetailEvent] = useState<Event | null>(null);
   const [pickerEvent, setPickerEvent] = useState<Event | null>(null);
+  const [returnToDetailEventId, setReturnToDetailEventId] = useState<number | null>(null);
   const [showAllUpcoming, setShowAllUpcoming] = useState(false);
   const [showAllPast, setShowAllPast] = useState(false);
   const [syncVisible, setSyncVisible] = useState(false);
@@ -139,13 +142,44 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
       return;
     }
     setEditingEvent(null);
+    setReturnToDetailEventId(null);
     setFormVisible(true);
   };
 
   const handleEdit = (ev: Event) => {
+    setReturnToDetailEventId(ev.id);
     setDetailEvent(null);
     setEditingEvent(ev);
     setFormVisible(true);
+  };
+
+  const openItemPicker = (ev: Event, returnToDetail = false) => {
+    setReturnToDetailEventId(returnToDetail ? ev.id : null);
+    if (returnToDetail) setDetailEvent(null);
+    setPickerEvent(ev);
+  };
+
+  const restoreDetailAfterChildClose = (eventId: number | null) => {
+    if (eventId === null) return;
+    setTimeout(() => {
+      const event = eventsRef.current.find((candidate) => candidate.id === eventId);
+      if (event) setDetailEvent(event);
+    }, 300);
+  };
+
+  const closeEventForm = () => {
+    const eventId = returnToDetailEventId;
+    setFormVisible(false);
+    setEditingEvent(null);
+    setReturnToDetailEventId(null);
+    restoreDetailAfterChildClose(eventId);
+  };
+
+  const closeItemPicker = () => {
+    const eventId = returnToDetailEventId;
+    setPickerEvent(null);
+    setReturnToDetailEventId(null);
+    restoreDetailAfterChildClose(eventId);
   };
 
   const handleDelete = (ev: Event) => {
@@ -216,7 +250,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
           </View>
         </View>
         {(event.itemIds ?? []).length > 0
-          ? <ItemThumbStack itemIds={event.itemIds!} allItems={allItems} onPress={() => setPickerEvent(event)} />
+          ? <ItemThumbStack itemIds={event.itemIds!} allItems={allItems} onPress={() => openItemPicker(event)} />
           : (
             <TouchableOpacity
               style={styles.styleItChip}
@@ -344,7 +378,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
                 deviceCoords={deviceCoords}
                 onPress={() => setDetailEvent(nextEvent)}
                 onPlanOutfit={() => openStylistForEvent(nextEvent, 'calendar_hero')}
-                onPressOutfit={() => setPickerEvent(nextEvent)}
+                onPressOutfit={() => openItemPicker(nextEvent)}
               />
             )}
 
@@ -468,7 +502,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         onClose={() => setDetailEvent(null)}
         onEdit={handleEdit}
         onDelete={handleDelete}
-        onAssign={(ev) => { setDetailEvent(null); setPickerEvent(ev); }}
+        onAssign={(ev) => openItemPicker(ev, true)}
         allItems={allItems}
         generateOutfit={generateOutfit}
         onViewOutfits={() => navigation.navigate('Closet')}
@@ -479,12 +513,12 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         visible={formVisible}
         event={editingEvent}
         initialDate={formInitialDate}
-        onClose={() => { setFormVisible(false); setEditingEvent(null); }}
+        onClose={closeEventForm}
       />
       <EventItemPickerModal
         event={pickerEvent}
         visible={pickerEvent !== null}
-        onClose={() => setPickerEvent(null)}
+        onClose={closeItemPicker}
       />
       <CalendarSyncSheet
         visible={syncVisible}
