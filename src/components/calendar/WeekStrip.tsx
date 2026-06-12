@@ -100,6 +100,9 @@ export function WeekStrip({
         ]}
         onPress={() => onSelectDate(str)}
         activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+        accessibilityState={{ selected: isSel }}
       >
         {!compact && (
           <Text style={[s.dayAbbrev, isSel && s.dayTextSel, !isSel && isToday && s.dayTextToday]}>
@@ -134,31 +137,31 @@ export function WeekStrip({
         <Text style={s.monthLabel}>{expanded ? displayMonthLabel : weekLabel}</Text>
         <View style={s.navRow}>
           {weekOffset !== 0 && !expanded && (
-            <TouchableOpacity onPress={onToday} style={s.todayBtn}>
+            <TouchableOpacity onPress={onToday} style={s.todayBtn} accessibilityRole="button" accessibilityLabel="Return to today">
               <Text style={s.todayText}>Today</Text>
             </TouchableOpacity>
           )}
           {!expanded && (
             <>
-              <TouchableOpacity onPress={onPrevWeek} style={s.navBtn}>
+              <TouchableOpacity onPress={onPrevWeek} style={s.navBtn} accessibilityRole="button" accessibilityLabel="Previous week">
                 <Ionicons name="chevron-back" size={16} color={colors.mutedForeground} />
               </TouchableOpacity>
-              <TouchableOpacity onPress={onNextWeek} style={s.navBtn}>
+              <TouchableOpacity onPress={onNextWeek} style={s.navBtn} accessibilityRole="button" accessibilityLabel="Next week">
                 <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
               </TouchableOpacity>
             </>
           )}
           {expanded && (
             <>
-              <TouchableOpacity onPress={() => setMonthOffset((o) => o - 1)} style={s.navBtn}>
+              <TouchableOpacity onPress={() => setMonthOffset((o) => o - 1)} style={s.navBtn} accessibilityRole="button" accessibilityLabel="Previous month">
                 <Ionicons name="chevron-back" size={16} color={colors.mutedForeground} />
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setMonthOffset((o) => o + 1)} style={s.navBtn}>
+              <TouchableOpacity onPress={() => setMonthOffset((o) => o + 1)} style={s.navBtn} accessibilityRole="button" accessibilityLabel="Next month">
                 <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
               </TouchableOpacity>
             </>
           )}
-          <TouchableOpacity onPress={handleToggle} style={s.navBtn}>
+          <TouchableOpacity onPress={handleToggle} style={s.navBtn} accessibilityRole="button" accessibilityLabel={expanded ? 'Collapse month calendar' : 'Expand month calendar'}>
             <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.mutedForeground} />
           </TouchableOpacity>
         </View>
@@ -201,7 +204,7 @@ export function WeekStrip({
 }
 
 const s = StyleSheet.create({
-  root: { marginBottom: spacing.lg },
+  root: { marginBottom: spacing.md },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginBottom: spacing.sm,
@@ -210,20 +213,20 @@ const s = StyleSheet.create({
     fontSize: typography.size.xs, fontWeight: typography.weight.semibold,
     color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 0.5,
   },
-  navRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  navRow: { flexDirection: 'row', alignItems: 'center' },
   todayBtn: {
-    paddingHorizontal: 8, paddingVertical: 4,
-    borderRadius: radii.sm, backgroundColor: `${colors.primary}15`,
+    minHeight: 44, justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
   },
   todayText: { fontSize: 11, fontWeight: typography.weight.semibold, color: colors.primary },
   navBtn: {
-    width: 28, height: 28, borderRadius: radii.md, backgroundColor: colors.muted,
+    width: 44, height: 44,
     alignItems: 'center', justifyContent: 'center',
   },
   days: { flexDirection: 'row', justifyContent: 'space-between' },
-  dayBtn: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm, borderRadius: radii.md, gap: 2 },
+  dayBtn: { flex: 1, alignItems: 'center', paddingVertical: spacing.xs + 2, borderRadius: radii.md, gap: 1 },
   dayBtnSel: { backgroundColor: colors.primary },
-  dayBtnToday: { backgroundColor: `${colors.primary}15` },
+  dayBtnToday: {},
   dayAbbrev: { fontSize: 10, fontWeight: typography.weight.semibold, color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 0.3 },
   dayNum: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.mutedForeground },
   dayTextSel: { color: colors.white },

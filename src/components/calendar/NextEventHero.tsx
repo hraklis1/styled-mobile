@@ -9,7 +9,7 @@ import {
   formatCountdown,
   formatTime,
 } from './calendarUtils';
-import { colors, spacing, typography, radii, shadows } from '../../theme';
+import { colors, spacing, typography, radii } from '../../theme';
 import type { Item } from '../../types/item';
 import type { Event } from '../../types/event';
 import { getEventPlanActionLabel } from './calendarPlanning';
@@ -28,7 +28,6 @@ export function NextEventHero({
   onPress,
   onPlanOutfit,
   onPressOutfit,
-  onChooseOutfit,
 }: {
   event: Event;
   allItems: Item[];
@@ -36,7 +35,6 @@ export function NextEventHero({
   onPress: () => void;
   onPlanOutfit: () => void;
   onPressOutfit: () => void;
-  onChooseOutfit: () => void;
 }) {
   const forecast = useWeatherForecast(
     deviceCoords?.lat ?? null,
@@ -80,87 +78,52 @@ export function NextEventHero({
         </View>
       </View>
 
-      <View style={s.chipRow}>
+      <View style={s.metaDetails}>
         {occasionMeta ? (
-          <View style={s.chip}>
-            <Text style={s.chipText}>{occasionMeta.label}</Text>
-          </View>
+          <Text style={s.detailText}>{occasionMeta.label}</Text>
         ) : null}
         {forecast.data ? (
-          <View style={s.chip}>
+          <View style={s.detail}>
+            {occasionMeta ? <Text style={s.detailDot}>·</Text> : null}
             <Ionicons name={WEATHER_ICONS[forecast.data.condition]} size={12} color={colors.mutedForeground} />
-            <Text style={s.chipText}>{forecast.data.tempMinF}–{forecast.data.tempMaxF}°F</Text>
+            <Text style={s.detailText}>{forecast.data.tempMinF}–{forecast.data.tempMaxF}°F</Text>
           </View>
         ) : null}
         {event.location ? (
-          <View style={[s.chip, s.chipShrink]}>
+          <View style={[s.detail, s.detailShrink]}>
+            {occasionMeta || forecast.data ? <Text style={s.detailDot}>·</Text> : null}
             <Ionicons name="location-outline" size={12} color={colors.mutedForeground} />
-            <Text style={s.chipText} numberOfLines={1}>{event.location}</Text>
+            <Text style={s.detailText} numberOfLines={1}>{event.location}</Text>
           </View>
         ) : null}
       </View>
 
-      <View style={s.divider} />
-
-      {hasOutfit ? (
-        <View style={s.outfitRow}>
-          <ItemThumbStack itemIds={event.itemIds!} allItems={allItems} onPress={onPressOutfit} />
-          <Text style={s.outfitReady}>Outfit planned</Text>
-          <TouchableOpacity
-            style={s.changeBtn}
-            onPress={onChooseOutfit}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            accessibilityRole="button"
-            accessibilityLabel={`Choose saved outfit for ${event.title}`}
-          >
-            <Ionicons name="albums-outline" size={12} color={colors.mutedForeground} />
-            <Text style={s.changeBtnText}>Library</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={s.changeBtn}
-            onPress={onPlanOutfit}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            accessibilityRole="button"
-            accessibilityLabel={`Try another outfit for ${event.title}`}
-          >
-            <Ionicons name="sparkles-outline" size={12} color={colors.primary} />
-            <Text style={s.changeBtnText}>Try another</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <View style={s.ctaRow}>
-          <TouchableOpacity
-            style={s.planBtn}
-            onPress={onPlanOutfit}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            accessibilityLabel={`Plan outfit for ${event.title}`}
-          >
-            <Ionicons name="sparkles-outline" size={15} color={colors.white} />
-            <Text style={s.planBtnText}>{getEventPlanActionLabel(hasOutfit)}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={s.pickBtn}
-            onPress={onChooseOutfit}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel={`Choose saved outfit for ${event.title}`}
-          >
-            <Ionicons name="albums-outline" size={15} color={colors.foreground} />
-            <Text style={s.pickBtnText}>Choose outfit</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={s.pickBtn}
-            onPress={onPressOutfit}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel={`Choose items for ${event.title}`}
-          >
-            <Ionicons name="shirt-outline" size={15} color={colors.foreground} />
-            <Text style={s.pickBtnText}>Choose items</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      <View style={s.actionRow}>
+        {hasOutfit ? (
+          <View style={s.outfitStatus}>
+            <ItemThumbStack itemIds={event.itemIds!} allItems={allItems} onPress={onPressOutfit} />
+            <Text style={s.outfitReady}>Outfit planned</Text>
+          </View>
+        ) : (
+          <Text style={s.outfitPrompt}>No outfit planned yet</Text>
+        )}
+        <TouchableOpacity
+          style={[s.planBtn, hasOutfit && s.planBtnSecondary]}
+          onPress={onPlanOutfit}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={`${getEventPlanActionLabel(hasOutfit)} for ${event.title}`}
+        >
+          <Ionicons
+            name="sparkles-outline"
+            size={14}
+            color={hasOutfit ? colors.primary : colors.white}
+          />
+          <Text style={[s.planBtnText, hasOutfit && s.planBtnTextSecondary]}>
+            {getEventPlanActionLabel(hasOutfit)}
+          </Text>
+        </TouchableOpacity>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -169,12 +132,9 @@ const s = StyleSheet.create({
   card: {
     backgroundColor: colors.card,
     borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: `${colors.primary}30`,
-    padding: spacing.lg,
-    marginBottom: spacing.xl,
-    gap: spacing.md,
-    ...shadows.warm,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
   },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   upNext: {
@@ -188,13 +148,13 @@ const s = StyleSheet.create({
     backgroundColor: `${colors.primary}15`,
     borderRadius: radii.full,
     paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 3,
+    paddingVertical: 2,
   },
   badgeText: { fontSize: 11, fontWeight: typography.weight.semibold, color: colors.primary },
 
   mainRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   iconBox: {
-    width: 48, height: 48, borderRadius: radii.md,
+    width: 44, height: 44, borderRadius: radii.md,
     backgroundColor: `${colors.primary}15`,
     alignItems: 'center', justifyContent: 'center',
   },
@@ -207,55 +167,39 @@ const s = StyleSheet.create({
   },
   meta: { fontSize: typography.size.sm, color: colors.mutedForeground, fontWeight: typography.weight.medium },
 
-  chipRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
-  chip: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: colors.background,
-    borderRadius: radii.full,
-    borderWidth: 1, borderColor: colors.border,
-    paddingHorizontal: spacing.sm + 2, paddingVertical: 4,
-  },
-  chipShrink: { flexShrink: 1 },
-  chipText: {
+  metaDetails: { flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' },
+  detail: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  detailShrink: { flexShrink: 1 },
+  detailDot: { fontSize: typography.size.xs, color: colors.mutedForeground },
+  detailText: {
     fontSize: 11, fontWeight: typography.weight.medium,
     color: colors.mutedForeground, textTransform: 'capitalize',
     flexShrink: 1,
   },
 
-  divider: { height: 1, backgroundColor: colors.border },
-
-  outfitRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  actionRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    gap: spacing.sm, paddingTop: spacing.xs,
+  },
+  outfitStatus: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   outfitReady: {
-    flex: 1,
-    fontSize: typography.size.sm,
+    fontSize: typography.size.xs,
     fontWeight: typography.weight.medium,
-    color: colors.foreground,
+    color: colors.mutedForeground,
   },
-  changeBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2,
-    borderRadius: radii.full,
-    borderWidth: 1, borderColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  changeBtnText: { fontSize: typography.size.xs, fontWeight: typography.weight.medium, color: colors.mutedForeground },
-
-  ctaRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
+  outfitPrompt: { flex: 1, fontSize: typography.size.xs, color: colors.mutedForeground },
   planBtn: {
-    flex: 1,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
     backgroundColor: colors.primary,
     borderRadius: radii.md,
-    paddingVertical: spacing.sm + 4,
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
-  planBtnText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.white },
-  pickBtn: {
-    flex: 1,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
-    borderRadius: radii.md,
-    borderWidth: 1, borderColor: colors.border,
+  planBtnSecondary: {
     backgroundColor: colors.background,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 4,
+    borderWidth: 1, borderColor: colors.border,
   },
-  pickBtnText: { fontSize: typography.size.sm, fontWeight: typography.weight.medium, color: colors.foreground },
+  planBtnText: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.white },
+  planBtnTextSecondary: { color: colors.primary },
 });

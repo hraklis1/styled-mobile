@@ -330,54 +330,10 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
             </Text>
           </View>
         </View>
-        {(event.itemIds ?? []).length > 0
-          ? (
-            <View style={styles.eventActions}>
-              <ItemThumbStack itemIds={event.itemIds!} allItems={allItems} onPress={() => openItemPicker(event)} />
-              <TouchableOpacity
-                style={styles.tryAnotherChip}
-                onPress={() => planOutfitForEvent(event)}
-                accessibilityRole="button"
-                accessibilityLabel={`Try another outfit for ${event.title}`}
-              >
-                <Ionicons name="sparkles-outline" size={11} color={colors.primary} />
-                <Text style={styles.tryAnotherText}>Try another</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.libraryChip}
-                onPress={() => openOutfitPicker(event)}
-                accessibilityRole="button"
-                accessibilityLabel={`Choose saved outfit for ${event.title}`}
-              >
-                <Ionicons name="albums-outline" size={11} color={colors.mutedForeground} />
-                <Text style={styles.libraryText}>Library</Text>
-              </TouchableOpacity>
-            </View>
-          )
-          : (
-            <View style={styles.eventActions}>
-              <TouchableOpacity
-                style={styles.styleItChip}
-                onPress={() => planOutfitForEvent(event)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityRole="button"
-                accessibilityLabel={`Plan outfit for ${event.title}`}
-              >
-                <Ionicons name="sparkles-outline" size={12} color={colors.primary} />
-                <Text style={styles.styleItText}>Plan outfit</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.libraryChip}
-                onPress={() => openOutfitPicker(event)}
-                accessibilityRole="button"
-                accessibilityLabel={`Choose saved outfit for ${event.title}`}
-              >
-                <Ionicons name="albums-outline" size={11} color={colors.mutedForeground} />
-                <Text style={styles.libraryText}>Library</Text>
-              </TouchableOpacity>
-            </View>
-          )
-        }
+        {(event.itemIds ?? []).length > 0 ? (
+          <ItemThumbStack itemIds={event.itemIds!} allItems={allItems} onPress={() => openItemPicker(event)} />
+        ) : null}
+        <Ionicons name="chevron-forward" size={14} color={colors.border} />
       </TouchableOpacity>
     );
   };
@@ -396,16 +352,26 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         <View style={styles.header}>
           <View style={styles.headerRow}>
             <Text style={styles.title}>Calendar</Text>
-            <TouchableOpacity
-              style={styles.syncIconBtn}
-              onPress={() => setSyncVisible(true)}
-              activeOpacity={0.7}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              accessibilityRole="button"
-              accessibilityLabel="Sync calendar"
-            >
-              <Ionicons name="sync-outline" size={20} color={colors.mutedForeground} />
-            </TouchableOpacity>
+            <View style={styles.headerActions}>
+              <TouchableOpacity
+                style={styles.headerIconBtn}
+                onPress={() => setSyncVisible(true)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Sync calendar"
+              >
+                <Ionicons name="sync-outline" size={20} color={colors.mutedForeground} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.addIconBtn}
+                onPress={handleAddEvent}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Add event"
+              >
+                <Ionicons name="add" size={22} color={colors.white} />
+              </TouchableOpacity>
+            </View>
           </View>
           <Text style={styles.subtitle}>Plan ahead for every occasion.</Text>
         </View>
@@ -493,7 +459,6 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
                 onPress={() => setDetailEvent(nextEvent)}
                 onPlanOutfit={() => planOutfitForEvent(nextEvent)}
                 onPressOutfit={() => openItemPicker(nextEvent)}
-                onChooseOutfit={() => openOutfitPicker(nextEvent)}
               />
             )}
 
@@ -575,41 +540,6 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         )}
       </ScrollView>
 
-      {/* Free-tier event limit pill */}
-      {!isPremium && events.length > 0 && (
-        <TouchableOpacity
-          style={[styles.limitPill, { bottom: insets.bottom + spacing.xl + 56 }]}
-          onPress={events.length >= FREE_EVENT_LIMIT ? () => presentPaywall() : undefined}
-          activeOpacity={events.length >= FREE_EVENT_LIMIT ? 0.75 : 1}
-          accessibilityLabel={`${events.length} of ${FREE_EVENT_LIMIT} free events used`}
-        >
-          <Ionicons
-            name="lock-closed-outline"
-            size={11}
-            color={events.length >= FREE_EVENT_LIMIT - 1 ? '#D97706' : colors.mutedForeground}
-          />
-          <Text style={[
-            styles.limitPillText,
-            events.length >= FREE_EVENT_LIMIT - 1 && styles.limitPillWarn,
-          ]}>
-            {events.length} of {FREE_EVENT_LIMIT} free events
-            {events.length >= FREE_EVENT_LIMIT ? ' — Upgrade' : ''}
-          </Text>
-        </TouchableOpacity>
-      )}
-
-      {/* FAB */}
-      <TouchableOpacity
-        style={[styles.fab, { bottom: insets.bottom + spacing.xl }]}
-        onPress={handleAddEvent}
-        activeOpacity={0.85}
-        accessibilityRole="button"
-        accessibilityLabel="Add event"
-      >
-        <Ionicons name="add" size={20} color={colors.white} />
-        <Text style={styles.fabText}>Add Event</Text>
-      </TouchableOpacity>
-
       {/* Modals */}
       <EventDetailModal
         event={detailEvent}
@@ -669,15 +599,20 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
-  scrollContent: { paddingHorizontal: spacing.lg, paddingBottom: 120 },
+  scrollContent: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxxl },
 
-  header: { marginBottom: spacing.xl },
+  header: { marginBottom: spacing.lg },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: typography.size.xxl, fontWeight: typography.weight.bold, color: colors.foreground, letterSpacing: -0.5 },
-  syncIconBtn: {
-    width: 36, height: 36,
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  headerIconBtn: {
+    width: 44, height: 44,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  addIconBtn: {
+    width: 44, height: 44,
     borderRadius: radii.full,
-    backgroundColor: colors.muted,
+    backgroundColor: colors.primary,
     alignItems: 'center', justifyContent: 'center',
   },
   subtitle: { fontSize: typography.size.sm, color: colors.mutedForeground, marginTop: 2 },
@@ -712,28 +647,6 @@ const styles = StyleSheet.create({
   },
   dayEmptyBtnText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.primary },
 
-  styleItChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: `${colors.primary}12`,
-    borderRadius: radii.full,
-    paddingHorizontal: spacing.sm + 2, paddingVertical: 5,
-  },
-  styleItText: { fontSize: 11, fontWeight: typography.weight.semibold, color: colors.primary },
-  eventActions: { alignItems: 'flex-end', gap: spacing.xs },
-  tryAnotherChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 3,
-    paddingHorizontal: spacing.sm, paddingVertical: 4,
-    borderRadius: radii.full, backgroundColor: `${colors.primary}12`,
-  },
-  tryAnotherText: { fontSize: 10, fontWeight: typography.weight.semibold, color: colors.primary },
-  libraryChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 3,
-    paddingHorizontal: spacing.sm, paddingVertical: 4,
-    borderRadius: radii.full, borderWidth: 1, borderColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  libraryText: { fontSize: 10, fontWeight: typography.weight.medium, color: colors.mutedForeground },
-
   dayGroup: { marginBottom: spacing.md },
   dayHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   dayLabel: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 0.5 },
@@ -742,12 +655,12 @@ const styles = StyleSheet.create({
 
   eventCard: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-    backgroundColor: colors.card, borderRadius: radii.lg,
-    borderWidth: 1, borderColor: colors.border,
-    padding: spacing.md, marginBottom: spacing.sm,
+    minHeight: 64,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
+    paddingHorizontal: spacing.xs, paddingVertical: spacing.sm,
   },
   eventIconBox: {
-    width: 40, height: 40, borderRadius: radii.md,
+    width: 36, height: 36, borderRadius: radii.md,
     backgroundColor: `${colors.primary}15`,
     alignItems: 'center', justifyContent: 'center',
   },
@@ -758,8 +671,7 @@ const styles = StyleSheet.create({
   dot: { fontSize: typography.size.xs, color: colors.mutedForeground },
   eventLoc: { fontSize: typography.size.xs, color: colors.mutedForeground, flex: 1 },
   occasionBadge: {
-    alignSelf: 'flex-start', backgroundColor: `${colors.primary}15`,
-    borderRadius: radii.full, paddingHorizontal: 8, paddingVertical: 2, marginTop: 2,
+    alignSelf: 'flex-start', marginTop: 2,
   },
   occasionBadgeText: { fontSize: 10, fontWeight: typography.weight.semibold, color: colors.primary, textTransform: 'capitalize' },
 
@@ -803,24 +715,4 @@ const styles = StyleSheet.create({
   },
   emptyBtnText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.white },
 
-  fab: {
-    position: 'absolute', right: spacing.lg,
-    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-    borderRadius: radii.xl, backgroundColor: colors.primary,
-    shadowColor: colors.primary, shadowOpacity: 0.35, shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 }, elevation: 6,
-  },
-  fabText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.white },
-
-  limitPill: {
-    position: 'absolute', right: spacing.lg,
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
-    borderRadius: radii.full,
-    backgroundColor: colors.card,
-    borderWidth: 1, borderColor: colors.border,
-  },
-  limitPillText: { fontSize: 11, color: colors.mutedForeground, fontWeight: typography.weight.medium },
-  limitPillWarn: { color: '#D97706' },
 });
