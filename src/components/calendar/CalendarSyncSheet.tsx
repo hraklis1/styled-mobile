@@ -28,7 +28,7 @@ import {
   CALENDAR_CONNECTIONS_KEY,
   type CalendarPreviewEvent,
 } from '../../hooks/useCalendarSync';
-import { api, API_BASE_URL } from '../../lib/api';
+import { api, API_BASE_URL, isNetworkError } from '../../lib/api';
 import { track } from '../../lib/analytics';
 import {
   connectGoogleCalendar,
@@ -613,6 +613,11 @@ export function CalendarSyncSheet({
 
   const reviewQuery = reviewProvider === 'google' ? googlePreview : applePreview;
   const reviewSelected = reviewProvider === 'google' ? googleSelected : appleSelected;
+  const reviewErrorMessage = isNetworkError(reviewQuery.error)
+    ? (__DEV__
+      ? `Could not reach ${API_BASE_URL}. Make sure the local API server is running.`
+      : 'Could not reach Styled. Check your internet connection and try again.')
+    : (reviewQuery.error as any)?.response?.data?.message;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -623,7 +628,7 @@ export function CalendarSyncSheet({
             events={reviewQuery.data}
             isLoading={reviewQuery.isLoading}
             isError={reviewQuery.isError}
-            errorMessage={(reviewQuery.error as any)?.response?.data?.message}
+            errorMessage={reviewErrorMessage}
             selected={reviewSelected}
             isImporting={reviewProvider === 'google' ? importGoogle.isPending : importApple.isPending}
             onToggle={(id) => toggleSelection(reviewProvider, id)}
