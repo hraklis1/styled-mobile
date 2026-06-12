@@ -25,7 +25,8 @@ import { colors, spacing, typography, radii } from '../../theme';
 import { OutfitCollage } from './OutfitCollage';
 import { OCCASIONS } from '../../lib/occasions';
 import type { OccasionId } from '../../lib/occasions';
-import type { Item, ItemCategory } from '../../types/item';
+import { OCCASION_LABELS, SEASON_LABELS } from '../../types/item';
+import type { Item, ItemCategory, Occasion, Season } from '../../types/item';
 import type { Outfit } from '../../types/outfit';
 import * as Haptics from 'expo-haptics';
 
@@ -54,6 +55,49 @@ const SLOTS: SlotDef[] = [
 ];
 
 type SlotMap = Partial<Record<SlotKey, Item>>;
+
+type PickerFilterRowProps = {
+  label: string;
+  values: string[];
+  selected: string[];
+  onToggle: (value: string) => void;
+  getLabel?: (value: string) => string;
+};
+
+function PickerFilterRow({
+  label,
+  values,
+  selected,
+  onToggle,
+  getLabel = (value) => value,
+}: PickerFilterRowProps) {
+  return (
+    <View style={styles.pickerFilterGroup}>
+      <Text style={styles.pickerFilterGroupLabel}>{label}</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.pickerFilterChips}
+      >
+        {values.map((value) => {
+          const active = selected.includes(value);
+          return (
+            <TouchableOpacity
+              key={value}
+              style={[styles.pickerFilterChip, active && styles.pickerFilterChipActive]}
+              onPress={() => onToggle(value)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.pickerFilterChipText, active && styles.pickerFilterChipTextActive]}>
+                {getLabel(value)}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
 
 function inferSlotKey(item: Item): SlotKey | null {
   const text = `${item.name} ${item.subcategory ?? ''}`.toLowerCase();
@@ -98,6 +142,12 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
   const [view, setView] = useState<'form' | 'picker'>('form');
   const [activeSlot, setActiveSlot] = useState<SlotKey | null>(null);
   const [pickerSearch, setPickerSearch] = useState('');
+  const [pickerFiltersOpen, setPickerFiltersOpen] = useState(false);
+  const [pickerFavoritesOnly, setPickerFavoritesOnly] = useState(false);
+  const [pickerAvailableOnly, setPickerAvailableOnly] = useState(false);
+  const [pickerColors, setPickerColors] = useState<string[]>([]);
+  const [pickerSeasons, setPickerSeasons] = useState<string[]>([]);
+  const [pickerOccasions, setPickerOccasions] = useState<string[]>([]);
 
   const isFullBodyTop = slots.topId?.category === 'full_body';
 
@@ -118,11 +168,11 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
     createdAt: '',
   }), [slots]);
 
-  const pickerItems = useMemo(() => {
+  const categoryPickerItems = useMemo(() => {
     if (!activeSlot) return [];
     const slot = SLOTS.find((s) => s.key === activeSlot);
     if (!slot) return [];
-    const categoryItems = allItems.filter((item) => {
+    return allItems.filter((item) => {
       if (!item.category || !(slot.categories as string[]).includes(item.category)) return false;
       if (slot.subcategories) {
         return item.subcategory != null &&
@@ -133,25 +183,97 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
       }
       return true;
     });
+  }, [activeSlot, allItems]);
+
+  const pickerFilterOptions = useMemo(() => ({
+    colors: [...new Set(categoryPickerItems
+      .map((item) => item.colorNormalized ?? item.color)
+      .filter((value): value is string => !!value))].sort(),
+    seasons: [...new Set(categoryPickerItems.flatMap((item) => item.seasons ?? []))].sort(),
+    occasions: [...new Set(categoryPickerItems.flatMap((item) => item.occasions ?? []))].sort(),
+  }), [categoryPickerItems]);
+
+  const pickerItems = useMemo(() => {
     const query = pickerSearch.trim().toLowerCase();
-    if (!query) return categoryItems;
-    return categoryItems.filter((item) =>
-      [
-        item.name,
-        item.brand,
-        item.color,
-        item.colorNormalized,
-        item.subcategory,
-        item.style,
-        item.material,
-        item.pattern,
-        ...(item.tags ?? []),
-      ].some((value) => value?.toLowerCase().includes(query))
+    const selectedId = activeSlot ? slots[activeSlot]?.id : undefined;
+    return categoryPickerItems
+      .filter((item) => {
+        if (pickerFavoritesOnly && !item.isFavorite) return false;
+        if (pickerAvailableOnly && item.laundryStatus && item.laundryStatus !== 'clean') return false;
+        const itemColor = item.colorNormalized ?? item.color;
+        if (pickerColors.length > 0 && (!itemColor || !pickerColors.includes(itemColor))) return false;
+        if (pickerSeasons.length > 0 && !item.seasons?.some((value) => pickerSeasons.includes(value))) return false;
+        if (pickerOccasions.length > 0 && !item.occasions?.some((value) => pickerOccasions.includes(value))) return false;
+        if (!query) return true;
+        return [
+          item.name,
+          item.brand,
+          item.color,
+          item.colorNormalized,
+          item.subcategory,
+          item.style,
+          item.material,
+          item.pattern,
+          ...(item.tags ?? []),
+        ].some((value) => value?.toLowerCase().includes(query));
+      })
+      .sort((a, b) => {
+        if (a.id === selectedId) return -1;
+        if (b.id === selectedId) return 1;
+        if (a.isFavorite !== b.isFavorite) return a.isFavorite ? -1 : 1;
+        if (a.wearCount !== b.wearCount) return b.wearCount - a.wearCount;
+        const lastWornDiff =
+          (b.lastWornAt ? new Date(b.lastWornAt).getTime() : 0) -
+          (a.lastWornAt ? new Date(a.lastWornAt).getTime() : 0);
+        if (lastWornDiff !== 0) return lastWornDiff;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+  }, [
+    activeSlot,
+    categoryPickerItems,
+    pickerAvailableOnly,
+    pickerColors,
+    pickerFavoritesOnly,
+    pickerOccasions,
+    pickerSearch,
+    pickerSeasons,
+    slots,
+  ]);
+
+  const pickerActiveFilterCount =
+    Number(pickerFavoritesOnly) +
+    Number(pickerAvailableOnly) +
+    pickerColors.length +
+    pickerSeasons.length +
+    pickerOccasions.length;
+
+  const clearPickerFilters = useCallback(() => {
+    setPickerFavoritesOnly(false);
+    setPickerAvailableOnly(false);
+    setPickerColors([]);
+    setPickerSeasons([]);
+    setPickerOccasions([]);
+  }, []);
+
+  const resetPickerControls = useCallback(() => {
+    setPickerSearch('');
+    setPickerFiltersOpen(false);
+    clearPickerFilters();
+  }, [clearPickerFilters]);
+
+  const togglePickerFilter = useCallback((
+    value: string,
+    setValues: React.Dispatch<React.SetStateAction<string[]>>
+  ) => {
+    setValues((current) =>
+      current.includes(value)
+        ? current.filter((item) => item !== value)
+        : [...current, value]
     );
-  }, [activeSlot, allItems, pickerSearch]);
+  }, []);
 
   const openPicker = (slotKey: SlotKey) => {
-    setPickerSearch('');
+    resetPickerControls();
     setActiveSlot(slotKey);
     setView('picker');
   };
@@ -165,7 +287,7 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
       }
       return next;
     });
-    setPickerSearch('');
+    resetPickerControls();
     setView('form');
   };
 
@@ -187,8 +309,8 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
     setUnmatchedItems([]);
     setView('form');
     setActiveSlot(null);
-    setPickerSearch('');
-  }, []);
+    resetPickerControls();
+  }, [resetPickerControls]);
 
   // Pre-seed slots when the sheet opens with pre-selected items.
   // Use a ref so the effect only depends on `visible`, not the array identity.
@@ -291,7 +413,7 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
       animationType="slide"
       presentationStyle="pageSheet"
       onRequestClose={view === 'picker' ? () => {
-        setPickerSearch('');
+        resetPickerControls();
         setView('form');
       } : handleClose}
     >
@@ -551,7 +673,7 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
               <View style={styles.header}>
                 <TouchableOpacity
                   onPress={() => {
-                    setPickerSearch('');
+                    resetPickerControls();
                     setView('form');
                   }}
                   style={styles.backBtn}
@@ -573,7 +695,7 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
                   <TouchableOpacity
                     onPress={() => {
                       clearSlot(activeSlot);
-                      setPickerSearch('');
+                      resetPickerControls();
                       setView('form');
                     }}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -585,19 +707,112 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
                 )}
               </View>
 
-              <View style={styles.pickerSearchBar}>
-                <Ionicons name="search-outline" size={16} color={colors.mutedForeground} />
-                <TextInput
-                  style={styles.pickerSearchInput}
-                  value={pickerSearch}
-                  onChangeText={setPickerSearch}
-                  placeholder={`Search ${activeSlotDef?.label.toLowerCase() ?? 'items'}…`}
-                  placeholderTextColor={colors.mutedForeground}
-                  autoCapitalize="none"
-                  returnKeyType="search"
-                  clearButtonMode="while-editing"
-                />
+              <View style={styles.pickerSearchRow}>
+                <View style={styles.pickerSearchBar}>
+                  <Ionicons name="search-outline" size={16} color={colors.mutedForeground} />
+                  <TextInput
+                    style={styles.pickerSearchInput}
+                    value={pickerSearch}
+                    onChangeText={setPickerSearch}
+                    placeholder={`Search ${activeSlotDef?.label.toLowerCase() ?? 'items'}…`}
+                    placeholderTextColor={colors.mutedForeground}
+                    autoCapitalize="none"
+                    returnKeyType="search"
+                    clearButtonMode="while-editing"
+                  />
+                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.pickerFilterButton,
+                    pickerActiveFilterCount > 0 && styles.pickerFilterButtonActive,
+                  ]}
+                  onPress={() => setPickerFiltersOpen((open) => !open)}
+                  activeOpacity={0.75}
+                  accessibilityRole="button"
+                  accessibilityLabel="Filter items"
+                  accessibilityState={{ expanded: pickerFiltersOpen }}
+                >
+                  <Ionicons
+                    name="options-outline"
+                    size={18}
+                    color={pickerActiveFilterCount > 0 ? colors.primaryForeground : colors.foreground}
+                  />
+                  {pickerActiveFilterCount > 0 && (
+                    <View style={styles.pickerFilterBadge}>
+                      <Text style={styles.pickerFilterBadgeText}>{pickerActiveFilterCount}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
               </View>
+
+              {pickerFiltersOpen && (
+                <View style={styles.pickerFilters}>
+                  <View style={styles.pickerFilterHeader}>
+                    <Text style={styles.pickerFilterTitle}>Filters</Text>
+                    {pickerActiveFilterCount > 0 && (
+                      <TouchableOpacity onPress={clearPickerFilters} activeOpacity={0.7}>
+                        <Text style={styles.pickerFilterClear}>Clear all</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.pickerFilterChips}
+                  >
+                    <TouchableOpacity
+                      style={[styles.pickerFilterChip, pickerFavoritesOnly && styles.pickerFilterChipActive]}
+                      onPress={() => setPickerFavoritesOnly((value) => !value)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name={pickerFavoritesOnly ? 'heart' : 'heart-outline'}
+                        size={13}
+                        color={pickerFavoritesOnly ? colors.primaryForeground : colors.mutedForeground}
+                      />
+                      <Text style={[styles.pickerFilterChipText, pickerFavoritesOnly && styles.pickerFilterChipTextActive]}>
+                        Favorites
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.pickerFilterChip, pickerAvailableOnly && styles.pickerFilterChipActive]}
+                      onPress={() => setPickerAvailableOnly((value) => !value)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.pickerFilterChipText, pickerAvailableOnly && styles.pickerFilterChipTextActive]}>
+                        Available
+                      </Text>
+                    </TouchableOpacity>
+                  </ScrollView>
+
+                  {pickerFilterOptions.colors.length > 0 && (
+                    <PickerFilterRow
+                      label="Color"
+                      values={pickerFilterOptions.colors}
+                      selected={pickerColors}
+                      onToggle={(value) => togglePickerFilter(value, setPickerColors)}
+                    />
+                  )}
+                  {pickerFilterOptions.seasons.length > 0 && (
+                    <PickerFilterRow
+                      label="Season"
+                      values={pickerFilterOptions.seasons}
+                      selected={pickerSeasons}
+                      onToggle={(value) => togglePickerFilter(value, setPickerSeasons)}
+                      getLabel={(value) => SEASON_LABELS[value as Season] ?? value}
+                    />
+                  )}
+                  {pickerFilterOptions.occasions.length > 0 && (
+                    <PickerFilterRow
+                      label="Occasion"
+                      values={pickerFilterOptions.occasions}
+                      selected={pickerOccasions}
+                      onToggle={(value) => togglePickerFilter(value, setPickerOccasions)}
+                      getLabel={(value) => OCCASION_LABELS[value as Occasion] ?? value}
+                    />
+                  )}
+                </View>
+              )}
 
               <FlatList
                 data={pickerItems}
@@ -619,11 +834,11 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
                       color={colors.border}
                     />
                     <Text style={styles.pickerEmptyTitle}>
-                      {pickerSearch.trim() ? 'No matching items' : 'No items yet'}
+                      {pickerSearch.trim() || pickerActiveFilterCount > 0 ? 'No matching items' : 'No items yet'}
                     </Text>
                     <Text style={styles.pickerEmptySubtitle}>
-                      {pickerSearch.trim()
-                        ? 'Try searching by name, brand, color, or style.'
+                      {pickerSearch.trim() || pickerActiveFilterCount > 0
+                        ? 'Try changing your search or filters.'
                         : 'Add items to your wardrobe first, then come back to build outfits.'}
                     </Text>
                   </View>
@@ -677,6 +892,9 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
                       </View>
                       <Text style={styles.pickerCardName} numberOfLines={1}>
                         {item.name}
+                      </Text>
+                      <Text style={styles.pickerCardMeta} numberOfLines={1}>
+                        {[item.brand, item.colorNormalized ?? item.color].filter(Boolean).join(' · ') || ' '}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -919,12 +1137,18 @@ const styles = StyleSheet.create({
   },
 
   // ── Picker
-  pickerSearchBar: {
+  pickerSearchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     marginHorizontal: spacing.lg,
     marginVertical: spacing.md,
+  },
+  pickerSearchBar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
     backgroundColor: colors.card,
@@ -937,6 +1161,96 @@ const styles = StyleSheet.create({
     fontSize: typography.size.md,
     color: colors.foreground,
     paddingVertical: 0,
+  },
+  pickerFilterButton: {
+    width: 42,
+    height: 42,
+    borderRadius: radii.md,
+    backgroundColor: colors.muted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pickerFilterButtonActive: {
+    backgroundColor: colors.primary,
+  },
+  pickerFilterBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: colors.foreground,
+    borderWidth: 2,
+    borderColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pickerFilterBadgeText: {
+    fontSize: 9,
+    fontWeight: typography.weight.bold,
+    color: colors.background,
+    fontVariant: ['tabular-nums'],
+  },
+  pickerFilters: {
+    gap: spacing.sm,
+    paddingBottom: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  pickerFilterHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+  },
+  pickerFilterTitle: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.foreground,
+  },
+  pickerFilterClear: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.medium,
+    color: colors.primary,
+  },
+  pickerFilterGroup: {
+    gap: spacing.xs,
+  },
+  pickerFilterGroupLabel: {
+    paddingHorizontal: spacing.lg,
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    color: colors.mutedForeground,
+  },
+  pickerFilterChips: {
+    paddingHorizontal: spacing.lg,
+    gap: spacing.xs,
+  },
+  pickerFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: radii.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  pickerFilterChipActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+  },
+  pickerFilterChipText: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.medium,
+    color: colors.mutedForeground,
+    textTransform: 'capitalize',
+  },
+  pickerFilterChipTextActive: {
+    color: colors.primaryForeground,
   },
   pickerRow: {
     paddingHorizontal: spacing.lg,
@@ -991,6 +1305,13 @@ const styles = StyleSheet.create({
     color: colors.foreground,
     marginTop: spacing.xs,
     paddingHorizontal: 2,
+  },
+  pickerCardMeta: {
+    fontSize: 10,
+    color: colors.mutedForeground,
+    marginTop: 2,
+    paddingHorizontal: 2,
+    textTransform: 'capitalize',
   },
   pickerEmpty: {
     flex: 1,
