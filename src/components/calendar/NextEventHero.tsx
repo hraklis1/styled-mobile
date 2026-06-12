@@ -28,6 +28,7 @@ export function NextEventHero({
   onPress,
   onPlanOutfit,
   onPressOutfit,
+  onChooseOutfit,
 }: {
   event: Event;
   allItems: Item[];
@@ -35,6 +36,7 @@ export function NextEventHero({
   onPress: () => void;
   onPlanOutfit: () => void;
   onPressOutfit: () => void;
+  onChooseOutfit: () => void;
 }) {
   const forecast = useWeatherForecast(
     deviceCoords?.lat ?? null,
@@ -106,6 +108,16 @@ export function NextEventHero({
           <Text style={s.outfitReady}>Outfit planned</Text>
           <TouchableOpacity
             style={s.changeBtn}
+            onPress={onChooseOutfit}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel={`Choose saved outfit for ${event.title}`}
+          >
+            <Ionicons name="albums-outline" size={12} color={colors.mutedForeground} />
+            <Text style={s.changeBtnText}>Library</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={s.changeBtn}
             onPress={onPlanOutfit}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityRole="button"
@@ -126,6 +138,16 @@ export function NextEventHero({
           >
             <Ionicons name="sparkles-outline" size={15} color={colors.white} />
             <Text style={s.planBtnText}>{getEventPlanActionLabel(hasOutfit)}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={s.pickBtn}
+            onPress={onChooseOutfit}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={`Choose saved outfit for ${event.title}`}
+          >
+            <Ionicons name="albums-outline" size={15} color={colors.foreground} />
+            <Text style={s.pickBtnText}>Choose outfit</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={s.pickBtn}
@@ -218,7 +240,7 @@ const s = StyleSheet.create({
   },
   changeBtnText: { fontSize: typography.size.xs, fontWeight: typography.weight.medium, color: colors.mutedForeground },
 
-  ctaRow: { flexDirection: 'row', gap: spacing.sm },
+  ctaRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
   planBtn: {
     flex: 1,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
@@ -228,11 +250,12 @@ const s = StyleSheet.create({
   },
   planBtnText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.white },
   pickBtn: {
+    flex: 1,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
     borderRadius: radii.md,
     borderWidth: 1, borderColor: colors.border,
     backgroundColor: colors.background,
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.sm + 4,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 4,
   },
   pickBtnText: { fontSize: typography.size.sm, fontWeight: typography.weight.medium, color: colors.foreground },
 });

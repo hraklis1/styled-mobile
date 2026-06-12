@@ -26,6 +26,7 @@ import { WeekStrip } from '../../components/calendar/WeekStrip';
 import { EventFormModal } from '../../components/calendar/EventFormModal';
 import { EventDetailModal } from '../../components/calendar/EventDetailModal';
 import { EventItemPickerModal } from '../../components/calendar/EventItemPickerModal';
+import { EventOutfitPickerModal } from '../../components/calendar/EventOutfitPickerModal';
 import { ItemThumbStack } from '../../components/calendar/ItemThumbStack';
 import { NextEventHero } from '../../components/calendar/NextEventHero';
 import { OutfitGeneratedSheet } from '../../components/calendar/OutfitGeneratedSheet';
@@ -80,6 +81,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [detailEvent, setDetailEvent] = useState<Event | null>(null);
   const [pickerEvent, setPickerEvent] = useState<Event | null>(null);
+  const [outfitPickerEvent, setOutfitPickerEvent] = useState<Event | null>(null);
   const [returnToDetailEventId, setReturnToDetailEventId] = useState<number | null>(null);
   const [showAllUpcoming, setShowAllUpcoming] = useState(false);
   const [showAllPast, setShowAllPast] = useState(false);
@@ -168,6 +170,12 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
     setPickerEvent(ev);
   };
 
+  const openOutfitPicker = (ev: Event, returnToDetail = false) => {
+    setReturnToDetailEventId(returnToDetail ? ev.id : null);
+    if (returnToDetail) setDetailEvent(null);
+    setOutfitPickerEvent(ev);
+  };
+
   const restoreDetailAfterChildClose = (eventId: number | null) => {
     if (eventId === null) return;
     setTimeout(() => {
@@ -187,6 +195,13 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
   const closeItemPicker = () => {
     const eventId = returnToDetailEventId;
     setPickerEvent(null);
+    setReturnToDetailEventId(null);
+    restoreDetailAfterChildClose(eventId);
+  };
+
+  const closeOutfitPicker = () => {
+    const eventId = returnToDetailEventId;
+    setOutfitPickerEvent(null);
     setReturnToDetailEventId(null);
     restoreDetailAfterChildClose(eventId);
   };
@@ -328,19 +343,39 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
                 <Ionicons name="sparkles-outline" size={11} color={colors.primary} />
                 <Text style={styles.tryAnotherText}>Try another</Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.libraryChip}
+                onPress={() => openOutfitPicker(event)}
+                accessibilityRole="button"
+                accessibilityLabel={`Choose saved outfit for ${event.title}`}
+              >
+                <Ionicons name="albums-outline" size={11} color={colors.mutedForeground} />
+                <Text style={styles.libraryText}>Library</Text>
+              </TouchableOpacity>
             </View>
           )
           : (
-            <TouchableOpacity
-              style={styles.styleItChip}
-              onPress={() => planOutfitForEvent(event)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              accessibilityRole="button"
-              accessibilityLabel={`Plan outfit for ${event.title}`}
-            >
-              <Ionicons name="sparkles-outline" size={12} color={colors.primary} />
-              <Text style={styles.styleItText}>Plan outfit</Text>
-            </TouchableOpacity>
+            <View style={styles.eventActions}>
+              <TouchableOpacity
+                style={styles.styleItChip}
+                onPress={() => planOutfitForEvent(event)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel={`Plan outfit for ${event.title}`}
+              >
+                <Ionicons name="sparkles-outline" size={12} color={colors.primary} />
+                <Text style={styles.styleItText}>Plan outfit</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.libraryChip}
+                onPress={() => openOutfitPicker(event)}
+                accessibilityRole="button"
+                accessibilityLabel={`Choose saved outfit for ${event.title}`}
+              >
+                <Ionicons name="albums-outline" size={11} color={colors.mutedForeground} />
+                <Text style={styles.libraryText}>Library</Text>
+              </TouchableOpacity>
+            </View>
           )
         }
       </TouchableOpacity>
@@ -458,6 +493,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
                 onPress={() => setDetailEvent(nextEvent)}
                 onPlanOutfit={() => planOutfitForEvent(nextEvent)}
                 onPressOutfit={() => openItemPicker(nextEvent)}
+                onChooseOutfit={() => openOutfitPicker(nextEvent)}
               />
             )}
 
@@ -582,6 +618,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         onEdit={handleEdit}
         onDelete={handleDelete}
         onAssign={(ev) => openItemPicker(ev, true)}
+        onChooseOutfit={(ev) => openOutfitPicker(ev, true)}
         allItems={allItems}
         onPlanOutfit={planOutfitForEvent}
         isPlanning={generatePlan.isPending && plannedEvent?.id === detailEvent?.id}
@@ -598,6 +635,11 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         event={pickerEvent}
         visible={pickerEvent !== null}
         onClose={closeItemPicker}
+      />
+      <EventOutfitPickerModal
+        event={outfitPickerEvent}
+        visible={outfitPickerEvent !== null}
+        onClose={closeOutfitPicker}
       />
       <CalendarSyncSheet
         visible={syncVisible}
@@ -684,6 +726,13 @@ const styles = StyleSheet.create({
     borderRadius: radii.full, backgroundColor: `${colors.primary}12`,
   },
   tryAnotherText: { fontSize: 10, fontWeight: typography.weight.semibold, color: colors.primary },
+  libraryChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingHorizontal: spacing.sm, paddingVertical: 4,
+    borderRadius: radii.full, borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  libraryText: { fontSize: 10, fontWeight: typography.weight.medium, color: colors.mutedForeground },
 
   dayGroup: { marginBottom: spacing.md },
   dayHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },

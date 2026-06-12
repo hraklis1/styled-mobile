@@ -30,6 +30,7 @@ export function EventDetailModal({
   onEdit,
   onDelete,
   onAssign,
+  onChooseOutfit,
   allItems,
   onPlanOutfit,
   isPlanning,
@@ -42,6 +43,7 @@ export function EventDetailModal({
   onEdit: (ev: Event) => void;
   onDelete: (ev: Event) => void;
   onAssign: (ev: Event) => void;
+  onChooseOutfit: (ev: Event) => void;
   allItems: Item[];
   onPlanOutfit: (event: Event) => void;
   isPlanning: boolean;
@@ -157,6 +159,10 @@ export function EventDetailModal({
               <Ionicons name="chatbubble-ellipses-outline" size={17} color={colors.primary} />
               <Text style={s.stylistBtnText}>Ask stylist</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={s.assignBtn} onPress={() => onChooseOutfit(event)} activeOpacity={0.8}>
+              <Ionicons name="albums-outline" size={18} color={colors.foreground} />
+              <Text style={s.assignBtnText}>Choose outfit</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={s.assignBtn} onPress={() => onAssign(event)} activeOpacity={0.8}>
               <Ionicons name="shirt-outline" size={18} color={colors.foreground} />
               <Text style={s.assignBtnText}>{getEventItemsActionLabel(hasOutfit)}</Text>
@@ -267,10 +273,13 @@ const s = StyleSheet.create({
   actionRow: {
     flexDirection: 'row',
     gap: spacing.md,
+    flexWrap: 'wrap',
   },
   deleteBtnText: { fontSize: typography.size.sm, color: colors.error, fontWeight: typography.weight.medium },
   assignBtn: {
+    flex: 1,
     flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+    justifyContent: 'center',
     paddingHorizontal: spacing.md, paddingVertical: spacing.md,
     borderRadius: radii.md, borderWidth: 1, borderColor: colors.border,
     backgroundColor: colors.card,
