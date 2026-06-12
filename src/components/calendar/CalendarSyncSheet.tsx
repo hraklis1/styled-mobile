@@ -37,12 +37,24 @@ import {
 import { colors, spacing, typography, radii } from '../../theme';
 import {
   createDefaultSelection,
+  filterPreviewEvents,
   groupPreviewEventsByDate,
   partitionPreviewEvents,
+  updateVisibleSelection,
+  type CalendarDateRange,
 } from './calendarSyncUtils';
 
 const GREEN = '#22c55e';
 type Provider = 'google' | 'apple';
+const DATE_FILTERS: { value: CalendarDateRange; label: string }[] = [
+  { value: 7, label: 'Next 7 days' },
+  { value: 30, label: 'Next 30 days' },
+  { value: 'all', label: 'All upcoming' },
+];
+
+function formatOccasionLabel(occasion: string) {
+  return occasion.replaceAll('_', ' ').replace(/\b\w/g, (character) => character.toUpperCase());
+}
 
 function SheetHeader({
   title,
@@ -133,8 +145,7 @@ function CalendarEventReview({
   selected,
   isImporting,
   onToggle,
-  onSelectAll,
-  onClear,
+  onUpdateVisibleSelection,
   onRetry,
   onImport,
   onBack,
@@ -148,32 +159,66 @@ function CalendarEventReview({
   selected: Set<string>;
   isImporting: boolean;
   onToggle: (id: string) => void;
-  onSelectAll: () => void;
-  onClear: () => void;
+  onUpdateVisibleSelection: (
+    events: CalendarPreviewEvent[],
+    action: 'select' | 'clear',
+  ) => void;
   onRetry: () => void;
   onImport: () => void;
   onBack: () => void;
   onClose: () => void;
 }) {
   const [syncedExpanded, setSyncedExpanded] = useState(false);
+  const [search, setSearch] = useState('');
+  const [dateRange, setDateRange] = useState<CalendarDateRange>(30);
+  const [selectedOccasions, setSelectedOccasions] = useState<string[]>([]);
   const { newEvents, syncedEvents } = useMemo(
     () => partitionPreviewEvents(events ?? []),
     [events],
   );
+  const availableOccasions = useMemo(
+    () => [...new Set(newEvents.map((event) => event.occasion).filter(Boolean))].sort(),
+    [newEvents],
+  );
+  const filteredNewEvents = useMemo(
+    () => filterPreviewEvents(newEvents, {
+      search,
+      dateRange,
+      occasions: selectedOccasions,
+    }),
+    [newEvents, search, dateRange, selectedOccasions],
+  );
   const sections = useMemo(
     () => [
-      ...groupPreviewEventsByDate(newEvents).map((section) => ({ ...section, kind: 'new' as const })),
+      ...groupPreviewEventsByDate(filteredNewEvents).map((section) => ({ ...section, kind: 'new' as const })),
       ...(syncedExpanded
         ? [{ title: 'Previously synced', data: syncedEvents, kind: 'synced' as const }]
         : []),
     ],
-    [newEvents, syncedEvents, syncedExpanded],
+    [filteredNewEvents, syncedEvents, syncedExpanded],
   );
   const providerName = provider === 'google' ? 'Google Calendar' : 'Apple Calendar';
 
   useEffect(() => {
     setSyncedExpanded(false);
+    setSearch('');
+    setDateRange(30);
+    setSelectedOccasions([]);
   }, [provider]);
+
+  const toggleOccasion = (occasion: string) => {
+    setSelectedOccasions((current) => (
+      current.includes(occasion)
+        ? current.filter((value) => value !== occasion)
+        : [...current, occasion]
+    ));
+  };
+
+  const clearFilters = () => {
+    setSearch('');
+    setDateRange('all');
+    setSelectedOccasions([]);
+  };
 
   return (
     <View style={s.root}>
@@ -208,21 +253,97 @@ function CalendarEventReview({
                   <View style={s.providerText}>
                     <Text style={s.providerName}>{providerName}</Text>
                     <Text style={s.providerDesc}>
-                      {selected.size} of {newEvents.length} new event{newEvents.length === 1 ? '' : 's'} selected
+                      {selected.size} selected · {filteredNewEvents.length} shown of {newEvents.length}
                     </Text>
                   </View>
                 </View>
                 {newEvents.length > 0 && (
-                  <View style={s.selectionBar}>
-                    <Text style={s.selectionTitle}>New events</Text>
-                    <View style={s.selectionActions}>
-                      <TouchableOpacity onPress={onSelectAll}>
-                        <Text style={s.selectionActionText}>Select all</Text>
-                      </TouchableOpacity>
-                      <View style={s.actionDivider} />
-                      <TouchableOpacity onPress={onClear}>
-                        <Text style={s.selectionActionText}>Clear</Text>
-                      </TouchableOpacity>
+                  <View style={s.filterArea}>
+                    <View style={s.searchBox}>
+                      <Ionicons name="search-outline" size={16} color={colors.mutedForeground} />
+                      <TextInput
+                        style={s.searchInput}
+                        value={search}
+                        onChangeText={setSearch}
+                        placeholder="Search events or locations"
+                        placeholderTextColor={colors.mutedForeground}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        returnKeyType="search"
+                        clearButtonMode="while-editing"
+                      />
+                    </View>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={s.filterChipRow}
+                    >
+                      {DATE_FILTERS.map((filter) => {
+                        const active = dateRange === filter.value;
+                        return (
+                          <TouchableOpacity
+                            key={String(filter.value)}
+                            style={[s.filterChip, active && s.filterChipActive]}
+                            onPress={() => setDateRange(filter.value)}
+                            activeOpacity={0.75}
+                          >
+                            <Text style={[s.filterChipText, active && s.filterChipTextActive]}>
+                              {filter.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                    {availableOccasions.length > 0 && (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={s.filterChipRow}
+                      >
+                        {availableOccasions.map((occasion) => {
+                          const active = selectedOccasions.includes(occasion);
+                          return (
+                            <TouchableOpacity
+                              key={occasion}
+                              style={[s.filterChip, active && s.filterChipActive]}
+                              onPress={() => toggleOccasion(occasion)}
+                              activeOpacity={0.75}
+                            >
+                              <Text style={[s.filterChipText, active && s.filterChipTextActive]}>
+                                {formatOccasionLabel(occasion)}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    )}
+                    <View style={s.selectionBar}>
+                      <Text style={s.selectionTitle}>New events</Text>
+                      <View style={s.selectionActions}>
+                        <TouchableOpacity
+                          onPress={() => onUpdateVisibleSelection(filteredNewEvents, 'select')}
+                          disabled={filteredNewEvents.length === 0}
+                        >
+                          <Text style={[
+                            s.selectionActionText,
+                            filteredNewEvents.length === 0 && s.selectionActionDisabled,
+                          ]}>
+                            Select shown
+                          </Text>
+                        </TouchableOpacity>
+                        <View style={s.actionDivider} />
+                        <TouchableOpacity
+                          onPress={() => onUpdateVisibleSelection(filteredNewEvents, 'clear')}
+                          disabled={filteredNewEvents.length === 0}
+                        >
+                          <Text style={[
+                            s.selectionActionText,
+                            filteredNewEvents.length === 0 && s.selectionActionDisabled,
+                          ]}>
+                            Clear shown
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   </View>
                 )}
@@ -230,9 +351,24 @@ function CalendarEventReview({
             }
             ListEmptyComponent={
               <View style={s.emptyState}>
-                <Ionicons name="checkmark-circle-outline" size={32} color={GREEN} />
-                <Text style={s.stateTitle}>You’re all caught up</Text>
-                <Text style={s.stateText}>There are no new events to import.</Text>
+                <Ionicons
+                  name={newEvents.length === 0 ? 'checkmark-circle-outline' : 'search-outline'}
+                  size={32}
+                  color={newEvents.length === 0 ? GREEN : colors.mutedForeground}
+                />
+                <Text style={s.stateTitle}>
+                  {newEvents.length === 0 ? 'You’re all caught up' : 'No events match'}
+                </Text>
+                <Text style={s.stateText}>
+                  {newEvents.length === 0
+                    ? 'There are no new events to import.'
+                    : 'Try changing or clearing your filters.'}
+                </Text>
+                {newEvents.length > 0 && (
+                  <TouchableOpacity style={s.clearFiltersBtn} onPress={clearFilters}>
+                    <Text style={s.clearFiltersText}>Clear filters</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             }
             renderSectionHeader={({ section }) => section.kind === 'synced' ? (
@@ -285,6 +421,8 @@ function CalendarEventReview({
                 </View>
               ) : null
             }
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
           />
           {newEvents.length > 0 && (
             <View style={s.stickyFooter}>
@@ -475,8 +613,6 @@ export function CalendarSyncSheet({
 
   const reviewQuery = reviewProvider === 'google' ? googlePreview : applePreview;
   const reviewSelected = reviewProvider === 'google' ? googleSelected : appleSelected;
-  const reviewEvents = reviewQuery.data ?? [];
-  const newReviewEvents = partitionPreviewEvents(reviewEvents).newEvents;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -491,13 +627,9 @@ export function CalendarSyncSheet({
             selected={reviewSelected}
             isImporting={reviewProvider === 'google' ? importGoogle.isPending : importApple.isPending}
             onToggle={(id) => toggleSelection(reviewProvider, id)}
-            onSelectAll={() => {
+            onUpdateVisibleSelection={(visibleEvents, action) => {
               const setter = reviewProvider === 'google' ? setGoogleSelected : setAppleSelected;
-              setter(new Set(newReviewEvents.map((event) => event.externalId)));
-            }}
-            onClear={() => {
-              const setter = reviewProvider === 'google' ? setGoogleSelected : setAppleSelected;
-              setter(new Set());
+              setter((current) => updateVisibleSelection(current, visibleEvents, action));
             }}
             onRetry={() => reviewQuery.refetch()}
             onImport={() => handleImport(reviewProvider)}
@@ -756,11 +888,47 @@ const s = StyleSheet.create({
   },
   reviewContent: { paddingBottom: spacing.xxl },
   reviewIntro: { gap: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.sm },
+  filterArea: { gap: spacing.sm },
+  searchBox: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    backgroundColor: colors.surfaceElevated,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    fontSize: typography.size.sm,
+    color: colors.foreground,
+  },
+  filterChipRow: { gap: spacing.sm, paddingHorizontal: spacing.lg },
+  filterChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceElevated,
+  },
+  filterChipActive: { borderColor: colors.primary, backgroundColor: colors.surfaceSelected },
+  filterChipText: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.medium,
+    color: colors.mutedForeground,
+  },
+  filterChipTextActive: { color: colors.primary },
   selectionBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
   },
   selectionTitle: {
     fontSize: typography.size.md,
@@ -773,7 +941,22 @@ const s = StyleSheet.create({
     fontWeight: typography.weight.medium,
     color: colors.primary,
   },
+  selectionActionDisabled: { color: colors.mutedForeground, opacity: 0.6 },
   actionDivider: { width: 1, height: 14, backgroundColor: colors.border },
+  clearFiltersBtn: {
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    backgroundColor: colors.surfaceElevated,
+  },
+  clearFiltersText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
+  },
   sectionHeader: {
     backgroundColor: colors.background,
     paddingHorizontal: spacing.lg,
