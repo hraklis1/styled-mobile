@@ -8,7 +8,12 @@ if (!API_URL) {
   throw new Error('Missing required EXPO_PUBLIC_API_URL configuration.');
 }
 
-export const API_BASE_URL = API_URL;
+const parsedApiUrl = new URL(API_URL);
+if (!__DEV__ && ['localhost', '127.0.0.1', '10.0.2.2'].includes(parsedApiUrl.hostname)) {
+  throw new Error('Released builds must use a hosted EXPO_PUBLIC_API_URL.');
+}
+
+export const API_BASE_URL = API_URL.replace(/\/+$/, '');
 
 export const api = axios.create({
   baseURL: API_URL,
