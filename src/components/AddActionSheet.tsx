@@ -91,8 +91,6 @@ export function AddActionSheet({
         if (d.seasons?.length) setManualSeasons(d.seasons);
         if (d.occasions?.length) setManualOccasions(d.occasions);
         if (d.brand) setManualBrand(d.brand);
-        // Auto-open manual form if there was a draft
-        setView('manual');
       } catch { /* malformed draft — ignore */ }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps

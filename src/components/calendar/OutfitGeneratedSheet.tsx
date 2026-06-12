@@ -20,12 +20,20 @@ export function OutfitGeneratedSheet({
   result,
   allItems,
   onDone,
-  onViewOutfit,
+  onAccept,
+  onTryAnother,
+  isAccepting,
+  isRegenerating,
+  hasCurrentOutfit,
 }: {
   result: GenerateOutfitResult | null;
   allItems: Item[];
   onDone: () => void;
-  onViewOutfit: () => void;
+  onAccept: () => void;
+  onTryAnother: () => void;
+  isAccepting: boolean;
+  isRegenerating: boolean;
+  hasCurrentOutfit: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const backdropAnim = useRef(new Animated.Value(0)).current;
@@ -81,7 +89,7 @@ export function OutfitGeneratedSheet({
               <View style={s.iconBadge}>
                 <Ionicons name="sparkles" size={22} color={colors.primary} />
               </View>
-              <Text style={s.eyebrow}>Outfit generated</Text>
+              <Text style={s.eyebrow}>Your outfit plan</Text>
               <Text style={s.outfitName}>{shown.outfitName}</Text>
             </View>
 
@@ -113,17 +121,36 @@ export function OutfitGeneratedSheet({
               </ScrollView>
             ) : null}
 
+            {shown.missingEssentials.length > 0 ? (
+              <View style={s.missingCard}>
+                <Text style={s.missingTitle}>Wardrobe note</Text>
+                <Text style={s.missingText}>
+                  {shown.missingEssentials.map((item) => `${item.label}: ${item.context}`).join(' · ')}
+                </Text>
+              </View>
+            ) : null}
+
             <View style={s.actions}>
               <TouchableOpacity
-                style={s.primaryBtn}
-                onPress={() => close(onViewOutfit)}
+                style={[s.primaryBtn, isAccepting && s.disabledBtn]}
+                onPress={onAccept}
+                disabled={isAccepting || isRegenerating}
                 activeOpacity={0.85}
               >
-                <Ionicons name="shirt-outline" size={18} color={colors.white} />
-                <Text style={s.primaryBtnText}>View Outfit</Text>
+                <Ionicons name="checkmark-circle-outline" size={18} color={colors.white} />
+                <Text style={s.primaryBtnText}>{isAccepting ? 'Saving…' : 'Use this outfit'}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={s.secondaryBtn} onPress={() => close()} activeOpacity={0.8}>
-                <Text style={s.secondaryBtnText}>Done</Text>
+              <TouchableOpacity
+                style={[s.secondaryBtn, isRegenerating && s.disabledBtn]}
+                onPress={onTryAnother}
+                disabled={isAccepting || isRegenerating}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
+                <Text style={s.secondaryBtnText}>{isRegenerating ? 'Planning…' : 'Try another'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.dismissBtn} onPress={() => close()} disabled={isAccepting} activeOpacity={0.8}>
+                <Text style={s.dismissBtnText}>{hasCurrentOutfit ? 'Keep current outfit' : 'Not now'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -223,6 +250,15 @@ const s = StyleSheet.create({
     color: colors.foreground,
     lineHeight: typography.size.sm * 1.5,
   },
+  missingCard: {
+    backgroundColor: `${colors.primary}10`,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    gap: 3,
+  },
+  missingTitle: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.primary },
+  missingText: { fontSize: typography.size.xs, color: colors.mutedForeground, lineHeight: typography.size.xs * 1.5 },
   actions: { gap: spacing.sm },
   primaryBtn: {
     flexDirection: 'row',
@@ -238,7 +274,12 @@ const s = StyleSheet.create({
     fontWeight: typography.weight.semibold,
     color: colors.white,
   },
+  disabledBtn: { opacity: 0.55 },
+  dismissBtn: { alignItems: 'center', paddingVertical: spacing.sm },
+  dismissBtnText: { fontSize: typography.size.sm, color: colors.mutedForeground },
   secondaryBtn: {
+    flexDirection: 'row',
+    gap: spacing.xs,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: spacing.md,

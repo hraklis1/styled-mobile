@@ -5,7 +5,13 @@ import { resolveImageUri } from '../../lib/resolveImageUri';
 import { colors, radii } from '../../theme';
 import { useItems } from '../../hooks/useItems';
 import type { Outfit } from '../../types/outfit';
+import type { ItemCategory } from '../../types/item';
 import { useMemo } from 'react';
+import {
+  getOutfitCategoryPriority,
+  getOutfitMosaicRects,
+  MAX_OUTFIT_MOSAIC_SLOTS,
+} from './outfitMosaic';
 
 type Props = {
   outfit: Outfit;
@@ -14,13 +20,7 @@ type Props = {
   borderRadius?: number;
 };
 
-function getGrid(count: number): { cols: number; rows: number } {
-  if (count <= 4) return { cols: 2, rows: 2 };
-  if (count <= 6) return { cols: 3, rows: 2 };
-  return { cols: 3, rows: 3 };
-}
-
-const MAX_SLOTS = 9;
+const EDITORIAL_MIN_SIZE = 260;
 
 export function OutfitCollage({ outfit, size, height = size, borderRadius = radii.md }: Props) {
   const { data: items = [] } = useItems();
@@ -28,6 +28,23 @@ export function OutfitCollage({ outfit, size, height = size, borderRadius = radi
   const itemMap = useMemo(
     () => new Map(items.map((i) => [i.id, i])),
     [items]
+  );
+
+  const slots = useMemo(
+    () =>
+      (outfit.itemIds ?? [])
+        .map((entry, originalIndex) => {
+          const resolved = itemMap.get(entry.id);
+          const category = resolved?.category ?? (entry.category as ItemCategory | null);
+          return {
+            uri: resolveImageUri(resolved?.imageUrl ?? null),
+            ghost: !resolved,
+            priority: getOutfitCategoryPriority(category),
+            originalIndex,
+          };
+        })
+        .sort((a, b) => a.priority - b.priority || a.originalIndex - b.originalIndex),
+    [itemMap, outfit.itemIds],
   );
 
   // Prefer AI-generated image if available
@@ -40,14 +57,6 @@ export function OutfitCollage({ outfit, size, height = size, borderRadius = radi
     );
   }
 
-  const slots = (outfit.itemIds ?? []).map((e) => {
-    const resolved = itemMap.get(e.id);
-    return {
-      uri: resolveImageUri(resolved?.imageUrl ?? null),
-      ghost: !resolved,
-    };
-  });
-
   const total = slots.length;
 
   // Fewer than 2 items — show single large image, ghost, or empty placeholder
@@ -56,7 +65,7 @@ export function OutfitCollage({ outfit, size, height = size, borderRadius = radi
     return (
       <View style={[styles.container, { width: size, height, borderRadius }]}>
         {slot?.uri ? (
-          <Image source={{ uri: slot.uri }} style={styles.fill} contentFit="cover" />
+          <Image source={{ uri: slot.uri }} style={styles.fill} contentFit="cover" transition={150} />
         ) : slot?.ghost ? (
           <View style={styles.placeholder}>
             <Ionicons name="unlink-outline" size={Math.min(size, height) * 0.25} color={colors.border} />
@@ -70,28 +79,36 @@ export function OutfitCollage({ outfit, size, height = size, borderRadius = radi
     );
   }
 
-  const overflow = total > MAX_SLOTS ? total - (MAX_SLOTS - 1) : 0;
-  const displaySlots = slots.slice(0, MAX_SLOTS);
-  const { cols, rows } = getGrid(total);
-  const cellW = size / cols;
-  const cellH = height / rows;
-  const cellCount = cols * rows;
+  const overflow = total > MAX_OUTFIT_MOSAIC_SLOTS ? total - (MAX_OUTFIT_MOSAIC_SLOTS - 1) : 0;
+  const displaySlots = slots.slice(0, MAX_OUTFIT_MOSAIC_SLOTS);
+  const rects = getOutfitMosaicRects(total);
+  const editorial = Math.min(size, height) >= EDITORIAL_MIN_SIZE;
+  const inset = editorial ? Math.max(8, Math.round(Math.min(size, height) * 0.035)) : 0;
+  const gap = editorial ? Math.max(4, Math.round(Math.min(size, height) * 0.015)) : 1;
+  const canvasWidth = size - inset * 2;
+  const canvasHeight = height - inset * 2;
+  const tileRadius = editorial ? Math.min(radii.md, gap * 1.5) : 0;
 
   return (
-    <View style={[styles.container, { width: size, height, borderRadius }]}>
-      {Array.from({ length: cellCount }, (_, i) => {
-        const left = (i % cols) * cellW;
-        const top = Math.floor(i / cols) * cellH;
+    <View style={[styles.container, editorial && styles.editorialContainer, { width: size, height, borderRadius }]}>
+      {rects.map((rect, i) => {
+        const left = inset + rect.left * canvasWidth + gap / 2;
+        const top = inset + rect.top * canvasHeight + gap / 2;
+        const cellW = rect.width * canvasWidth - gap;
+        const cellH = rect.height * canvasHeight - gap;
         const slot = displaySlots[i];
-        const isOverflowCell = overflow > 0 && i === MAX_SLOTS - 1;
+        const isOverflowCell = overflow > 0 && i === MAX_OUTFIT_MOSAIC_SLOTS - 1;
 
         return (
-          <View key={i} style={{ position: 'absolute', left, top, width: cellW, height: cellH }}>
+          <View
+            key={`${slot?.originalIndex ?? 'empty'}-${i}`}
+            style={[styles.tile, { left, top, width: cellW, height: cellH, borderRadius: tileRadius }]}
+          >
             {slot?.uri ? (
-              <Image source={{ uri: slot.uri }} style={styles.fill} contentFit="cover" />
+              <Image source={{ uri: slot.uri }} style={styles.fill} contentFit="cover" transition={150} />
             ) : slot?.ghost ? (
               <View style={[styles.fill, styles.ghostCell]}>
-                <Ionicons name="unlink-outline" size={cellW * 0.3} color={colors.border} />
+                <Ionicons name="unlink-outline" size={Math.min(cellW, cellH) * 0.3} color={colors.border} />
               </View>
             ) : (
               <View style={[styles.fill, { backgroundColor: colors.muted }]} />
@@ -112,6 +129,14 @@ export function OutfitCollage({ outfit, size, height = size, borderRadius = radi
 
 const styles = StyleSheet.create({
   container: {
+    overflow: 'hidden',
+    backgroundColor: colors.muted,
+  },
+  editorialContainer: {
+    backgroundColor: colors.card,
+  },
+  tile: {
+    position: 'absolute',
     overflow: 'hidden',
     backgroundColor: colors.muted,
   },

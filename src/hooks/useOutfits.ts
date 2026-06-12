@@ -89,20 +89,55 @@ export function useMarkOutfitWorn() {
 }
 
 export type GenerateOutfitResult = {
-  outfit: { id: number; name: string };
+  candidateId: string;
   outfitName: string;
   stylistNotes: string | null;
   itemIds: number[];
+  missingEssentials: Array<{
+    label: string;
+    category: string;
+    reason: string;
+    context: string;
+    priority: number;
+  }>;
+  recommendationId: number | null;
 };
 
-export function useGenerateOutfit() {
+export function useGenerateEventOutfitPlan() {
+  return useMutation({
+    mutationFn: ({
+      eventId,
+      ...input
+    }: {
+      eventId: number;
+      lat?: number;
+      lon?: number;
+      previousCandidateId?: string;
+    }) =>
+      api.post<GenerateOutfitResult>(`/api/events/${eventId}/outfit-plan`, input).then((r) => r.data),
+    retry: (failureCount, error) => isNetworkError(error) && failureCount < 2,
+    onSuccess: (_result, { eventId, previousCandidateId }) => {
+      track('calendar_outfit_plan_generated', {
+        eventId,
+        isAlternative: !!previousCandidateId,
+      });
+    },
+  });
+}
+
+export function useAcceptEventOutfitPlan() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (args: { eventId: number; lat?: number; lon?: number }) =>
-      api.post<GenerateOutfitResult>('/api/outfits/generate', args).then((r) => r.data),
-    retry: (failureCount, error) => isNetworkError(error) && failureCount < 2,
-    onSuccess: () => {
+    mutationFn: ({ eventId, candidateId }: { eventId: number; candidateId: string }) =>
+      api
+        .post<{ outfit: Outfit; itemIds: number[] }>(`/api/events/${eventId}/outfit-plan/accept`, {
+          candidateId,
+        })
+        .then((r) => r.data),
+    onSuccess: (_result, { eventId }) => {
       qc.invalidateQueries({ queryKey: OUTFITS_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: ['events'] });
+      track('calendar_outfit_plan_accepted', { eventId });
     },
   });
 }

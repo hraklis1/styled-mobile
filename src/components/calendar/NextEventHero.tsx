@@ -12,6 +12,7 @@ import {
 import { colors, spacing, typography, radii, shadows } from '../../theme';
 import type { Item } from '../../types/item';
 import type { Event } from '../../types/event';
+import { getEventPlanActionLabel } from './calendarPlanning';
 
 const WEATHER_ICONS: Record<WeatherCondition, keyof typeof Ionicons.glyphMap> = {
   sunny: 'sunny-outline',
@@ -105,12 +106,13 @@ export function NextEventHero({
           <Text style={s.outfitReady}>Outfit planned</Text>
           <TouchableOpacity
             style={s.changeBtn}
-            onPress={onPressOutfit}
+            onPress={onPlanOutfit}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityRole="button"
-            accessibilityLabel={`Change outfit for ${event.title}`}
+            accessibilityLabel={`Try another outfit for ${event.title}`}
           >
-            <Text style={s.changeBtnText}>Change</Text>
+            <Ionicons name="sparkles-outline" size={12} color={colors.primary} />
+            <Text style={s.changeBtnText}>Try another</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -123,17 +125,17 @@ export function NextEventHero({
             accessibilityLabel={`Plan outfit for ${event.title}`}
           >
             <Ionicons name="sparkles-outline" size={15} color={colors.white} />
-            <Text style={s.planBtnText}>Plan outfit</Text>
+            <Text style={s.planBtnText}>{getEventPlanActionLabel(hasOutfit)}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={s.pickBtn}
             onPress={onPressOutfit}
             activeOpacity={0.8}
             accessibilityRole="button"
-            accessibilityLabel={`Pick items for ${event.title}`}
+            accessibilityLabel={`Choose items for ${event.title}`}
           >
             <Ionicons name="shirt-outline" size={15} color={colors.foreground} />
-            <Text style={s.pickBtnText}>Pick items</Text>
+            <Text style={s.pickBtnText}>Choose items</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -208,6 +210,7 @@ const s = StyleSheet.create({
     color: colors.foreground,
   },
   changeBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2,
     borderRadius: radii.full,
     borderWidth: 1, borderColor: colors.border,

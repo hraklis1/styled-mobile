@@ -16,19 +16,26 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 
 import { track } from '../../lib/analytics';
 import { OCCASIONS as SHARED_OCCASIONS, type OccasionId } from '../../lib/occasions';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { presentPaywall } from '../../lib/paywall';
 import { useGenerateSuggestion } from '../../hooks/useSuggestions';
-import { useCreateOutfit } from '../../hooks/useOutfits';
+import {
+  useAcceptEventOutfitPlan,
+  useCreateOutfit,
+  useGenerateEventOutfitPlan,
+  type GenerateOutfitResult,
+} from '../../hooks/useOutfits';
 import { useItems } from '../../hooks/useItems';
 import { useEvents } from '../../hooks/useEvents';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { SuggestionsScreenProps } from '../../navigation/types';
 import type { Item } from '../../types/item';
+import { OutfitGeneratedSheet } from '../../components/calendar/OutfitGeneratedSheet';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -89,8 +96,11 @@ export function SuggestionsScreen({ navigation, route }: SuggestionsScreenProps)
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [saveName, setSaveName]           = useState('');
   const [refreshing, setRefreshing]       = useState(false);
+  const [eventPlan, setEventPlan] = useState<GenerateOutfitResult | null>(null);
 
   const generateMutation = useGenerateSuggestion();
+  const generateEventPlan = useGenerateEventOutfitPlan();
+  const acceptEventPlan = useAcceptEventOutfitPlan();
   const createOutfit     = useCreateOutfit();
   const { data: items, refetch: refetchItems }   = useItems();
   const { data: events, refetch: refetchEvents } = useEvents();
@@ -125,11 +135,13 @@ export function SuggestionsScreen({ navigation, route }: SuggestionsScreenProps)
     setSelectedEventId(id);
     setOccasion(ev.occasion as OccasionId);
     generateMutation.reset();
+    setEventPlan(null);
   };
 
   const clearEvent = () => {
     setSelectedEventId(null);
     generateMutation.reset();
+    setEventPlan(null);
   };
 
   const handleGenerate = async () => {
@@ -148,15 +160,25 @@ export function SuggestionsScreen({ navigation, route }: SuggestionsScreenProps)
       await presentPaywall();
       return;
     }
+    if (selectedEvent) {
+      generateEventPlan.mutate(
+        { eventId: selectedEvent.id },
+        {
+          onSuccess: (result) => {
+            setEventPlan(result);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+          },
+          onError: (err: any) => {
+            Alert.alert('Could not plan outfit', err?.response?.data?.message ?? 'Please try again.');
+          },
+        },
+      );
+      return;
+    }
     track('outfit_suggestion_generated', { weather, occasion });
     generateMutation.mutate({
       weather,
       event: occasion,
-      ...(selectedEvent && {
-        eventTitle:    selectedEvent.title,
-        eventLocation: selectedEvent.location ?? undefined,
-        eventNotes:    selectedEvent.notes    ?? undefined,
-      }),
       ...(details.trim() && { details: details.trim() }),
     });
   };
@@ -382,17 +404,21 @@ export function SuggestionsScreen({ navigation, route }: SuggestionsScreenProps)
           {/* Generate button */}
           <TouchableOpacity
             onPress={handleGenerate}
-            disabled={generateMutation.isPending}
-            style={[styles.generateBtn, generateMutation.isPending && styles.generateBtnDisabled]}
+            disabled={generateMutation.isPending || generateEventPlan.isPending}
+            style={[styles.generateBtn, (generateMutation.isPending || generateEventPlan.isPending) && styles.generateBtnDisabled]}
           >
-            {generateMutation.isPending ? (
+            {generateMutation.isPending || generateEventPlan.isPending ? (
               <View style={styles.generateBtnInner}>
                 <ActivityIndicator color={colors.primaryForeground} size="small" />
-                <Text style={styles.generateBtnText}>Consulting Stylist…</Text>
+                <Text style={styles.generateBtnText}>{selectedEvent ? 'Planning outfit…' : 'Consulting Stylist…'}</Text>
               </View>
             ) : (
               <View style={styles.generateBtnInner}>
-                <Text style={styles.generateBtnText}>Curate Outfit</Text>
+                <Text style={styles.generateBtnText}>
+                  {selectedEvent
+                    ? (selectedEvent.itemIds ?? []).length > 0 ? 'Try another outfit' : 'Plan outfit'
+                    : 'Curate Outfit'}
+                </Text>
                 <Ionicons name="arrow-forward" size={20} color={colors.primaryForeground} />
               </View>
             )}
@@ -409,7 +435,7 @@ export function SuggestionsScreen({ navigation, route }: SuggestionsScreenProps)
           )}
 
           {/* Result */}
-          {generateMutation.data && (
+          {generateMutation.data && !selectedEvent && (
             <View style={styles.resultCard}>
               <Text style={styles.resultHeading}>Your Curated Look</Text>
               <View style={styles.suggestionQuote}>
@@ -494,6 +520,36 @@ export function SuggestionsScreen({ navigation, route }: SuggestionsScreenProps)
           </View>
         </View>
       </Modal>
+      <OutfitGeneratedSheet
+        result={eventPlan}
+        allItems={items ?? []}
+        onDone={() => setEventPlan(null)}
+        onAccept={() => {
+          if (!selectedEvent || !eventPlan) return;
+          acceptEventPlan.mutate(
+            { eventId: selectedEvent.id, candidateId: eventPlan.candidateId },
+            {
+              onSuccess: () => {
+                setEventPlan(null);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+              },
+              onError: (err: any) => {
+                Alert.alert('Could not save outfit', err?.response?.data?.message ?? 'Please try again.');
+              },
+            },
+          );
+        }}
+        onTryAnother={() => {
+          if (!selectedEvent || !eventPlan) return;
+          generateEventPlan.mutate(
+            { eventId: selectedEvent.id, previousCandidateId: eventPlan.candidateId },
+            { onSuccess: setEventPlan },
+          );
+        }}
+        isAccepting={acceptEventPlan.isPending}
+        isRegenerating={generateEventPlan.isPending}
+        hasCurrentOutfit={(selectedEvent?.itemIds ?? []).length > 0}
+      />
     </KeyboardAvoidingView>
   );
 }

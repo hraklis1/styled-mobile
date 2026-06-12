@@ -15,7 +15,11 @@ import {
   useEvents,
   useDeleteEvent,
 } from '../../hooks/useEvents';
-import { useGenerateOutfit } from '../../hooks/useOutfits';
+import {
+  useAcceptEventOutfitPlan,
+  useGenerateEventOutfitPlan,
+  type GenerateOutfitResult,
+} from '../../hooks/useOutfits';
 import { useItems } from '../../hooks/useItems';
 import { CalendarSyncSheet } from '../../components/calendar/CalendarSyncSheet';
 import { WeekStrip } from '../../components/calendar/WeekStrip';
@@ -24,6 +28,7 @@ import { EventDetailModal } from '../../components/calendar/EventDetailModal';
 import { EventItemPickerModal } from '../../components/calendar/EventItemPickerModal';
 import { ItemThumbStack } from '../../components/calendar/ItemThumbStack';
 import { NextEventHero } from '../../components/calendar/NextEventHero';
+import { OutfitGeneratedSheet } from '../../components/calendar/OutfitGeneratedSheet';
 import {
   toDateStr,
   formatDayLabel,
@@ -34,6 +39,7 @@ import {
   OCCASION_ICONS,
 } from '../../components/calendar/calendarUtils';
 import * as Location from 'expo-location';
+import * as Haptics from 'expo-haptics';
 import { colors, spacing, typography, radii } from '../../theme';
 import { ErrorState } from '../../components/primitives/ErrorState';
 import { useEntitlement } from '../../hooks/useEntitlement';
@@ -51,7 +57,8 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
   const { data: events = [], isLoading, refetch, isRefetching, isError } = useEvents();
   const { data: allItems = [] } = useItems();
   const deleteEventMutation = useDeleteEvent();
-  const generateOutfit = useGenerateOutfit();
+  const generatePlan = useGenerateEventOutfitPlan();
+  const acceptPlan = useAcceptEventOutfitPlan();
   const eventsRef = useRef(events);
   eventsRef.current = events;
 
@@ -77,6 +84,8 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
   const [showAllUpcoming, setShowAllUpcoming] = useState(false);
   const [showAllPast, setShowAllPast] = useState(false);
   const [syncVisible, setSyncVisible] = useState(false);
+  const [plannedEvent, setPlannedEvent] = useState<Event | null>(null);
+  const [generatedPlan, setGeneratedPlan] = useState<GenerateOutfitResult | null>(null);
 
   const UPCOMING_LIMIT = 4;
   const PAST_LIMIT = 5;
@@ -213,6 +222,63 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
     }, delay);
   };
 
+  const planOutfitForEvent = async (event: Event, previousCandidateId?: string) => {
+    if (!isPremium) {
+      const shouldUpgrade = await new Promise<boolean>((resolve) => {
+        Alert.alert(
+          'Unlock outfit planning',
+          'Get personalized event outfits built from your wardrobe, style, and the forecast.',
+          [
+            { text: 'Not now', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'See plans', onPress: () => resolve(true) },
+          ],
+        );
+      });
+      if (shouldUpgrade) await presentPaywall();
+      return;
+    }
+    setPlannedEvent(event);
+    generatePlan.mutate(
+      {
+        eventId: event.id,
+        ...(deviceCoords ?? {}),
+        ...(previousCandidateId ? { previousCandidateId } : {}),
+      },
+      {
+        onSuccess: (result) => {
+          setGeneratedPlan(result);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        },
+        onError: (err: any) => {
+          Alert.alert(
+            'Could not plan outfit',
+            err?.response?.data?.message ?? 'Please try again.',
+          );
+        },
+      },
+    );
+  };
+
+  const acceptGeneratedPlan = () => {
+    if (!plannedEvent || !generatedPlan) return;
+    acceptPlan.mutate(
+      { eventId: plannedEvent.id, candidateId: generatedPlan.candidateId },
+      {
+        onSuccess: ({ itemIds }) => {
+          setDetailEvent((current) =>
+            current?.id === plannedEvent.id ? { ...current, itemIds } : current,
+          );
+          setGeneratedPlan(null);
+          setPlannedEvent(null);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        },
+        onError: (err: any) => {
+          Alert.alert('Could not save outfit', err?.response?.data?.message ?? 'Please try again.');
+        },
+      },
+    );
+  };
+
   const handleSelectDate = (s: string) => {
     setSelectedDate((prev) => (prev === s ? null : s));
   };
@@ -250,17 +316,30 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
           </View>
         </View>
         {(event.itemIds ?? []).length > 0
-          ? <ItemThumbStack itemIds={event.itemIds!} allItems={allItems} onPress={() => openItemPicker(event)} />
+          ? (
+            <View style={styles.eventActions}>
+              <ItemThumbStack itemIds={event.itemIds!} allItems={allItems} onPress={() => openItemPicker(event)} />
+              <TouchableOpacity
+                style={styles.tryAnotherChip}
+                onPress={() => planOutfitForEvent(event)}
+                accessibilityRole="button"
+                accessibilityLabel={`Try another outfit for ${event.title}`}
+              >
+                <Ionicons name="sparkles-outline" size={11} color={colors.primary} />
+                <Text style={styles.tryAnotherText}>Try another</Text>
+              </TouchableOpacity>
+            </View>
+          )
           : (
             <TouchableOpacity
               style={styles.styleItChip}
-              onPress={() => openStylistForEvent(event, 'calendar_card')}
+              onPress={() => planOutfitForEvent(event)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               accessibilityRole="button"
-              accessibilityLabel={`Style an outfit for ${event.title}`}
+              accessibilityLabel={`Plan outfit for ${event.title}`}
             >
               <Ionicons name="sparkles-outline" size={12} color={colors.primary} />
-              <Text style={styles.styleItText}>Style it</Text>
+              <Text style={styles.styleItText}>Plan outfit</Text>
             </TouchableOpacity>
           )
         }
@@ -377,7 +456,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
                 allItems={allItems}
                 deviceCoords={deviceCoords}
                 onPress={() => setDetailEvent(nextEvent)}
-                onPlanOutfit={() => openStylistForEvent(nextEvent, 'calendar_hero')}
+                onPlanOutfit={() => planOutfitForEvent(nextEvent)}
                 onPressOutfit={() => openItemPicker(nextEvent)}
               />
             )}
@@ -504,8 +583,8 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         onDelete={handleDelete}
         onAssign={(ev) => openItemPicker(ev, true)}
         allItems={allItems}
-        generateOutfit={generateOutfit}
-        onViewOutfits={() => navigation.navigate('Closet')}
+        onPlanOutfit={planOutfitForEvent}
+        isPlanning={generatePlan.isPending && plannedEvent?.id === detailEvent?.id}
         onOpenStylist={(event) => openStylistForEvent(event, 'event_detail')}
         deviceCoords={deviceCoords}
       />
@@ -523,6 +602,23 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
       <CalendarSyncSheet
         visible={syncVisible}
         onClose={() => setSyncVisible(false)}
+      />
+      <OutfitGeneratedSheet
+        result={generatedPlan}
+        allItems={allItems}
+        onDone={() => {
+          setGeneratedPlan(null);
+          setPlannedEvent(null);
+        }}
+        onAccept={acceptGeneratedPlan}
+        onTryAnother={() => {
+          if (plannedEvent && generatedPlan) {
+            planOutfitForEvent(plannedEvent, generatedPlan.candidateId);
+          }
+        }}
+        isAccepting={acceptPlan.isPending}
+        isRegenerating={generatePlan.isPending}
+        hasCurrentOutfit={(plannedEvent?.itemIds ?? []).length > 0}
       />
     </View>
   );
@@ -581,6 +677,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm + 2, paddingVertical: 5,
   },
   styleItText: { fontSize: 11, fontWeight: typography.weight.semibold, color: colors.primary },
+  eventActions: { alignItems: 'flex-end', gap: spacing.xs },
+  tryAnotherChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingHorizontal: spacing.sm, paddingVertical: 4,
+    borderRadius: radii.full, backgroundColor: `${colors.primary}12`,
+  },
+  tryAnotherText: { fontSize: 10, fontWeight: typography.weight.semibold, color: colors.primary },
 
   dayGroup: { marginBottom: spacing.md },
   dayHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },

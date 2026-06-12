@@ -19,6 +19,7 @@ import { getSubcategories } from '../../lib/taxonomy';
 import { CATEGORY_ORDER, CATEGORY_LABELS, type ItemCategory } from '../../types/item';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { Event } from '../../types/event';
+import { getEventItemsActionLabel } from './calendarPlanning';
 
 export function EventItemPickerModal({
   event,
@@ -95,7 +96,7 @@ export function EventItemPickerModal({
             <TouchableOpacity onPress={onClose} style={s.headerSide}>
               <Text style={s.cancelText}>Cancel</Text>
             </TouchableOpacity>
-            <Text style={s.headerTitle}>Assign Outfit</Text>
+            <Text style={s.headerTitle}>{getEventItemsActionLabel((event?.itemIds ?? []).length > 0)}</Text>
             <TouchableOpacity onPress={handleConfirm} disabled={assignItems.isPending} style={[s.headerSide, { alignItems: 'flex-end' }]}>
               {assignItems.isPending
                 ? <ActivityIndicator color={colors.primary} />

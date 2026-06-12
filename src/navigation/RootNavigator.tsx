@@ -29,6 +29,7 @@ import { CalendarScreen } from '../screens/app/CalendarScreen';
 import { ProfileScreen } from '../screens/app/ProfileScreen';
 import { SuggestionsScreen } from '../screens/app/SuggestionsScreen';
 import { ShopScreen } from '../screens/app/ShopScreen';
+import { ErrorState } from '../components/primitives/ErrorState';
 import { colors, radii, spacing, typography } from '../theme';
 
 import type {
@@ -219,7 +220,7 @@ const tabStyles = StyleSheet.create({
 const WELCOME_SEEN_KEY = 'welcome_seen';
 
 function AppGate() {
-  const { data: profile, isLoading } = useProfile();
+  const { data: profile, isLoading, isError, refetch } = useProfile();
   const [welcomeSeen, setWelcomeSeen] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -239,6 +240,10 @@ function AppGate() {
         <ActivityIndicator size="large" />
       </View>
     );
+  }
+
+  if (isError) {
+    return <ErrorState message="Couldn't load your account" onRetry={refetch} />;
   }
 
   // Show welcome intro only to new users who haven't completed onboarding
