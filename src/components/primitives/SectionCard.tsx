@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, typography, radii } from '../../theme';
+import { colors, spacing, typography } from '../../theme';
 
 interface SectionCardProps {
   title: string;
@@ -56,18 +56,15 @@ export function SectionCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.card,
-    padding: spacing.lg,
+    paddingVertical: spacing.lg,
+    gap: spacing.lg,
   },
   borderedCard: {
-    borderRadius: radii.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: spacing.lg,
-    marginBottom: spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    marginBottom: spacing.sm,
   },
   plainCard: {
-    borderRadius: radii.lg,
     marginHorizontal: spacing.lg,
     marginBottom: spacing.md,
   },
@@ -76,13 +73,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
     minHeight: 24,
+    paddingHorizontal: 2,
   },
   chevron: { marginLeft: 'auto' },
   iconLabel: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.bold,
-    color: colors.mutedForeground,
-    letterSpacing: 1.2,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.foreground,
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
   title: {

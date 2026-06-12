@@ -16,7 +16,7 @@ export function WeekStrip({
   weekOffset,
 }: {
   weekDays: Date[];
-  selectedDate: string;
+  selectedDate: string | null;
   onSelectDate: (s: string) => void;
   onPrevWeek: () => void;
   onNextWeek: () => void;

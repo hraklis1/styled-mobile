@@ -24,10 +24,12 @@ import type { Event } from '../../types/event';
 export function EventFormModal({
   visible,
   event,
+  initialDate,
   onClose,
 }: {
   visible: boolean;
   event: Event | null;
+  initialDate?: Date | null;
   onClose: () => void;
 }) {
   const createEvent = useCreateEvent();
@@ -52,7 +54,8 @@ export function EventFormModal({
       setLocation(event.location ?? '');
       setNotes(event.notes ?? '');
     } else {
-      const d = new Date(); d.setHours(9, 0, 0, 0);
+      const d = initialDate ? new Date(initialDate) : new Date();
+      d.setHours(9, 0, 0, 0);
       setTitle('');
       setFormDate(d);
       setOccasion('casual');
@@ -60,7 +63,7 @@ export function EventFormModal({
       setLocation('');
       setNotes('');
     }
-  }, [visible, event]);
+  }, [visible, event, initialDate]);
 
   const isPending = createEvent.isPending || updateEvent.isPending;
 

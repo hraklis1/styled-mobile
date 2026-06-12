@@ -15,6 +15,8 @@ export type StylistOpenSource =
   | 'item_detail'
   | 'outfit_detail'
   | 'event_detail'
+  | 'calendar_card'
+  | 'calendar_hero'
   | 'closet_selection';
 
 type OpenStylistOptions = {

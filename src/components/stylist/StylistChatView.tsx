@@ -58,6 +58,9 @@ type ChatMessage = {
   shopOutfit?: ShopOutfit;
   suggestedItemIds?: number[];
   missingEssentials?: MissingEssential[];
+  // Server-side recommendation ledger id — sent back with feedback so the
+  // backend can link the reaction to the context that produced the suggestion.
+  recId?: number;
 };
 
 type TtsResponse = {
@@ -355,8 +358,8 @@ export function StylistChatView({
                 if (flushTimer) { clearTimeout(flushTimer); }
                 flushPending();
 
-                const { transcript, responseText, itemIds, missingEssentials: mes, missingEssential: legacyMe, shopOutfit } =
-                  parsed as { transcript: string; responseText: string; itemIds?: number[]; missingEssentials?: MissingEssential[]; missingEssential?: { label: string; category: string; reason: string } | null; shopOutfit?: ShopOutfit | null };
+                const { transcript, responseText, itemIds, missingEssentials: mes, missingEssential: legacyMe, shopOutfit, recId } =
+                  parsed as { transcript: string; responseText: string; itemIds?: number[]; missingEssentials?: MissingEssential[]; missingEssential?: { label: string; category: string; reason: string } | null; shopOutfit?: ShopOutfit | null; recId?: number | null };
                 const hydratedEssentials: MissingEssential[] =
                   Array.isArray(mes) && mes.length > 0
                     ? mes
@@ -382,6 +385,7 @@ export function StylistChatView({
                   ...(shopOutfit ? { shopOutfit } : {}),
                   ...(itemIds?.length ? { suggestedItemIds: itemIds } : {}),
                   ...(hydratedEssentials.length ? { missingEssentials: hydratedEssentials } : {}),
+                  ...(typeof recId === 'number' ? { recId } : {}),
                 };
 
                 if (!assistantAdded) {
@@ -707,6 +711,7 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, onToggleAud
             createOutfit={createOutfit}
             missingEssentials={message.missingEssentials}
             onNavigateToShop={onNavigateToShop}
+            recId={message.recId}
           />
           {onToggleAudio && (
             <TouchableOpacity style={styles.ttsBtn} onPress={onToggleAudio}>
@@ -794,9 +799,10 @@ type OutfitSuggestionCardProps = {
   createOutfit: ReturnType<typeof useCreateOutfit>;
   missingEssentials?: MissingEssential[];
   onNavigateToShop?: () => void;
+  recId?: number;
 };
 
-function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, missingEssentials, onNavigateToShop }: OutfitSuggestionCardProps) {
+function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, missingEssentials, onNavigateToShop, recId }: OutfitSuggestionCardProps) {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
@@ -828,7 +834,7 @@ function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, mi
   function handleFeedback(rating: 'up' | 'down') {
     if (feedback) return;
     setFeedback(rating);
-    api.post('/api/stylist/feedback', { itemIds, rating }).catch(() => {});
+    api.post('/api/stylist/feedback', { itemIds, rating, ...(recId ? { recId } : {}) }).catch(() => {});
   }
 
   return (

@@ -133,6 +133,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   }, [fabCollapsed]);
   const { width } = useWindowDimensions();
   const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / 2;
+  const heroWidth = width - SIDE_PAD * 2;
+  const heroHeight = Math.round(heroWidth * 0.78);
 
   const handleAddToCloset = useCallback(() => {
     openAddSheet({
@@ -159,6 +161,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   );
 
   const favoriteCount = items.filter((i) => i.isFavorite).length;
+  const featuredOutfit = recentOutfits[0];
+  const remainingOutfits = recentOutfits.slice(1);
 
   if ((itemsError || outfitsError) && items.length === 0 && outfits.length === 0) {
     return (
@@ -263,6 +267,60 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         <Ionicons name="arrow-forward" size={16} color="#C2A68D" />
       </TouchableOpacity>
 
+      {/* ── Featured outfit ────────────────────────────────────── */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Stylist Picks for Today</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Closet')} accessibilityRole="button" accessibilityLabel="View all outfits">
+            <Text style={styles.sectionLink}>View all</Text>
+          </TouchableOpacity>
+        </View>
+
+        {featuredOutfit ? (
+          <>
+            <PressableScale
+              contentStyle={styles.featuredOutfit}
+              onPress={() => navigation.navigate('Closet', {
+                screen: 'OutfitDetail',
+                params: { outfitId: featuredOutfit.id },
+              })}
+              accessibilityRole="button"
+              accessibilityLabel={featuredOutfit.name}
+            >
+              <OutfitCollage
+                outfit={featuredOutfit}
+                size={heroWidth}
+                height={heroHeight}
+                borderRadius={radii.lg}
+              />
+              <View style={styles.featuredOutfitInfo}>
+                <View style={styles.featuredOutfitCopy}>
+                  <Text style={styles.featuredEyebrow}>Today’s edit</Text>
+                  <Text style={styles.featuredOutfitName} numberOfLines={1}>{featuredOutfit.name}</Text>
+                  {featuredOutfit.event ? (
+                    <Text style={styles.featuredOutfitEvent} numberOfLines={1}>{featuredOutfit.event}</Text>
+                  ) : null}
+                </View>
+                <View style={styles.featuredArrow}>
+                  <Ionicons name="arrow-forward" size={16} color={colors.primaryForeground} />
+                </View>
+              </View>
+            </PressableScale>
+
+          </>
+        ) : (
+          <View style={styles.emptyOutfits}>
+            <View style={[styles.emptyOutfitIcon, { backgroundColor: `${colors.primary}18` }]}>
+              <Ionicons name="layers-outline" size={28} color={colors.primary} />
+            </View>
+            <Text style={styles.emptyOutfitTitle}>No saved outfits yet</Text>
+            <Text style={styles.emptyOutfitSub}>
+              Build an outfit from your wardrobe to see it here
+            </Text>
+          </View>
+        )}
+      </View>
+
       {/* ── Quick creation actions ─────────────────────────────── */}
       <View style={styles.quickActions}>
         <PressableScale
@@ -290,6 +348,33 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           <Text style={styles.quickActionText}>Log today’s look</Text>
         </PressableScale>
       </View>
+
+      {remainingOutfits.length > 0 && (
+        <View style={[styles.outfitGrid, styles.secondaryOutfitGrid]}>
+          {remainingOutfits.map((outfit) => (
+            <PressableScale
+              key={outfit.id}
+              contentStyle={[styles.outfitCard, { width: cardWidth }]}
+              onPress={() => navigation.navigate('Closet', {
+                screen: 'OutfitDetail',
+                params: { outfitId: outfit.id },
+              })}
+              accessibilityRole="button"
+              accessibilityLabel={outfit.name}
+            >
+              <View style={styles.collageWrapper}>
+                <OutfitCollage outfit={outfit} size={cardWidth} />
+              </View>
+              <View style={styles.outfitInfo}>
+                <Text style={styles.outfitName} numberOfLines={1}>{outfit.name}</Text>
+                {outfit.event ? (
+                  <Text style={styles.outfitEvent} numberOfLines={1}>{outfit.event}</Text>
+                ) : null}
+              </View>
+            </PressableScale>
+          ))}
+        </View>
+      )}
 
       {/* ── Empty wardrobe nudge ───────────────────────────────────── */}
       {items.length === 0 && (
@@ -446,52 +531,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         </View>
       )}
 
-      {/* ── Recent Outfits ────────────────────────────────────────── */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Stylist Picks for Today</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Closet')} accessibilityRole="button" accessibilityLabel="View all outfits">
-            <Text style={styles.sectionLink}>View all</Text>
-          </TouchableOpacity>
-        </View>
-
-        {recentOutfits.length === 0 ? (
-          <View style={styles.emptyOutfits}>
-            <View style={[styles.emptyOutfitIcon, { backgroundColor: `${colors.primary}18` }]}>
-              <Ionicons name="layers-outline" size={28} color={colors.primary} />
-            </View>
-            <Text style={styles.emptyOutfitTitle}>No saved outfits yet</Text>
-            <Text style={styles.emptyOutfitSub}>
-              Build an outfit from your wardrobe to see it here
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.outfitGrid}>
-            {recentOutfits.map((outfit) => (
-              <PressableScale
-                key={outfit.id}
-                contentStyle={[styles.outfitCard, { width: cardWidth }]}
-                onPress={() => navigation.navigate('Closet', {
-                  screen: 'OutfitDetail',
-                  params: { outfitId: outfit.id },
-                })}
-                accessibilityRole="button"
-                accessibilityLabel={outfit.name}
-              >
-                <View style={styles.collageWrapper}>
-                  <OutfitCollage outfit={outfit} size={cardWidth} />
-                </View>
-                <View style={styles.outfitInfo}>
-                  <Text style={styles.outfitName} numberOfLines={1}>{outfit.name}</Text>
-                  {outfit.event ? (
-                    <Text style={styles.outfitEvent} numberOfLines={1}>{outfit.event}</Text>
-                  ) : null}
-                </View>
-              </PressableScale>
-            ))}
-          </View>
-        )}
-      </View>
     </ScrollView>
     </View>
   );
@@ -508,7 +547,7 @@ const styles = StyleSheet.create({
 
   // Greeting
   greetingSection: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   greetingRow: {
     flexDirection: 'row',
@@ -521,7 +560,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   greeting: {
-    fontSize: typography.size.xxl,
+    fontSize: typography.size.xl + 4,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
     letterSpacing: -0.5,
@@ -531,7 +570,7 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
   },
   headerMeta: {
-    gap: 6,
+    gap: spacing.xs,
   },
   weatherLine: {
     fontSize: typography.size.xs,
@@ -543,10 +582,9 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   chip: {
-    backgroundColor: colors.muted,
-    borderRadius: radii.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: colors.border,
+    paddingRight: spacing.sm,
   },
   chipText: {
     fontSize: typography.size.xs,
@@ -569,7 +607,7 @@ const styles = StyleSheet.create({
     borderColor: '#EBE7E0',
     paddingHorizontal: spacing.lg,
     paddingVertical: 14,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.09,
@@ -583,27 +621,24 @@ const styles = StyleSheet.create({
   },
   quickActions: {
     flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
+    gap: spacing.xs,
+    marginBottom: spacing.xl,
   },
   quickActionPressable: {
     flex: 1,
   },
   quickAction: {
-    minHeight: 48,
+    minHeight: 42,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.xs,
+    paddingHorizontal: spacing.sm,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radii.md,
   },
   quickActionIcon: {
-    width: 28,
-    height: 28,
+    width: 26,
+    height: 26,
     borderRadius: radii.full,
     backgroundColor: `${colors.primary}15`,
     alignItems: 'center',
@@ -671,12 +706,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surfaceSubtle,
     borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
     padding: spacing.lg,
-    ...shadows.sm,
   },
   emptyIcon: {
     width: 36,
@@ -750,6 +782,51 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: COL_GAP,
   },
+  secondaryOutfitGrid: {
+    marginBottom: spacing.xl,
+  },
+  featuredOutfit: {
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radii.lg,
+    overflow: 'hidden',
+    ...shadows.md,
+  },
+  featuredOutfitInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.lg,
+  },
+  featuredOutfitCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  featuredEyebrow: {
+    fontSize: 10,
+    fontWeight: typography.weight.bold,
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 1.1,
+  },
+  featuredOutfitName: {
+    fontSize: typography.size.lg,
+    fontWeight: typography.weight.bold,
+    color: colors.foreground,
+    letterSpacing: -0.3,
+  },
+  featuredOutfitEvent: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+    textTransform: 'capitalize',
+  },
+  featuredArrow: {
+    width: 34,
+    height: 34,
+    borderRadius: radii.full,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   outfitCard: {
     borderRadius: radii.md,
     // Shadow on outer card so overflow:hidden on inner wrapper doesn't clip it
@@ -814,14 +891,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
     minHeight: 56,
-    ...shadows.xs,
   },
   logThumbs: {
     flexDirection: 'row',

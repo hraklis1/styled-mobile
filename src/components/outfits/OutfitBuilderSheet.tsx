@@ -97,6 +97,7 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
   // ── Picker ─────────────────────────────────────────────────────────────
   const [view, setView] = useState<'form' | 'picker'>('form');
   const [activeSlot, setActiveSlot] = useState<SlotKey | null>(null);
+  const [pickerSearch, setPickerSearch] = useState('');
 
   const isFullBodyTop = slots.topId?.category === 'full_body';
 
@@ -121,7 +122,7 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
     if (!activeSlot) return [];
     const slot = SLOTS.find((s) => s.key === activeSlot);
     if (!slot) return [];
-    return allItems.filter((item) => {
+    const categoryItems = allItems.filter((item) => {
       if (!item.category || !(slot.categories as string[]).includes(item.category)) return false;
       if (slot.subcategories) {
         return item.subcategory != null &&
@@ -132,9 +133,25 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
       }
       return true;
     });
-  }, [activeSlot, allItems]);
+    const query = pickerSearch.trim().toLowerCase();
+    if (!query) return categoryItems;
+    return categoryItems.filter((item) =>
+      [
+        item.name,
+        item.brand,
+        item.color,
+        item.colorNormalized,
+        item.subcategory,
+        item.style,
+        item.material,
+        item.pattern,
+        ...(item.tags ?? []),
+      ].some((value) => value?.toLowerCase().includes(query))
+    );
+  }, [activeSlot, allItems, pickerSearch]);
 
   const openPicker = (slotKey: SlotKey) => {
+    setPickerSearch('');
     setActiveSlot(slotKey);
     setView('picker');
   };
@@ -148,6 +165,7 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
       }
       return next;
     });
+    setPickerSearch('');
     setView('form');
   };
 
@@ -169,6 +187,7 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
     setUnmatchedItems([]);
     setView('form');
     setActiveSlot(null);
+    setPickerSearch('');
   }, []);
 
   // Pre-seed slots when the sheet opens with pre-selected items.
@@ -271,7 +290,10 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
       visible={visible}
       animationType="slide"
       presentationStyle="pageSheet"
-      onRequestClose={view === 'picker' ? () => setView('form') : handleClose}
+      onRequestClose={view === 'picker' ? () => {
+        setPickerSearch('');
+        setView('form');
+      } : handleClose}
     >
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -362,51 +384,6 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
                     </TouchableOpacity>
                   ))}
                 </View>
-
-                <Text style={styles.label}>Tags</Text>
-                <View style={styles.tagContainer}>
-                  {tags.map((tag) => (
-                    <TouchableOpacity
-                      key={tag}
-                      style={styles.tagChip}
-                      onPress={() => setTags((prev) => prev.filter((t) => t !== tag))}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.tagChipText}>{tag}</Text>
-                      <Ionicons name="close" size={12} color={colors.primary} />
-                    </TouchableOpacity>
-                  ))}
-                  <TextInput
-                    style={styles.tagInput}
-                    value={tagInput}
-                    onChangeText={(text) => {
-                      if (text.endsWith(',')) {
-                        commitTagInput(text.slice(0, -1));
-                      } else {
-                        setTagInput(text);
-                      }
-                    }}
-                    onSubmitEditing={() => commitTagInput(tagInput)}
-                    placeholder={tags.length === 0 ? 'Add a tag…' : ''}
-                    placeholderTextColor={colors.mutedForeground}
-                    autoCapitalize="none"
-                    returnKeyType="done"
-                    blurOnSubmit={false}
-                  />
-                </View>
-
-                <Text style={styles.label}>Notes</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  value={notes}
-                  onChangeText={setNotes}
-                  placeholder="Any styling notes…"
-                  placeholderTextColor={colors.mutedForeground}
-                  autoCapitalize="sentences"
-                  multiline
-                  numberOfLines={3}
-                  textAlignVertical="top"
-                />
 
                 {/* ── Slots ── */}
                 <Text style={[styles.label, styles.piecesLabel]}>Pieces</Text>
@@ -516,6 +493,51 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
                   </>
                 )}
 
+                <Text style={styles.label}>Tags</Text>
+                <View style={styles.tagContainer}>
+                  {tags.map((tag) => (
+                    <TouchableOpacity
+                      key={tag}
+                      style={styles.tagChip}
+                      onPress={() => setTags((prev) => prev.filter((t) => t !== tag))}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.tagChipText}>{tag}</Text>
+                      <Ionicons name="close" size={12} color={colors.primary} />
+                    </TouchableOpacity>
+                  ))}
+                  <TextInput
+                    style={styles.tagInput}
+                    value={tagInput}
+                    onChangeText={(text) => {
+                      if (text.endsWith(',')) {
+                        commitTagInput(text.slice(0, -1));
+                      } else {
+                        setTagInput(text);
+                      }
+                    }}
+                    onSubmitEditing={() => commitTagInput(tagInput)}
+                    placeholder={tags.length === 0 ? 'Add a tag…' : ''}
+                    placeholderTextColor={colors.mutedForeground}
+                    autoCapitalize="none"
+                    returnKeyType="done"
+                    blurOnSubmit={false}
+                  />
+                </View>
+
+                <Text style={styles.label}>Notes</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  value={notes}
+                  onChangeText={setNotes}
+                  placeholder="Any styling notes…"
+                  placeholderTextColor={colors.mutedForeground}
+                  autoCapitalize="sentences"
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
+
                 <View style={{ height: 48 }} />
               </ScrollView>
             </>
@@ -528,7 +550,10 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
             <>
               <View style={styles.header}>
                 <TouchableOpacity
-                  onPress={() => setView('form')}
+                  onPress={() => {
+                    setPickerSearch('');
+                    setView('form');
+                  }}
                   style={styles.backBtn}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
@@ -548,6 +573,7 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
                   <TouchableOpacity
                     onPress={() => {
                       clearSlot(activeSlot);
+                      setPickerSearch('');
                       setView('form');
                     }}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -559,77 +585,103 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
                 )}
               </View>
 
-              {pickerItems.length === 0 ? (
-                <View style={styles.pickerEmpty}>
-                  <Ionicons name="shirt-outline" size={44} color={colors.border} />
-                  <Text style={styles.pickerEmptyTitle}>No items yet</Text>
-                  <Text style={styles.pickerEmptySubtitle}>
-                    Add items to your wardrobe first, then come back to build outfits.
-                  </Text>
-                </View>
-              ) : (
-                <FlatList
-                  data={pickerItems}
-                  keyExtractor={(item) => String(item.id)}
-                  numColumns={PICKER_COLS}
-                  columnWrapperStyle={styles.pickerRow}
-                  contentContainerStyle={styles.pickerContent}
-                  showsVerticalScrollIndicator={false}
-                  renderItem={({ item }) => {
-                    const isSelected = slots[activeSlot]?.id === item.id;
-                    const imgUri = resolveImageUri(item.imageUrl);
-                    return (
-                      <TouchableOpacity
+              <View style={styles.pickerSearchBar}>
+                <Ionicons name="search-outline" size={16} color={colors.mutedForeground} />
+                <TextInput
+                  style={styles.pickerSearchInput}
+                  value={pickerSearch}
+                  onChangeText={setPickerSearch}
+                  placeholder={`Search ${activeSlotDef?.label.toLowerCase() ?? 'items'}…`}
+                  placeholderTextColor={colors.mutedForeground}
+                  autoCapitalize="none"
+                  returnKeyType="search"
+                  clearButtonMode="while-editing"
+                />
+              </View>
+
+              <FlatList
+                data={pickerItems}
+                keyExtractor={(item) => String(item.id)}
+                numColumns={PICKER_COLS}
+                columnWrapperStyle={styles.pickerRow}
+                contentContainerStyle={[
+                  styles.pickerContent,
+                  pickerItems.length === 0 && styles.pickerEmptyContent,
+                ]}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+                ListEmptyComponent={
+                  <View style={styles.pickerEmpty}>
+                    <Ionicons
+                      name={pickerSearch.trim() ? 'search-outline' : 'shirt-outline'}
+                      size={44}
+                      color={colors.border}
+                    />
+                    <Text style={styles.pickerEmptyTitle}>
+                      {pickerSearch.trim() ? 'No matching items' : 'No items yet'}
+                    </Text>
+                    <Text style={styles.pickerEmptySubtitle}>
+                      {pickerSearch.trim()
+                        ? 'Try searching by name, brand, color, or style.'
+                        : 'Add items to your wardrobe first, then come back to build outfits.'}
+                    </Text>
+                  </View>
+                }
+                renderItem={({ item }) => {
+                  const isSelected = slots[activeSlot]?.id === item.id;
+                  const imgUri = resolveImageUri(item.imageUrl);
+                  return (
+                    <TouchableOpacity
+                      style={[
+                        styles.pickerCard,
+                        { width: pickerCardWidth },
+                        isSelected && styles.pickerCardSelected,
+                      ]}
+                      onPress={() => selectItem(item)}
+                      activeOpacity={0.8}
+                    >
+                      <View
                         style={[
-                          styles.pickerCard,
-                          { width: pickerCardWidth },
-                          isSelected && styles.pickerCardSelected,
+                          styles.pickerCardImage,
+                          { height: pickerCardHeight },
                         ]}
-                        onPress={() => selectItem(item)}
-                        activeOpacity={0.8}
                       >
-                        <View
-                          style={[
-                            styles.pickerCardImage,
-                            { height: pickerCardHeight },
-                          ]}
-                        >
-                          {imgUri ? (
-                            <Image
-                              source={{ uri: imgUri }}
-                              style={StyleSheet.absoluteFill}
-                              resizeMode="cover"
+                        {imgUri ? (
+                          <Image
+                            source={{ uri: imgUri }}
+                            style={StyleSheet.absoluteFill}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <View style={styles.pickerCardPlaceholder}>
+                            <Ionicons
+                              name="shirt-outline"
+                              size={24}
+                              color={colors.border}
                             />
-                          ) : (
-                            <View style={styles.pickerCardPlaceholder}>
+                          </View>
+                        )}
+                        {isSelected && (
+                          <>
+                            <View style={styles.pickerOverlay} />
+                            <View style={styles.pickerCheck}>
                               <Ionicons
-                                name="shirt-outline"
-                                size={24}
-                                color={colors.border}
+                                name="checkmark"
+                                size={14}
+                                color={colors.primaryForeground}
                               />
                             </View>
-                          )}
-                          {isSelected && (
-                            <>
-                              <View style={styles.pickerOverlay} />
-                              <View style={styles.pickerCheck}>
-                                <Ionicons
-                                  name="checkmark"
-                                  size={14}
-                                  color={colors.primaryForeground}
-                                />
-                              </View>
-                            </>
-                          )}
-                        </View>
-                        <Text style={styles.pickerCardName} numberOfLines={1}>
-                          {item.name}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  }}
-                />
-              )}
+                          </>
+                        )}
+                      </View>
+                      <Text style={styles.pickerCardName} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                }}
+              />
             </>
           )}
 
@@ -867,6 +919,25 @@ const styles = StyleSheet.create({
   },
 
   // ── Picker
+  pickerSearchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+    marginVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  pickerSearchInput: {
+    flex: 1,
+    fontSize: typography.size.md,
+    color: colors.foreground,
+    paddingVertical: 0,
+  },
   pickerRow: {
     paddingHorizontal: spacing.lg,
     gap: spacing.sm,
@@ -875,6 +946,9 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: 40,
     gap: spacing.sm,
+  },
+  pickerEmptyContent: {
+    flexGrow: 1,
   },
   pickerCard: {
     marginBottom: 0,

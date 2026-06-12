@@ -10,6 +10,7 @@ import { useMemo } from 'react';
 type Props = {
   outfit: Outfit;
   size: number;
+  height?: number;
   borderRadius?: number;
 };
 
@@ -21,7 +22,7 @@ function getGrid(count: number): { cols: number; rows: number } {
 
 const MAX_SLOTS = 9;
 
-export function OutfitCollage({ outfit, size, borderRadius = radii.md }: Props) {
+export function OutfitCollage({ outfit, size, height = size, borderRadius = radii.md }: Props) {
   const { data: items = [] } = useItems();
 
   const itemMap = useMemo(
@@ -33,7 +34,7 @@ export function OutfitCollage({ outfit, size, borderRadius = radii.md }: Props) 
   if (outfit.aiGeneratedImageUrl) {
     const uri = resolveImageUri(outfit.aiGeneratedImageUrl);
     return (
-      <View style={[styles.container, { width: size, height: size, borderRadius }]}>
+      <View style={[styles.container, { width: size, height, borderRadius }]}>
         <Image source={{ uri }} style={styles.fill} contentFit="cover" />
       </View>
     );
@@ -53,16 +54,16 @@ export function OutfitCollage({ outfit, size, borderRadius = radii.md }: Props) 
   if (total <= 1) {
     const slot = slots[0];
     return (
-      <View style={[styles.container, { width: size, height: size, borderRadius }]}>
+      <View style={[styles.container, { width: size, height, borderRadius }]}>
         {slot?.uri ? (
           <Image source={{ uri: slot.uri }} style={styles.fill} contentFit="cover" />
         ) : slot?.ghost ? (
           <View style={styles.placeholder}>
-            <Ionicons name="unlink-outline" size={size * 0.25} color={colors.border} />
+            <Ionicons name="unlink-outline" size={Math.min(size, height) * 0.25} color={colors.border} />
           </View>
         ) : (
           <View style={styles.placeholder}>
-            <Ionicons name="layers-outline" size={size * 0.3} color={colors.border} />
+            <Ionicons name="layers-outline" size={Math.min(size, height) * 0.3} color={colors.border} />
           </View>
         )}
       </View>
@@ -73,11 +74,11 @@ export function OutfitCollage({ outfit, size, borderRadius = radii.md }: Props) 
   const displaySlots = slots.slice(0, MAX_SLOTS);
   const { cols, rows } = getGrid(total);
   const cellW = size / cols;
-  const cellH = size / rows;
+  const cellH = height / rows;
   const cellCount = cols * rows;
 
   return (
-    <View style={[styles.container, { width: size, height: size, borderRadius }]}>
+    <View style={[styles.container, { width: size, height, borderRadius }]}>
       {Array.from({ length: cellCount }, (_, i) => {
         const left = (i % cols) * cellW;
         const top = Math.floor(i / cols) * cellH;

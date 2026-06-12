@@ -186,6 +186,12 @@ export function ProfileScreen(_props: ProfileScreenProps) {
   // ── Initials ───────────────────────────────────────────────────────────────
   const initials = (form.displayName.trim() || user?.displayName?.trim() || 'ME')
     .split(/\s+/).map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
+  const styleSummary = form.stylePreference.length > 0
+    ? form.stylePreference.slice(0, 3).join(' · ')
+    : 'Add your style preferences';
+  const summaryPalette = form.colorPalette
+    .flatMap((palette) => PALETTE_COLORS[palette]?.slice(0, 1) ?? [])
+    .slice(0, 4);
 
   const activeCfg = form.activePicker ? form.pickerCfg[form.activePicker] : null;
 
@@ -242,7 +248,17 @@ export function ProfileScreen(_props: ProfileScreenProps) {
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${form.completionPct}%` as any }]} />
           </View>
-          <Text style={styles.progressLabel}>{form.completionPct}% complete</Text>
+          <View style={styles.summaryMeta}>
+            <Text style={styles.styleSummary} numberOfLines={1}>{styleSummary}</Text>
+            {summaryPalette.length > 0 && (
+              <View style={styles.summaryPalette}>
+                {summaryPalette.map((color) => (
+                  <View key={color} style={[styles.summarySwatch, { backgroundColor: color }]} />
+                ))}
+              </View>
+            )}
+            <Text style={styles.progressLabel}>{form.completionPct}%</Text>
+          </View>
         </View>
         <TouchableOpacity
           onPress={() => scrollRef.current?.scrollToEnd({ animated: true })}
@@ -877,36 +893,51 @@ const styles = StyleSheet.create({
 
   // Fixed header
   header: {
-    backgroundColor: colors.card,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
+    backgroundColor: colors.background,
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: spacing.lg, paddingBottom: spacing.md,
+    paddingHorizontal: spacing.lg, paddingBottom: spacing.lg,
     gap: spacing.md,
   },
   avatar: {
-    width: 48, height: 48, borderRadius: radii.lg,
-    backgroundColor: `${colors.primary}18`,
+    width: 58, height: 58, borderRadius: radii.lg,
+    backgroundColor: colors.surfaceSelected,
     alignItems: 'center', justifyContent: 'center',
   },
-  avatarPhoto: { width: 48, height: 48, borderRadius: radii.lg },
+  avatarPhoto: { width: 58, height: 58, borderRadius: radii.lg },
   avatarBadge: {
     position: 'absolute', bottom: 0, right: 0,
     width: 16, height: 16, borderRadius: 8,
     backgroundColor: colors.primary,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: colors.card,
+    borderWidth: 1.5, borderColor: colors.background,
   },
   avatarText: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.primary },
   headerInfo: { flex: 1, gap: 4 },
-  headerTitle: { fontSize: typography.size.md, fontWeight: typography.weight.bold, color: colors.foreground },
+  headerTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.foreground, letterSpacing: -0.3 },
   progressTrack: { height: 4, backgroundColor: colors.muted, borderRadius: 2, overflow: 'hidden' },
   progressFill: { height: '100%' as any, backgroundColor: colors.primary, borderRadius: 2 },
-  progressLabel: { fontSize: 10, color: colors.mutedForeground },
+  summaryMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  styleSummary: {
+    flex: 1,
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+    textTransform: 'capitalize',
+  },
+  summaryPalette: { flexDirection: 'row', alignItems: 'center' },
+  summarySwatch: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginLeft: -2,
+    borderWidth: 1,
+    borderColor: colors.background,
+  },
+  progressLabel: { fontSize: 10, color: colors.primary, fontWeight: typography.weight.semibold },
   stickyFooter: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
-    backgroundColor: colors.card,
-    borderTopWidth: 1,
+    backgroundColor: colors.surfaceElevated,
+    borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
   saveFooterBtn: {
@@ -930,7 +961,7 @@ const styles = StyleSheet.create({
   hint: { fontSize: typography.size.xs, color: colors.mutedForeground },
   divTop: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.lg, marginTop: spacing.sm },
   input: {
-    backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.surfaceSubtle, borderWidth: 0,
     borderRadius: radii.md, paddingHorizontal: spacing.md,
     paddingVertical: Platform.OS === 'ios' ? spacing.sm + 2 : spacing.sm,
     fontSize: typography.size.sm, color: colors.foreground,
@@ -941,8 +972,8 @@ const styles = StyleSheet.create({
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   pill: {
     paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2,
-    borderRadius: radii.full, borderWidth: 1, borderColor: colors.border,
-    backgroundColor: colors.background,
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceSubtle,
   },
   pillSel: { backgroundColor: colors.primary, borderColor: colors.primary },
   pillText: { fontSize: typography.size.xs, color: colors.mutedForeground, fontWeight: typography.weight.medium },
@@ -952,8 +983,8 @@ const styles = StyleSheet.create({
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
     paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2,
-    borderRadius: radii.full, borderWidth: 1, borderColor: colors.border,
-    backgroundColor: colors.background,
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceSubtle,
   },
   chipSel: { backgroundColor: colors.primary, borderColor: colors.primary },
   chipDim: { opacity: 0.35 },
@@ -1000,8 +1031,8 @@ const styles = StyleSheet.create({
   voiceCard: {
     width: '47%',
     paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderRadius: radii.md, borderWidth: 1, borderColor: colors.border,
-    backgroundColor: colors.background, gap: 2,
+    borderRadius: radii.md,
+    backgroundColor: colors.surfaceSubtle, gap: 2,
   },
   voiceCardSel: { backgroundColor: `${colors.primary}12`, borderColor: colors.primary },
   voiceName: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.mutedForeground },

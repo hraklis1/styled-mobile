@@ -5,6 +5,9 @@ export const colors = {
   background:          '#FAF8F5', // HSL 30 20% 98% — warm off-white
   foreground:          '#28231F', // HSL 25 15% 15% — deep charcoal brown
   card:                '#F4EFE9', // HSL 30 25% 96% — warm creamy beige
+  surfaceElevated:     '#FFFFFF', // Primary content and modal surfaces
+  surfaceSubtle:       '#F1EDE8', // Quiet grouped rows and controls
+  surfaceSelected:     '#EEE2D8', // Selected or emphasized content
   primary:             '#956D51', // HSL 25 30% 45% — clay/earth brown
   primaryForeground:   '#FAF8F5',
   secondary:           '#EDE7DC', // HSL 35 25% 90% — soft taupe/sand

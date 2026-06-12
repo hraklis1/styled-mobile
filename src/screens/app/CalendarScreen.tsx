@@ -23,6 +23,7 @@ import { EventFormModal } from '../../components/calendar/EventFormModal';
 import { EventDetailModal } from '../../components/calendar/EventDetailModal';
 import { EventItemPickerModal } from '../../components/calendar/EventItemPickerModal';
 import { ItemThumbStack } from '../../components/calendar/ItemThumbStack';
+import { NextEventHero } from '../../components/calendar/NextEventHero';
 import {
   toDateStr,
   formatDayLabel,
@@ -37,7 +38,7 @@ import { colors, spacing, typography, radii } from '../../theme';
 import { ErrorState } from '../../components/primitives/ErrorState';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { presentPaywall } from '../../lib/paywall';
-import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
+import { useGlobalAIStylist, type StylistOpenSource } from '../../contexts/GlobalAIStylistContext';
 import type { CalendarScreenProps } from '../../navigation/types';
 import type { Event } from '../../types/event';
 
@@ -63,7 +64,8 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
     }).catch(() => { });
   }, []);
 
-  const [selectedDate, setSelectedDate] = useState(() => toDateStr(new Date()));
+  // null = no day filter; a date string filters the list to that day
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [formVisible, setFormVisible] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
@@ -76,18 +78,21 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
   const UPCOMING_LIMIT = 4;
   const PAST_LIMIT = 5;
 
-  const now = Date.now();
+  // Events stay in "Upcoming" until their day ends, not the minute they start
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const dayStartMs = startOfToday.getTime();
 
   const upcoming = useMemo(
     () => events
-      .filter((e) => new Date(e.date).getTime() >= now)
+      .filter((e) => new Date(e.date).getTime() >= dayStartMs)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
     [events],
   );
 
   const past = useMemo(
     () => events
-      .filter((e) => new Date(e.date).getTime() < now)
+      .filter((e) => new Date(e.date).getTime() < dayStartMs)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
     [events],
   );
@@ -109,7 +114,22 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
     [events],
   );
 
-  const visibleUpcoming = showAllUpcoming ? upcoming : upcoming.slice(0, UPCOMING_LIMIT);
+  // Events on the selected day (day-filter mode), in chronological order
+  const dayEvents = useMemo(() => {
+    if (!selectedDate) return [];
+    return events
+      .filter((e) => toDateStr(new Date(e.date)) === selectedDate)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [events, selectedDate]);
+
+  const formInitialDate = useMemo(
+    () => (selectedDate ? new Date(selectedDate + 'T09:00:00') : null),
+    [selectedDate],
+  );
+
+  const nextEvent = upcoming[0] ?? null;
+  const upcomingRest = upcoming.slice(1);
+  const visibleUpcoming = showAllUpcoming ? upcomingRest : upcomingRest.slice(0, UPCOMING_LIMIT);
   const groupedUpcoming = useMemo(() => groupByDate(visibleUpcoming), [visibleUpcoming]);
   const visiblePast = showAllPast ? past : past.slice(0, PAST_LIMIT);
 
@@ -140,6 +160,77 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
           onPress: () => { deleteEventMutation.mutate(ev.id); setDetailEvent(null); },
         },
       ],
+    );
+  };
+
+  const openStylistForEvent = (event: Event, source: StylistOpenSource) => {
+    const details = [
+      `Dress me for "${event.title}"`,
+      `on ${new Date(event.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`,
+      event.occasion ? `for a ${event.occasion.replaceAll('_', ' ')} occasion` : null,
+      event.location ? `at ${event.location}` : null,
+      event.environment ? `in a ${event.environment} setting` : null,
+    ].filter(Boolean).join(' ');
+    // Let the detail modal finish dismissing before presenting the stylist sheet
+    const delay = detailEvent ? 300 : 0;
+    setDetailEvent(null);
+    setTimeout(() => {
+      openStylist({ initialQuery: `${details}.`, source });
+    }, delay);
+  };
+
+  const handleSelectDate = (s: string) => {
+    setSelectedDate((prev) => (prev === s ? null : s));
+  };
+
+  const renderEventCard = (event: Event) => {
+    const iconName = (OCCASION_ICONS[event.occasion] ?? 'calendar-outline') as keyof typeof Ionicons.glyphMap;
+    return (
+      <TouchableOpacity
+        key={event.id}
+        style={styles.eventCard}
+        onPress={() => setDetailEvent(event)}
+        activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel={event.title}
+      >
+        <View style={styles.eventIconBox}>
+          <Ionicons name={iconName} size={18} color={colors.primary} />
+        </View>
+        <View style={styles.eventBody}>
+          <Text style={styles.eventTitle} numberOfLines={1}>{event.title}</Text>
+          <View style={styles.eventMeta}>
+            <Text style={styles.eventTime}>{formatTime(new Date(event.date))}</Text>
+            {event.location ? (
+              <>
+                <Text style={styles.dot}>·</Text>
+                <Ionicons name="location-outline" size={11} color={colors.mutedForeground} />
+                <Text style={styles.eventLoc} numberOfLines={1}>{event.location}</Text>
+              </>
+            ) : null}
+          </View>
+          <View style={styles.occasionBadge}>
+            <Text style={styles.occasionBadgeText}>
+              {OCCASIONS.find((o) => o.id === event.occasion)?.label ?? event.occasion}
+            </Text>
+          </View>
+        </View>
+        {(event.itemIds ?? []).length > 0
+          ? <ItemThumbStack itemIds={event.itemIds!} allItems={allItems} onPress={() => setPickerEvent(event)} />
+          : (
+            <TouchableOpacity
+              style={styles.styleItChip}
+              onPress={() => openStylistForEvent(event, 'calendar_card')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel={`Style an outfit for ${event.title}`}
+            >
+              <Ionicons name="sparkles-outline" size={12} color={colors.primary} />
+              <Text style={styles.styleItText}>Style it</Text>
+            </TouchableOpacity>
+          )
+        }
+      </TouchableOpacity>
     );
   };
 
@@ -175,10 +266,10 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         <WeekStrip
           weekDays={weekDays}
           selectedDate={selectedDate}
-          onSelectDate={setSelectedDate}
+          onSelectDate={handleSelectDate}
           onPrevWeek={() => setWeekOffset((o) => o - 1)}
           onNextWeek={() => setWeekOffset((o) => o + 1)}
-          onToday={() => { setWeekOffset(0); setSelectedDate(toDateStr(new Date())); }}
+          onToday={() => { setWeekOffset(0); setSelectedDate(null); }}
           eventDateSet={eventDateSet}
           weekOffset={weekOffset}
         />
@@ -187,6 +278,42 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
           <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xxxl }} />
         ) : isError ? (
           <ErrorState message="Couldn't load events" onRetry={refetch} />
+        ) : selectedDate ? (
+          /* Day-filter mode: tapped a day in the strip */
+          <View style={styles.section}>
+            <View style={styles.filterHeader}>
+              <Text style={styles.filterTitle}>
+                {formatDayLabel(new Date(selectedDate + 'T00:00:00'))}
+              </Text>
+              <TouchableOpacity
+                style={styles.clearFilterBtn}
+                onPress={() => setSelectedDate(null)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="Show all events"
+              >
+                <Ionicons name="close" size={12} color={colors.mutedForeground} />
+                <Text style={styles.clearFilterText}>Show all</Text>
+              </TouchableOpacity>
+            </View>
+            {dayEvents.length === 0 ? (
+              <View style={styles.dayEmpty}>
+                <Text style={styles.dayEmptyText}>Nothing planned for this day.</Text>
+                <TouchableOpacity
+                  style={styles.dayEmptyBtn}
+                  onPress={handleAddEvent}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add event on this day"
+                >
+                  <Ionicons name="add" size={14} color={colors.primary} />
+                  <Text style={styles.dayEmptyBtnText}>Add event</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              dayEvents.map(renderEventCard)
+            )}
+          </View>
         ) : events.length === 0 ? (
           <View style={styles.empty}>
             <View style={styles.emptyIconBox}>
@@ -209,16 +336,28 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
           </View>
         ) : (
           <>
-            {/* Upcoming */}
-            {upcoming.length > 0 && (
+            {/* Next event hero */}
+            {nextEvent && (
+              <NextEventHero
+                event={nextEvent}
+                allItems={allItems}
+                deviceCoords={deviceCoords}
+                onPress={() => setDetailEvent(nextEvent)}
+                onPlanOutfit={() => openStylistForEvent(nextEvent, 'calendar_hero')}
+                onPressOutfit={() => setPickerEvent(nextEvent)}
+              />
+            )}
+
+            {/* Upcoming (after the hero) */}
+            {upcomingRest.length > 0 && (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>
-                  Upcoming{upcoming.length > UPCOMING_LIMIT
-                    ? <Text style={styles.sectionCount}> ({upcoming.length})</Text>
+                  Later{upcomingRest.length > UPCOMING_LIMIT
+                    ? <Text style={styles.sectionCount}> ({upcomingRest.length})</Text>
                     : null}
                 </Text>
 
-                {groupedUpcoming.map(([dateStr, dayEvents]) => {
+                {groupedUpcoming.map(([dateStr, group]) => {
                   const dayDate = new Date(dateStr + 'T00:00:00');
                   const countdown = formatCountdown(dayDate);
                   return (
@@ -229,56 +368,18 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
                         {countdown ? <Text style={styles.dayCountdown}>{countdown}</Text> : null}
                       </View>
 
-                      {dayEvents.map((event) => {
-                        const iconName = (OCCASION_ICONS[event.occasion] ?? 'calendar-outline') as keyof typeof Ionicons.glyphMap;
-                        return (
-                          <TouchableOpacity
-                            key={event.id}
-                            style={styles.eventCard}
-                            onPress={() => setDetailEvent(event)}
-                            activeOpacity={0.8}
-                            accessibilityRole="button"
-                            accessibilityLabel={event.title}
-                          >
-                            <View style={styles.eventIconBox}>
-                              <Ionicons name={iconName} size={18} color={colors.primary} />
-                            </View>
-                            <View style={styles.eventBody}>
-                              <Text style={styles.eventTitle} numberOfLines={1}>{event.title}</Text>
-                              <View style={styles.eventMeta}>
-                                <Text style={styles.eventTime}>{formatTime(new Date(event.date))}</Text>
-                                {event.location ? (
-                                  <>
-                                    <Text style={styles.dot}>·</Text>
-                                    <Ionicons name="location-outline" size={11} color={colors.mutedForeground} />
-                                    <Text style={styles.eventLoc} numberOfLines={1}>{event.location}</Text>
-                                  </>
-                                ) : null}
-                              </View>
-                              <View style={styles.occasionBadge}>
-                                <Text style={styles.occasionBadgeText}>
-                                  {OCCASIONS.find((o) => o.id === event.occasion)?.label ?? event.occasion}
-                                </Text>
-                              </View>
-                            </View>
-                            {(event.itemIds ?? []).length > 0
-                              ? <ItemThumbStack itemIds={event.itemIds!} allItems={allItems} onPress={() => setPickerEvent(event)} />
-                              : <Ionicons name="chevron-forward" size={16} color={colors.border} />
-                            }
-                          </TouchableOpacity>
-                        );
-                      })}
+                      {group.map(renderEventCard)}
                     </View>
                   );
                 })}
 
-                {upcoming.length > UPCOMING_LIMIT && !showAllUpcoming && (
+                {upcomingRest.length > UPCOMING_LIMIT && !showAllUpcoming && (
                   <TouchableOpacity style={styles.showMore} onPress={() => setShowAllUpcoming(true)}>
                     <Ionicons name="chevron-down" size={16} color={colors.mutedForeground} />
-                    <Text style={styles.showMoreText}>View all {upcoming.length} upcoming events</Text>
+                    <Text style={styles.showMoreText}>View all {upcomingRest.length} upcoming events</Text>
                   </TouchableOpacity>
                 )}
-                {showAllUpcoming && upcoming.length > UPCOMING_LIMIT && (
+                {showAllUpcoming && upcomingRest.length > UPCOMING_LIMIT && (
                   <TouchableOpacity style={styles.showMore} onPress={() => setShowAllUpcoming(false)}>
                     <Text style={styles.showMoreText}>Show less</Text>
                   </TouchableOpacity>
@@ -371,24 +472,13 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         allItems={allItems}
         generateOutfit={generateOutfit}
         onViewOutfits={() => navigation.navigate('Closet')}
-        onOpenStylist={(event) => {
-          const details = [
-            `Dress me for "${event.title}"`,
-            `on ${new Date(event.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`,
-            event.occasion ? `for a ${event.occasion.replaceAll('_', ' ')} occasion` : null,
-            event.location ? `at ${event.location}` : null,
-            event.environment ? `in a ${event.environment} setting` : null,
-          ].filter(Boolean).join(' ');
-          setDetailEvent(null);
-          setTimeout(() => {
-            openStylist({ initialQuery: `${details}.`, source: 'event_detail' });
-          }, 300);
-        }}
+        onOpenStylist={(event) => openStylistForEvent(event, 'event_detail')}
         deviceCoords={deviceCoords}
       />
       <EventFormModal
         visible={formVisible}
         event={editingEvent}
+        initialDate={formInitialDate}
         onClose={() => { setFormVisible(false); setEditingEvent(null); }}
       />
       <EventItemPickerModal
@@ -423,6 +513,40 @@ const styles = StyleSheet.create({
   section: { marginBottom: spacing.xl },
   sectionTitle: { fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: colors.foreground, marginBottom: spacing.md },
   sectionCount: { fontWeight: typography.weight.regular, color: colors.mutedForeground },
+
+  filterHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: spacing.md,
+  },
+  filterTitle: { fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: colors.foreground },
+  clearFilterBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: spacing.sm + 2, paddingVertical: 5,
+    borderRadius: radii.full, backgroundColor: colors.muted,
+  },
+  clearFilterText: { fontSize: 11, fontWeight: typography.weight.medium, color: colors.mutedForeground },
+
+  dayEmpty: {
+    alignItems: 'center', gap: spacing.sm,
+    paddingVertical: spacing.xl,
+    borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed',
+    borderRadius: radii.lg,
+  },
+  dayEmptyText: { fontSize: typography.size.sm, color: colors.mutedForeground },
+  dayEmptyBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2,
+    borderRadius: radii.full, backgroundColor: `${colors.primary}12`,
+  },
+  dayEmptyBtnText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.primary },
+
+  styleItChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: `${colors.primary}12`,
+    borderRadius: radii.full,
+    paddingHorizontal: spacing.sm + 2, paddingVertical: 5,
+  },
+  styleItText: { fontSize: 11, fontWeight: typography.weight.semibold, color: colors.primary },
 
   dayGroup: { marginBottom: spacing.md },
   dayHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
