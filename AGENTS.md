@@ -11,9 +11,10 @@ npm run ios
 ```
 
 This builds the native app, boots the iOS simulator, installs the app, and connects
-to Metro. If Expo says it is skipping the dev server, verify the existing Metro
-server at `http://localhost:8081`; start it with `npm start` only if it is not
-already running.
+to Metro. Its `preios` script also verifies the configured local API and starts
+the sibling `../Styled` backend when needed. If Expo says it is skipping the dev
+server, verify the existing Metro server at `http://localhost:8081`; start it
+with `npm start` only if it is not already running.
 
 The generated `ios/` directory is gitignored. If CocoaPods reports stale local
 Expo podspecs after dependencies change, run:

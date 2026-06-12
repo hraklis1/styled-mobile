@@ -11,6 +11,16 @@
 
 Restart Metro and rebuild the app after changing an `EXPO_PUBLIC_*` variable.
 
+## Local API Startup
+
+`npm run ios` checks `EXPO_PUBLIC_API_URL` before launching Expo. When it points
+to localhost and the API is not reachable, the pre-launch script starts the
+sibling `../Styled` backend and waits for it to become ready. Backend output is
+written to `/tmp/styled-api-<port>.log`.
+
+If the backend is stored elsewhere, set `STYLED_BACKEND_DIR` to its absolute
+path before running `npm run ios`.
+
 ## Google Calendar Mobile OAuth Contract
 
 The mobile app requests `GET /api/calendar/google/mobile-token`, then opens
