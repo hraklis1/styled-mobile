@@ -37,6 +37,7 @@ export function useClosetFilters({ items, outfits, search, activeCategory, activ
   const [outfitSelectedTags, setOutfitSelectedTags]     = useState<string[]>([]);
   const [outfitSelectedEvents, setOutfitSelectedEvents] = useState<string[]>([]);
   const [outfitShowNeverWorn, setOutfitShowNeverWorn]   = useState(false);
+  const [outfitShowFavorites, setOutfitShowFavorites]   = useState(false);
 
   // ── Filter metadata ──────────────────────────────────────────────────────
   const allColors    = useMemo(() => [...new Set(items.filter(i => i.colorNormalized).map(i => i.colorNormalized!))].sort(), [items]);
@@ -87,8 +88,9 @@ export function useClosetFilters({ items, outfits, search, activeCategory, activ
       (outfitSortKey !== 'newest' ? 1 : 0) +
       outfitSelectedTags.length +
       outfitSelectedEvents.length +
-      (outfitShowNeverWorn ? 1 : 0),
-    [outfitSortKey, outfitSelectedTags, outfitSelectedEvents, outfitShowNeverWorn],
+      (outfitShowNeverWorn ? 1 : 0) +
+      (outfitShowFavorites ? 1 : 0),
+    [outfitSortKey, outfitSelectedTags, outfitSelectedEvents, outfitShowNeverWorn, outfitShowFavorites],
   );
 
   // ── Category metadata ────────────────────────────────────────────────────
@@ -202,6 +204,8 @@ export function useClosetFilters({ items, outfits, search, activeCategory, activ
       result = result.filter(o => o.event && outfitSelectedEvents.includes(o.event));
     if (outfitShowNeverWorn)
       result = result.filter(o => o.wearCount === 0);
+    if (outfitShowFavorites)
+      result = result.filter(o => o.isFavorite);
 
     const arr = [...result];
     if (outfitSortKey === 'oldest')
@@ -220,7 +224,7 @@ export function useClosetFilters({ items, outfits, search, activeCategory, activ
     else
       arr.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return arr;
-  }, [outfits, search, outfitSelectedTags, outfitSelectedEvents, outfitShowNeverWorn, outfitSortKey]);
+  }, [outfits, search, outfitSelectedTags, outfitSelectedEvents, outfitShowNeverWorn, outfitShowFavorites, outfitSortKey]);
 
   // ── Actions ──────────────────────────────────────────────────────────────
   function clearSheetFilters() {
@@ -242,6 +246,7 @@ export function useClosetFilters({ items, outfits, search, activeCategory, activ
     setOutfitSelectedTags([]);
     setOutfitSelectedEvents([]);
     setOutfitShowNeverWorn(false);
+    setOutfitShowFavorites(false);
   }
 
   function resetAll() {
@@ -270,6 +275,7 @@ export function useClosetFilters({ items, outfits, search, activeCategory, activ
     outfitSelectedTags, setOutfitSelectedTags,
     outfitSelectedEvents, setOutfitSelectedEvents,
     outfitShowNeverWorn, setOutfitShowNeverWorn,
+    outfitShowFavorites, setOutfitShowFavorites,
 
     // Filter metadata
     allColors, allBrands, allSeasons, allMaterials, allSleeveLengths,

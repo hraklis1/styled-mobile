@@ -13,6 +13,7 @@ export type Outfit = {
   tags: string[];
   notes: string | null;
   isDraft: boolean;
+  isFavorite: boolean;
   aiGeneratedImageUrl: string | null;
   wearCount: number;
   lastWornAt: string | null;

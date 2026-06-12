@@ -16,7 +16,7 @@ import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useItems, useUpdateItem, useDeleteItem, useMarkItemWorn } from '../../hooks/useItems';
-import { useOutfits } from '../../hooks/useOutfits';
+import { useOutfits, useMarkOutfitWorn, useDeleteOutfit, useUpdateOutfit } from '../../hooks/useOutfits';
 import { useClosetFilters, type SortKey, type OutfitSortKey } from '../../hooks/useClosetFilters';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
 import { OutfitBuilderSheet } from '../../components/outfits/OutfitBuilderSheet';
@@ -83,6 +83,8 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
 
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds]     = useState<Set<number>>(new Set());
+  const [outfitSelectionMode, setOutfitSelectionMode] = useState(false);
+  const [selectedOutfitIds, setSelectedOutfitIds]     = useState<Set<number>>(new Set());
   const justLongPressedRef = useRef(false);
   const [outfitBuilderVisible, setOutfitBuilderVisible] = useState(false);
   const [outfitBuilderItems, setOutfitBuilderItems]     = useState<typeof items>([]);
@@ -92,6 +94,9 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
   const updateItem = useUpdateItem();
   const deleteItem = useDeleteItem();
   const markWorn = useMarkItemWorn();
+  const markOutfitWorn = useMarkOutfitWorn();
+  const deleteOutfit = useDeleteOutfit();
+  const updateOutfit = useUpdateOutfit();
   const {
     sortKey, setSortKey,
     filterSheetOpen, setFilterSheetOpen,
@@ -110,6 +115,7 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
     outfitSelectedTags, setOutfitSelectedTags,
     outfitSelectedEvents, setOutfitSelectedEvents,
     outfitShowNeverWorn, setOutfitShowNeverWorn,
+    outfitShowFavorites, setOutfitShowFavorites,
     allColors, allBrands, allSeasons, allMaterials, allSleeveLengths,
     activeFilterCount,
     allOutfitTags, allOutfitEvents,
@@ -197,6 +203,10 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
       setSearch('');
       setActiveCategory(null);
       setActiveSubcategory(null);
+      setSelectionMode(false);
+      setSelectedIds(new Set());
+      setOutfitSelectionMode(false);
+      setSelectedOutfitIds(new Set());
       resetAll();
       setSegment(next);
       expandCollapsible();
@@ -253,6 +263,70 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
       setSelectionMode(false);
     }
   }, [selectionMode, selectedIds.size]);
+
+  const handleOutfitLongPress = useCallback((outfit: (typeof outfits)[number]) => {
+    justLongPressedRef.current = true;
+    setOutfitSelectionMode(true);
+    setSelectedOutfitIds(new Set([outfit.id]));
+  }, []);
+
+  const toggleOutfitSelect = useCallback((id: number) => {
+    if (justLongPressedRef.current) {
+      justLongPressedRef.current = false;
+      return;
+    }
+    setSelectedOutfitIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const exitOutfitSelectionMode = useCallback(() => {
+    setOutfitSelectionMode(false);
+    setSelectedOutfitIds(new Set());
+  }, []);
+
+  useEffect(() => {
+    if (outfitSelectionMode && selectedOutfitIds.size === 0) {
+      setOutfitSelectionMode(false);
+    }
+  }, [outfitSelectionMode, selectedOutfitIds.size]);
+
+  const handleBulkDeleteOutfits = useCallback(() => {
+    const count = selectedOutfitIds.size;
+    if (count === 0) return;
+    Alert.alert(
+      'Delete outfits',
+      `Delete ${count} outfit${count !== 1 ? 's' : ''}? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            selectedOutfitIds.forEach(id => deleteOutfit.mutate(id));
+            exitOutfitSelectionMode();
+          },
+        },
+      ]
+    );
+  }, [selectedOutfitIds, deleteOutfit, exitOutfitSelectionMode]);
+
+  const handleBulkMarkOutfitsWorn = useCallback(() => {
+    if (selectedOutfitIds.size === 0) return;
+    selectedOutfitIds.forEach(id => markOutfitWorn.mutate(id));
+    exitOutfitSelectionMode();
+  }, [selectedOutfitIds, markOutfitWorn, exitOutfitSelectionMode]);
+
+  const handleBulkFavoriteOutfits = useCallback(() => {
+    if (selectedOutfitIds.size === 0) return;
+    selectedOutfitIds.forEach(id => {
+      const outfit = outfits.find(o => o.id === id);
+      if (outfit) updateOutfit.mutate({ id, isFavorite: !outfit.isFavorite });
+    });
+    exitOutfitSelectionMode();
+  }, [selectedOutfitIds, outfits, updateOutfit, exitOutfitSelectionMode]);
 
   const handleBulkDelete = useCallback(() => {
     const count = selectedIds.size;
@@ -373,15 +447,32 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
 
   const renderOutfitCard = useCallback(
     ({ item: outfit }: { item: (typeof outfits)[number] }) => {
+      const isSelected = selectedOutfitIds.has(outfit.id);
       if (viewMode === 'list') {
         const thumbSize = 72;
         return (
           <PressableScale
-            contentStyle={styles.outfitRow}
-            onPress={() => navigation.navigate('OutfitDetail', { outfitId: outfit.id })}
+            contentStyle={[styles.outfitRow, outfitSelectionMode && isSelected && styles.itemRowSelected]}
+            onPress={
+              outfitSelectionMode
+                ? () => toggleOutfitSelect(outfit.id)
+                : () => navigation.navigate('OutfitDetail', { outfitId: outfit.id })
+            }
+            onLongPress={outfitSelectionMode ? undefined : () => handleOutfitLongPress(outfit)}
+            delayLongPress={450}
             accessibilityRole="button"
             accessibilityLabel={outfit.name}
+            accessibilityState={outfitSelectionMode ? { selected: isSelected } : undefined}
           >
+            {outfitSelectionMode && (
+              <View style={styles.itemRowCheck}>
+                <Ionicons
+                  name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
+                  size={22}
+                  color={isSelected ? colors.primary : colors.mutedForeground}
+                />
+              </View>
+            )}
             <View style={[styles.outfitRowThumb, { width: thumbSize, height: thumbSize }]}>
               <OutfitCollage outfit={outfit} size={thumbSize} />
             </View>
@@ -394,7 +485,12 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
                 <Text style={styles.outfitWorn}>Worn {outfit.wearCount}×</Text>
               ) : null}
             </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.border} />
+            {!outfitSelectionMode && outfit.isFavorite && (
+              <Ionicons name="heart" size={16} color={colors.primary} />
+            )}
+            {!outfitSelectionMode && (
+              <Ionicons name="chevron-forward" size={16} color={colors.border} />
+            )}
           </PressableScale>
         );
       }
@@ -402,12 +498,34 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
         <View style={styles.outfitGridItem}>
           <PressableScale
             contentStyle={[styles.outfitCard, { width: cardWidth }]}
-            onPress={() => navigation.navigate('OutfitDetail', { outfitId: outfit.id })}
+            onPress={
+              outfitSelectionMode
+                ? () => toggleOutfitSelect(outfit.id)
+                : () => navigation.navigate('OutfitDetail', { outfitId: outfit.id })
+            }
+            onLongPress={outfitSelectionMode ? undefined : () => handleOutfitLongPress(outfit)}
+            delayLongPress={450}
             accessibilityRole="button"
             accessibilityLabel={outfit.name}
+            accessibilityState={outfitSelectionMode ? { selected: isSelected } : undefined}
           >
             <View style={styles.collageWrapper}>
               <OutfitCollage outfit={outfit} size={cardWidth} />
+              {outfitSelectionMode && isSelected && <View style={styles.selectedOverlay} />}
+              {outfitSelectionMode && (
+                <View style={styles.selectionBadge}>
+                  <Ionicons
+                    name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
+                    size={22}
+                    color={isSelected ? colors.primary : colors.white}
+                  />
+                </View>
+              )}
+              {!outfitSelectionMode && outfit.isFavorite && (
+                <View style={styles.favBadge}>
+                  <Ionicons name="heart" size={12} color={colors.primary} />
+                </View>
+              )}
             </View>
             <View style={styles.outfitInfo}>
               <Text style={styles.outfitName} numberOfLines={1}>{outfit.name}</Text>
@@ -419,7 +537,7 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
         </View>
       );
     },
-    [cardWidth, navigation, viewMode],
+    [cardWidth, navigation, viewMode, outfitSelectionMode, selectedOutfitIds, toggleOutfitSelect, handleOutfitLongPress],
   );
 
   // ── Empty states ───────────────────────────────────────────────────────────
@@ -586,6 +704,7 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
             data={filteredOutfits}
             keyExtractor={outfit => String(outfit.id)}
             renderItem={renderOutfitCard}
+            extraData={{ outfitSelectionMode, selectedOutfitIds }}
             numColumns={viewMode === 'list' ? 1 : 2}
             ListEmptyComponent={emptyOutfits}
             contentContainerStyle={
@@ -813,6 +932,70 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
         </View>
       )}
 
+      {/* ── Bulk action bar (outfits) ── */}
+      {outfitSelectionMode && (
+        <View style={[styles.bulkBar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+          <View style={styles.bulkBarTop}>
+            <TouchableOpacity onPress={exitOutfitSelectionMode} accessibilityRole="button" accessibilityLabel="Cancel selection">
+              <Text style={styles.bulkCancel}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                if (selectedOutfitIds.size === filteredOutfits.length) {
+                  setSelectedOutfitIds(new Set());
+                } else {
+                  setSelectedOutfitIds(new Set(filteredOutfits.map(o => o.id)));
+                }
+              }}
+              accessibilityRole="button"
+            >
+              <Text style={styles.bulkSelectAll}>
+                {selectedOutfitIds.size === 0
+                  ? 'Select all'
+                  : selectedOutfitIds.size === filteredOutfits.length
+                    ? `${selectedOutfitIds.size} selected — Clear`
+                    : `${selectedOutfitIds.size} selected — Select all`}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.bulkActions}>
+            <TouchableOpacity
+              style={[styles.bulkBtn, selectedOutfitIds.size === 0 && styles.bulkBtnDisabled]}
+              onPress={handleBulkFavoriteOutfits}
+              disabled={selectedOutfitIds.size === 0}
+              accessibilityRole="button"
+              accessibilityLabel="Favourite selected outfits"
+              accessibilityState={{ disabled: selectedOutfitIds.size === 0 }}
+            >
+              <Ionicons name="heart-outline" size={17} color={selectedOutfitIds.size === 0 ? colors.border : colors.foreground} />
+              <Text style={[styles.bulkBtnText, selectedOutfitIds.size === 0 && styles.bulkBtnTextDisabled]}>Favourite</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.bulkBtn, selectedOutfitIds.size === 0 && styles.bulkBtnDisabled]}
+              onPress={handleBulkMarkOutfitsWorn}
+              disabled={selectedOutfitIds.size === 0}
+              accessibilityRole="button"
+              accessibilityLabel="Mark selected outfits as worn today"
+              accessibilityState={{ disabled: selectedOutfitIds.size === 0 }}
+            >
+              <Ionicons name="shirt-outline" size={17} color={selectedOutfitIds.size === 0 ? colors.border : colors.foreground} />
+              <Text style={[styles.bulkBtnText, selectedOutfitIds.size === 0 && styles.bulkBtnTextDisabled]}>Worn today</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.bulkBtn, styles.bulkBtnDelete, selectedOutfitIds.size === 0 && styles.bulkBtnDisabled]}
+              onPress={handleBulkDeleteOutfits}
+              disabled={selectedOutfitIds.size === 0}
+              accessibilityRole="button"
+              accessibilityLabel="Delete selected outfits"
+              accessibilityState={{ disabled: selectedOutfitIds.size === 0 }}
+            >
+              <Ionicons name="trash-outline" size={17} color={selectedOutfitIds.size === 0 ? colors.border : colors.error} />
+              <Text style={[styles.bulkBtnText, styles.bulkBtnTextDelete, selectedOutfitIds.size === 0 && styles.bulkBtnTextDisabled]}>Delete</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       {filterSheetOpen && <FilterPanel
         onClose={() => setFilterSheetOpen(false)}
         sortOptions={SORT_OPTIONS}
@@ -910,6 +1093,8 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
           }
           showNeverWorn={outfitShowNeverWorn}
           onToggleNeverWorn={() => setOutfitShowNeverWorn(v => !v)}
+          showFavorites={outfitShowFavorites}
+          onToggleFavorites={() => setOutfitShowFavorites(v => !v)}
           filteredCount={filteredOutfits.length}
           activeFilterCount={outfitActiveFilterCount}
           onClearAll={clearOutfitFilters}
@@ -1191,6 +1376,23 @@ const styles = StyleSheet.create({
   collageWrapper: {
     borderRadius: radii.md,
     overflow: 'hidden',
+  },
+  selectedOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(149, 109, 81, 0.18)',
+  },
+  selectionBadge: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
   },
   outfitInfo: {
     paddingTop: spacing.sm,

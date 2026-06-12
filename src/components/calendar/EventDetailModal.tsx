@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   Modal,
   View,
@@ -12,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useWeatherForecast, type WeatherCondition } from '../../hooks/useWeather';
 import { useGenerateOutfit, type GenerateOutfitResult } from '../../hooks/useOutfits';
 import { ItemThumbStack } from './ItemThumbStack';
+import { OutfitGeneratedSheet } from './OutfitGeneratedSheet';
 import { OCCASIONS, OCCASION_ICONS, formatDayLabel, formatTime, formatCountdown } from './calendarUtils';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { Item } from '../../types/item';
@@ -49,6 +51,7 @@ export function EventDetailModal({
   onOpenStylist: (event: Event) => void;
   deviceCoords: { lat: number; lon: number } | null;
 }) {
+  const [generated, setGenerated] = useState<GenerateOutfitResult | null>(null);
   const eventDateStr = event ? event.date.slice(0, 10) : null;
   const forecast = useWeatherForecast(
     deviceCoords?.lat ?? null,
@@ -150,14 +153,7 @@ export function EventDetailModal({
             onPress={() => {
               generateOutfit.mutate({ eventId: event.id }, {
                 onSuccess: (result: GenerateOutfitResult) => {
-                  Alert.alert(
-                    'Outfit Generated',
-                    `"${result.outfitName}"${result.stylistNotes ? `\n\n${result.stylistNotes}` : ''}`,
-                    [
-                      { text: 'View in Outfits', onPress: () => { onClose(); onViewOutfits(); } },
-                      { text: 'Done', style: 'cancel' },
-                    ]
-                  );
+                  setGenerated(result);
                 },
                 onError: (err: any) => {
                   const msg = err?.response?.data?.message ?? 'Could not generate an outfit. Please try again.';
@@ -192,6 +188,16 @@ export function EventDetailModal({
             </TouchableOpacity>
           </View>
         </View>
+
+        <OutfitGeneratedSheet
+          result={generated}
+          allItems={allItems}
+          onDone={() => setGenerated(null)}
+          onViewOutfit={() => {
+            onClose();
+            onViewOutfits();
+          }}
+        />
       </View>
     </Modal>
   );

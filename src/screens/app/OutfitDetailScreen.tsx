@@ -303,6 +303,22 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
             <Ionicons name="chevron-back" size={22} color={colors.foreground} />
           </TouchableOpacity>
 
+          {/* Favourite — top-right, left of delete */}
+          <TouchableOpacity
+            style={[styles.headerIconButton, styles.favButton, { top: insets.top + spacing.sm }]}
+            onPress={() => updateOutfit.mutate({ id: outfit.id, isFavorite: !outfit.isFavorite })}
+            disabled={updateOutfit.isPending}
+            accessibilityRole="button"
+            accessibilityLabel={outfit.isFavorite ? 'Remove from favourites' : 'Add to favourites'}
+            accessibilityState={{ selected: !!outfit.isFavorite }}
+          >
+            <Ionicons
+              name={outfit.isFavorite ? 'heart' : 'heart-outline'}
+              size={20}
+              color={outfit.isFavorite ? colors.primary : colors.foreground}
+            />
+          </TouchableOpacity>
+
           {/* Delete — top-right */}
           <TouchableOpacity
             style={[styles.headerIconButton, { top: insets.top + spacing.sm }]}
@@ -402,10 +418,10 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
           })}
           activeOpacity={0.8}
           accessibilityRole="button"
-          accessibilityLabel={`Ask AI Stylist to improve ${outfit.name}`}
+          accessibilityLabel={`Get styling advice for ${outfit.name}`}
         >
           <Ionicons name="sparkles" size={17} color={colors.primary} />
-          <Text style={styles.stylistButtonLabel}>Improve this outfit</Text>
+          <Text style={styles.stylistButtonLabel}>Get styling advice</Text>
         </TouchableOpacity>
 
         {/* ── Details ── */}
@@ -607,6 +623,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
+  },
+  favButton: {
+    right: spacing.lg + 44 + spacing.sm,
   },
 
   // ── Collage overlay ──

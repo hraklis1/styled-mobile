@@ -79,6 +79,8 @@ export interface OutfitFilterPanelProps {
   onToggleTag: (tag: string) => void;
   showNeverWorn: boolean;
   onToggleNeverWorn: () => void;
+  showFavorites: boolean;
+  onToggleFavorites: () => void;
   filteredCount: number;
   activeFilterCount: number;
   onClearAll: () => void;
@@ -99,6 +101,8 @@ export function OutfitFilterPanel({
   onToggleTag,
   showNeverWorn,
   onToggleNeverWorn,
+  showFavorites,
+  onToggleFavorites,
   filteredCount,
   activeFilterCount,
   onClearAll,
@@ -224,6 +228,25 @@ export function OutfitFilterPanel({
             </View>
           </AccordionSection>
         )}
+
+        {/* ── Favourites ── */}
+        <AccordionSection
+          title="Favourites"
+          badge={showFavorites ? 1 : undefined}
+          defaultExpanded={showFavorites}
+        >
+          <View style={styles.chips}>
+            <TouchableOpacity
+              style={[styles.chip, showFavorites && styles.chipActive]}
+              onPress={onToggleFavorites}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.chipText, showFavorites && styles.chipTextActive]}>
+                Favourites only
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </AccordionSection>
 
         {/* ── Wear status ── */}
         <AccordionSection

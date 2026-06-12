@@ -162,6 +162,7 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
     tags: [],
     notes: null,
     isDraft: false,
+    isFavorite: false,
     aiGeneratedImageUrl: null,
     wearCount: 0,
     lastWornAt: null,
