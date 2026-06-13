@@ -26,6 +26,10 @@ import { colors, spacing, typography, radii } from '../../theme';
 import { CATEGORY_LABELS } from '../../types/item';
 import type { OutfitDetailScreenProps } from '../../navigation/types';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
+import { useEvents } from '../../hooks/useEvents';
+import { useAssignOutfitEvents } from '../../hooks/useOutfits';
+import { getUpcomingOutfitEvents, parseEventDate } from '../../lib/outfitAssignments';
+import { OutfitEventAssignmentModal } from '../../components/outfits/OutfitEventAssignmentModal';
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', {
@@ -138,18 +142,21 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   const { outfitId } = route.params;
   const { data: outfits = [] } = useOutfits();
   const { data: items = [] } = useItems();
+  const { data: events = [] } = useEvents();
   const outfit = outfits.find((o) => o.id === outfitId);
 
   const deleteOutfit = useDeleteOutfit();
   const markWorn = useMarkOutfitWorn();
   const visualize = useVisualizeOutfit();
   const updateOutfit = useUpdateOutfit();
+  const assignEvents = useAssignOutfitEvents();
   const { openStylist } = useGlobalAIStylist();
 
   const [localName, setLocalName] = useState(outfit?.name ?? '');
   const [localNotes, setLocalNotes] = useState(outfit?.notes ?? '');
   const [localTags, setLocalTags] = useState<string[]>(outfit?.tags ?? []);
   const [tagDraft, setTagDraft] = useState('');
+  const [eventPickerVisible, setEventPickerVisible] = useState(false);
 
   useEffect(() => {
     if (outfit) {
@@ -226,6 +233,10 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   }, [outfit, itemMap]);
 
   const hasDeletedPieces = pieces.some((p) => p.item === null);
+  const upcomingEvents = useMemo(
+    () => getUpcomingOutfitEvents(events, outfitId),
+    [events, outfitId],
+  );
 
   if (!outfit) {
     return (
@@ -386,12 +397,6 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
               </TouchableOpacity>
             )}
           </View>
-          {outfit.event ? (
-            <View style={styles.eventRow}>
-              <Ionicons name="calendar-outline" size={14} color={colors.mutedForeground} />
-              <Text style={styles.event}>{outfit.event}</Text>
-            </View>
-          ) : null}
         </View>
 
         {/* ── Primary CTA ── */}
@@ -439,6 +444,49 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
               </View>
             )}
           </View>
+        </View>
+
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[styles.sectionTitle, styles.sectionTitleNoMargin]}>Upcoming events</Text>
+            <TouchableOpacity onPress={() => setEventPickerVisible(true)} activeOpacity={0.7}>
+              <Text style={styles.sectionAction}>Add to events</Text>
+            </TouchableOpacity>
+          </View>
+          {upcomingEvents.length === 0 ? (
+            <Text style={styles.emptySectionText}>This outfit is not assigned to an upcoming event.</Text>
+          ) : (
+            upcomingEvents.map((event) => (
+              <View key={event.id} style={styles.assignedEventRow}>
+                <View style={styles.assignedEventIcon}>
+                  <Ionicons name="calendar-outline" size={16} color={colors.primary} />
+                </View>
+                <View style={styles.assignedEventBody}>
+                  <Text style={styles.assignedEventTitle}>{event.title}</Text>
+                  <Text style={styles.assignedEventMeta}>
+                    {parseEventDate(event.date).toLocaleString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
+                    {event.location ? ` · ${event.location}` : ''}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => assignEvents.mutate({
+                    outfitId: outfit.id,
+                    eventIds: upcomingEvents.filter((entry) => entry.id !== event.id).map((entry) => entry.id),
+                  })}
+                  disabled={assignEvents.isPending}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${outfit.name} from ${event.title}`}
+                >
+                  <Ionicons name="close-circle-outline" size={20} color={colors.mutedForeground} />
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
         </View>
 
         {/* ── Pieces ── */}
@@ -584,6 +632,13 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
           </View>
         </View>
       </ScrollView>
+      <OutfitEventAssignmentModal
+        outfit={outfit}
+        outfits={outfits}
+        events={events}
+        visible={eventPickerVisible}
+        onClose={() => setEventPickerVisible(false)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -721,16 +776,6 @@ const styles = StyleSheet.create({
   nameEditIcon: {
     flexShrink: 0,
   },
-  eventRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  event: {
-    fontSize: typography.size.sm,
-    color: colors.mutedForeground,
-    textTransform: 'capitalize',
-  },
 
   // ── Primary CTA ──
   wornButton: {
@@ -785,6 +830,38 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     marginBottom: spacing.md,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+  },
+  sectionTitleNoMargin: { marginBottom: 0 },
+  sectionAction: {
+    color: colors.primary,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+  },
+  emptySectionText: { color: colors.mutedForeground, fontSize: typography.size.sm },
+  assignedEventRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  assignedEventIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: radii.full,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  assignedEventBody: { flex: 1, gap: 2 },
+  assignedEventTitle: { color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+  assignedEventMeta: { color: colors.mutedForeground, fontSize: typography.size.xs },
 
   detailGrid: { gap: spacing.sm },
   detailItem: {

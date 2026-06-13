@@ -8,4 +8,5 @@ export type Event = {
   notes: string | null;
   environment: string | null;
   itemIds: number[] | null;
+  outfitId: number | null;
 };

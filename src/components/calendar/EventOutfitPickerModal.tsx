@@ -37,12 +37,7 @@ export function EventOutfitPickerModal({
   useEffect(() => {
     if (!visible) return;
 
-    const assignedIds = [...(event?.itemIds ?? [])].sort((a, b) => a - b);
-    const matchingOutfit = availableOutfits.find((outfit) => {
-      const outfitIds = outfit.itemIds.map((entry) => entry.id).sort((a, b) => a - b);
-      return outfitIds.length === assignedIds.length
-        && outfitIds.every((id, index) => id === assignedIds[index]);
-    });
+    const matchingOutfit = availableOutfits.find((outfit) => outfit.id === event?.outfitId);
 
     setQuery('');
     setSelectedOutfitId(matchingOutfit?.id ?? null);
@@ -53,7 +48,7 @@ export function EventOutfitPickerModal({
     if (!normalizedQuery) return availableOutfits;
 
     return availableOutfits.filter((outfit) =>
-      [outfit.name, outfit.event, ...outfit.tags]
+      [outfit.name, ...outfit.tags]
         .filter(Boolean)
         .some((value) => value!.toLowerCase().includes(normalizedQuery)),
     );
@@ -65,7 +60,7 @@ export function EventOutfitPickerModal({
     if (!outfit) return;
 
     assignItems.mutate(
-      { id: event.id, itemIds: outfit.itemIds.map((entry) => entry.id) },
+      { id: event.id, itemIds: outfit.itemIds.map((entry) => entry.id), outfitId: outfit.id },
       { onSuccess: onClose },
     );
   };

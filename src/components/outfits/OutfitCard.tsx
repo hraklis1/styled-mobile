@@ -56,7 +56,6 @@ export function OutfitCard({
         </View>
         <View style={styles.listInfo}>
           <Text style={styles.name} numberOfLines={1}>{outfit.name}</Text>
-          {outfit.event ? <Text style={styles.event} numberOfLines={1}>{outfit.event}</Text> : null}
           {outfit.wearCount > 0 ? <Text style={styles.worn}>Worn {outfit.wearCount}×</Text> : null}
           {outfit.isDraft ? (
             <View style={styles.draftBadge}><Text style={styles.draftText}>Draft</Text></View>
@@ -89,9 +88,6 @@ export function OutfitCard({
         <Text style={viewMode === 'dense' ? styles.nameDense : styles.name} numberOfLines={1}>
           {outfit.name}
         </Text>
-        {viewMode !== 'dense' && outfit.event ? (
-          <Text style={styles.event} numberOfLines={1}>{outfit.event}</Text>
-        ) : null}
         {viewMode !== 'dense' && outfit.wearCount > 0 ? (
           <Text style={styles.worn}>Worn {outfit.wearCount}×</Text>
         ) : null}
@@ -182,11 +178,6 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
-  },
-  event: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-    textTransform: 'capitalize',
   },
   worn: {
     fontSize: typography.size.xs,

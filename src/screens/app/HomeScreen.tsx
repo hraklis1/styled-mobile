@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useRef } from 'react';
+import { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -27,6 +27,16 @@ import { useFabScroll } from '../../contexts/FabScrollContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { useWeatherToday } from '../../hooks/useWeather';
 import { resolveImageUri } from '../../lib/resolveImageUri';
+import {
+  selectDailyStylistPick,
+  toLocalDateKey,
+  type DailyPickHistoryEntry,
+} from '../../lib/dailyStylistPick';
+import {
+  loadDailyPickHistory,
+  recordDailyPick,
+  saveDailyPickHistory,
+} from '../../lib/dailyPickHistory';
 import { colors, shadows, spacing, typography, radii } from '../../theme';
 import { PressableScale } from '../../components/primitives/PressableScale';
 import type { HomeScreenProps } from '../../navigation/types';
@@ -109,11 +119,33 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const insets = useSafeAreaInsets();
   const lastHomeScrollY = useRef(0);
   const fabIsCollapsed = useRef(false);
+  const [dailyPickDate, setDailyPickDate] = useState(() => toLocalDateKey(new Date()));
+  const [dailyPickHistory, setDailyPickHistory] = useState<DailyPickHistoryEntry[]>([]);
+  const [dailyPickHistoryLoaded, setDailyPickHistoryLoaded] = useState(false);
 
   useFocusEffect(useCallback(() => {
     fabIsCollapsed.current = false;
     fabCollapsed.value = 0;
+    setDailyPickDate(toLocalDateKey(new Date()));
   }, [fabCollapsed]));
+
+  useEffect(() => {
+    let active = true;
+    setDailyPickHistoryLoaded(false);
+    if (!user?.id) {
+      setDailyPickHistory([]);
+      setDailyPickHistoryLoaded(true);
+      return () => { active = false; };
+    }
+    loadDailyPickHistory(user.id)
+      .then((history) => {
+        if (active) setDailyPickHistory(history);
+      })
+      .finally(() => {
+        if (active) setDailyPickHistoryLoaded(true);
+      });
+    return () => { active = false; };
+  }, [user?.id]);
 
   const handleHomeScroll = useCallback((e: any) => {
     const y = e.nativeEvent.contentOffset.y;
@@ -161,8 +193,32 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   );
 
   const favoriteCount = items.filter((i) => i.isFavorite).length;
-  const featuredOutfit = recentOutfits[0];
-  const remainingOutfits = recentOutfits.slice(1);
+  const dailyPick = useMemo(
+    () => dailyPickHistoryLoaded
+      ? selectDailyStylistPick({
+        outfits,
+        items,
+        events,
+        weather: weather.data,
+        logs,
+        date: dailyPickDate,
+        history: dailyPickHistory,
+      })
+      : null,
+    [dailyPickDate, dailyPickHistory, dailyPickHistoryLoaded, events, items, logs, outfits, weather.data],
+  );
+  const featuredOutfit = dailyPick?.outfit ?? recentOutfits[0];
+  const featuredReason = dailyPick?.reason ?? 'Today’s edit';
+  const remainingOutfits = recentOutfits.filter((outfit) => outfit.id !== featuredOutfit?.id).slice(0, 5);
+
+  useEffect(() => {
+    if (!dailyPickHistoryLoaded || !user?.id || !dailyPick?.outfit) return;
+    const current = dailyPickHistory.find((entry) => entry.date === dailyPickDate);
+    if (current?.outfitId === dailyPick.outfit.id) return;
+    const next = recordDailyPick(dailyPickHistory, { date: dailyPickDate, outfitId: dailyPick.outfit.id });
+    setDailyPickHistory(next);
+    saveDailyPickHistory(user.id, next).catch(() => {});
+  }, [dailyPick, dailyPickDate, dailyPickHistory, dailyPickHistoryLoaded, user?.id]);
 
   if ((itemsError || outfitsError) && items.length === 0 && outfits.length === 0) {
     return (
@@ -271,7 +327,14 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Stylist Picks for Today</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Closet')} accessibilityRole="button" accessibilityLabel="View all outfits">
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Closet', {
+              screen: 'ClosetMain',
+              params: { segment: 'outfits' },
+            })}
+            accessibilityRole="button"
+            accessibilityLabel="View all outfits"
+          >
             <Text style={styles.sectionLink}>View all</Text>
           </TouchableOpacity>
         </View>
@@ -295,11 +358,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               />
               <View style={styles.featuredOutfitInfo}>
                 <View style={styles.featuredOutfitCopy}>
-                  <Text style={styles.featuredEyebrow}>Today’s edit</Text>
+                  <Text style={styles.featuredEyebrow} numberOfLines={1}>{featuredReason}</Text>
                   <Text style={styles.featuredOutfitName} numberOfLines={1}>{featuredOutfit.name}</Text>
-                  {featuredOutfit.event ? (
-                    <Text style={styles.featuredOutfitEvent} numberOfLines={1}>{featuredOutfit.event}</Text>
-                  ) : null}
                 </View>
                 <View style={styles.featuredArrow}>
                   <Ionicons name="arrow-forward" size={16} color={colors.primaryForeground} />
@@ -367,9 +427,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               </View>
               <View style={styles.outfitInfo}>
                 <Text style={styles.outfitName} numberOfLines={1}>{outfit.name}</Text>
-                {outfit.event ? (
-                  <Text style={styles.outfitEvent} numberOfLines={1}>{outfit.event}</Text>
-                ) : null}
               </View>
             </PressableScale>
           ))}
@@ -814,11 +871,6 @@ const styles = StyleSheet.create({
     color: colors.foreground,
     letterSpacing: -0.3,
   },
-  featuredOutfitEvent: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-    textTransform: 'capitalize',
-  },
   featuredArrow: {
     width: 34,
     height: 34,
@@ -849,11 +901,6 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
-  },
-  outfitEvent: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-    textTransform: 'capitalize',
   },
 
   // Empty outfits

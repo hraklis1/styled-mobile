@@ -59,13 +59,13 @@ export function useUpdateEvent() {
 export function useAssignEventItems() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, itemIds }: { id: number; itemIds: number[] | null }) =>
-      api.patch<Event>(`/api/events/${id}`, { itemIds }).then((r) => r.data),
-    onMutate: async ({ id, itemIds }) => {
+    mutationFn: ({ id, itemIds, outfitId }: { id: number; itemIds: number[] | null; outfitId?: number | null }) =>
+      api.patch<Event>(`/api/events/${id}`, { itemIds, ...(outfitId !== undefined ? { outfitId } : {}) }).then((r) => r.data),
+    onMutate: async ({ id, itemIds, outfitId }) => {
       await qc.cancelQueries({ queryKey: EVENTS_QUERY_KEY });
       const previous = qc.getQueryData<Event[]>(EVENTS_QUERY_KEY);
       qc.setQueryData<Event[]>(EVENTS_QUERY_KEY, (old) =>
-        old?.map((e) => (e.id === id ? { ...e, itemIds } : e)) ?? []
+        old?.map((e) => (e.id === id ? { ...e, itemIds, outfitId: outfitId ?? null } : e)) ?? []
       );
       return { previous };
     },

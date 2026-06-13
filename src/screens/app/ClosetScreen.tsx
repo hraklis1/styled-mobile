@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useItems, useUpdateItem, useDeleteItem, useMarkItemWorn } from '../../hooks/useItems';
 import { useOutfits, useMarkOutfitWorn, useDeleteOutfit, useUpdateOutfit } from '../../hooks/useOutfits';
+import { useEvents } from '../../hooks/useEvents';
 import { useClosetFilters, type SortKey, type OutfitSortKey } from '../../hooks/useClosetFilters';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
 import { OutfitBuilderSheet } from '../../components/outfits/OutfitBuilderSheet';
@@ -24,6 +25,7 @@ import { FilterPanel } from '../../components/wardrobe/FilterPanel';
 import { OutfitFilterPanel } from '../../components/outfits/OutfitFilterPanel';
 import { ClosetGrid } from '../../components/wardrobe/ClosetGrid';
 import { resolveImageUri } from '../../lib/resolveImageUri';
+import { parseEventDate } from '../../lib/outfitAssignments';
 import { CATEGORY_LABELS, type ItemCategory } from '../../types/item';
 import { colors, shadows, spacing, typography, radii } from '../../theme';
 import { useGlobalScan } from '../../contexts/GlobalScanContext';
@@ -67,7 +69,7 @@ const SEARCH_ROW_H      = 58;
 const PILL_ROW_H        = 52;
 const SUBCATEGORY_ROW_H = 48;
 
-export function ClosetScreen({ navigation }: ClosetScreenProps) {
+export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { openScanItem, openBatchScan } = useGlobalScan();
@@ -91,6 +93,7 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
 
   const { data: items = [], isLoading: itemsLoading, isError: itemsError, refetch: refetchItems } = useItems();
   const { data: outfits = [] } = useOutfits();
+  const { data: events = [] } = useEvents();
   const updateItem = useUpdateItem();
   const deleteItem = useDeleteItem();
   const markWorn = useMarkItemWorn();
@@ -113,17 +116,17 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
     outfitSortKey, setOutfitSortKey,
     outfitFilterSheetOpen, setOutfitFilterSheetOpen,
     outfitSelectedTags, setOutfitSelectedTags,
-    outfitSelectedEvents, setOutfitSelectedEvents,
+    outfitShowAssigned, setOutfitShowAssigned,
     outfitShowNeverWorn, setOutfitShowNeverWorn,
     outfitShowFavorites, setOutfitShowFavorites,
     allColors, allBrands, allSeasons, allMaterials, allSleeveLengths,
     activeFilterCount,
-    allOutfitTags, allOutfitEvents,
+    allOutfitTags, upcomingAssignmentSummaries,
     outfitActiveFilterCount,
     availableCategories, availableSubcategories,
     filteredItems, filteredOutfits,
     clearSheetFilters, clearOutfitFilters, resetAll,
-  } = useClosetFilters({ items, outfits, search, activeCategory, activeSubcategory });
+  } = useClosetFilters({ items, outfits, events, search, activeCategory, activeSubcategory });
 
   const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / 2;
 
@@ -213,6 +216,13 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
     },
     [segment, expandCollapsible, resetAll],
   );
+
+  useEffect(() => {
+    const requestedSegment = route.params?.segment;
+    if (!requestedSegment) return;
+    if (requestedSegment !== segment) handleSegmentChange(requestedSegment);
+    navigation.setParams({ segment: undefined });
+  }, [handleSegmentChange, navigation, route.params?.segment, segment]);
 
   const handleCategoryPress = useCallback((cat: ItemCategory) => {
     setActiveCategory(prev => (prev === cat ? null : cat));
@@ -448,6 +458,14 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
   const renderOutfitCard = useCallback(
     ({ item: outfit }: { item: (typeof outfits)[number] }) => {
       const isSelected = selectedOutfitIds.has(outfit.id);
+      const assignment = upcomingAssignmentSummaries.get(outfit.id);
+      const eventDate = assignment
+        ? parseEventDate(assignment.nextEvent.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+        : null;
+      const additionalEventCount = assignment ? assignment.count - 1 : 0;
+      const assignmentLabel = assignment
+        ? `, assigned to ${assignment.nextEvent.title} on ${eventDate}${additionalEventCount > 0 ? ` and ${additionalEventCount} more upcoming event${additionalEventCount === 1 ? '' : 's'}` : ''}`
+        : '';
       if (viewMode === 'list') {
         const thumbSize = 72;
         return (
@@ -461,7 +479,7 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
             onLongPress={outfitSelectionMode ? undefined : () => handleOutfitLongPress(outfit)}
             delayLongPress={450}
             accessibilityRole="button"
-            accessibilityLabel={outfit.name}
+            accessibilityLabel={`${outfit.name}${assignmentLabel}`}
             accessibilityState={outfitSelectionMode ? { selected: isSelected } : undefined}
           >
             {outfitSelectionMode && (
@@ -478,15 +496,20 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
             </View>
             <View style={styles.outfitRowInfo}>
               <Text style={styles.outfitName} numberOfLines={1}>{outfit.name}</Text>
-              {outfit.event ? (
-                <Text style={styles.outfitEvent} numberOfLines={1}>{outfit.event}</Text>
-              ) : null}
               {outfit.wearCount > 0 ? (
                 <Text style={styles.outfitWorn}>Worn {outfit.wearCount}×</Text>
               ) : null}
             </View>
             {!outfitSelectionMode && outfit.isFavorite && (
               <Ionicons name="heart" size={16} color={colors.primary} />
+            )}
+            {!outfitSelectionMode && assignment && eventDate && (
+              <View style={styles.outfitRowAssignment}>
+                <Ionicons name="calendar-outline" size={14} color={colors.mutedForeground} />
+                <Text style={styles.outfitRowAssignmentText}>
+                  {eventDate}{additionalEventCount > 0 ? ` +${additionalEventCount}` : ''}
+                </Text>
+              </View>
             )}
             {!outfitSelectionMode && (
               <Ionicons name="chevron-forward" size={16} color={colors.border} />
@@ -506,7 +529,7 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
             onLongPress={outfitSelectionMode ? undefined : () => handleOutfitLongPress(outfit)}
             delayLongPress={450}
             accessibilityRole="button"
-            accessibilityLabel={outfit.name}
+            accessibilityLabel={`${outfit.name}${assignmentLabel}`}
             accessibilityState={outfitSelectionMode ? { selected: isSelected } : undefined}
           >
             <View style={styles.collageWrapper}>
@@ -521,23 +544,32 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
                   />
                 </View>
               )}
-              {!outfitSelectionMode && outfit.isFavorite && (
-                <View style={styles.favBadge}>
-                  <Ionicons name="heart" size={12} color={colors.primary} />
+              {!outfitSelectionMode && (assignment || outfit.isFavorite) && (
+                <View style={styles.outfitBadgeStack}>
+                  {assignment && eventDate ? (
+                    <View style={styles.eventDateBadge}>
+                      <Ionicons name="calendar-outline" size={12} color={colors.foreground} />
+                      <Text style={styles.eventDateText}>
+                        {eventDate}{additionalEventCount > 0 ? ` +${additionalEventCount}` : ''}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {outfit.isFavorite ? (
+                    <View style={styles.outfitFavBadge}>
+                      <Ionicons name="heart" size={12} color={colors.primary} />
+                    </View>
+                  ) : null}
                 </View>
               )}
             </View>
             <View style={styles.outfitInfo}>
               <Text style={styles.outfitName} numberOfLines={1}>{outfit.name}</Text>
-              {outfit.event ? (
-                <Text style={styles.outfitEvent} numberOfLines={1}>{outfit.event}</Text>
-              ) : null}
             </View>
           </PressableScale>
         </View>
       );
     },
-    [cardWidth, navigation, viewMode, outfitSelectionMode, selectedOutfitIds, toggleOutfitSelect, handleOutfitLongPress],
+    [cardWidth, navigation, viewMode, outfitSelectionMode, selectedOutfitIds, toggleOutfitSelect, handleOutfitLongPress, upcomingAssignmentSummaries],
   );
 
   // ── Empty states ───────────────────────────────────────────────────────────
@@ -1077,13 +1109,8 @@ export function ClosetScreen({ navigation }: ClosetScreenProps) {
           sortOptions={OUTFIT_SORT_OPTIONS}
           sortKey={outfitSortKey}
           onSortChange={(key) => setOutfitSortKey(key as OutfitSortKey)}
-          allEvents={allOutfitEvents}
-          selectedEvents={outfitSelectedEvents}
-          onToggleEvent={(event) =>
-            setOutfitSelectedEvents(prev =>
-              prev.includes(event) ? prev.filter(e => e !== event) : [...prev, event]
-            )
-          }
+          showAssigned={outfitShowAssigned}
+          onToggleAssigned={() => setOutfitShowAssigned(v => !v)}
           allTags={allOutfitTags}
           selectedTags={outfitSelectedTags}
           onToggleTag={(tag) =>
@@ -1356,6 +1383,53 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...shadows.xs,
   },
+  outfitBadgeStack: {
+    position: 'absolute',
+    top: spacing.xs,
+    right: spacing.xs,
+    alignItems: 'flex-end',
+    gap: spacing.xs,
+  },
+  eventDateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: radii.full,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    ...shadows.xs,
+  },
+  eventDateText: {
+    fontSize: 11,
+    fontWeight: typography.weight.semibold,
+    color: colors.foreground,
+    fontVariant: ['tabular-nums'],
+  },
+  outfitFavBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: radii.full,
+    backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.xs,
+  },
+  outfitRowAssignment: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  outfitRowAssignmentText: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    color: colors.mutedForeground,
+    fontVariant: ['tabular-nums'],
+  },
   itemInfo: {
     paddingTop: spacing.sm,
     paddingHorizontal: 2,
@@ -1403,11 +1477,6 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
-  },
-  outfitEvent: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-    textTransform: 'capitalize',
   },
   outfitWorn: {
     fontSize: typography.size.xs,

@@ -71,9 +71,8 @@ export interface OutfitFilterPanelProps {
   sortOptions: { key: string; label: string }[];
   sortKey: string;
   onSortChange: (key: string) => void;
-  allEvents: string[];
-  selectedEvents: string[];
-  onToggleEvent: (event: string) => void;
+  showAssigned: boolean;
+  onToggleAssigned: () => void;
   allTags: string[];
   selectedTags: string[];
   onToggleTag: (tag: string) => void;
@@ -93,9 +92,8 @@ export function OutfitFilterPanel({
   sortOptions,
   sortKey,
   onSortChange,
-  allEvents,
-  selectedEvents,
-  onToggleEvent,
+  showAssigned,
+  onToggleAssigned,
   allTags,
   selectedTags,
   onToggleTag,
@@ -202,32 +200,23 @@ export function OutfitFilterPanel({
           ))}
         </AccordionSection>
 
-        {/* ── Event / Occasion ── */}
-        {allEvents.length > 0 && (
-          <AccordionSection
-            title="Occasion"
-            badge={selectedEvents.length}
-            defaultExpanded={selectedEvents.length > 0}
-          >
-            <View style={styles.chips}>
-              {allEvents.map(event => {
-                const active = selectedEvents.includes(event);
-                return (
-                  <TouchableOpacity
-                    key={event}
-                    style={[styles.chip, active && styles.chipActive]}
-                    onPress={() => onToggleEvent(event)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                      {event}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </AccordionSection>
-        )}
+        <AccordionSection
+          title="Event Assignment"
+          badge={showAssigned ? 1 : undefined}
+          defaultExpanded={showAssigned}
+        >
+          <View style={styles.chips}>
+            <TouchableOpacity
+              style={[styles.chip, showAssigned && styles.chipActive]}
+              onPress={onToggleAssigned}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.chipText, showAssigned && styles.chipTextActive]}>
+                Assigned to event
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </AccordionSection>
 
         {/* ── Favourites ── */}
         <AccordionSection

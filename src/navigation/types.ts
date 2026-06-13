@@ -25,7 +25,7 @@ export type AppTabParamList = {
 
 // Unified closet stack (items + outfits + their detail screens)
 export type ClosetStackParamList = {
-  ClosetMain: undefined;
+  ClosetMain: { segment?: 'pieces' | 'outfits' } | undefined;
   ItemDetail: {
     itemId?: number;
     scanData?: ScanResult;

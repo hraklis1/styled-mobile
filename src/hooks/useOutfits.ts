@@ -4,6 +4,8 @@ import { Alert } from 'react-native';
 import { api, isNetworkError } from '../lib/api';
 import { track } from '../lib/analytics';
 import type { Outfit, OutfitItemEntry } from '../types/outfit';
+import type { Event } from '../types/event';
+import { EVENTS_QUERY_KEY } from './useEvents';
 
 export const OUTFITS_QUERY_KEY = ['outfits'] as const;
 
@@ -172,6 +174,24 @@ export function useDeleteOutfit() {
       if (ctx?.previous) qc.setQueryData(OUTFITS_QUERY_KEY, ctx.previous);
       Alert.alert('Error', "Couldn't delete outfit. Please try again.");
     },
-    onSettled: () => invalidateOutfitQueries(qc),
+    onSettled: () => {
+      invalidateOutfitQueries(qc);
+      qc.invalidateQueries({ queryKey: EVENTS_QUERY_KEY });
+    },
+  });
+}
+
+export function useAssignOutfitEvents() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ outfitId, eventIds }: { outfitId: number; eventIds: number[] }) =>
+      api.put<Event[]>(`/api/outfits/${outfitId}/events`, { eventIds }).then((r) => r.data),
+    onSuccess: (events) => {
+      qc.setQueryData<Event[]>(EVENTS_QUERY_KEY, events);
+      invalidateOutfitQueries(qc);
+    },
+    onError: () => {
+      Alert.alert('Error', "Couldn't update event assignments. Please try again.");
+    },
   });
 }

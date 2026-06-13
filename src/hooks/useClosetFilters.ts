@@ -4,6 +4,8 @@ import { SEASON_OPTIONS, CATEGORY_ORDER, CATEGORY_LABELS, type ItemCategory } fr
 import { getSubcategories } from '../lib/taxonomy';
 import type { Item } from '../types/item';
 import type { Outfit } from '../types/outfit';
+import type { Event } from '../types/event';
+import { getUpcomingAssignmentSummaries } from '../lib/outfitAssignments';
 
 export type SortKey = 'newest' | 'oldest' | 'name_asc' | 'name_desc' | 'most_worn' | 'least_worn' | 'recently_worn' | 'cost_per_wear';
 export type OutfitSortKey = 'newest' | 'oldest' | 'most_worn' | 'recently_worn' | 'name_asc';
@@ -11,12 +13,13 @@ export type OutfitSortKey = 'newest' | 'oldest' | 'most_worn' | 'recently_worn' 
 interface UseClosetFiltersParams {
   items: Item[];
   outfits: Outfit[];
+  events: Event[];
   search: string;
   activeCategory: ItemCategory | null;
   activeSubcategory: string | null;
 }
 
-export function useClosetFilters({ items, outfits, search, activeCategory, activeSubcategory }: UseClosetFiltersParams) {
+export function useClosetFilters({ items, outfits, events, search, activeCategory, activeSubcategory }: UseClosetFiltersParams) {
   // ── Pieces filter state ──────────────────────────────────────────────────
   const [sortKey, setSortKey]                     = useState<SortKey>('newest');
   const [filterSheetOpen, setFilterSheetOpen]     = useState(false);
@@ -35,7 +38,7 @@ export function useClosetFilters({ items, outfits, search, activeCategory, activ
   const [outfitSortKey, setOutfitSortKey]               = useState<OutfitSortKey>('newest');
   const [outfitFilterSheetOpen, setOutfitFilterSheetOpen] = useState(false);
   const [outfitSelectedTags, setOutfitSelectedTags]     = useState<string[]>([]);
-  const [outfitSelectedEvents, setOutfitSelectedEvents] = useState<string[]>([]);
+  const [outfitShowAssigned, setOutfitShowAssigned]     = useState(false);
   const [outfitShowNeverWorn, setOutfitShowNeverWorn]   = useState(false);
   const [outfitShowFavorites, setOutfitShowFavorites]   = useState(false);
 
@@ -79,18 +82,15 @@ export function useClosetFilters({ items, outfits, search, activeCategory, activ
     () => [...new Set(outfits.flatMap(o => o.tags ?? []))].sort(),
     [outfits],
   );
-  const allOutfitEvents = useMemo(
-    () => [...new Set(outfits.filter(o => o.event).map(o => o.event!))].sort(),
-    [outfits],
-  );
+  const upcomingAssignmentSummaries = useMemo(() => getUpcomingAssignmentSummaries(events), [events]);
   const outfitActiveFilterCount = useMemo(
     () =>
       (outfitSortKey !== 'newest' ? 1 : 0) +
       outfitSelectedTags.length +
-      outfitSelectedEvents.length +
+      (outfitShowAssigned ? 1 : 0) +
       (outfitShowNeverWorn ? 1 : 0) +
       (outfitShowFavorites ? 1 : 0),
-    [outfitSortKey, outfitSelectedTags, outfitSelectedEvents, outfitShowNeverWorn, outfitShowFavorites],
+    [outfitSortKey, outfitSelectedTags, outfitShowAssigned, outfitShowNeverWorn, outfitShowFavorites],
   );
 
   // ── Category metadata ────────────────────────────────────────────────────
@@ -194,14 +194,13 @@ export function useClosetFilters({ items, outfits, search, activeCategory, activ
       result = result.filter(
         o =>
           o.name.toLowerCase().includes(q) ||
-          (o.event ?? '').toLowerCase().includes(q) ||
           (o.tags ?? []).some(t => t.toLowerCase().includes(q)),
       );
     }
     if (outfitSelectedTags.length)
       result = result.filter(o => outfitSelectedTags.every(t => (o.tags ?? []).includes(t)));
-    if (outfitSelectedEvents.length)
-      result = result.filter(o => o.event && outfitSelectedEvents.includes(o.event));
+    if (outfitShowAssigned)
+      result = result.filter(o => upcomingAssignmentSummaries.has(o.id));
     if (outfitShowNeverWorn)
       result = result.filter(o => o.wearCount === 0);
     if (outfitShowFavorites)
@@ -224,7 +223,7 @@ export function useClosetFilters({ items, outfits, search, activeCategory, activ
     else
       arr.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return arr;
-  }, [outfits, search, outfitSelectedTags, outfitSelectedEvents, outfitShowNeverWorn, outfitShowFavorites, outfitSortKey]);
+  }, [outfits, search, outfitSelectedTags, outfitShowAssigned, outfitShowNeverWorn, outfitShowFavorites, outfitSortKey, upcomingAssignmentSummaries]);
 
   // ── Actions ──────────────────────────────────────────────────────────────
   function clearSheetFilters() {
@@ -244,7 +243,7 @@ export function useClosetFilters({ items, outfits, search, activeCategory, activ
   function clearOutfitFilters() {
     setOutfitSortKey('newest');
     setOutfitSelectedTags([]);
-    setOutfitSelectedEvents([]);
+    setOutfitShowAssigned(false);
     setOutfitShowNeverWorn(false);
     setOutfitShowFavorites(false);
   }
@@ -273,14 +272,14 @@ export function useClosetFilters({ items, outfits, search, activeCategory, activ
     outfitSortKey, setOutfitSortKey,
     outfitFilterSheetOpen, setOutfitFilterSheetOpen,
     outfitSelectedTags, setOutfitSelectedTags,
-    outfitSelectedEvents, setOutfitSelectedEvents,
+    outfitShowAssigned, setOutfitShowAssigned,
     outfitShowNeverWorn, setOutfitShowNeverWorn,
     outfitShowFavorites, setOutfitShowFavorites,
 
     // Filter metadata
     allColors, allBrands, allSeasons, allMaterials, allSleeveLengths,
     activeFilterCount,
-    allOutfitTags, allOutfitEvents,
+    allOutfitTags, upcomingAssignmentSummaries,
     outfitActiveFilterCount,
     categoryCounts, availableCategories, availableSubcategories,
 
