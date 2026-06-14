@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 import { useUpdateProfile } from '../../hooks/useProfile';
 import { track } from '../../lib/analytics';
 import { colors, spacing, typography, radii } from '../../theme';
@@ -297,10 +298,52 @@ function StepLocationSizing({
   sizeTop: string;
   setSizeTop: (v: string) => void;
 }) {
+  const [locationPermission, setLocationPermission] = useState<'granted' | 'denied' | 'undetermined'>('undetermined');
+  const [requestingLocation, setRequestingLocation] = useState(false);
+
+  const requestLocation = async () => {
+    setRequestingLocation(true);
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      setLocationPermission(permission.status);
+    } finally {
+      setRequestingLocation(false);
+    }
+  };
+
   return (
     <View style={{ gap: spacing.xl }}>
       <View>
-        <SectionLabel>Your location</SectionLabel>
+        <SectionLabel>Weather-aware styling</SectionLabel>
+        <Text style={s.locationCopy}>
+          Let Styled use your current city while the app is open so outfits match the weather wherever you are.
+        </Text>
+        <TouchableOpacity
+          style={[s.locationPermissionBtn, locationPermission === 'granted' && s.locationPermissionBtnGranted]}
+          onPress={requestLocation}
+          disabled={requestingLocation || locationPermission === 'granted'}
+          activeOpacity={0.75}
+        >
+          {requestingLocation ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Ionicons
+              name={locationPermission === 'granted' ? 'checkmark-circle' : 'navigate-outline'}
+              size={18}
+              color={colors.primary}
+            />
+          )}
+          <Text style={s.locationPermissionText}>
+            {locationPermission === 'granted' ? 'Current location enabled' : 'Use current location'}
+          </Text>
+        </TouchableOpacity>
+        {locationPermission === 'denied' ? (
+          <Text style={s.hint}>Location is off. You can still use a Home city below.</Text>
+        ) : null}
+      </View>
+
+      <View>
+        <SectionLabel>Home city (optional)</SectionLabel>
         <TextInput
           value={location}
           onChangeText={setLocation}
@@ -309,7 +352,7 @@ function StepLocationSizing({
           style={s.textInput}
           returnKeyType="done"
         />
-        <Text style={s.hint}>Used for weather context and nearby store suggestions</Text>
+        <Text style={s.hint}>Used as a fallback and for local recommendations. We never save GPS coordinates as Home.</Text>
       </View>
 
       <View>
@@ -359,7 +402,7 @@ const STEPS = [
   { title: "What's your aesthetic?",   desc: "Pick everything that resonates — most people are a mix."     },
   { title: "Colors & budget",          desc: "Two quick picks."                                             },
   { title: "Body & fit",               desc: "Helps us nail the silhouette and cut every time."             },
-  { title: "Location & sizing",        desc: "Helps us find items near you in the right size."              },
+  { title: "Location & sizing",        desc: "Weather-aware outfits, with a Home city fallback."            },
 ];
 
 export function OnboardingScreen() {
@@ -753,6 +796,31 @@ const s = StyleSheet.create({
     fontSize: typography.size.xs,
     color: colors.mutedForeground,
     marginTop: spacing.xs,
+  },
+  locationCopy: {
+    fontSize: typography.size.sm,
+    lineHeight: typography.size.sm * 1.5,
+    color: colors.mutedForeground,
+    marginBottom: spacing.md,
+  },
+  locationPermissionBtn: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surfaceSelected,
+  },
+  locationPermissionBtnGranted: {
+    opacity: 0.8,
+  },
+  locationPermissionText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
   },
   regionRow: {
     flexDirection: 'row',

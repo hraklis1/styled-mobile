@@ -25,7 +25,9 @@ import { useGlobalAddSheet } from '../../contexts/GlobalAddSheetContext';
 import { useGlobalScan } from '../../contexts/GlobalScanContext';
 import { useFabScroll } from '../../contexts/FabScrollContext';
 import { useFocusEffect } from '@react-navigation/native';
-import { useWeatherToday } from '../../hooks/useWeather';
+import { useStylingWeatherToday } from '../../hooks/useWeather';
+import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
+import { StylingLocationSheet } from '../../components/home/StylingLocationSheet';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import {
   selectDailyStylistPick,
@@ -75,8 +77,8 @@ function getGreeting(name?: string | null): string {
   return `${period}, ${capitalized}.`;
 }
 
-function stripTempFromSummary(summary: string): string {
-  return summary.replace(/\s+at\s+\d+°[CF]\.?/gi, '').replace(/\.$/, '');
+function compactLocationLabel(label?: string): string | undefined {
+  return label?.split(',')[0]?.trim() || undefined;
 }
 
 function formatEventDate(isoDate: string): string {
@@ -109,7 +111,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const { data: events  = [] } = useEvents();
   const { data: logs    = [] } = useOutfitLogs();
   const deleteLog = useDeleteOutfitLog();
-  const weather = useWeatherToday();
+  const stylingLocation = useActiveStylingLocation();
+  const weather = useStylingWeatherToday(stylingLocation.activeLocation);
+  const [locationSheetVisible, setLocationSheetVisible] = useState(false);
 
   const { openLogger } = useGlobalOutfitLogger();
   const { openStylist } = useGlobalAIStylist();
@@ -192,7 +196,21 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     [outfits],
   );
 
-  const favoriteCount = items.filter((i) => i.isFavorite).length;
+  const activeLocationLabel = stylingLocation.activeLocation.label?.trim() || undefined;
+  const compactActiveLocation = compactLocationLabel(activeLocationLabel);
+  const isHomeFallback = stylingLocation.activeLocation.source === 'home';
+  const weatherLocationLine = weather.data
+    ? [
+      `${WEATHER_EMOJI[weather.data.current.condition] ?? '🌡️'} ${weather.data.current.temperatureC}°C`,
+      compactActiveLocation,
+      isHomeFallback ? 'Home' : undefined,
+    ].filter(Boolean).join(' · ')
+    : compactActiveLocation
+      ? [`📍 ${compactActiveLocation}`, isHomeFallback ? 'Home' : undefined].filter(Boolean).join(' · ')
+      : 'Set weather location';
+  const locationAccessibilityLabel = activeLocationLabel
+    ? `Weather location: ${activeLocationLabel}. ${isHomeFallback ? 'Using Home fallback.' : 'Using current location.'} Tap to change.`
+    : 'No weather location set. Tap to set weather location.';
   const dailyPick = useMemo(
     () => dailyPickHistoryLoaded
       ? selectDailyStylistPick({
@@ -263,39 +281,18 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         <View style={styles.greetingRow}>
           <View style={styles.greetingText}>
             <Text style={styles.greeting}>{getGreeting(user?.displayName)}</Text>
-            {(items.length > 0 || outfits.length > 0 || weather.data) ? (
-              <View style={styles.headerMeta}>
-                {weather.data && (
-                  <Text style={styles.weatherLine}>
-                    {WEATHER_EMOJI[weather.data.current.condition] ?? '🌡️'}{' '}
-                    {weather.data.current.temperatureC}°C,{' '}
-                    {stripTempFromSummary(weather.data.current.summary)} · ↑{weather.data.forecast.tempMaxC}° ↓{weather.data.forecast.tempMinC}°
-                    {weather.data.current.locationLabel ? ` · 📍 ${weather.data.current.locationLabel}` : ''}
-                  </Text>
-                )}
-                <View style={styles.chipsRow}>
-                  <View style={styles.chip}>
-                    <Text style={styles.chipText}>
-                      {items.length} {items.length === 1 ? 'item' : 'items'}
-                    </Text>
-                  </View>
-                  {favoriteCount > 0 && (
-                    <View style={styles.chip}>
-                      <Text style={styles.chipText}>{favoriteCount} favourited</Text>
-                    </View>
-                  )}
-                  {outfits.length > 0 && (
-                    <View style={styles.chip}>
-                      <Text style={styles.chipText}>
-                        {outfits.length} {outfits.length === 1 ? 'outfit' : 'outfits'}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            ) : (
-              <Text style={styles.greetingSubtitle}>Your style, at a glance.</Text>
-            )}
+            <TouchableOpacity
+              style={styles.weatherLocationButton}
+              onPress={() => setLocationSheetVisible(true)}
+              activeOpacity={0.65}
+              accessibilityRole="button"
+              accessibilityLabel={locationAccessibilityLabel}
+            >
+              <Text style={styles.weatherLocationText} numberOfLines={1}>
+                {weatherLocationLine}
+              </Text>
+              <Ionicons name="chevron-forward" size={12} color={colors.mutedForeground} />
+            </TouchableOpacity>
           </View>
           <PressableScale
             contentStyle={styles.settingsBtn}
@@ -589,6 +586,15 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       )}
 
     </ScrollView>
+      <StylingLocationSheet
+        visible={locationSheetVisible}
+        activeLocation={stylingLocation.activeLocation}
+        homeLocation={stylingLocation.homeLocation}
+        permissionStatus={stylingLocation.permissionStatus}
+        onRequestCurrent={stylingLocation.requestCurrentLocation}
+        onRefreshCurrent={() => { stylingLocation.refetchCurrentLocation(); }}
+        onClose={() => setLocationSheetVisible(false)}
+      />
     </View>
   );
 }
@@ -622,31 +628,18 @@ const styles = StyleSheet.create({
     color: colors.foreground,
     letterSpacing: -0.5,
   },
-  greetingSubtitle: {
-    fontSize: typography.size.sm,
-    color: colors.mutedForeground,
-  },
-  headerMeta: {
-    gap: spacing.xs,
-  },
-  weatherLine: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-  },
-  chipsRow: {
+  weatherLocationButton: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    gap: 3,
+    paddingVertical: 2,
   },
-  chip: {
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderRightColor: colors.border,
-    paddingRight: spacing.sm,
-  },
-  chipText: {
+  weatherLocationText: {
+    flexShrink: 1,
     fontSize: typography.size.xs,
     color: colors.mutedForeground,
-    fontWeight: typography.weight.medium,
   },
   settingsBtn: {
     padding: spacing.sm,

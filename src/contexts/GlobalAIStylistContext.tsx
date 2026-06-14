@@ -21,6 +21,7 @@ export type StylistOpenSource =
 
 type OpenStylistOptions = {
   initialQuery?: string;
+  destination?: string;
   source: StylistOpenSource;
 };
 
@@ -45,10 +46,11 @@ type Props = {
 export function GlobalAIStylistProvider({ children }: Props) {
   const [visible, setVisible] = useState(false);
   const [initialQuery, setInitialQuery] = useState<string | undefined>(undefined);
+  const [initialDestination, setInitialDestination] = useState<string | undefined>(undefined);
   const [promptRequestId, setPromptRequestId] = useState(0);
   const { isPremium } = useEntitlement();
 
-  const openStylist = useCallback(async ({ initialQuery: query, source }: OpenStylistOptions) => {
+  const openStylist = useCallback(async ({ initialQuery: query, destination, source }: OpenStylistOptions) => {
     if (!isPremium) {
       const shouldUpgrade = await new Promise<boolean>((resolve) => {
         Alert.alert(
@@ -66,11 +68,15 @@ export function GlobalAIStylistProvider({ children }: Props) {
     }
     track('stylist_opened', { source });
     setInitialQuery(query);
+    setInitialDestination(destination);
     if (query) setPromptRequestId((id) => id + 1);
     setVisible(true);
   }, [isPremium]);
 
-  const closeStylist = useCallback(() => setVisible(false), []);
+  const closeStylist = useCallback(() => {
+    setVisible(false);
+    setInitialDestination(undefined);
+  }, []);
   const consumePrompt = useCallback(() => setInitialQuery(undefined), []);
 
   return (
@@ -85,6 +91,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
       >
         <StylistChatView
           initialQuery={initialQuery}
+          initialDestination={initialDestination}
           promptRequestId={promptRequestId}
           onPromptConsumed={consumePrompt}
           onClose={closeStylist}

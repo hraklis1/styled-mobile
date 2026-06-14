@@ -597,14 +597,14 @@ export function ProfileScreen(_props: ProfileScreenProps) {
 
           {/* Location */}
           <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Location</Text>
+            <Text style={styles.fieldLabel}>Home location</Text>
             <LocationAutocompleteInput
               value={form.location}
               onChangeText={form.setLocation}
               onSelect={form.setLocation}
               placeholder="e.g. Brooklyn, NY"
             />
-            <Text style={styles.hint}>Used as a fallback for weather-based suggestions.</Text>
+            <Text style={styles.hint}>Used when current location is off or unavailable, and for local recommendations.</Text>
           </View>
 
           {/* Favorite Shops */}

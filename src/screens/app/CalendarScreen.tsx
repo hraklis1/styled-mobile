@@ -233,7 +233,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
     const delay = detailEvent ? 300 : 0;
     setDetailEvent(null);
     setTimeout(() => {
-      openStylist({ initialQuery: `${details}.`, source });
+      openStylist({ initialQuery: `${details}.`, destination: event.location ?? undefined, source });
     }, delay);
   };
 

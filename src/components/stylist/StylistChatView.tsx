@@ -12,11 +12,12 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
-import * as Location from 'expo-location';
+import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -26,13 +27,17 @@ import { api, getAccessToken, API_BASE_URL } from '../../lib/api';
 import { track } from '../../lib/analytics';
 import { compressImageToDataUrl } from '../../lib/compressImage';
 import { resolveImageUri } from '../../lib/resolveImageUri';
-import { useWeatherCurrent, type CurrentWeather } from '../../hooks/useWeather';
+import { useStylingWeatherToday, type CurrentWeather } from '../../hooks/useWeather';
 import { useItems } from '../../hooks/useItems';
 import { useProfile } from '../../hooks/useProfile';
+import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
+import { conversationLocation, type StylingLocationContext } from '../../lib/stylingLocation';
 import { useCreateOutfit, type CreateOutfitInput } from '../../hooks/useOutfits';
 import { addToWishlist } from '../../lib/wishlist';
 import { VoiceInputButton } from '../primitives/VoiceInputButton';
+import { LocationAutocompleteInput } from '../primitives/LocationAutocompleteInput';
 import { ShopOutfitCard } from '../outfits/ShopOutfitCard';
+import { ResolvedOutfitCollage } from '../outfits/ResolvedOutfitCollage';
 import { colors, radii, shadows, spacing, typography } from '../../theme';
 import type { ShopOutfit } from '../../types/shop';
 import type { Item } from '../../types/item';
@@ -90,6 +95,13 @@ const CHIPS_DEFAULT = [
   'Help me dress for a dinner date',
 ];
 
+const PROMPT_ICONS: Array<keyof typeof Ionicons.glyphMap> = [
+  'sunny-outline',
+  'cafe-outline',
+  'color-palette-outline',
+  'wine-outline',
+];
+
 function useContextualChips(lastMessage: ChatMessage | undefined): string[] {
   return useMemo(() => {
     if (!lastMessage || lastMessage.role !== 'assistant') return CHIPS_DEFAULT;
@@ -139,6 +151,7 @@ function detectOccasionHint(text: string): OccasionHint | undefined {
 
 type Props = {
   initialQuery?: string;
+  initialDestination?: string;
   promptRequestId?: number;
   onPromptConsumed?: () => void;
   onClose: () => void;
@@ -147,15 +160,22 @@ type Props = {
 
 export function StylistChatView({
   initialQuery,
+  initialDestination,
   promptRequestId = 0,
   onPromptConsumed,
   onClose,
   onNavigateToShop,
 }: Props) {
   const insets = useSafeAreaInsets();
-  const weather = useWeatherCurrent();
   const { data: allItems = [] } = useItems();
   const { data: profile } = useProfile();
+  const stylingLocation = useActiveStylingLocation();
+  const [conversationLocationContext, setConversationLocationContext] = useState<StylingLocationContext | null>(
+    initialDestination ? conversationLocation(initialDestination) : null,
+  );
+  const [locationPickerVisible, setLocationPickerVisible] = useState(false);
+  const activeLocation = conversationLocationContext ?? stylingLocation.activeLocation;
+  const weather = useStylingWeatherToday(activeLocation);
   const createOutfit = useCreateOutfit();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -246,6 +266,7 @@ export function StylistChatView({
       track('stylist_message_sent', {
         input_type: audio ? 'voice' : photoData ? 'photo' : 'text',
       });
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 
       const session = ++sessionRef.current;
 
@@ -284,21 +305,10 @@ export function StylistChatView({
         if (weather.data) {
           const useCelsius = profile?.tempUnit === 'C';
           const tempStr = useCelsius
-            ? `${weather.data.temperatureC}°C`
-            : `${weather.data.temperatureF}°F`;
-          weatherSummary = `${weather.data.summary} ${tempStr}`;
+            ? `${weather.data.current.temperatureC}°C`
+            : `${weather.data.current.temperatureF}°F`;
+          weatherSummary = `${weather.data.current.summary} ${tempStr}`;
         }
-
-        let liveLocation: { lat: number; lon: number } | undefined;
-        try {
-          const { status } = await Location.requestForegroundPermissionsAsync();
-          if (status === 'granted') {
-            const pos = await Location.getCurrentPositionAsync({
-              accuracy: Location.Accuracy.Balanced,
-            });
-            liveLocation = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-          }
-        } catch { /* location is non-fatal */ }
 
         const occasionHint = text ? detectOccasionHint(text) : undefined;
 
@@ -314,7 +324,13 @@ export function StylistChatView({
             ...(audio ? { audio } : {}),
             ...(photoData ? { photoData } : {}),
             ...(weatherSummary ? { weatherSummary } : {}),
-            ...(liveLocation ? { liveLocation } : {}),
+            ...((activeLocation.label || activeLocation.coords) ? {
+              locationContext: {
+                source: activeLocation.source,
+                ...(activeLocation.label ? { label: activeLocation.label } : {}),
+                ...(activeLocation.coords ? { coords: activeLocation.coords } : {}),
+              },
+            } : {}),
             ...(occasionHint ? { occasionHint } : {}),
             history,
             _stream: true,
@@ -446,10 +462,14 @@ export function StylistChatView({
         if (sessionRef.current === session) setIsLoading(false);
       }
     },
-    [isLoading, messages, profile?.tempUnit, weather.data],
+    [activeLocation, isLoading, messages, profile?.tempUnit, weather.data],
   );
 
   // ── Effects ────────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    setConversationLocationContext(initialDestination ? conversationLocation(initialDestination) : null);
+  }, [initialDestination]);
 
   useEffect(() => {
     AsyncStorage.getItem(SESSION_KEY).then((raw) => {
@@ -472,7 +492,14 @@ export function StylistChatView({
   }, [initialQuery, isLoading, onPromptConsumed, promptRequestId, sendMessage]);
 
   useEffect(() => {
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+    const timer = setTimeout(() => {
+      if (messages.length === 0 && !isLoading) {
+        scrollRef.current?.scrollTo({ y: 0, animated: false });
+        return;
+      }
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+    return () => clearTimeout(timer);
   }, [messages, isLoading]);
 
   useEffect(() => {
@@ -520,6 +547,30 @@ export function StylistChatView({
     setMentionQuery(null);
   }
 
+  function confirmNewConversation() {
+    Alert.alert(
+      'Start a new styling session?',
+      'This clears the current conversation from this device.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Start New',
+          onPress: () => {
+            stopCurrentAudio();
+            sessionRef.current++;
+            setMessages([]);
+            setInputText('');
+            setIsLoading(false);
+            setMentionQuery(null);
+            setConversationLocationContext(null);
+            AsyncStorage.removeItem(SESSION_KEY).catch(() => {});
+            Haptics.selectionAsync().catch(() => {});
+          },
+        },
+      ],
+    );
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   const isEmpty = messages.length === 0 && !isLoading;
@@ -532,36 +583,40 @@ export function StylistChatView({
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={insets.bottom}
     >
-      {/* Header — glassmorphism via BlurView; falls back to a semi-opaque view on
-          older Android devices where hardware blur isn't available. */}
       <BlurView
-        intensity={20}
-        tint="light"
+        intensity={35}
+        tint="systemThinMaterialLight"
         style={[styles.header, { paddingTop: insets.top }]}
-        {...(Platform.OS === 'android' && { experimentalBlurMethod: 'dimezisBlurView' })}
+        {...(Platform.OS === 'android' && { blurMethod: 'dimezisBlurViewSdk31Plus' })}
       >
-        <TouchableOpacity style={styles.headerBtn} onPress={onClose}>
+        <TouchableOpacity style={styles.headerBtn} onPress={onClose} accessibilityLabel="Close stylist">
           <Ionicons name="chevron-down" size={22} color={colors.foreground} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>AI Stylist</Text>
+        <View style={styles.headerIdentity}>
+          <View style={styles.headerMark}>
+            <Ionicons name="sparkles" size={13} color={colors.primary} />
+          </View>
+          <View>
+            <Text style={styles.headerTitle}>Your Stylist</Text>
+            <TouchableOpacity onPress={() => setLocationPickerVisible(true)} activeOpacity={0.7}>
+              <Text style={styles.headerSubtitle} numberOfLines={1}>
+                {activeLocation.label || 'Set location'} · {activeLocation.source === 'conversation' ? 'Destination' : activeLocation.source === 'home' ? 'Home fallback' : 'Current'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
         <TouchableOpacity
           style={styles.headerBtn}
-          onPress={() => {
-            stopCurrentAudio();
-            sessionRef.current++;
-            setMessages([]);
-            setIsLoading(false);
-            setMentionQuery(null);
-            AsyncStorage.removeItem(SESSION_KEY).catch(() => {});
-          }}
-          accessibilityLabel="Clear conversation"
+          onPress={confirmNewConversation}
+          accessibilityLabel="Start a new conversation"
         >
-          <Ionicons name="refresh-outline" size={20} color={colors.mutedForeground} />
+          <Ionicons name="ellipsis-horizontal" size={20} color={colors.mutedForeground} />
         </TouchableOpacity>
       </BlurView>
 
       {/* Messages */}
       <ScrollView
+        key={isEmpty ? 'empty-session' : 'active-session'}
         ref={scrollRef}
         style={styles.messageList}
         contentContainerStyle={[
@@ -572,7 +627,14 @@ export function StylistChatView({
         showsVerticalScrollIndicator={false}
       >
         {isEmpty ? (
-          <EmptyState weather={weather.data} onPrompt={(q) => sendMessage({ text: q })} />
+          <EmptyState
+            weather={weather.data?.current}
+            displayName={profile?.displayName}
+            location={activeLocation.label}
+            wardrobeCount={allItems.length}
+            onLocationPress={() => setLocationPickerVisible(true)}
+            onPrompt={(q) => sendMessage({ text: q })}
+          />
         ) : (
           <>
             {messages.map((msg) => (
@@ -597,6 +659,20 @@ export function StylistChatView({
           </>
         )}
       </ScrollView>
+
+      <ConversationLocationPicker
+        visible={locationPickerVisible}
+        activeLocation={activeLocation}
+        homeLocation={stylingLocation.homeLocation}
+        everydayLocation={stylingLocation.activeLocation}
+        permissionStatus={stylingLocation.permissionStatus}
+        onRequestCurrent={stylingLocation.requestCurrentLocation}
+        onSelect={(location) => {
+          setConversationLocationContext(location);
+          setLocationPickerVisible(false);
+        }}
+        onClose={() => setLocationPickerVisible(false)}
+      />
 
       {/* Follow-up chips */}
       {messages.length > 0 && (
@@ -655,29 +731,41 @@ export function StylistChatView({
 
       {/* Input bar */}
       <View style={[styles.inputBar, { paddingBottom: insets.bottom + spacing.sm }]}>
-        <Pressable style={styles.photoBtn} onPress={handlePickPhoto} disabled={isLoading}>
-          <Ionicons name="image-outline" size={22} color={colors.mutedForeground} />
-        </Pressable>
+        <View style={styles.composer}>
+          <Pressable
+            style={styles.photoBtn}
+            onPress={handlePickPhoto}
+            disabled={isLoading}
+            accessibilityLabel="Add a photo"
+          >
+            <Ionicons name="add" size={22} color={colors.primary} />
+          </Pressable>
 
-        <TextInput
-          style={styles.textInput}
-          value={inputText}
-          onChangeText={handleTextChange}
-          placeholder="Ask your stylist… or type @ to tag a piece"
-          placeholderTextColor={colors.mutedForeground}
-          multiline
-          maxLength={2000}
-          returnKeyType="default"
-          editable={!isLoading}
-        />
+          <TextInput
+            style={styles.textInput}
+            value={inputText}
+            onChangeText={handleTextChange}
+            placeholder="Ask about an outfit or tag @a piece"
+            placeholderTextColor={colors.mutedForeground}
+            multiline
+            maxLength={2000}
+            returnKeyType="default"
+            editable={!isLoading}
+          />
 
-        {inputText.trim() ? (
-          <TouchableOpacity style={styles.sendBtn} onPress={handleSendText} disabled={isLoading}>
-            <Ionicons name="send" size={18} color={colors.white} />
-          </TouchableOpacity>
-        ) : (
-          <VoiceInputButton onAudioReady={(b64) => sendMessage({ audio: b64 })} disabled={isLoading} />
-        )}
+          {inputText.trim() ? (
+            <TouchableOpacity
+              style={styles.sendBtn}
+              onPress={handleSendText}
+              disabled={isLoading}
+              accessibilityLabel="Send message"
+            >
+              <Ionicons name="arrow-up" size={19} color={colors.white} />
+            </TouchableOpacity>
+          ) : (
+            <VoiceInputButton onAudioReady={(b64) => sendMessage({ audio: b64 })} disabled={isLoading} />
+          )}
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
@@ -699,11 +787,8 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, onToggleAud
 
   if (!isUser && message.suggestedItemIds?.length) {
     return (
-      <View style={styles.bubbleRowAssistant}>
-        <View style={styles.avatarCircle}>
-          <Ionicons name="sparkles" size={14} color={colors.primary} />
-        </View>
-        <View style={styles.bubbleAssistantWrap}>
+      <EditorialEntrance>
+        <View style={styles.editorialResponse}>
           <OutfitSuggestionCard
             messageText={message.text}
             itemIds={message.suggestedItemIds}
@@ -714,26 +799,28 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, onToggleAud
             recId={message.recId}
           />
           {onToggleAudio && (
-            <TouchableOpacity style={styles.ttsBtn} onPress={onToggleAudio}>
+            <TouchableOpacity style={styles.quietAudioBtn} onPress={onToggleAudio} accessibilityLabel="Read styling notes aloud">
               <Ionicons
                 name={isPlaying ? 'pause-circle-outline' : 'volume-medium-outline'}
                 size={18}
                 color={colors.mutedForeground}
               />
+              <Text style={styles.quietActionText}>{isPlaying ? 'Pause notes' : 'Listen to notes'}</Text>
             </TouchableOpacity>
           )}
         </View>
-      </View>
+      </EditorialEntrance>
     );
   }
 
   if (!isUser && message.shopOutfit) {
     return (
-      <View style={styles.shopCardRow}>
-        <View style={styles.avatarCircle}>
-          <Ionicons name="sparkles" size={14} color={colors.primary} />
-        </View>
+      <EditorialEntrance>
         <View style={styles.shopCardContainer}>
+          <View style={styles.sectionEyebrow}>
+            <Ionicons name="bag-handle-outline" size={13} color={colors.primary} />
+            <Text style={styles.sectionEyebrowText}>Shopping edit</Text>
+          </View>
           <ShopOutfitCard
             outfit={message.shopOutfit}
             onSave={async () => {
@@ -742,42 +829,69 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, onToggleAud
             }}
           />
           {onToggleAudio && (
-            <TouchableOpacity style={styles.ttsBtnShop} onPress={onToggleAudio}>
+            <TouchableOpacity style={styles.quietAudioBtn} onPress={onToggleAudio} accessibilityLabel="Read shopping notes aloud">
               <Ionicons
                 name={isPlaying ? 'pause-circle-outline' : 'volume-medium-outline'}
                 size={18}
                 color={colors.mutedForeground}
               />
+              <Text style={styles.quietActionText}>{isPlaying ? 'Pause notes' : 'Listen to notes'}</Text>
             </TouchableOpacity>
           )}
         </View>
-      </View>
+      </EditorialEntrance>
+    );
+  }
+
+  if (!isUser) {
+    return (
+      <EditorialEntrance>
+        <View style={styles.stylistNote}>
+          <View style={styles.sectionEyebrow}>
+            <Ionicons name="sparkles" size={13} color={colors.primary} />
+            <Text style={styles.sectionEyebrowText}>Stylist note</Text>
+          </View>
+          <Text style={styles.stylistNoteText}>
+            {message.text}{message.isStreaming ? '▍' : ''}
+          </Text>
+          {onToggleAudio && (
+            <TouchableOpacity style={styles.quietAudioBtn} onPress={onToggleAudio} accessibilityLabel="Read stylist note aloud">
+              <Ionicons
+                name={isPlaying ? 'pause-circle-outline' : 'volume-medium-outline'}
+                size={18}
+                color={colors.mutedForeground}
+              />
+              <Text style={styles.quietActionText}>{isPlaying ? 'Pause' : 'Listen'}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </EditorialEntrance>
     );
   }
 
   return (
-    <View style={[styles.bubbleRow, isUser ? styles.bubbleRowUser : styles.bubbleRowAssistant]}>
-      {!isUser && (
-        <View style={styles.avatarCircle}>
-          <Ionicons name="sparkles" size={14} color={colors.primary} />
-        </View>
-      )}
-      <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAssistant]}>
-        <Text style={[styles.bubbleText, isUser ? styles.bubbleTextUser : styles.bubbleTextAssistant]}>
+    <View style={[styles.bubbleRow, styles.bubbleRowUser]}>
+      <View style={[styles.bubble, styles.bubbleUser]}>
+        <Text style={[styles.bubbleText, styles.bubbleTextUser]}>
           {message.text}{message.isStreaming ? '▍' : ''}
         </Text>
-        {!isUser && onToggleAudio && (
-          <TouchableOpacity style={styles.ttsBtn} onPress={onToggleAudio}>
-            <Ionicons
-              name={isPlaying ? 'pause-circle-outline' : 'volume-medium-outline'}
-              size={18}
-              color={colors.mutedForeground}
-            />
-          </TouchableOpacity>
-        )}
       </View>
     </View>
   );
+}
+
+function EditorialEntrance({ children }: { children: React.ReactNode }) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(10)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 260, useNativeDriver: true }),
+      Animated.timing(translateY, { toValue: 0, duration: 260, useNativeDriver: true }),
+    ]).start();
+  }, [opacity, translateY]);
+
+  return <Animated.View style={{ opacity, transform: [{ translateY }] }}>{children}</Animated.View>;
 }
 
 // ── OutfitSuggestionCard ──────────────────────────────────────────────────────
@@ -803,6 +917,7 @@ type OutfitSuggestionCardProps = {
 };
 
 function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, missingEssentials, onNavigateToShop, recId }: OutfitSuggestionCardProps) {
+  const { width } = useWindowDimensions();
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
@@ -812,6 +927,15 @@ function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, mi
     () => itemIds.map((id) => allItems.find((i) => i.id === id)).filter((i): i is Item => !!i),
     [itemIds, allItems],
   );
+  const collageSlots = useMemo(
+    () => matchedItems.map((item) => ({
+      key: String(item.id),
+      uri: resolveImageUri(item.imageUrl),
+    })),
+    [matchedItems],
+  );
+  const collageSize = Math.max(240, Math.min(width - spacing.xxl * 2, 420));
+  const lookTitle = outfitNameFromItems(matchedItems);
 
   async function handleSave() {
     if (saved || saving) return;
@@ -824,6 +948,7 @@ function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, mi
       };
       await createOutfit.mutateAsync(input);
       setSaved(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     } catch {
       // Error alert handled by the mutation
     } finally {
@@ -839,37 +964,42 @@ function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, mi
 
   return (
     <View style={styles.outfitCard}>
-      {/* Item thumbnails */}
-      {matchedItems.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.outfitCardThumbs}
-        >
-          {matchedItems.map((item) => {
-            const imgUri = resolveImageUri(item.imageUrl);
-            return (
-              <Pressable key={item.id} style={styles.outfitThumbWrap} onPress={() => setSelectedItem(item)}>
-                <View style={styles.outfitItemThumb}>
-                  {imgUri ? (
-                    <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                  ) : (
-                    <Ionicons name="shirt-outline" size={18} color={colors.mutedForeground} />
-                  )}
-                </View>
-                <Text style={styles.outfitThumbLabel} numberOfLines={1} ellipsizeMode="tail">
-                  {item.name}
-                </Text>
+      <View style={styles.lookHeader}>
+        <View style={styles.sectionEyebrow}>
+          <Ionicons name="sparkles" size={13} color={colors.primary} />
+          <Text style={styles.sectionEyebrowText}>Styled for you</Text>
+        </View>
+        <Text style={styles.lookTitle} numberOfLines={2}>{lookTitle}</Text>
+        <Text style={styles.lookMeta}>{matchedItems.length} pieces from your wardrobe</Text>
+      </View>
+
+      {collageSlots.length > 0 && (
+        <View style={styles.collageFrame}>
+          <ResolvedOutfitCollage
+            slots={collageSlots}
+            size={collageSize}
+            height={Math.round(collageSize * 0.88)}
+            borderRadius={radii.lg}
+          />
+          <View style={styles.collageLabels}>
+            {matchedItems.slice(0, 4).map((item, index) => (
+              <Pressable
+                key={item.id}
+                style={styles.collageLabel}
+                onPress={() => setSelectedItem(item)}
+                accessibilityLabel={`View ${item.name}`}
+              >
+                <Text style={styles.collageLabelIndex}>{index + 1}</Text>
+                <Text style={styles.collageLabelText} numberOfLines={1}>{item.name}</Text>
               </Pressable>
-            );
-          })}
-        </ScrollView>
+            ))}
+          </View>
+        </View>
       )}
 
-      {/* AI response text */}
+      <Text style={styles.rationaleLabel}>Why it works</Text>
       <Text style={styles.outfitCardText}>{messageText}</Text>
 
-      {/* Save button + feedback row */}
       <View style={styles.outfitCardActions}>
         <TouchableOpacity
           style={[styles.saveBtn, (saved || saving) && styles.saveBtnDone]}
@@ -883,11 +1013,12 @@ function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, mi
             color={saved ? colors.primaryForeground : colors.primary}
           />
           <Text style={[styles.saveBtnText, saved && styles.saveBtnTextDone]}>
-            {saving ? 'Saving…' : saved ? 'Saved to Outfits' : 'Save to Outfits'}
+            {saving ? 'Saving…' : saved ? 'Saved to outfits' : 'Save this look'}
           </Text>
         </TouchableOpacity>
 
         <View style={styles.feedbackRow}>
+          <Text style={styles.feedbackLabel}>Was this useful?</Text>
           <TouchableOpacity
             style={[styles.feedbackBtn, feedback === 'up' && styles.feedbackBtnActive]}
             onPress={() => handleFeedback('up')}
@@ -1034,11 +1165,12 @@ function TypingIndicator() {
   }, []);
 
   return (
-    <View style={styles.bubbleRow}>
-      <View style={styles.avatarCircle}>
-        <Ionicons name="sparkles" size={14} color={colors.primary} />
+    <View style={styles.typingRow}>
+      <View style={styles.typingLabel}>
+        <Ionicons name="sparkles" size={13} color={colors.primary} />
+        <Text style={styles.sectionEyebrowText}>Styling your answer</Text>
       </View>
-      <View style={[styles.bubble, styles.bubbleAssistant, styles.typingBubble]}>
+      <View style={styles.typingBubble}>
         {[dot1, dot2, dot3].map((d, i) => (
           <Animated.View
             key={i}
@@ -1082,27 +1214,162 @@ function buildEmptyStatePrompts(weather: CurrentWeather | undefined): string[] {
   return prompts;
 }
 
-function EmptyState({ weather, onPrompt }: { weather: CurrentWeather | undefined; onPrompt: (q: string) => void }) {
+function EmptyState({
+  weather,
+  displayName,
+  location,
+  wardrobeCount,
+  onLocationPress,
+  onPrompt,
+}: {
+  weather: CurrentWeather | undefined;
+  displayName?: string | null;
+  location?: string;
+  wardrobeCount: number;
+  onLocationPress: () => void;
+  onPrompt: (q: string) => void;
+}) {
   const prompts = buildEmptyStatePrompts(weather);
+  const firstName = displayName?.trim().split(/\s+/)[0];
+  const context = [
+    location,
+    weather?.summary,
+    wardrobeCount > 0 ? `${wardrobeCount} wardrobe pieces ready` : 'Ready to learn your wardrobe',
+  ].filter(Boolean).join(' · ');
 
   return (
     <View style={styles.emptyState}>
-      <View style={styles.emptyIconCircle}>
-        <Ionicons name="sparkles" size={36} color={colors.primary} />
+      <View style={styles.emptyHero}>
+        <View style={styles.emptyIconCircle}>
+          <Ionicons name="sparkles" size={28} color={colors.primary} />
+        </View>
+        <Text style={styles.emptyKicker}>Your private styling session</Text>
+        <Text style={styles.emptyTitle}>
+          {firstName ? `What are we dressing for, ${firstName}?` : 'What are we dressing for?'}
+        </Text>
+        <Text style={styles.emptySubtitle}>
+          I can build looks from your wardrobe, refine an idea, or help you dress for what is next.
+        </Text>
+        <TouchableOpacity style={styles.contextPill} onPress={onLocationPress} activeOpacity={0.7}>
+          <Ionicons name="location-outline" size={13} color={colors.primary} />
+          <Text style={styles.contextPillText}>{context}</Text>
+          <Ionicons name="chevron-down" size={12} color={colors.primary} />
+        </TouchableOpacity>
       </View>
-      <Text style={styles.emptyTitle}>Your AI Stylist</Text>
-      <Text style={styles.emptySubtitle}>
-        Ask anything — outfit ideas, style advice, or what to wear for an occasion.
-        Type @ to tag items from your wardrobe.
-      </Text>
+
+      <View style={styles.promptHeader}>
+        <Text style={styles.promptHeaderTitle}>Start with an idea</Text>
+        <Text style={styles.promptHeaderHint}>or ask anything below</Text>
+      </View>
       <View style={styles.promptList}>
-        {prompts.map((p) => (
-          <TouchableOpacity key={p} style={styles.promptChip} onPress={() => onPrompt(p)}>
+        {prompts.map((p, index) => (
+          <TouchableOpacity
+            key={p}
+            style={styles.promptChip}
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => {});
+              onPrompt(p);
+            }}
+          >
+            <View style={styles.promptIcon}>
+              <Ionicons name={PROMPT_ICONS[index]} size={17} color={colors.primary} />
+            </View>
             <Text style={styles.promptChipText}>{p}</Text>
+            <Ionicons name="arrow-forward" size={15} color={colors.mutedForeground} />
           </TouchableOpacity>
         ))}
       </View>
     </View>
+  );
+}
+
+function ConversationLocationPicker({
+  visible,
+  activeLocation,
+  homeLocation,
+  everydayLocation,
+  permissionStatus,
+  onRequestCurrent,
+  onSelect,
+  onClose,
+}: {
+  visible: boolean;
+  activeLocation: StylingLocationContext;
+  homeLocation?: string;
+  everydayLocation: StylingLocationContext;
+  permissionStatus: 'granted' | 'denied' | 'undetermined';
+  onRequestCurrent: () => Promise<unknown>;
+  onSelect: (location: StylingLocationContext | null) => void;
+  onClose: () => void;
+}) {
+  const [destination, setDestination] = useState('');
+
+  useEffect(() => {
+    if (visible) setDestination(activeLocation.source === 'conversation' ? activeLocation.label ?? '' : '');
+  }, [activeLocation, visible]);
+
+  const chooseCurrent = async () => {
+    if (permissionStatus !== 'granted') {
+      const status = await onRequestCurrent();
+      if (status !== 'granted') return;
+    }
+    onSelect(null);
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={styles.locationPicker} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={styles.locationPickerHeader}>
+          <View style={styles.locationPickerHeaderCopy}>
+            <Text style={styles.locationPickerTitle}>Where are we dressing for?</Text>
+            <Text style={styles.locationPickerSubtitle}>This choice lasts only for this conversation.</Text>
+          </View>
+          <TouchableOpacity style={styles.headerBtn} onPress={onClose} accessibilityLabel="Close location picker">
+            <Ionicons name="close" size={20} color={colors.foreground} />
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity style={styles.locationChoice} onPress={chooseCurrent}>
+          <Ionicons name="navigate-outline" size={18} color={colors.primary} />
+          <View style={styles.locationChoiceCopy}>
+            <Text style={styles.locationChoiceTitle}>Current location</Text>
+            <Text style={styles.locationChoiceHint}>
+              {everydayLocation.source === 'current' ? everydayLocation.label : permissionStatus === 'granted' ? 'Refresh current location' : 'Enable current location'}
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.locationChoice, !homeLocation && styles.locationChoiceDisabled]}
+          onPress={() => homeLocation && onSelect({ source: 'home', label: homeLocation, isFallback: false })}
+          disabled={!homeLocation}
+        >
+          <Ionicons name="home-outline" size={18} color={colors.primary} />
+          <View style={styles.locationChoiceCopy}>
+            <Text style={styles.locationChoiceTitle}>Home</Text>
+            <Text style={styles.locationChoiceHint}>{homeLocation || 'Add a Home city in Profile first'}</Text>
+          </View>
+        </TouchableOpacity>
+
+        <View style={styles.destinationCard}>
+          <Text style={styles.locationChoiceTitle}>Choose destination</Text>
+          <Text style={styles.locationChoiceHint}>Useful for trips, packing, or plans somewhere else.</Text>
+          <LocationAutocompleteInput
+            value={destination}
+            onChangeText={setDestination}
+            onSelect={setDestination}
+            placeholder="Search a city or region"
+          />
+          <TouchableOpacity
+            style={[styles.destinationButton, !destination.trim() && styles.locationChoiceDisabled]}
+            onPress={() => destination.trim() && onSelect(conversationLocation(destination))}
+            disabled={!destination.trim()}
+          >
+            <Text style={styles.destinationButtonText}>Use destination</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
@@ -1121,9 +1388,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: '#DDD6CD',
+    paddingBottom: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   headerBtn: {
     width: 36,
@@ -1132,16 +1399,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: typography.size.md,
+    fontSize: typography.size.sm,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
+  headerIdentity: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  headerMark: {
+    width: 32, height: 32, borderRadius: radii.full,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceSelected,
+  },
+  headerSubtitle: { fontSize: 10, color: colors.mutedForeground, marginTop: 1 },
   // Messages
   messageList: { flex: 1 },
   messageListContent: {
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.lg,
-    gap: spacing.md,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xxl,
+    gap: spacing.xl,
   },
   messageListEmpty: {
     flex: 1,
@@ -1149,13 +1423,11 @@ const styles = StyleSheet.create({
   },
   // Follow-up chips
   chipsBar: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
     flexGrow: 0,
   },
   chipsContent: {
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.xs,
     gap: spacing.sm,
   },
   chip: {
@@ -1164,7 +1436,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 2,
-    backgroundColor: colors.card,
+    backgroundColor: colors.surfaceElevated,
   },
   chipText: {
     fontSize: typography.size.xs,
@@ -1214,14 +1486,21 @@ const styles = StyleSheet.create({
   },
   // Input bar
   inputBar: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    backgroundColor: colors.background,
+  },
+  composer: {
+    minHeight: 52,
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: spacing.sm,
-    paddingTop: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    backgroundColor: colors.background,
     gap: spacing.xs,
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 4,
+    ...shadows.md,
   },
   photoBtn: {
     width: 44,
@@ -1233,14 +1512,10 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 44,
     maxHeight: 120,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm + 2,
     fontSize: typography.size.sm,
     color: colors.foreground,
-    backgroundColor: colors.card,
   },
   sendBtn: {
     width: 44,
@@ -1257,107 +1532,115 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   bubbleRowUser: { justifyContent: 'flex-end' },
-  bubbleRowAssistant: { justifyContent: 'flex-start' },
-  bubbleAssistantWrap: { flex: 1, gap: spacing.xs },
-  avatarCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: `${colors.primary}18`,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
   bubble: {
-    maxWidth: '78%',
-    borderRadius: radii.lg,
+    maxWidth: '82%',
+    borderRadius: radii.xl,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.sm + 2,
   },
   bubbleUser: {
     backgroundColor: colors.primary,
-    borderBottomRightRadius: radii.sm,
-  },
-  bubbleAssistant: {
-    backgroundColor: '#F8F4EF',
-    borderBottomLeftRadius: radii.sm,
-    borderWidth: 1,
-    borderColor: `${colors.primary}22`,
-    shadowColor: '#956D51',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.09,
-    shadowRadius: 5,
-    elevation: 2,
+    borderBottomRightRadius: radii.md,
   },
   bubbleText: {
     fontSize: typography.size.sm,
     lineHeight: typography.size.sm * 1.55,
   },
   bubbleTextUser: { color: colors.white },
-  bubbleTextAssistant: { color: colors.foreground },
-  ttsBtn: { marginTop: spacing.xs, alignSelf: 'flex-end' },
-  // Shop outfit card
-  shopCardRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
+  editorialResponse: { gap: spacing.sm },
+  shopCardContainer: { gap: spacing.sm },
+  stylistNote: { gap: spacing.sm, paddingHorizontal: spacing.xs },
+  stylistNoteText: {
+    fontSize: typography.size.md,
+    color: colors.foreground,
+    lineHeight: typography.size.md * 1.6,
   },
-  shopCardContainer: { flex: 1, gap: spacing.xs },
-  ttsBtnShop: { alignSelf: 'flex-end' },
+  sectionEyebrow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  sectionEyebrowText: {
+    fontSize: 10,
+    fontWeight: typography.weight.bold,
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  quietAudioBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    alignSelf: 'flex-start',
+    paddingVertical: spacing.xs,
+  },
+  quietActionText: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+    fontWeight: typography.weight.medium,
+  },
   // Outfit suggestion card
   outfitCard: {
-    flex: 1,
-    backgroundColor: '#F8F4EF',
-    borderRadius: radii.lg,
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radii.xl,
     borderWidth: 1,
-    borderColor: `${colors.primary}22`,
-    padding: spacing.md,
-    gap: spacing.sm,
-    shadowColor: '#956D51',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.09,
-    shadowRadius: 5,
-    elevation: 2,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.md,
+    ...shadows.md,
   },
-  outfitCardThumbs: {
-    gap: spacing.sm,
-    paddingBottom: spacing.xs,
+  lookHeader: { gap: spacing.xs },
+  lookTitle: {
+    fontSize: typography.size.xl,
+    fontWeight: typography.weight.semibold,
+    color: colors.foreground,
+    lineHeight: typography.size.xl * 1.25,
+    letterSpacing: -0.4,
   },
-  outfitThumbWrap: {
+  lookMeta: { fontSize: typography.size.xs, color: colors.mutedForeground },
+  collageFrame: {
     alignItems: 'center',
-    width: 72,
+    gap: spacing.sm,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  collageLabels: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  collageLabel: {
+    maxWidth: '48%',
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing.xs,
+    paddingRight: spacing.xs,
   },
-  outfitItemThumb: {
-    width: 72,
-    height: 72,
-    borderRadius: radii.md,
-    backgroundColor: colors.muted,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  outfitThumbLabel: {
+  collageLabelIndex: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     fontSize: 10,
-    color: colors.mutedForeground,
     textAlign: 'center',
-    width: 72,
+    lineHeight: 18,
+    color: colors.primary,
+    backgroundColor: colors.surfaceSelected,
+    overflow: 'hidden',
+  },
+  collageLabelText: { flexShrink: 1, fontSize: 10, color: colors.mutedForeground },
+  rationaleLabel: {
+    fontSize: 10,
+    fontWeight: typography.weight.bold,
+    color: colors.mutedForeground,
+    textTransform: 'uppercase',
+    letterSpacing: 0.9,
   },
   outfitCardText: {
     fontSize: typography.size.sm,
     color: colors.foreground,
-    lineHeight: typography.size.sm * 1.55,
+    lineHeight: typography.size.sm * 1.65,
   },
   saveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
-    backgroundColor: colors.muted,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.primary,
     borderRadius: radii.full,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.sm + 2,
     paddingHorizontal: spacing.lg,
     alignSelf: 'flex-start',
   },
@@ -1368,7 +1651,7 @@ const styles = StyleSheet.create({
   saveBtnText: {
     fontSize: typography.size.xs,
     fontWeight: typography.weight.semibold,
-    color: colors.foreground,
+    color: colors.white,
   },
   saveBtnTextDone: {
     color: colors.white,
@@ -1377,18 +1660,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: spacing.sm,
   },
   feedbackRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing.xs,
   },
+  feedbackLabel: { display: 'none', fontSize: 10, color: colors.mutedForeground },
   feedbackBtn: {
     width: 32,
     height: 32,
     borderRadius: radii.full,
-    backgroundColor: colors.muted,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.surfaceSubtle,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1414,12 +1698,16 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.medium,
   },
   // Typing indicator
-  typingBubble: {
+  typingRow: {
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
+  typingLabel: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    paddingVertical: spacing.md,
   },
+  typingBubble: { flexDirection: 'row', gap: spacing.xs },
   typingDot: {
     width: 7,
     height: 7,
@@ -1428,44 +1716,165 @@ const styles = StyleSheet.create({
   },
   // Empty state
   emptyState: {
+    paddingHorizontal: spacing.sm,
+    gap: spacing.xl,
+  },
+  emptyHero: {
     alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    gap: spacing.lg,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
   emptyIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: `${colors.primary}18`,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: colors.surfaceSelected,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: spacing.xs,
+  },
+  emptyKicker: {
+    fontSize: 10,
+    fontWeight: typography.weight.bold,
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
   },
   emptyTitle: {
-    fontSize: typography.size.xl,
-    fontWeight: typography.weight.bold,
+    fontSize: typography.size.xxl,
+    fontWeight: typography.weight.semibold,
     color: colors.foreground,
-    letterSpacing: -0.3,
+    textAlign: 'center',
+    lineHeight: typography.size.xxl * 1.15,
+    letterSpacing: -0.7,
   },
   emptySubtitle: {
     fontSize: typography.size.sm,
     color: colors.mutedForeground,
     textAlign: 'center',
     lineHeight: typography.size.sm * 1.6,
-    maxWidth: 300,
+    maxWidth: 330,
   },
-  promptList: { width: '100%', gap: spacing.sm },
-  promptChip: {
+  contextPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+    backgroundColor: colors.surfaceSelected,
+    borderRadius: radii.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+  },
+  contextPillText: {
+    flexShrink: 1,
+    fontSize: 10,
+    color: colors.secondaryForeground,
+    fontWeight: typography.weight.medium,
+  },
+  locationPicker: {
+    flex: 1,
+    gap: spacing.md,
+    padding: spacing.lg,
+    backgroundColor: colors.background,
+  },
+  locationPickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  locationPickerHeaderCopy: { flex: 1, gap: 3 },
+  locationPickerTitle: {
+    fontSize: typography.size.xl,
+    color: colors.foreground,
+    fontWeight: typography.weight.bold,
+  },
+  locationPickerSubtitle: {
+    fontSize: typography.size.sm,
+    color: colors.mutedForeground,
+    lineHeight: 19,
+  },
+  locationChoice: {
+    minHeight: 68,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.lg,
+    backgroundColor: colors.surfaceElevated,
+  },
+  locationChoiceDisabled: { opacity: 0.45 },
+  locationChoiceCopy: { flex: 1, gap: 2 },
+  locationChoiceTitle: {
+    fontSize: typography.size.md,
+    color: colors.foreground,
+    fontWeight: typography.weight.semibold,
+  },
+  locationChoiceHint: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+    lineHeight: 17,
+  },
+  destinationCard: {
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surfaceElevated,
+    ...shadows.sm,
+  },
+  destinationButton: {
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.full,
+    backgroundColor: colors.primary,
+  },
+  destinationButtonText: {
+    fontSize: typography.size.sm,
+    color: colors.primaryForeground,
+    fontWeight: typography.weight.semibold,
+  },
+  promptHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+  },
+  promptHeaderTitle: {
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.semibold,
+    color: colors.foreground,
+  },
+  promptHeaderHint: { fontSize: typography.size.xs, color: colors.mutedForeground },
+  promptIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceSelected,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  promptList: { width: '100%', gap: spacing.sm },
+  promptChip: {
+    minHeight: 54,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    backgroundColor: colors.card,
+    backgroundColor: colors.surfaceElevated,
+    ...shadows.xs,
   },
   promptChipText: {
+    flex: 1,
     fontSize: typography.size.sm,
     color: colors.foreground,
-    textAlign: 'center',
+    fontWeight: typography.weight.medium,
   },
   // Item detail sheet
   sheetRoot: {

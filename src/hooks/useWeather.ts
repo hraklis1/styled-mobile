@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import * as Location from 'expo-location';
 import { api } from '../lib/api';
+import type { StylingLocationContext } from './useActiveStylingLocation';
 
 export type WeatherCondition = 'sunny' | 'rainy' | 'cold' | 'mild';
 
@@ -55,6 +56,25 @@ export type TodayWeather = {
 
 export const WEATHER_TODAY_KEY = ['weather', 'today'] as const;
 
+async function getWeatherForCoords(
+  lat: number,
+  lon: number,
+  date: string,
+  locationLabel?: string,
+): Promise<TodayWeather> {
+  const [currentRes, forecastRes] = await Promise.all([
+    api.get<CurrentWeather>(`/api/weather?lat=${lat}&lon=${lon}`),
+    api.get<ForecastWeather>(`/api/weather/forecast?lat=${lat}&lon=${lon}&date=${date}`),
+  ]);
+  return {
+    current: {
+      ...currentRes.data,
+      locationLabel: locationLabel ?? currentRes.data.locationLabel,
+    },
+    forecast: forecastRes.data,
+  };
+}
+
 export function useWeatherToday(enabled = true) {
   return useQuery<TodayWeather, Error>({
     queryKey: WEATHER_TODAY_KEY,
@@ -64,12 +84,43 @@ export function useWeatherToday(enabled = true) {
     queryFn: async () => {
       const { lat, lon } = await getDeviceCoords();
       const today = new Date().toISOString().slice(0, 10);
-      const [currentRes, forecastRes] = await Promise.all([
-        api.get<CurrentWeather>(`/api/weather?lat=${lat}&lon=${lon}`),
-        api.get<ForecastWeather>(`/api/weather/forecast?lat=${lat}&lon=${lon}&date=${today}`),
-      ]);
-      return { current: currentRes.data, forecast: forecastRes.data };
+      return getWeatherForCoords(lat, lon, today);
     },
+  });
+}
+
+function stylingWeatherKey(location: StylingLocationContext) {
+  return [
+    'weather',
+    'styling',
+    location.source,
+    location.label ?? null,
+    location.coords?.lat ?? null,
+    location.coords?.lon ?? null,
+  ] as const;
+}
+
+export async function fetchStylingWeatherToday(
+  location: StylingLocationContext,
+  today = new Date().toISOString().slice(0, 10),
+): Promise<TodayWeather> {
+  if (location.coords) {
+    const { lat, lon } = location.coords;
+    return getWeatherForCoords(lat, lon, today, location.label);
+  }
+
+  const [geocoded] = await Location.geocodeAsync(location.label!);
+  if (!geocoded) throw new Error(`Could not find weather location "${location.label}"`);
+  return getWeatherForCoords(geocoded.latitude, geocoded.longitude, today, location.label);
+}
+
+export function useStylingWeatherToday(location: StylingLocationContext) {
+  return useQuery<TodayWeather, Error>({
+    queryKey: stylingWeatherKey(location),
+    enabled: !!location.coords || !!location.label,
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+    queryFn: () => fetchStylingWeatherToday(location),
   });
 }
 
