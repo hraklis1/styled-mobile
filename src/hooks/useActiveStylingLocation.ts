@@ -38,6 +38,7 @@ export function useActiveStylingLocation() {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const homeLocation = profile?.location ?? undefined;
   const [permissionStatus, setPermissionStatus] = useState<'granted' | 'denied' | 'undetermined'>('undetermined');
+  const [permissionCanAskAgain, setPermissionCanAskAgain] = useState(true);
   const [lastKnownLocation, setLastKnownLocation] = useState<DeviceStylingLocation>();
 
   const device = useQuery<DeviceStylingLocation, Error>({
@@ -51,20 +52,31 @@ export function useActiveStylingLocation() {
   const refreshPermission = useCallback(async () => {
     const permission = await Location.getForegroundPermissionsAsync();
     setPermissionStatus(permission.status);
-    return permission.status;
+    setPermissionCanAskAgain(permission.canAskAgain);
+    return permission;
   }, []);
 
   const requestCurrentLocation = useCallback(async () => {
     const permission = await Location.requestForegroundPermissionsAsync();
     setPermissionStatus(permission.status);
+    setPermissionCanAskAgain(permission.canAskAgain);
     if (permission.status === 'granted') {
-      await device.refetch();
+      const result = await device.refetch();
+      return result.isSuccess && Boolean(result.data);
     }
-    return permission.status;
+    return false;
+  }, [device]);
+
+  const refreshCurrentLocation = useCallback(async () => {
+    const result = await device.refetch();
+    return result.isSuccess && Boolean(result.data);
   }, [device]);
 
   useEffect(() => {
-    refreshPermission().catch(() => setPermissionStatus('denied'));
+    refreshPermission().catch(() => {
+      setPermissionStatus('denied');
+      setPermissionCanAskAgain(false);
+    });
   }, [refreshPermission]);
 
   useEffect(() => {
@@ -92,8 +104,8 @@ export function useActiveStylingLocation() {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
       if (state !== 'active') return;
-      refreshPermission().then((status) => {
-        if (status === 'granted') refetchCurrentLocation();
+      refreshPermission().then((permission) => {
+        if (permission.status === 'granted') refetchCurrentLocation();
       }).catch(() => {});
     });
     return () => subscription.remove();
@@ -103,8 +115,10 @@ export function useActiveStylingLocation() {
     activeLocation,
     homeLocation,
     permissionStatus,
+    permissionCanAskAgain,
     isLoading: profileLoading || (permissionStatus === 'granted' && device.isLoading && !homeLocation),
     refetchCurrentLocation,
+    refreshCurrentLocation,
     requestCurrentLocation,
   };
 }

@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   useWindowDimensions,
+  Linking,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -586,15 +587,19 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       )}
 
     </ScrollView>
-      <StylingLocationSheet
-        visible={locationSheetVisible}
-        activeLocation={stylingLocation.activeLocation}
-        homeLocation={stylingLocation.homeLocation}
-        permissionStatus={stylingLocation.permissionStatus}
-        onRequestCurrent={stylingLocation.requestCurrentLocation}
-        onRefreshCurrent={() => { stylingLocation.refetchCurrentLocation(); }}
-        onClose={() => setLocationSheetVisible(false)}
-      />
+      {locationSheetVisible && (
+        <StylingLocationSheet
+          visible
+          activeLocation={stylingLocation.activeLocation}
+          homeLocation={stylingLocation.homeLocation}
+          permissionStatus={stylingLocation.permissionStatus}
+          permissionCanAskAgain={stylingLocation.permissionCanAskAgain}
+          onRequestCurrent={stylingLocation.requestCurrentLocation}
+          onRefreshCurrent={stylingLocation.refreshCurrentLocation}
+          onOpenSettings={Linking.openSettings}
+          onClose={() => setLocationSheetVisible(false)}
+        />
+      )}
     </View>
   );
 }

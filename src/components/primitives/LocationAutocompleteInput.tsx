@@ -71,6 +71,7 @@ interface LocationAutocompleteInputProps {
   placeholder?: string;
   containerStyle?: StyleProp<ViewStyle>;
   autoFocus?: boolean;
+  showUseMyLocation?: boolean;
 }
 
 export function LocationAutocompleteInput({
@@ -80,6 +81,7 @@ export function LocationAutocompleteInput({
   placeholder = 'Search location…',
   containerStyle,
   autoFocus,
+  showUseMyLocation = true,
 }: LocationAutocompleteInputProps) {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [searching, setSearching] = useState(false);
@@ -185,18 +187,20 @@ export function LocationAutocompleteInput({
           style={styles.input}
           returnKeyType="search"
         />
-        <TouchableOpacity
-          style={styles.geoBtn}
-          onPress={handleUseMyLocation}
-          disabled={geolocating}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          {geolocating ? (
-            <ActivityIndicator size="small" color={colors.primary} />
-          ) : (
-            <Ionicons name="navigate-outline" size={18} color={colors.primary} />
-          )}
-        </TouchableOpacity>
+        {showUseMyLocation && (
+          <TouchableOpacity
+            style={styles.geoBtn}
+            onPress={handleUseMyLocation}
+            disabled={geolocating}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            {geolocating ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Ionicons name="navigate-outline" size={18} color={colors.primary} />
+            )}
+          </TouchableOpacity>
+        )}
         {searching && !geolocating && (
           <ActivityIndicator size="small" color={colors.mutedForeground} style={styles.spinner} />
         )}
