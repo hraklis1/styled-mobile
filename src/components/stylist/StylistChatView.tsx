@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   Alert,
   Image,
@@ -66,6 +67,15 @@ type ChatMessage = {
   // Server-side recommendation ledger id — sent back with feedback so the
   // backend can link the reaction to the context that produced the suggestion.
   recId?: number;
+  createdAt?: number;
+};
+
+// A persisted stylist thread, as summarized by GET /api/stylist/conversations.
+type Conversation = {
+  id: number;
+  title: string;
+  source?: string | null;
+  updatedAt: string;
 };
 
 type TtsResponse = {
@@ -115,6 +125,41 @@ function makeId() {
   return Math.random().toString(36).slice(2);
 }
 
+// ── Conversation persistence keys ──────────────────────────────────────────────
+// The server is the source of truth for threads; these AsyncStorage entries are a
+// thin cache so the active thread resumes instantly and reads while offline.
+const ACTIVE_THREAD_KEY = 'stylist_active_thread_id';
+const LEGACY_SESSION_KEY = 'stylist_last_session';
+const threadKey = (id: number) => `stylist_thread_${id}`;
+
+type ServerMessage = { id: number; role: Role; text: string; recId?: number | null; createdAt?: string };
+
+// Map a server-stored thread into chat messages. Phase 1 persists plain text only,
+// so rich payloads (outfit collages, shop cards) render as stylist notes on reload;
+// the recId is preserved so feedback still links.
+function mapServerMessages(rows: ServerMessage[]): ChatMessage[] {
+  return rows.map((m) => ({
+    id: `srv_${m.id}`,
+    role: m.role,
+    text: m.text,
+    ...(typeof m.recId === 'number' ? { recId: m.recId } : {}),
+    ...(m.createdAt ? { createdAt: new Date(m.createdAt).getTime() } : {}),
+  }));
+}
+
+function timeAgo(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+  const mins = Math.floor((Date.now() - then) / 60_000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(then).toLocaleDateString('en', { month: 'short', day: 'numeric' });
+}
+
 type OccasionHint = 'formal' | 'business' | 'smart_casual' | 'casual' | 'athletic';
 
 const OCCASION_PATTERNS: Array<{ hint: OccasionHint; pattern: RegExp }> = [
@@ -153,6 +198,14 @@ type Props = {
   initialQuery?: string;
   initialDestination?: string;
   promptRequestId?: number;
+  // Entry point that opened the stylist — stored on a new thread for analytics.
+  source?: string;
+  // Whether opening should start a fresh thread or resume the last one. Topical
+  // entry points pass 'new'; the generic center-tab open passes 'resume'.
+  threadMode?: 'new' | 'resume';
+  // Increments on every open() so the view can apply threadMode each time, even
+  // though it stays mounted inside the always-rendered modal.
+  openRequestId?: number;
   onPromptConsumed?: () => void;
   onClose: () => void;
   onNavigateToShop?: () => void;
@@ -162,6 +215,9 @@ export function StylistChatView({
   initialQuery,
   initialDestination,
   promptRequestId = 0,
+  source,
+  threadMode = 'resume',
+  openRequestId = 0,
   onPromptConsumed,
   onClose,
   onNavigateToShop,
@@ -183,14 +239,40 @@ export function StylistChatView({
   const [isLoading, setIsLoading] = useState(false);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  // Active server thread. null means "unsaved draft" — the next send lazily
+  // creates a thread server-side and returns its id in the `done` event.
+  const [conversationId, setConversationId] = useState<number | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [conversationsLoading, setConversationsLoading] = useState(false);
 
   const scrollRef = useRef<ScrollView>(null);
   const player = useAudioPlayer(null);
   const playingFileRef = useRef<File | null>(null);
   const sessionRef = useRef(0);
   const lastPromptRequestIdRef = useRef(0);
+  const lastOpenRequestIdRef = useRef(0);
+  // Mirror of `messages` so sendMessage can read the latest history without being
+  // re-created on every message, and so a thread reset takes effect synchronously.
+  const messagesRef = useRef<ChatMessage[]>([]);
+  // Mirror of `conversationId` for synchronous reads: a topical "new" open resets
+  // the thread and immediately fires the initial query, so the send must see the
+  // cleared id rather than the previous render's value.
+  const conversationIdRef = useRef<number | null>(null);
 
-  const SESSION_KEY = 'stylist_last_session';
+  const setActiveConversationId = useCallback((id: number | null) => {
+    conversationIdRef.current = id;
+    setConversationId(id);
+  }, []);
+
+  // Cache the active thread's recent tail for instant resume + offline reads.
+  const cacheThread = useCallback((id: number | null, msgs: ChatMessage[]) => {
+    if (id == null) return;
+    AsyncStorage.multiSet([
+      [threadKey(id), JSON.stringify(msgs.slice(-6))],
+      [ACTIVE_THREAD_KEY, String(id)],
+    ]).catch(() => {});
+  }, []);
 
   // ── Mention filtering ──────────────────────────────────────────────────────
 
@@ -211,6 +293,11 @@ export function StylistChatView({
       content: m.transcript ?? m.text,
     }));
   }
+
+  // Keep the history mirror in sync with rendered messages.
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   function stopCurrentAudio() {
     try { player.pause(); } catch { /* ignore */ }
@@ -299,7 +386,7 @@ export function StylistChatView({
       };
 
       try {
-        const history = buildHistory(messages);
+        const history = buildHistory(messagesRef.current);
 
         let weatherSummary: string | undefined;
         if (weather.data) {
@@ -332,6 +419,8 @@ export function StylistChatView({
               },
             } : {}),
             ...(occasionHint ? { occasionHint } : {}),
+            ...(conversationIdRef.current ? { conversationId: conversationIdRef.current } : {}),
+            ...(source ? { source } : {}),
             history,
             _stream: true,
           }),
@@ -374,8 +463,14 @@ export function StylistChatView({
                 if (flushTimer) { clearTimeout(flushTimer); }
                 flushPending();
 
-                const { transcript, responseText, itemIds, missingEssentials: mes, missingEssential: legacyMe, shopOutfit, recId } =
-                  parsed as { transcript: string; responseText: string; itemIds?: number[]; missingEssentials?: MissingEssential[]; missingEssential?: { label: string; category: string; reason: string } | null; shopOutfit?: ShopOutfit | null; recId?: number | null };
+                const { transcript, responseText, itemIds, missingEssentials: mes, missingEssential: legacyMe, shopOutfit, recId, conversationId: doneConversationId } =
+                  parsed as { transcript: string; responseText: string; itemIds?: number[]; missingEssentials?: MissingEssential[]; missingEssential?: { label: string; category: string; reason: string } | null; shopOutfit?: ShopOutfit | null; recId?: number | null; conversationId?: number | null };
+
+                // Adopt the thread id the server created/confirmed for this turn.
+                const resolvedConvId = typeof doneConversationId === 'number' ? doneConversationId : conversationIdRef.current;
+                if (resolvedConvId != null && resolvedConvId !== conversationIdRef.current) {
+                  setActiveConversationId(resolvedConvId);
+                }
                 const hydratedEssentials: MissingEssential[] =
                   Array.isArray(mes) && mes.length > 0
                     ? mes
@@ -408,7 +503,8 @@ export function StylistChatView({
                   // shop_new or error case — no tokens were streamed; add message now
                   setMessages((prev) => {
                     const next = [...prev, finalMsg];
-                    AsyncStorage.setItem(SESSION_KEY, JSON.stringify(next.slice(-6))).catch(() => {});
+                    messagesRef.current = next;
+                    cacheThread(resolvedConvId, next);
                     return next;
                   });
                 } else {
@@ -419,7 +515,8 @@ export function StylistChatView({
                         ? { ...finalMsg, text: finalResponseText || m.text }
                         : m,
                     );
-                    AsyncStorage.setItem(SESSION_KEY, JSON.stringify(next.slice(-6))).catch(() => {});
+                    messagesRef.current = next;
+                    cacheThread(resolvedConvId, next);
                     return next;
                   });
                 }
@@ -462,8 +559,113 @@ export function StylistChatView({
         if (sessionRef.current === session) setIsLoading(false);
       }
     },
-    [activeLocation, isLoading, messages, profile?.tempUnit, weather.data],
+    [activeLocation, isLoading, source, cacheThread, setActiveConversationId, profile?.tempUnit, weather.data],
   );
+
+  // ── Thread lifecycle ─────────────────────────────────────────────────────────
+
+  function startFreshThread() {
+    stopCurrentAudio();
+    sessionRef.current++;
+    messagesRef.current = [];
+    setMessages([]);
+    setActiveConversationId(null);
+    setInputText('');
+    setIsLoading(false);
+    setMentionQuery(null);
+  }
+
+  function applyServerThread(id: number, rows: ServerMessage[]) {
+    const msgs = mapServerMessages(rows);
+    messagesRef.current = msgs;
+    setMessages(msgs);
+    setActiveConversationId(id);
+  }
+
+  async function loadThreadFromCache(id: number): Promise<boolean> {
+    try {
+      const cached = await AsyncStorage.getItem(threadKey(id));
+      if (!cached) return false;
+      const parsedMsgs: ChatMessage[] = JSON.parse(cached);
+      messagesRef.current = parsedMsgs;
+      setMessages(parsedMsgs);
+      setActiveConversationId(id);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // Resume the most-recent thread (center-tab open). Server is source of truth;
+  // fall back to the offline cache, then to a one-time legacy-cache migration.
+  async function resumeActiveThread() {
+    try {
+      const activeId = await AsyncStorage.getItem(ACTIVE_THREAD_KEY);
+      if (activeId) {
+        const id = Number(activeId);
+        if (Number.isInteger(id) && id > 0) {
+          try {
+            const { data } = await api.get<{ messages: ServerMessage[] }>(`/api/stylist/conversations/${id}`);
+            applyServerThread(id, data.messages ?? []);
+            return;
+          } catch {
+            if (await loadThreadFromCache(id)) return;
+          }
+        }
+      }
+      // Legacy migration: surface the old single-session cache once as a draft.
+      // The next send creates a real server thread; then drop the legacy key.
+      const legacy = await AsyncStorage.getItem(LEGACY_SESSION_KEY);
+      if (legacy) {
+        try {
+          const legacyMsgs: ChatMessage[] = JSON.parse(legacy);
+          if (Array.isArray(legacyMsgs) && legacyMsgs.length > 0) {
+            const tail = legacyMsgs.slice(-6);
+            messagesRef.current = tail;
+            setMessages(tail);
+            setActiveConversationId(null);
+          }
+        } catch { /* ignore corrupt data */ }
+        AsyncStorage.removeItem(LEGACY_SESSION_KEY).catch(() => {});
+      }
+    } catch { /* ignore */ }
+  }
+
+  async function loadConversations() {
+    setConversationsLoading(true);
+    try {
+      const { data } = await api.get<Conversation[]>('/api/stylist/conversations');
+      setConversations(Array.isArray(data) ? data : []);
+    } catch {
+      // Offline or transient — keep whatever list we already have.
+    } finally {
+      setConversationsLoading(false);
+    }
+  }
+
+  function openDrawer() {
+    setDrawerOpen(true);
+    loadConversations();
+  }
+
+  async function selectConversation(id: number) {
+    setDrawerOpen(false);
+    if (id === conversationIdRef.current) return;
+    stopCurrentAudio();
+    sessionRef.current++;
+    setIsLoading(false);
+    try {
+      const { data } = await api.get<{ messages: ServerMessage[] }>(`/api/stylist/conversations/${id}`);
+      applyServerThread(id, data.messages ?? []);
+      AsyncStorage.setItem(ACTIVE_THREAD_KEY, String(id)).catch(() => {});
+    } catch {
+      if (await loadThreadFromCache(id)) {
+        AsyncStorage.setItem(ACTIVE_THREAD_KEY, String(id)).catch(() => {});
+      } else {
+        Alert.alert('Offline', "Can't load that conversation right now. Try again when you're back online.");
+      }
+    }
+  }
 
   // ── Effects ────────────────────────────────────────────────────────────────
 
@@ -471,17 +673,20 @@ export function StylistChatView({
     setConversationLocationContext(initialDestination ? conversationLocation(initialDestination) : null);
   }, [initialDestination]);
 
+  // Apply the open intent each time the stylist is opened. The view stays mounted
+  // inside the always-rendered modal, so this runs off an incrementing request id
+  // rather than on mount. Declared before the initial-query effect so a topical
+  // "new" reset clears history synchronously before that query is sent.
   useEffect(() => {
-    AsyncStorage.getItem(SESSION_KEY).then((raw) => {
-      if (!raw) return;
-      try {
-        const saved: ChatMessage[] = JSON.parse(raw);
-        if (Array.isArray(saved) && saved.length > 0) {
-          setMessages(saved.slice(-6));
-        }
-      } catch { /* ignore corrupt data */ }
-    });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    if (openRequestId <= lastOpenRequestIdRef.current) return;
+    lastOpenRequestIdRef.current = openRequestId;
+    if (threadMode === 'new') {
+      startFreshThread();
+    } else {
+      resumeActiveThread();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRequestId, threadMode]);
 
   useEffect(() => {
     if (initialQuery && !isLoading && promptRequestId > lastPromptRequestIdRef.current) {
@@ -547,26 +752,26 @@ export function StylistChatView({
     setMentionQuery(null);
   }
 
+  function startNewConversation() {
+    startFreshThread();
+    setConversationLocationContext(null);
+    // Clear the active pointer so a fresh draft is shown until the next send
+    // creates a new server thread. The previous thread stays saved in history.
+    AsyncStorage.removeItem(ACTIVE_THREAD_KEY).catch(() => {});
+    Haptics.selectionAsync().catch(() => {});
+  }
+
   function confirmNewConversation() {
+    if (messages.length === 0) {
+      startNewConversation();
+      return;
+    }
     Alert.alert(
       'Start a new styling session?',
-      'This clears the current conversation from this device.',
+      'Your current conversation stays saved in History.',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Start New',
-          onPress: () => {
-            stopCurrentAudio();
-            sessionRef.current++;
-            setMessages([]);
-            setInputText('');
-            setIsLoading(false);
-            setMentionQuery(null);
-            setConversationLocationContext(null);
-            AsyncStorage.removeItem(SESSION_KEY).catch(() => {});
-            Haptics.selectionAsync().catch(() => {});
-          },
-        },
+        { text: 'Start New', onPress: startNewConversation },
       ],
     );
   }
@@ -605,14 +810,36 @@ export function StylistChatView({
             </TouchableOpacity>
           </View>
         </View>
-        <TouchableOpacity
-          style={styles.headerBtn}
-          onPress={confirmNewConversation}
-          accessibilityLabel="Start a new conversation"
-        >
-          <Ionicons name="ellipsis-horizontal" size={20} color={colors.mutedForeground} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={openDrawer}
+            accessibilityLabel="Conversation history"
+          >
+            <Ionicons name="time-outline" size={21} color={colors.mutedForeground} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={confirmNewConversation}
+            accessibilityLabel="Start a new conversation"
+          >
+            <Ionicons name="create-outline" size={20} color={colors.mutedForeground} />
+          </TouchableOpacity>
+        </View>
       </BlurView>
+
+      <ConversationDrawer
+        visible={drawerOpen}
+        conversations={conversations}
+        loading={conversationsLoading}
+        activeId={conversationId}
+        onSelect={selectConversation}
+        onNew={() => {
+          setDrawerOpen(false);
+          startNewConversation();
+        }}
+        onClose={() => setDrawerOpen(false)}
+      />
 
       {/* Messages */}
       <ScrollView
@@ -1373,6 +1600,116 @@ function ConversationLocationPicker({
   );
 }
 
+// ── ConversationDrawer ────────────────────────────────────────────────────────
+
+function ConversationDrawer({
+  visible,
+  conversations,
+  loading,
+  activeId,
+  onSelect,
+  onNew,
+  onClose,
+}: {
+  visible: boolean;
+  conversations: Conversation[];
+  loading: boolean;
+  activeId: number | null;
+  onSelect: (id: number) => void;
+  onNew: () => void;
+  onClose: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const panelWidth = Math.min(320, width * 0.82);
+  const translateX = useRef(new Animated.Value(-panelWidth)).current;
+  const backdrop = useRef(new Animated.Value(0)).current;
+  const [mounted, setMounted] = useState(visible);
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      Animated.parallel([
+        Animated.timing(translateX, { toValue: 0, duration: 240, useNativeDriver: true }),
+        Animated.timing(backdrop, { toValue: 1, duration: 240, useNativeDriver: true }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(translateX, { toValue: -panelWidth, duration: 200, useNativeDriver: true }),
+        Animated.timing(backdrop, { toValue: 0, duration: 200, useNativeDriver: true }),
+      ]).start(({ finished }) => { if (finished) setMounted(false); });
+    }
+  }, [visible, panelWidth, translateX, backdrop]);
+
+  if (!mounted) return null;
+
+  return (
+    <Modal visible transparent animationType="none" onRequestClose={onClose}>
+      <Animated.View style={[styles.drawerBackdrop, { opacity: backdrop }]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close history" />
+      </Animated.View>
+      <Animated.View
+        style={[
+          styles.drawerPanel,
+          {
+            width: panelWidth,
+            paddingTop: insets.top + spacing.md,
+            paddingBottom: insets.bottom + spacing.md,
+            transform: [{ translateX }],
+          },
+        ]}
+      >
+        <View style={styles.drawerHeader}>
+          <Text style={styles.drawerTitle}>Conversations</Text>
+          <TouchableOpacity style={styles.headerBtn} onPress={onClose} accessibilityLabel="Close history">
+            <Ionicons name="close" size={20} color={colors.foreground} />
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity style={styles.drawerNewBtn} onPress={onNew}>
+          <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
+          <Text style={styles.drawerNewText}>New conversation</Text>
+        </TouchableOpacity>
+
+        {loading && conversations.length === 0 ? (
+          <View style={styles.drawerEmpty}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        ) : conversations.length === 0 ? (
+          <View style={styles.drawerEmpty}>
+            <Text style={styles.drawerEmptyText}>No saved conversations yet.</Text>
+          </View>
+        ) : (
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.drawerList}>
+            {conversations.map((c) => {
+              const active = c.id === activeId;
+              return (
+                <TouchableOpacity
+                  key={c.id}
+                  style={[styles.drawerRow, active && styles.drawerRowActive]}
+                  onPress={() => onSelect(c.id)}
+                >
+                  <Ionicons
+                    name={active ? 'chatbubble-ellipses' : 'chatbubble-outline'}
+                    size={16}
+                    color={active ? colors.primary : colors.mutedForeground}
+                  />
+                  <View style={styles.drawerRowCopy}>
+                    <Text style={[styles.drawerRowTitle, active && styles.drawerRowTitleActive]} numberOfLines={1}>
+                      {c.title || 'Conversation'}
+                    </Text>
+                    <Text style={styles.drawerRowMeta}>{timeAgo(c.updatedAt)}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
+      </Animated.View>
+    </Modal>
+  );
+}
+
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
@@ -1409,6 +1746,92 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceSelected,
   },
   headerSubtitle: { fontSize: 10, color: colors.mutedForeground, marginTop: 1 },
+  headerActions: { flexDirection: 'row', alignItems: 'center' },
+  // Conversation drawer
+  drawerBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  drawerPanel: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    backgroundColor: colors.background,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: colors.border,
+    paddingHorizontal: spacing.md,
+    ...shadows.lg,
+  },
+  drawerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  drawerTitle: {
+    fontSize: typography.size.lg,
+    fontWeight: typography.weight.semibold,
+    color: colors.foreground,
+  },
+  drawerNewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.md,
+    backgroundColor: colors.surfaceSelected,
+    marginBottom: spacing.sm,
+  },
+  drawerNewText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.medium,
+    color: colors.primary,
+  },
+  drawerEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xxl,
+  },
+  drawerEmptyText: {
+    fontSize: typography.size.sm,
+    color: colors.mutedForeground,
+    textAlign: 'center',
+  },
+  drawerList: {
+    paddingBottom: spacing.lg,
+    gap: 2,
+  },
+  drawerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.md,
+  },
+  drawerRowActive: {
+    backgroundColor: colors.surfaceSelected,
+  },
+  drawerRowCopy: { flex: 1 },
+  drawerRowTitle: {
+    fontSize: typography.size.sm,
+    color: colors.foreground,
+  },
+  drawerRowTitleActive: {
+    fontWeight: typography.weight.semibold,
+  },
+  drawerRowMeta: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+    marginTop: 1,
+  },
   // Messages
   messageList: { flex: 1 },
   messageListContent: {

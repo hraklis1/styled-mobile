@@ -43,11 +43,20 @@ type Props = {
   children: React.ReactNode;
 };
 
+// Topical entry points each imply a distinct conversation, so they start a fresh
+// thread. The generic center-tab tap resumes the user's most recent thread.
+function threadModeForSource(source: StylistOpenSource): 'new' | 'resume' {
+  return source === 'center_tab' ? 'resume' : 'new';
+}
+
 export function GlobalAIStylistProvider({ children }: Props) {
   const [visible, setVisible] = useState(false);
   const [initialQuery, setInitialQuery] = useState<string | undefined>(undefined);
   const [initialDestination, setInitialDestination] = useState<string | undefined>(undefined);
   const [promptRequestId, setPromptRequestId] = useState(0);
+  const [openRequestId, setOpenRequestId] = useState(0);
+  const [source, setSource] = useState<StylistOpenSource | undefined>(undefined);
+  const [threadMode, setThreadMode] = useState<'new' | 'resume'>('resume');
   const { isPremium } = useEntitlement();
 
   const openStylist = useCallback(async ({ initialQuery: query, destination, source }: OpenStylistOptions) => {
@@ -67,9 +76,12 @@ export function GlobalAIStylistProvider({ children }: Props) {
       if (!purchased) return;
     }
     track('stylist_opened', { source });
+    setSource(source);
+    setThreadMode(threadModeForSource(source));
     setInitialQuery(query);
     setInitialDestination(destination);
     if (query) setPromptRequestId((id) => id + 1);
+    setOpenRequestId((id) => id + 1);
     setVisible(true);
   }, [isPremium]);
 
@@ -93,6 +105,9 @@ export function GlobalAIStylistProvider({ children }: Props) {
           initialQuery={initialQuery}
           initialDestination={initialDestination}
           promptRequestId={promptRequestId}
+          openRequestId={openRequestId}
+          source={source}
+          threadMode={threadMode}
           onPromptConsumed={consumePrompt}
           onClose={closeStylist}
         />
