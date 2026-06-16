@@ -11,9 +11,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   useEvents,
   useDeleteEvent,
+  EVENTS_QUERY_KEY,
 } from '../../hooks/useEvents';
 import {
   useAcceptEventOutfitPlan,
@@ -60,6 +62,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
   const deleteEventMutation = useDeleteEvent();
   const generatePlan = useGenerateEventOutfitPlan();
   const acceptPlan = useAcceptEventOutfitPlan();
+  const queryClient = useQueryClient();
   const eventsRef = useRef(events);
   eventsRef.current = events;
 
@@ -233,7 +236,12 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
     const delay = detailEvent ? 300 : 0;
     setDetailEvent(null);
     setTimeout(() => {
-      openStylist({ initialQuery: `${details}.`, destination: event.location ?? undefined, source });
+      openStylist({
+        initialQuery: `${details}.`,
+        destination: event.location ?? undefined,
+        source,
+        eventContext: { id: event.id, title: event.title },
+      });
     }, delay);
   };
 
@@ -252,6 +260,14 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
       if (shouldUpgrade) await presentPaywall();
       return;
     }
+    // When planning from the open detail modal, dismiss it first so the result
+    // sheet isn't presented behind the pageSheet — and remember to restore it.
+    // (Skip on "Try another", where the sheet is already the active modal.)
+    const fromDetail = !previousCandidateId && detailEvent?.id === event.id;
+    if (fromDetail) {
+      setReturnToDetailEventId(event.id);
+      setDetailEvent(null);
+    }
     setPlannedEvent(event);
     generatePlan.mutate(
       {
@@ -261,14 +277,24 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
       },
       {
         onSuccess: (result) => {
-          setGeneratedPlan(result);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+          const showSheet = () => {
+            setGeneratedPlan(result);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+          };
+          // Let the detail dismissal animation finish before mounting the sheet;
+          // iOS rejects presenting a modal while another is still dismissing.
+          if (fromDetail) setTimeout(showSheet, 300);
+          else showSheet();
         },
         onError: (err: any) => {
           Alert.alert(
             'Could not plan outfit',
             err?.response?.data?.message ?? 'Please try again.',
           );
+          if (fromDetail) {
+            setReturnToDetailEventId(null);
+            restoreDetailAfterChildClose(event.id);
+          }
         },
       },
     );
@@ -276,15 +302,22 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
 
   const acceptGeneratedPlan = () => {
     if (!plannedEvent || !generatedPlan) return;
+    const eventId = plannedEvent.id;
+    const restoreId = returnToDetailEventId;
     acceptPlan.mutate(
-      { eventId: plannedEvent.id, candidateId: generatedPlan.candidateId },
+      { eventId, candidateId: generatedPlan.candidateId },
       {
         onSuccess: ({ itemIds }) => {
-          setDetailEvent((current) =>
-            current?.id === plannedEvent.id ? { ...current, itemIds } : current,
+          // Optimistically apply the new outfit so the list and the restored
+          // detail modal show the assigned items immediately (no empty-state flash
+          // before the query invalidation refetch lands).
+          queryClient.setQueryData<Event[]>(EVENTS_QUERY_KEY, (old) =>
+            old?.map((e) => (e.id === eventId ? { ...e, itemIds } : e)) ?? old,
           );
           setGeneratedPlan(null);
           setPlannedEvent(null);
+          setReturnToDetailEventId(null);
+          restoreDetailAfterChildClose(restoreId);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
         },
         onError: (err: any) => {
@@ -456,6 +489,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
                 event={nextEvent}
                 allItems={allItems}
                 deviceCoords={deviceCoords}
+                isPremium={isPremium}
                 onPress={() => setDetailEvent(nextEvent)}
                 onPlanOutfit={() => planOutfitForEvent(nextEvent)}
                 onPressOutfit={() => openItemPicker(nextEvent)}
@@ -554,6 +588,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         isPlanning={generatePlan.isPending && plannedEvent?.id === detailEvent?.id}
         onOpenStylist={(event) => openStylistForEvent(event, 'event_detail')}
         deviceCoords={deviceCoords}
+        isPremium={isPremium}
       />
       <EventFormModal
         visible={formVisible}
@@ -579,8 +614,11 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         result={generatedPlan}
         allItems={allItems}
         onDone={() => {
+          const restoreId = returnToDetailEventId;
           setGeneratedPlan(null);
           setPlannedEvent(null);
+          setReturnToDetailEventId(null);
+          restoreDetailAfterChildClose(restoreId);
         }}
         onAccept={acceptGeneratedPlan}
         onTryAnother={() => {

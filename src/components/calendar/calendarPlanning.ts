@@ -1,7 +1,7 @@
-export function getEventPlanActionLabel(hasOutfit: boolean): 'Plan outfit' | 'Try another outfit' {
-  return hasOutfit ? 'Try another outfit' : 'Plan outfit';
+export function getEventPlanActionLabel(hasOutfit: boolean): 'Generate outfit' | 'Generate another' {
+  return hasOutfit ? 'Generate another' : 'Generate outfit';
 }
 
-export function getEventItemsActionLabel(hasOutfit: boolean): 'Choose items' | 'Change items' {
-  return hasOutfit ? 'Change items' : 'Choose items';
+export function getEventItemsActionLabel(hasOutfit: boolean): 'Choose items' | 'Edit items' {
+  return hasOutfit ? 'Edit items' : 'Choose items';
 }

@@ -199,18 +199,23 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
   const activeLocationLabel = stylingLocation.activeLocation.label?.trim() || undefined;
   const compactActiveLocation = compactLocationLabel(activeLocationLabel);
-  const isHomeFallback = stylingLocation.activeLocation.source === 'home';
+  const locationSource = stylingLocation.activeLocation.source;
+  const isHomeFallback = locationSource === 'home';
+  const isDestination = locationSource === 'destination';
+  const locationBadge = isDestination ? 'Trip' : isHomeFallback ? 'Home' : undefined;
   const weatherLocationLine = weather.data
     ? [
       `${WEATHER_EMOJI[weather.data.current.condition] ?? '🌡️'} ${weather.data.current.temperatureC}°C`,
       compactActiveLocation,
-      isHomeFallback ? 'Home' : undefined,
+      locationBadge,
     ].filter(Boolean).join(' · ')
     : compactActiveLocation
-      ? [`📍 ${compactActiveLocation}`, isHomeFallback ? 'Home' : undefined].filter(Boolean).join(' · ')
+      ? [`📍 ${compactActiveLocation}`, locationBadge].filter(Boolean).join(' · ')
       : 'Set weather location';
   const locationAccessibilityLabel = activeLocationLabel
-    ? `Weather location: ${activeLocationLabel}. ${isHomeFallback ? 'Using Home fallback.' : 'Using current location.'} Tap to change.`
+    ? `Weather location: ${activeLocationLabel}. ${
+      isDestination ? 'Styling for a destination.' : isHomeFallback ? 'Using Home city.' : 'Using current location.'
+    } Tap to change.`
     : 'No weather location set. Tap to set weather location.';
   const dailyPick = useMemo(
     () => dailyPickHistoryLoaded
@@ -292,7 +297,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               <Text style={styles.weatherLocationText} numberOfLines={1}>
                 {weatherLocationLine}
               </Text>
-              <Ionicons name="chevron-forward" size={12} color={colors.mutedForeground} />
+              <Ionicons name="chevron-down" size={13} color={colors.primary} />
             </TouchableOpacity>
           </View>
           <PressableScale
@@ -592,6 +597,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           visible
           activeLocation={stylingLocation.activeLocation}
           homeLocation={stylingLocation.homeLocation}
+          override={stylingLocation.override}
+          onSelectOverride={stylingLocation.setLocationOverride}
           permissionStatus={stylingLocation.permissionStatus}
           permissionCanAskAgain={stylingLocation.permissionCanAskAgain}
           onRequestCurrent={stylingLocation.requestCurrentLocation}
@@ -644,7 +651,7 @@ const styles = StyleSheet.create({
   weatherLocationText: {
     flexShrink: 1,
     fontSize: typography.size.xs,
-    color: colors.mutedForeground,
+    color: colors.primary,
   },
   settingsBtn: {
     padding: spacing.sm,
