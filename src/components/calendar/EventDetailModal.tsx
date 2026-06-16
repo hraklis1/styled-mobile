@@ -36,6 +36,7 @@ export function EventDetailModal({
   isPlanning,
   onOpenStylist,
   deviceCoords,
+  isPremium,
 }: {
   event: Event | null;
   visible: boolean;
@@ -49,6 +50,7 @@ export function EventDetailModal({
   isPlanning: boolean;
   onOpenStylist: (event: Event) => void;
   deviceCoords: { lat: number; lon: number } | null;
+  isPremium: boolean;
 }) {
   const eventDateStr = event ? event.date.slice(0, 10) : null;
   const forecast = useWeatherForecast(
@@ -137,13 +139,14 @@ export function EventDetailModal({
         </ScrollView>
 
         <View style={s.actions}>
+          {/* AI actions */}
           <TouchableOpacity
             style={[s.generateBtn, isPlanning && s.generateBtnDisabled]}
             onPress={() => onPlanOutfit(event)}
             disabled={isPlanning}
             activeOpacity={0.85}
             accessibilityRole="button"
-            accessibilityLabel={`${getEventPlanActionLabel(hasOutfit)} for ${event.title}`}
+            accessibilityLabel={`${getEventPlanActionLabel(hasOutfit)} for ${event.title}${isPremium ? '' : ', Premium feature'}`}
           >
             {isPlanning ? (
               <ActivityIndicator size="small" color={colors.white} />
@@ -153,12 +156,20 @@ export function EventDetailModal({
             <Text style={s.generateBtnText}>
               {isPlanning ? 'Planning…' : getEventPlanActionLabel(hasOutfit)}
             </Text>
+            {!isPremium && !isPlanning ? (
+              <View style={s.proPill}>
+                <Text style={s.proPillText}>PRO</Text>
+              </View>
+            ) : null}
           </TouchableOpacity>
+          <TouchableOpacity style={s.stylistBtn} onPress={() => onOpenStylist(event)} activeOpacity={0.8}>
+            <Ionicons name="chatbubble-ellipses-outline" size={17} color={colors.primary} />
+            <Text style={s.stylistBtnText}>Ask stylist about this</Text>
+          </TouchableOpacity>
+
+          {/* Manual actions */}
+          <Text style={s.orLabel}>Or choose yourself</Text>
           <View style={s.actionRow}>
-            <TouchableOpacity style={s.stylistBtn} onPress={() => onOpenStylist(event)} activeOpacity={0.8}>
-              <Ionicons name="chatbubble-ellipses-outline" size={17} color={colors.primary} />
-              <Text style={s.stylistBtnText}>Ask stylist</Text>
-            </TouchableOpacity>
             <TouchableOpacity style={s.assignBtn} onPress={() => onChooseOutfit(event)} activeOpacity={0.8}>
               <Ionicons name="albums-outline" size={18} color={colors.foreground} />
               <Text style={s.assignBtnText}>Choose outfit</Text>
@@ -247,7 +258,6 @@ const s = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   stylistBtn: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -257,6 +267,25 @@ const s = StyleSheet.create({
     backgroundColor: colors.accent,
     borderWidth: 1,
     borderColor: `${colors.primary}30`,
+  },
+  proPill: {
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderRadius: radii.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 1,
+    marginLeft: spacing.xs,
+  },
+  proPillText: {
+    fontSize: 10,
+    fontWeight: typography.weight.bold,
+    color: colors.white,
+    letterSpacing: 0.5,
+  },
+  orLabel: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+    textAlign: 'center',
+    marginTop: spacing.xs,
   },
   deleteTextBtn: { alignItems: 'center', paddingVertical: spacing.xs },
   stylistBtnText: {

@@ -95,13 +95,23 @@ export function ShopScreen(_props: ShopScreenProps) {
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
             <View style={styles.entryWrapper}>
-              <Text style={styles.entryDate}>
-                {new Date(item.savedAt).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                })}
-              </Text>
+              <View style={styles.entryMetaRow}>
+                <Text style={styles.entryDate}>
+                  {new Date(item.savedAt).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
+                </Text>
+                {item.eventContext && (
+                  <View style={styles.eventChip}>
+                    <Ionicons name="calendar-outline" size={11} color={colors.primary} />
+                    <Text style={styles.eventChipText} numberOfLines={1}>
+                      For {item.eventContext.title}
+                    </Text>
+                  </View>
+                )}
+              </View>
               <ShopOutfitCard
                 outfit={item.outfit}
                 onRemove={() => handleRemove(item.id)}
@@ -163,11 +173,33 @@ const styles = StyleSheet.create({
   entryWrapper: {
     gap: spacing.xs,
   },
+  entryMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
   entryDate: {
     fontSize: typography.size.xs,
     color: colors.mutedForeground,
     fontWeight: typography.weight.medium,
     paddingLeft: 2,
+  },
+  eventChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    maxWidth: '60%',
+    backgroundColor: `${colors.primary}15`,
+    borderRadius: radii.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  eventChipText: {
+    fontSize: 11,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
+    flexShrink: 1,
   },
   emptyState: {
     flex: 1,

@@ -40,27 +40,41 @@ export function OutfitGeneratedSheet({
   const sheetAnim = useRef(new Animated.Value(600)).current;
   // Keep the last result mounted while the close animation runs
   const [shown, setShown] = useState<GenerateOutfitResult | null>(null);
+  const shownRef = useRef<GenerateOutfitResult | null>(null);
   const pendingAction = useRef<(() => void) | null>(null);
+
+  const animateOut = (onComplete: () => void) => {
+    Animated.parallel([
+      Animated.timing(backdropAnim, { toValue: 0, duration: 180, useNativeDriver: true }),
+      Animated.timing(sheetAnim, { toValue: 600, duration: 220, useNativeDriver: true }),
+    ]).start(onComplete);
+  };
 
   useEffect(() => {
     if (result) {
       setShown(result);
+      shownRef.current = result;
       backdropAnim.setValue(0);
       sheetAnim.setValue(600);
       Animated.parallel([
         Animated.timing(backdropAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
         Animated.spring(sheetAnim, { toValue: 0, damping: 22, stiffness: 220, useNativeDriver: true }),
       ]).start();
+    } else if (shownRef.current) {
+      // Parent cleared the result (e.g. after accepting) — animate the sheet out.
+      // The parent owns post-dismiss cleanup here, so we don't call onDone.
+      animateOut(() => {
+        setShown(null);
+        shownRef.current = null;
+      });
     }
   }, [result, backdropAnim, sheetAnim]);
 
   const close = (after?: () => void) => {
     pendingAction.current = after ?? null;
-    Animated.parallel([
-      Animated.timing(backdropAnim, { toValue: 0, duration: 180, useNativeDriver: true }),
-      Animated.timing(sheetAnim, { toValue: 600, duration: 220, useNativeDriver: true }),
-    ]).start(() => {
+    animateOut(() => {
       setShown(null);
+      shownRef.current = null;
       const action = pendingAction.current;
       pendingAction.current = null;
       onDone();

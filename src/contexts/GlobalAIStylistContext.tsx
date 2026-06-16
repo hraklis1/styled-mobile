@@ -19,10 +19,13 @@ export type StylistOpenSource =
   | 'calendar_hero'
   | 'closet_selection';
 
+export type StylistEventContext = { id: number; title: string };
+
 type OpenStylistOptions = {
   initialQuery?: string;
   destination?: string;
   source: StylistOpenSource;
+  eventContext?: StylistEventContext;
 };
 
 type GlobalAIStylistContextValue = {
@@ -47,10 +50,11 @@ export function GlobalAIStylistProvider({ children }: Props) {
   const [visible, setVisible] = useState(false);
   const [initialQuery, setInitialQuery] = useState<string | undefined>(undefined);
   const [initialDestination, setInitialDestination] = useState<string | undefined>(undefined);
+  const [eventContext, setEventContext] = useState<StylistEventContext | undefined>(undefined);
   const [promptRequestId, setPromptRequestId] = useState(0);
   const { isPremium } = useEntitlement();
 
-  const openStylist = useCallback(async ({ initialQuery: query, destination, source }: OpenStylistOptions) => {
+  const openStylist = useCallback(async ({ initialQuery: query, destination, source, eventContext: event }: OpenStylistOptions) => {
     if (!isPremium) {
       const shouldUpgrade = await new Promise<boolean>((resolve) => {
         Alert.alert(
@@ -69,6 +73,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
     track('stylist_opened', { source });
     setInitialQuery(query);
     setInitialDestination(destination);
+    setEventContext(event);
     if (query) setPromptRequestId((id) => id + 1);
     setVisible(true);
   }, [isPremium]);
@@ -76,6 +81,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
   const closeStylist = useCallback(() => {
     setVisible(false);
     setInitialDestination(undefined);
+    setEventContext(undefined);
   }, []);
   const consumePrompt = useCallback(() => setInitialQuery(undefined), []);
 
@@ -92,6 +98,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
         <StylistChatView
           initialQuery={initialQuery}
           initialDestination={initialDestination}
+          eventContext={eventContext}
           promptRequestId={promptRequestId}
           onPromptConsumed={consumePrompt}
           onClose={closeStylist}

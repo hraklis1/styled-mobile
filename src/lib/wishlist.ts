@@ -7,6 +7,8 @@ export type WishlistEntry = {
   id: string;
   savedAt: string;
   outfit: ShopOutfit;
+  /** Set when saved from the stylist while planning a specific calendar event. */
+  eventContext?: { id: number; title: string };
 };
 
 export async function loadWishlist(): Promise<WishlistEntry[]> {
@@ -18,12 +20,16 @@ export async function loadWishlist(): Promise<WishlistEntry[]> {
   }
 }
 
-export async function addToWishlist(outfit: ShopOutfit): Promise<WishlistEntry> {
+export async function addToWishlist(
+  outfit: ShopOutfit,
+  eventContext?: { id: number; title: string },
+): Promise<WishlistEntry> {
   const list = await loadWishlist();
   const entry: WishlistEntry = {
     id: Math.random().toString(36).slice(2),
     savedAt: new Date().toISOString(),
     outfit,
+    ...(eventContext ? { eventContext } : {}),
   };
   list.unshift(entry);
   await AsyncStorage.setItem(WISHLIST_KEY, JSON.stringify(list));

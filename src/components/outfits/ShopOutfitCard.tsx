@@ -17,6 +17,8 @@ type Props = {
   onRemove?: () => void;
   /** Called after user taps Save — pass undefined to hide the button */
   onSave?: () => Promise<void>;
+  /** Override the default "Save" button label (e.g. "Save for <event>") */
+  saveLabel?: string;
 };
 
 const CATEGORY_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -83,7 +85,7 @@ function ItemRow({ item, index }: { item: ShopOutfitItem; index: number }) {
   );
 }
 
-export function ShopOutfitCard({ outfit, onRemove, onSave }: Props) {
+export function ShopOutfitCard({ outfit, onRemove, onSave, saveLabel }: Props) {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -144,7 +146,7 @@ export function ShopOutfitCard({ outfit, onRemove, onSave }: Props) {
                 color={saved ? '#16A34A' : colors.mutedForeground}
               />
               <Text style={[styles.footerBtnText, saved && styles.footerBtnTextSaved]}>
-                {saved ? 'Saved' : saving ? 'Saving…' : 'Save'}
+                {saved ? 'Saved' : saving ? 'Saving…' : saveLabel ?? 'Save'}
               </Text>
             </Pressable>
           )}
