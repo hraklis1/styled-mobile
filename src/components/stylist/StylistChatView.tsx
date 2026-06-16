@@ -34,11 +34,15 @@ import { useProfile } from '../../hooks/useProfile';
 import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
 import { conversationLocation, type StylingLocationContext } from '../../lib/stylingLocation';
 import { useCreateOutfit, type CreateOutfitInput } from '../../hooks/useOutfits';
+import { useAssignEventItems } from '../../hooks/useEvents';
 import { addToWishlist } from '../../lib/wishlist';
 import { VoiceInputButton } from '../primitives/VoiceInputButton';
 import { LocationAutocompleteInput } from '../primitives/LocationAutocompleteInput';
 import { ShopOutfitCard } from '../outfits/ShopOutfitCard';
 import { ResolvedOutfitCollage } from '../outfits/ResolvedOutfitCollage';
+import { ItemPickerSheet } from '../outfits/ItemPickerSheet';
+import { StylistRichText } from './StylistRichText';
+import { TripPlanCard, type TripPlanData } from './TripPlanCard';
 import { colors, radii, shadows, spacing, typography } from '../../theme';
 import type { ShopOutfit } from '../../types/shop';
 import type { Item } from '../../types/item';
@@ -55,6 +59,8 @@ type MissingEssential = {
   priority: number;
 };
 
+type StylistMode = 'from_closet' | 'shop_new' | 'advice' | 'trip';
+
 type ChatMessage = {
   id: string;
   role: Role;
@@ -64,6 +70,10 @@ type ChatMessage = {
   shopOutfit?: ShopOutfit;
   suggestedItemIds?: number[];
   missingEssentials?: MissingEssential[];
+  tripPlan?: TripPlanData;
+  // Which stylist intent produced this reply — drives how it's rendered
+  // (advice → rich text, trip → carousel, from_closet → outfit card).
+  mode?: StylistMode;
   // Server-side recommendation ledger id — sent back with feedback so the
   // backend can link the reaction to the context that produced the suggestion.
   recId?: number;
@@ -105,16 +115,36 @@ const CHIPS_DEFAULT = [
   'Help me dress for a dinner date',
 ];
 
+const CHIPS_ADVICE = [
+  'Build that into an outfit',
+  'What else pairs with it?',
+  "What's missing from my closet?",
+  'What should I buy next?',
+];
+
+const CHIPS_TRIP = [
+  'Add a dressier option',
+  'Keep it carry-on only',
+  'Make it more casual',
+  'What am I missing to pack?',
+];
+
+// Short, structured rejection reasons — kept generic enough to map to a durable
+// style aversion on the backend (see maybeInferStyleAversion).
+const DOWN_REASONS = ['Too formal', 'Too casual', 'Wrong colors', 'Not my fit'];
+
 const PROMPT_ICONS: Array<keyof typeof Ionicons.glyphMap> = [
   'sunny-outline',
-  'cafe-outline',
+  'cube-outline',
+  'briefcase-outline',
   'color-palette-outline',
-  'wine-outline',
 ];
 
 function useContextualChips(lastMessage: ChatMessage | undefined): string[] {
   return useMemo(() => {
     if (!lastMessage || lastMessage.role !== 'assistant') return CHIPS_DEFAULT;
+    if (lastMessage.tripPlan || lastMessage.mode === 'trip') return CHIPS_TRIP;
+    if (lastMessage.mode === 'advice') return CHIPS_ADVICE;
     if (lastMessage.shopOutfit) return CHIPS_SHOP;
     if (lastMessage.suggestedItemIds?.length) return CHIPS_CLOSET;
     return CHIPS_DEFAULT;
@@ -194,9 +224,12 @@ function detectOccasionHint(text: string): OccasionHint | undefined {
 
 // ── Main Component ───────────────────────────────────────────────────────────
 
+type EventContext = { id: number; title: string };
+
 type Props = {
   initialQuery?: string;
   initialDestination?: string;
+  eventContext?: EventContext;
   promptRequestId?: number;
   // Entry point that opened the stylist — stored on a new thread for analytics.
   source?: string;
@@ -214,6 +247,7 @@ type Props = {
 export function StylistChatView({
   initialQuery,
   initialDestination,
+  eventContext,
   promptRequestId = 0,
   source,
   threadMode = 'resume',
@@ -233,6 +267,16 @@ export function StylistChatView({
   const activeLocation = conversationLocationContext ?? stylingLocation.activeLocation;
   const weather = useStylingWeatherToday(activeLocation);
   const createOutfit = useCreateOutfit();
+  const assignEventItems = useAssignEventItems();
+  // When the chat was launched from a calendar event, suggested looks can be
+  // assigned straight back onto that event (in addition to "Save this look").
+  const onAddToEvent = useMemo(
+    () =>
+      eventContext
+        ? (itemIds: number[]) => assignEventItems.mutateAsync({ id: eventContext.id, itemIds })
+        : undefined,
+    [eventContext, assignEventItems],
+  );
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
@@ -374,6 +418,8 @@ export function StylistChatView({
       let flushTimer: ReturnType<typeof setTimeout> | null = null;
       let finalResponseText = '';
       let ttsReceivedFromStream = false;
+      // Trip mode streams outfits one at a time so the carousel fills progressively.
+      let tripOutfits: TripPlanData['outfits'] = [];
 
       const flushPending = () => {
         const toFlush = pendingText;
@@ -463,8 +509,8 @@ export function StylistChatView({
                 if (flushTimer) { clearTimeout(flushTimer); }
                 flushPending();
 
-                const { transcript, responseText, itemIds, missingEssentials: mes, missingEssential: legacyMe, shopOutfit, recId, conversationId: doneConversationId } =
-                  parsed as { transcript: string; responseText: string; itemIds?: number[]; missingEssentials?: MissingEssential[]; missingEssential?: { label: string; category: string; reason: string } | null; shopOutfit?: ShopOutfit | null; recId?: number | null; conversationId?: number | null };
+                const { transcript, responseText, itemIds, missingEssentials: mes, missingEssential: legacyMe, shopOutfit, tripPlan, mode: respMode, recId, conversationId: doneConversationId } =
+                  parsed as { transcript: string; responseText: string; itemIds?: number[]; missingEssentials?: MissingEssential[]; missingEssential?: { label: string; category: string; reason: string } | null; shopOutfit?: ShopOutfit | null; tripPlan?: TripPlanData | null; mode?: StylistMode; recId?: number | null; conversationId?: number | null };
 
                 // Adopt the thread id the server created/confirmed for this turn.
                 const resolvedConvId = typeof doneConversationId === 'number' ? doneConversationId : conversationIdRef.current;
@@ -493,7 +539,9 @@ export function StylistChatView({
                   role: 'assistant',
                   text: finalResponseText,
                   isStreaming: false,
+                  ...(respMode ? { mode: respMode } : {}),
                   ...(shopOutfit ? { shopOutfit } : {}),
+                  ...(tripPlan ? { tripPlan: { ...tripPlan, pending: false } } : {}),
                   ...(itemIds?.length ? { suggestedItemIds: itemIds } : {}),
                   ...(hydratedEssentials.length ? { missingEssentials: hydratedEssentials } : {}),
                   ...(typeof recId === 'number' ? { recId } : {}),
@@ -521,6 +569,19 @@ export function StylistChatView({
                   });
                 }
 
+              } else if (currentEvent === 'trip_outfit') {
+                // Progressive trip fill — append the outfit to the streaming
+                // bubble's carousel as each one clears validation server-side.
+                const outfit = parsed as unknown as TripPlanData['outfits'][number];
+                tripOutfits = [...tripOutfits, outfit];
+                const snapshot = tripOutfits;
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantId
+                      ? { ...m, mode: 'trip', tripPlan: { intro: m.text, outfits: snapshot, packingList: [], pending: true } }
+                      : m,
+                  ),
+                );
               } else if (currentEvent === 'tts_ready') {
                 const { audioReply } = parsed as { audioReply: string };
                 ttsReceivedFromStream = true;
@@ -546,7 +607,10 @@ export function StylistChatView({
           }
         }
 
-        if (!ttsReceivedFromStream && finalResponseText) {
+        // Only auto-fetch TTS when the user actually spoke — typed chats stay
+        // silent unless the user taps "Listen" (matches the server's TTS gate,
+        // so we don't pay for speech nobody plays).
+        if (!ttsReceivedFromStream && finalResponseText && !!audio) {
           playTts(assistantId, finalResponseText);
         }
       } catch (err: unknown) {
@@ -871,6 +935,8 @@ export function StylistChatView({
                 allItems={allItems}
                 isPlaying={playingId === msg.id}
                 createOutfit={createOutfit}
+                eventContext={eventContext}
+                onAddToEvent={onAddToEvent}
                 onNavigateToShop={onNavigateToShop}
                 onToggleAudio={
                   msg.role === 'assistant' && !msg.isStreaming
@@ -1005,12 +1071,91 @@ type BubbleProps = {
   allItems: Item[];
   isPlaying: boolean;
   createOutfit: ReturnType<typeof useCreateOutfit>;
+  eventContext?: EventContext;
+  onAddToEvent?: (itemIds: number[]) => Promise<unknown>;
   onToggleAudio?: () => void;
   onNavigateToShop?: () => void;
 };
 
-function MessageBubble({ message, allItems, isPlaying, createOutfit, onToggleAudio, onNavigateToShop }: BubbleProps) {
+function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContext, onAddToEvent, onToggleAudio, onNavigateToShop }: BubbleProps) {
   const isUser = message.role === 'user';
+
+  // Trip plan — multi-outfit carousel + packing list (also renders progressively
+  // while streaming, so check before the streaming-text fallback below).
+  if (!isUser && message.tripPlan) {
+    return (
+      <EditorialEntrance>
+        <View style={styles.editorialResponse}>
+          <TripPlanCard
+            plan={message.tripPlan}
+            allItems={allItems}
+            createOutfit={createOutfit}
+            eventContext={eventContext}
+            onAddToEvent={onAddToEvent}
+          />
+        </View>
+      </EditorialEntrance>
+    );
+  }
+
+  // Advice / wardrobe audit — rich text (allows bullets) plus any referenced
+  // wardrobe thumbnails and gap chips. Never an editable outfit card.
+  if (!isUser && message.mode === 'advice') {
+    return (
+      <EditorialEntrance>
+        <View style={styles.stylistNote}>
+          <View style={styles.sectionEyebrow}>
+            <Ionicons name="sparkles" size={13} color={colors.primary} />
+            <Text style={styles.sectionEyebrowText}>Stylist note</Text>
+          </View>
+          <StylistRichText text={message.text} streaming={message.isStreaming} />
+          {!!message.suggestedItemIds?.length && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.adviceThumbs}>
+              {message.suggestedItemIds
+                .map((id) => allItems.find((i) => i.id === id))
+                .filter((i): i is Item => !!i)
+                .map((item) => {
+                  const uri = resolveImageUri(item.imageUrl);
+                  return (
+                    <View key={item.id} style={styles.adviceThumb}>
+                      {uri ? (
+                        <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                      ) : (
+                        <Ionicons name="shirt-outline" size={18} color={colors.mutedForeground} />
+                      )}
+                    </View>
+                  );
+                })}
+            </ScrollView>
+          )}
+          {(message.missingEssentials ?? []).map((item, i) => (
+            <TouchableOpacity
+              key={i}
+              style={styles.missingEssentialBanner}
+              onPress={onNavigateToShop}
+              activeOpacity={onNavigateToShop ? 0.7 : 1}
+            >
+              <Ionicons name="bag-handle-outline" size={14} color={colors.primary} />
+              <Text style={styles.missingEssentialText} numberOfLines={1}>
+                {item.label}{item.context ? ` — ${item.context}` : ''}
+              </Text>
+              {onNavigateToShop && <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />}
+            </TouchableOpacity>
+          ))}
+          {onToggleAudio && (
+            <TouchableOpacity style={styles.quietAudioBtn} onPress={onToggleAudio} accessibilityLabel="Read stylist note aloud">
+              <Ionicons
+                name={isPlaying ? 'pause-circle-outline' : 'volume-medium-outline'}
+                size={18}
+                color={colors.mutedForeground}
+              />
+              <Text style={styles.quietActionText}>{isPlaying ? 'Pause' : 'Listen'}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </EditorialEntrance>
+    );
+  }
 
   if (!isUser && message.suggestedItemIds?.length) {
     return (
@@ -1021,6 +1166,8 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, onToggleAud
             itemIds={message.suggestedItemIds}
             allItems={allItems}
             createOutfit={createOutfit}
+            eventContext={eventContext}
+            onAddToEvent={onAddToEvent}
             missingEssentials={message.missingEssentials}
             onNavigateToShop={onNavigateToShop}
             recId={message.recId}
@@ -1050,9 +1197,10 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, onToggleAud
           </View>
           <ShopOutfitCard
             outfit={message.shopOutfit}
+            saveLabel={eventContext ? `Save for ${eventContext.title}` : undefined}
             onSave={async () => {
-              await addToWishlist(message.shopOutfit!);
-              track('outfit_saved_to_wishlist');
+              await addToWishlist(message.shopOutfit!, eventContext);
+              track('outfit_saved_to_wishlist', { forEvent: !!eventContext });
             }}
           />
           {onToggleAudio && (
@@ -1138,21 +1286,42 @@ type OutfitSuggestionCardProps = {
   itemIds: number[];
   allItems: Item[];
   createOutfit: ReturnType<typeof useCreateOutfit>;
+  eventContext?: EventContext;
+  onAddToEvent?: (itemIds: number[]) => Promise<unknown>;
   missingEssentials?: MissingEssential[];
   onNavigateToShop?: () => void;
   recId?: number;
 };
 
-function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, missingEssentials, onNavigateToShop, recId }: OutfitSuggestionCardProps) {
+function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, eventContext, onAddToEvent, missingEssentials, onNavigateToShop, recId }: OutfitSuggestionCardProps) {
   const { width } = useWindowDimensions();
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [added, setAdded] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
+  // When the user taps 👎 we reveal reason chips before finalizing — a labeled
+  // rejection is a much stronger learning signal than a bare thumbs-down.
+  const [choosingReason, setChoosingReason] = useState(false);
+
+  // Local, editable copy of the suggested item set. Edits stay local until the
+  // user taps "Save this look", which persists whatever set is current.
+  const [editedIds, setEditedIds] = useState<number[]>(itemIds);
+  // Reset when the underlying suggestion changes (keyed on a stable join).
+  const itemIdsKey = itemIds.join(',');
+  useEffect(() => {
+    setEditedIds(itemIds);
+    setAdded(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemIdsKey]);
+
+  // `null` = closed, 'add' = pick any item, { swapId } = replace that item.
+  const [picker, setPicker] = useState<'add' | { swapId: number } | null>(null);
 
   const matchedItems = useMemo(
-    () => itemIds.map((id) => allItems.find((i) => i.id === id)).filter((i): i is Item => !!i),
-    [itemIds, allItems],
+    () => editedIds.map((id) => allItems.find((i) => i.id === id)).filter((i): i is Item => !!i),
+    [editedIds, allItems],
   );
   const collageSlots = useMemo(
     () => matchedItems.map((item) => ({
@@ -1164,8 +1333,48 @@ function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, mi
   const collageSize = Math.max(240, Math.min(width - spacing.xxl * 2, 420));
   const lookTitle = outfitNameFromItems(matchedItems);
 
+  // ── Edit handlers (clear the saved/added flags so the refined look can be re-saved) ──
+  const removeItem = useCallback((id: number) => {
+    setEditedIds((ids) => ids.filter((x) => x !== id));
+    setSaved(false);
+    setAdded(false);
+  }, []);
+  const swapItem = useCallback((oldId: number, newItem: Item) => {
+    setEditedIds((ids) => ids.map((x) => (x === oldId ? newItem.id : x)));
+    setSaved(false);
+    setAdded(false);
+  }, []);
+  const addItem = useCallback((newItem: Item) => {
+    setEditedIds((ids) => (ids.includes(newItem.id) ? ids : [...ids, newItem.id]));
+    setSaved(false);
+    setAdded(false);
+  }, []);
+
+  // ── Picker candidate pool ────────────────────────────────────────────────
+  const swapTarget = picker && picker !== 'add'
+    ? allItems.find((i) => i.id === picker.swapId) ?? null
+    : null;
+  const pickerItems = useMemo(() => {
+    if (!picker) return [];
+    if (picker === 'add') {
+      return allItems.filter((i) => !editedIds.includes(i.id));
+    }
+    const targetCategory = swapTarget?.category ?? null;
+    return allItems.filter(
+      (i) => i.category === targetCategory && (i.id === picker.swapId || !editedIds.includes(i.id)),
+    );
+  }, [picker, allItems, editedIds, swapTarget]);
+  const pickerTitle = picker === 'add'
+    ? 'Add an item'
+    : `Swap ${(swapTarget?.category ?? 'item').replace(/_/g, ' ')}`;
+
+  function handlePickerSelect(item: Item) {
+    if (picker === 'add') addItem(item);
+    else if (picker) swapItem(picker.swapId, item);
+  }
+
   async function handleSave() {
-    if (saved || saving) return;
+    if (saved || saving || matchedItems.length === 0) return;
     setSaving(true);
     try {
       const input: CreateOutfitInput = {
@@ -1183,10 +1392,42 @@ function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, mi
     }
   }
 
+  async function handleAddToEvent() {
+    if (!onAddToEvent || added || adding || matchedItems.length === 0) return;
+    setAdding(true);
+    try {
+      // Persist the refined set (editedIds), matching what feedback/save use.
+      await onAddToEvent(matchedItems.map((i) => i.id));
+      setAdded(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    } catch {
+      // Error alert handled by the mutation
+    } finally {
+      setAdding(false);
+    }
+  }
+
   function handleFeedback(rating: 'up' | 'down') {
     if (feedback) return;
-    setFeedback(rating);
-    api.post('/api/stylist/feedback', { itemIds, rating, ...(recId ? { recId } : {}) }).catch(() => {});
+    if (rating === 'down') {
+      // Don't finalize yet — let the user say why.
+      setChoosingReason(true);
+      return;
+    }
+    setFeedback('up');
+    api.post('/api/stylist/feedback', { itemIds: editedIds, rating: 'up', ...(recId ? { recId } : {}) }).catch(() => {});
+  }
+
+  function submitDownFeedback(reason?: string) {
+    if (feedback) return;
+    setFeedback('down');
+    setChoosingReason(false);
+    api.post('/api/stylist/feedback', {
+      itemIds: editedIds,
+      rating: 'down',
+      ...(reason ? { reason } : {}),
+      ...(recId ? { recId } : {}),
+    }).catch(() => {});
   }
 
   return (
@@ -1208,30 +1449,102 @@ function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, mi
             height={Math.round(collageSize * 0.88)}
             borderRadius={radii.lg}
           />
-          <View style={styles.collageLabels}>
-            {matchedItems.slice(0, 4).map((item, index) => (
+        </View>
+      )}
+
+      {/* Editable item list — tap name to view, swap, or remove */}
+      <View style={styles.editList}>
+        {matchedItems.map((item) => {
+          const imgUri = resolveImageUri(item.imageUrl);
+          return (
+            <View key={item.id} style={styles.editRow}>
               <Pressable
-                key={item.id}
-                style={styles.collageLabel}
+                style={styles.editRowMain}
                 onPress={() => setSelectedItem(item)}
                 accessibilityLabel={`View ${item.name}`}
               >
-                <Text style={styles.collageLabelIndex}>{index + 1}</Text>
-                <Text style={styles.collageLabelText} numberOfLines={1}>{item.name}</Text>
+                <View style={styles.editThumb}>
+                  {imgUri ? (
+                    <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                  ) : (
+                    <Ionicons name="shirt-outline" size={16} color={colors.mutedForeground} />
+                  )}
+                </View>
+                <View style={styles.editRowText}>
+                  <Text style={styles.editRowName} numberOfLines={1}>{item.name}</Text>
+                  {!!item.category && (
+                    <Text style={styles.editRowCategory} numberOfLines={1}>
+                      {item.category.replace(/_/g, ' ')}
+                    </Text>
+                  )}
+                </View>
               </Pressable>
-            ))}
-          </View>
-        </View>
-      )}
+              <TouchableOpacity
+                style={styles.editIconBtn}
+                onPress={() => setPicker({ swapId: item.id })}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                accessibilityLabel={`Swap ${item.name}`}
+              >
+                <Ionicons name="swap-horizontal-outline" size={18} color={colors.mutedForeground} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.editIconBtn}
+                onPress={() => removeItem(item.id)}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                accessibilityLabel={`Remove ${item.name}`}
+              >
+                <Ionicons name="close" size={18} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            </View>
+          );
+        })}
+        <TouchableOpacity
+          style={styles.addItemBtn}
+          onPress={() => setPicker('add')}
+          activeOpacity={0.8}
+          accessibilityLabel="Add an item from your library"
+        >
+          <Ionicons name="add-outline" size={16} color={colors.primary} />
+          <Text style={styles.addItemBtnText}>Add item</Text>
+        </TouchableOpacity>
+      </View>
 
       <Text style={styles.rationaleLabel}>Why it works</Text>
       <Text style={styles.outfitCardText}>{messageText}</Text>
 
+      {onAddToEvent && eventContext && (
+        <TouchableOpacity
+          style={[
+            styles.addEventBtn,
+            added && styles.addEventBtnDone,
+            matchedItems.length === 0 && styles.saveBtnDisabled,
+          ]}
+          onPress={handleAddToEvent}
+          disabled={added || adding || matchedItems.length === 0}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={`Add this outfit to ${eventContext.title}`}
+        >
+          <Ionicons
+            name={added ? 'checkmark-circle' : 'calendar-outline'}
+            size={16}
+            color={colors.primaryForeground}
+          />
+          <Text style={styles.addEventBtnText} numberOfLines={1}>
+            {adding ? 'Adding…' : added ? `Added to ${eventContext.title}` : `Add to ${eventContext.title}`}
+          </Text>
+        </TouchableOpacity>
+      )}
+
       <View style={styles.outfitCardActions}>
         <TouchableOpacity
-          style={[styles.saveBtn, (saved || saving) && styles.saveBtnDone]}
+          style={[
+            styles.saveBtn,
+            (saved || saving) && styles.saveBtnDone,
+            matchedItems.length === 0 && styles.saveBtnDisabled,
+          ]}
           onPress={handleSave}
-          disabled={saved || saving}
+          disabled={saved || saving || matchedItems.length === 0}
           activeOpacity={0.8}
         >
           <Ionicons
@@ -1259,7 +1572,7 @@ function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, mi
             />
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.feedbackBtn, feedback === 'down' && styles.feedbackBtnActive]}
+            style={[styles.feedbackBtn, (feedback === 'down' || choosingReason) && styles.feedbackBtnActive]}
             onPress={() => handleFeedback('down')}
             disabled={!!feedback}
             accessibilityLabel="This outfit doesn't work for me"
@@ -1267,11 +1580,25 @@ function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, mi
             <Ionicons
               name="thumbs-down-outline"
               size={16}
-              color={feedback === 'down' ? colors.primary : colors.mutedForeground}
+              color={feedback === 'down' || choosingReason ? colors.primary : colors.mutedForeground}
             />
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Reason chips — surfaced after 👎 so the rejection becomes a labeled signal */}
+      {choosingReason && !feedback && (
+        <View style={styles.reasonChips}>
+          {DOWN_REASONS.map((r) => (
+            <TouchableOpacity key={r} style={styles.reasonChip} onPress={() => submitDownFeedback(r)} activeOpacity={0.7}>
+              <Text style={styles.reasonChipText}>{r}</Text>
+            </TouchableOpacity>
+          ))}
+          <TouchableOpacity style={styles.reasonChip} onPress={() => submitDownFeedback()} activeOpacity={0.7}>
+            <Text style={styles.reasonChipText}>Just not it</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Wardrobe gap banners — sorted by priority, max 3 */}
       {(missingEssentials ?? []).map((item, i) => (
@@ -1292,6 +1619,15 @@ function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, mi
       ))}
 
       <ItemDetailSheet item={selectedItem} onClose={() => setSelectedItem(null)} />
+
+      <ItemPickerSheet
+        visible={picker !== null}
+        onClose={() => setPicker(null)}
+        title={pickerTitle}
+        items={pickerItems}
+        selectedId={picker && picker !== 'add' ? picker.swapId : undefined}
+        onSelect={handlePickerSelect}
+      />
     </View>
   );
 }
@@ -1417,10 +1753,11 @@ function TypingIndicator() {
 
 // ── EmptyState ────────────────────────────────────────────────────────────────
 
-function buildEmptyStatePrompts(weather: CurrentWeather | undefined): string[] {
+function buildEmptyStatePrompts(weather: CurrentWeather | undefined, wardrobeCount: number): string[] {
   const day = new Date().toLocaleDateString('en', { weekday: 'long' });
   const prompts: string[] = [];
 
+  // [0] Weather-aware "what to wear today" (icon: sunny-outline)
   if (weather) {
     const { condition, summary } = weather;
     if (condition === 'rainy') {
@@ -1431,12 +1768,20 @@ function buildEmptyStatePrompts(weather: CurrentWeather | undefined): string[] {
       prompts.push(`What should I wear on this ${summary.toLowerCase()} ${day}?`);
     }
   } else {
-    prompts.push(`What should I wear today?`);
+    prompts.push('What should I wear today?');
   }
 
-  prompts.push('Build me a casual weekend outfit');
-  prompts.push('What goes with my blue jeans?');
-  prompts.push('Help me dress for a dinner date');
+  // Showcase the stylist's range: an audit, a trip plan, and a pairing check —
+  // but only the wardrobe-grounded ones once they actually own pieces.
+  if (wardrobeCount > 0) {
+    prompts.push("What's missing from my closet?"); // [1] advice / audit (cube-outline)
+    prompts.push('Pack me for a weekend trip');      // [2] trip (briefcase-outline)
+    prompts.push('What goes with my blue jeans?');   // [3] advice / pairing (color-palette-outline)
+  } else {
+    prompts.push('What should I buy to start my wardrobe?');
+    prompts.push('Pack me for a weekend trip');
+    prompts.push('Help me dress for a dinner date');
+  }
 
   return prompts;
 }
@@ -1456,7 +1801,7 @@ function EmptyState({
   onLocationPress: () => void;
   onPrompt: (q: string) => void;
 }) {
-  const prompts = buildEmptyStatePrompts(weather);
+  const prompts = buildEmptyStatePrompts(weather, wardrobeCount);
   const firstName = displayName?.trim().split(/\s+/)[0];
   const context = [
     location,
@@ -2024,26 +2369,65 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  collageLabels: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
-  collageLabel: {
-    maxWidth: '48%',
+  editList: { width: '100%', gap: spacing.xs },
+  editRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
-    paddingRight: spacing.xs,
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
   },
-  collageLabelIndex: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    fontSize: 10,
-    textAlign: 'center',
-    lineHeight: 18,
-    color: colors.primary,
-    backgroundColor: colors.surfaceSelected,
+  editRowMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  editThumb: {
+    width: 36,
+    height: 42,
+    borderRadius: radii.sm,
     overflow: 'hidden',
+    backgroundColor: colors.muted,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  collageLabelText: { flexShrink: 1, fontSize: 10, color: colors.mutedForeground },
+  editRowText: { flex: 1 },
+  editRowName: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.medium,
+    color: colors.foreground,
+  },
+  editRowCategory: {
+    fontSize: 10,
+    color: colors.mutedForeground,
+    textTransform: 'capitalize',
+    marginTop: 1,
+  },
+  editIconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addItemBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderStyle: 'dashed',
+  },
+  addItemBtnText: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
+  },
   rationaleLabel: {
     fontSize: 10,
     fontWeight: typography.weight.bold,
@@ -2055,6 +2439,26 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
     color: colors.foreground,
     lineHeight: typography.size.sm * 1.65,
+  },
+  addEventBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.primary,
+    borderRadius: radii.full,
+    paddingVertical: spacing.sm + 3,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  addEventBtnDone: {
+    backgroundColor: colors.primary,
+  },
+  addEventBtnText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.white,
+    flexShrink: 1,
   },
   saveBtn: {
     flexDirection: 'row',
@@ -2070,6 +2474,9 @@ const styles = StyleSheet.create({
   saveBtnDone: {
     backgroundColor: colors.primary,
     borderWidth: 0,
+  },
+  saveBtnDisabled: {
+    opacity: 0.4,
   },
   saveBtnText: {
     fontSize: typography.size.xs,
@@ -2119,6 +2526,35 @@ const styles = StyleSheet.create({
     fontSize: typography.size.xs,
     color: colors.foreground,
     fontWeight: typography.weight.medium,
+  },
+  reasonChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  reasonChip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.muted,
+  },
+  reasonChipText: {
+    fontSize: typography.size.xs,
+    color: colors.foreground,
+    fontWeight: typography.weight.medium,
+  },
+  adviceThumbs: { gap: spacing.sm, paddingVertical: spacing.xs },
+  adviceThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: radii.md,
+    overflow: 'hidden',
+    backgroundColor: colors.muted,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   // Typing indicator
   typingRow: {

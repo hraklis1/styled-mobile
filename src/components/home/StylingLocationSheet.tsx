@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -15,16 +15,23 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUpdateProfile } from '../../hooks/useProfile';
-import type { StylingLocationContext } from '../../hooks/useActiveStylingLocation';
-import { colors, radii, shadows, spacing, typography } from '../../theme';
+import type {
+  LocationOverride,
+  StylingLocationContext,
+} from '../../hooks/useActiveStylingLocation';
+import { colors, radii, spacing, typography } from '../../theme';
 import { LocationAutocompleteInput } from '../primitives/LocationAutocompleteInput';
 
 const WINDOW_HEIGHT = Dimensions.get('window').height;
+
+type OverrideMode = LocationOverride['mode'];
 
 type Props = {
   visible: boolean;
   activeLocation: StylingLocationContext;
   homeLocation?: string;
+  override: LocationOverride | null;
+  onSelectOverride: (override: LocationOverride) => void;
   permissionStatus: 'granted' | 'denied' | 'undetermined';
   permissionCanAskAgain: boolean;
   onRequestCurrent: () => Promise<boolean>;
@@ -39,6 +46,8 @@ export function StylingLocationSheet({
   visible,
   activeLocation,
   homeLocation,
+  override,
+  onSelectOverride,
   permissionStatus,
   permissionCanAskAgain,
   onRequestCurrent,
@@ -53,8 +62,13 @@ export function StylingLocationSheet({
   const [savedHome, setSavedHome] = useState(homeLocation?.trim() ?? '');
   const [home, setHome] = useState(homeLocation ?? '');
   const [editingHome, setEditingHome] = useState(false);
+  const [editingDestination, setEditingDestination] = useState(false);
+  const [destinationDraft, setDestinationDraft] = useState('');
   const [locating, setLocating] = useState(false);
   const [locationFeedback, setLocationFeedback] = useState<LocationFeedback>(null);
+
+  const selected: OverrideMode = override?.mode ?? 'current';
+  const isEditing = editingHome || editingDestination;
 
   useEffect(() => {
     if (visible) bottomSheetRef.current?.present();
@@ -77,18 +91,24 @@ export function StylingLocationSheet({
     feedbackTimerRef.current = setTimeout(() => setLocationFeedback(null), 3000);
   }, []);
 
-  const handleDismiss = useCallback(() => {
+  const resetEditing = useCallback(() => {
     setEditingHome(false);
+    setEditingDestination(false);
+    setDestinationDraft('');
+  }, []);
+
+  const handleDismiss = useCallback(() => {
+    resetEditing();
     setHome(savedHome);
     setLocationFeedback(null);
     onClose();
-  }, [onClose, savedHome]);
+  }, [onClose, resetEditing, savedHome]);
 
   const handleClose = useCallback(() => {
     bottomSheetRef.current?.dismiss();
   }, []);
 
-  const handleCurrent = async () => {
+  const refreshCurrent = useCallback(async () => {
     if (permissionStatus !== 'granted' && !permissionCanAskAgain) {
       try {
         await onOpenSettings();
@@ -110,22 +130,63 @@ export function StylingLocationSheet({
     } finally {
       setLocating(false);
     }
-  };
+  }, [
+    onOpenSettings,
+    onRefreshCurrent,
+    onRequestCurrent,
+    permissionCanAskAgain,
+    permissionStatus,
+    showLocationFeedback,
+  ]);
 
-  const startEditingHome = () => {
+  const handleSelectCurrent = useCallback(() => {
+    resetEditing();
+    onSelectOverride({ mode: 'current' });
+    void refreshCurrent();
+  }, [onSelectOverride, refreshCurrent, resetEditing]);
+
+  const handleSelectHome = useCallback(() => {
+    setEditingDestination(false);
+    setDestinationDraft('');
+    setLocationFeedback(null);
+    if (!savedHome) {
+      // Nothing to select yet — drop the user straight into the editor.
+      setHome('');
+      setEditingHome(true);
+      return;
+    }
+    onSelectOverride({ mode: 'home' });
+  }, [onSelectOverride, savedHome]);
+
+  const handleSelectDestination = useCallback(() => {
+    setEditingHome(false);
+    setLocationFeedback(null);
+    setDestinationDraft(override?.mode === 'destination' ? override.label : '');
+    setEditingDestination(true);
+  }, [override]);
+
+  const handleDestinationChosen = useCallback((label: string) => {
+    const trimmed = label.trim();
+    if (!trimmed) return;
+    onSelectOverride({ mode: 'destination', label: trimmed });
+    resetEditing();
+  }, [onSelectOverride, resetEditing]);
+
+  const startEditingHome = useCallback(() => {
+    setEditingDestination(false);
     setHome(savedHome);
     setEditingHome(true);
-  };
+  }, [savedHome]);
 
-  const cancelEditingHome = () => {
+  const cancelEditingHome = useCallback(() => {
     setHome(savedHome);
     setEditingHome(false);
-  };
+  }, [savedHome]);
 
   const trimmedHome = home.trim();
   const homeChanged = trimmedHome !== savedHome;
 
-  const saveHome = () => {
+  const saveHome = useCallback(() => {
     if (!homeChanged) return;
     updateProfile.mutate(
       { location: trimmedHome || null },
@@ -134,10 +195,12 @@ export function StylingLocationSheet({
           setSavedHome(trimmedHome);
           setHome(trimmedHome);
           setEditingHome(false);
+          // Selecting Home only makes sense once a city is saved.
+          if (trimmedHome) onSelectOverride({ mode: 'home' });
         },
       },
     );
-  };
+  }, [homeChanged, onSelectOverride, trimmedHome, updateProfile]);
 
   const renderBackdrop = useCallback(
     (props: any) => (
@@ -152,24 +215,24 @@ export function StylingLocationSheet({
     [],
   );
 
-  const currentActionLabel = permissionStatus === 'granted'
-    ? 'Refresh current location'
+  const currentSubtitle = permissionStatus === 'granted'
+    ? activeLocation.source === 'current' && activeLocation.label
+      ? activeLocation.label
+      : 'Locating…'
     : permissionCanAskAgain
-      ? 'Enable current location'
-      : 'Open Settings';
+      ? 'Enable to use your live location'
+      : 'Turn on location access in Settings';
 
-  const activeLocationHint = activeLocation.source === 'home'
-    ? 'Using your Home city fallback'
-    : activeLocation.label
-      ? 'Using your current location'
-      : activeLocation.fallbackReason || 'Location is unavailable';
+  const destinationSubtitle = override?.mode === 'destination'
+    ? override.label
+    : 'Style for a trip or event';
 
   return (
     <BottomSheetModal
       ref={bottomSheetRef}
-      enableDynamicSizing={!editingHome}
-      snapPoints={editingHome ? ['82%'] : undefined}
-      maxDynamicContentSize={WINDOW_HEIGHT * 0.76}
+      enableDynamicSizing={!isEditing}
+      snapPoints={isEditing ? ['82%'] : undefined}
+      maxDynamicContentSize={WINDOW_HEIGHT * 0.82}
       keyboardBehavior="interactive"
       keyboardBlurBehavior="restore"
       android_keyboardInputMode="adjustResize"
@@ -182,57 +245,31 @@ export function StylingLocationSheet({
       <BottomSheetView style={[styles.content, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
         <View style={styles.header}>
           <View style={styles.headerCopy}>
-            <Text style={styles.title}>Location for today</Text>
+            <Text style={styles.title}>Style me for</Text>
             <Text style={styles.subtitle}>Used for weather-aware outfit suggestions.</Text>
           </View>
           <TouchableOpacity
             style={styles.closeButton}
             onPress={handleClose}
             accessibilityRole="button"
-            accessibilityLabel="Close location details"
+            accessibilityLabel="Close location options"
           >
             <Ionicons name="close" size={20} color={colors.foreground} />
           </TouchableOpacity>
         </View>
 
-        <View style={styles.activeCard}>
-          <View style={styles.cardHeader}>
-            <View style={styles.optionIcon}>
-              <Ionicons
-                name={activeLocation.source === 'home' ? 'home-outline' : 'navigate-outline'}
-                size={20}
-                color={colors.primary}
-              />
-            </View>
-            <View style={styles.cardCopy}>
-              <Text style={styles.cardLabel}>Styling for</Text>
-              <Text style={styles.cardValue}>{activeLocation.label || 'No location available'}</Text>
-              <Text style={styles.cardHint}>{activeLocationHint}</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={handleCurrent}
-            disabled={locating}
-            accessibilityRole="button"
-            accessibilityLabel={currentActionLabel}
-          >
-            {locating ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : (
-              <>
-                <Ionicons
-                  name={permissionStatus === 'denied' && !permissionCanAskAgain ? 'settings-outline' : 'navigate-outline'}
-                  size={16}
-                  color={colors.primary}
-                />
-                <Text style={styles.secondaryButtonText}>{currentActionLabel}</Text>
-              </>
-            )}
-          </TouchableOpacity>
-
-          {locationFeedback && (
+        <View style={styles.options}>
+          {/* ── Current location ─────────────────────────────────── */}
+          <OptionRow
+            icon="navigate-outline"
+            title="Current location"
+            subtitle={currentSubtitle}
+            selected={selected === 'current'}
+            loading={locating}
+            onPress={handleSelectCurrent}
+            accessibilityLabel="Style for my current location"
+          />
+          {selected === 'current' && locationFeedback && (
             <View style={styles.feedbackRow}>
               <Ionicons
                 name={locationFeedback === 'success' ? 'checkmark-circle-outline' : 'alert-circle-outline'}
@@ -246,27 +283,28 @@ export function StylingLocationSheet({
               </Text>
             </View>
           )}
-        </View>
 
-        <View style={[styles.homeCard, editingHome && styles.homeCardEditing]}>
-          <View style={styles.homeSummary}>
-            <View style={styles.homeCopy}>
-              <Text style={styles.sectionTitle}>Home city</Text>
-              <Text style={styles.homeValue}>{savedHome || 'Not set'}</Text>
-              <Text style={styles.cardHint}>Used automatically when current location is unavailable.</Text>
-            </View>
-            {!editingHome && (
-              <TouchableOpacity
-                style={styles.editButton}
-                onPress={startEditingHome}
-                accessibilityRole="button"
-                accessibilityLabel="Edit Home city"
-              >
-                <Text style={styles.editButtonText}>Edit</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
+          {/* ── Home city ────────────────────────────────────────── */}
+          <OptionRow
+            icon="home-outline"
+            title="Home city"
+            subtitle={savedHome || 'Set your home city'}
+            selected={selected === 'home'}
+            onPress={handleSelectHome}
+            accessibilityLabel="Style for my home city"
+            trailing={
+              savedHome && !editingHome ? (
+                <TouchableOpacity
+                  style={styles.editButton}
+                  onPress={startEditingHome}
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit Home city"
+                >
+                  <Text style={styles.editButtonText}>Edit</Text>
+                </TouchableOpacity>
+              ) : undefined
+            }
+          />
           {editingHome && (
             <View style={styles.editor}>
               <LocationAutocompleteInput
@@ -301,9 +339,88 @@ export function StylingLocationSheet({
               </View>
             </View>
           )}
+
+          {/* ── Destination ──────────────────────────────────────── */}
+          <OptionRow
+            icon="airplane-outline"
+            title="Destination"
+            subtitle={destinationSubtitle}
+            selected={selected === 'destination'}
+            onPress={handleSelectDestination}
+            accessibilityLabel="Style for a destination"
+          />
+          {editingDestination && (
+            <View style={styles.editor}>
+              <LocationAutocompleteInput
+                value={destinationDraft}
+                onChangeText={setDestinationDraft}
+                onSelect={handleDestinationChosen}
+                placeholder="Search a city you're heading to"
+                autoFocus
+                showUseMyLocation={false}
+              />
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={resetEditing}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel destination"
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </BottomSheetView>
     </BottomSheetModal>
+  );
+}
+
+type OptionRowProps = {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  subtitle: string;
+  selected: boolean;
+  loading?: boolean;
+  onPress: () => void;
+  accessibilityLabel: string;
+  trailing?: ReactNode;
+};
+
+function OptionRow({
+  icon,
+  title,
+  subtitle,
+  selected,
+  loading,
+  onPress,
+  accessibilityLabel,
+  trailing,
+}: OptionRowProps) {
+  return (
+    <TouchableOpacity
+      style={[styles.optionRow, selected && styles.optionRowSelected]}
+      onPress={onPress}
+      activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={accessibilityLabel}
+    >
+      <View style={[styles.optionIcon, selected && styles.optionIconSelected]}>
+        <Ionicons name={icon} size={20} color={selected ? colors.primary : colors.mutedForeground} />
+      </View>
+      <View style={styles.optionCopy}>
+        <Text style={styles.optionTitle}>{title}</Text>
+        <Text style={styles.optionSubtitle} numberOfLines={1}>{subtitle}</Text>
+      </View>
+      {trailing}
+      {loading ? (
+        <ActivityIndicator size="small" color={colors.primary} />
+      ) : selected ? (
+        <Ionicons name="checkmark-circle" size={22} color={colors.primary} />
+      ) : (
+        <View style={styles.radioOutline} />
+      )}
+    </TouchableOpacity>
   );
 }
 
@@ -319,45 +436,36 @@ const styles = StyleSheet.create({
     width: 36, height: 36, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.surfaceSubtle,
   },
-  activeCard: {
-    gap: spacing.md, padding: spacing.lg, borderRadius: radii.lg,
-    backgroundColor: colors.surfaceElevated, ...shadows.sm,
+  options: { gap: spacing.sm },
+  optionRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    padding: spacing.md, borderRadius: radii.lg,
+    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceElevated,
   },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  optionRowSelected: { borderColor: colors.primary, backgroundColor: `${colors.primary}0D` },
   optionIcon: {
     width: 42, height: 42, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: `${colors.primary}15`,
+    backgroundColor: colors.surfaceSubtle,
   },
-  cardCopy: { flex: 1, gap: 2 },
-  cardLabel: {
-    fontSize: 10, color: colors.primary, fontWeight: typography.weight.bold,
-    textTransform: 'uppercase', letterSpacing: 0.8,
+  optionIconSelected: { backgroundColor: `${colors.primary}1A` },
+  optionCopy: { flex: 1, gap: 2 },
+  optionTitle: { fontSize: typography.size.md, color: colors.foreground, fontWeight: typography.weight.semibold },
+  optionSubtitle: { fontSize: typography.size.xs, lineHeight: 17, color: colors.mutedForeground },
+  radioOutline: {
+    width: 22, height: 22, borderRadius: radii.full, borderWidth: 2, borderColor: colors.border,
   },
-  cardValue: { fontSize: typography.size.lg, color: colors.foreground, fontWeight: typography.weight.semibold },
-  cardHint: { fontSize: typography.size.xs, lineHeight: 17, color: colors.mutedForeground },
-  secondaryButton: {
-    minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
-    borderRadius: radii.full, borderWidth: 1, borderColor: colors.border,
+  feedbackRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
+    paddingHorizontal: spacing.md,
   },
-  secondaryButtonText: { fontSize: typography.size.sm, color: colors.primary, fontWeight: typography.weight.semibold },
-  feedbackRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs },
   feedbackText: { fontSize: typography.size.xs, color: colors.primary, fontWeight: typography.weight.medium },
   feedbackError: { color: colors.error },
-  homeCard: {
-    gap: spacing.md, padding: spacing.lg, borderRadius: radii.lg,
-    backgroundColor: colors.surfaceElevated, ...shadows.sm,
-  },
-  homeCardEditing: { flex: 1 },
-  homeSummary: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  homeCopy: { flex: 1, gap: 2 },
-  sectionTitle: { fontSize: typography.size.md, color: colors.foreground, fontWeight: typography.weight.semibold },
-  homeValue: { fontSize: typography.size.sm, color: colors.foreground, fontWeight: typography.weight.medium },
   editButton: {
     minWidth: 52, minHeight: 34, alignItems: 'center', justifyContent: 'center',
     borderRadius: radii.full, backgroundColor: colors.surfaceSubtle,
   },
   editButtonText: { fontSize: typography.size.sm, color: colors.primary, fontWeight: typography.weight.semibold },
-  editor: { gap: spacing.md, zIndex: 10 },
+  editor: { gap: spacing.md, zIndex: 10, paddingHorizontal: spacing.xs },
   editorActions: { flexDirection: 'row', gap: spacing.sm },
   cancelButton: {
     minHeight: 44, paddingHorizontal: spacing.lg, alignItems: 'center', justifyContent: 'center',

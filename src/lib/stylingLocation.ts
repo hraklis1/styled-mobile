@@ -1,4 +1,6 @@
-export type StylingLocationSource = 'current' | 'home' | 'conversation';
+import type { LocationOverride } from './stylingLocationOverride';
+
+export type StylingLocationSource = 'current' | 'home' | 'destination' | 'conversation';
 
 export type DeviceStylingLocation = {
   label: string;
@@ -41,6 +43,28 @@ export function resolveStylingLocation(
       ? 'Current location is unavailable. Add a Home city as a fallback.'
       : 'Enable current location or add a Home city for weather-aware styling.',
   };
+}
+
+/**
+ * Applies a user's manual override on top of the auto-resolved location.
+ * - `destination` styles for an arbitrary city the user typed.
+ * - `home` forces the saved Home city even when current location is available.
+ * - `current` / no override / unusable override falls back to the auto resolution.
+ */
+export function applyLocationOverride(
+  auto: StylingLocationContext,
+  override: LocationOverride | null | undefined,
+  homeLocation?: string,
+): StylingLocationContext {
+  if (override?.mode === 'destination') {
+    const label = override.label.trim();
+    if (label) return { source: 'destination', label, isFallback: false };
+  }
+  if (override?.mode === 'home') {
+    const home = homeLocation?.trim();
+    if (home) return { source: 'home', label: home, isFallback: false };
+  }
+  return auto;
 }
 
 export function conversationLocation(label: string): StylingLocationContext {

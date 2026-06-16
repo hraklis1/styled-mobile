@@ -51,6 +51,10 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 const MAX_PHOTOS = 10;
 
+// Cap simultaneous detail-extraction calls so a large batch doesn't fan out into
+// dozens of concurrent LLM-vision requests (provider rate limits / socket timeouts).
+const EXTRACTION_CONCURRENCY = 4;
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Phase = 'idle' | 'processing' | 'pre-extract' | 'extracting' | 'review' | 'saving';
@@ -59,6 +63,7 @@ type PhotoStatus = 'pending' | 'scanning' | 'done' | 'error';
 
 type PhotoJob = {
   id: string;
+  asset: ImagePicker.ImagePickerAsset;
   thumbDataUrl: string;
   status: PhotoStatus;
   itemCount: number;
@@ -123,6 +128,36 @@ async function buildUploadImage(item: {
   return item.croppedImage;
 }
 
+/**
+ * Runs `fn` over `items` with at most `limit` promises in flight at once.
+ * Returns settled results in input order so callers can map failures back to
+ * their source item. Drop-in concurrency-bounded replacement for Promise.allSettled.
+ */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let cursor = 0;
+
+  async function worker() {
+    while (true) {
+      const idx = cursor++;
+      if (idx >= items.length) return;
+      try {
+        results[idx] = { status: 'fulfilled', value: await fn(items[idx], idx) };
+      } catch (reason) {
+        results[idx] = { status: 'rejected', reason };
+      }
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(limit, items.length) }, worker);
+  await Promise.all(workers);
+  return results;
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanSheetProps) {
@@ -131,6 +166,7 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
   const [photoJobs, setPhotoJobs] = useState<PhotoJob[]>([]);
   const [preExtractItems, setPreExtractItems] = useState<PreExtractItemData[]>([]);
   const [allItems, setAllItems] = useState<EditableItem[]>([]);
+  const [failedItems, setFailedItems] = useState<PreExtractItemData[]>([]);
   const [extractionProgress, setExtractionProgress] = useState({ current: 0, total: 0 });
   const [extractedThumbs, setExtractedThumbs] = useState<string[]>([]);
   const [cropAdjustTarget, setCropAdjustTarget] = useState<{
@@ -151,6 +187,7 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
     setPhotoJobs([]);
     setPreExtractItems([]);
     setAllItems([]);
+    setFailedItems([]);
     setExtractionProgress({ current: 0, total: 0 });
     setExtractedThumbs([]);
   }, []);
@@ -204,11 +241,71 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
     await processPhotos(result.assets);
   };
 
+  // Compress + pose-scan a single photo job, updating its status as it goes.
+  // Returns detected items, or null if compression/scan failed (job marked 'error').
+  const scanPhotoJob = async (
+    job: PhotoJob,
+    session: number,
+  ): Promise<PreExtractItemData[] | null> => {
+    const { asset } = job;
+
+    let compressed: { uri: string; dataUrl: string };
+    try {
+      compressed = await compressImageToDataUrl(
+        { uri: asset.uri, width: asset.width ?? 1024, height: asset.height ?? 1024 },
+        1024,
+        0.8,
+      );
+    } catch {
+      updateJob(job.id, { thumbDataUrl: asset.uri, status: 'error', errorMsg: 'Compression failed' });
+      return null;
+    }
+
+    updateJob(job.id, { thumbDataUrl: compressed.dataUrl, status: 'scanning' });
+
+    let poseItems: PoseScanItem[] = [];
+    try {
+      const base64 = compressed.dataUrl.includes(',')
+        ? compressed.dataUrl.split(',')[1]
+        : compressed.dataUrl;
+      const poseResult = await scanVisionPoseDirect(base64);
+      poseItems = poseResult.items ?? [];
+    } catch {
+      updateJob(job.id, { status: 'error', errorMsg: 'Scan failed — service may be unavailable' });
+      return null;
+    }
+
+    if (sessionRef.current !== session) return null;
+
+    const preItems: PreExtractItemData[] = poseItems.map((poseItem) => ({
+      tempId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      name: poseItem.name,
+      category: poseItem.category,
+      croppedImage: poseItem.croppedWebP
+        ? `data:image/webp;base64,${poseItem.croppedWebP}`
+        : null,
+      bbox: poseItem.bbox_pct
+        ? {
+            x: poseItem.bbox_pct.x,
+            y: poseItem.bbox_pct.y,
+            width: poseItem.bbox_pct.width,
+            height: poseItem.bbox_pct.height,
+          }
+        : null,
+      sourceImage: compressed.dataUrl,
+      brandHint: '',
+    }));
+
+    updateJob(job.id, { status: 'done', itemCount: preItems.length });
+    return preItems;
+  };
+
   const processPhotos = async (assets: ImagePicker.ImagePickerAsset[]) => {
     const session = sessionRef.current;
 
-    const jobs: PhotoJob[] = assets.map((_, i) => ({
+    const jobs: PhotoJob[] = assets.map((asset, i) => ({
       id: `photo-${Date.now()}-${i}`,
+      asset,
       thumbDataUrl: '',
       status: 'pending',
       itemCount: 0,
@@ -220,61 +317,10 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
 
     const accumulated: PreExtractItemData[] = [];
 
-    for (let i = 0; i < assets.length; i++) {
+    for (const job of jobs) {
       if (sessionRef.current !== session) return;
-
-      const asset = assets[i];
-      const jobId = jobs[i].id;
-
-      let compressed: { uri: string; dataUrl: string };
-      try {
-        compressed = await compressImageToDataUrl(
-          { uri: asset.uri, width: asset.width ?? 1024, height: asset.height ?? 1024 },
-          1024,
-          0.8,
-        );
-      } catch {
-        updateJob(jobId, { thumbDataUrl: asset.uri, status: 'error', errorMsg: 'Compression failed' });
-        continue;
-      }
-
-      updateJob(jobId, { thumbDataUrl: compressed.dataUrl, status: 'scanning' });
-
-      let poseItems: PoseScanItem[] = [];
-      try {
-        const base64 = compressed.dataUrl.includes(',')
-          ? compressed.dataUrl.split(',')[1]
-          : compressed.dataUrl;
-        const poseResult = await scanVisionPoseDirect(base64);
-        poseItems = poseResult.items ?? [];
-      } catch {
-        updateJob(jobId, { status: 'error', errorMsg: 'Scan failed — service may be unavailable' });
-        continue;
-      }
-
-      if (sessionRef.current !== session) return;
-
-      const preItems: PreExtractItemData[] = poseItems.map((poseItem) => ({
-        tempId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        name: poseItem.name,
-        category: poseItem.category,
-        croppedImage: poseItem.croppedWebP
-          ? `data:image/webp;base64,${poseItem.croppedWebP}`
-          : null,
-        bbox: poseItem.bbox_pct
-          ? {
-              x: poseItem.bbox_pct.x,
-              y: poseItem.bbox_pct.y,
-              width: poseItem.bbox_pct.width,
-              height: poseItem.bbox_pct.height,
-            }
-          : null,
-        sourceImage: compressed.dataUrl,
-        brandHint: '',
-      }));
-
-      accumulated.push(...preItems);
-      updateJob(jobId, { status: 'done', itemCount: preItems.length });
+      const preItems = await scanPhotoJob(job, session);
+      if (preItems) accumulated.push(...preItems);
     }
 
     if (sessionRef.current !== session) return;
@@ -293,97 +339,153 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
     setPhase('pre-extract');
   };
 
-  const runExtraction = useCallback(async () => {
-    if (preExtractItems.length === 0) return;
+  // Re-scan photos that failed during detection, merging any newly found items
+  // into the existing pre-extract list. Reuses the processing screen for feedback.
+  const retryFailedPhotos = async () => {
+    const failed = photoJobs.filter((j) => j.status === 'error');
+    if (failed.length === 0) return;
     const session = sessionRef.current;
-    const total = preExtractItems.length;
-    setPhase('extracting');
-    setExtractionProgress({ current: 0, total });
-    setExtractedThumbs([]);
 
-    let completedCount = 0;
+    setPhase('processing');
 
-    const settled = await Promise.allSettled(
-      preExtractItems.map(async (preItem, idx) => {
-        if (sessionRef.current !== session) throw new Error('session_changed');
-
-        const imageData = preItem.croppedImage ?? preItem.sourceImage;
-        const otherItems = preExtractItems
-          .filter((_, i) => i !== idx)
-          .map((o) => `${o.name} (${o.category})`)
-          .join(', ');
-
-        const result = await scanItemDirect({
-          imageData,
-          outfitContext: otherItems || undefined,
-          brandHint: preItem.brandHint || undefined,
-        });
-
-        if (sessionRef.current !== session) throw new Error('session_changed');
-
-        completedCount += 1;
-        setExtractionProgress({ current: completedCount, total });
-        if (preItem.croppedImage) {
-          setExtractedThumbs((prev) => [...prev, preItem.croppedImage!]);
-        }
-
-        return {
-          result,
-          croppedImage: preItem.croppedImage,
-          bbox: preItem.bbox,
-          sourceImage: preItem.sourceImage,
-        };
-      }),
-    );
+    const accumulated: PreExtractItemData[] = [];
+    for (const job of failed) {
+      if (sessionRef.current !== session) return;
+      const preItems = await scanPhotoJob(job, session);
+      if (preItems) accumulated.push(...preItems);
+    }
 
     if (sessionRef.current !== session) return;
 
-    const extracted: EditableItem[] = [];
-    for (const s of settled) {
-      if (s.status !== 'fulfilled') continue;
-      const { result, croppedImage, bbox, sourceImage } = s.value;
-      extracted.push({
-        tempId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        name: result.name || 'Unknown Item',
-        brand: result.brand ?? null,
-        category: result.category ?? null,
-        subcategory: result.subcategory ?? null,
-        color: result.color ?? null,
-        style: result.style ?? null,
-        seasons: result.seasons?.length ? result.seasons : [],
-        occasions: result.occasions?.length ? result.occasions : [],
-        material: result.material ?? null,
-        fit: result.fit ?? null,
-        pattern: result.pattern ?? null,
-        neckline: result.neckline ?? null,
-        care: result.care ?? null,
-        formalityStyles: result.formalityStyles ?? [],
-        notableDetails: result.notableDetails ?? [],
-        colorPalette: result.colorPalette ?? [],
-        colorNormalized: result.colorNormalized ?? null,
-        colorTemperature: result.colorTemperature ?? null,
-        warmthRating: result.warmthRating ?? null,
-        croppedImage,
-        bbox,
-        sourceImage,
-        expanded: false,
-        sizeProfile: null,
-      });
+    if (accumulated.length > 0) {
+      setPreExtractItems((prev) => [...prev, ...accumulated]);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
+    setPhase('pre-extract');
+  };
 
-    if (extracted.length === 0) {
-      Alert.alert(
-        'Extraction failed',
-        "Couldn't extract details for any items. Please try again.",
-        [{ text: 'OK', onPress: () => setPhase('pre-extract') }],
+  const extractItems = useCallback(
+    async (targets: PreExtractItemData[], mode: 'initial' | 'retry') => {
+      if (targets.length === 0) return;
+      const session = sessionRef.current;
+      const total = targets.length;
+      setPhase('extracting');
+      setExtractionProgress({ current: 0, total });
+      setExtractedThumbs([]);
+
+      let completedCount = 0;
+
+      const settled = await mapWithConcurrency(
+        targets,
+        EXTRACTION_CONCURRENCY,
+        async (preItem) => {
+          if (sessionRef.current !== session) throw new Error('session_changed');
+
+          const imageData = preItem.croppedImage ?? preItem.sourceImage;
+          // Use the full detection set for outfit context, even on a retry of a subset.
+          const otherItems = preExtractItems
+            .filter((o) => o.tempId !== preItem.tempId)
+            .map((o) => `${o.name} (${o.category})`)
+            .join(', ');
+
+          const result = await scanItemDirect({
+            imageData,
+            outfitContext: otherItems || undefined,
+            brandHint: preItem.brandHint || undefined,
+          });
+
+          if (sessionRef.current !== session) throw new Error('session_changed');
+
+          completedCount += 1;
+          setExtractionProgress({ current: completedCount, total });
+          if (preItem.croppedImage) {
+            setExtractedThumbs((prev) => [...prev, preItem.croppedImage!]);
+          }
+
+          return {
+            result,
+            croppedImage: preItem.croppedImage,
+            bbox: preItem.bbox,
+            sourceImage: preItem.sourceImage,
+          };
+        },
       );
-      return;
-    }
 
-    setAllItems(extracted);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setPhase('review');
-  }, [preExtractItems]);
+      if (sessionRef.current !== session) return;
+
+      const extracted: EditableItem[] = [];
+      const failed: PreExtractItemData[] = [];
+      settled.forEach((s, idx) => {
+        if (s.status !== 'fulfilled') {
+          failed.push(targets[idx]);
+          return;
+        }
+        const { result, croppedImage, bbox, sourceImage } = s.value;
+        extracted.push({
+          tempId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          name: result.name || 'Unknown Item',
+          brand: result.brand ?? null,
+          category: result.category ?? null,
+          subcategory: result.subcategory ?? null,
+          color: result.color ?? null,
+          style: result.style ?? null,
+          seasons: result.seasons?.length ? result.seasons : [],
+          occasions: result.occasions?.length ? result.occasions : [],
+          material: result.material ?? null,
+          fit: result.fit ?? null,
+          pattern: result.pattern ?? null,
+          neckline: result.neckline ?? null,
+          care: result.care ?? null,
+          formalityStyles: result.formalityStyles ?? [],
+          notableDetails: result.notableDetails ?? [],
+          colorPalette: result.colorPalette ?? [],
+          colorNormalized: result.colorNormalized ?? null,
+          colorTemperature: result.colorTemperature ?? null,
+          warmthRating: result.warmthRating ?? null,
+          croppedImage,
+          bbox,
+          sourceImage,
+          expanded: false,
+          sizeProfile: null,
+        });
+      });
+
+      setFailedItems(failed);
+
+      // Initial run with zero successes: nothing to review — send the user back.
+      if (mode === 'initial' && extracted.length === 0) {
+        Alert.alert(
+          'Extraction failed',
+          "Couldn't extract details for any items. Please try again.",
+          [{ text: 'OK', onPress: () => setPhase('pre-extract') }],
+        );
+        return;
+      }
+
+      if (extracted.length > 0) {
+        setAllItems((prev) => (mode === 'retry' ? [...prev, ...extracted] : extracted));
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      } else {
+        Alert.alert(
+          'Still unavailable',
+          "Couldn't extract those items — the service may be busy. Try again in a moment.",
+        );
+      }
+
+      setPhase('review');
+    },
+    [preExtractItems],
+  );
+
+  const runExtraction = useCallback(
+    () => extractItems(preExtractItems, 'initial'),
+    [extractItems, preExtractItems],
+  );
+
+  const retryFailedExtractions = useCallback(() => {
+    if (failedItems.length === 0) return;
+    extractItems(failedItems, 'retry');
+  }, [extractItems, failedItems]);
 
   const updateItem = useCallback((tempId: string, patch: Partial<EditableItem>) => {
     setAllItems((prev) => prev.map((it) => (it.tempId === tempId ? { ...it, ...patch } : it)));
@@ -698,6 +800,8 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
           {phase === 'pre-extract' && preExtractItems.length > 0 && (
             <PreExtractList
               items={preExtractItems}
+              failedPhotoCount={errorCount}
+              onRetryPhotos={retryFailedPhotos}
               onUpdateItem={updatePreExtractItem}
               onRemoveItem={removePreExtractItem}
               onAdjustCrop={handlePreExtractAdjustCrop}
@@ -714,6 +818,8 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
           {(phase === 'review' || phase === 'saving') && allItems.length > 0 && (
             <ReviewContent
               items={allItems}
+              failedCount={failedItems.length}
+              onRetryFailed={retryFailedExtractions}
               onUpdateItem={updateItem}
               onRemoveItem={removeItem}
               onAdjustCrop={handleAdjustCrop}
@@ -912,11 +1018,15 @@ const procStyles = StyleSheet.create({
 
 function PreExtractList({
   items,
+  failedPhotoCount,
+  onRetryPhotos,
   onUpdateItem,
   onRemoveItem,
   onAdjustCrop,
 }: {
   items: PreExtractItemData[];
+  failedPhotoCount: number;
+  onRetryPhotos: () => void;
   onUpdateItem: (id: string, patch: Partial<PreExtractItemData>) => void;
   onRemoveItem: (id: string) => void;
   onAdjustCrop: (id: string) => void;
@@ -928,6 +1038,25 @@ function PreExtractList({
       <Text style={preExtractStyles.hint}>
         Optionally enter the brand to improve AI accuracy, then tap Extract Details.
       </Text>
+
+      {failedPhotoCount > 0 && (
+        <View style={preExtractStyles.retryBanner}>
+          <Ionicons name="alert-circle" size={18} color={colors.error} />
+          <Text style={preExtractStyles.retryText}>
+            {failedPhotoCount === 1
+              ? "1 photo couldn't be scanned."
+              : `${failedPhotoCount} photos couldn't be scanned.`}
+          </Text>
+          <TouchableOpacity
+            onPress={onRetryPhotos}
+            style={preExtractStyles.retryBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="refresh" size={14} color={colors.primary} />
+            <Text style={preExtractStyles.retryBtnText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       {items.map((item, idx) => (
         <View key={item.tempId} style={{ zIndex: items.length - idx }}>
           <PreExtractCard
@@ -1005,6 +1134,32 @@ const preExtractStyles = StyleSheet.create({
     color: colors.mutedForeground,
     lineHeight: typography.size.sm * 1.5,
     marginBottom: spacing.xs,
+  },
+  retryBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.muted,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  retryText: {
+    flex: 1,
+    fontSize: typography.size.sm,
+    color: colors.foreground,
+  },
+  retryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  retryBtnText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
   },
 });
 
@@ -1120,12 +1275,16 @@ const extractStyles = StyleSheet.create({
 
 function ReviewContent({
   items,
+  failedCount,
+  onRetryFailed,
   onUpdateItem,
   onRemoveItem,
   onAdjustCrop,
   disabled,
 }: {
   items: EditableItem[];
+  failedCount: number;
+  onRetryFailed: () => void;
   onUpdateItem: (id: string, patch: Partial<EditableItem>) => void;
   onRemoveItem: (id: string) => void;
   onAdjustCrop: (id: string) => void;
@@ -1138,6 +1297,26 @@ function ReviewContent({
       <Text style={reviewStyles.hint}>
         AI has extracted clothing details — tap any item to review or add more.
       </Text>
+
+      {failedCount > 0 && (
+        <View style={reviewStyles.retryBanner}>
+          <Ionicons name="alert-circle" size={18} color={colors.error} />
+          <Text style={reviewStyles.retryText}>
+            {failedCount === 1
+              ? "1 item couldn't be extracted."
+              : `${failedCount} items couldn't be extracted.`}
+          </Text>
+          <TouchableOpacity
+            onPress={onRetryFailed}
+            disabled={disabled}
+            style={[reviewStyles.retryBtn, disabled && reviewStyles.retryBtnDisabled]}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="refresh" size={14} color={colors.primary} />
+            <Text style={reviewStyles.retryBtnText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       {items.map((item, idx) => (
         <View key={item.tempId} style={{ zIndex: items.length - idx }}>
           <ItemCard
@@ -1162,6 +1341,33 @@ const reviewStyles = StyleSheet.create({
     color: colors.mutedForeground,
     lineHeight: typography.size.sm * 1.5,
     marginBottom: spacing.xs,
+  },
+  retryBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.muted,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  retryText: {
+    flex: 1,
+    fontSize: typography.size.sm,
+    color: colors.foreground,
+  },
+  retryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  retryBtnDisabled: { opacity: 0.4 },
+  retryBtnText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
   },
 });
 

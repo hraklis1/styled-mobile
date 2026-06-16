@@ -25,6 +25,7 @@ export function NextEventHero({
   event,
   allItems,
   deviceCoords,
+  isPremium,
   onPress,
   onPlanOutfit,
   onPressOutfit,
@@ -32,6 +33,7 @@ export function NextEventHero({
   event: Event;
   allItems: Item[];
   deviceCoords: { lat: number; lon: number } | null;
+  isPremium: boolean;
   onPress: () => void;
   onPlanOutfit: () => void;
   onPressOutfit: () => void;
@@ -112,7 +114,7 @@ export function NextEventHero({
           onPress={onPlanOutfit}
           activeOpacity={0.85}
           accessibilityRole="button"
-          accessibilityLabel={`${getEventPlanActionLabel(hasOutfit)} for ${event.title}`}
+          accessibilityLabel={`${getEventPlanActionLabel(hasOutfit)} for ${event.title}${isPremium ? '' : ', Premium feature'}`}
         >
           <Ionicons
             name="sparkles-outline"
@@ -122,6 +124,11 @@ export function NextEventHero({
           <Text style={[s.planBtnText, hasOutfit && s.planBtnTextSecondary]}>
             {getEventPlanActionLabel(hasOutfit)}
           </Text>
+          {!isPremium ? (
+            <View style={[s.proPill, hasOutfit && s.proPillSecondary]}>
+              <Text style={[s.proPillText, hasOutfit && s.proPillTextSecondary]}>PRO</Text>
+            </View>
+          ) : null}
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -202,4 +209,13 @@ const s = StyleSheet.create({
   },
   planBtnText: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.white },
   planBtnTextSecondary: { color: colors.primary },
+  proPill: {
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderRadius: radii.full,
+    paddingHorizontal: spacing.xs + 1,
+    paddingVertical: 1,
+  },
+  proPillSecondary: { backgroundColor: `${colors.primary}15` },
+  proPillText: { fontSize: 9, fontWeight: typography.weight.bold, color: colors.white, letterSpacing: 0.5 },
+  proPillTextSecondary: { color: colors.primary },
 });

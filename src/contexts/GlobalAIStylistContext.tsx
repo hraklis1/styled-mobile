@@ -19,10 +19,13 @@ export type StylistOpenSource =
   | 'calendar_hero'
   | 'closet_selection';
 
+export type StylistEventContext = { id: number; title: string };
+
 type OpenStylistOptions = {
   initialQuery?: string;
   destination?: string;
   source: StylistOpenSource;
+  eventContext?: StylistEventContext;
 };
 
 type GlobalAIStylistContextValue = {
@@ -53,13 +56,14 @@ export function GlobalAIStylistProvider({ children }: Props) {
   const [visible, setVisible] = useState(false);
   const [initialQuery, setInitialQuery] = useState<string | undefined>(undefined);
   const [initialDestination, setInitialDestination] = useState<string | undefined>(undefined);
+  const [eventContext, setEventContext] = useState<StylistEventContext | undefined>(undefined);
   const [promptRequestId, setPromptRequestId] = useState(0);
   const [openRequestId, setOpenRequestId] = useState(0);
   const [source, setSource] = useState<StylistOpenSource | undefined>(undefined);
   const [threadMode, setThreadMode] = useState<'new' | 'resume'>('resume');
   const { isPremium } = useEntitlement();
 
-  const openStylist = useCallback(async ({ initialQuery: query, destination, source }: OpenStylistOptions) => {
+  const openStylist = useCallback(async ({ initialQuery: query, destination, source, eventContext: event }: OpenStylistOptions) => {
     if (!isPremium) {
       const shouldUpgrade = await new Promise<boolean>((resolve) => {
         Alert.alert(
@@ -80,6 +84,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
     setThreadMode(threadModeForSource(source));
     setInitialQuery(query);
     setInitialDestination(destination);
+    setEventContext(event);
     if (query) setPromptRequestId((id) => id + 1);
     setOpenRequestId((id) => id + 1);
     setVisible(true);
@@ -88,6 +93,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
   const closeStylist = useCallback(() => {
     setVisible(false);
     setInitialDestination(undefined);
+    setEventContext(undefined);
   }, []);
   const consumePrompt = useCallback(() => setInitialQuery(undefined), []);
 
@@ -104,6 +110,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
         <StylistChatView
           initialQuery={initialQuery}
           initialDestination={initialDestination}
+          eventContext={eventContext}
           promptRequestId={promptRequestId}
           openRequestId={openRequestId}
           source={source}
