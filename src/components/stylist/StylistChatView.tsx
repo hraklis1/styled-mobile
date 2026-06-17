@@ -20,6 +20,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useAudioPlayer, setAudioModeAsync } from 'expo-audio';
@@ -86,6 +88,7 @@ type Conversation = {
   title: string;
   source?: string | null;
   updatedAt: string;
+  preview?: string | null;
 };
 
 type TtsResponse = {
@@ -731,6 +734,33 @@ export function StylistChatView({
     }
   }
 
+  async function deleteConversation(id: number) {
+    // Optimistic: drop it from the list immediately, reconcile on failure.
+    setConversations((prev) => prev.filter((c) => c.id !== id));
+    AsyncStorage.removeItem(threadKey(id)).catch(() => {});
+    try {
+      await api.delete(`/api/stylist/conversations/${id}`);
+    } catch {
+      Alert.alert('Could not delete', "Please try again when you're back online.");
+      loadConversations();
+      return;
+    }
+    // If we just deleted the thread on screen, fall back to a fresh draft.
+    if (id === conversationIdRef.current) startNewConversation();
+  }
+
+  async function renameConversation(id: number, title: string) {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, title: trimmed } : c)));
+    try {
+      await api.patch(`/api/stylist/conversations/${id}`, { title: trimmed });
+    } catch {
+      Alert.alert('Could not rename', "Please try again when you're back online.");
+      loadConversations();
+    }
+  }
+
   // ── Effects ────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -869,7 +899,7 @@ export function StylistChatView({
             <Text style={styles.headerTitle}>Your Stylist</Text>
             <TouchableOpacity onPress={() => setLocationPickerVisible(true)} activeOpacity={0.7}>
               <Text style={styles.headerSubtitle} numberOfLines={1}>
-                {activeLocation.label || 'Set location'} · {activeLocation.source === 'conversation' ? 'Destination' : activeLocation.source === 'home' ? 'Home fallback' : 'Current'}
+                {activeLocation.label || 'Set location'} · {activeLocation.source === 'conversation' ? 'Destination' : activeLocation.source === 'home' ? 'Home' : 'Current'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -880,14 +910,14 @@ export function StylistChatView({
             onPress={openDrawer}
             accessibilityLabel="Conversation history"
           >
-            <Ionicons name="time-outline" size={21} color={colors.mutedForeground} />
+            <Ionicons name="time-outline" size={21} color={colors.foreground} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.headerBtn}
             onPress={confirmNewConversation}
             accessibilityLabel="Start a new conversation"
           >
-            <Ionicons name="create-outline" size={20} color={colors.mutedForeground} />
+            <Ionicons name="create-outline" size={20} color={colors.primary} />
           </TouchableOpacity>
         </View>
       </BlurView>
@@ -898,6 +928,8 @@ export function StylistChatView({
         loading={conversationsLoading}
         activeId={conversationId}
         onSelect={selectConversation}
+        onDelete={deleteConversation}
+        onRename={renameConversation}
         onNew={() => {
           setDrawerOpen(false);
           startNewConversation();
@@ -1757,15 +1789,19 @@ function buildEmptyStatePrompts(weather: CurrentWeather | undefined, wardrobeCou
   const day = new Date().toLocaleDateString('en', { weekday: 'long' });
   const prompts: string[] = [];
 
-  // [0] Weather-aware "what to wear today" (icon: sunny-outline)
+  // [0] Weather-aware "what to wear today" (icon: sunny-outline).
+  // Lead with the weather summary as its own clause — it's a standalone sentence
+  // (e.g. "Beautiful and sunny at 22°C.") so interpolating it mid-sentence reads
+  // wrong. Strip trailing punctuation and keep its original casing.
   if (weather) {
     const { condition, summary } = weather;
-    if (condition === 'rainy') {
-      prompts.push(`It's ${summary.toLowerCase()} — what should I wear?`);
-    } else if (condition === 'cold') {
-      prompts.push(`It's ${summary.toLowerCase()} — help me stay warm and stylish`);
+    const lead = summary.replace(/[.\s]+$/, '');
+    if (condition === 'cold') {
+      prompts.push(`${lead} — help me stay warm and stylish`);
+    } else if (condition === 'rainy') {
+      prompts.push(`${lead} — what should I wear?`);
     } else {
-      prompts.push(`What should I wear on this ${summary.toLowerCase()} ${day}?`);
+      prompts.push(`${lead} — what should I wear ${day}?`);
     }
   } else {
     prompts.push('What should I wear today?');
@@ -1806,7 +1842,7 @@ function EmptyState({
   const context = [
     location,
     weather?.summary,
-    wardrobeCount > 0 ? `${wardrobeCount} wardrobe pieces ready` : 'Ready to learn your wardrobe',
+    wardrobeCount > 0 ? `${wardrobeCount} pieces ready` : 'Ready to learn your wardrobe',
   ].filter(Boolean).join(' · ');
 
   return (
@@ -1824,7 +1860,7 @@ function EmptyState({
         </Text>
         <TouchableOpacity style={styles.contextPill} onPress={onLocationPress} activeOpacity={0.7}>
           <Ionicons name="location-outline" size={13} color={colors.primary} />
-          <Text style={styles.contextPillText}>{context}</Text>
+          <Text style={styles.contextPillText} numberOfLines={1}>{context}</Text>
           <Ionicons name="chevron-down" size={12} color={colors.primary} />
         </TouchableOpacity>
       </View>
@@ -1947,12 +1983,111 @@ function ConversationLocationPicker({
 
 // ── ConversationDrawer ────────────────────────────────────────────────────────
 
+// Bucket threads by the user's *local* day. `updatedAt` is a UTC ISO string, so we
+// parse it to an absolute instant and compare against local midnight (setHours on a
+// local Date) rather than diffing raw UTC — otherwise an 11pm-local thread can land
+// in the wrong bucket.
+function groupConversations(list: Conversation[]): { label: string; items: Conversation[] }[] {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const todayMs = startOfToday.getTime();
+  const yesterdayMs = todayMs - 86_400_000;
+
+  const today: Conversation[] = [];
+  const yesterday: Conversation[] = [];
+  const earlier: Conversation[] = [];
+  for (const c of list) {
+    const t = new Date(c.updatedAt).getTime();
+    if (!Number.isNaN(t) && t >= todayMs) today.push(c);
+    else if (!Number.isNaN(t) && t >= yesterdayMs) yesterday.push(c);
+    else earlier.push(c);
+  }
+
+  const groups: { label: string; items: Conversation[] }[] = [];
+  if (today.length) groups.push({ label: 'Today', items: today });
+  if (yesterday.length) groups.push({ label: 'Yesterday', items: yesterday });
+  if (earlier.length) groups.push({ label: 'Earlier', items: earlier });
+  return groups;
+}
+
+function ConversationRow({
+  conversation,
+  active,
+  onSelect,
+  onRename,
+  onDelete,
+  registerOpenRow,
+}: {
+  conversation: Conversation;
+  active: boolean;
+  onSelect: (id: number) => void;
+  onRename: (c: Conversation) => void;
+  onDelete: (c: Conversation) => void;
+  registerOpenRow: (row: SwipeableMethods | null) => void;
+}) {
+  const swipeRef = useRef<SwipeableMethods>(null);
+  const close = () => swipeRef.current?.close();
+
+  return (
+    <ReanimatedSwipeable
+      ref={swipeRef}
+      friction={2}
+      rightThreshold={36}
+      overshootRight={false}
+      onSwipeableWillOpen={() => registerOpenRow(swipeRef.current)}
+      renderRightActions={() => (
+        <TouchableOpacity
+          style={styles.drawerDeleteAction}
+          onPress={() => {
+            close();
+            onDelete(conversation);
+          }}
+          accessibilityLabel="Delete conversation"
+        >
+          <Ionicons name="trash-outline" size={18} color={colors.white} />
+          <Text style={styles.drawerDeleteText}>Delete</Text>
+        </TouchableOpacity>
+      )}
+    >
+      <TouchableOpacity
+        style={[styles.drawerRow, active && styles.drawerRowActive]}
+        onPress={() => onSelect(conversation.id)}
+        onLongPress={() => {
+          close();
+          Haptics.selectionAsync().catch(() => {});
+          onRename(conversation);
+        }}
+        delayLongPress={300}
+      >
+        <Ionicons
+          name={active ? 'chatbubble-ellipses' : 'chatbubble-outline'}
+          size={16}
+          color={active ? colors.primary : colors.mutedForeground}
+        />
+        <View style={styles.drawerRowCopy}>
+          <Text style={[styles.drawerRowTitle, active && styles.drawerRowTitleActive]} numberOfLines={1}>
+            {conversation.title || 'Conversation'}
+          </Text>
+          {conversation.preview ? (
+            <Text style={styles.drawerRowPreview} numberOfLines={1}>
+              {conversation.preview}
+            </Text>
+          ) : null}
+          <Text style={styles.drawerRowMeta}>{timeAgo(conversation.updatedAt)}</Text>
+        </View>
+      </TouchableOpacity>
+    </ReanimatedSwipeable>
+  );
+}
+
 function ConversationDrawer({
   visible,
   conversations,
   loading,
   activeId,
   onSelect,
+  onDelete,
+  onRename,
   onNew,
   onClose,
 }: {
@@ -1961,6 +2096,8 @@ function ConversationDrawer({
   loading: boolean;
   activeId: number | null;
   onSelect: (id: number) => void;
+  onDelete: (id: number) => void;
+  onRename: (id: number, title: string) => void;
   onNew: () => void;
   onClose: () => void;
 }) {
@@ -1970,6 +2107,38 @@ function ConversationDrawer({
   const translateX = useRef(new Animated.Value(-panelWidth)).current;
   const backdrop = useRef(new Animated.Value(0)).current;
   const [mounted, setMounted] = useState(visible);
+
+  // Track the currently-open swipe row so opening a second one closes the first.
+  const openRowRef = useRef<SwipeableMethods | null>(null);
+  const registerOpenRow = (row: SwipeableMethods | null) => {
+    if (openRowRef.current && openRowRef.current !== row) openRowRef.current.close();
+    openRowRef.current = row;
+  };
+
+  // Cross-platform rename: Alert.prompt is iOS-only, so use a small Modal + TextInput.
+  const [renaming, setRenaming] = useState<Conversation | null>(null);
+  const [renameText, setRenameText] = useState('');
+  const beginRename = (c: Conversation) => {
+    setRenameText(c.title || '');
+    setRenaming(c);
+  };
+  const commitRename = () => {
+    if (renaming && renameText.trim()) onRename(renaming.id, renameText);
+    setRenaming(null);
+  };
+
+  const confirmDelete = (c: Conversation) => {
+    Alert.alert(
+      'Delete conversation',
+      `Delete "${c.title || 'this conversation'}"? This can't be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => onDelete(c.id) },
+      ],
+    );
+  };
+
+  const groups = useMemo(() => groupConversations(conversations), [conversations]);
 
   useEffect(() => {
     if (visible) {
@@ -1990,67 +2159,98 @@ function ConversationDrawer({
 
   return (
     <Modal visible transparent animationType="none" onRequestClose={onClose}>
-      <Animated.View style={[styles.drawerBackdrop, { opacity: backdrop }]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close history" />
-      </Animated.View>
-      <Animated.View
-        style={[
-          styles.drawerPanel,
-          {
-            width: panelWidth,
-            paddingTop: insets.top + spacing.md,
-            paddingBottom: insets.bottom + spacing.md,
-            transform: [{ translateX }],
-          },
-        ]}
-      >
-        <View style={styles.drawerHeader}>
-          <Text style={styles.drawerTitle}>Conversations</Text>
-          <TouchableOpacity style={styles.headerBtn} onPress={onClose} accessibilityLabel="Close history">
-            <Ionicons name="close" size={20} color={colors.foreground} />
+      <GestureHandlerRootView style={StyleSheet.absoluteFill}>
+        <Animated.View style={[styles.drawerBackdrop, { opacity: backdrop }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close history" />
+        </Animated.View>
+        <Animated.View
+          style={[
+            styles.drawerPanel,
+            {
+              width: panelWidth,
+              paddingTop: insets.top + spacing.md,
+              paddingBottom: insets.bottom + spacing.md,
+              transform: [{ translateX }],
+            },
+          ]}
+        >
+          <View style={styles.drawerHeader}>
+            <Text style={styles.drawerTitle}>Conversations</Text>
+            <TouchableOpacity style={styles.headerBtn} onPress={onClose} accessibilityLabel="Close history">
+              <Ionicons name="close" size={20} color={colors.foreground} />
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity style={styles.drawerNewBtn} onPress={onNew}>
+            <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
+            <Text style={styles.drawerNewText}>New conversation</Text>
           </TouchableOpacity>
-        </View>
 
-        <TouchableOpacity style={styles.drawerNewBtn} onPress={onNew}>
-          <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
-          <Text style={styles.drawerNewText}>New conversation</Text>
-        </TouchableOpacity>
+          {loading && conversations.length === 0 ? (
+            <View style={styles.drawerEmpty}>
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : conversations.length === 0 ? (
+            <View style={styles.drawerEmpty}>
+              <Text style={styles.drawerEmptyText}>No saved conversations yet.</Text>
+            </View>
+          ) : (
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.drawerList}>
+              {groups.map((group) => (
+                <View key={group.label} style={styles.drawerGroup}>
+                  <Text style={styles.drawerGroupLabel}>{group.label}</Text>
+                  {group.items.map((c) => (
+                    <ConversationRow
+                      key={c.id}
+                      conversation={c}
+                      active={c.id === activeId}
+                      onSelect={onSelect}
+                      onRename={beginRename}
+                      onDelete={confirmDelete}
+                      registerOpenRow={registerOpenRow}
+                    />
+                  ))}
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </Animated.View>
 
-        {loading && conversations.length === 0 ? (
-          <View style={styles.drawerEmpty}>
-            <ActivityIndicator color={colors.primary} />
-          </View>
-        ) : conversations.length === 0 ? (
-          <View style={styles.drawerEmpty}>
-            <Text style={styles.drawerEmptyText}>No saved conversations yet.</Text>
-          </View>
-        ) : (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.drawerList}>
-            {conversations.map((c) => {
-              const active = c.id === activeId;
-              return (
-                <TouchableOpacity
-                  key={c.id}
-                  style={[styles.drawerRow, active && styles.drawerRowActive]}
-                  onPress={() => onSelect(c.id)}
-                >
-                  <Ionicons
-                    name={active ? 'chatbubble-ellipses' : 'chatbubble-outline'}
-                    size={16}
-                    color={active ? colors.primary : colors.mutedForeground}
-                  />
-                  <View style={styles.drawerRowCopy}>
-                    <Text style={[styles.drawerRowTitle, active && styles.drawerRowTitleActive]} numberOfLines={1}>
-                      {c.title || 'Conversation'}
-                    </Text>
-                    <Text style={styles.drawerRowMeta}>{timeAgo(c.updatedAt)}</Text>
-                  </View>
+        <Modal visible={renaming !== null} transparent animationType="fade" onRequestClose={() => setRenaming(null)}>
+          <KeyboardAvoidingView
+            style={styles.renameOverlay}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          >
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => setRenaming(null)} />
+            <View style={styles.renameCard}>
+              <Text style={styles.renameTitle}>Rename conversation</Text>
+              <TextInput
+                style={styles.renameInput}
+                value={renameText}
+                onChangeText={setRenameText}
+                placeholder="Conversation name"
+                placeholderTextColor={colors.mutedForeground}
+                autoFocus
+                returnKeyType="done"
+                onSubmitEditing={commitRename}
+                maxLength={80}
+              />
+              <View style={styles.renameActions}>
+                <TouchableOpacity style={styles.renameCancelBtn} onPress={() => setRenaming(null)}>
+                  <Text style={styles.renameCancelText}>Cancel</Text>
                 </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        )}
-      </Animated.View>
+                <TouchableOpacity
+                  style={[styles.renameSaveBtn, !renameText.trim() && styles.locationChoiceDisabled]}
+                  onPress={commitRename}
+                  disabled={!renameText.trim()}
+                >
+                  <Text style={styles.renameSaveText}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
@@ -2151,7 +2351,18 @@ const styles = StyleSheet.create({
   },
   drawerList: {
     paddingBottom: spacing.lg,
-    gap: 2,
+  },
+  drawerGroup: {
+    marginTop: spacing.sm,
+  },
+  drawerGroupLabel: {
+    fontSize: 10,
+    fontWeight: typography.weight.bold,
+    color: colors.mutedForeground,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    paddingHorizontal: spacing.sm,
+    paddingBottom: spacing.xs,
   },
   drawerRow: {
     flexDirection: 'row',
@@ -2160,6 +2371,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm + 2,
     paddingHorizontal: spacing.sm,
     borderRadius: radii.md,
+    // Opaque so the swipe-revealed Delete action doesn't show through.
+    backgroundColor: colors.background,
   },
   drawerRowActive: {
     backgroundColor: colors.surfaceSelected,
@@ -2172,10 +2385,85 @@ const styles = StyleSheet.create({
   drawerRowTitleActive: {
     fontWeight: typography.weight.semibold,
   },
+  drawerRowPreview: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+    marginTop: 1,
+  },
   drawerRowMeta: {
     fontSize: typography.size.xs,
     color: colors.mutedForeground,
     marginTop: 1,
+  },
+  drawerDeleteAction: {
+    width: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    backgroundColor: colors.error,
+    borderRadius: radii.md,
+    marginLeft: spacing.xs,
+  },
+  drawerDeleteText: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    color: colors.white,
+  },
+  renameOverlay: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  renameCard: {
+    width: '100%',
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    gap: spacing.md,
+    ...shadows.lg,
+  },
+  renameTitle: {
+    fontSize: typography.size.lg,
+    fontWeight: typography.weight.semibold,
+    color: colors.foreground,
+  },
+  renameInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    fontSize: typography.size.md,
+    color: colors.foreground,
+    backgroundColor: colors.background,
+  },
+  renameActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+  },
+  renameCancelBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.full,
+  },
+  renameCancelText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.medium,
+    color: colors.mutedForeground,
+  },
+  renameSaveBtn: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.full,
+    backgroundColor: colors.primary,
+  },
+  renameSaveText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.primaryForeground,
   },
   // Messages
   messageList: { flex: 1 },
@@ -2576,7 +2864,7 @@ const styles = StyleSheet.create({
   // Empty state
   emptyState: {
     paddingHorizontal: spacing.sm,
-    gap: spacing.xl,
+    gap: spacing.lg,
   },
   emptyHero: {
     alignItems: 'center',
@@ -2584,9 +2872,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   emptyIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: colors.surfaceSelected,
     alignItems: 'center',
     justifyContent: 'center',
@@ -2626,7 +2914,7 @@ const styles = StyleSheet.create({
   },
   contextPillText: {
     flexShrink: 1,
-    fontSize: 10,
+    fontSize: 12,
     color: colors.secondaryForeground,
     fontWeight: typography.weight.medium,
   },
