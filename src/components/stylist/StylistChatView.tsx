@@ -165,19 +165,39 @@ const ACTIVE_THREAD_KEY = 'stylist_active_thread_id';
 const LEGACY_SESSION_KEY = 'stylist_last_session';
 const threadKey = (id: number) => `stylist_thread_${id}`;
 
-type ServerMessage = { id: number; role: Role; text: string; recId?: number | null; createdAt?: string };
+// Structured render data the server stores alongside an assistant turn, so a
+// reloaded thread redraws outfit cards, shop edits, and trip carousels instead
+// of degrading them to plain notes. Mirrors the /ask `done` event's rich fields.
+type ServerMessagePayload = {
+  mode?: StylistMode;
+  itemIds?: number[];
+  missingEssentials?: MissingEssential[];
+  shopOutfit?: ShopOutfit;
+  tripPlan?: TripPlanData;
+};
 
-// Map a server-stored thread into chat messages. Phase 1 persists plain text only,
-// so rich payloads (outfit collages, shop cards) render as stylist notes on reload;
-// the recId is preserved so feedback still links.
+type ServerMessage = { id: number; role: Role; text: string; recId?: number | null; payload?: ServerMessagePayload | null; createdAt?: string };
+
+// Map a server-stored thread into chat messages. The recId is preserved so
+// feedback still links; the payload (when present) rehydrates rich replies —
+// without it, an assistant turn falls back to a plain stylist note.
 function mapServerMessages(rows: ServerMessage[]): ChatMessage[] {
-  return rows.map((m) => ({
-    id: `srv_${m.id}`,
-    role: m.role,
-    text: m.text,
-    ...(typeof m.recId === 'number' ? { recId: m.recId } : {}),
-    ...(m.createdAt ? { createdAt: new Date(m.createdAt).getTime() } : {}),
-  }));
+  return rows.map((m) => {
+    const p = m.payload ?? undefined;
+    return {
+      id: `srv_${m.id}`,
+      role: m.role,
+      text: m.text,
+      ...(typeof m.recId === 'number' ? { recId: m.recId } : {}),
+      ...(p?.mode ? { mode: p.mode } : {}),
+      ...(p?.itemIds?.length ? { suggestedItemIds: p.itemIds } : {}),
+      ...(p?.missingEssentials?.length ? { missingEssentials: p.missingEssentials } : {}),
+      ...(p?.shopOutfit ? { shopOutfit: p.shopOutfit } : {}),
+      // Reloaded trip plans are complete, never mid-stream — clear the pending flag.
+      ...(p?.tripPlan ? { tripPlan: { ...p.tripPlan, pending: false } } : {}),
+      ...(m.createdAt ? { createdAt: new Date(m.createdAt).getTime() } : {}),
+    };
+  });
 }
 
 function timeAgo(iso: string): string {
