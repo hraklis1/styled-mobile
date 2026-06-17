@@ -65,6 +65,7 @@
     "android": "expo run:android",
     "preios": "node scripts/ensure-local-api.mjs",
     "ios": "expo run:ios",
+    "ios:sim": "bash scripts/run-ios-sim.sh",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --quiet",
