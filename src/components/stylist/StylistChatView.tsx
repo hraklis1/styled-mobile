@@ -908,8 +908,12 @@ export function StylistChatView({
         style={[styles.header, { paddingTop: insets.top }]}
         {...(Platform.OS === 'android' && { blurMethod: 'dimezisBlurViewSdk31Plus' })}
       >
-        <TouchableOpacity style={styles.headerBtn} onPress={onClose} accessibilityLabel="Close stylist">
-          <Ionicons name="chevron-down" size={22} color={colors.foreground} />
+        <TouchableOpacity
+          style={styles.headerBtn}
+          onPress={openDrawer}
+          accessibilityLabel="Conversation history"
+        >
+          <Ionicons name="menu-outline" size={24} color={colors.foreground} />
         </TouchableOpacity>
         <View style={styles.headerIdentity}>
           <View style={styles.headerMark}>
@@ -927,17 +931,13 @@ export function StylistChatView({
         <View style={styles.headerActions}>
           <TouchableOpacity
             style={styles.headerBtn}
-            onPress={openDrawer}
-            accessibilityLabel="Conversation history"
-          >
-            <Ionicons name="time-outline" size={21} color={colors.foreground} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.headerBtn}
             onPress={confirmNewConversation}
             accessibilityLabel="Start a new conversation"
           >
             <Ionicons name="create-outline" size={20} color={colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerBtn} onPress={onClose} accessibilityLabel="Close stylist">
+            <Ionicons name="close" size={22} color={colors.foreground} />
           </TouchableOpacity>
         </View>
       </BlurView>
@@ -1859,11 +1859,7 @@ function EmptyState({
 }) {
   const prompts = buildEmptyStatePrompts(weather, wardrobeCount);
   const firstName = displayName?.trim().split(/\s+/)[0];
-  const context = [
-    location,
-    weather?.summary,
-    wardrobeCount > 0 ? `${wardrobeCount} pieces ready` : 'Ready to learn your wardrobe',
-  ].filter(Boolean).join(' · ');
+  const context = location?.trim() || 'Set location';
 
   return (
     <View style={styles.emptyState}>
@@ -1883,12 +1879,14 @@ function EmptyState({
           <Text style={styles.contextPillText} numberOfLines={1}>{context}</Text>
           <Ionicons name="chevron-down" size={12} color={colors.primary} />
         </TouchableOpacity>
+        {weather?.summary ? (
+          <View style={styles.weatherLine}>
+            <Ionicons name="partly-sunny-outline" size={13} color={colors.mutedForeground} />
+            <Text style={styles.weatherText}>{weather.summary}</Text>
+          </View>
+        ) : null}
       </View>
 
-      <View style={styles.promptHeader}>
-        <Text style={styles.promptHeaderTitle}>Start with an idea</Text>
-        <Text style={styles.promptHeaderHint}>or ask anything below</Text>
-      </View>
       <View style={styles.promptList}>
         {prompts.map((p, index) => (
           <TouchableOpacity
@@ -2305,7 +2303,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
-  headerIdentity: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  headerIdentity: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   headerMark: {
     width: 32, height: 32, borderRadius: radii.full,
     alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceSelected,
@@ -2938,6 +2936,20 @@ const styles = StyleSheet.create({
     color: colors.secondaryForeground,
     fontWeight: typography.weight.medium,
   },
+  weatherLine: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
+    maxWidth: 330,
+    paddingHorizontal: spacing.sm,
+  },
+  weatherText: {
+    flexShrink: 1,
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+    lineHeight: typography.size.xs * 1.5,
+    textAlign: 'center',
+  },
   locationPicker: {
     flex: 1,
     gap: spacing.md,
@@ -3004,17 +3016,6 @@ const styles = StyleSheet.create({
     color: colors.primaryForeground,
     fontWeight: typography.weight.semibold,
   },
-  promptHeader: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-  },
-  promptHeaderTitle: {
-    fontSize: typography.size.md,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  promptHeaderHint: { fontSize: typography.size.xs, color: colors.mutedForeground },
   promptIcon: {
     width: 32,
     height: 32,
