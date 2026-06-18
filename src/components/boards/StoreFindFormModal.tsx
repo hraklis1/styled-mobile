@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
   Modal,
   View,
@@ -11,10 +11,13 @@ import {
   Platform,
   ScrollView,
   Alert,
+  ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
+import * as FileSystem from 'expo-file-system/legacy';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { StoreFind } from '../../types/storeFind';
 import { BrandAutocompleteInput } from '../primitives/BrandAutocompleteInput';
@@ -24,9 +27,26 @@ import { useCameraLaunch, useLibraryLaunch } from '../../hooks/useCameraLaunch';
 const POPULAR_STORES = [
   'Abercrombie & Fitch', 'Anthropologie', 'Aritzia', 'ASOS', "Bloomingdale's",
   'Free People', 'Gap', 'H&M', 'J.Crew', "Macy's", 'Madewell', 'Nordstrom',
-  'Old Navy', 'PacSun', 'Saks Fifth Avenue', 'Target', 'Thrift Store', 
-  'Uniqlo', 'Urban Outfitters', 'Vintage Shop', 'Walmart', 'Zara'
+  'Old Navy', 'PacSun', 'Saks Fifth Avenue', 'Target', 'Thrift Store',
+  'Uniqlo', 'Urban Outfitters', 'Vintage Shop', 'Walmart', 'Zara',
 ];
+
+const SIZE_OPTIONS = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'OS', 'Custom'] as const;
+const MAX_PHOTOS = 5;
+
+async function persistPhoto(cacheUri: string): Promise<string> {
+  const dir = FileSystem.documentDirectory;
+  if (!dir) return cacheUri;
+  try {
+    const storeFindDir = `${dir}store_finds/`;
+    await FileSystem.makeDirectoryAsync(storeFindDir, { intermediates: true });
+    const dest = `${storeFindDir}${Date.now()}.jpg`;
+    await FileSystem.copyAsync({ from: cacheUri, to: dest });
+    return dest;
+  } catch {
+    return cacheUri; // fall back to cache URI if copy fails
+  }
+}
 
 type Props = {
   visible: boolean;
@@ -35,68 +55,106 @@ type Props = {
 };
 
 export function StoreFindFormModal({ visible, onClose, onSave }: Props) {
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageUris, setImageUris] = useState<string[]>([]);
   const [description, setDescription] = useState('');
   const [store, setStore] = useState('');
   const [brand, setBrand] = useState('');
   const [priceStr, setPriceStr] = useState('');
-  const [size, setSize] = useState('');
+  const [sizePreset, setSizePreset] = useState('');
+  const [customSize, setCustomSize] = useState('');
   const [notes, setNotes] = useState('');
   const [interestLevel, setInterestLevel] = useState(3);
-  
-  const brandSuggestions = useBrandSuggestions();
+  const [location, setLocation] = useState<string | null>(null);
+  const [isFetchingLocation, setIsFetchingLocation] = useState(false);
 
+  const brandSuggestions = useBrandSuggestions();
   const launchCamera = useCameraLaunch();
   const launchLibrary = useLibraryLaunch();
 
-  const handleTakePic = () => {
-    Alert.alert(
-      'Add Photo',
-      'Choose a photo source',
-      [
-        {
-          text: 'Camera',
-          onPress: async () => {
-            const image = await launchCamera({ allowsEditing: true, maxDim: 1200, compress: 0.8 });
-            if (image?.dataUrl) setImageUrl(image.dataUrl);
-          }
-        },
-        {
-          text: 'Gallery',
-          onPress: async () => {
-            const image = await launchLibrary({ allowsEditing: true, maxDim: 1200, compress: 0.8 });
-            if (image?.dataUrl) setImageUrl(image.dataUrl);
-          }
-        },
-        { text: 'Cancel', style: 'cancel' }
-      ]
-    );
-  };
+  const addPhoto = useCallback(async (fromCamera: boolean) => {
+    const launch = fromCamera ? launchCamera : launchLibrary;
+    const image = await launch({ maxDim: 1080, compress: 0.8 });
+    if (!image?.uri) return;
+    const persistent = await persistPhoto(image.uri);
+    setImageUris((prev) => [...prev, persistent]);
+  }, [launchCamera, launchLibrary]);
+
+  const handleAddPhoto = useCallback(() => {
+    Alert.alert('Add Photo', 'Choose a photo source', [
+      { text: 'Camera', onPress: () => addPhoto(true) },
+      { text: 'Gallery', onPress: () => addPhoto(false) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }, [addPhoto]);
+
+  const handleRemovePhoto = useCallback((index: number) => {
+    setImageUris((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleTagLocation = useCallback(async () => {
+    setIsFetchingLocation(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Location access needed',
+          'Enable location access in Settings to tag your current location.',
+          [
+            { text: 'Not now', style: 'cancel' },
+            {
+              text: 'Open Settings',
+              onPress: () =>
+                Platform.OS === 'ios'
+                  ? Linking.openURL('app-settings:')
+                  : Linking.openSettings(),
+            },
+          ],
+        );
+        return;
+      }
+      const coords = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const results = await Location.reverseGeocodeAsync(coords.coords);
+      if (results.length > 0) {
+        const r = results[0];
+        const name = r.city || r.subregion || r.region || 'Unknown Location';
+        setLocation(name);
+      }
+    } catch {
+      Alert.alert('Location Error', 'Unable to get your current location. Please try again.');
+    } finally {
+      setIsFetchingLocation(false);
+    }
+  }, []);
 
   const handleSave = () => {
     const price = parseFloat(priceStr.replace(/[^0-9.]/g, ''));
-    
+    const size = sizePreset === 'Custom' ? customSize.trim() : sizePreset;
+
     onSave({
-      imageUrl,
-      location: null, // Would be gathered via Location API
+      imageUrl: imageUris[0] ?? null,
+      imageUrls: imageUris,
+      location,
       description: description.trim() || null,
       store: store.trim() || null,
       brand: brand.trim() || null,
       price: isNaN(price) ? null : price,
-      size: size.trim() || null,
+      size: size || null,
       notes: notes.trim() || null,
       interestLevel,
     });
-    
-    // Reset
-    setImageUrl(null);
+
+    setImageUris([]);
     setDescription('');
     setStore('');
     setBrand('');
     setPriceStr('');
-    setSize('');
+    setSizePreset('');
+    setCustomSize('');
     setNotes('');
     setInterestLevel(3);
+    setLocation(null);
     onClose();
   };
 
@@ -114,17 +172,36 @@ export function StoreFindFormModal({ visible, onClose, onSave }: Props) {
         </View>
 
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <ScrollView contentContainerStyle={styles.scroll}>
-            <TouchableOpacity style={styles.imagePicker} onPress={handleTakePic} activeOpacity={0.8}>
-              {imageUrl ? (
-                <Image source={{ uri: imageUrl }} style={styles.image} />
-              ) : (
-                <View style={styles.imagePlaceholder}>
-                  <Ionicons name="camera" size={32} color={colors.primary} />
-                  <Text style={styles.imagePlaceholderText}>Snap Photo</Text>
+          <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+
+            {/* Multi-photo strip */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.photoStrip}
+              contentContainerStyle={styles.photoStripContent}
+            >
+              {imageUris.map((uri, idx) => (
+                <View key={uri + idx} style={styles.photoThumb}>
+                  <Image source={{ uri }} style={styles.thumbImage} />
+                  <TouchableOpacity
+                    style={styles.removePhotoBtn}
+                    onPress={() => handleRemovePhoto(idx)}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
+                    <Ionicons name="close-circle" size={20} color="#fff" />
+                  </TouchableOpacity>
                 </View>
+              ))}
+              {imageUris.length < MAX_PHOTOS && (
+                <TouchableOpacity style={styles.addPhotoBtn} onPress={handleAddPhoto} activeOpacity={0.7}>
+                  <Ionicons name="add" size={28} color={colors.primary} />
+                  {imageUris.length === 0 && (
+                    <Text style={styles.addPhotoText}>Snap Photo</Text>
+                  )}
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
+            </ScrollView>
 
             <View style={[styles.form, { zIndex: 1 }]}>
               <View style={[styles.field, { zIndex: 12 }]}>
@@ -138,8 +215,25 @@ export function StoreFindFormModal({ visible, onClose, onSave }: Props) {
                 />
               </View>
 
+              {/* Store + location tag */}
               <View style={[styles.field, { zIndex: 11 }]}>
-                <Text style={styles.label}>Store</Text>
+                <View style={styles.labelRow}>
+                  <Text style={styles.label}>Store</Text>
+                  <TouchableOpacity
+                    style={styles.locationTagBtn}
+                    onPress={handleTagLocation}
+                    disabled={isFetchingLocation}
+                  >
+                    {isFetchingLocation ? (
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    ) : (
+                      <>
+                        <Ionicons name="location-outline" size={13} color={colors.primary} />
+                        <Text style={styles.locationTagText}>Tag Location</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
                 <BrandAutocompleteInput
                   value={store}
                   onChangeText={setStore}
@@ -147,6 +241,15 @@ export function StoreFindFormModal({ visible, onClose, onSave }: Props) {
                   suggestions={POPULAR_STORES}
                   placeholder="e.g. Zara, Nordstrom"
                 />
+                {!!location && (
+                  <View style={styles.locationChip}>
+                    <Ionicons name="location" size={12} color={colors.mutedForeground} />
+                    <Text style={styles.locationChipText}>{location}</Text>
+                    <TouchableOpacity onPress={() => setLocation(null)} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
+                      <Ionicons name="close" size={12} color={colors.mutedForeground} />
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
 
               <View style={[styles.field, { zIndex: 10 }]}>
@@ -160,29 +263,52 @@ export function StoreFindFormModal({ visible, onClose, onSave }: Props) {
                 />
               </View>
 
+              {/* Price with $ prefix + Size inline */}
               <View style={styles.row}>
                 <View style={[styles.field, { flex: 1 }]}>
                   <Text style={styles.label}>Price</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="$0.00"
-                    placeholderTextColor={colors.mutedForeground}
-                    keyboardType="decimal-pad"
-                    value={priceStr}
-                    onChangeText={setPriceStr}
-                  />
+                  <View style={styles.priceRow}>
+                    <View style={styles.currencyPrefix}>
+                      <Text style={styles.currencyText}>$</Text>
+                    </View>
+                    <TextInput
+                      style={[styles.input, styles.priceInput]}
+                      placeholder="0.00"
+                      placeholderTextColor={colors.mutedForeground}
+                      keyboardType="decimal-pad"
+                      value={priceStr}
+                      onChangeText={setPriceStr}
+                    />
+                  </View>
                 </View>
+              </View>
 
-                <View style={[styles.field, { flex: 1 }]}>
-                  <Text style={styles.label}>Size</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="M, 32, etc."
-                    placeholderTextColor={colors.mutedForeground}
-                    value={size}
-                    onChangeText={setSize}
-                  />
+              {/* Size picker — inline grid, cross-platform */}
+              <View style={styles.field}>
+                <Text style={styles.label}>Size</Text>
+                <View style={styles.sizeGrid}>
+                  {SIZE_OPTIONS.map((s) => (
+                    <TouchableOpacity
+                      key={s}
+                      style={[styles.sizeBtn, sizePreset === s && styles.sizeBtnActive]}
+                      onPress={() => setSizePreset((prev) => (prev === s ? '' : s))}
+                    >
+                      <Text style={[styles.sizeBtnText, sizePreset === s && styles.sizeBtnTextActive]}>
+                        {s}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
+                {sizePreset === 'Custom' && (
+                  <TextInput
+                    style={[styles.input, { marginTop: spacing.xs }]}
+                    placeholder="Enter size (e.g. 32x30, 7.5W)"
+                    placeholderTextColor={colors.mutedForeground}
+                    value={customSize}
+                    onChangeText={setCustomSize}
+                    autoFocus
+                  />
+                )}
               </View>
 
               <View style={styles.field}>
@@ -221,6 +347,8 @@ export function StoreFindFormModal({ visible, onClose, onSave }: Props) {
   );
 }
 
+const THUMB_SIZE = 90;
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   header: {
@@ -249,31 +377,52 @@ const styles = StyleSheet.create({
   scroll: {
     padding: spacing.lg,
   },
-  imagePicker: {
-    width: '100%',
-    aspectRatio: 3 / 4,
-    backgroundColor: `${colors.primary}10`,
-    borderRadius: radii.lg,
-    overflow: 'hidden',
+
+  // Photo strip
+  photoStrip: {
     marginBottom: spacing.xl,
-    borderWidth: 1,
-    borderColor: `${colors.primary}30`,
+  },
+  photoStripContent: {
+    gap: spacing.sm,
+    alignItems: 'center',
+  },
+  photoThumb: {
+    width: THUMB_SIZE * 1.33,
+    height: THUMB_SIZE,
+    borderRadius: radii.md,
+    overflow: 'visible',
+    position: 'relative',
+  },
+  thumbImage: {
+    width: THUMB_SIZE * 1.33,
+    height: THUMB_SIZE,
+    borderRadius: radii.md,
+  },
+  removePhotoBtn: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 10,
+  },
+  addPhotoBtn: {
+    width: THUMB_SIZE * 1.33,
+    height: THUMB_SIZE,
+    borderRadius: radii.md,
+    borderWidth: 1.5,
     borderStyle: 'dashed',
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-  },
-  imagePlaceholder: {
-    flex: 1,
+    borderColor: `${colors.primary}60`,
+    backgroundColor: `${colors.primary}08`,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.sm,
+    gap: 4,
   },
-  imagePlaceholderText: {
+  addPhotoText: {
     color: colors.primary,
+    fontSize: typography.size.xs,
     fontWeight: typography.weight.medium,
   },
+
   form: {
     gap: spacing.lg,
   },
@@ -284,11 +433,45 @@ const styles = StyleSheet.create({
   field: {
     gap: spacing.xs,
   },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
   label: {
     fontSize: typography.size.sm,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
     marginLeft: spacing.xs,
+  },
+  locationTagBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 2,
+    paddingHorizontal: spacing.xs,
+    marginRight: spacing.xs,
+  },
+  locationTagText: {
+    fontSize: typography.size.xs,
+    color: colors.primary,
+    fontWeight: typography.weight.medium,
+  },
+  locationChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    backgroundColor: colors.secondary,
+    borderRadius: radii.sm,
+    alignSelf: 'flex-start',
+  },
+  locationChipText: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
   },
   input: {
     backgroundColor: colors.card,
@@ -305,6 +488,67 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     textAlignVertical: 'top',
   },
+
+  // Price with $ prefix
+  priceRow: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    overflow: 'hidden',
+    backgroundColor: colors.card,
+  },
+  currencyPrefix: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.secondary,
+    borderRightWidth: 1,
+    borderRightColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  currencyText: {
+    fontSize: typography.size.md,
+    color: colors.mutedForeground,
+    fontWeight: typography.weight.medium,
+  },
+  priceInput: {
+    flex: 1,
+    borderWidth: 0,
+    borderRadius: 0,
+    paddingLeft: spacing.sm,
+  },
+
+  // Size grid
+  sizeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  sizeBtn: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    minWidth: 44,
+    alignItems: 'center',
+  },
+  sizeBtnActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  sizeBtnText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.medium,
+    color: colors.foreground,
+  },
+  sizeBtnTextActive: {
+    color: colors.primaryForeground,
+  },
+
+  // Interest level
   ratingRow: {
     flexDirection: 'row',
     gap: spacing.sm,

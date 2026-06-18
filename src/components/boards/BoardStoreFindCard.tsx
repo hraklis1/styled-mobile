@@ -9,24 +9,32 @@ type Props = {
 };
 
 export function BoardStoreFindCard({ storeFind, cardWidth }: Props) {
-  const hasImage = !!storeFind.imageUrl;
-  
+  const primaryImage = storeFind.imageUrls?.[0] ?? storeFind.imageUrl;
+  const photoCount = storeFind.imageUrls?.length ?? (storeFind.imageUrl ? 1 : 0);
+
   return (
     <View style={[styles.root, { width: cardWidth, height: cardWidth * 1.25 }]}>
-      {hasImage ? (
-        <Image source={{ uri: storeFind.imageUrl as string }} style={styles.image} />
+      {primaryImage ? (
+        <Image source={{ uri: primaryImage }} style={styles.image} />
       ) : (
         <View style={[styles.image, styles.placeholder]}>
           <Ionicons name="camera-outline" size={32} color={colors.mutedForeground} />
         </View>
       )}
-      
+
       <View style={styles.badge}>
         <Ionicons name="location-outline" size={12} color="#fff" />
         <Text style={styles.badgeText} numberOfLines={1}>
           {storeFind.store || storeFind.brand || 'Store Find'}
         </Text>
       </View>
+
+      {photoCount > 1 && (
+        <View style={styles.photoCountBadge}>
+          <Ionicons name="camera" size={10} color="#fff" />
+          <Text style={styles.photoCountText}>{photoCount}</Text>
+        </View>
+      )}
 
       <View style={styles.details}>
         {!!storeFind.description && (
@@ -75,6 +83,23 @@ const styles = StyleSheet.create({
     maxWidth: '90%',
   },
   badgeText: {
+    color: '#fff',
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.medium,
+  },
+  photoCountBadge: {
+    position: 'absolute',
+    bottom: spacing.xs + 36, // above the details section
+    right: spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    borderRadius: radii.sm,
+  },
+  photoCountText: {
     color: '#fff',
     fontSize: typography.size.xs,
     fontWeight: typography.weight.medium,

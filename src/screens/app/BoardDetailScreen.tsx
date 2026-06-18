@@ -18,6 +18,8 @@ import { GarmentCard } from '../../components/wardrobe/GarmentCard';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
 import { PressableScale } from '../../components/primitives/PressableScale';
 import { useBoards, useBoardFeed, flattenBoardFeed, useDeleteBoard, useUpdateBoard } from '../../hooks/useBoards';
+import { useStoreFindSync } from '../../hooks/useStoreFindSync';
+import { enqueueStoreFind } from '../../lib/storeFindQueue';
 import type { BoardFeedItem } from '../../types/board';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { BoardDetailScreenProps } from '../../navigation/types';
@@ -52,6 +54,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
 
   const { mutate: deleteBoard } = useDeleteBoard();
   const { mutate: updateBoard } = useUpdateBoard();
+  const { pendingCount, sync: syncStoreFinds } = useStoreFindSync();
 
   const [menuVisible, setMenuVisible] = useState(false);
   const [optionsMenuVisible, setOptionsMenuVisible] = useState(false);
@@ -62,20 +65,25 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
 
   const launchLibrary = useLibraryLaunch();
 
-  const handleSaveStoreFind = useCallback((data: Omit<StoreFind, 'id' | 'createdAt'>) => {
+  const handleSaveStoreFind = useCallback(async (data: Omit<StoreFind, 'id' | 'createdAt'>) => {
     const newFind: StoreFind = {
       ...data,
       id: Math.random().toString(36).substring(7),
       createdAt: new Date().toISOString(),
     };
+
+    // Persist to queue first — guarantees the find survives a network drop or app kill
+    await enqueueStoreFind(boardId, newFind);
+
     const existingFinds = items
       .filter((it): it is Extract<BoardFeedItem, { kind: 'storeFind' }> => it.kind === 'storeFind')
       .map((it) => it.storeFind);
-    updateBoard({
-      id: boardId,
-      storeFinds: [newFind, ...existingFinds],
-    });
-  }, [boardId, items, updateBoard]);
+
+    updateBoard(
+      { id: boardId, storeFinds: [newFind, ...existingFinds] },
+      { onSuccess: () => syncStoreFinds() },
+    );
+  }, [boardId, items, updateBoard, syncStoreFinds]);
 
   const handleRename = useCallback(() => {
     if (Platform.OS === 'ios') {
@@ -193,9 +201,14 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()} accessibilityLabel="Back">
           <Ionicons name="chevron-back" size={24} color={colors.foreground} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {board?.name ?? 'Board'}
-        </Text>
+        <View style={styles.headerTitleWrap}>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {board?.name ?? 'Board'}
+          </Text>
+          {pendingCount > 0 && (
+            <View style={styles.syncDot} accessibilityLabel={`${pendingCount} pending sync`} />
+          )}
+        </View>
         <View style={{ flexDirection: 'row' }}>
           <TouchableOpacity style={styles.headerBtn} onPress={() => setMenuVisible(true)} accessibilityLabel="Add to board">
             <Ionicons name="add" size={26} color={colors.foreground} />
@@ -305,12 +318,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: {
+  headerTitleWrap: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+  },
+  headerTitle: {
     textAlign: 'center',
     fontSize: typography.size.lg,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
+  },
+  syncDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.primary,
+    marginTop: 1,
   },
   cell: {
     paddingHorizontal: COL_GAP / 2,
