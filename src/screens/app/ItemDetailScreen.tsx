@@ -32,6 +32,8 @@ import type { ItemDetailScreenProps } from '../../navigation/types';
 import * as Haptics from 'expo-haptics';
 import { useTagScanner } from '../../hooks/useTagScanner';
 import { EditItemModal } from '../../components/item/EditItemModal';
+import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
+import { uploadImageToR2 } from '../../lib/uploadImage';
 import { SectionCard } from '../../components/primitives/SectionCard';
 import { Chip } from '../../components/primitives/Chip';
 import { SLEEVE_LENGTH_LABELS } from '../../types/item';
@@ -70,6 +72,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
 
   // ── Edit modal visibility ────────────────────────────────────────────────────
   const [editOpen, setEditOpen] = useState(false);
+  const [saveSheetOpen, setSaveSheetOpen] = useState(false);
 
   // ── Inline tag state ─────────────────────────────────────────────────────────
   const [inlineTagActive, setInlineTagActive] = useState(false);
@@ -226,7 +229,16 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     refineImage.mutate(
       { name: item.name, color: item.color || 'neutral', brand: item.brand, category: item.category },
       {
-        onSuccess: ({ imageData }) => updateItem.mutate({ id: item.id, imageUrl: imageData }),
+        onSuccess: async ({ imageData }) => {
+          try {
+            // Upload the generated image to R2 and store the hosted URL — never
+            // the raw base64 — so the closet payload stays small.
+            const hosted = await uploadImageToR2(imageData, item.userId);
+            updateItem.mutate({ id: item.id, imageUrl: hosted });
+          } catch {
+            Alert.alert('Save failed', 'Generated the image but could not save it. Please try again.');
+          }
+        },
         onError: (err: any) => {
           const msg = err?.response?.data?.message ?? 'Could not generate image. Please try again.';
           Alert.alert('Generation failed', msg);
@@ -368,6 +380,12 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
             />
             <Text style={styles.actionLabel}>{viewItem.isFavorite ? 'Favourited' : 'Favourite'}</Text>
           </TouchableOpacity>
+          {!isCreateMode && !!itemId && (
+            <TouchableOpacity style={styles.actionButton} onPress={() => setSaveSheetOpen(true)}>
+              <Ionicons name="bookmark-outline" size={20} color={colors.foreground} />
+              <Text style={styles.actionLabel}>Save</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <TouchableOpacity
@@ -700,6 +718,13 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         onClose={() => setEditOpen(false)}
         onCreateSuccess={() => {}}
       />
+
+      {saveSheetOpen && !!itemId && (
+        <SaveToBoardSheet
+          target={{ type: 'item', id: itemId }}
+          onClose={() => setSaveSheetOpen(false)}
+        />
+      )}
     </View>
   );
 }

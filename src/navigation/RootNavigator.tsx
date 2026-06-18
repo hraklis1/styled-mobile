@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '../contexts/AuthContext';
 import { useProfile } from '../hooks/useProfile';
+import { syncLocalWishlistToServer } from '../lib/wishlistSync';
 import { GlobalOutfitLoggerProvider } from '../contexts/GlobalOutfitLoggerContext';
 import { GlobalAIStylistProvider, useGlobalAIStylist } from '../contexts/GlobalAIStylistContext';
 import { GlobalScanProvider } from '../contexts/GlobalScanContext';
@@ -24,6 +25,7 @@ import { HomeScreen } from '../screens/app/HomeScreen';
 import { ItemDetailScreen } from '../screens/app/ItemDetailScreen';
 import { ClosetRefreshScreen } from '../screens/app/ClosetRefreshScreen';
 import { OutfitDetailScreen } from '../screens/app/OutfitDetailScreen';
+import { BoardDetailScreen } from '../screens/app/BoardDetailScreen';
 import { ClosetScreen } from '../screens/app/ClosetScreen';
 import { CalendarScreen } from '../screens/app/CalendarScreen';
 import { ProfileScreen } from '../screens/app/ProfileScreen';
@@ -103,6 +105,7 @@ function ClosetNavigator() {
       <ClosetStack.Screen name="ItemDetail" component={ItemDetailScreen} />
       <ClosetStack.Screen name="ClosetRefresh" component={ClosetRefreshScreen} />
       <ClosetStack.Screen name="OutfitDetail" component={OutfitDetailScreen} />
+      <ClosetStack.Screen name="BoardDetail" component={BoardDetailScreen} />
     </ClosetStack.Navigator>
   );
 }
@@ -110,6 +113,11 @@ function ClosetNavigator() {
 function AppTabNavigator() {
   const { openStylist } = useGlobalAIStylist();
   const insets = useSafeAreaInsets();
+
+  // Once per signed-in session, migrate any legacy on-device wishlist to the server.
+  useEffect(() => {
+    void syncLocalWishlistToServer();
+  }, []);
 
   return (
     <View style={{ flex: 1 }}>

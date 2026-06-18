@@ -47,7 +47,7 @@ export function OutfitCollage({ outfit, size, height = size, borderRadius = radi
     const uri = resolveImageUri(outfit.aiGeneratedImageUrl);
     return (
       <View style={[styles.container, { width: size, height, borderRadius }]}>
-        <Image source={{ uri }} style={styles.fill} contentFit="cover" />
+        <Image source={{ uri }} style={styles.fill} contentFit="cover" cachePolicy="memory-disk" recyclingKey={String(outfit.id)} />
       </View>
     );
   }

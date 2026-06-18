@@ -44,6 +44,7 @@ import { SizeProfileInput } from '../primitives/SizeProfileInput';
 import type { SizeProfile } from '../../lib/sizes';
 import { CropAdjustModal, type Bbox } from './CropAdjustModal';
 import { cropImage } from '../../lib/cropImage';
+import { uploadImageToR2 } from '../../lib/uploadImage';
 import { AnimatedProgressBar } from '../primitives/AnimatedProgressBar';
 import { track } from '../../lib/analytics';
 import * as Haptics from 'expo-haptics';
@@ -245,45 +246,6 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     onClose();
   }, [poseScan, onClose]);
 
-  const uploadImageToR2 = async (dataUrl: string): Promise<string> => {
-    // React Native's fetch does not support data: URIs (the native networking
-    // layer only handles http/https/file). Parse the data URL manually instead.
-    const commaIdx = dataUrl.indexOf(',');
-    const meta = dataUrl.slice(0, commaIdx); // e.g. "data:image/webp;base64"
-    const base64 = dataUrl.slice(commaIdx + 1);
-    const mimeType = meta.slice(5).replace(';base64', '') || 'image/jpeg';
-    const ext = mimeType.includes('webp') ? 'webp' : 'jpg';
-    const fileName = `users/${user!.id}/items/${Date.now()}-${crypto.randomUUID()}.${ext}`;
-
-    const { presignedUrl, publicUrl } = await api
-      .post<{ presignedUrl: string; publicUrl: string }>('/api/upload-url', {
-        fileName,
-        fileType: mimeType,
-      })
-      .then((r) => r.data);
-
-    // Decode base64 → binary ArrayBuffer, then upload to the presigned R2 URL.
-    // We use XMLHttpRequest.send(ArrayBuffer) rather than fetch(Blob) because
-    // React Native's Blob implementation can silently re-encode binary data as
-    // base64 when serialised through XHR, corrupting the upload on some Android
-    // devices. Sending the raw ArrayBuffer avoids that codepath entirely.
-    const binaryStr = atob(base64);
-    const bytes = new Uint8Array(binaryStr.length);
-    for (let i = 0; i < binaryStr.length; i++) {
-      bytes[i] = binaryStr.charCodeAt(i);
-    }
-
-    await new Promise<void>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('PUT', presignedUrl);
-      xhr.setRequestHeader('Content-Type', mimeType);
-      xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`R2 upload failed: ${xhr.status}`)));
-      xhr.onerror = () => reject(new Error('R2 upload network error'));
-      xhr.send(bytes.buffer);
-    });
-
-    return publicUrl;
-  };
 
   const handleSaveAll = async () => {
     if (detectedItems.length === 0) return;
@@ -306,7 +268,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
       const imageToUpload = await buildUploadImage(item);
       if (imageToUpload) {
         try {
-          imageUrl = await uploadImageToR2(imageToUpload);
+          imageUrl = await uploadImageToR2(imageToUpload, user!.id);
         } catch {
           // R2 upload failed — fall back to storing the base64 data URL directly
           // so the item always has a photo even if cloud storage is unavailable.

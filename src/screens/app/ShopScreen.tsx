@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -12,37 +12,24 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { ShopOutfitCard } from '../../components/outfits/ShopOutfitCard';
-import {
-  loadWishlist,
-  removeFromWishlist,
-  type WishlistEntry,
-} from '../../lib/wishlist';
+import { useWishlist, useRemoveFromWishlist } from '../../hooks/useWishlist';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { ShopScreenProps } from '../../navigation/types';
 
 export function ShopScreen(_props: ShopScreenProps) {
   const insets = useSafeAreaInsets();
   const { openStylist } = useGlobalAIStylist();
-  const [entries, setEntries] = useState<WishlistEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: entries = [], isLoading: loading, refetch } = useWishlist();
+  const { mutate: removeItem } = useRemoveFromWishlist();
 
   useFocusEffect(
     useCallback(() => {
-      let active = true;
-      setLoading(true);
-      loadWishlist().then((list) => {
-        if (active) {
-          setEntries(list);
-          setLoading(false);
-        }
-      });
-      return () => { active = false; };
-    }, []),
+      refetch();
+    }, [refetch]),
   );
 
-  async function handleRemove(id: string) {
-    await removeFromWishlist(id);
-    setEntries((prev) => prev.filter((e) => e.id !== id));
+  function handleRemove(id: string) {
+    removeItem(id);
   }
 
   if (loading) {

@@ -10,6 +10,7 @@ import {
   Animated,
   useWindowDimensions,
   Alert,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { FlashList } from '@shopify/flash-list';
@@ -24,6 +25,9 @@ import { OutfitBuilderSheet } from '../../components/outfits/OutfitBuilderSheet'
 import { FilterPanel } from '../../components/wardrobe/FilterPanel';
 import { OutfitFilterPanel } from '../../components/outfits/OutfitFilterPanel';
 import { ClosetGrid } from '../../components/wardrobe/ClosetGrid';
+import { BoardCard } from '../../components/boards/BoardCard';
+import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
+import { useBoards, useCreateBoard, type BoardEntryRef } from '../../hooks/useBoards';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { parseEventDate } from '../../lib/outfitAssignments';
 import { CATEGORY_LABELS, type ItemCategory } from '../../types/item';
@@ -39,7 +43,7 @@ import { ErrorState } from '../../components/primitives/ErrorState';
 import type { ClosetScreenProps } from '../../navigation/types';
 
 type ViewMode = 'grid' | 'list';
-type Segment = 'pieces' | 'outfits';
+type Segment = 'pieces' | 'outfits' | 'boards';
 
 const OUTFIT_SORT_OPTIONS: { key: OutfitSortKey; label: string }[] = [
   { key: 'newest',        label: 'Newest first' },
@@ -94,6 +98,11 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const { data: items = [], isLoading: itemsLoading, isError: itemsError, refetch: refetchItems } = useItems();
   const { data: outfits = [] } = useOutfits();
   const { data: events = [] } = useEvents();
+  const { data: boards = [] } = useBoards();
+  const createBoard = useCreateBoard();
+
+  // SaveToBoardSheet target for the bulk "Add to Board" action.
+  const [saveSheetTarget, setSaveSheetTarget] = useState<BoardEntryRef[] | null>(null);
   const updateItem = useUpdateItem();
   const deleteItem = useDeleteItem();
   const markWorn = useMarkItemWorn();
@@ -234,7 +243,9 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const subtitle =
     segment === 'pieces'
       ? `${filteredItems.length} ${filteredItems.length === 1 ? 'piece' : 'pieces'}`
-      : `${filteredOutfits.length} ${filteredOutfits.length === 1 ? 'outfit' : 'outfits'}`;
+      : segment === 'boards'
+        ? `${boards.length} ${boards.length === 1 ? 'board' : 'boards'}`
+        : `${filteredOutfits.length} ${filteredOutfits.length === 1 ? 'outfit' : 'outfits'}`;
 
   // ── Render helpers ─────────────────────────────────────────────────────────
 
@@ -388,14 +399,35 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     });
   }, [openAddSheet, openBatchScan, openScanItem]);
 
+  const handleNewBoard = useCallback(() => {
+    if (Platform.OS === 'ios') {
+      Alert.prompt('New board', 'Name your board', (text) => {
+        const name = text?.trim();
+        if (name) createBoard.mutate({ name });
+      });
+    } else {
+      // Android has no Alert.prompt; create with a default name the user can rename.
+      createBoard.mutate({ name: 'New board' });
+    }
+  }, [createBoard]);
+
+  const handleBulkAddToBoard = useCallback(() => {
+    if (selectedIds.size === 0) return;
+    setSaveSheetTarget([...selectedIds].map((id) => ({ type: 'item', id })));
+  }, [selectedIds]);
+
   const handlePrimaryAction = useCallback(() => {
     if (segment === 'pieces') {
       handleAddPieces();
       return;
     }
+    if (segment === 'boards') {
+      handleNewBoard();
+      return;
+    }
     setOutfitBuilderItems([]);
     setOutfitBuilderVisible(true);
-  }, [handleAddPieces, segment]);
+  }, [handleAddPieces, handleNewBoard, segment]);
 
   const handleStyleSelected = useCallback(() => {
     if (selectedIds.size === 0) return;
@@ -433,7 +465,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
           )}
           <View style={styles.itemRowThumb}>
             {uri ? (
-              <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
+              <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} cachePolicy="memory-disk" recyclingKey={String(item.id)} />
             ) : (
               <View style={styles.itemThumbPlaceholder}>
                 <Ionicons name="shirt-outline" size={20} color={colors.mutedForeground} />
@@ -624,6 +656,26 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     </View>
   );
 
+  const emptyBoards = (
+    <View style={styles.emptyState}>
+      <View style={styles.emptyIcon}>
+        <Ionicons name="albums-outline" size={32} color={colors.mutedForeground} />
+      </View>
+      <Text style={styles.emptyTitle}>No boards yet</Text>
+      <Text style={styles.emptySub}>Create your first board to organize your style.</Text>
+      <TouchableOpacity
+        style={styles.emptyBtn}
+        onPress={handleNewBoard}
+        activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel="Create your first board"
+      >
+        <Ionicons name="add" size={16} color={colors.primaryForeground} />
+        <Text style={styles.emptyBtnText}>Create board</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -640,24 +692,26 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             contentStyle={styles.primaryHeaderBtn}
             onPress={handlePrimaryAction}
             accessibilityRole="button"
-            accessibilityLabel={segment === 'pieces' ? 'Add pieces' : 'Create outfit'}
+            accessibilityLabel={segment === 'pieces' ? 'Add pieces' : segment === 'boards' ? 'New board' : 'Create outfit'}
           >
             <Ionicons name="add" size={16} color={colors.primaryForeground} />
             <Text style={styles.primaryHeaderBtnText}>
-              {segment === 'pieces' ? 'Add pieces' : 'Create outfit'}
+              {segment === 'pieces' ? 'Add pieces' : segment === 'boards' ? 'New board' : 'Create outfit'}
             </Text>
           </PressableScale>
-          <PressableScale
-            contentStyle={styles.headerBtn}
-            onPress={() => setViewMode(v => v === 'grid' ? 'list' : 'grid')}
-            accessibilityLabel="Toggle view"
-          >
-            <Ionicons
-              name={viewMode === 'grid' ? 'list-outline' : 'grid-outline'}
-              size={20}
-              color={colors.foreground}
-            />
-          </PressableScale>
+          {segment !== 'boards' && (
+            <PressableScale
+              contentStyle={styles.headerBtn}
+              onPress={() => setViewMode(v => v === 'grid' ? 'list' : 'grid')}
+              accessibilityLabel="Toggle view"
+            >
+              <Ionicons
+                name={viewMode === 'grid' ? 'list-outline' : 'grid-outline'}
+                size={20}
+                color={colors.foreground}
+              />
+            </PressableScale>
+          )}
         </View>
       </View>
 
@@ -686,6 +740,18 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
           >
             <Text style={[styles.segmentLabel, segment === 'outfits' && styles.segmentLabelActive]}>
               Outfits
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.segmentBtn, segment === 'boards' && styles.segmentBtnActive]}
+            onPress={() => handleSegmentChange('boards')}
+            activeOpacity={0.8}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: segment === 'boards' }}
+            accessibilityLabel="Boards"
+          >
+            <Text style={[styles.segmentLabel, segment === 'boards' && styles.segmentLabelActive]}>
+              Boards
             </Text>
           </TouchableOpacity>
         </View>
@@ -730,7 +796,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
               scrollEventThrottle={16}
             />
           )
-        ) : (
+        ) : segment === 'outfits' ? (
           <FlashList
             key={`outfits-${viewMode}`}
             data={filteredOutfits}
@@ -748,9 +814,34 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             onScroll={handleScroll}
             scrollEventThrottle={16}
           />
+        ) : (
+          <FlashList
+            key="boards-grid"
+            data={boards}
+            keyExtractor={(b) => String(b.id)}
+            numColumns={2}
+            renderItem={({ item }) => (
+              <View style={{ paddingHorizontal: COL_GAP / 2, marginBottom: spacing.lg }}>
+                <BoardCard
+                  board={item}
+                  width={cardWidth}
+                  onPress={() => navigation.navigate('BoardDetail', { boardId: item.id })}
+                />
+              </View>
+            )}
+            ListEmptyComponent={emptyBoards}
+            contentContainerStyle={{
+              paddingTop: spacing.md,
+              paddingHorizontal: SIDE_PAD - COL_GAP / 2,
+              paddingBottom: spacing.xxxl * 2,
+            }}
+            showsVerticalScrollIndicator={false}
+          />
         )}
 
-        {/* Floating header — absolute over the list, slides on native thread */}
+        {/* Floating header — absolute over the list, slides on native thread.
+            Hidden on the boards segment (no search/filter there). */}
+        {segment !== 'boards' && (
         <Animated.View
           style={[styles.floatingHeader, { transform: [{ translateY: headerTranslateY }] }]}
         >
@@ -873,6 +964,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             </ScrollView>
           )}
         </Animated.View>
+        )}
 
       </View>
 
@@ -948,6 +1040,17 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             >
               <Ionicons name="layers-outline" size={17} color={selectedIds.size === 0 ? colors.border : colors.foreground} />
               <Text style={[styles.bulkBtnText, selectedIds.size === 0 && styles.bulkBtnTextDisabled]}>Outfit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.bulkBtn, selectedIds.size === 0 && styles.bulkBtnDisabled]}
+              onPress={handleBulkAddToBoard}
+              disabled={selectedIds.size === 0}
+              accessibilityRole="button"
+              accessibilityLabel="Add selected items to a board"
+              accessibilityState={{ disabled: selectedIds.size === 0 }}
+            >
+              <Ionicons name="albums-outline" size={17} color={selectedIds.size === 0 ? colors.border : colors.foreground} />
+              <Text style={[styles.bulkBtnText, selectedIds.size === 0 && styles.bulkBtnTextDisabled]}>Board</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.bulkBtn, styles.bulkBtnDelete, selectedIds.size === 0 && styles.bulkBtnDisabled]}
@@ -1134,6 +1237,13 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         onCreated={() => { setOutfitBuilderVisible(false); exitSelectionMode(); }}
         initialItems={outfitBuilderItems}
       />
+
+      {saveSheetTarget !== null && (
+        <SaveToBoardSheet
+          target={saveSheetTarget}
+          onClose={() => { setSaveSheetTarget(null); exitSelectionMode(); }}
+        />
+      )}
     </View>
   );
 }

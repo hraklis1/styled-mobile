@@ -37,13 +37,14 @@ import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
 import { conversationLocation, type StylingLocationContext } from '../../lib/stylingLocation';
 import { useCreateOutfit, type CreateOutfitInput } from '../../hooks/useOutfits';
 import { useAssignEventItems } from '../../hooks/useEvents';
-import { addToWishlist } from '../../lib/wishlist';
+import { addOutfitToWishlist } from '../../hooks/useWishlist';
 import { VoiceInputButton } from '../primitives/VoiceInputButton';
 import { LocationAutocompleteInput } from '../primitives/LocationAutocompleteInput';
 import { ShopOutfitCard } from '../outfits/ShopOutfitCard';
 import { ResolvedOutfitCollage } from '../outfits/ResolvedOutfitCollage';
 import { ItemPickerSheet } from '../outfits/ItemPickerSheet';
 import { StylistRichText } from './StylistRichText';
+import { GapCard } from './GapCard';
 import { TripPlanCard, type TripPlanData } from './TripPlanCard';
 import { colors, radii, shadows, spacing, typography } from '../../theme';
 import type { ShopOutfit } from '../../types/shop';
@@ -59,6 +60,9 @@ type MissingEssential = {
   reason: string;
   context: string;
   priority: number;
+  // Occasions this gap would unlock (e.g. "Formal", "Date night"); optional —
+  // only populated for advice/audit replies that return it.
+  unlocks?: string[];
 };
 
 type StylistMode = 'from_closet' | 'shop_new' | 'advice' | 'trip';
@@ -1180,20 +1184,11 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
                 })}
             </ScrollView>
           )}
-          {(message.missingEssentials ?? []).map((item, i) => (
-            <TouchableOpacity
-              key={i}
-              style={styles.missingEssentialBanner}
-              onPress={onNavigateToShop}
-              activeOpacity={onNavigateToShop ? 0.7 : 1}
-            >
-              <Ionicons name="bag-handle-outline" size={14} color={colors.primary} />
-              <Text style={styles.missingEssentialText} numberOfLines={1}>
-                {item.label}{item.context ? ` — ${item.context}` : ''}
-              </Text>
-              {onNavigateToShop && <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />}
-            </TouchableOpacity>
-          ))}
+          {[...(message.missingEssentials ?? [])]
+            .sort((a, b) => a.priority - b.priority)
+            .map((item, i) => (
+              <GapCard key={i} item={item} onPress={onNavigateToShop} />
+            ))}
           {onToggleAudio && (
             <TouchableOpacity style={styles.quietAudioBtn} onPress={onToggleAudio} accessibilityLabel="Read stylist note aloud">
               <Ionicons
@@ -1251,7 +1246,7 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
             outfit={message.shopOutfit}
             saveLabel={eventContext ? `Save for ${eventContext.title}` : undefined}
             onSave={async () => {
-              await addToWishlist(message.shopOutfit!, eventContext);
+              await addOutfitToWishlist(message.shopOutfit!, eventContext);
               track('outfit_saved_to_wishlist', { forEvent: !!eventContext });
             }}
           />
@@ -1652,23 +1647,12 @@ function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, ev
         </View>
       )}
 
-      {/* Wardrobe gap banners — sorted by priority, max 3 */}
-      {(missingEssentials ?? []).map((item, i) => (
-        <TouchableOpacity
-          key={i}
-          style={styles.missingEssentialBanner}
-          onPress={onNavigateToShop}
-          activeOpacity={onNavigateToShop ? 0.7 : 1}
-        >
-          <Ionicons name="bag-handle-outline" size={14} color={colors.primary} />
-          <Text style={styles.missingEssentialText} numberOfLines={1}>
-            {item.label}{item.context ? ` — ${item.context}` : ''}
-          </Text>
-          {onNavigateToShop && (
-            <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />
-          )}
-        </TouchableOpacity>
-      ))}
+      {/* Wardrobe gap cards — sorted by priority, max 3 */}
+      {[...(missingEssentials ?? [])]
+        .sort((a, b) => a.priority - b.priority)
+        .map((item, i) => (
+          <GapCard key={i} item={item} onPress={onNavigateToShop} />
+        ))}
 
       <ItemDetailSheet item={selectedItem} onClose={() => setSelectedItem(null)} />
 
@@ -2815,23 +2799,6 @@ const styles = StyleSheet.create({
   feedbackBtnActive: {
     backgroundColor: `${colors.primary}18`,
     borderColor: colors.primary,
-  },
-  missingEssentialBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs + 2,
-    backgroundColor: `${colors.primary}0D`,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: `${colors.primary}22`,
-  },
-  missingEssentialText: {
-    flex: 1,
-    fontSize: typography.size.xs,
-    color: colors.foreground,
-    fontWeight: typography.weight.medium,
   },
   reasonChips: {
     flexDirection: 'row',

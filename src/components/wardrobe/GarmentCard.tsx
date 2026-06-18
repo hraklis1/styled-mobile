@@ -75,6 +75,8 @@ function GarmentCardComponent({
             style={StyleSheet.absoluteFill}
             contentFit="contain"
             transition={200}
+            cachePolicy="memory-disk"
+            recyclingKey={String(item.id)}
           />
         ) : (
           <View style={styles.imagePlaceholder}>

@@ -20,6 +20,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { track } from '../lib/analytics';
 import { useCreateItem, useBrandSuggestions } from '../hooks/useItems';
+import { useAuth } from '../contexts/AuthContext';
+import { uploadImageToR2, isDataUri } from '../lib/uploadImage';
 import { colors, spacing, typography, radii } from '../theme';
 import {
   type Item, type ItemCategory, type NormalizedColor, type Season, type Occasion,
@@ -54,6 +56,7 @@ export function AddActionSheet({
   onBatchImport: onBatchImportProp,
 }: AddActionSheetProps) {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const createItem = useCreateItem();
   const bottomSheetRef = useRef<BottomSheetModal>(null);
   const brandSuggestions = useBrandSuggestions();
@@ -152,9 +155,24 @@ export function AddActionSheet({
     setTimeout(() => onBatchImportProp?.(), 300);
   }, [onBatchImportProp]);
 
-  const handleSaveManual = useCallback(() => {
+  const handleSaveManual = useCallback(async () => {
     if (!manualName.trim()) return;
     setView('saving');
+
+    // Upload the picked image to R2 and store the hosted URL — not inline base64.
+    let imageUrl: string | null = null;
+    if (manualImageDataUrl) {
+      try {
+        imageUrl = isDataUri(manualImageDataUrl)
+          ? await uploadImageToR2(manualImageDataUrl, user!.id)
+          : manualImageDataUrl;
+      } catch {
+        Alert.alert('Save failed', 'Could not upload the image. Please try again.');
+        setView('manual');
+        return;
+      }
+    }
+
     createItem.mutate(
       {
         name: manualName.trim(),
@@ -166,7 +184,7 @@ export function AddActionSheet({
         style: manualStyle || null,
         seasons: manualSeasons,
         occasions: manualOccasions,
-        imageUrl: manualImageDataUrl || null,
+        imageUrl,
       },
       {
         onSuccess: (created) => {
@@ -182,7 +200,7 @@ export function AddActionSheet({
         },
       },
     );
-  }, [manualName, manualBrand, manualCategory, manualColor, manualColorNormalized, manualSubcategory, manualStyle, manualSeasons, manualOccasions, manualImageDataUrl, createItem, onItemsSaved]);
+  }, [manualName, manualBrand, manualCategory, manualColor, manualColorNormalized, manualSubcategory, manualStyle, manualSeasons, manualOccasions, manualImageDataUrl, createItem, onItemsSaved, user]);
 
   const canClose = view !== 'saving';
 

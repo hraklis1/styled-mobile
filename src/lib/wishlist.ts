@@ -8,38 +8,19 @@ export type WishlistEntry = {
   savedAt: string;
   outfit: ShopOutfit;
   /** Set when saved from the stylist while planning a specific calendar event. */
-  eventContext?: { id: number; title: string };
+  eventContext?: { id: number; title: string } | null;
 };
 
-export async function loadWishlist(): Promise<WishlistEntry[]> {
+/**
+ * Reads the legacy on-device wishlist. The wishlist now lives server-side (see
+ * hooks/useWishlist); this is retained only as the source for the one-time
+ * migration in lib/wishlistSync. Do not use for new reads/writes.
+ */
+export async function loadLocalWishlist(): Promise<WishlistEntry[]> {
   try {
     const raw = await AsyncStorage.getItem(WISHLIST_KEY);
     return raw ? (JSON.parse(raw) as WishlistEntry[]) : [];
   } catch {
     return [];
   }
-}
-
-export async function addToWishlist(
-  outfit: ShopOutfit,
-  eventContext?: { id: number; title: string },
-): Promise<WishlistEntry> {
-  const list = await loadWishlist();
-  const entry: WishlistEntry = {
-    id: Math.random().toString(36).slice(2),
-    savedAt: new Date().toISOString(),
-    outfit,
-    ...(eventContext ? { eventContext } : {}),
-  };
-  list.unshift(entry);
-  await AsyncStorage.setItem(WISHLIST_KEY, JSON.stringify(list));
-  return entry;
-}
-
-export async function removeFromWishlist(id: string): Promise<void> {
-  const list = await loadWishlist();
-  await AsyncStorage.setItem(
-    WISHLIST_KEY,
-    JSON.stringify(list.filter((e) => e.id !== id)),
-  );
 }

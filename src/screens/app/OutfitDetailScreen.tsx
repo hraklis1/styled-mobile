@@ -30,6 +30,7 @@ import { useEvents } from '../../hooks/useEvents';
 import { useAssignOutfitEvents } from '../../hooks/useOutfits';
 import { getUpcomingOutfitEvents, parseEventDate } from '../../lib/outfitAssignments';
 import { OutfitEventAssignmentModal } from '../../components/outfits/OutfitEventAssignmentModal';
+import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', {
@@ -157,6 +158,7 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   const [localTags, setLocalTags] = useState<string[]>(outfit?.tags ?? []);
   const [tagDraft, setTagDraft] = useState('');
   const [eventPickerVisible, setEventPickerVisible] = useState(false);
+  const [saveSheetOpen, setSaveSheetOpen] = useState(false);
 
   useEffect(() => {
     if (outfit) {
@@ -328,6 +330,16 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
               size={20}
               color={outfit.isFavorite ? colors.primary : colors.foreground}
             />
+          </TouchableOpacity>
+
+          {/* Save to board — top-right, left of favourite */}
+          <TouchableOpacity
+            style={[styles.headerIconButton, styles.saveButton, { top: insets.top + spacing.sm }]}
+            onPress={() => setSaveSheetOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Save to board"
+          >
+            <Ionicons name="bookmark-outline" size={20} color={colors.foreground} />
           </TouchableOpacity>
 
           {/* Delete — top-right */}
@@ -639,6 +651,12 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
         visible={eventPickerVisible}
         onClose={() => setEventPickerVisible(false)}
       />
+      {saveSheetOpen && (
+        <SaveToBoardSheet
+          target={{ type: 'outfit', id: outfitId }}
+          onClose={() => setSaveSheetOpen(false)}
+        />
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -681,6 +699,9 @@ const styles = StyleSheet.create({
   },
   favButton: {
     right: spacing.lg + 44 + spacing.sm,
+  },
+  saveButton: {
+    right: spacing.lg + (44 + spacing.sm) * 2,
   },
 
   // ── Collage overlay ──

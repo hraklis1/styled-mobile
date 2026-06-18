@@ -26,6 +26,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { AnimatedProgressBar } from '../primitives/AnimatedProgressBar';
 import { compressImageToDataUrl } from '../../lib/compressImage';
+import { uploadImageToR2 } from '../../lib/uploadImage';
 import {
   scanVisionPoseDirect,
   scanItemDirect,
@@ -560,41 +561,6 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
     [cropAdjustTarget, updatePreExtractItem, updateItem],
   );
 
-  const uploadImageToR2 = async (dataUrl: string): Promise<string> => {
-    const commaIdx = dataUrl.indexOf(',');
-    const meta = dataUrl.slice(0, commaIdx);
-    const base64 = dataUrl.slice(commaIdx + 1);
-    const mimeType = meta.slice(5).replace(';base64', '') || 'image/jpeg';
-    const ext = mimeType.includes('webp') ? 'webp' : 'jpg';
-    const fileName = `users/${user!.id}/items/${Date.now()}-${crypto.randomUUID()}.${ext}`;
-
-    const { presignedUrl, publicUrl } = await api
-      .post<{ presignedUrl: string; publicUrl: string }>('/api/upload-url', {
-        fileName,
-        fileType: mimeType,
-      })
-      .then((r) => r.data);
-
-    const binaryStr = atob(base64);
-    const bytes = new Uint8Array(binaryStr.length);
-    for (let i = 0; i < binaryStr.length; i++) {
-      bytes[i] = binaryStr.charCodeAt(i);
-    }
-
-    await new Promise<void>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('PUT', presignedUrl);
-      xhr.setRequestHeader('Content-Type', mimeType);
-      xhr.onload = () =>
-        xhr.status >= 200 && xhr.status < 300
-          ? resolve()
-          : reject(new Error(`R2 upload failed: ${xhr.status}`));
-      xhr.onerror = () => reject(new Error('R2 upload network error'));
-      xhr.send(bytes.buffer);
-    });
-
-    return publicUrl;
-  };
 
   const handleSaveAll = useCallback(async () => {
     if (allItems.length === 0) return;
@@ -615,7 +581,7 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
       const imageToUpload = await buildUploadImage(item);
       if (imageToUpload) {
         try {
-          imageUrl = await uploadImageToR2(imageToUpload);
+          imageUrl = await uploadImageToR2(imageToUpload, user!.id);
         } catch {
           imageUrl = imageToUpload;
         }

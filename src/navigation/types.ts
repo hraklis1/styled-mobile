@@ -23,9 +23,9 @@ export type AppTabParamList = {
   Profile: undefined;
 };
 
-// Unified closet stack (items + outfits + their detail screens)
+// Unified closet stack (items + outfits + boards + their detail screens)
 export type ClosetStackParamList = {
-  ClosetMain: { segment?: 'pieces' | 'outfits' } | undefined;
+  ClosetMain: { segment?: 'pieces' | 'outfits' | 'boards' } | undefined;
   ItemDetail: {
     itemId?: number;
     scanData?: ScanResult;
@@ -33,6 +33,7 @@ export type ClosetStackParamList = {
   };
   ClosetRefresh: undefined;
   OutfitDetail: { outfitId: number };
+  BoardDetail: { boardId: number };
 };
 
 // Home nested stack
@@ -79,6 +80,7 @@ export type ProfileScreenProps = BottomTabScreenProps<AppTabParamList, 'Profile'
 export type ItemDetailScreenProps = NativeStackScreenProps<ClosetStackParamList, 'ItemDetail'>;
 export type ClosetRefreshScreenProps = NativeStackScreenProps<ClosetStackParamList, 'ClosetRefresh'>;
 export type OutfitDetailScreenProps = NativeStackScreenProps<ClosetStackParamList, 'OutfitDetail'>;
+export type BoardDetailScreenProps = NativeStackScreenProps<ClosetStackParamList, 'BoardDetail'>;
 
 // Legacy — WardrobeScreen and OutfitsScreen are no longer tab destinations
 // but their files still compile against these types
