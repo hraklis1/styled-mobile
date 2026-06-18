@@ -17,6 +17,8 @@ export const colors = {
   accent:              '#F0E6DE', // HSL 20 30% 92% — soft terracotta/blush
   border:              '#DDD6CD', // HSL 30 15% 85%
   error:               '#BF4040', // HSL 0  50% 50%
+  destructive:         '#BF4040', // Alias for error
+  success:             '#4A7D59', // Soft green
   white:               '#FFFFFF',
 } as const;
 

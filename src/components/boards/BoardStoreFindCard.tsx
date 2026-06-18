@@ -14,7 +14,7 @@ export function BoardStoreFindCard({ storeFind, cardWidth }: Props) {
   return (
     <View style={[styles.root, { width: cardWidth, height: cardWidth * 1.25 }]}>
       {hasImage ? (
-        <Image source={{ uri: storeFind.imageUrl }} style={styles.image} />
+        <Image source={{ uri: storeFind.imageUrl as string }} style={styles.image} />
       ) : (
         <View style={[styles.image, styles.placeholder]}>
           <Ionicons name="camera-outline" size={32} color={colors.mutedForeground} />
@@ -29,6 +29,9 @@ export function BoardStoreFindCard({ storeFind, cardWidth }: Props) {
       </View>
 
       <View style={styles.details}>
+        {!!storeFind.description && (
+          <Text style={styles.descriptionText} numberOfLines={1}>{storeFind.description}</Text>
+        )}
         <Text style={styles.priceText}>
           {storeFind.price != null ? `$${storeFind.price.toFixed(2)}` : 'Price unknown'}
         </Text>
@@ -81,6 +84,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
+  },
+  descriptionText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.medium,
+    color: colors.foreground,
+    marginBottom: 2,
   },
   priceText: {
     fontSize: typography.size.sm,

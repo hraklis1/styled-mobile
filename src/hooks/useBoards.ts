@@ -28,6 +28,8 @@ export type UpdateBoardInput = {
   itemIds?: number[];
   outfitIds?: number[];
   wishlistIds?: string[];
+  coverImageUrl?: string;
+  storeFinds?: import('../types/storeFind').StoreFind[];
 };
 
 /** A reference that can be toggled into/out of a board. */
@@ -149,7 +151,8 @@ export function boardContains(board: Board, ref: BoardEntryRef): boolean {
 type BoardFeedRef =
   | { kind: 'item'; data: Item }
   | { kind: 'outfit'; data: Outfit }
-  | { kind: 'wishlist'; data: WishlistEntry };
+  | { kind: 'wishlist'; data: WishlistEntry }
+  | { kind: 'storeFind'; data: import('../types/storeFind').StoreFind };
 type BoardFeedPage = { items: BoardFeedRef[]; nextCursor: string | null };
 
 /** Cursor-paginated mixed feed for a board (items + outfits + wishlist). */
@@ -175,6 +178,7 @@ export function flattenBoardFeed(pages: BoardFeedPage[] | undefined): BoardFeedI
     for (const ref of page.items) {
       if (ref.kind === 'item') out.push({ kind: 'item', key: `i${ref.data.id}`, item: ref.data });
       else if (ref.kind === 'outfit') out.push({ kind: 'outfit', key: `o${ref.data.id}`, outfit: ref.data });
+      else if (ref.kind === 'storeFind') out.push({ kind: 'storeFind', key: `sf_${ref.data.id}`, storeFind: ref.data });
       else out.push({ kind: 'wishlist', key: `w${ref.data.id}`, entry: ref.data });
     }
   }

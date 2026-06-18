@@ -22,12 +22,14 @@ import type { BoardFeedItem } from '../../types/board';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { BoardDetailScreenProps } from '../../navigation/types';
 import { BoardAddMenuSheet } from '../../components/boards/BoardAddMenuSheet';
+import { BoardOptionsMenuSheet } from '../../components/boards/BoardOptionsMenuSheet';
 import { BoardItemPickerModal } from '../../components/boards/BoardItemPickerModal';
 import { BoardOutfitPickerModal } from '../../components/boards/BoardOutfitPickerModal';
 import { BoardWishlistPickerModal } from '../../components/boards/BoardWishlistPickerModal';
 import { StoreFindFormModal } from '../../components/boards/StoreFindFormModal';
 import { BoardStoreFindCard } from '../../components/boards/BoardStoreFindCard';
 import type { StoreFind } from '../../types/storeFind';
+import { useLibraryLaunch } from '../../hooks/useCameraLaunch';
 
 const SIDE_PAD = spacing.lg;
 const COL_GAP = spacing.sm;
@@ -44,26 +46,21 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
 
   const feed = useBoardFeed(boardId);
 
-  const [localStoreFinds, setLocalStoreFinds] = useState<StoreFind[]>([]);
-
   const items = useMemo(() => {
-    const apiItems = flattenBoardFeed(feed.data?.pages);
-    const localItems: BoardFeedItem[] = localStoreFinds.map((sf) => ({
-      kind: 'storeFind',
-      key: `sf_${sf.id}`,
-      storeFind: sf,
-    }));
-    return [...localItems, ...apiItems];
-  }, [feed.data?.pages, localStoreFinds]);
+    return flattenBoardFeed(feed.data?.pages);
+  }, [feed.data?.pages]);
 
   const { mutate: deleteBoard } = useDeleteBoard();
   const { mutate: updateBoard } = useUpdateBoard();
 
   const [menuVisible, setMenuVisible] = useState(false);
+  const [optionsMenuVisible, setOptionsMenuVisible] = useState(false);
   const [itemPickerVisible, setItemPickerVisible] = useState(false);
   const [outfitPickerVisible, setOutfitPickerVisible] = useState(false);
   const [wishlistPickerVisible, setWishlistPickerVisible] = useState(false);
   const [storeFindFormVisible, setStoreFindFormVisible] = useState(false);
+
+  const launchLibrary = useLibraryLaunch();
 
   const handleSaveStoreFind = useCallback((data: Omit<StoreFind, 'id' | 'createdAt'>) => {
     const newFind: StoreFind = {
@@ -71,8 +68,11 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
       id: Math.random().toString(36).substring(7),
       createdAt: new Date().toISOString(),
     };
-    setLocalStoreFinds((prev) => [newFind, ...prev]);
-  }, []);
+    updateBoard({
+      id: boardId,
+      storeFinds: [newFind, ...(board?.storeFinds ?? [])]
+    });
+  }, [boardId, board?.storeFinds, updateBoard]);
 
   const handleRename = useCallback(() => {
     if (Platform.OS === 'ios') {
@@ -89,6 +89,20 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
     }
   }, [boardId, board?.name, updateBoard]);
 
+  const handleChangeCover = useCallback(async () => {
+    const image = await launchLibrary({ allowsEditing: true, maxDim: 800 });
+    if (image?.dataUrl) {
+      updateBoard(
+        { id: boardId, coverImageUrl: image.dataUrl },
+        {
+          onSuccess: () => {
+            Alert.alert('Cover Updated', 'The cover photo for this board was successfully updated.');
+          },
+        }
+      );
+    }
+  }, [boardId, launchLibrary, updateBoard]);
+
   const handleDelete = useCallback(() => {
     Alert.alert('Delete board', `Delete "${board?.name ?? 'this board'}"? Saved items stay in your closet.`, [
       { text: 'Cancel', style: 'cancel' },
@@ -104,12 +118,8 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
   }, [boardId, board?.name, deleteBoard, navigation]);
 
   const handleOverflow = useCallback(() => {
-    Alert.alert(board?.name ?? 'Board', undefined, [
-      { text: 'Rename', onPress: handleRename },
-      { text: 'Delete board', style: 'destructive', onPress: handleDelete },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  }, [board?.name, handleRename, handleDelete]);
+    setOptionsMenuVisible(true);
+  }, []);
 
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<BoardFeedItem>) => {
@@ -140,7 +150,18 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
       if (item.kind === 'storeFind') {
         return (
           <View style={styles.cell}>
-            <BoardStoreFindCard storeFind={item.storeFind} cardWidth={cardWidth} />
+            <PressableScale onPress={() => {
+              const sf = item.storeFind;
+              const details = [
+                sf.store || sf.brand ? `Store/Brand: ${sf.store || sf.brand}` : null,
+                sf.price ? `Price: $${sf.price.toFixed(2)}` : null,
+                sf.size ? `Size: ${sf.size}` : null,
+                sf.notes ? `Notes: ${sf.notes}` : null,
+              ].filter(Boolean).join('\n');
+              Alert.alert('Store Find', sf.description ? `${sf.description}\n\n${details}` : details || 'No details added.');
+            }}>
+              <BoardStoreFindCard storeFind={item.storeFind} cardWidth={cardWidth} />
+            </PressableScale>
           </View>
         );
       }
@@ -231,6 +252,15 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
           onPickOutfits={() => setOutfitPickerVisible(true)}
           onPickWishlist={() => setWishlistPickerVisible(true)}
           onSnapStoreFind={() => setStoreFindFormVisible(true)}
+        />
+      )}
+      {optionsMenuVisible && (
+        <BoardOptionsMenuSheet
+          visible={optionsMenuVisible}
+          onClose={() => setOptionsMenuVisible(false)}
+          onRename={handleRename}
+          onChangeCover={handleChangeCover}
+          onDelete={handleDelete}
         />
       )}
       <BoardItemPickerModal

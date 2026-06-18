@@ -19,6 +19,7 @@ import { colors, spacing, typography, radii } from '../../theme';
 import type { StoreFind } from '../../types/storeFind';
 import { BrandAutocompleteInput } from '../primitives/BrandAutocompleteInput';
 import { useBrandSuggestions } from '../../hooks/useItems';
+import { useCameraLaunch, useLibraryLaunch } from '../../hooks/useCameraLaunch';
 
 const POPULAR_STORES = [
   'Abercrombie & Fitch', 'Anthropologie', 'Aritzia', 'ASOS', "Bloomingdale's",
@@ -35,6 +36,7 @@ type Props = {
 
 export function StoreFindFormModal({ visible, onClose, onSave }: Props) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [description, setDescription] = useState('');
   const [store, setStore] = useState('');
   const [brand, setBrand] = useState('');
   const [priceStr, setPriceStr] = useState('');
@@ -44,22 +46,31 @@ export function StoreFindFormModal({ visible, onClose, onSave }: Props) {
   
   const brandSuggestions = useBrandSuggestions();
 
-  const handleTakePic = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'We need camera permissions to snap a photo.');
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [3, 4],
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setImageUrl(result.assets[0].uri);
-      // In a real app we might also request location here to get coordinates
-    }
+  const launchCamera = useCameraLaunch();
+  const launchLibrary = useLibraryLaunch();
+
+  const handleTakePic = () => {
+    Alert.alert(
+      'Add Photo',
+      'Choose a photo source',
+      [
+        {
+          text: 'Camera',
+          onPress: async () => {
+            const image = await launchCamera({ allowsEditing: true, maxDim: 1200, compress: 0.8 });
+            if (image?.dataUrl) setImageUrl(image.dataUrl);
+          }
+        },
+        {
+          text: 'Gallery',
+          onPress: async () => {
+            const image = await launchLibrary({ allowsEditing: true, maxDim: 1200, compress: 0.8 });
+            if (image?.dataUrl) setImageUrl(image.dataUrl);
+          }
+        },
+        { text: 'Cancel', style: 'cancel' }
+      ]
+    );
   };
 
   const handleSave = () => {
@@ -68,6 +79,7 @@ export function StoreFindFormModal({ visible, onClose, onSave }: Props) {
     onSave({
       imageUrl,
       location: null, // Would be gathered via Location API
+      description: description.trim() || null,
       store: store.trim() || null,
       brand: brand.trim() || null,
       price: isNaN(price) ? null : price,
@@ -78,6 +90,7 @@ export function StoreFindFormModal({ visible, onClose, onSave }: Props) {
     
     // Reset
     setImageUrl(null);
+    setDescription('');
     setStore('');
     setBrand('');
     setPriceStr('');
@@ -114,6 +127,17 @@ export function StoreFindFormModal({ visible, onClose, onSave }: Props) {
             </TouchableOpacity>
 
             <View style={[styles.form, { zIndex: 1 }]}>
+              <View style={[styles.field, { zIndex: 12 }]}>
+                <Text style={styles.label}>Description</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder='e.g. "dress", "wide bottom jeans"'
+                  placeholderTextColor={colors.mutedForeground}
+                  value={description}
+                  onChangeText={setDescription}
+                />
+              </View>
+
               <View style={[styles.field, { zIndex: 11 }]}>
                 <Text style={styles.label}>Store</Text>
                 <BrandAutocompleteInput

@@ -2,6 +2,7 @@ export type StoreFind = {
   id: string; // Using string UUID for client-side minted IDs
   imageUrl: string | null;
   location: string | null;
+  description: string | null;
   store: string | null;
   brand: string | null;
   price: number | null;
