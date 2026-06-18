@@ -1,16 +1,18 @@
-import { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { PressableScale } from '../primitives/PressableScale';
 import { resolveImageUri } from '../../lib/resolveImageUri';
-import { useItems } from '../../hooks/useItems';
-import { useOutfits } from '../../hooks/useOutfits';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { Board } from '../../types/board';
+import type { Item } from '../../types/item';
+import type { Outfit } from '../../types/outfit';
 
 type Props = {
   board: Board;
+  itemMap: Map<number, Item>;
+  outfitMap: Map<number, Outfit>;
   width: number;
   onPress?: () => void;
 };
@@ -31,9 +33,7 @@ function Cell({ uri, recyclingKey }: { uri: string; recyclingKey: string }) {
   );
 }
 
-export function BoardCard({ board, width, onPress }: Props) {
-  const { data: items = [] } = useItems();
-  const { data: outfits = [] } = useOutfits();
+export const BoardCard = React.memo(function BoardCard({ board, itemMap, outfitMap, width, onPress }: Props) {
   const count = board.itemIds.length + board.outfitIds.length + board.wishlistIds.length;
 
   // Collect up to 4 real cover images, items-first then outfits. Wishlist entries
@@ -42,17 +42,17 @@ export function BoardCard({ board, width, onPress }: Props) {
   const covers = useMemo(() => {
     const uris: string[] = [];
     for (const id of board.itemIds) {
-      const uri = resolveImageUri(items.find((i) => i.id === id)?.imageUrl);
+      const uri = resolveImageUri(itemMap.get(id)?.imageUrl);
       if (uri) uris.push(uri);
       if (uris.length >= 4) return uris;
     }
     for (const id of board.outfitIds) {
-      const uri = resolveImageUri(outfits.find((x) => x.id === id)?.aiGeneratedImageUrl);
+      const uri = resolveImageUri(outfitMap.get(id)?.aiGeneratedImageUrl);
       if (uri) uris.push(uri);
       if (uris.length >= 4) return uris;
     }
     return uris;
-  }, [board.itemIds, board.outfitIds, items, outfits]);
+  }, [board.itemIds, board.outfitIds, itemMap, outfitMap]);
 
   // Brief fallback while items/outfits hydrate (or dev setups without local
   // image data): lean on the server-baked composite so the tile isn't empty.
@@ -140,7 +140,7 @@ export function BoardCard({ board, width, onPress }: Props) {
       </Text>
     </PressableScale>
   );
-}
+});
 
 const styles = StyleSheet.create({
   cover: {

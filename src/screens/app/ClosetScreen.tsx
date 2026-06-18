@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -99,6 +99,9 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const { data: outfits = [] } = useOutfits();
   const { data: events = [] } = useEvents();
   const { data: boards = [] } = useBoards();
+
+  const itemMap = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
+  const outfitMap = useMemo(() => new Map(outfits.map((o) => [o.id, o])), [outfits]);
   const createBoard = useCreateBoard();
 
   // SaveToBoardSheet target for the bulk "Add to Board" action.
@@ -824,6 +827,8 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
               <View style={{ paddingHorizontal: COL_GAP / 2, marginBottom: spacing.lg }}>
                 <BoardCard
                   board={item}
+                  itemMap={itemMap}
+                  outfitMap={outfitMap}
                   width={cardWidth}
                   onPress={() => navigation.navigate('BoardDetail', { boardId: item.id })}
                 />

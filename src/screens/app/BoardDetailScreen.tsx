@@ -68,11 +68,14 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
       id: Math.random().toString(36).substring(7),
       createdAt: new Date().toISOString(),
     };
+    const existingFinds = items
+      .filter((it): it is Extract<BoardFeedItem, { kind: 'storeFind' }> => it.kind === 'storeFind')
+      .map((it) => it.storeFind);
     updateBoard({
       id: boardId,
-      storeFinds: [newFind, ...(board?.storeFinds ?? [])]
+      storeFinds: [newFind, ...existingFinds],
     });
-  }, [boardId, board?.storeFinds, updateBoard]);
+  }, [boardId, items, updateBoard]);
 
   const handleRename = useCallback(() => {
     if (Platform.OS === 'ios') {
