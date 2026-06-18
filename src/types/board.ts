@@ -17,6 +17,7 @@ export type Board = {
   outfitIds: number[];
   wishlistIds: string[];
   storeFindIds?: string[];
+  storeFinds?: import('./storeFind').StoreFind[];
   createdAt: string;
 };
 

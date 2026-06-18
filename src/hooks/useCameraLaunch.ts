@@ -6,6 +6,8 @@ import { compressImageToDataUrl } from '../lib/compressImage';
 export type CapturedImage = {
   uri: string;
   dataUrl: string;
+  /** Raw EXIF data from the image, present when captureExif option is true. */
+  exif?: Record<string, unknown> | null;
 };
 
 type Options = {
@@ -15,6 +17,8 @@ type Options = {
   allowsEditing?: boolean;
   /** JPEG compress quality 0–1 (default: 0.75) */
   compress?: number;
+  /** Include raw EXIF metadata in the returned image (e.g. for GPS extraction). */
+  captureExif?: boolean;
 };
 
 /**
@@ -27,7 +31,7 @@ type Options = {
 export function useCameraLaunch() {
   const launchCamera = useCallback(
     async (options: Options = {}): Promise<CapturedImage | null> => {
-      const { maxDim = 1600, allowsEditing = false, compress } = options;
+      const { maxDim = 1600, allowsEditing = false, compress, captureExif = false } = options;
 
       // Check permission status first
       const { status } = await ImagePicker.getCameraPermissionsAsync();
@@ -49,6 +53,7 @@ export function useCameraLaunch() {
         mediaTypes: ['images'],
         quality: 1,
         allowsEditing,
+        exif: captureExif,
       });
 
       if (result.canceled || !result.assets[0]) return null;
@@ -60,7 +65,10 @@ export function useCameraLaunch() {
           maxDim,
           compress,
         );
-        return compressed;
+        return {
+          ...compressed,
+          exif: captureExif ? (asset.exif as Record<string, unknown> | null) : undefined,
+        };
       } catch {
         return null;
       }
@@ -78,7 +86,7 @@ export function useCameraLaunch() {
 export function useLibraryLaunch() {
   const launchLibrary = useCallback(
     async (options: Options = {}): Promise<CapturedImage | null> => {
-      const { maxDim = 1600, allowsEditing = false, compress } = options;
+      const { maxDim = 1600, allowsEditing = false, compress, captureExif = false } = options;
 
       // Request photo library permission if not already granted
       const { status } = await ImagePicker.getMediaLibraryPermissionsAsync();
@@ -98,6 +106,7 @@ export function useLibraryLaunch() {
         mediaTypes: ['images'],
         quality: 1,
         allowsEditing,
+        exif: captureExif,
       });
 
       if (result.canceled || !result.assets[0]) return null;
@@ -109,7 +118,10 @@ export function useLibraryLaunch() {
           maxDim,
           compress,
         );
-        return compressed;
+        return {
+          ...compressed,
+          exif: captureExif ? (asset.exif as Record<string, unknown> | null) : undefined,
+        };
       } catch {
         return null;
       }

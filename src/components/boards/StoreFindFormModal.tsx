@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -48,13 +48,16 @@ async function persistPhoto(cacheUri: string): Promise<string> {
   }
 }
 
+const SIZE_PRESETS = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'OS'] as const;
+
 type Props = {
   visible: boolean;
   onClose: () => void;
-  onSave: (data: Omit<StoreFind, 'id' | 'createdAt'>) => void;
+  onSave: (data: Omit<StoreFind, 'id' | 'createdAt'>) => Promise<void>;
+  initialValues?: StoreFind;
 };
 
-export function StoreFindFormModal({ visible, onClose, onSave }: Props) {
+export function StoreFindFormModal({ visible, onClose, onSave, initialValues }: Props) {
   const [imageUris, setImageUris] = useState<string[]>([]);
   const [description, setDescription] = useState('');
   const [store, setStore] = useState('');
@@ -65,6 +68,41 @@ export function StoreFindFormModal({ visible, onClose, onSave }: Props) {
   const [notes, setNotes] = useState('');
   const [location, setLocation] = useState<string | null>(null);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Populate form when opened in edit mode; reset when opened in create mode.
+  useEffect(() => {
+    if (!visible) return;
+    if (!initialValues) {
+      setImageUris([]);
+      setDescription('');
+      setStore('');
+      setBrand('');
+      setPriceStr('');
+      setSizePreset('');
+      setCustomSize('');
+      setNotes('');
+      setLocation(null);
+      return;
+    }
+    const size = initialValues.size ?? '';
+    const isPreset = (SIZE_PRESETS as readonly string[]).includes(size);
+    setImageUris(
+      initialValues.imageUrls?.length
+        ? initialValues.imageUrls
+        : initialValues.imageUrl
+        ? [initialValues.imageUrl]
+        : [],
+    );
+    setDescription(initialValues.description ?? '');
+    setStore(initialValues.store ?? '');
+    setBrand(initialValues.brand ?? '');
+    setPriceStr(initialValues.price != null ? String(initialValues.price) : '');
+    setSizePreset(isPreset ? size : size ? 'Custom' : '');
+    setCustomSize(isPreset || !size ? '' : size);
+    setNotes(initialValues.notes ?? '');
+    setLocation(initialValues.location ?? null);
+  }, [visible, initialValues]);
 
   const brandSuggestions = useBrandSuggestions();
   const launchCamera = useCameraLaunch();
@@ -127,32 +165,38 @@ export function StoreFindFormModal({ visible, onClose, onSave }: Props) {
     }
   }, []);
 
-  const handleSave = () => {
-    const price = parseFloat(priceStr.replace(/[^0-9.]/g, ''));
-    const size = sizePreset === 'Custom' ? customSize.trim() : sizePreset;
+  const handleSave = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const price = parseFloat(priceStr.replace(/[^0-9.]/g, ''));
+      const size = sizePreset === 'Custom' ? customSize.trim() : sizePreset;
 
-    onSave({
-      imageUrl: imageUris[0] ?? null,
-      imageUrls: imageUris,
-      location,
-      description: description.trim() || null,
-      store: store.trim() || null,
-      brand: brand.trim() || null,
-      price: isNaN(price) ? null : price,
-      size: size || null,
-      notes: notes.trim() || null,
-    });
+      await onSave({
+        imageUrl: imageUris[0] ?? null,
+        imageUrls: imageUris,
+        location,
+        description: description.trim() || null,
+        store: store.trim() || null,
+        brand: brand.trim() || null,
+        price: isNaN(price) ? null : price,
+        size: size || null,
+        notes: notes.trim() || null,
+      });
 
-    setImageUris([]);
-    setDescription('');
-    setStore('');
-    setBrand('');
-    setPriceStr('');
-    setSizePreset('');
-    setCustomSize('');
-    setNotes('');
-    setLocation(null);
-    onClose();
+      setImageUris([]);
+      setDescription('');
+      setStore('');
+      setBrand('');
+      setPriceStr('');
+      setSizePreset('');
+      setCustomSize('');
+      setNotes('');
+      setLocation(null);
+      onClose();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -162,9 +206,11 @@ export function StoreFindFormModal({ visible, onClose, onSave }: Props) {
           <TouchableOpacity onPress={onClose} style={styles.headerBtn}>
             <Text style={styles.headerBtnText}>Cancel</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>Store Find</Text>
-          <TouchableOpacity onPress={handleSave} style={styles.headerBtn}>
-            <Text style={[styles.headerBtnText, styles.saveText]}>Save</Text>
+          <Text style={styles.title}>{initialValues ? 'Edit Store Find' : 'Store Find'}</Text>
+          <TouchableOpacity onPress={handleSave} style={styles.headerBtn} disabled={isSubmitting}>
+            <Text style={[styles.headerBtnText, styles.saveText, isSubmitting && { opacity: 0.4 }]}>
+              {isSubmitting ? 'Saving…' : 'Save'}
+            </Text>
           </TouchableOpacity>
         </View>
 

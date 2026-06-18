@@ -178,6 +178,7 @@ export type Item = {
   warmthRating: number | null;
   purchasePrice: number | null;
   purchaseDate: string | null;
+  purchaseLocation?: string | null;
   wearCount: number;
   lastWornAt: string | null;
   isFavorite: boolean;

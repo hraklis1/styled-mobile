@@ -45,6 +45,7 @@ import type { SizeProfile } from '../../lib/sizes';
 import { CropAdjustModal, type Bbox } from './CropAdjustModal';
 import { cropImage } from '../../lib/cropImage';
 import { uploadImageToR2 } from '../../lib/uploadImage';
+import { capturePhotoLocation } from '../../lib/photoLocation';
 import { AnimatedProgressBar } from '../primitives/AnimatedProgressBar';
 import { track } from '../../lib/analytics';
 import * as Haptics from 'expo-haptics';
@@ -83,6 +84,7 @@ type EditableItem = {
   sizeProfile: SizeProfile | null;
   bbox: Bbox | null;
   sourceImage: string | null;
+  purchaseLocation: string | null;
 };
 
 type PreExtractItemData = {
@@ -128,6 +130,9 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
   const [extractionProgress, setExtractionProgress] = useState({ current: 0, total: 0 });
   const [extractedThumbs, setExtractedThumbs] = useState<string[]>([]);
   const sessionRef = useRef(0);
+  // Location derived from photo EXIF GPS (or device position as fallback).
+  // Captured in parallel with scanning; applied to every item saved in the session.
+  const photoLocationRef = useRef<string | null>(null);
   const [preExtractItems, setPreExtractItems] = useState<PreExtractItemData[]>([]);
   const [cropAdjustTarget, setCropAdjustTarget] = useState<{
     tempId: string;
@@ -207,10 +212,14 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     (async () => {
       const captured =
         autoLaunch === 'camera'
-          ? await launchCamera({ maxDim: 1600, compress: 0.85 })
-          : await launchLibrary({ maxDim: 1600, compress: 0.85 });
+          ? await launchCamera({ maxDim: 1600, compress: 0.85, captureExif: true })
+          : await launchLibrary({ maxDim: 1600, compress: 0.85, captureExif: true });
       if (!active) return;
       if (!captured) { onClose(); return; }
+      photoLocationRef.current = null;
+      capturePhotoLocation(captured.exif, autoLaunch === 'camera').then((loc) => {
+        photoLocationRef.current = loc;
+      });
       setImageDataUrl(captured.dataUrl);
       setPhase('scanning');
       bottomSheetRef.current?.present();
@@ -301,6 +310,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
               colorPalette: item.colorPalette.length > 0 ? item.colorPalette : undefined,
               imageUrl,
               sizeProfile: item.sizeProfile ?? null,
+              purchaseLocation: item.purchaseLocation ?? null,
               needsDetails,
             },
             { onSuccess: resolve, onError: reject },
@@ -399,6 +409,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
         sizeProfile: null,
         bbox,
         sourceImage: fullImageDataUrl,
+        purchaseLocation: photoLocationRef.current,
       });
     }
 
@@ -489,11 +500,18 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     // Both hooks handle permission checks, denial alerts, and compression internally
     const captured =
       source === 'camera'
-        ? await launchCamera({ maxDim: 1600, compress: 0.85 })
-        : await launchLibrary({ maxDim: 1600, compress: 0.85 });
+        ? await launchCamera({ maxDim: 1600, compress: 0.85, captureExif: true })
+        : await launchLibrary({ maxDim: 1600, compress: 0.85, captureExif: true });
 
     if (!captured) return;
     track('item_scan_started', { source });
+
+    // Capture location in parallel — EXIF GPS preferred, current position as
+    // fallback for camera shots (where the user is physically at the location).
+    photoLocationRef.current = null;
+    capturePhotoLocation(captured.exif, source === 'camera').then((loc) => {
+      photoLocationRef.current = loc;
+    });
 
     setImageDataUrl(captured.dataUrl);
     // Pass the local file URI so runPoseScan can downscale without re-encoding the data URL

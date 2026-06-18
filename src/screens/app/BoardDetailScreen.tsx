@@ -20,6 +20,8 @@ import { PressableScale } from '../../components/primitives/PressableScale';
 import { useBoards, useBoardFeed, flattenBoardFeed, useDeleteBoard, useUpdateBoard } from '../../hooks/useBoards';
 import { useStoreFindSync } from '../../hooks/useStoreFindSync';
 import { enqueueStoreFind } from '../../lib/storeFindQueue';
+import { uploadLocalImages } from '../../lib/uploadLocalImages';
+import { useAuth } from '../../contexts/AuthContext';
 import type { BoardFeedItem } from '../../types/board';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { BoardDetailScreenProps } from '../../navigation/types';
@@ -30,6 +32,7 @@ import { BoardOutfitPickerModal } from '../../components/boards/BoardOutfitPicke
 import { BoardWishlistPickerModal } from '../../components/boards/BoardWishlistPickerModal';
 import { StoreFindFormModal } from '../../components/boards/StoreFindFormModal';
 import { BoardStoreFindCard } from '../../components/boards/BoardStoreFindCard';
+import { StoreFindDetailSheet } from '../../components/boards/StoreFindDetailSheet';
 import type { StoreFind } from '../../types/storeFind';
 import { useLibraryLaunch } from '../../hooks/useCameraLaunch';
 
@@ -43,6 +46,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
   const { width } = useWindowDimensions();
   const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / 2;
 
+  const { user } = useAuth();
   const { data: boards = [] } = useBoards();
   const board = boards.find((b) => b.id === boardId);
 
@@ -62,6 +66,65 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
   const [outfitPickerVisible, setOutfitPickerVisible] = useState(false);
   const [wishlistPickerVisible, setWishlistPickerVisible] = useState(false);
   const [storeFindFormVisible, setStoreFindFormVisible] = useState(false);
+  const [detailStoreFind, setDetailStoreFind] = useState<StoreFind | null>(null);
+  const [editingStoreFind, setEditingStoreFind] = useState<StoreFind | null>(null);
+
+  // ── Multiselect ─────────────────────────────────────────────────────────────
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const isMultiselect = selectedKeys.size > 0;
+
+  const enterMultiselect = useCallback((key: string) => {
+    setSelectedKeys(new Set([key]));
+  }, []);
+
+  const toggleSelectedKey = useCallback((key: string) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const exitMultiselect = useCallback(() => {
+    setSelectedKeys(new Set());
+  }, []);
+
+  const handleDeleteSelected = useCallback(() => {
+    if (!board || selectedKeys.size === 0) return;
+    const count = selectedKeys.size;
+    Alert.alert(
+      'Remove from board',
+      `Remove ${count} ${count === 1 ? 'item' : 'items'} from this board? They will stay in your closet.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            const itemIds = new Set<number>();
+            const outfitIds = new Set<number>();
+            const wishlistIds = new Set<string>();
+            const storeFindIds = new Set<string>();
+            for (const key of selectedKeys) {
+              if (key.startsWith('sf_')) storeFindIds.add(key.slice(3));
+              else if (key.startsWith('i')) itemIds.add(Number(key.slice(1)));
+              else if (key.startsWith('o')) outfitIds.add(Number(key.slice(1)));
+              else if (key.startsWith('w')) wishlistIds.add(key.slice(1));
+            }
+            updateBoard({
+              id: boardId,
+              itemIds: board.itemIds.filter((id) => !itemIds.has(id)),
+              outfitIds: board.outfitIds.filter((id) => !outfitIds.has(id)),
+              wishlistIds: board.wishlistIds.filter((id) => !wishlistIds.has(id)),
+              storeFinds: (board.storeFinds ?? []).filter((sf) => !storeFindIds.has(sf.id)),
+            });
+            setSelectedKeys(new Set());
+          },
+        },
+      ],
+    );
+  }, [board, boardId, selectedKeys, updateBoard]);
 
   const launchLibrary = useLibraryLaunch();
 
@@ -77,6 +140,25 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
     await enqueueStoreFind(boardId, newFind);
     syncStoreFinds();
   }, [boardId, syncStoreFinds]);
+
+  const handleEditSaveStoreFind = useCallback(async (data: Omit<StoreFind, 'id' | 'createdAt'>) => {
+    if (!editingStoreFind) return;
+    let updatedFind: StoreFind = { ...editingStoreFind, ...data };
+
+    // Upload any newly-added local photos inline — edits bypass the queue.
+    const hasLocal = (updatedFind.imageUrls ?? []).some((u) => u.startsWith('file://'));
+    if (hasLocal && user?.id) {
+      updatedFind = await uploadLocalImages(updatedFind, user.id);
+    }
+
+    const current = board?.storeFinds ?? [];
+    const exists = current.some((sf) => sf.id === editingStoreFind.id);
+    const updated = exists
+      ? current.map((sf) => (sf.id === editingStoreFind.id ? updatedFind : sf))
+      : [...current, updatedFind];
+
+    updateBoard({ id: boardId, storeFinds: updated });
+  }, [editingStoreFind, board, boardId, updateBoard, user?.id]);
 
   const handleRename = useCallback(() => {
     if (Platform.OS === 'ios') {
@@ -127,6 +209,17 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
 
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<BoardFeedItem>) => {
+      const key = item.key;
+      const isSelected = selectedKeys.has(key);
+
+      const selectionOverlay = isSelected ? (
+        <View style={styles.selectionOverlay} pointerEvents="none">
+          <View style={styles.selectionCheck}>
+            <Ionicons name="checkmark" size={16} color={colors.primaryForeground} />
+          </View>
+        </View>
+      ) : null;
+
       if (item.kind === 'item') {
         return (
           <View style={styles.cell}>
@@ -134,38 +227,51 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
               item={item.item}
               aspectRatio={CARD_ASPECT_RATIO}
               cardWidth={cardWidth}
-              onPress={() => navigation.navigate('ItemDetail', { itemId: item.item.id })}
+              onPress={
+                isMultiselect
+                  ? () => toggleSelectedKey(key)
+                  : () => navigation.navigate('ItemDetail', { itemId: item.item.id })
+              }
+              onLongPress={() => enterMultiselect(key)}
             />
+            {selectionOverlay}
           </View>
         );
       }
       if (item.kind === 'outfit') {
         return (
           <View style={styles.cell}>
-            <PressableScale onPress={() => navigation.navigate('OutfitDetail', { outfitId: item.outfit.id })}>
+            <PressableScale
+              onPress={
+                isMultiselect
+                  ? () => toggleSelectedKey(key)
+                  : () => navigation.navigate('OutfitDetail', { outfitId: item.outfit.id })
+              }
+              onLongPress={() => enterMultiselect(key)}
+            >
               <OutfitCollage outfit={item.outfit} size={cardWidth} />
               <Text style={styles.outfitName} numberOfLines={1}>
                 {item.outfit.name}
               </Text>
             </PressableScale>
+            {selectionOverlay}
           </View>
         );
       }
       if (item.kind === 'storeFind') {
         return (
           <View style={styles.cell}>
-            <PressableScale onPress={() => {
-              const sf = item.storeFind;
-              const details = [
-                sf.store || sf.brand ? `Store/Brand: ${sf.store || sf.brand}` : null,
-                sf.price ? `Price: $${sf.price.toFixed(2)}` : null,
-                sf.size ? `Size: ${sf.size}` : null,
-                sf.notes ? `Notes: ${sf.notes}` : null,
-              ].filter(Boolean).join('\n');
-              Alert.alert('Store Find', sf.description ? `${sf.description}\n\n${details}` : details || 'No details added.');
-            }}>
+            <PressableScale
+              onPress={
+                isMultiselect
+                  ? () => toggleSelectedKey(key)
+                  : () => setDetailStoreFind(item.storeFind)
+              }
+              onLongPress={() => enterMultiselect(key)}
+            >
               <BoardStoreFindCard storeFind={item.storeFind} cardWidth={cardWidth} />
             </PressableScale>
+            {selectionOverlay}
           </View>
         );
       }
@@ -173,17 +279,23 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
       const o = item.entry.outfit;
       return (
         <View style={styles.cell}>
-          <View style={[styles.wishlistTile, { width: cardWidth, height: cardWidth }]}>
-            <Ionicons name="bag-handle-outline" size={26} color={colors.primary} />
-            <Text style={styles.wishlistLabel} numberOfLines={1}>
-              {o?.city ? `Shop · ${o.city}` : 'Shop outfit'}
-            </Text>
-            {!!o?.totalBudget && <Text style={styles.wishlistBudget}>{o.totalBudget}</Text>}
-          </View>
+          <PressableScale
+            onLongPress={() => enterMultiselect(key)}
+            onPress={isMultiselect ? () => toggleSelectedKey(key) : undefined}
+          >
+            <View style={[styles.wishlistTile, { width: cardWidth, height: cardWidth }]}>
+              <Ionicons name="bag-handle-outline" size={26} color={colors.primary} />
+              <Text style={styles.wishlistLabel} numberOfLines={1}>
+                {o?.city ? `Shop · ${o.city}` : 'Shop outfit'}
+              </Text>
+              {!!o?.totalBudget && <Text style={styles.wishlistBudget}>{o.totalBudget}</Text>}
+            </View>
+          </PressableScale>
+          {selectionOverlay}
         </View>
       );
     },
-    [cardWidth, navigation],
+    [cardWidth, navigation, isMultiselect, selectedKeys, enterMultiselect, toggleSelectedKey],
   );
 
   const showInitialLoading = feed.isLoading && items.length === 0;
@@ -191,25 +303,50 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()} accessibilityLabel="Back">
-          <Ionicons name="chevron-back" size={24} color={colors.foreground} />
-        </TouchableOpacity>
+        {isMultiselect ? (
+          <TouchableOpacity style={styles.headerBtn} onPress={exitMultiselect} accessibilityLabel="Cancel selection">
+            <Text style={styles.cancelText}>Cancel</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()} accessibilityLabel="Back">
+            <Ionicons name="chevron-back" size={24} color={colors.foreground} />
+          </TouchableOpacity>
+        )}
         <View style={styles.headerTitleWrap}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {board?.name ?? 'Board'}
-          </Text>
-          {pendingCount > 0 && (
-            <View style={styles.syncDot} accessibilityLabel={`${pendingCount} pending sync`} />
+          {isMultiselect ? (
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {selectedKeys.size} selected
+            </Text>
+          ) : (
+            <>
+              <Text style={styles.headerTitle} numberOfLines={1}>
+                {board?.name ?? 'Board'}
+              </Text>
+              {pendingCount > 0 && (
+                <View style={styles.syncDot} accessibilityLabel={`${pendingCount} pending sync`} />
+              )}
+            </>
           )}
         </View>
-        <View style={{ flexDirection: 'row' }}>
-          <TouchableOpacity style={styles.headerBtn} onPress={() => setMenuVisible(true)} accessibilityLabel="Add to board">
-            <Ionicons name="add" size={26} color={colors.foreground} />
+        {isMultiselect ? (
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={handleDeleteSelected}
+            disabled={selectedKeys.size === 0}
+            accessibilityLabel="Remove selected"
+          >
+            <Ionicons name="trash-outline" size={22} color={colors.destructive} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.headerBtn} onPress={handleOverflow} accessibilityLabel="Board options">
-            <Ionicons name="ellipsis-horizontal" size={22} color={colors.foreground} />
-          </TouchableOpacity>
-        </View>
+        ) : (
+          <View style={{ flexDirection: 'row' }}>
+            <TouchableOpacity style={styles.headerBtn} onPress={() => setMenuVisible(true)} accessibilityLabel="Add to board">
+              <Ionicons name="add" size={26} color={colors.foreground} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.headerBtn} onPress={handleOverflow} accessibilityLabel="Board options">
+              <Ionicons name="ellipsis-horizontal" size={22} color={colors.foreground} />
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {showInitialLoading ? (
@@ -288,9 +425,22 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
         onClose={() => setWishlistPickerVisible(false)}
       />
       <StoreFindFormModal
-        visible={storeFindFormVisible}
-        onClose={() => setStoreFindFormVisible(false)}
-        onSave={handleSaveStoreFind}
+        visible={storeFindFormVisible || editingStoreFind !== null}
+        onClose={() => {
+          setStoreFindFormVisible(false);
+          setEditingStoreFind(null);
+        }}
+        onSave={editingStoreFind ? handleEditSaveStoreFind : handleSaveStoreFind}
+        initialValues={editingStoreFind ?? undefined}
+      />
+      <StoreFindDetailSheet
+        storeFind={detailStoreFind}
+        onClose={() => setDetailStoreFind(null)}
+        onEdit={() => {
+          if (!detailStoreFind) return;
+          setEditingStoreFind(detailStoreFind);
+          setDetailStoreFind(null);
+        }}
       />
     </View>
   );
@@ -359,6 +509,27 @@ const styles = StyleSheet.create({
   wishlistBudget: {
     fontSize: typography.size.xs,
     color: colors.mutedForeground,
+  },
+  cancelText: {
+    color: colors.primary,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.medium,
+  },
+  selectionOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: `${colors.primary}40`,
+    borderRadius: radii.lg,
+    alignItems: 'flex-end',
+    justifyContent: 'flex-start',
+    padding: spacing.xs,
+  },
+  selectionCheck: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   centered: {
     flex: 1,

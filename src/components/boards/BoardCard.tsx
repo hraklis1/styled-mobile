@@ -34,7 +34,7 @@ function Cell({ uri, recyclingKey }: { uri: string; recyclingKey: string }) {
 }
 
 export const BoardCard = React.memo(function BoardCard({ board, itemMap, outfitMap, width, onPress }: Props) {
-  const count = board.itemIds.length + board.outfitIds.length + board.wishlistIds.length;
+  const count = board.itemIds.length + board.outfitIds.length + board.wishlistIds.length + (board.storeFinds?.length ?? 0);
 
   // Collect up to 4 real cover images, items-first then outfits. Wishlist entries
   // carry no image (only search queries), so they contribute to `count` but not
@@ -51,8 +51,14 @@ export const BoardCard = React.memo(function BoardCard({ board, itemMap, outfitM
       if (uri) uris.push(uri);
       if (uris.length >= 4) return uris;
     }
+    for (const sf of board.storeFinds ?? []) {
+      const raw = sf.imageUrls?.[0] ?? sf.imageUrl;
+      const uri = resolveImageUri(raw ?? undefined);
+      if (uri) uris.push(uri);
+      if (uris.length >= 4) return uris;
+    }
     return uris;
-  }, [board.itemIds, board.outfitIds, itemMap, outfitMap]);
+  }, [board.itemIds, board.outfitIds, board.storeFinds, itemMap, outfitMap]);
 
   // Brief fallback while items/outfits hydrate (or dev setups without local
   // image data): lean on the server-baked composite so the tile isn't empty.

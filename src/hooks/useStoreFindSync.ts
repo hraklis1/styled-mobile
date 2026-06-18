@@ -3,7 +3,7 @@ import { AppState } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import * as FileSystem from 'expo-file-system/legacy';
 import { api } from '../lib/api';
-import { uploadImageToR2 } from '../lib/uploadImage';
+import { uploadLocalImages } from '../lib/uploadLocalImages';
 import { dequeueAll, removeEntry, StoreFindQueueEntry } from '../lib/storeFindQueue';
 import { useAuth } from '../contexts/AuthContext';
 import { BOARDS_QUERY_KEY } from './useBoards';
@@ -11,30 +11,6 @@ import type { StoreFind } from '../types/storeFind';
 
 type BoardFeedRef = { kind: string; data: unknown };
 type BoardFeedPage = { items: BoardFeedRef[]; nextCursor: string | null };
-
-async function uploadLocalImages(find: StoreFind, userId: string): Promise<StoreFind> {
-  if (!find.imageUrls?.length) return find;
-
-  const uploadedUrls = await Promise.all(
-    find.imageUrls.map(async (uri) => {
-      if (!uri.startsWith('file://')) return uri;
-      try {
-        const base64 = await FileSystem.readAsStringAsync(uri, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        return await uploadImageToR2(`data:image/jpeg;base64,${base64}`, userId);
-      } catch {
-        return uri; // keep local URI on failure; will retry next sync
-      }
-    }),
-  );
-
-  return {
-    ...find,
-    imageUrls: uploadedUrls,
-    imageUrl: uploadedUrls[0] ?? find.imageUrl,
-  };
-}
 
 async function fetchRemoteStoreFinds(boardId: number): Promise<StoreFind[]> {
   const res = await api.get<BoardFeedPage>(`/api/boards/${boardId}/feed`, {
@@ -93,6 +69,7 @@ export function useStoreFindSync() {
 
         const remoteIds = new Set(remoteFinds.map((sf) => sf.id));
         const toAppend: StoreFind[] = [];
+        const pendingEntries: StoreFindQueueEntry[] = [];
 
         for (const entry of entries) {
           if (remoteIds.has(entry.find.id)) {
@@ -102,7 +79,13 @@ export function useStoreFindSync() {
             continue;
           }
           const uploaded = await uploadLocalImages(entry.find, user.id);
+
+          // If any image still has a file:// URI the upload failed — skip this
+          // entry and leave it in the queue so the next sync can retry.
+          if ((uploaded.imageUrls ?? []).some((u) => u.startsWith('file://'))) continue;
+
           toAppend.push(uploaded);
+          pendingEntries.push(entry);
         }
 
         if (toAppend.length === 0) continue;
@@ -113,9 +96,10 @@ export function useStoreFindSync() {
           await api.patch(`/api/boards/${boardId}`, { storeFinds: merged });
           qc.invalidateQueries({ queryKey: BOARDS_QUERY_KEY });
 
-          for (const find of toAppend) {
-            await removeEntry(find.id);
-            await deleteLocalImages(find);
+          // Delete the ORIGINAL local files (not the uploaded R2 URLs).
+          for (let i = 0; i < toAppend.length; i++) {
+            await removeEntry(toAppend[i].id);
+            await deleteLocalImages(pendingEntries[i].find);
           }
         } catch {
           // Leave in queue for next retry

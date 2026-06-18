@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, Image } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { StoreFind } from '../../types/storeFind';
@@ -15,7 +16,14 @@ export function BoardStoreFindCard({ storeFind, cardWidth }: Props) {
   return (
     <View style={[styles.root, { width: cardWidth, height: cardWidth * 1.25 }]}>
       {primaryImage ? (
-        <Image source={{ uri: primaryImage }} style={styles.image} />
+        <Image
+          source={{ uri: primaryImage }}
+          style={styles.image}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          recyclingKey={storeFind.id}
+          transition={150}
+        />
       ) : (
         <View style={[styles.image, styles.placeholder]}>
           <Ionicons name="camera-outline" size={32} color={colors.mutedForeground} />

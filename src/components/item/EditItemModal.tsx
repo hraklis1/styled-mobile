@@ -151,6 +151,7 @@ export function EditItemModal({
   const [editWarmthRating, setEditWarmthRating] = useState<number | null>(null);
   const [editPurchasePrice, setEditPurchasePrice] = useState('');
   const [editPurchaseDate, setEditPurchaseDate] = useState('');
+  const [editPurchaseLocation, setEditPurchaseLocation] = useState('');
   const [editPattern, setEditPattern] = useState('');
   const [editFit, setEditFit] = useState('');
   const [editNeckline, setEditNeckline] = useState('');
@@ -182,6 +183,7 @@ export function EditItemModal({
       setEditWarmthRating(null);
       setEditPurchasePrice('');
       setEditPurchaseDate('');
+      setEditPurchaseLocation('');
       setEditPattern(scanData.pattern ?? '');
       setEditFit(scanData.fit ?? '');
       setEditNeckline(scanData.neckline ?? '');
@@ -210,6 +212,7 @@ export function EditItemModal({
       setEditWarmthRating(item.warmthRating ?? null);
       setEditPurchasePrice(item.purchasePrice != null ? String(item.purchasePrice) : '');
       setEditPurchaseDate((item as any).purchaseDate ?? '');
+      setEditPurchaseLocation(item.purchaseLocation ?? '');
       setEditPattern(item.pattern ?? '');
       setEditFit(item.fit ?? '');
       setEditNeckline(item.neckline ?? '');
@@ -301,6 +304,7 @@ export function EditItemModal({
           warmthRating: editWarmthRating,
           purchasePrice: parsedPrice && !isNaN(parsedPrice) ? parsedPrice : null,
           purchaseDate: editPurchaseDate.trim() || null,
+          purchaseLocation: editPurchaseLocation.trim() || null,
           pattern: editPattern || null,
           fit: editFit.trim() || null,
           neckline: necklineValue,
@@ -337,6 +341,7 @@ export function EditItemModal({
           warmthRating: editWarmthRating,
           purchasePrice: parsedPrice && !isNaN(parsedPrice) ? parsedPrice : null,
           purchaseDate: editPurchaseDate.trim() || null,
+          purchaseLocation: editPurchaseLocation.trim() || null,
           pattern: editPattern || null,
           fit: editFit.trim() || null,
           neckline: necklineValue,
@@ -646,6 +651,14 @@ export function EditItemModal({
                 onChangeText={setEditPurchaseDate}
                 placeholder="YYYY-MM-DD"
                 maxLength={10}
+              />
+              <View style={styles.spacer} />
+              <EditLabel>Purchase Location</EditLabel>
+              <EditInput
+                value={editPurchaseLocation}
+                onChangeText={setEditPurchaseLocation}
+                placeholder="e.g. New York, Paris"
+                maxLength={100}
               />
             </EditSection>
           )}

@@ -52,6 +52,7 @@ export type CreateItemInput = {
   warmthRating?: number | null;
   purchasePrice?: number | null;
   purchaseDate?: string | null;
+  purchaseLocation?: string | null;
   formalityStyles?: string[];
   notableDetails?: string[];
   colorPalette?: string[];

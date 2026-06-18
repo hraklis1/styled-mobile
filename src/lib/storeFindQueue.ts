@@ -24,6 +24,7 @@ async function writeQueue(queue: StoreFindQueueEntry[]): Promise<void> {
 
 export async function enqueueStoreFind(boardId: number, find: StoreFind): Promise<void> {
   const queue = await readQueue();
+  if (queue.some((e) => e.find.id === find.id)) return;
   queue.push({ boardId, find, queuedAt: new Date().toISOString() });
   await writeQueue(queue);
 }

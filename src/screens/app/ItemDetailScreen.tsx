@@ -521,6 +521,12 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
                 <Text style={styles.detailValue}>${(viewItem.purchasePrice / viewItem.wearCount).toFixed(2)}</Text>
               </View>
             )}
+            {!!viewItem.purchaseLocation && (
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Purchased in</Text>
+                <Text style={styles.detailValue}>{viewItem.purchaseLocation}</Text>
+              </View>
+            )}
             <View style={styles.detailItem}>
               <Text style={styles.detailLabel}>Times worn</Text>
               <Text style={styles.detailValue}>{viewItem.wearCount}</Text>
