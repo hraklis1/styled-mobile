@@ -16,6 +16,7 @@ export type Board = {
   itemIds: number[];
   outfitIds: number[];
   wishlistIds: string[];
+  storeFindIds?: string[];
   createdAt: string;
 };
 
@@ -26,4 +27,5 @@ export type Board = {
 export type BoardFeedItem =
   | { kind: 'item'; key: string; item: Item }
   | { kind: 'outfit'; key: string; outfit: Outfit }
-  | { kind: 'wishlist'; key: string; entry: WishlistEntry };
+  | { kind: 'wishlist'; key: string; entry: WishlistEntry }
+  | { kind: 'storeFind'; key: string; storeFind: import('./storeFind').StoreFind };

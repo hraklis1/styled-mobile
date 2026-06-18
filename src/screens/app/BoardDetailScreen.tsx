@@ -25,6 +25,9 @@ import { BoardAddMenuSheet } from '../../components/boards/BoardAddMenuSheet';
 import { BoardItemPickerModal } from '../../components/boards/BoardItemPickerModal';
 import { BoardOutfitPickerModal } from '../../components/boards/BoardOutfitPickerModal';
 import { BoardWishlistPickerModal } from '../../components/boards/BoardWishlistPickerModal';
+import { StoreFindFormModal } from '../../components/boards/StoreFindFormModal';
+import { BoardStoreFindCard } from '../../components/boards/BoardStoreFindCard';
+import type { StoreFind } from '../../types/storeFind';
 
 const SIDE_PAD = spacing.lg;
 const COL_GAP = spacing.sm;
@@ -40,7 +43,18 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
   const board = boards.find((b) => b.id === boardId);
 
   const feed = useBoardFeed(boardId);
-  const items = useMemo(() => flattenBoardFeed(feed.data?.pages), [feed.data?.pages]);
+
+  const [localStoreFinds, setLocalStoreFinds] = useState<StoreFind[]>([]);
+
+  const items = useMemo(() => {
+    const apiItems = flattenBoardFeed(feed.data?.pages);
+    const localItems: BoardFeedItem[] = localStoreFinds.map((sf) => ({
+      kind: 'storeFind',
+      key: `sf_${sf.id}`,
+      storeFind: sf,
+    }));
+    return [...localItems, ...apiItems];
+  }, [feed.data?.pages, localStoreFinds]);
 
   const { mutate: deleteBoard } = useDeleteBoard();
   const { mutate: updateBoard } = useUpdateBoard();
@@ -49,6 +63,16 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
   const [itemPickerVisible, setItemPickerVisible] = useState(false);
   const [outfitPickerVisible, setOutfitPickerVisible] = useState(false);
   const [wishlistPickerVisible, setWishlistPickerVisible] = useState(false);
+  const [storeFindFormVisible, setStoreFindFormVisible] = useState(false);
+
+  const handleSaveStoreFind = useCallback((data: Omit<StoreFind, 'id' | 'createdAt'>) => {
+    const newFind: StoreFind = {
+      ...data,
+      id: Math.random().toString(36).substring(7),
+      createdAt: new Date().toISOString(),
+    };
+    setLocalStoreFinds((prev) => [newFind, ...prev]);
+  }, []);
 
   const handleRename = useCallback(() => {
     if (Platform.OS === 'ios') {
@@ -110,6 +134,13 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
                 {item.outfit.name}
               </Text>
             </PressableScale>
+          </View>
+        );
+      }
+      if (item.kind === 'storeFind') {
+        return (
+          <View style={styles.cell}>
+            <BoardStoreFindCard storeFind={item.storeFind} cardWidth={cardWidth} />
           </View>
         );
       }
@@ -192,13 +223,16 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
         </View>
       )}
 
-      <BoardAddMenuSheet
-        visible={menuVisible}
-        onClose={() => setMenuVisible(false)}
-        onPickItems={() => setItemPickerVisible(true)}
-        onPickOutfits={() => setOutfitPickerVisible(true)}
-        onPickWishlist={() => setWishlistPickerVisible(true)}
-      />
+      {menuVisible && (
+        <BoardAddMenuSheet
+          visible={menuVisible}
+          onClose={() => setMenuVisible(false)}
+          onPickItems={() => setItemPickerVisible(true)}
+          onPickOutfits={() => setOutfitPickerVisible(true)}
+          onPickWishlist={() => setWishlistPickerVisible(true)}
+          onSnapStoreFind={() => setStoreFindFormVisible(true)}
+        />
+      )}
       <BoardItemPickerModal
         board={board ?? null}
         visible={itemPickerVisible}
@@ -213,6 +247,11 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
         board={board ?? null}
         visible={wishlistPickerVisible}
         onClose={() => setWishlistPickerVisible(false)}
+      />
+      <StoreFindFormModal
+        visible={storeFindFormVisible}
+        onClose={() => setStoreFindFormVisible(false)}
+        onSave={handleSaveStoreFind}
       />
     </View>
   );

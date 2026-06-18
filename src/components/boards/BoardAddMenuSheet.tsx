@@ -11,16 +11,16 @@ type Props = {
   onPickItems: () => void;
   onPickOutfits: () => void;
   onPickWishlist: () => void;
+  onSnapStoreFind: () => void;
 };
 
-export function BoardAddMenuSheet({ visible, onClose, onPickItems, onPickOutfits, onPickWishlist }: Props) {
+export function BoardAddMenuSheet({ visible, onClose, onPickItems, onPickOutfits, onPickWishlist, onSnapStoreFind }: Props) {
   const insets = useSafeAreaInsets();
   const ref = useRef<BottomSheetModal>(null);
 
   useEffect(() => {
-    if (visible) ref.current?.present();
-    else ref.current?.dismiss();
-  }, [visible]);
+    ref.current?.present();
+  }, []);
 
   const renderBackdrop = useCallback(
     (props: any) => <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />,
@@ -82,6 +82,21 @@ export function BoardAddMenuSheet({ visible, onClose, onPickItems, onPickOutfits
               <Ionicons name="bag-handle-outline" size={20} color="#956D51" />
             </View>
             <Text style={styles.optionText}>Add from Shop (Wishlist)</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.optionRow} 
+            activeOpacity={0.7} 
+            onPress={() => {
+              onClose();
+              setTimeout(onSnapStoreFind, 300);
+            }}
+          >
+            <View style={[styles.iconBox, { backgroundColor: `${colors.success}15` }]}>
+              <Ionicons name="camera-outline" size={20} color={colors.success} />
+            </View>
+            <Text style={styles.optionText}>Snap Store Find</Text>
             <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
           </TouchableOpacity>
         </View>
