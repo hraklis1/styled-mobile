@@ -9,6 +9,5 @@ export type StoreFind = {
   price: number | null;
   size: string | null;
   notes: string | null;
-  interestLevel: number | null; // e.g. 1-5
   createdAt: string;
 };

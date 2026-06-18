@@ -72,18 +72,11 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
       createdAt: new Date().toISOString(),
     };
 
-    // Persist to queue first — guarantees the find survives a network drop or app kill
+    // Persist to queue first, then sync — the sync hook uploads images to R2
+    // before PATCHing the board, so we never send local file:// URIs to the server.
     await enqueueStoreFind(boardId, newFind);
-
-    const existingFinds = items
-      .filter((it): it is Extract<BoardFeedItem, { kind: 'storeFind' }> => it.kind === 'storeFind')
-      .map((it) => it.storeFind);
-
-    updateBoard(
-      { id: boardId, storeFinds: [newFind, ...existingFinds] },
-      { onSuccess: () => syncStoreFinds() },
-    );
-  }, [boardId, items, updateBoard, syncStoreFinds]);
+    syncStoreFinds();
+  }, [boardId, syncStoreFinds]);
 
   const handleRename = useCallback(() => {
     if (Platform.OS === 'ios') {

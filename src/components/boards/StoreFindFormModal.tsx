@@ -63,7 +63,6 @@ export function StoreFindFormModal({ visible, onClose, onSave }: Props) {
   const [sizePreset, setSizePreset] = useState('');
   const [customSize, setCustomSize] = useState('');
   const [notes, setNotes] = useState('');
-  const [interestLevel, setInterestLevel] = useState(3);
   const [location, setLocation] = useState<string | null>(null);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
 
@@ -142,7 +141,6 @@ export function StoreFindFormModal({ visible, onClose, onSave }: Props) {
       price: isNaN(price) ? null : price,
       size: size || null,
       notes: notes.trim() || null,
-      interestLevel,
     });
 
     setImageUris([]);
@@ -153,7 +151,6 @@ export function StoreFindFormModal({ visible, onClose, onSave }: Props) {
     setSizePreset('');
     setCustomSize('');
     setNotes('');
-    setInterestLevel(3);
     setLocation(null);
     onClose();
   };
@@ -309,23 +306,6 @@ export function StoreFindFormModal({ visible, onClose, onSave }: Props) {
                     autoFocus
                   />
                 )}
-              </View>
-
-              <View style={styles.field}>
-                <Text style={styles.label}>Interest Level (1-5)</Text>
-                <View style={styles.ratingRow}>
-                  {[1, 2, 3, 4, 5].map((level) => (
-                    <TouchableOpacity
-                      key={level}
-                      style={[styles.ratingBtn, interestLevel === level && styles.ratingBtnActive]}
-                      onPress={() => setInterestLevel(level)}
-                    >
-                      <Text style={[styles.ratingText, interestLevel === level && styles.ratingTextActive]}>
-                        {level}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
               </View>
 
               <View style={styles.field}>
@@ -548,31 +528,4 @@ const styles = StyleSheet.create({
     color: colors.primaryForeground,
   },
 
-  // Interest level
-  ratingRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  ratingBtn: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-  },
-  ratingBtnActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  ratingText: {
-    fontSize: typography.size.md,
-    fontWeight: typography.weight.medium,
-    color: colors.foreground,
-  },
-  ratingTextActive: {
-    color: colors.primaryForeground,
-  },
 });
