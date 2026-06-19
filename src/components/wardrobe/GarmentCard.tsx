@@ -80,7 +80,7 @@ function GarmentCardComponent({
           />
         ) : (
           <View style={styles.imagePlaceholder}>
-            <Ionicons name="shirt-outline" size={28} color={colors.mutedForeground} />
+            <Ionicons name="shirt-outline" size={40} color={colors.mutedForeground} />
           </View>
         )}
 

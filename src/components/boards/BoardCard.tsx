@@ -14,6 +14,7 @@ type Props = {
   itemMap: Map<number, Item>;
   outfitMap: Map<number, Outfit>;
   width: number;
+  isDailyFinds?: boolean;
   onPress?: () => void;
 };
 
@@ -33,7 +34,7 @@ function Cell({ uri, recyclingKey }: { uri: string; recyclingKey: string }) {
   );
 }
 
-export const BoardCard = React.memo(function BoardCard({ board, itemMap, outfitMap, width, onPress }: Props) {
+export const BoardCard = React.memo(function BoardCard({ board, itemMap, outfitMap, width, isDailyFinds, onPress }: Props) {
   const count = board.itemIds.length + board.outfitIds.length + board.wishlistIds.length + (board.storeFinds?.length ?? 0);
 
   // Collect up to 4 real cover images, items-first then outfits. Wishlist entries
@@ -137,6 +138,11 @@ export const BoardCard = React.memo(function BoardCard({ board, itemMap, outfitM
             <Ionicons name="albums-outline" size={28} color={colors.mutedForeground} />
           </View>
         )}
+        {isDailyFinds && (
+          <View style={styles.systemBadge}>
+            <Ionicons name="flash-outline" size={12} color="#fff" />
+          </View>
+        )}
       </View>
       <Text style={styles.name} numberOfLines={1}>
         {board.name}
@@ -187,6 +193,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
+  systemBadge: {
+    position: 'absolute',
+    top: spacing.xs,
+    right: spacing.xs,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: radii.sm,
+    padding: 4,
+  },
   overflowText: {
     color: '#fff',
     fontSize: typography.size.lg,
@@ -207,6 +221,7 @@ const styles = StyleSheet.create({
   count: {
     marginTop: 1,
     fontSize: typography.size.xs,
-    color: colors.mutedForeground,
+    fontWeight: typography.weight.medium,
+    color: colors.foreground,
   },
 });

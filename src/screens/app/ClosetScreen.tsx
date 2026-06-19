@@ -28,6 +28,7 @@ import { ClosetGrid } from '../../components/wardrobe/ClosetGrid';
 import { BoardCard } from '../../components/boards/BoardCard';
 import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
 import { useBoards, useCreateBoard, type BoardEntryRef } from '../../hooks/useBoards';
+import { useDailyFindsBoard } from '../../hooks/useDailyFindsBoard';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { parseEventDate } from '../../lib/outfitAssignments';
 import { CATEGORY_LABELS, type ItemCategory } from '../../types/item';
@@ -99,9 +100,17 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const { data: outfits = [] } = useOutfits();
   const { data: events = [] } = useEvents();
   const { data: boards = [] } = useBoards();
+  const { dailyFindsBoardId } = useDailyFindsBoard();
 
   const itemMap = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
   const outfitMap = useMemo(() => new Map(outfits.map((o) => [o.id, o])), [outfits]);
+  const sortedBoards = useMemo(
+    () =>
+      [...boards].sort((a, b) =>
+        a.id === dailyFindsBoardId ? -1 : b.id === dailyFindsBoardId ? 1 : 0,
+      ),
+    [boards, dailyFindsBoardId],
+  );
   const createBoard = useCreateBoard();
 
   // SaveToBoardSheet target for the bulk "Add to Board" action.
@@ -820,7 +829,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         ) : (
           <FlashList
             key="boards-grid"
-            data={boards}
+            data={sortedBoards}
             keyExtractor={(b) => String(b.id)}
             numColumns={2}
             renderItem={({ item }) => (
@@ -830,6 +839,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
                   itemMap={itemMap}
                   outfitMap={outfitMap}
                   width={cardWidth}
+                  isDailyFinds={item.id === dailyFindsBoardId}
                   onPress={() => navigation.navigate('BoardDetail', { boardId: item.id })}
                 />
               </View>

@@ -33,7 +33,7 @@ export type ClosetStackParamList = {
   };
   ClosetRefresh: undefined;
   OutfitDetail: { outfitId: number };
-  BoardDetail: { boardId: number };
+  BoardDetail: { boardId: number; autoOpenStoreFindForm?: boolean };
 };
 
 // Home nested stack

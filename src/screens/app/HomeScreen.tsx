@@ -21,6 +21,7 @@ import { useEvents } from '../../hooks/useEvents';
 import { useOutfitLogs, useDeleteOutfitLog } from '../../hooks/useOutfitLogs';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
 import { useGlobalOutfitLogger } from '../../contexts/GlobalOutfitLoggerContext';
+import { useDailyFindsBoard } from '../../hooks/useDailyFindsBoard';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { useGlobalAddSheet } from '../../contexts/GlobalAddSheetContext';
 import { useGlobalScan } from '../../contexts/GlobalScanContext';
@@ -117,6 +118,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [locationSheetVisible, setLocationSheetVisible] = useState(false);
 
   const { openLogger } = useGlobalOutfitLogger();
+  const { dailyFindsBoardId } = useDailyFindsBoard();
   const { openStylist } = useGlobalAIStylist();
   const { openAddSheet } = useGlobalAddSheet();
   const { openScanItem, openBatchScan } = useGlobalScan();
@@ -232,7 +234,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     [dailyPickDate, dailyPickHistory, dailyPickHistoryLoaded, events, items, logs, outfits, weather.data],
   );
   const featuredOutfit = dailyPick?.outfit ?? recentOutfits[0];
-  const featuredReason = dailyPick?.reason ?? 'Today’s edit';
+  const featuredReason = dailyPick?.reason ?? "Today’s edit";
   const remainingOutfits = recentOutfits.filter((outfit) => outfit.id !== featuredOutfit?.id).slice(0, 5);
 
   useEffect(() => {
@@ -408,7 +410,26 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           <View style={styles.quickActionIcon}>
             <Ionicons name="journal-outline" size={17} color={colors.primary} />
           </View>
-          <Text style={styles.quickActionText}>Log today’s look</Text>
+          <Text style={styles.quickActionText}>Log today's look</Text>
+        </PressableScale>
+        <PressableScale
+          style={styles.quickActionPressable}
+          contentStyle={styles.quickAction}
+          onPress={() => {
+            if (dailyFindsBoardId != null) {
+              navigation.navigate('Closet', {
+                screen: 'BoardDetail',
+                params: { boardId: dailyFindsBoardId, autoOpenStoreFindForm: true },
+              });
+            }
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Daily Finds"
+        >
+          <View style={styles.quickActionIcon}>
+            <Ionicons name="flash-outline" size={17} color={colors.primary} />
+          </View>
+          <Text style={styles.quickActionText}>Daily Finds</Text>
         </PressableScale>
       </View>
 

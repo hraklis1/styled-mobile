@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { StoreFind } from '../../types/storeFind';
@@ -28,6 +29,14 @@ export function BoardStoreFindCard({ storeFind, cardWidth }: Props) {
         <View style={[styles.image, styles.placeholder]}>
           <Ionicons name="camera-outline" size={32} color={colors.mutedForeground} />
         </View>
+      )}
+
+      {primaryImage && (
+        <LinearGradient
+          colors={['rgba(0,0,0,0.45)', 'rgba(0,0,0,0)']}
+          style={styles.topGradient}
+          pointerEvents="none"
+        />
       )}
 
       <View style={styles.badge}>
@@ -77,10 +86,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  topGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '45%',
+    zIndex: 1,
+  },
   badge: {
     position: 'absolute',
     top: spacing.xs,
     left: spacing.xs,
+    zIndex: 2,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.6)',
@@ -106,6 +124,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
     paddingVertical: 2,
     borderRadius: radii.sm,
+    zIndex: 2,
   },
   photoCountText: {
     color: '#fff',

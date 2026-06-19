@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useState } from 'react';
+import { useMemo, useCallback, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -41,7 +41,7 @@ const COL_GAP = spacing.sm;
 const CARD_ASPECT_RATIO = 0.85;
 
 export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps) {
-  const { boardId } = route.params;
+  const { boardId, autoOpenStoreFindForm } = route.params;
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / 2;
@@ -68,6 +68,12 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
   const [storeFindFormVisible, setStoreFindFormVisible] = useState(false);
   const [detailStoreFind, setDetailStoreFind] = useState<StoreFind | null>(null);
   const [editingStoreFind, setEditingStoreFind] = useState<StoreFind | null>(null);
+
+  // Auto-open the store find form when navigated from the "Daily Finds" home button.
+  useEffect(() => {
+    if (autoOpenStoreFindForm) setStoreFindFormVisible(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Multiselect ─────────────────────────────────────────────────────────────
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
@@ -158,7 +164,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
       : [...current, updatedFind];
 
     updateBoard({ id: boardId, storeFinds: updated });
-  }, [editingStoreFind, board, boardId, updateBoard, user?.id]);
+  }, [editingStoreFind, board, boardId, updateBoard, user]);
 
   const handleRename = useCallback(() => {
     if (Platform.OS === 'ios') {
@@ -355,18 +361,48 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
         </View>
       ) : items.length === 0 ? (
         <View style={styles.centered}>
-          <View style={styles.emptyIcon}>
-            <Ionicons name="albums-outline" size={30} color={colors.mutedForeground} />
-          </View>
-          <Text style={styles.emptyTitle}>Nothing saved yet</Text>
-          <Text style={styles.emptySub}>Save pieces, outfits, and shop finds to this board.</Text>
-          <TouchableOpacity 
-            style={{ marginTop: spacing.md, backgroundColor: colors.primary, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm + 2, borderRadius: radii.full }}
-            onPress={() => setMenuVisible(true)}
-            activeOpacity={0.8}
-          >
-            <Text style={{ color: colors.primaryForeground, fontWeight: typography.weight.semibold }}>Add to Board</Text>
-          </TouchableOpacity>
+          {board?.name === 'Daily Finds' ? (
+            <>
+              <TouchableOpacity
+                style={styles.emptyCamera}
+                onPress={() => setStoreFindFormVisible(true)}
+                activeOpacity={0.75}
+                accessibilityRole="button"
+                accessibilityLabel="Snap a photo to save it here"
+              >
+                <Ionicons name="camera-outline" size={56} color={colors.primary} />
+              </TouchableOpacity>
+              <Text style={styles.emptyTitle}>Spotted something you like?</Text>
+              <Text style={styles.emptySub}>Snap a photo to save it here.</Text>
+              <TouchableOpacity
+                style={styles.emptyBtn}
+                onPress={() => setStoreFindFormVisible(true)}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Snap a photo"
+              >
+                <Ionicons name="camera-outline" size={16} color={colors.primaryForeground} />
+                <Text style={styles.emptyBtnText}>Snap a photo</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <View style={styles.emptyIcon}>
+                <Ionicons name="albums-outline" size={30} color={colors.mutedForeground} />
+              </View>
+              <Text style={styles.emptyTitle}>Nothing saved yet</Text>
+              <Text style={styles.emptySub}>Save pieces, outfits, and shop finds to this board.</Text>
+              <TouchableOpacity
+                style={styles.emptyBtn}
+                onPress={() => setMenuVisible(true)}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Add to board"
+              >
+                <Text style={styles.emptyBtnText}>Add to Board</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       ) : (
         <View style={{ flex: 1, paddingHorizontal: SIDE_PAD - COL_GAP / 2 }}>
@@ -556,5 +592,29 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
     color: colors.mutedForeground,
     textAlign: 'center',
+  },
+  emptyCamera: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+  },
+  emptyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: radii.full,
+  },
+  emptyBtnText: {
+    color: colors.primaryForeground,
+    fontWeight: typography.weight.semibold,
+    fontSize: typography.size.sm,
   },
 });
