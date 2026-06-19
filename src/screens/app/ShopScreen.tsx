@@ -1,20 +1,43 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
+  Keyboard,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { ShopOutfitCard } from '../../components/outfits/ShopOutfitCard';
+import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
+import { ShopWishlistSummaryCard } from '../../components/outfits/ShopWishlistSummaryCard';
+import { ShopWishlistDetailSheet } from '../../components/outfits/ShopWishlistDetailSheet';
+import { ShopWishlistFilterSheet } from '../../components/outfits/ShopWishlistFilterSheet';
 import { useWishlist, useRemoveFromWishlist } from '../../hooks/useWishlist';
+import {
+  countWishlistFilters,
+  filterWishlist,
+  getWishlistFilterOptions,
+  type WishlistScope,
+  type WishlistSortOrder,
+} from '../../lib/shopWishlistFilters';
+import type { WishlistEntry } from '../../lib/wishlist';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { ShopScreenProps } from '../../navigation/types';
+
+function toggleValue(values: string[], value: string) {
+  return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
+}
+
+const SCOPES: { value: WishlistScope; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'event', label: 'For events' },
+  { value: 'general', label: 'General' },
+];
 
 export function ShopScreen(_props: ShopScreenProps) {
   const insets = useSafeAreaInsets();
@@ -22,15 +45,52 @@ export function ShopScreen(_props: ShopScreenProps) {
   const { data: entries = [], isLoading: loading, refetch } = useWishlist();
   const { mutate: removeItem } = useRemoveFromWishlist();
 
+  const [query, setQuery] = useState('');
+  const [scope, setScope] = useState<WishlistScope>('all');
+  const [categories, setCategories] = useState<string[]>([]);
+  const [cities, setCities] = useState<string[]>([]);
+  const [brands, setBrands] = useState<string[]>([]);
+  const [sortOrder, setSortOrder] = useState<WishlistSortOrder>('newest');
+  const [filtersVisible, setFiltersVisible] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<WishlistEntry | null>(null);
+
   useFocusEffect(
     useCallback(() => {
       refetch();
     }, [refetch]),
   );
 
-  function handleRemove(id: string) {
-    removeItem(id);
-  }
+  const filterOptions = useMemo(() => getWishlistFilterOptions(entries), [entries]);
+  const filters = useMemo(() => ({
+    query,
+    scope,
+    categories,
+    cities,
+    brands,
+    sortOrder,
+  }), [query, scope, categories, cities, brands, sortOrder]);
+  const filteredEntries = useMemo(() => filterWishlist(entries, filters), [entries, filters]);
+  const activeFilterCount = countWishlistFilters(filters);
+
+  const clearFilters = useCallback(() => {
+    setCategories([]);
+    setCities([]);
+    setBrands([]);
+    setSortOrder('newest');
+  }, []);
+
+  const clearAllSearchAndFilters = useCallback(() => {
+    setQuery('');
+    setScope('all');
+    clearFilters();
+  }, [clearFilters]);
+
+  const confirmRemove = useCallback((entry: WishlistEntry) => {
+    Alert.alert('Remove saved outfit?', 'This outfit will be removed from your Shop Wishlist.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => removeItem(entry.id) },
+    ]);
+  }, [removeItem]);
 
   if (loading) {
     return (
@@ -42,14 +102,11 @@ export function ShopScreen(_props: ShopScreenProps) {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>Shop Wishlist</Text>
-          <Text style={styles.headerSub}>
-            {entries.length === 0 ? 'No saved outfits yet' : `${entries.length} saved outfit${entries.length !== 1 ? 's' : ''}`}
-          </Text>
-        </View>
+        <Text style={styles.headerTitle}>Shop Wishlist</Text>
+        <Text style={styles.headerSub}>
+          {entries.length === 0 ? 'No saved outfits yet' : `${entries.length} saved outfit${entries.length === 1 ? '' : 's'}`}
+        </Text>
       </View>
 
       {entries.length === 0 ? (
@@ -59,52 +116,120 @@ export function ShopScreen(_props: ShopScreenProps) {
           </View>
           <Text style={styles.emptyTitle}>Your wishlist is empty</Text>
           <Text style={styles.emptySubtitle}>
-            Ask your AI Stylist to shop for a new outfit. When it suggests one, tap "Save" to add it here.
+            Ask your AI Stylist to shop for a new outfit. When it suggests one, tap “Save” to add it here.
           </Text>
           <TouchableOpacity
-            style={styles.emptyBtn}
-            onPress={() => openStylist({
-              initialQuery: 'Shop for a new outfit for me',
-              source: 'shop',
-            })}
+            style={styles.emptyButton}
+            onPress={() => openStylist({ initialQuery: 'Shop for a new outfit for me', source: 'shop' })}
             activeOpacity={0.85}
             accessibilityLabel="Open AI Stylist"
           >
             <Ionicons name="sparkles" size={15} color={colors.primaryForeground} />
-            <Text style={styles.emptyBtnText}>Chat with your Stylist</Text>
+            <Text style={styles.emptyButtonText}>Chat with your Stylist</Text>
           </TouchableOpacity>
         </View>
       ) : (
-        <FlatList
-          data={entries}
-          keyExtractor={(e) => e.id}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => (
-            <View style={styles.entryWrapper}>
-              <View style={styles.entryMetaRow}>
-                <Text style={styles.entryDate}>
-                  {new Date(item.savedAt).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                  })}
-                </Text>
-                {item.eventContext && (
-                  <View style={styles.eventChip}>
-                    <Ionicons name="calendar-outline" size={11} color={colors.primary} />
-                    <Text style={styles.eventChipText} numberOfLines={1}>
-                      For {item.eventContext.title}
-                    </Text>
-                  </View>
+        <>
+          <View style={styles.browseControls}>
+            <View style={styles.searchRow}>
+              <View style={styles.searchBox}>
+                <Ionicons name="search-outline" size={18} color={colors.mutedForeground} />
+                <TextInput
+                  value={query}
+                  onChangeText={setQuery}
+                  style={styles.searchInput}
+                  placeholder="Search outfits, brands, cities…"
+                  placeholderTextColor={colors.mutedForeground}
+                  returnKeyType="search"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onSubmitEditing={Keyboard.dismiss}
+                  accessibilityLabel="Search saved outfits"
+                />
+                {query.length > 0 && (
+                  <TouchableOpacity onPress={() => setQuery('')} accessibilityLabel="Clear search">
+                    <Ionicons name="close-circle" size={18} color={colors.mutedForeground} />
+                  </TouchableOpacity>
                 )}
               </View>
-              <ShopOutfitCard
-                outfit={item.outfit}
-                onRemove={() => handleRemove(item.id)}
-              />
+              <TouchableOpacity
+                style={[styles.filterButton, activeFilterCount > 0 && styles.filterButtonActive]}
+                onPress={() => setFiltersVisible(true)}
+                accessibilityLabel={`Sort and filter${activeFilterCount ? `, ${activeFilterCount} active` : ''}`}
+              >
+                <Ionicons name="options-outline" size={20} color={activeFilterCount ? colors.primaryForeground : colors.foreground} />
+                {activeFilterCount > 0 && <Text style={styles.filterCount}>{activeFilterCount}</Text>}
+              </TouchableOpacity>
             </View>
-          )}
+
+            <View style={styles.scopeGroup} accessibilityRole="tablist">
+              {SCOPES.map((option) => {
+                const active = scope === option.value;
+                return (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[styles.scopeButton, active && styles.scopeButtonActive]}
+                    onPress={() => setScope(option.value)}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text style={[styles.scopeText, active && styles.scopeTextActive]}>{option.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          <FlatList
+            data={filteredEntries}
+            keyExtractor={(entry) => entry.id}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
+            contentInsetAdjustmentBehavior="automatic"
+            contentContainerStyle={[styles.listContent, filteredEntries.length === 0 && styles.listContentEmpty]}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => (
+              <ShopWishlistSummaryCard
+                entry={item}
+                onPress={() => setSelectedEntry(item)}
+                onMore={() => confirmRemove(item)}
+              />
+            )}
+            ListEmptyComponent={(
+              <View style={styles.noResults}>
+                <Ionicons name="search-outline" size={30} color={colors.mutedForeground} />
+                <Text style={styles.noResultsTitle}>No matching outfits</Text>
+                <Text style={styles.noResultsText}>Try another search or clear your filters.</Text>
+                <TouchableOpacity style={styles.clearButton} onPress={clearAllSearchAndFilters}>
+                  <Text style={styles.clearButtonText}>Clear search and filters</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          />
+        </>
+      )}
+
+      {filtersVisible && (
+        <ShopWishlistFilterSheet
+          options={filterOptions}
+          categories={categories}
+          cities={cities}
+          brands={brands}
+          sortOrder={sortOrder}
+          resultCount={filteredEntries.length}
+          onToggleCategory={(value) => setCategories((current) => toggleValue(current, value))}
+          onToggleCity={(value) => setCities((current) => toggleValue(current, value))}
+          onToggleBrand={(value) => setBrands((current) => toggleValue(current, value))}
+          onSortChange={setSortOrder}
+          onClear={clearFilters}
+          onClose={() => setFiltersVisible(false)}
+        />
+      )}
+      {selectedEntry && (
+        <ShopWishlistDetailSheet
+          entry={selectedEntry}
+          onClose={() => setSelectedEntry(null)}
+          onRemove={() => removeItem(selectedEntry.id)}
         />
       )}
     </View>
@@ -112,135 +237,61 @@ export function ShopScreen(_props: ShopScreenProps) {
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  centered: {
-    flex: 1,
-    backgroundColor: colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  root: { flex: 1, backgroundColor: colors.background },
+  centered: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.lg,
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  headerLeft: {
+  headerTitle: { fontSize: typography.size.xl, fontWeight: typography.weight.bold, color: colors.foreground, letterSpacing: -0.3 },
+  headerSub: { marginTop: 2, fontSize: typography.size.sm, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
+  browseControls: { padding: spacing.md, gap: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  searchBox: {
     flex: 1,
-    gap: 2,
-  },
-  headerBtn: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  headerTitle: {
-    fontSize: typography.size.xl,
-    fontWeight: typography.weight.bold,
-    color: colors.foreground,
-    letterSpacing: -0.3,
-  },
-  headerSub: {
-    fontSize: typography.size.sm,
-    color: colors.mutedForeground,
-  },
-  listContent: {
-    padding: spacing.lg,
-    gap: spacing.xl,
-    paddingBottom: spacing.xxxl,
-  },
-  entryWrapper: {
-    gap: spacing.xs,
-  },
-  entryMetaRow: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: spacing.sm,
-  },
-  entryDate: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-    fontWeight: typography.weight.medium,
-    paddingLeft: 2,
-  },
-  eventChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    maxWidth: '60%',
-    backgroundColor: `${colors.primary}15`,
-    borderRadius: radii.full,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-  },
-  eventChipText: {
-    fontSize: 11,
-    fontWeight: typography.weight.semibold,
-    color: colors.primary,
-    flexShrink: 1,
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
-    gap: spacing.lg,
-  },
-  emptyIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: `${colors.primary}18`,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyTitle: {
-    fontSize: typography.size.lg,
-    fontWeight: typography.weight.bold,
-    color: colors.foreground,
-    letterSpacing: -0.2,
-  },
-  emptySubtitle: {
-    fontSize: typography.size.sm,
-    color: colors.mutedForeground,
-    textAlign: 'center',
-    lineHeight: typography.size.sm * 1.6,
-    maxWidth: 280,
-  },
-  emptyBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.md,
     borderRadius: radii.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm + 2,
-    marginTop: spacing.xs,
+    borderCurve: 'continuous',
+    backgroundColor: colors.surfaceSubtle,
   },
-  emptyBtnText: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-    color: colors.primaryForeground,
-  },
-  emptyPromptChip: {
+  searchInput: { flex: 1, paddingVertical: spacing.sm, fontSize: typography.size.sm, color: colors.foreground },
+  filterButton: {
+    width: 44,
+    height: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.md,
+    borderCurve: 'continuous',
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radii.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.card,
+    backgroundColor: colors.surfaceElevated,
   },
-  emptyPromptText: {
-    fontSize: typography.size.sm,
-    color: colors.foreground,
-  },
+  filterButtonActive: { width: 54, gap: 3, borderColor: colors.primary, backgroundColor: colors.primary },
+  filterCount: { fontSize: typography.size.xs, fontWeight: typography.weight.bold, color: colors.primaryForeground, fontVariant: ['tabular-nums'] },
+  scopeGroup: { flexDirection: 'row', padding: 3, borderRadius: radii.md, backgroundColor: colors.surfaceSubtle },
+  scopeButton: { flex: 1, minHeight: 34, alignItems: 'center', justifyContent: 'center', borderRadius: radii.sm },
+  scopeButtonActive: { backgroundColor: colors.surfaceElevated },
+  scopeText: { fontSize: typography.size.sm, color: colors.mutedForeground },
+  scopeTextActive: { fontWeight: typography.weight.semibold, color: colors.foreground },
+  listContent: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxxl },
+  listContentEmpty: { flexGrow: 1 },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, gap: spacing.lg },
+  emptyIconCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: `${colors.primary}18`, alignItems: 'center', justifyContent: 'center' },
+  emptyTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.foreground },
+  emptySubtitle: { maxWidth: 280, fontSize: typography.size.sm, lineHeight: 21, color: colors.mutedForeground, textAlign: 'center' },
+  emptyButton: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: radii.md, backgroundColor: colors.primary },
+  emptyButtonText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.primaryForeground },
+  noResults: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.xl },
+  noResultsTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.foreground },
+  noResultsText: { fontSize: typography.size.sm, color: colors.mutedForeground, textAlign: 'center' },
+  clearButton: { marginTop: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radii.full, backgroundColor: colors.secondary },
+  clearButtonText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.secondaryForeground },
 });
