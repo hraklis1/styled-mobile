@@ -22,6 +22,10 @@ import { useOutfitLogs, useDeleteOutfitLog } from '../../hooks/useOutfitLogs';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
 import { useGlobalOutfitLogger } from '../../contexts/GlobalOutfitLoggerContext';
 import { useDailyFindsBoard } from '../../hooks/useDailyFindsBoard';
+import { StoreFindFormModal } from '../../components/boards/StoreFindFormModal';
+import { enqueueStoreFind } from '../../lib/storeFindQueue';
+import { useStoreFindSync } from '../../hooks/useStoreFindSync';
+import type { StoreFind } from '../../types/storeFind';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { useGlobalAddSheet } from '../../contexts/GlobalAddSheetContext';
 import { useGlobalScan } from '../../contexts/GlobalScanContext';
@@ -119,6 +123,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
   const { openLogger } = useGlobalOutfitLogger();
   const { dailyFindsBoardId } = useDailyFindsBoard();
+  const { sync: syncStoreFinds } = useStoreFindSync();
+  const [storeFindFormVisible, setStoreFindFormVisible] = useState(false);
   const { openStylist } = useGlobalAIStylist();
   const { openAddSheet } = useGlobalAddSheet();
   const { openScanItem, openBatchScan } = useGlobalScan();
@@ -174,6 +180,13 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / 2;
   const heroWidth = width - SIDE_PAD * 2;
   const heroHeight = Math.round(heroWidth * 0.78);
+
+  const handleSaveStoreFind = useCallback(async (data: Omit<StoreFind, 'id' | 'createdAt'>) => {
+    if (dailyFindsBoardId == null) return;
+    const newFind: StoreFind = { ...data, id: Date.now().toString(), createdAt: new Date().toISOString() };
+    await enqueueStoreFind(dailyFindsBoardId, newFind);
+    syncStoreFinds();
+  }, [dailyFindsBoardId, syncStoreFinds]);
 
   const handleAddToCloset = useCallback(() => {
     openAddSheet({
@@ -388,41 +401,35 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
       {/* ── Quick creation actions ─────────────────────────────── */}
       <View style={styles.quickActions}>
+        <View style={styles.quickActionsRow}>
+          <PressableScale
+            style={styles.quickActionPressable}
+            contentStyle={styles.quickAction}
+            onPress={handleAddToCloset}
+            accessibilityRole="button"
+            accessibilityLabel="Add to closet"
+          >
+            <View style={styles.quickActionIcon}>
+              <Ionicons name="add" size={18} color={colors.primary} />
+            </View>
+            <Text style={styles.quickActionText}>Add to closet</Text>
+          </PressableScale>
+          <PressableScale
+            style={styles.quickActionPressable}
+            contentStyle={styles.quickAction}
+            onPress={openLogger}
+            accessibilityRole="button"
+            accessibilityLabel="Log today's look"
+          >
+            <View style={styles.quickActionIcon}>
+              <Ionicons name="journal-outline" size={17} color={colors.primary} />
+            </View>
+            <Text style={styles.quickActionText}>Log today's look</Text>
+          </PressableScale>
+        </View>
         <PressableScale
-          style={styles.quickActionPressable}
           contentStyle={styles.quickAction}
-          onPress={handleAddToCloset}
-          accessibilityRole="button"
-          accessibilityLabel="Add to closet"
-        >
-          <View style={styles.quickActionIcon}>
-            <Ionicons name="add" size={18} color={colors.primary} />
-          </View>
-          <Text style={styles.quickActionText}>Add to closet</Text>
-        </PressableScale>
-        <PressableScale
-          style={styles.quickActionPressable}
-          contentStyle={styles.quickAction}
-          onPress={openLogger}
-          accessibilityRole="button"
-          accessibilityLabel="Log today's look"
-        >
-          <View style={styles.quickActionIcon}>
-            <Ionicons name="journal-outline" size={17} color={colors.primary} />
-          </View>
-          <Text style={styles.quickActionText}>Log today's look</Text>
-        </PressableScale>
-        <PressableScale
-          style={styles.quickActionPressable}
-          contentStyle={styles.quickAction}
-          onPress={() => {
-            if (dailyFindsBoardId != null) {
-              navigation.navigate('Closet', {
-                screen: 'BoardDetail',
-                params: { boardId: dailyFindsBoardId, autoOpenStoreFindForm: true },
-              });
-            }
-          }}
+          onPress={() => setStoreFindFormVisible(true)}
           accessibilityRole="button"
           accessibilityLabel="Daily Finds"
         >
@@ -628,6 +635,11 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           onClose={() => setLocationSheetVisible(false)}
         />
       )}
+      <StoreFindFormModal
+        visible={storeFindFormVisible}
+        onClose={() => setStoreFindFormVisible(false)}
+        onSave={handleSaveStoreFind}
+      />
     </View>
   );
 }
@@ -703,9 +715,13 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
   },
   quickActions: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     gap: spacing.xs,
     marginBottom: spacing.xl,
+  },
+  quickActionsRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
   },
   quickActionPressable: {
     flex: 1,
