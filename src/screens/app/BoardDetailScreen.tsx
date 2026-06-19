@@ -19,7 +19,6 @@ import { OutfitCollage } from '../../components/outfits/OutfitCollage';
 import { PressableScale } from '../../components/primitives/PressableScale';
 import { useBoards, useBoardFeed, flattenBoardFeed, useDeleteBoard, useUpdateBoard } from '../../hooks/useBoards';
 import { useStoreFindSync } from '../../hooks/useStoreFindSync';
-import { enqueueStoreFind } from '../../lib/storeFindQueue';
 import { uploadLocalImages } from '../../lib/uploadLocalImages';
 import { useAuth } from '../../contexts/AuthContext';
 import type { BoardFeedItem } from '../../types/board';
@@ -135,17 +134,20 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
   const launchLibrary = useLibraryLaunch();
 
   const handleSaveStoreFind = useCallback(async (data: Omit<StoreFind, 'id' | 'createdAt'>) => {
-    const newFind: StoreFind = {
+    let newFind: StoreFind = {
       ...data,
       id: Math.random().toString(36).substring(7),
       createdAt: new Date().toISOString(),
     };
 
-    // Persist to queue first, then sync — the sync hook uploads images to R2
-    // before PATCHing the board, so we never send local file:// URIs to the server.
-    await enqueueStoreFind(boardId, newFind);
-    syncStoreFinds();
-  }, [boardId, syncStoreFinds]);
+    const hasLocal = (newFind.imageUrls ?? []).some((u) => u.startsWith('file://'));
+    if (hasLocal && user?.id) {
+      newFind = await uploadLocalImages(newFind, user.id);
+    }
+
+    const current = board?.storeFinds ?? [];
+    updateBoard({ id: boardId, storeFinds: [newFind, ...current] });
+  }, [board, boardId, updateBoard, user]);
 
   const handleEditSaveStoreFind = useCallback(async (data: Omit<StoreFind, 'id' | 'createdAt'>) => {
     if (!editingStoreFind) return;

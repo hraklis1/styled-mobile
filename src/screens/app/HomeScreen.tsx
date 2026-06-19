@@ -23,8 +23,8 @@ import { OutfitCollage } from '../../components/outfits/OutfitCollage';
 import { useGlobalOutfitLogger } from '../../contexts/GlobalOutfitLoggerContext';
 import { useDailyFindsBoard } from '../../hooks/useDailyFindsBoard';
 import { StoreFindFormModal } from '../../components/boards/StoreFindFormModal';
-import { enqueueStoreFind } from '../../lib/storeFindQueue';
-import { useStoreFindSync } from '../../hooks/useStoreFindSync';
+import { useUpdateBoard } from '../../hooks/useBoards';
+import { uploadLocalImages } from '../../lib/uploadLocalImages';
 import type { StoreFind } from '../../types/storeFind';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { useGlobalAddSheet } from '../../contexts/GlobalAddSheetContext';
@@ -122,8 +122,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [locationSheetVisible, setLocationSheetVisible] = useState(false);
 
   const { openLogger } = useGlobalOutfitLogger();
-  const { dailyFindsBoardId } = useDailyFindsBoard();
-  const { sync: syncStoreFinds } = useStoreFindSync();
+  const { dailyFindsBoard } = useDailyFindsBoard();
+  const { mutate: updateBoard } = useUpdateBoard();
   const [storeFindFormVisible, setStoreFindFormVisible] = useState(false);
   const { openStylist } = useGlobalAIStylist();
   const { openAddSheet } = useGlobalAddSheet();
@@ -182,11 +182,17 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const heroHeight = Math.round(heroWidth * 0.78);
 
   const handleSaveStoreFind = useCallback(async (data: Omit<StoreFind, 'id' | 'createdAt'>) => {
-    if (dailyFindsBoardId == null) return;
-    const newFind: StoreFind = { ...data, id: Date.now().toString(), createdAt: new Date().toISOString() };
-    await enqueueStoreFind(dailyFindsBoardId, newFind);
-    syncStoreFinds();
-  }, [dailyFindsBoardId, syncStoreFinds]);
+    if (!dailyFindsBoard) return;
+    let newFind: StoreFind = { ...data, id: Date.now().toString(), createdAt: new Date().toISOString() };
+
+    const hasLocal = (newFind.imageUrls ?? []).some((u) => u.startsWith('file://'));
+    if (hasLocal && user?.id) {
+      newFind = await uploadLocalImages(newFind, user.id);
+    }
+
+    const current = dailyFindsBoard.storeFinds ?? [];
+    updateBoard({ id: dailyFindsBoard.id, storeFinds: [newFind, ...current] });
+  }, [dailyFindsBoard, user, updateBoard]);
 
   const handleAddToCloset = useCallback(() => {
     openAddSheet({
