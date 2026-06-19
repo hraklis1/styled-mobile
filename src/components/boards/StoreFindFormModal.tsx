@@ -366,11 +366,7 @@ export function StoreFindFormModal({
             <Text style={styles.headerBtnText}>Cancel</Text>
           </TouchableOpacity>
           <Text style={styles.title}>{initialValues ? 'Edit Find' : 'Save Find'}</Text>
-          <TouchableOpacity onPress={() => handleSave(false)} style={styles.headerBtn} disabled={isSubmitting}>
-            <Text style={[styles.headerBtnText, styles.saveText, isSubmitting && { opacity: 0.4 }]}>
-              {isSubmitting ? 'Saving…' : 'Save'}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.headerBtn} />
         </View>
 
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -550,13 +546,27 @@ export function StoreFindFormModal({
                 </TouchableOpacity>
               )}
 
+              <TouchableOpacity
+                style={styles.saveFinishButton}
+                onPress={() => handleSave(false)}
+                disabled={isSubmitting}
+                accessibilityLabel={initialValues ? 'Save changes' : 'Save find and finish'}
+              >
+                {isSubmitting
+                  ? <ActivityIndicator color={colors.primaryForeground} />
+                  : <Ionicons name="checkmark" size={20} color={colors.primaryForeground} />}
+                <Text style={styles.saveFinishText}>
+                  {isSubmitting ? 'Saving…' : initialValues ? 'Save changes' : 'Save & finish'}
+                </Text>
+              </TouchableOpacity>
+
               {!initialValues && onSaveAndAddAnother && (
                 <TouchableOpacity
                   style={styles.saveAnotherButton}
                   onPress={() => handleSave(true)}
                   disabled={isSubmitting}
                 >
-                  <Ionicons name="camera-outline" size={18} color={colors.primaryForeground} />
+                  <Ionicons name="camera-outline" size={18} color={colors.primary} />
                   <Text style={styles.saveAnotherText}>Save & snap another</Text>
                 </TouchableOpacity>
               )}
@@ -586,14 +596,10 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.bold,
     color: colors.foreground,
   },
-  headerBtn: { padding: spacing.xs },
+  headerBtn: { width: 72, padding: spacing.xs },
   headerBtnText: {
     fontSize: typography.size.md,
     color: colors.foreground,
-  },
-  saveText: {
-    color: colors.primary,
-    fontWeight: typography.weight.semibold,
   },
   scroll: {
     padding: spacing.lg,
@@ -801,7 +807,7 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
     fontWeight: typography.weight.semibold,
   },
-  saveAnotherButton: {
+  saveFinishButton: {
     minHeight: 52,
     flexDirection: 'row',
     alignItems: 'center',
@@ -810,8 +816,24 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     backgroundColor: colors.primary,
   },
-  saveAnotherText: {
+  saveFinishText: {
     color: colors.primaryForeground,
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.semibold,
+  },
+  saveAnotherButton: {
+    minHeight: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderRadius: radii.full,
+    backgroundColor: colors.accent,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: `${colors.primary}35`,
+  },
+  saveAnotherText: {
+    color: colors.primary,
     fontSize: typography.size.md,
     fontWeight: typography.weight.semibold,
   },
