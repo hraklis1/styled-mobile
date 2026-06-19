@@ -316,6 +316,7 @@ export function StylistChatView({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationsLoading, setConversationsLoading] = useState(false);
+  const [showNewSessionConfirm, setShowNewSessionConfirm] = useState(false);
 
   const scrollRef = useRef<ScrollView>(null);
   const player = useAudioPlayer(null);
@@ -884,14 +885,7 @@ export function StylistChatView({
       startNewConversation();
       return;
     }
-    Alert.alert(
-      'Start a new styling session?',
-      'Your current conversation stays saved in History.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Start New', onPress: startNewConversation },
-      ],
-    );
+    setShowNewSessionConfirm(true);
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -1116,6 +1110,26 @@ export function StylistChatView({
           )}
         </View>
       </View>
+
+      <Modal visible={showNewSessionConfirm} transparent animationType="fade" onRequestClose={() => setShowNewSessionConfirm(false)}>
+        <Pressable style={styles.confirmOverlay} onPress={() => setShowNewSessionConfirm(false)}>
+          <Pressable style={styles.confirmCard} onPress={() => {}}>
+            <Text style={styles.confirmTitle}>Start a new styling session?</Text>
+            <Text style={styles.confirmBody}>Your current conversation stays saved in History.</Text>
+            <View style={styles.confirmActions}>
+              <TouchableOpacity style={styles.confirmCancelBtn} onPress={() => setShowNewSessionConfirm(false)}>
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmPrimaryBtn}
+                onPress={() => { setShowNewSessionConfirm(false); startNewConversation(); }}
+              >
+                <Text style={styles.confirmPrimaryText}>Start New</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -2410,6 +2424,59 @@ const styles = StyleSheet.create({
     fontSize: typography.size.xs,
     fontWeight: typography.weight.semibold,
     color: colors.white,
+  },
+  confirmOverlay: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  confirmCard: {
+    width: '100%',
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radii.lg,
+    padding: spacing.xl,
+    gap: spacing.sm,
+    ...shadows.lg,
+  },
+  confirmTitle: {
+    fontSize: typography.size.lg,
+    fontWeight: typography.weight.semibold,
+    color: colors.foreground,
+    letterSpacing: -0.2,
+  },
+  confirmBody: {
+    fontSize: typography.size.sm,
+    color: colors.mutedForeground,
+    lineHeight: 20,
+  },
+  confirmActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  confirmCancelBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.full,
+  },
+  confirmCancelText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.medium,
+    color: colors.mutedForeground,
+  },
+  confirmPrimaryBtn: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.full,
+    backgroundColor: colors.primary,
+  },
+  confirmPrimaryText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.primaryForeground,
   },
   renameOverlay: {
     flex: 1,
