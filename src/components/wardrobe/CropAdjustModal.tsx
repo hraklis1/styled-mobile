@@ -313,17 +313,19 @@ export function CropAdjustModal({ visible, sourceImage, initialBbox, itemName, o
           {...panResponder.panHandlers}
         >
           {/* Source image */}
-          <Image
-            source={{ uri: sourceImage }}
-            style={[
-              s.image,
-              bounds
-                ? { left: bounds.x, top: bounds.y, width: bounds.w, height: bounds.h }
-                : { top: 0, left: 0, right: 0, bottom: 0 },
-            ]}
-            resizeMode="contain"
-            accessibilityLabel={itemName}
-          />
+          {!!sourceImage && (
+            <Image
+              source={{ uri: sourceImage }}
+              style={[
+                s.image,
+                bounds
+                  ? { left: bounds.x, top: bounds.y, width: bounds.w, height: bounds.h }
+                  : { top: 0, left: 0, right: 0, bottom: 0 },
+              ]}
+              resizeMode="contain"
+              accessibilityLabel={itemName}
+            />
+          )}
 
           {frame && (
             <>
