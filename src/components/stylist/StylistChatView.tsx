@@ -22,6 +22,7 @@ import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
+import Reanimated, { FadeInUp, useReducedMotion } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useAudioPlayer, setAudioModeAsync } from 'expo-audio';
@@ -84,6 +85,22 @@ type ChatMessage = {
   // backend can link the reaction to the context that produced the suggestion.
   recId?: number;
   createdAt?: number;
+  attachment?: ComposerAttachment;
+};
+
+type ComposerAttachment = {
+  type: 'photo' | 'item';
+  label: string;
+  uri?: string | null;
+  itemId?: number;
+};
+
+type SendOptions = {
+  text?: string;
+  displayText?: string;
+  audio?: string;
+  photoData?: string;
+  attachment?: ComposerAttachment;
 };
 
 // A persisted stylist thread, as summarized by GET /api/stylist/conversations.
@@ -140,11 +157,15 @@ const CHIPS_TRIP = [
 // style aversion on the backend (see maybeInferStyleAversion).
 const DOWN_REASONS = ['Too formal', 'Too casual', 'Wrong colors', 'Not my fit'];
 
-const PROMPT_ICONS: Array<keyof typeof Ionicons.glyphMap> = [
-  'sunny-outline',
-  'cube-outline',
-  'briefcase-outline',
-  'color-palette-outline',
+const PROMPT_INTENTS: Array<{
+  title: string;
+  subtitle: string;
+  icon: keyof typeof Ionicons.glyphMap;
+}> = [
+  { title: 'Style a look', subtitle: 'Dress for today', icon: 'sparkles-outline' },
+  { title: 'Shop the gaps', subtitle: 'Build smarter', icon: 'bag-handle-outline' },
+  { title: 'Pack a trip', subtitle: 'Plan every look', icon: 'briefcase-outline' },
+  { title: 'Style a piece', subtitle: 'Start in your closet', icon: 'shirt-outline' },
 ];
 
 function useContextualChips(lastMessage: ChatMessage | undefined): string[] {
@@ -267,7 +288,9 @@ type Props = {
   // though it stays mounted inside the always-rendered modal.
   openRequestId?: number;
   onPromptConsumed?: () => void;
-  onClose: () => void;
+  onClose?: () => void;
+  /** True when rendered as the permanent Stylist tab rather than a contextual modal. */
+  embedded?: boolean;
   onNavigateToShop?: () => void;
 };
 
@@ -281,6 +304,7 @@ export function StylistChatView({
   openRequestId = 0,
   onPromptConsumed,
   onClose,
+  embedded = false,
   onNavigateToShop,
 }: Props) {
   const insets = useSafeAreaInsets();
@@ -317,6 +341,14 @@ export function StylistChatView({
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationsLoading, setConversationsLoading] = useState(false);
   const [showNewSessionConfirm, setShowNewSessionConfirm] = useState(false);
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const [attachmentSheetVisible, setAttachmentSheetVisible] = useState(false);
+  const [wardrobePickerVisible, setWardrobePickerVisible] = useState(false);
+  const [composerAttachment, setComposerAttachment] = useState<ComposerAttachment | null>(null);
+  const [composerPhotoData, setComposerPhotoData] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [failedRequest, setFailedRequest] = useState<SendOptions | null>(null);
+  const [followUpsOpen, setFollowUpsOpen] = useState(false);
 
   const scrollRef = useRef<ScrollView>(null);
   const player = useAudioPlayer(null);
@@ -331,6 +363,7 @@ export function StylistChatView({
   // the thread and immediately fires the initial query, so the send must see the
   // cleared id rather than the previous render's value.
   const conversationIdRef = useRef<number | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const setActiveConversationId = useCallback((id: number | null) => {
     conversationIdRef.current = id;
@@ -417,8 +450,8 @@ export function StylistChatView({
   // ── Send message ───────────────────────────────────────────────────────────
 
   const sendMessage = useCallback(
-    async (opts: { text?: string; audio?: string; photoData?: string }) => {
-      const { text, audio, photoData } = opts;
+    async (opts: SendOptions) => {
+      const { text, displayText, audio, photoData, attachment } = opts;
       if (!text && !audio && !photoData) return;
       if (isLoading) return;
 
@@ -428,17 +461,23 @@ export function StylistChatView({
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 
       const session = ++sessionRef.current;
+      setErrorMessage(null);
+      setFailedRequest(null);
 
       const userMsg: ChatMessage = {
         id: makeId(),
         role: 'user',
-        text: audio ? '🎙 Voice message…' : text ?? '📷 Photo',
+        text: audio ? '🎙 Voice message…' : displayText ?? text ?? '📷 Photo',
+        ...(attachment ? { attachment } : {}),
       };
 
       setMessages((prev) => [...prev, userMsg]);
       setInputText('');
       setMentionQuery(null);
       setIsLoading(true);
+      const controller = new AbortController();
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = controller;
 
       const assistantId = makeId();
       let assistantAdded = false;
@@ -498,6 +537,7 @@ export function StylistChatView({
             history,
             _stream: true,
           }),
+          signal: controller.signal,
         });
 
         if (!response.ok) {
@@ -645,10 +685,15 @@ export function StylistChatView({
         if (flushTimer) clearTimeout(flushTimer);
         if (sessionRef.current !== session) return;
         const msg = (err as { message?: string })?.message ?? 'Could not reach the stylist. Please try again.';
-        Alert.alert('Stylist unavailable', msg);
+        if ((err as { name?: string })?.name === 'AbortError') return;
+        setErrorMessage(msg);
+        setFailedRequest(opts);
         setMessages((prev) => prev.filter((m) => m.id !== userMsg.id && m.id !== assistantId));
       } finally {
-        if (sessionRef.current === session) setIsLoading(false);
+        if (sessionRef.current === session) {
+          setIsLoading(false);
+          abortControllerRef.current = null;
+        }
       }
     },
     [activeLocation, isLoading, source, cacheThread, setActiveConversationId, profile?.tempUnit, weather.data],
@@ -658,6 +703,8 @@ export function StylistChatView({
 
   function startFreshThread() {
     stopCurrentAudio();
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
     sessionRef.current++;
     messagesRef.current = [];
     setMessages([]);
@@ -665,6 +712,10 @@ export function StylistChatView({
     setInputText('');
     setIsLoading(false);
     setMentionQuery(null);
+    setComposerAttachment(null);
+    setComposerPhotoData(null);
+    setErrorMessage(null);
+    setFailedRequest(null);
   }
 
   function applyServerThread(id: number, rows: ServerMessage[]) {
@@ -832,15 +883,26 @@ export function StylistChatView({
 
   // ── Input handlers ─────────────────────────────────────────────────────────
 
-  async function handlePickPhoto() {
+  async function stagePhoto(source: 'camera' | 'library') {
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
+      if (source === 'camera') {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert('Camera access needed', 'Allow camera access to show your stylist what you are wearing.');
+          return;
+        }
+      }
+      const result = await (source === 'camera'
+        ? ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 })
+        : ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 1,
-      });
+      }));
       if (result.canceled || !result.assets[0]) return;
       const compressed = await compressImageToDataUrl(result.assets[0]);
-      sendMessage({ photoData: compressed.dataUrl });
+      setComposerAttachment({ type: 'photo', label: 'Photo', uri: result.assets[0].uri });
+      setComposerPhotoData(compressed.dataUrl);
+      setAttachmentSheetVisible(false);
     } catch {
       Alert.alert('Could not load photo', 'Please try again.');
     }
@@ -848,7 +910,27 @@ export function StylistChatView({
 
   function handleSendText() {
     const trimmed = inputText.trim();
-    if (trimmed) sendMessage({ text: trimmed });
+    if (!trimmed && !composerAttachment) return;
+    const attachmentText = composerAttachment?.type === 'item'
+      ? `@${composerAttachment.label}${trimmed ? ` ${trimmed}` : ''}`
+      : trimmed || 'What do you think of this look?';
+    sendMessage({
+      text: attachmentText,
+      displayText: trimmed || (composerAttachment?.type === 'photo' ? 'What do you think of this look?' : 'How would you style this?'),
+      ...(composerPhotoData ? { photoData: composerPhotoData } : {}),
+      ...(composerAttachment ? { attachment: composerAttachment } : {}),
+    });
+    setComposerAttachment(null);
+    setComposerPhotoData(null);
+  }
+
+  function stopGeneration() {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    sessionRef.current++;
+    setIsLoading(false);
+    setMessages((prev) => prev.map((m) => (m.isStreaming ? { ...m, isStreaming: false } : m)));
+    Haptics.selectionAsync().catch(() => {});
   }
 
   function handleTextChange(text: string) {
@@ -865,9 +947,10 @@ export function StylistChatView({
   }
 
   function handleMentionSelect(item: Item) {
+    const uri = resolveImageUri(item.imageUrl);
     const lastAt = inputText.lastIndexOf('@');
-    const newText = inputText.slice(0, lastAt) + `@${item.name} `;
-    setInputText(newText);
+    setInputText(lastAt >= 0 ? inputText.slice(0, lastAt) : inputText);
+    setComposerAttachment({ type: 'item', label: item.name, uri, itemId: item.id });
     setMentionQuery(null);
   }
 
@@ -890,7 +973,7 @@ export function StylistChatView({
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const isEmpty = messages.length === 0 && !isLoading;
+  const isEmpty = messages.length === 0 && !isLoading && !errorMessage;
   const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant');
   const contextualChips = useContextualChips(lastAssistantMsg);
 
@@ -903,42 +986,57 @@ export function StylistChatView({
       <BlurView
         intensity={35}
         tint="systemThinMaterialLight"
-        style={[styles.header, { paddingTop: insets.top }]}
+        style={[styles.header, { paddingTop: embedded ? insets.top + spacing.xs : insets.top }]}
         {...(Platform.OS === 'android' && { blurMethod: 'dimezisBlurViewSdk31Plus' })}
       >
-        <TouchableOpacity
-          style={styles.headerBtn}
-          onPress={openDrawer}
-          accessibilityLabel="Conversation history"
-        >
-          <Ionicons name="menu-outline" size={24} color={colors.foreground} />
-        </TouchableOpacity>
         <View style={styles.headerIdentity}>
-          <View style={styles.headerMark}>
-            <Ionicons name="sparkles" size={13} color={colors.primary} />
-          </View>
-          <View>
-            <Text style={styles.headerTitle}>Your Stylist</Text>
-            <TouchableOpacity onPress={() => setLocationPickerVisible(true)} activeOpacity={0.7}>
-              <Text style={styles.headerSubtitle} numberOfLines={1}>
-                {activeLocation.label || 'Set location'} · {activeLocation.source === 'conversation' ? 'Destination' : activeLocation.source === 'home' ? 'Home' : 'Current'}
+          <Text style={styles.headerTitle}>Stylist</Text>
+          <TouchableOpacity
+            style={styles.headerContextPill}
+            onPress={() => setLocationPickerVisible(true)}
+            activeOpacity={0.75}
+            accessibilityLabel={`Styling location: ${activeLocation.label || 'not set'}`}
+          >
+            <Ionicons name="location-outline" size={12} color={colors.primary} />
+            <Text style={styles.headerSubtitle} numberOfLines={1}>{activeLocation.label || 'Set location'}</Text>
+            {weather.data?.current ? (
+              <Text style={styles.headerWeather}>
+                {profile?.tempUnit === 'C' ? `${weather.data.current.temperatureC}°` : `${weather.data.current.temperatureF}°`}
               </Text>
-            </TouchableOpacity>
-          </View>
+            ) : null}
+          </TouchableOpacity>
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity
             style={styles.headerBtn}
-            onPress={confirmNewConversation}
-            accessibilityLabel="Start a new conversation"
+            onPress={() => setHeaderMenuOpen(true)}
+            accessibilityLabel="Stylist options"
           >
-            <Ionicons name="create-outline" size={20} color={colors.primary} />
+            <Ionicons name="ellipsis-horizontal" size={22} color={colors.foreground} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.headerBtn} onPress={onClose} accessibilityLabel="Close stylist">
-            <Ionicons name="close" size={22} color={colors.foreground} />
-          </TouchableOpacity>
+          {!embedded && onClose ? (
+            <TouchableOpacity style={styles.doneBtn} onPress={onClose} accessibilityLabel="Done with stylist">
+              <Text style={styles.doneBtnText}>Done</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </BlurView>
+
+      <Modal visible={headerMenuOpen} transparent animationType="fade" onRequestClose={() => setHeaderMenuOpen(false)}>
+        <Pressable style={styles.menuOverlay} onPress={() => setHeaderMenuOpen(false)}>
+          <View style={[styles.headerMenu, { top: insets.top + 52 }]}>
+            <TouchableOpacity style={styles.headerMenuRow} onPress={() => { setHeaderMenuOpen(false); openDrawer(); }}>
+              <Ionicons name="time-outline" size={19} color={colors.foreground} />
+              <Text style={styles.headerMenuText}>Conversation history</Text>
+            </TouchableOpacity>
+            <View style={styles.headerMenuDivider} />
+            <TouchableOpacity style={styles.headerMenuRow} onPress={() => { setHeaderMenuOpen(false); confirmNewConversation(); }}>
+              <Ionicons name="create-outline" size={19} color={colors.primary} />
+              <Text style={styles.headerMenuText}>New styling session</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
 
       <ConversationDrawer
         visible={drawerOpen}
@@ -999,6 +1097,22 @@ export function StylistChatView({
               />
             ))}
             {isLoading && !messages.some((m) => m.isStreaming) && <TypingIndicator />}
+            {errorMessage ? (
+              <View style={styles.inlineError} accessibilityRole="alert">
+                <View style={styles.inlineErrorCopy}>
+                  <Ionicons name="cloud-offline-outline" size={18} color={colors.error} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.inlineErrorTitle}>That look did not come through</Text>
+                    <Text style={styles.inlineErrorText} numberOfLines={2}>{errorMessage}</Text>
+                  </View>
+                </View>
+                {failedRequest ? (
+                  <TouchableOpacity style={styles.retryBtn} onPress={() => sendMessage(failedRequest)}>
+                    <Text style={styles.retryBtnText}>Try again</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ) : null}
           </>
         )}
       </ScrollView>
@@ -1018,15 +1132,9 @@ export function StylistChatView({
       />
 
       {/* Follow-up chips */}
-      {messages.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.chipsBar}
-          contentContainerStyle={styles.chipsContent}
-          keyboardShouldPersistTaps="always"
-        >
-          {contextualChips.map((chip) => (
+      {messages.length > 0 && !isLoading && (
+        <View style={styles.chipsContent}>
+          {contextualChips.slice(0, 2).map((chip) => (
             <TouchableOpacity
               key={chip}
               style={styles.chip}
@@ -1036,7 +1144,12 @@ export function StylistChatView({
               <Text style={styles.chipText}>{chip}</Text>
             </TouchableOpacity>
           ))}
-        </ScrollView>
+          {contextualChips.length > 2 ? (
+            <TouchableOpacity style={styles.moreChip} onPress={() => setFollowUpsOpen(true)} accessibilityLabel="More follow-up ideas">
+              <Ionicons name="ellipsis-horizontal" size={17} color={colors.primary} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
       )}
 
       {/* @ Mention menu — sits between chips and input bar */}
@@ -1074,14 +1187,36 @@ export function StylistChatView({
 
       {/* Input bar */}
       <View style={[styles.inputBar, { paddingBottom: insets.bottom + spacing.sm }]}>
+        {composerAttachment ? (
+          <View style={styles.attachmentPreview}>
+            <View style={styles.attachmentThumb}>
+              {composerAttachment.uri ? (
+                <Image source={{ uri: composerAttachment.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+              ) : (
+                <Ionicons name={composerAttachment.type === 'photo' ? 'image-outline' : 'shirt-outline'} size={18} color={colors.primary} />
+              )}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.attachmentEyebrow}>{composerAttachment.type === 'photo' ? 'PHOTO' : 'FROM YOUR CLOSET'}</Text>
+              <Text style={styles.attachmentLabel} numberOfLines={1}>{composerAttachment.label}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.attachmentRemove}
+              onPress={() => { setComposerAttachment(null); setComposerPhotoData(null); }}
+              accessibilityLabel="Remove attachment"
+            >
+              <Ionicons name="close" size={17} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+        ) : null}
         <View style={styles.composer}>
           <Pressable
             style={styles.photoBtn}
-            onPress={handlePickPhoto}
+            onPress={() => setAttachmentSheetVisible(true)}
             disabled={isLoading}
-            accessibilityLabel="Add a photo"
+            accessibilityLabel="Add photo or wardrobe piece"
           >
-            <Ionicons name="add" size={22} color={colors.primary} />
+            <Ionicons name="attach-outline" size={20} color={colors.primary} />
           </Pressable>
 
           <TextInput
@@ -1096,7 +1231,11 @@ export function StylistChatView({
             editable={!isLoading}
           />
 
-          {inputText.trim() ? (
+          {isLoading ? (
+            <TouchableOpacity style={styles.stopBtn} onPress={stopGeneration} accessibilityLabel="Stop generating">
+              <Ionicons name="stop" size={14} color={colors.primaryForeground} />
+            </TouchableOpacity>
+          ) : inputText.trim() || composerAttachment ? (
             <TouchableOpacity
               style={styles.sendBtn}
               onPress={handleSendText}
@@ -1110,6 +1249,55 @@ export function StylistChatView({
           )}
         </View>
       </View>
+
+      <Modal visible={attachmentSheetVisible} transparent animationType="slide" onRequestClose={() => setAttachmentSheetVisible(false)}>
+        <Pressable style={styles.sheetBackdrop} onPress={() => setAttachmentSheetVisible(false)}>
+          <Pressable style={[styles.attachmentSheet, { paddingBottom: insets.bottom + spacing.lg }]} onPress={() => {}}>
+            <View style={styles.sheetGrabber} />
+            <Text style={styles.attachmentSheetTitle}>Add to your question</Text>
+            <Text style={styles.attachmentSheetSubtitle}>Give your stylist something visual to work with.</Text>
+            <View style={styles.attachmentChoices}>
+              <AttachmentChoice icon="camera-outline" label="Camera" onPress={() => stagePhoto('camera')} />
+              <AttachmentChoice icon="images-outline" label="Photo library" onPress={() => stagePhoto('library')} />
+              <AttachmentChoice
+                icon="shirt-outline"
+                label="Wardrobe piece"
+                onPress={() => { setAttachmentSheetVisible(false); setWardrobePickerVisible(true); }}
+              />
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <ItemPickerSheet
+        visible={wardrobePickerVisible}
+        onClose={() => setWardrobePickerVisible(false)}
+        title="Choose a wardrobe piece"
+        items={allItems}
+        selectedId={composerAttachment?.type === 'item' ? composerAttachment.itemId : undefined}
+        onSelect={(item) => {
+          setComposerAttachment({ type: 'item', label: item.name, itemId: item.id, uri: resolveImageUri(item.imageUrl) });
+          setComposerPhotoData(null);
+          setWardrobePickerVisible(false);
+        }}
+      />
+
+      <Modal visible={followUpsOpen} transparent animationType="slide" onRequestClose={() => setFollowUpsOpen(false)}>
+        <Pressable style={styles.sheetBackdrop} onPress={() => setFollowUpsOpen(false)}>
+          <Pressable style={[styles.attachmentSheet, { paddingBottom: insets.bottom + spacing.lg }]} onPress={() => {}}>
+            <View style={styles.sheetGrabber} />
+            <Text style={styles.attachmentSheetTitle}>Refine the edit</Text>
+            <View style={styles.followUpList}>
+              {contextualChips.map((chip) => (
+                <TouchableOpacity key={chip} style={styles.followUpRow} onPress={() => { setFollowUpsOpen(false); sendMessage({ text: chip }); }}>
+                  <Text style={styles.followUpText}>{chip}</Text>
+                  <Ionicons name="arrow-forward" size={17} color={colors.primary} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal visible={showNewSessionConfirm} transparent animationType="fade" onRequestClose={() => setShowNewSessionConfirm(false)}>
         <Pressable style={styles.confirmOverlay} onPress={() => setShowNewSessionConfirm(false)}>
@@ -1131,6 +1319,25 @@ export function StylistChatView({
         </Pressable>
       </Modal>
     </KeyboardAvoidingView>
+  );
+}
+
+function AttachmentChoice({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity style={styles.attachmentChoice} onPress={onPress} accessibilityRole="button">
+      <View style={styles.attachmentChoiceIcon}>
+        <Ionicons name={icon} size={22} color={colors.primary} />
+      </View>
+      <Text style={styles.attachmentChoiceLabel}>{label}</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -1176,33 +1383,39 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
         <View style={styles.stylistNote}>
           <View style={styles.sectionEyebrow}>
             <Ionicons name="sparkles" size={13} color={colors.primary} />
-            <Text style={styles.sectionEyebrowText}>Stylist note</Text>
+            <Text style={styles.sectionEyebrowText}>My take</Text>
           </View>
           <StylistRichText text={message.text} streaming={message.isStreaming} />
           {!!message.suggestedItemIds?.length && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.adviceThumbs}>
-              {message.suggestedItemIds
-                .map((id) => allItems.find((i) => i.id === id))
-                .filter((i): i is Item => !!i)
-                .map((item) => {
-                  const uri = resolveImageUri(item.imageUrl);
-                  return (
-                    <View key={item.id} style={styles.adviceThumb}>
-                      {uri ? (
-                        <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                      ) : (
-                        <Ionicons name="shirt-outline" size={18} color={colors.mutedForeground} />
-                      )}
-                    </View>
-                  );
-                })}
-            </ScrollView>
+            <View style={styles.responseSection}>
+              <Text style={styles.responseSectionTitle}>Wear it with</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.adviceThumbs}>
+                {message.suggestedItemIds
+                  .map((id) => allItems.find((i) => i.id === id))
+                  .filter((i): i is Item => !!i)
+                  .map((item) => {
+                    const uri = resolveImageUri(item.imageUrl);
+                    return (
+                      <View key={item.id} style={styles.adviceThumb}>
+                        {uri ? (
+                          <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                        ) : (
+                          <Ionicons name="shirt-outline" size={18} color={colors.mutedForeground} />
+                        )}
+                      </View>
+                    );
+                  })}
+              </ScrollView>
+            </View>
           )}
-          {[...(message.missingEssentials ?? [])]
-            .sort((a, b) => a.priority - b.priority)
-            .map((item, i) => (
-              <GapCard key={i} item={item} onPress={onNavigateToShop} />
-            ))}
+          {!!message.missingEssentials?.length && (
+            <View style={styles.responseSection}>
+              <Text style={styles.responseSectionTitle}>Closet gaps</Text>
+              {[...message.missingEssentials]
+                .sort((a, b) => a.priority - b.priority)
+                .map((item, i) => <GapCard key={i} item={item} onPress={onNavigateToShop} />)}
+            </View>
+          )}
           {onToggleAudio && (
             <TouchableOpacity style={styles.quietAudioBtn} onPress={onToggleAudio} accessibilityLabel="Read stylist note aloud">
               <Ionicons
@@ -1308,6 +1521,18 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
   return (
     <View style={[styles.bubbleRow, styles.bubbleRowUser]}>
       <View style={[styles.bubble, styles.bubbleUser]}>
+        {message.attachment ? (
+          <View style={styles.userAttachment}>
+            {message.attachment.uri ? (
+              <Image source={{ uri: message.attachment.uri }} style={styles.userAttachmentImage} resizeMode="cover" />
+            ) : (
+              <View style={styles.userAttachmentFallback}>
+                <Ionicons name={message.attachment.type === 'photo' ? 'image-outline' : 'shirt-outline'} size={19} color={colors.primaryForeground} />
+              </View>
+            )}
+            <Text style={styles.userAttachmentLabel} numberOfLines={1}>{message.attachment.label}</Text>
+          </View>
+        ) : null}
         <Text style={[styles.bubbleText, styles.bubbleTextUser]}>
           {message.text}{message.isStreaming ? '▍' : ''}
         </Text>
@@ -1317,17 +1542,8 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
 }
 
 function EditorialEntrance({ children }: { children: React.ReactNode }) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(10)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 260, useNativeDriver: true }),
-      Animated.timing(translateY, { toValue: 0, duration: 260, useNativeDriver: true }),
-    ]).start();
-  }, [opacity, translateY]);
-
-  return <Animated.View style={{ opacity, transform: [{ translateY }] }}>{children}</Animated.View>;
+  const reduceMotion = useReducedMotion();
+  return <Reanimated.View entering={reduceMotion ? undefined : FadeInUp.duration(240)}>{children}</Reanimated.View>;
 }
 
 // ── OutfitSuggestionCard ──────────────────────────────────────────────────────
@@ -1862,43 +2078,38 @@ function EmptyState({
   return (
     <View style={styles.emptyState}>
       <View style={styles.emptyHero}>
-        <View style={styles.emptyIconCircle}>
-          <Ionicons name="sparkles" size={28} color={colors.primary} />
-        </View>
-        <Text style={styles.emptyKicker}>Your private styling session</Text>
+        <Text style={styles.emptyKicker}>YOUR PRIVATE STYLIST</Text>
         <Text style={styles.emptyTitle}>
           {firstName ? `What are we dressing for, ${firstName}?` : 'What are we dressing for?'}
         </Text>
         <Text style={styles.emptySubtitle}>
-          I can build looks from your wardrobe, refine an idea, or help you dress for what is next.
+          Looks grounded in your wardrobe, your plans, and the weather around you.
         </Text>
-        <TouchableOpacity style={styles.contextPill} onPress={onLocationPress} activeOpacity={0.7}>
-          <Ionicons name="location-outline" size={13} color={colors.primary} />
-          <Text style={styles.contextPillText} numberOfLines={1}>{context}</Text>
-          <Ionicons name="chevron-down" size={12} color={colors.primary} />
+        <TouchableOpacity style={styles.contextLine} onPress={onLocationPress} activeOpacity={0.7}>
+          <Ionicons name="location-outline" size={14} color={colors.primary} />
+          <Text style={styles.contextLineText} numberOfLines={1}>{context}</Text>
+          {weather?.summary ? <Text style={styles.contextWeather} numberOfLines={1}>· {weather.summary}</Text> : null}
+          <Ionicons name="chevron-forward" size={13} color={colors.mutedForeground} />
         </TouchableOpacity>
-        {weather?.summary ? (
-          <View style={styles.weatherLine}>
-            <Ionicons name="partly-sunny-outline" size={13} color={colors.mutedForeground} />
-            <Text style={styles.weatherText}>{weather.summary}</Text>
-          </View>
-        ) : null}
       </View>
 
       <View style={styles.promptList}>
         {prompts.map((p, index) => (
           <TouchableOpacity
             key={p}
-            style={styles.promptChip}
+            style={styles.promptCard}
             onPress={() => {
               Haptics.selectionAsync().catch(() => {});
               onPrompt(p);
             }}
           >
             <View style={styles.promptIcon}>
-              <Ionicons name={PROMPT_ICONS[index]} size={17} color={colors.primary} />
+              <Ionicons name={PROMPT_INTENTS[index].icon} size={20} color={colors.primary} />
             </View>
-            <Text style={styles.promptChipText}>{p}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.promptTitle}>{PROMPT_INTENTS[index].title}</Text>
+              <Text style={styles.promptSubtitle}>{PROMPT_INTENTS[index].subtitle}</Text>
+            </View>
             <Ionicons name="arrow-forward" size={15} color={colors.mutedForeground} />
           </TouchableOpacity>
         ))}
@@ -2286,7 +2497,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
-    paddingBottom: spacing.sm,
+    minHeight: 66,
+    paddingBottom: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
@@ -2297,17 +2509,39 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
+    fontFamily: typography.family.display,
+    fontSize: typography.size.xl,
     color: colors.foreground,
   },
-  headerIdentity: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  headerMark: {
-    width: 32, height: 32, borderRadius: radii.full,
-    alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceSelected,
+  headerIdentity: { flex: 1, alignItems: 'flex-start', gap: spacing.xs },
+  headerContextPill: {
+    maxWidth: '92%',
+    minHeight: 26,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceSelected,
   },
-  headerSubtitle: { fontSize: 10, color: colors.mutedForeground, marginTop: 1 },
-  headerActions: { flexDirection: 'row', alignItems: 'center' },
+  headerSubtitle: { flexShrink: 1, fontSize: 11, color: colors.secondaryForeground },
+  headerWeather: { fontSize: 11, color: colors.primary, fontWeight: typography.weight.semibold },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  doneBtn: { minHeight: 36, justifyContent: 'center', paddingHorizontal: spacing.sm },
+  doneBtnText: { color: colors.primary, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+  menuOverlay: { flex: 1, backgroundColor: 'rgba(40,35,31,0.08)' },
+  headerMenu: {
+    position: 'absolute',
+    right: spacing.md,
+    width: 240,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surfaceElevated,
+    ...shadows.lg,
+  },
+  headerMenuRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md },
+  headerMenuText: { color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.medium },
+  headerMenuDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginHorizontal: spacing.md },
   // Conversation drawer
   drawerBackdrop: {
     position: 'absolute',
@@ -2551,11 +2785,17 @@ const styles = StyleSheet.create({
     flexGrow: 0,
   },
   chipsContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     gap: spacing.sm,
   },
   chip: {
+    flex: 1,
+    minHeight: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.full,
@@ -2567,6 +2807,15 @@ const styles = StyleSheet.create({
     fontSize: typography.size.xs,
     color: colors.foreground,
     fontWeight: typography.weight.medium,
+    textAlign: 'center',
+  },
+  moreChip: {
+    width: 38,
+    height: 38,
+    borderRadius: radii.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceSelected,
   },
   // @ Mention menu
   mentionMenu: {
@@ -2615,6 +2864,29 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     backgroundColor: colors.background,
   },
+  attachmentPreview: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surfaceElevated,
+    ...shadows.xs,
+  },
+  attachmentThumb: {
+    width: 42,
+    height: 42,
+    borderRadius: radii.md,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceSelected,
+  },
+  attachmentEyebrow: { color: colors.primary, fontSize: 9, fontWeight: typography.weight.bold, letterSpacing: 0.8 },
+  attachmentLabel: { color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+  attachmentRemove: { width: 36, height: 36, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center' },
   composer: {
     minHeight: 52,
     flexDirection: 'row',
@@ -2622,8 +2894,8 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     backgroundColor: colors.surfaceElevated,
     borderRadius: radii.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: `${colors.primary}33`,
     padding: 4,
     ...shadows.md,
   },
@@ -2650,6 +2922,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  stopBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.full,
+    backgroundColor: colors.foreground,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   // Message bubbles
   bubbleRow: {
     flexDirection: 'row',
@@ -2672,6 +2952,10 @@ const styles = StyleSheet.create({
     lineHeight: typography.size.sm * 1.55,
   },
   bubbleTextUser: { color: colors.white },
+  userAttachment: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs },
+  userAttachmentImage: { width: 52, height: 58, borderRadius: radii.md },
+  userAttachmentFallback: { width: 38, height: 38, borderRadius: radii.md, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.16)' },
+  userAttachmentLabel: { flexShrink: 1, color: colors.primaryForeground, fontSize: typography.size.xs, fontWeight: typography.weight.semibold },
   editorialResponse: { gap: spacing.sm },
   shopCardContainer: { gap: spacing.sm },
   stylistNote: { gap: spacing.sm, paddingHorizontal: spacing.xs },
@@ -2704,16 +2988,16 @@ const styles = StyleSheet.create({
   outfitCard: {
     backgroundColor: colors.surfaceElevated,
     borderRadius: radii.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: `${colors.primary}24`,
     padding: spacing.lg,
     gap: spacing.md,
     ...shadows.md,
   },
   lookHeader: { gap: spacing.xs },
   lookTitle: {
-    fontSize: typography.size.xl,
-    fontWeight: typography.weight.semibold,
+    fontFamily: typography.family.display,
+    fontSize: 24,
     color: colors.foreground,
     lineHeight: typography.size.xl * 1.25,
     letterSpacing: -0.4,
@@ -2722,9 +3006,8 @@ const styles = StyleSheet.create({
   collageFrame: {
     alignItems: 'center',
     gap: spacing.sm,
-    paddingBottom: spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    overflow: 'hidden',
+    borderRadius: radii.lg,
   },
   editList: { width: '100%', gap: spacing.xs },
   editRow: {
@@ -2887,6 +3170,8 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.medium,
   },
   adviceThumbs: { gap: spacing.sm, paddingVertical: spacing.xs },
+  responseSection: { gap: spacing.sm, marginTop: spacing.sm },
+  responseSectionTitle: { color: colors.foreground, fontFamily: typography.family.display, fontSize: typography.size.lg },
   adviceThumb: {
     width: 56,
     height: 56,
@@ -2913,24 +3198,44 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: colors.primary,
   },
+  inlineError: {
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radii.lg,
+    backgroundColor: '#FFF5F3',
+  },
+  inlineErrorCopy: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  inlineErrorTitle: { color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+  inlineErrorText: { color: colors.mutedForeground, fontSize: typography.size.xs, lineHeight: 17 },
+  retryBtn: { alignSelf: 'flex-start', minHeight: 36, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.foreground },
+  retryBtnText: { color: colors.primaryForeground, fontSize: typography.size.xs, fontWeight: typography.weight.semibold },
+  sheetBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(40,35,31,0.28)' },
+  attachmentSheet: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    borderTopLeftRadius: radii.xl,
+    borderTopRightRadius: radii.xl,
+    backgroundColor: colors.surfaceElevated,
+  },
+  sheetGrabber: { width: 38, height: 5, alignSelf: 'center', marginBottom: spacing.lg, borderRadius: radii.full, backgroundColor: colors.border },
+  attachmentSheetTitle: { color: colors.foreground, fontFamily: typography.family.display, fontSize: 24 },
+  attachmentSheetSubtitle: { marginTop: spacing.xs, color: colors.mutedForeground, fontSize: typography.size.sm, lineHeight: 20 },
+  attachmentChoices: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
+  attachmentChoice: { flex: 1, minHeight: 104, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radii.lg, backgroundColor: colors.surfaceSubtle },
+  attachmentChoiceIcon: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: radii.full, backgroundColor: colors.surfaceSelected },
+  attachmentChoiceLabel: { color: colors.foreground, fontSize: typography.size.xs, fontWeight: typography.weight.semibold, textAlign: 'center' },
+  followUpList: { gap: spacing.xs, marginTop: spacing.lg },
+  followUpRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, borderRadius: radii.md, backgroundColor: colors.surfaceSubtle },
+  followUpText: { color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.medium },
   // Empty state
   emptyState: {
     paddingHorizontal: spacing.sm,
     gap: spacing.lg,
   },
   emptyHero: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-  },
-  emptyIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.surfaceSelected,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.xs,
+    paddingHorizontal: spacing.xs,
   },
   emptyKicker: {
     fontSize: 10,
@@ -2940,49 +3245,35 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
   },
   emptyTitle: {
-    fontSize: typography.size.xxl,
-    fontWeight: typography.weight.semibold,
+    fontFamily: typography.family.display,
+    fontSize: 32,
     color: colors.foreground,
-    textAlign: 'center',
-    lineHeight: typography.size.xxl * 1.15,
-    letterSpacing: -0.7,
+    lineHeight: 38,
+    letterSpacing: -0.5,
   },
   emptySubtitle: {
     fontSize: typography.size.sm,
     color: colors.mutedForeground,
-    textAlign: 'center',
     lineHeight: typography.size.sm * 1.6,
     maxWidth: 330,
   },
-  contextPill: {
+  contextLine: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    marginTop: spacing.xs,
-    backgroundColor: colors.surfaceSelected,
-    borderRadius: radii.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs + 2,
+    maxWidth: '100%',
+    marginTop: spacing.sm,
+    paddingVertical: spacing.xs,
   },
-  contextPillText: {
-    flexShrink: 1,
+  contextLineText: {
     fontSize: 12,
     color: colors.secondaryForeground,
-    fontWeight: typography.weight.medium,
+    fontWeight: typography.weight.semibold,
   },
-  weatherLine: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.xs,
-    maxWidth: 330,
-    paddingHorizontal: spacing.sm,
-  },
-  weatherText: {
-    flexShrink: 1,
-    fontSize: typography.size.xs,
+  contextWeather: {
+    flex: 1,
+    fontSize: 12,
     color: colors.mutedForeground,
-    lineHeight: typography.size.xs * 1.5,
-    textAlign: 'center',
   },
   locationPicker: {
     flex: 1,
@@ -3051,33 +3342,32 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.semibold,
   },
   promptIcon: {
-    width: 32,
-    height: 32,
+    width: 40,
+    height: 40,
     borderRadius: radii.full,
     backgroundColor: colors.surfaceSelected,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  promptList: { width: '100%', gap: spacing.sm },
-  promptChip: {
-    minHeight: 54,
+  promptList: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  promptCard: {
+    width: '48%',
+    minHeight: 116,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
     gap: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    borderRadius: radii.lg,
+    padding: spacing.md,
     backgroundColor: colors.surfaceElevated,
     ...shadows.xs,
   },
-  promptChipText: {
-    flex: 1,
-    fontSize: typography.size.sm,
+  promptTitle: {
+    fontSize: typography.size.md,
     color: colors.foreground,
-    fontWeight: typography.weight.medium,
+    fontWeight: typography.weight.semibold,
   },
+  promptSubtitle: { marginTop: 2, fontSize: typography.size.xs, color: colors.mutedForeground },
   // Item detail sheet
   sheetRoot: {
     flex: 1,

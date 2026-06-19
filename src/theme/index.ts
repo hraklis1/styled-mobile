@@ -33,6 +33,9 @@ export const spacing = {
 } as const;
 
 export const typography = {
+  family: {
+    display: Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' }),
+  },
   size: {
     xs:   12,
     sm:   13,

@@ -167,6 +167,8 @@ export function TripPlanCard({
   const { width } = useWindowDimensions();
   const cardWidth = Math.min(width - spacing.xxl * 2, 320);
   const [packed, setPacked] = useState<Record<number, boolean>>({});
+  const [activeOutfit, setActiveOutfit] = useState(0);
+  const [packingExpanded, setPackingExpanded] = useState(false);
 
   return (
     <View style={styles.container}>
@@ -182,6 +184,10 @@ export function TripPlanCard({
         contentContainerStyle={styles.carousel}
         decelerationRate="fast"
         snapToInterval={cardWidth + spacing.md}
+        onMomentumScrollEnd={(event) => {
+          const page = Math.round(event.nativeEvent.contentOffset.x / (cardWidth + spacing.md));
+          setActiveOutfit(Math.max(0, Math.min(page, plan.outfits.length - 1)));
+        }}
       >
         {plan.outfits.map((o, i) => (
           <TripOutfitCard
@@ -203,24 +209,36 @@ export function TripPlanCard({
         )}
       </ScrollView>
 
+      {plan.outfits.length > 1 ? (
+        <View style={styles.pagination} accessibilityLabel={`Look ${activeOutfit + 1} of ${plan.outfits.length}`}>
+          {plan.outfits.map((_, index) => <View key={index} style={[styles.pageDot, index === activeOutfit && styles.pageDotActive]} />)}
+        </View>
+      ) : null}
+
       {plan.packingList.length > 0 && (
         <View style={styles.packing}>
-          <Text style={styles.packingTitle}>Packing list</Text>
-          {plan.packingList.map((entry, i) => (
-            <TouchableOpacity
-              key={`${entry}-${i}`}
-              style={styles.packingRow}
-              onPress={() => setPacked((p) => ({ ...p, [i]: !p[i] }))}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name={packed[i] ? 'checkbox' : 'square-outline'}
-                size={18}
-                color={packed[i] ? colors.primary : colors.mutedForeground}
-              />
-              <Text style={[styles.packingText, packed[i] && styles.packingTextDone]}>{entry}</Text>
-            </TouchableOpacity>
-          ))}
+          <TouchableOpacity style={styles.packingHeader} onPress={() => setPackingExpanded((open) => !open)}>
+            <View>
+              <Text style={styles.packingTitle}>Packing list</Text>
+              <Text style={styles.packingMeta}>{Object.values(packed).filter(Boolean).length} of {plan.packingList.length} packed</Text>
+            </View>
+            <Ionicons name={packingExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.primary} />
+          </TouchableOpacity>
+          {packingExpanded ? plan.packingList.map((entry, i) => (
+              <TouchableOpacity
+                key={`${entry}-${i}`}
+                style={styles.packingRow}
+                onPress={() => setPacked((p) => ({ ...p, [i]: !p[i] }))}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={packed[i] ? 'checkbox' : 'square-outline'}
+                  size={18}
+                  color={packed[i] ? colors.primary : colors.mutedForeground}
+                />
+                <Text style={[styles.packingText, packed[i] && styles.packingTextDone]}>{entry}</Text>
+              </TouchableOpacity>
+            )) : null}
         </View>
       )}
     </View>
@@ -238,24 +256,25 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   intro: {
-    fontSize: typography.size.md,
+    fontFamily: typography.family.display,
+    fontSize: typography.size.xl,
     color: colors.foreground,
-    lineHeight: typography.size.md * 1.55,
+    lineHeight: typography.size.xl * 1.4,
   },
   carousel: { gap: spacing.md, paddingVertical: spacing.xs, paddingRight: spacing.lg },
   outfitCard: {
-    backgroundColor: colors.card,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radii.xl,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: `${colors.primary}24`,
     padding: spacing.lg,
     gap: spacing.sm,
   },
   placeholderCard: { alignItems: 'center', justifyContent: 'center', minHeight: 220 },
   placeholderText: { color: colors.mutedForeground, fontSize: typography.size.sm, marginTop: spacing.xs },
   outfitLabel: {
-    fontSize: typography.size.md,
-    fontWeight: typography.weight.bold,
+    fontFamily: typography.family.display,
+    fontSize: typography.size.lg,
     color: colors.foreground,
   },
   collageFrame: { borderRadius: radii.md, overflow: 'hidden' },
@@ -293,20 +312,22 @@ const styles = StyleSheet.create({
   saveBtnDone: { backgroundColor: colors.primary, borderColor: colors.primary },
   saveBtnText: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.primary },
   saveBtnTextDone: { color: colors.primaryForeground },
+  pagination: { minHeight: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  pageDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.border },
+  pageDotActive: { width: 18, backgroundColor: colors.primary },
   packing: {
-    backgroundColor: colors.muted,
-    borderRadius: radii.md,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radii.lg,
     padding: spacing.md,
     gap: spacing.xs,
   },
   packingTitle: {
-    fontSize: 10,
-    fontWeight: typography.weight.bold,
-    color: colors.primary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: spacing.xs,
+    fontFamily: typography.family.display,
+    fontSize: typography.size.lg,
+    color: colors.foreground,
   },
+  packingHeader: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  packingMeta: { marginTop: 2, color: colors.mutedForeground, fontSize: typography.size.xs },
   packingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   packingText: { flex: 1, fontSize: typography.size.sm, color: colors.foreground },
   packingTextDone: { textDecorationLine: 'line-through', color: colors.mutedForeground },
