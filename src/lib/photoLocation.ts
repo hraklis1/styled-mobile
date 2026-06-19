@@ -38,14 +38,26 @@ function extractGpsCoords(
   return null;
 }
 
-async function reverseGeocode(coords: { latitude: number; longitude: number }): Promise<string | null> {
+export type CapturedLocation = {
+  latitude: number;
+  longitude: number;
+  label: string | null;
+  address: string | null;
+  placeId?: string | null;
+};
+
+async function reverseGeocode(coords: { latitude: number; longitude: number }): Promise<CapturedLocation> {
   try {
     const results = await Location.reverseGeocodeAsync(coords);
-    if (!results.length) return null;
+    if (!results.length) return { ...coords, label: null, address: null };
     const r = results[0];
-    return r.city || r.subregion || r.region || null;
+    const label = r.name || r.street || r.city || r.subregion || r.region || null;
+    const address = r.formattedAddress
+      || [r.name, r.street, r.city, r.region, r.postalCode].filter(Boolean).join(', ')
+      || null;
+    return { ...coords, label, address };
   } catch {
-    return null;
+    return { ...coords, label: null, address: null };
   }
 }
 
@@ -64,6 +76,14 @@ export async function capturePhotoLocation(
   exif: Record<string, unknown> | null | undefined,
   fallbackToCurrentLocation: boolean,
 ): Promise<string | null> {
+  const result = await capturePhotoLocationData(exif, fallbackToCurrentLocation);
+  return result?.label ?? null;
+}
+
+export async function capturePhotoLocationData(
+  exif: Record<string, unknown> | null | undefined,
+  fallbackToCurrentLocation: boolean,
+): Promise<CapturedLocation | null> {
   // 1. EXIF GPS
   if (exif) {
     const coords = extractGpsCoords(exif);

@@ -9,6 +9,7 @@ import {
   Linking,
 } from 'react-native';
 import { Image } from 'expo-image';
+import * as Crypto from 'expo-crypto';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
@@ -23,9 +24,10 @@ import { OutfitCollage } from '../../components/outfits/OutfitCollage';
 import { useGlobalOutfitLogger } from '../../contexts/GlobalOutfitLoggerContext';
 import { useDailyFindsBoard } from '../../hooks/useDailyFindsBoard';
 import { StoreFindFormModal } from '../../components/boards/StoreFindFormModal';
-import { useUpdateBoard } from '../../hooks/useBoards';
-import { uploadLocalImages } from '../../lib/uploadLocalImages';
+import { DailyFindCaptureModal } from '../../components/boards/DailyFindCaptureModal';
 import type { StoreFind } from '../../types/storeFind';
+import { useStoreFindSync } from '../../hooks/useStoreFindSync';
+import type { CapturedLocation } from '../../lib/photoLocation';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { useGlobalAddSheet } from '../../contexts/GlobalAddSheetContext';
 import { useGlobalScan } from '../../contexts/GlobalScanContext';
@@ -123,8 +125,11 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
   const { openLogger } = useGlobalOutfitLogger();
   const { dailyFindsBoard } = useDailyFindsBoard();
-  const { mutate: updateBoard } = useUpdateBoard();
+  const { queueFind } = useStoreFindSync(dailyFindsBoard?.id);
+  const [findCaptureVisible, setFindCaptureVisible] = useState(false);
   const [storeFindFormVisible, setStoreFindFormVisible] = useState(false);
+  const [capturedFindImages, setCapturedFindImages] = useState<string[]>([]);
+  const [capturedFindLocation, setCapturedFindLocation] = useState<CapturedLocation | null>(null);
   const { openStylist } = useGlobalAIStylist();
   const { openAddSheet } = useGlobalAddSheet();
   const { openScanItem, openBatchScan } = useGlobalScan();
@@ -181,18 +186,31 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const heroWidth = width - SIDE_PAD * 2;
   const heroHeight = Math.round(heroWidth * 0.78);
 
+  const startDailyFindCapture = useCallback(async () => {
+    setFindCaptureVisible(true);
+  }, []);
+
+  const handleFindCaptured = useCallback((imageUris: string[], location: CapturedLocation | null) => {
+    setCapturedFindImages(imageUris);
+    setCapturedFindLocation(location);
+    setStoreFindFormVisible(true);
+  }, []);
+
   const handleSaveStoreFind = useCallback(async (data: Omit<StoreFind, 'id' | 'createdAt'>) => {
-    if (!dailyFindsBoard) return;
-    let newFind: StoreFind = { ...data, id: Date.now().toString(), createdAt: new Date().toISOString() };
+    const newFind: StoreFind = {
+      ...data,
+      id: Crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+      syncStatus: 'pending',
+      status: data.status ?? 'saved',
+    };
+    await queueFind(newFind, dailyFindsBoard?.id ?? null, 'Daily Finds');
+  }, [dailyFindsBoard?.id, queueFind]);
 
-    const hasLocal = (newFind.imageUrls ?? []).some((u) => u.startsWith('file://'));
-    if (hasLocal && user?.id) {
-      newFind = await uploadLocalImages(newFind, user.id);
-    }
-
-    const current = dailyFindsBoard.storeFinds ?? [];
-    updateBoard({ id: dailyFindsBoard.id, storeFinds: [newFind, ...current] });
-  }, [dailyFindsBoard, user, updateBoard]);
+  const handleSaveAndAddAnother = useCallback(async (data: Omit<StoreFind, 'id' | 'createdAt'>) => {
+    await handleSaveStoreFind(data);
+    setTimeout(() => { void startDailyFindCapture(); }, 350);
+  }, [handleSaveStoreFind, startDailyFindCapture]);
 
   const handleAddToCloset = useCallback(() => {
     openAddSheet({
@@ -435,7 +453,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         </View>
         <PressableScale
           contentStyle={styles.quickAction}
-          onPress={() => setStoreFindFormVisible(true)}
+          onPress={() => { void startDailyFindCapture(); }}
           accessibilityRole="button"
           accessibilityLabel="Daily Finds"
         >
@@ -643,8 +661,20 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       )}
       <StoreFindFormModal
         visible={storeFindFormVisible}
-        onClose={() => setStoreFindFormVisible(false)}
+        onClose={() => {
+          setStoreFindFormVisible(false);
+          setCapturedFindImages([]);
+          setCapturedFindLocation(null);
+        }}
         onSave={handleSaveStoreFind}
+        onSaveAndAddAnother={handleSaveAndAddAnother}
+        initialImageUris={capturedFindImages}
+        initialLocation={capturedFindLocation}
+      />
+      <DailyFindCaptureModal
+        visible={findCaptureVisible}
+        onClose={() => setFindCaptureVisible(false)}
+        onCaptured={handleFindCaptured}
       />
     </View>
   );

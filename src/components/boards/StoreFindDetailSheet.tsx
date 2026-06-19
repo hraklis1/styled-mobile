@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Modal, View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import { Modal, View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent, Linking, Alert } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,11 +10,15 @@ type Props = {
   storeFind: StoreFind | null;
   onClose: () => void;
   onEdit?: () => void;
+  onRetry?: () => void;
+  onDelete?: () => void;
+  onMarkPurchased?: () => void;
+  onArchive?: () => void;
 };
 
 const PHOTO_HEIGHT = 320;
 
-export function StoreFindDetailSheet({ storeFind, onClose, onEdit }: Props) {
+export function StoreFindDetailSheet({ storeFind, onClose, onEdit, onRetry, onDelete, onMarkPurchased, onArchive }: Props) {
   const { width: screenWidth } = useWindowDimensions();
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
 
@@ -37,6 +41,26 @@ export function StoreFindDetailSheet({ storeFind, onClose, onEdit }: Props) {
       : storeFind?.imageUrl
       ? [storeFind.imageUrl]
       : [];
+  const formattedPrice = storeFind?.price != null
+    ? new Intl.NumberFormat(undefined, {
+        style: 'currency', currency: storeFind.currency ?? 'USD', maximumFractionDigits: 2,
+      }).format(storeFind.price)
+    : null;
+
+  const openInMaps = useCallback(async () => {
+    if (!storeFind) return;
+    const coordinates = storeFind.locationData;
+    const query = coordinates
+      ? `${coordinates.latitude},${coordinates.longitude}`
+      : storeFind.location || storeFind.store;
+    if (!query) return;
+    const url = `https://maps.apple.com/?q=${encodeURIComponent(query)}`;
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('Maps unavailable', 'This location could not be opened.');
+    }
+  }, [storeFind]);
 
   return (
     <Modal
@@ -117,9 +141,9 @@ export function StoreFindDetailSheet({ storeFind, onClose, onEdit }: Props) {
               )}
 
               <View style={styles.pillRow}>
-                {storeFind.price != null && (
+                {!!formattedPrice && (
                   <View style={styles.pill}>
-                    <Text style={styles.pillText}>${storeFind.price.toFixed(2)}</Text>
+                    <Text style={styles.pillText}>{formattedPrice}</Text>
                   </View>
                 )}
                 {!!storeFind.size && (
@@ -134,6 +158,61 @@ export function StoreFindDetailSheet({ storeFind, onClose, onEdit }: Props) {
                   </View>
                 )}
               </View>
+
+              <Text style={styles.captureDate}>
+                Saved {new Date(storeFind.createdAt).toLocaleDateString(undefined, {
+                  month: 'long', day: 'numeric', year: 'numeric',
+                })}
+              </Text>
+
+              {storeFind.syncStatus && storeFind.syncStatus !== 'synced' && (
+                <View style={styles.syncBlock}>
+                  <Ionicons
+                    name={storeFind.syncStatus === 'failed' ? 'cloud-offline-outline' : 'cloud-upload-outline'}
+                    size={18}
+                    color={colors.primary}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.syncTitle}>
+                      {storeFind.syncStatus === 'failed' ? 'Saved on this device' : 'Waiting to sync'}
+                    </Text>
+                    {!!storeFind.syncError && <Text style={styles.syncMessage}>{storeFind.syncError}</Text>}
+                  </View>
+                  {onRetry && (
+                    <TouchableOpacity onPress={onRetry} style={styles.retryButton}>
+                      <Text style={styles.retryText}>Retry</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
+              {(storeFind.locationData || storeFind.location) && (
+                <TouchableOpacity style={styles.mapButton} onPress={openInMaps}>
+                  <Ionicons name="map-outline" size={18} color={colors.primaryForeground} />
+                  <Text style={styles.mapButtonText}>Open location in Maps</Text>
+                </TouchableOpacity>
+              )}
+
+              {onMarkPurchased && storeFind.status !== 'purchased' && (
+                <TouchableOpacity style={styles.purchasedButton} onPress={onMarkPurchased}>
+                  <Ionicons name="checkmark-circle-outline" size={18} color={colors.primary} />
+                  <Text style={styles.purchasedButtonText}>Purchased · Add to closet</Text>
+                </TouchableOpacity>
+              )}
+
+              {onDelete && (
+                <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
+                  <Ionicons name="trash-outline" size={17} color={colors.destructive} />
+                  <Text style={styles.deleteButtonText}>Delete find</Text>
+                </TouchableOpacity>
+              )}
+
+              {onArchive && (
+                <TouchableOpacity style={styles.deleteButton} onPress={onArchive}>
+                  <Ionicons name="archive-outline" size={17} color={colors.mutedForeground} />
+                  <Text style={styles.archiveButtonText}>Archive find</Text>
+                </TouchableOpacity>
+              )}
 
               {(!!storeFind.store || !!storeFind.brand) && (
                 <View style={styles.metaRow}>
@@ -202,6 +281,49 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.md,
   },
+  captureDate: { color: colors.mutedForeground, fontSize: typography.size.xs },
+  syncBlock: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radii.md,
+    backgroundColor: colors.accent,
+  },
+  syncTitle: { color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+  syncMessage: { color: colors.mutedForeground, fontSize: typography.size.xs, marginTop: 2 },
+  retryButton: { minWidth: 52, minHeight: 40, alignItems: 'center', justifyContent: 'center' },
+  retryText: { color: colors.primary, fontSize: typography.size.sm, fontWeight: typography.weight.bold },
+  mapButton: {
+    minHeight: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderRadius: radii.full,
+    backgroundColor: colors.primary,
+  },
+  mapButtonText: { color: colors.primaryForeground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+  purchasedButton: {
+    minHeight: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderRadius: radii.full,
+    backgroundColor: colors.accent,
+  },
+  purchasedButtonText: { color: colors.primary, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+  deleteButton: {
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  deleteButtonText: { color: colors.destructive, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+  archiveButtonText: { color: colors.mutedForeground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
   descriptionText: {
     fontSize: typography.size.lg,
     fontWeight: typography.weight.semibold,

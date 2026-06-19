@@ -1,127 +1,245 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
 import { AppState } from 'react-native';
-import { useQueryClient } from '@tanstack/react-query';
+import NetInfo from '@react-native-community/netinfo';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as FileSystem from 'expo-file-system/legacy';
 import { api } from '../lib/api';
 import { uploadLocalImages } from '../lib/uploadLocalImages';
-import { dequeueAll, removeEntry, StoreFindQueueEntry } from '../lib/storeFindQueue';
+import {
+  enqueueStoreFind,
+  readStoreFindQueue,
+  migrateLegacyStoreFindQueue,
+  removeQueuedStoreFind,
+  updateQueuedStoreFind,
+  type StoreFindQueueEntry,
+} from '../lib/storeFindQueue';
 import { useAuth } from '../contexts/AuthContext';
 import { BOARDS_QUERY_KEY } from './useBoards';
+import type { Board } from '../types/board';
 import type { StoreFind } from '../types/storeFind';
 
-type BoardFeedRef = { kind: string; data: unknown };
-type BoardFeedPage = { items: BoardFeedRef[]; nextCursor: string | null };
+export const STORE_FIND_QUEUE_QUERY_KEY = ['storeFindQueue'] as const;
+const syncingUsers = new Set<string>();
 
-async function fetchRemoteStoreFinds(boardId: number): Promise<StoreFind[]> {
-  const res = await api.get<BoardFeedPage>(`/api/boards/${boardId}/feed`, {
-    params: { limit: 100 },
-  });
-  return res.data.items
-    .filter((r) => r.kind === 'storeFind')
-    .map((r) => r.data as StoreFind);
-}
-
-async function deleteLocalImages(find: StoreFind): Promise<void> {
-  for (const uri of find.imageUrls ?? []) {
+async function deleteLocalImages(uris: string[]): Promise<void> {
+  for (const uri of uris) {
     if (uri.startsWith('file://')) {
-      await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+      await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => undefined);
     }
   }
 }
 
-export function useStoreFindSync() {
+function readableSyncError(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  return 'Unable to sync. Your find is still saved on this device.';
+}
+
+export function useStoreFindSync(boardId?: number) {
   const { user } = useAuth();
   const qc = useQueryClient();
-  const isSyncing = useRef(false);
-  const [pendingCount, setPendingCount] = useState(0);
+  const userId = user?.id ? String(user.id) : null;
 
-  const refreshCount = useCallback(async () => {
-    const queue = await dequeueAll();
-    setPendingCount(queue.length);
-  }, []);
+  const queueQuery = useQuery({
+    queryKey: [...STORE_FIND_QUEUE_QUERY_KEY, userId],
+    queryFn: () => (userId ? readStoreFindQueue(userId) : Promise.resolve([])),
+    enabled: !!userId,
+    staleTime: 0,
+  });
+
+  const refresh = useCallback(async () => {
+    await qc.invalidateQueries({ queryKey: [...STORE_FIND_QUEUE_QUERY_KEY, userId] });
+  }, [qc, userId]);
 
   const sync = useCallback(async () => {
-    if (!user?.id || isSyncing.current) return;
-    isSyncing.current = true;
+    if (!userId || syncingUsers.has(userId)) return;
+    syncingUsers.add(userId);
 
     try {
-      const queue = await dequeueAll();
-      if (queue.length === 0) {
-        setPendingCount(0);
-        return;
-      }
+      const queue = await readStoreFindQueue(userId);
+      if (queue.length === 0) return;
 
-      // Group entries by boardId so we make one PATCH per board
-      const byBoard = new Map<number, StoreFindQueueEntry[]>();
+      let boards = await api.get<Board[]>('/api/boards').then((response) => response.data);
+
       for (const entry of queue) {
-        const list = byBoard.get(entry.boardId) ?? [];
-        list.push(entry);
-        byBoard.set(entry.boardId, list);
-      }
-
-      for (const [boardId, entries] of byBoard) {
-        let remoteFinds: StoreFind[];
+        let workingFind = entry.find;
         try {
-          remoteFinds = await fetchRemoteStoreFinds(boardId);
-        } catch {
-          continue; // network unavailable — leave in queue
-        }
+          let target = entry.boardId ? boards.find((board) => board.id === entry.boardId) : undefined;
+          target ??= boards.find(
+            (board) => board.name.toLowerCase() === entry.targetBoardName.toLowerCase(),
+          );
 
-        const remoteIds = new Set(remoteFinds.map((sf) => sf.id));
-        const toAppend: StoreFind[] = [];
-        const pendingEntries: StoreFindQueueEntry[] = [];
-
-        for (const entry of entries) {
-          if (remoteIds.has(entry.find.id)) {
-            // Already on server (e.g. a previous partial sync succeeded)
-            await removeEntry(entry.find.id);
-            await deleteLocalImages(entry.find);
-            continue;
+          if (!target) {
+            const createdBoard = await api
+              .post<Board>('/api/boards', { name: entry.targetBoardName })
+              .then((response) => response.data);
+            target = createdBoard;
+            boards = [createdBoard, ...boards];
           }
-          const uploaded = await uploadLocalImages(entry.find, user.id);
+          if (!target) throw new Error('Daily Finds is unavailable.');
+          const targetBoard = target;
 
-          // If any image still has a file:// URI the upload failed — skip this
-          // entry and leave it in the queue so the next sync can retry.
-          if ((uploaded.imageUrls ?? []).some((u) => u.startsWith('file://'))) continue;
+          const syncingFind: StoreFind = {
+            ...entry.find,
+            syncStatus: 'syncing',
+            syncError: null,
+            lastSyncAttemptAt: new Date().toISOString(),
+          };
+          await updateQueuedStoreFind(userId, entry.find.id, {
+            boardId: targetBoard.id,
+            find: syncingFind,
+          });
+          await refresh();
 
-          toAppend.push(uploaded);
-          pendingEntries.push(entry);
-        }
-
-        if (toAppend.length === 0) continue;
-
-        const merged = [...toAppend, ...remoteFinds];
-
-        try {
-          await api.patch(`/api/boards/${boardId}`, { storeFinds: merged });
-          qc.invalidateQueries({ queryKey: BOARDS_QUERY_KEY });
-
-          // Delete the ORIGINAL local files (not the uploaded R2 URLs).
-          for (let i = 0; i < toAppend.length; i++) {
-            await removeEntry(toAppend[i].id);
-            await deleteLocalImages(pendingEntries[i].find);
+          const uploaded = await uploadLocalImages(syncingFind, userId);
+          if ((uploaded.imageUrls ?? []).some((uri) => uri.startsWith('file://'))) {
+            throw new Error('Photo upload is waiting for a better connection.');
           }
-        } catch {
-          // Leave in queue for next retry
+          workingFind = uploaded;
+          await updateQueuedStoreFind(userId, entry.find.id, {
+            boardId: targetBoard.id,
+            find: { ...uploaded, syncStatus: 'syncing', syncError: null },
+          });
+          await refresh();
+
+          const remoteFinds = targetBoard.storeFinds ?? [];
+          const syncedFind: StoreFind = {
+            ...uploaded,
+            syncStatus: 'synced',
+            syncError: null,
+          };
+          const merged = remoteFinds.some((find) => find.id === syncedFind.id)
+            ? remoteFinds.map((find) => (find.id === syncedFind.id ? syncedFind : find))
+            : [syncedFind, ...remoteFinds];
+
+          const updatedBoard = await api
+            .patch<Board>(`/api/boards/${targetBoard.id}`, { storeFinds: merged })
+            .then((response) => response.data);
+          boards = boards.map((board) => (board.id === updatedBoard.id ? updatedBoard : board));
+
+          await removeQueuedStoreFind(userId, entry.find.id);
+          await deleteLocalImages(entry.localImageUris ?? (entry.find.imageUrls ?? []).filter((uri) => uri.startsWith('file://')));
+          qc.setQueryData<Board[]>(BOARDS_QUERY_KEY, boards);
+        } catch (error) {
+          const attempts = (entry.find.syncAttempts ?? 0) + 1;
+          await updateQueuedStoreFind(userId, entry.find.id, {
+            find: {
+              ...workingFind,
+              syncStatus: 'failed',
+              syncError: readableSyncError(error),
+              syncAttempts: attempts,
+              lastSyncAttemptAt: new Date().toISOString(),
+            },
+          });
         }
       }
+    } catch {
+      // Fetching boards can fail wholesale while offline. The durable queue is untouched.
     } finally {
-      isSyncing.current = false;
-      const remaining = await dequeueAll();
-      setPendingCount(remaining.length);
+      syncingUsers.delete(userId);
+      await refresh();
+      qc.invalidateQueries({ queryKey: BOARDS_QUERY_KEY });
     }
-  }, [user?.id, qc]);
+  }, [qc, refresh, userId]);
 
-  useEffect(() => {
-    refreshCount();
-  }, [refreshCount]);
-
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') sync();
+  const queueFind = useCallback(async (
+    find: StoreFind,
+    targetBoardId: number | null,
+    targetBoardName = 'Daily Finds',
+  ) => {
+    if (!userId) throw new Error('Sign in before saving a find.');
+    const pendingFind: StoreFind = {
+      ...find,
+      syncStatus: 'pending',
+      syncError: null,
+      syncAttempts: find.syncAttempts ?? 0,
+    };
+    await enqueueStoreFind({
+      userId,
+      boardId: targetBoardId,
+      targetBoardName,
+      find: pendingFind,
+      localImageUris: (pendingFind.imageUrls ?? []).filter((uri) => uri.startsWith('file://')),
+      queuedAt: new Date().toISOString(),
     });
-    return () => sub.remove();
+    await refresh();
+    void sync();
+  }, [refresh, sync, userId]);
+
+  const retry = useCallback(async (findId?: string) => {
+    if (userId && findId) {
+      const entries = await readStoreFindQueue(userId);
+      const entry = entries.find((candidate) => candidate.find.id === findId);
+      if (entry) {
+        await updateQueuedStoreFind(userId, findId, {
+          find: { ...entry.find, syncStatus: 'pending', syncError: null },
+        });
+      }
+    }
+    await refresh();
+    await sync();
+  }, [refresh, sync, userId]);
+
+  const updateLocalFind = useCallback(async (find: StoreFind) => {
+    if (!userId) return false;
+    const queue = await readStoreFindQueue(userId);
+    const entry = queue.find((candidate) => candidate.find.id === find.id);
+    if (!entry) return false;
+    await updateQueuedStoreFind(userId, find.id, {
+      find: { ...find, syncStatus: 'pending', syncError: null },
+      localImageUris: Array.from(new Set([
+        ...(entry.localImageUris ?? []),
+        ...(find.imageUrls ?? []).filter((uri) => uri.startsWith('file://')),
+      ])),
+    });
+    await refresh();
+    void sync();
+    return true;
+  }, [refresh, sync, userId]);
+
+  const discardLocalFind = useCallback(async (findId: string) => {
+    if (!userId) return false;
+    const queue = await readStoreFindQueue(userId);
+    const entry = queue.find((candidate) => candidate.find.id === findId);
+    if (!entry) return false;
+    await removeQueuedStoreFind(userId, findId);
+    await deleteLocalImages(entry.localImageUris ?? []);
+    await refresh();
+    return true;
+  }, [refresh, userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    void migrateLegacyStoreFindQueue(userId).then(() => sync());
+  }, [sync, userId]);
+
+  useEffect(() => {
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void sync();
+    });
+    const network = NetInfo.addEventListener((state) => {
+      if (state.isConnected && state.isInternetReachable !== false) void sync();
+    });
+    return () => {
+      appState.remove();
+      network();
+    };
   }, [sync]);
 
-  return { pendingCount, sync };
+  const entries = (queueQuery.data ?? []).filter((entry: StoreFindQueueEntry) => {
+    if (boardId == null) return true;
+    return entry.boardId === boardId || (entry.boardId == null && entry.targetBoardName === 'Daily Finds');
+  });
+
+  return {
+    entries,
+    pendingFinds: entries.map((entry) => entry.find),
+    pendingCount: entries.length,
+    isLoading: queueQuery.isLoading,
+    queueFind,
+    retry,
+    updateLocalFind,
+    discardLocalFind,
+    sync,
+    refresh,
+  };
 }

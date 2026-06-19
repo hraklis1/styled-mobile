@@ -20,6 +20,7 @@ import * as Location from 'expo-location';
 import * as FileSystem from 'expo-file-system/legacy';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { StoreFind } from '../../types/storeFind';
+import type { CapturedLocation } from '../../lib/photoLocation';
 import { BrandAutocompleteInput } from '../primitives/BrandAutocompleteInput';
 import { useBrandSuggestions } from '../../hooks/useItems';
 import { useCameraLaunch, useLibraryLaunch } from '../../hooks/useCameraLaunch';
@@ -134,30 +135,51 @@ const POPULAR_STORES = [
 const SIZE_OPTIONS = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'OS', 'Custom'] as const;
 const MAX_PHOTOS = 5;
 
-async function persistPhoto(cacheUri: string): Promise<string> {
+export async function persistStoreFindPhoto(cacheUri: string): Promise<string> {
   const dir = FileSystem.documentDirectory;
-  if (!dir) return cacheUri;
+  if (!dir) throw new Error('Device storage is unavailable.');
   try {
     const storeFindDir = `${dir}store_finds/`;
     await FileSystem.makeDirectoryAsync(storeFindDir, { intermediates: true });
-    const dest = `${storeFindDir}${Date.now()}.jpg`;
+    const dest = `${storeFindDir}${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
     await FileSystem.copyAsync({ from: cacheUri, to: dest });
+    const info = await FileSystem.getInfoAsync(dest);
+    if (!info.exists || (typeof info.size === 'number' && info.size === 0)) {
+      throw new Error('Photo could not be saved.');
+    }
     return dest;
   } catch {
-    return cacheUri; // fall back to cache URI if copy fails
+    throw new Error('Photo could not be stored on this device.');
   }
 }
 
 const SIZE_PRESETS = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'OS'] as const;
 
+function defaultCurrency(): string {
+  const locale = Intl.DateTimeFormat().resolvedOptions().locale;
+  const region = locale.split('-')[1]?.toUpperCase();
+  return ({ CA: 'CAD', US: 'USD', GB: 'GBP', AU: 'AUD', NZ: 'NZD', JP: 'JPY' } as Record<string, string>)[region] ?? 'USD';
+}
+
 type Props = {
   visible: boolean;
   onClose: () => void;
   onSave: (data: Omit<StoreFind, 'id' | 'createdAt'>) => Promise<void>;
+  onSaveAndAddAnother?: (data: Omit<StoreFind, 'id' | 'createdAt'>) => Promise<void>;
   initialValues?: StoreFind;
+  initialImageUris?: string[];
+  initialLocation?: CapturedLocation | null;
 };
 
-export function StoreFindFormModal({ visible, onClose, onSave, initialValues }: Props) {
+export function StoreFindFormModal({
+  visible,
+  onClose,
+  onSave,
+  onSaveAndAddAnother,
+  initialValues,
+  initialImageUris = [],
+  initialLocation,
+}: Props) {
   const [imageUris, setImageUris] = useState<string[]>([]);
   const [description, setDescription] = useState('');
   const [store, setStore] = useState('');
@@ -167,6 +189,8 @@ export function StoreFindFormModal({ visible, onClose, onSave, initialValues }: 
   const [customSize, setCustomSize] = useState('');
   const [notes, setNotes] = useState('');
   const [location, setLocation] = useState<string | null>(null);
+  const [locationData, setLocationData] = useState<CapturedLocation | null>(null);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -174,7 +198,7 @@ export function StoreFindFormModal({ visible, onClose, onSave, initialValues }: 
   useEffect(() => {
     if (!visible) return;
     if (!initialValues) {
-      setImageUris([]);
+      setImageUris(initialImageUris);
       setDescription('');
       setStore('');
       setBrand('');
@@ -182,7 +206,9 @@ export function StoreFindFormModal({ visible, onClose, onSave, initialValues }: 
       setSizePreset('');
       setCustomSize('');
       setNotes('');
-      setLocation(null);
+      setLocation(initialLocation?.label ?? null);
+      setLocationData(initialLocation ?? null);
+      setDetailsExpanded(false);
       return;
     }
     const size = initialValues.size ?? '';
@@ -202,7 +228,9 @@ export function StoreFindFormModal({ visible, onClose, onSave, initialValues }: 
     setCustomSize(isPreset || !size ? '' : size);
     setNotes(initialValues.notes ?? '');
     setLocation(initialValues.location ?? null);
-  }, [visible, initialValues]);
+    setLocationData(initialValues.locationData ?? null);
+    setDetailsExpanded(true);
+  }, [visible, initialValues, initialImageUris, initialLocation]);
 
   const brandSuggestions = useBrandSuggestions();
   const launchCamera = useCameraLaunch();
@@ -212,8 +240,12 @@ export function StoreFindFormModal({ visible, onClose, onSave, initialValues }: 
     const launch = fromCamera ? launchCamera : launchLibrary;
     const image = await launch({ maxDim: 1080, compress: 0.8 });
     if (!image?.uri) return;
-    const persistent = await persistPhoto(image.uri);
-    setImageUris((prev) => [...prev, persistent]);
+    try {
+      const persistent = await persistStoreFindPhoto(image.uri);
+      setImageUris((prev) => [...prev, persistent]);
+    } catch (error) {
+      Alert.alert('Photo not saved', error instanceof Error ? error.message : 'Please try again.');
+    }
   }, [launchCamera, launchLibrary]);
 
   const handleAddPhoto = useCallback(() => {
@@ -255,8 +287,16 @@ export function StoreFindFormModal({ visible, onClose, onSave, initialValues }: 
       const results = await Location.reverseGeocodeAsync(coords.coords);
       if (results.length > 0) {
         const r = results[0];
-        const name = r.city || r.subregion || r.region || 'Unknown Location';
+        const name = r.name || r.street || r.city || r.subregion || r.region || 'Unknown Location';
         setLocation(name);
+        setLocationData({
+          latitude: coords.coords.latitude,
+          longitude: coords.coords.longitude,
+          label: name,
+          address: r.formattedAddress
+            || [r.name, r.street, r.city, r.region, r.postalCode].filter(Boolean).join(', ')
+            || null,
+        });
       }
     } catch {
       Alert.alert('Location Error', 'Unable to get your current location. Please try again.');
@@ -265,24 +305,40 @@ export function StoreFindFormModal({ visible, onClose, onSave, initialValues }: 
     }
   }, []);
 
-  const handleSave = async () => {
+  const buildSaveData = (): Omit<StoreFind, 'id' | 'createdAt'> => {
+    const price = parseFloat(priceStr.replace(/[^0-9.]/g, ''));
+    const size = sizePreset === 'Custom' ? customSize.trim() : sizePreset;
+    return {
+      imageUrl: imageUris[0] ?? null,
+      imageUrls: imageUris,
+      location,
+      locationData: locationData ? { ...locationData, label: location } : null,
+      description: description.trim() || null,
+      store: store.trim() || null,
+      brand: brand.trim() || null,
+      price: isNaN(price) ? null : price,
+      currency: initialValues?.currency ?? defaultCurrency(),
+      size: size || null,
+      notes: notes.trim() || null,
+      syncStatus: 'pending',
+      status: 'saved',
+      syncError: null,
+      syncAttempts: 0,
+      lastSyncAttemptAt: null,
+    };
+  };
+
+  const handleSave = async (addAnother = false) => {
     if (isSubmitting) return;
+    if (imageUris.length === 0) {
+      Alert.alert('Add a photo', 'Take or choose a photo before saving this find.');
+      return;
+    }
     setIsSubmitting(true);
     try {
-      const price = parseFloat(priceStr.replace(/[^0-9.]/g, ''));
-      const size = sizePreset === 'Custom' ? customSize.trim() : sizePreset;
-
-      await onSave({
-        imageUrl: imageUris[0] ?? null,
-        imageUrls: imageUris,
-        location,
-        description: description.trim() || null,
-        store: store.trim() || null,
-        brand: brand.trim() || null,
-        price: isNaN(price) ? null : price,
-        size: size || null,
-        notes: notes.trim() || null,
-      });
+      const data = buildSaveData();
+      if (addAnother && onSaveAndAddAnother) await onSaveAndAddAnother(data);
+      else await onSave(data);
 
       setImageUris([]);
       setDescription('');
@@ -293,7 +349,10 @@ export function StoreFindFormModal({ visible, onClose, onSave, initialValues }: 
       setCustomSize('');
       setNotes('');
       setLocation(null);
+      setLocationData(null);
       onClose();
+    } catch (error) {
+      Alert.alert('Not saved', error instanceof Error ? error.message : 'Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -306,8 +365,8 @@ export function StoreFindFormModal({ visible, onClose, onSave, initialValues }: 
           <TouchableOpacity onPress={onClose} style={styles.headerBtn}>
             <Text style={styles.headerBtnText}>Cancel</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>{initialValues ? 'Edit Store Find' : 'Store Find'}</Text>
-          <TouchableOpacity onPress={handleSave} style={styles.headerBtn} disabled={isSubmitting}>
+          <Text style={styles.title}>{initialValues ? 'Edit Find' : 'Save Find'}</Text>
+          <TouchableOpacity onPress={() => handleSave(false)} style={styles.headerBtn} disabled={isSubmitting}>
             <Text style={[styles.headerBtnText, styles.saveText, isSubmitting && { opacity: 0.4 }]}>
               {isSubmitting ? 'Saving…' : 'Save'}
             </Text>
@@ -347,7 +406,7 @@ export function StoreFindFormModal({ visible, onClose, onSave, initialValues }: 
             </ScrollView>
 
             <View style={[styles.form, { zIndex: 1 }]}>
-              <View style={[styles.field, { zIndex: 12 }]}>
+              {detailsExpanded && <View style={[styles.field, { zIndex: 12 }]}>
                 <Text style={styles.label}>Description</Text>
                 <TextInput
                   style={styles.input}
@@ -356,26 +415,29 @@ export function StoreFindFormModal({ visible, onClose, onSave, initialValues }: 
                   value={description}
                   onChangeText={setDescription}
                 />
-              </View>
+              </View>}
 
               {/* Store + location tag */}
               <View style={[styles.field, { zIndex: 11 }]}>
                 <View style={styles.labelRow}>
                   <Text style={styles.label}>Store</Text>
-                  <TouchableOpacity
-                    style={styles.locationTagBtn}
-                    onPress={handleTagLocation}
-                    disabled={isFetchingLocation}
-                  >
-                    {isFetchingLocation ? (
-                      <ActivityIndicator size="small" color={colors.primary} />
-                    ) : (
-                      <>
-                        <Ionicons name="location-outline" size={13} color={colors.primary} />
-                        <Text style={styles.locationTagText}>Tag Location</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
+                  {!location && (
+                    <TouchableOpacity
+                      style={styles.locationTagBtn}
+                      onPress={handleTagLocation}
+                      disabled={isFetchingLocation}
+                      accessibilityLabel="Add current location"
+                    >
+                      {isFetchingLocation ? (
+                        <ActivityIndicator size="small" color={colors.primary} />
+                      ) : (
+                        <>
+                          <Ionicons name="location-outline" size={13} color={colors.primary} />
+                          <Text style={styles.locationTagText}>Add current location</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )}
                 </View>
                 <BrandAutocompleteInput
                   value={store}
@@ -387,15 +449,30 @@ export function StoreFindFormModal({ visible, onClose, onSave, initialValues }: 
                 {!!location && (
                   <View style={styles.locationChip}>
                     <Ionicons name="location" size={12} color={colors.mutedForeground} />
-                    <Text style={styles.locationChipText}>{location}</Text>
-                    <TouchableOpacity onPress={() => setLocation(null)} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
-                      <Ionicons name="close" size={12} color={colors.mutedForeground} />
+                    <Text style={styles.locationChipText} numberOfLines={2}>{location}</Text>
+                    <TouchableOpacity
+                      style={styles.changeLocationButton}
+                      onPress={handleTagLocation}
+                      disabled={isFetchingLocation}
+                      accessibilityLabel="Change current location"
+                    >
+                      {isFetchingLocation
+                        ? <ActivityIndicator size="small" color={colors.primary} />
+                        : <Text style={styles.changeLocationText}>Change</Text>}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.clearLocationButton}
+                      onPress={() => { setLocation(null); setLocationData(null); }}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      accessibilityLabel="Remove location"
+                    >
+                      <Ionicons name="close" size={14} color={colors.mutedForeground} />
                     </TouchableOpacity>
                   </View>
                 )}
               </View>
 
-              <View style={[styles.field, { zIndex: 10 }]}>
+              {detailsExpanded && <View style={[styles.field, { zIndex: 10 }]}>
                 <Text style={styles.label}>Brand</Text>
                 <BrandAutocompleteInput
                   value={brand}
@@ -404,7 +481,7 @@ export function StoreFindFormModal({ visible, onClose, onSave, initialValues }: 
                   suggestions={brandSuggestions}
                   placeholder="Brand name"
                 />
-              </View>
+              </View>}
 
               {/* Price with $ prefix + Size inline */}
               <View style={styles.row}>
@@ -454,7 +531,7 @@ export function StoreFindFormModal({ visible, onClose, onSave, initialValues }: 
                 )}
               </View>
 
-              <View style={styles.field}>
+              {detailsExpanded && <View style={styles.field}>
                 <Text style={styles.label}>Notes</Text>
                 <TextInput
                   style={[styles.input, styles.textArea]}
@@ -464,7 +541,25 @@ export function StoreFindFormModal({ visible, onClose, onSave, initialValues }: 
                   value={notes}
                   onChangeText={setNotes}
                 />
-              </View>
+              </View>}
+
+              {!detailsExpanded && (
+                <TouchableOpacity style={styles.detailsToggle} onPress={() => setDetailsExpanded(true)}>
+                  <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
+                  <Text style={styles.detailsToggleText}>Add description, brand or notes</Text>
+                </TouchableOpacity>
+              )}
+
+              {!initialValues && onSaveAndAddAnother && (
+                <TouchableOpacity
+                  style={styles.saveAnotherButton}
+                  onPress={() => handleSave(true)}
+                  disabled={isSubmitting}
+                >
+                  <Ionicons name="camera-outline" size={18} color={colors.primaryForeground} />
+                  <Text style={styles.saveAnotherText}>Save & snap another</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -593,11 +688,30 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     backgroundColor: colors.secondary,
     borderRadius: radii.sm,
-    alignSelf: 'flex-start',
+    alignSelf: 'stretch',
   },
   locationChipText: {
+    flex: 1,
     fontSize: typography.size.xs,
     color: colors.mutedForeground,
+  },
+  changeLocationButton: {
+    minWidth: 54,
+    minHeight: 32,
+    paddingHorizontal: spacing.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  changeLocationText: {
+    color: colors.primary,
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+  },
+  clearLocationButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   input: {
     backgroundColor: colors.card,
@@ -672,6 +786,34 @@ const styles = StyleSheet.create({
   },
   sizeBtnTextActive: {
     color: colors.primaryForeground,
+  },
+  detailsToggle: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderRadius: radii.full,
+    backgroundColor: colors.accent,
+  },
+  detailsToggleText: {
+    color: colors.primary,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+  },
+  saveAnotherButton: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderRadius: radii.full,
+    backgroundColor: colors.primary,
+  },
+  saveAnotherText: {
+    color: colors.primaryForeground,
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.semibold,
   },
 
 });

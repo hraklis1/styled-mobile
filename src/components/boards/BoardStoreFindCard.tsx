@@ -10,9 +10,32 @@ type Props = {
   cardWidth: number;
 };
 
+function formatPrice(storeFind: StoreFind): string | null {
+  if (storeFind.price == null) return null;
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency', currency: storeFind.currency ?? 'USD', maximumFractionDigits: 2,
+    }).format(storeFind.price);
+  } catch {
+    return `$${storeFind.price.toFixed(2)}`;
+  }
+}
+
+function formatFindDate(value: string): string {
+  const date = new Date(value);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const day = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const difference = Math.round((today - day) / 86_400_000);
+  if (difference === 0) return 'Today';
+  if (difference === 1) return 'Yesterday';
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 export function BoardStoreFindCard({ storeFind, cardWidth }: Props) {
   const primaryImage = storeFind.imageUrls?.[0] ?? storeFind.imageUrl;
   const photoCount = storeFind.imageUrls?.length ?? (storeFind.imageUrl ? 1 : 0);
+  const price = formatPrice(storeFind);
 
   return (
     <View style={[styles.root, { width: cardWidth, height: cardWidth * 1.25 }]}>
@@ -53,16 +76,28 @@ export function BoardStoreFindCard({ storeFind, cardWidth }: Props) {
         </View>
       )}
 
+      {storeFind.syncStatus && storeFind.syncStatus !== 'synced' && (
+        <View style={styles.syncBadge}>
+          <Ionicons
+            name={storeFind.syncStatus === 'failed' ? 'cloud-offline-outline' : 'cloud-upload-outline'}
+            size={11}
+            color="#fff"
+          />
+          <Text style={styles.syncText}>
+            {storeFind.syncStatus === 'failed' ? 'Saved offline' : 'Waiting to sync'}
+          </Text>
+        </View>
+      )}
+
       <View style={styles.details}>
         {!!storeFind.description && (
           <Text style={styles.descriptionText} numberOfLines={1}>{storeFind.description}</Text>
         )}
-        <Text style={styles.priceText}>
-          {storeFind.price != null ? `$${storeFind.price.toFixed(2)}` : 'Price unknown'}
-        </Text>
+        {!!price && <Text style={styles.priceText}>{price}</Text>}
         {!!storeFind.size && (
           <Text style={styles.sizeText}>Size: {storeFind.size}</Text>
         )}
+        <Text style={styles.dateText}>{formatFindDate(storeFind.createdAt)}</Text>
       </View>
     </View>
   );
@@ -131,6 +166,24 @@ const styles = StyleSheet.create({
     fontSize: typography.size.xs,
     fontWeight: typography.weight.medium,
   },
+  syncBadge: {
+    position: 'absolute',
+    right: spacing.xs,
+    bottom: spacing.xs + 36,
+    zIndex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: radii.full,
+    backgroundColor: 'rgba(40,35,31,0.78)',
+  },
+  syncText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: typography.weight.semibold,
+  },
   details: {
     padding: spacing.xs,
     backgroundColor: colors.card,
@@ -152,4 +205,5 @@ const styles = StyleSheet.create({
     fontSize: typography.size.xs,
     color: colors.mutedForeground,
   },
+  dateText: { fontSize: 10, color: colors.mutedForeground, marginTop: 2 },
 });
