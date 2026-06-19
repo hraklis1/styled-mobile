@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import type { ListRenderItemInfo } from '@shopify/flash-list';
@@ -24,20 +25,44 @@ import { useAuth } from '../../contexts/AuthContext';
 import type { BoardFeedItem } from '../../types/board';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { BoardDetailScreenProps } from '../../navigation/types';
-import { BoardAddMenuSheet } from '../../components/boards/BoardAddMenuSheet';
 import { BoardOptionsMenuSheet } from '../../components/boards/BoardOptionsMenuSheet';
-import { BoardItemPickerModal } from '../../components/boards/BoardItemPickerModal';
-import { BoardOutfitPickerModal } from '../../components/boards/BoardOutfitPickerModal';
-import { BoardWishlistPickerModal } from '../../components/boards/BoardWishlistPickerModal';
+import { BoardContentPickerModal } from '../../components/boards/BoardContentPickerModal';
+import { BoardCoverPickerModal } from '../../components/boards/BoardCoverPickerModal';
 import { StoreFindFormModal } from '../../components/boards/StoreFindFormModal';
 import { BoardStoreFindCard } from '../../components/boards/BoardStoreFindCard';
 import { StoreFindDetailSheet } from '../../components/boards/StoreFindDetailSheet';
 import type { StoreFind } from '../../types/storeFind';
 import { useLibraryLaunch } from '../../hooks/useCameraLaunch';
+import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
+import {
+  buildBoardStylistPrompt,
+  filterBoardFeed,
+  getBoardInsights,
+  type BoardAIIntent,
+  type BoardFilter,
+} from '../../lib/boardPresentation';
 
 const SIDE_PAD = spacing.lg;
 const COL_GAP = spacing.sm;
 const CARD_ASPECT_RATIO = 0.85;
+const BOARD_FILTERS: { key: BoardFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'item', label: 'Pieces' },
+  { key: 'outfit', label: 'Outfits' },
+  { key: 'wishlist', label: 'Wishlist' },
+  { key: 'storeFind', label: 'Finds' },
+];
+
+const NAMED_SWATCHES: Record<string, string> = {
+  black: '#28231F', white: '#FAF8F5', grey: '#8B8580', navy: '#25324A', blue: '#4C6F91',
+  green: '#62775A', olive: '#77734D', red: '#9C4A45', burgundy: '#6B3540', pink: '#C98E9D',
+  orange: '#C47842', yellow: '#D4B95D', brown: '#7B5B46', tan: '#B89A78', beige: '#D8C7AF',
+  cream: '#F3EBDD', purple: '#735E7D', lavender: '#A79AB8', gold: '#B28A45', silver: '#A5A5A2',
+};
+
+function swatchColor(value: string): string {
+  return /^#[0-9A-F]{6}$/i.test(value) ? value : NAMED_SWATCHES[value.toLowerCase()] ?? colors.secondary;
+}
 
 export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps) {
   const { boardId, autoOpenStoreFindForm } = route.params;
@@ -46,8 +71,10 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
   const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / 2;
 
   const { user } = useAuth();
+  const { openStylist } = useGlobalAIStylist();
   const { data: boards = [] } = useBoards();
   const board = boards.find((b) => b.id === boardId);
+  const [filter, setFilter] = useState<BoardFilter>('all');
 
   const feed = useBoardFeed(boardId);
 
@@ -55,18 +82,31 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
     return flattenBoardFeed(feed.data?.pages);
   }, [feed.data?.pages]);
 
+  const visibleItems = useMemo(
+    () => filterBoardFeed(items, filter),
+    [filter, items],
+  );
+
+  const boardInsights = useMemo(() => getBoardInsights(items), [items]);
+
   const { mutate: deleteBoard } = useDeleteBoard();
   const { mutate: updateBoard } = useUpdateBoard();
   const { pendingCount, sync: syncStoreFinds } = useStoreFindSync();
 
-  const [menuVisible, setMenuVisible] = useState(false);
   const [optionsMenuVisible, setOptionsMenuVisible] = useState(false);
-  const [itemPickerVisible, setItemPickerVisible] = useState(false);
-  const [outfitPickerVisible, setOutfitPickerVisible] = useState(false);
-  const [wishlistPickerVisible, setWishlistPickerVisible] = useState(false);
+  const [contentPickerVisible, setContentPickerVisible] = useState(false);
+  const [coverPickerVisible, setCoverPickerVisible] = useState(route.params.editCover === true);
   const [storeFindFormVisible, setStoreFindFormVisible] = useState(false);
   const [detailStoreFind, setDetailStoreFind] = useState<StoreFind | null>(null);
   const [editingStoreFind, setEditingStoreFind] = useState<StoreFind | null>(null);
+  const [organizeMode, setOrganizeMode] = useState(route.params.organize === true);
+  const [lastRemoval, setLastRemoval] = useState<{
+    count: number;
+    itemIds: number[];
+    outfitIds: number[];
+    wishlistIds: string[];
+    storeFinds: StoreFind[];
+  } | null>(null);
 
   // Auto-open the store find form when navigated from the "Daily Finds" home button.
   useEffect(() => {
@@ -74,11 +114,18 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!lastRemoval) return;
+    const timeout = setTimeout(() => setLastRemoval(null), 7000);
+    return () => clearTimeout(timeout);
+  }, [lastRemoval]);
+
   // ── Multiselect ─────────────────────────────────────────────────────────────
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
-  const isMultiselect = selectedKeys.size > 0;
+  const isMultiselect = organizeMode;
 
   const enterMultiselect = useCallback((key: string) => {
+    setOrganizeMode(true);
     setSelectedKeys(new Set([key]));
   }, []);
 
@@ -93,6 +140,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
 
   const exitMultiselect = useCallback(() => {
     setSelectedKeys(new Set());
+    setOrganizeMode(false);
   }, []);
 
   const handleDeleteSelected = useCallback(() => {
@@ -107,6 +155,13 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
           text: 'Remove',
           style: 'destructive',
           onPress: () => {
+            setLastRemoval({
+              count,
+              itemIds: board.itemIds,
+              outfitIds: board.outfitIds,
+              wishlistIds: board.wishlistIds,
+              storeFinds: board.storeFinds ?? [],
+            });
             const itemIds = new Set<number>();
             const outfitIds = new Set<number>();
             const wishlistIds = new Set<string>();
@@ -130,6 +185,18 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
       ],
     );
   }, [board, boardId, selectedKeys, updateBoard]);
+
+  const undoRemoval = useCallback(() => {
+    if (!lastRemoval) return;
+    updateBoard({
+      id: boardId,
+      itemIds: lastRemoval.itemIds,
+      outfitIds: lastRemoval.outfitIds,
+      wishlistIds: lastRemoval.wishlistIds,
+      storeFinds: lastRemoval.storeFinds,
+    });
+    setLastRemoval(null);
+  }, [boardId, lastRemoval, updateBoard]);
 
   const launchLibrary = useLibraryLaunch();
 
@@ -183,7 +250,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
     }
   }, [boardId, board?.name, updateBoard]);
 
-  const handleChangeCover = useCallback(async () => {
+  const handleUploadCover = useCallback(async () => {
     const image = await launchLibrary({ allowsEditing: true, maxDim: 800 });
     if (image?.dataUrl) {
       updateBoard(
@@ -196,6 +263,20 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
       );
     }
   }, [boardId, launchLibrary, updateBoard]);
+
+  const handleSelectCover = useCallback((coverImageUrl: string | null) => {
+    updateBoard({ id: boardId, coverImageUrl });
+    setCoverPickerVisible(false);
+  }, [boardId, updateBoard]);
+
+  const openBoardStylist = useCallback((intent: BoardAIIntent) => {
+    if (!board) return;
+    openStylist({
+      source: 'board_detail',
+      destination: board.name,
+      initialQuery: buildBoardStylistPrompt(board.name, items, intent),
+    });
+  }, [board, items, openStylist]);
 
   const handleDelete = useCallback(() => {
     Alert.alert('Delete board', `Delete "${board?.name ?? 'this board'}"? Saved items stay in your closet.`, [
@@ -220,10 +301,10 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
       const key = item.key;
       const isSelected = selectedKeys.has(key);
 
-      const selectionOverlay = isSelected ? (
-        <View style={styles.selectionOverlay} pointerEvents="none">
-          <View style={styles.selectionCheck}>
-            <Ionicons name="checkmark" size={16} color={colors.primaryForeground} />
+      const selectionOverlay = isMultiselect ? (
+        <View style={[styles.selectionOverlay, !isSelected && styles.selectionOverlayIdle]} pointerEvents="none">
+          <View style={[styles.selectionCheck, !isSelected && styles.selectionCheckIdle]}>
+            {isSelected && <Ionicons name="checkmark" size={16} color={colors.primaryForeground} />}
           </View>
         </View>
       ) : null;
@@ -308,6 +389,65 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
 
   const showInitialLoading = feed.isLoading && items.length === 0;
 
+  const boardTools = !organizeMode ? (
+    <View style={styles.tools}>
+      {items.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          {BOARD_FILTERS.map((option) => {
+            const count = option.key === 'all' ? items.length : items.filter((entry) => entry.kind === option.key).length;
+            return (
+              <TouchableOpacity
+                key={option.key}
+                style={[styles.filterChip, filter === option.key && styles.filterChipActive]}
+                onPress={() => setFilter(option.key)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: filter === option.key }}
+              >
+                <Text style={[styles.filterText, filter === option.key && styles.filterTextActive]}>{option.label} · {count}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
+
+      {(boardInsights.colors.length > 0 || boardInsights.categories.length > 0) && (
+        <View style={styles.insightRow}>
+          {boardInsights.colors.length > 0 && (
+            <View style={styles.palette} accessibilityLabel={`Board palette: ${boardInsights.colors.join(', ')}`}>
+              {boardInsights.colors.map((color, index) => <View key={`${color}-${index}`} style={[styles.swatch, { backgroundColor: swatchColor(color) }]} />)}
+            </View>
+          )}
+          {boardInsights.categories.length > 0 && (
+            <Text style={styles.insightText} numberOfLines={1}>
+              {boardInsights.categories.map(([name, count]) => `${name} ${count}`).join(' · ')}
+            </Text>
+          )}
+        </View>
+      )}
+
+      <View style={styles.aiCard}>
+        <View style={styles.aiHeading}>
+          <View style={styles.aiIcon}><Ionicons name="sparkles" size={16} color={colors.primary} /></View>
+          <View style={styles.aiHeadingText}>
+            <Text style={styles.aiTitle}>Style this board</Text>
+            <Text style={styles.aiSubtitle}>AI suggestions only—nothing is saved without you.</Text>
+          </View>
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.aiActions}>
+          <TouchableOpacity style={styles.aiAction} onPress={() => openBoardStylist('outfit')}><Ionicons name="shirt-outline" size={16} color={colors.primary} /><Text style={styles.aiActionText}>Create outfit</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.aiAction} onPress={() => openBoardStylist('complete')}><Ionicons name="add-circle-outline" size={16} color={colors.primary} /><Text style={styles.aiActionText}>Complete board</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.aiAction} onPress={() => openBoardStylist('capsule')}><Ionicons name="briefcase-outline" size={16} color={colors.primary} /><Text style={styles.aiActionText}>Capsule plan</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.aiAction} onPress={() => openBoardStylist('theme')}><Ionicons name="color-palette-outline" size={16} color={colors.primary} /><Text style={styles.aiActionText}>Theme & palette</Text></TouchableOpacity>
+        </ScrollView>
+      </View>
+    </View>
+  ) : (
+    <View style={styles.organizeBanner}>
+      <Ionicons name="checkmark-circle-outline" size={18} color={colors.primary} />
+      <Text style={styles.organizeText}>Tap anything you want to remove. Your closet stays unchanged.</Text>
+    </View>
+  );
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -347,7 +487,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
           </TouchableOpacity>
         ) : (
           <View style={{ flexDirection: 'row' }}>
-            <TouchableOpacity style={styles.headerBtn} onPress={() => setMenuVisible(true)} accessibilityLabel="Add to board">
+            <TouchableOpacity style={styles.headerBtn} onPress={() => setContentPickerVisible(true)} accessibilityLabel="Add to board">
               <Ionicons name="add" size={26} color={colors.foreground} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.headerBtn} onPress={handleOverflow} accessibilityLabel="Board options">
@@ -356,6 +496,8 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
           </View>
         )}
       </View>
+
+      {boardTools}
 
       {showInitialLoading ? (
         <View style={styles.centered}>
@@ -396,7 +538,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
               <Text style={styles.emptySub}>Save pieces, outfits, and shop finds to this board.</Text>
               <TouchableOpacity
                 style={styles.emptyBtn}
-                onPress={() => setMenuVisible(true)}
+                onPress={() => setContentPickerVisible(true)}
                 activeOpacity={0.8}
                 accessibilityRole="button"
                 accessibilityLabel="Add to board"
@@ -409,7 +551,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
       ) : (
         <View style={{ flex: 1, paddingHorizontal: SIDE_PAD - COL_GAP / 2 }}>
           <FlashList
-            data={items}
+            data={visibleItems}
             numColumns={2}
             renderItem={renderItem}
             keyExtractor={(it) => it.key}
@@ -424,43 +566,38 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
               ) : null
             }
             contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: spacing.xxxl * 2 }}
+            ListEmptyComponent={
+              <View style={styles.filteredEmpty}>
+                <Text style={styles.emptyTitle}>Nothing in this section</Text>
+                <Text style={styles.emptySub}>Try another filter or add something new.</Text>
+              </View>
+            }
           />
         </View>
       )}
 
-      {menuVisible && (
-        <BoardAddMenuSheet
-          visible={menuVisible}
-          onClose={() => setMenuVisible(false)}
-          onPickItems={() => setItemPickerVisible(true)}
-          onPickOutfits={() => setOutfitPickerVisible(true)}
-          onPickWishlist={() => setWishlistPickerVisible(true)}
-          onSnapStoreFind={() => setStoreFindFormVisible(true)}
-        />
-      )}
       {optionsMenuVisible && (
         <BoardOptionsMenuSheet
           visible={optionsMenuVisible}
           onClose={() => setOptionsMenuVisible(false)}
           onRename={handleRename}
-          onChangeCover={handleChangeCover}
+          onChangeCover={() => setCoverPickerVisible(true)}
+          onOrganize={() => setOrganizeMode(true)}
           onDelete={handleDelete}
         />
       )}
-      <BoardItemPickerModal
+      <BoardContentPickerModal
         board={board ?? null}
-        visible={itemPickerVisible}
-        onClose={() => setItemPickerVisible(false)}
+        visible={contentPickerVisible}
+        onClose={() => setContentPickerVisible(false)}
+        onAddStoreFind={() => setStoreFindFormVisible(true)}
       />
-      <BoardOutfitPickerModal
-        board={board ?? null}
-        visible={outfitPickerVisible}
-        onClose={() => setOutfitPickerVisible(false)}
-      />
-      <BoardWishlistPickerModal
-        board={board ?? null}
-        visible={wishlistPickerVisible}
-        onClose={() => setWishlistPickerVisible(false)}
+      <BoardCoverPickerModal
+        visible={coverPickerVisible}
+        items={items}
+        onClose={() => setCoverPickerVisible(false)}
+        onSelect={handleSelectCover}
+        onUpload={() => { setCoverPickerVisible(false); setTimeout(handleUploadCover, 300); }}
       />
       <StoreFindFormModal
         visible={storeFindFormVisible || editingStoreFind !== null}
@@ -480,6 +617,15 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
           setDetailStoreFind(null);
         }}
       />
+      {lastRemoval && (
+        <View style={[styles.undoToast, { bottom: insets.bottom + spacing.lg }]} accessibilityLiveRegion="polite">
+          <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+          <Text style={styles.undoToastText}>{lastRemoval.count} removed from board</Text>
+          <TouchableOpacity style={styles.undoToastButton} onPress={undoRemoval} accessibilityRole="button">
+            <Text style={styles.undoToastAction}>Undo</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
@@ -561,6 +707,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     padding: spacing.xs,
   },
+  selectionOverlayIdle: { backgroundColor: 'transparent' },
   selectionCheck: {
     width: 22,
     height: 22,
@@ -569,6 +716,54 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  selectionCheckIdle: { backgroundColor: colors.surfaceElevated, borderWidth: 2, borderColor: colors.border },
+  tools: { gap: spacing.sm, paddingBottom: spacing.sm },
+  filterRow: { paddingHorizontal: spacing.lg, gap: spacing.sm },
+  filterChip: {
+    minHeight: 36,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.secondary,
+  },
+  filterChipActive: { backgroundColor: colors.primary },
+  filterText: { color: colors.mutedForeground, fontSize: typography.size.xs, fontWeight: typography.weight.medium, fontVariant: ['tabular-nums'] },
+  filterTextActive: { color: colors.primaryForeground, fontWeight: typography.weight.semibold },
+  insightRow: { minHeight: 34, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg },
+  palette: { flexDirection: 'row', alignItems: 'center' },
+  swatch: { width: 22, height: 22, borderRadius: 11, marginRight: -4, borderWidth: 2, borderColor: colors.background },
+  insightText: { flex: 1, color: colors.mutedForeground, fontSize: typography.size.xs },
+  aiCard: { marginHorizontal: spacing.lg, padding: spacing.md, gap: spacing.md, borderRadius: radii.lg, backgroundColor: colors.surfaceElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  aiHeading: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  aiIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
+  aiHeadingText: { flex: 1 },
+  aiTitle: { color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.bold },
+  aiSubtitle: { color: colors.mutedForeground, fontSize: typography.size.xs },
+  aiActions: { gap: spacing.sm },
+  aiAction: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.accent },
+  aiActionText: { color: colors.secondaryForeground, fontSize: typography.size.xs, fontWeight: typography.weight.semibold },
+  organizeBanner: { minHeight: 48, marginHorizontal: spacing.lg, marginBottom: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.accent },
+  organizeText: { flex: 1, color: colors.secondaryForeground, fontSize: typography.size.xs },
+  filteredEmpty: { paddingTop: spacing.xxxl, alignItems: 'center', gap: spacing.xs },
+  undoToast: {
+    position: 'absolute',
+    left: spacing.lg,
+    right: spacing.lg,
+    minHeight: 52,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.xs,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  undoToastText: { flex: 1, color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.medium },
+  undoToastButton: { minWidth: 56, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  undoToastAction: { color: colors.primary, fontSize: typography.size.sm, fontWeight: typography.weight.bold },
   centered: {
     flex: 1,
     alignItems: 'center',

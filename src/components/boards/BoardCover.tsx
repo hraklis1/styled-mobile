@@ -1,0 +1,152 @@
+import { useMemo, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+
+import { colors, radii, spacing, typography } from '../../theme';
+import type { Board } from '../../types/board';
+import type { Item } from '../../types/item';
+import type { Outfit } from '../../types/outfit';
+import { getBoardCoverUris, getBoardSavedCount } from '../../lib/boardPresentation';
+
+type Props = {
+  board: Board;
+  itemMap: Map<number, Item>;
+  outfitMap: Map<number, Outfit>;
+  size: number;
+  isDailyFinds?: boolean;
+  compact?: boolean;
+};
+
+const GAP = 2;
+
+function CoverCell({ uri, recyclingKey }: { uri: string; recyclingKey: string }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <View style={styles.cell}>
+      <Ionicons name="sparkles-outline" size={16} color={colors.mutedForeground} />
+      {!failed && (
+        <Image
+          source={{ uri }}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          recyclingKey={recyclingKey}
+          transition={150}
+          onError={() => setFailed(true)}
+        />
+      )}
+    </View>
+  );
+}
+
+export function BoardCover({ board, itemMap, outfitMap, size, isDailyFinds, compact }: Props) {
+  const covers = useMemo(() => getBoardCoverUris(board, itemMap, outfitMap), [board, itemMap, outfitMap]);
+
+  const count = getBoardSavedCount(board);
+  const overflow = Math.max(0, count - covers.length);
+
+  const cell = (index: number) => (
+    <CoverCell uri={covers[index]} recyclingKey={`${board.id}-${index}-${covers[index]}`} />
+  );
+
+  return (
+    <View
+      style={[styles.cover, { width: size, height: size, borderRadius: compact ? radii.md : radii.lg }]}
+      accessibilityLabel={`${board.name} cover`}
+    >
+      {covers.length >= 4 ? (
+        <View style={styles.grid}>
+          <View style={styles.row}>{cell(0)}{cell(1)}</View>
+          <View style={styles.row}>
+            {cell(2)}
+            <View style={styles.flex}>
+              {cell(3)}
+              {overflow > 0 && <View style={styles.overflow}><Text style={styles.overflowText}>+{overflow}</Text></View>}
+            </View>
+          </View>
+        </View>
+      ) : covers.length === 3 ? (
+        <View style={styles.row}>
+          {cell(0)}
+          <View style={styles.column}>{cell(1)}{cell(2)}</View>
+        </View>
+      ) : covers.length === 2 ? (
+        <View style={styles.row}>{cell(0)}{cell(1)}</View>
+      ) : covers.length === 1 ? (
+        cell(0)
+      ) : (
+        <LinearGradient
+          colors={isDailyFinds ? ['#D9B79D', '#956D51'] : ['#F0E6DE', '#DDD0C4']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.fallback}
+        >
+          <View style={styles.fallbackIcon}>
+            <Ionicons name={isDailyFinds ? 'camera-outline' : 'albums-outline'} size={compact ? 18 : 30} color={isDailyFinds ? colors.white : colors.primary} />
+          </View>
+          {!compact && (
+            <Text style={[styles.fallbackText, isDailyFinds && styles.dailyFallbackText]}>
+              {isDailyFinds ? 'Your in-store inspiration' : 'Ready for your ideas'}
+            </Text>
+          )}
+        </LinearGradient>
+      )}
+      {isDailyFinds && (
+        <View style={[styles.dailyBadge, compact && styles.dailyBadgeCompact]}>
+          <Ionicons name="flash" size={compact ? 9 : 11} color={colors.white} />
+          {!compact && <Text style={styles.dailyBadgeText}>DAILY FINDS</Text>}
+        </View>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  cover: { overflow: 'hidden', backgroundColor: colors.muted },
+  grid: { flex: 1, gap: GAP },
+  row: { flex: 1, flexDirection: 'row', gap: GAP },
+  column: { flex: 1, gap: GAP },
+  flex: { flex: 1 },
+  cell: {
+    flex: 1,
+    minWidth: 1,
+    minHeight: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.secondary,
+  },
+  overflow: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(40,35,31,0.42)',
+  },
+  overflowText: { color: colors.white, fontSize: typography.size.lg, fontWeight: typography.weight.semibold },
+  fallback: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, padding: spacing.md },
+  fallbackIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(250,248,245,0.72)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fallbackText: { color: colors.secondaryForeground, fontSize: typography.size.sm, fontWeight: typography.weight.medium, textAlign: 'center' },
+  dailyFallbackText: { color: colors.white },
+  dailyBadge: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    minHeight: 24,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.full,
+    backgroundColor: 'rgba(40,35,31,0.72)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  dailyBadgeCompact: { top: 3, right: 3, minHeight: 18, paddingHorizontal: 5 },
+  dailyBadgeText: { color: colors.white, fontSize: 9, fontWeight: typography.weight.bold, letterSpacing: 0.6 },
+});

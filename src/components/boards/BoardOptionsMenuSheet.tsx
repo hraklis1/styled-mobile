@@ -10,10 +10,11 @@ type Props = {
   onClose: () => void;
   onRename: () => void;
   onChangeCover: () => void;
+  onOrganize: () => void;
   onDelete: () => void;
 };
 
-export function BoardOptionsMenuSheet({ visible, onClose, onRename, onChangeCover, onDelete }: Props) {
+export function BoardOptionsMenuSheet({ visible, onClose, onRename, onChangeCover, onOrganize, onDelete }: Props) {
   const insets = useSafeAreaInsets();
   const ref = useRef<BottomSheetModal>(null);
 
@@ -39,6 +40,18 @@ export function BoardOptionsMenuSheet({ visible, onClose, onRename, onChangeCove
         <Text style={styles.title}>Board Options</Text>
         
         <View style={styles.menuOptions}>
+          <TouchableOpacity
+            style={styles.optionRow}
+            activeOpacity={0.7}
+            onPress={() => { onClose(); setTimeout(onOrganize, 300); }}
+          >
+            <View style={[styles.iconBox, { backgroundColor: `${colors.primary}15` }]}>
+              <Ionicons name="checkmark-circle-outline" size={20} color={colors.primary} />
+            </View>
+            <Text style={styles.optionText}>Organize Board</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
+          </TouchableOpacity>
+
           <TouchableOpacity 
             style={styles.optionRow} 
             activeOpacity={0.7} 
@@ -47,7 +60,7 @@ export function BoardOptionsMenuSheet({ visible, onClose, onRename, onChangeCove
               setTimeout(onRename, 300);
             }}
           >
-            <View style={[styles.iconBox, { backgroundColor: `${colors.primary}15` }]}>
+            <View style={[styles.iconBox, { backgroundColor: `${colors.secondary}80` }]}>
               <Ionicons name="pencil-outline" size={20} color={colors.primary} />
             </View>
             <Text style={styles.optionText}>Rename Board</Text>
@@ -65,7 +78,7 @@ export function BoardOptionsMenuSheet({ visible, onClose, onRename, onChangeCove
             <View style={[styles.iconBox, { backgroundColor: `${colors.secondary}80` }]}>
               <Ionicons name="image-outline" size={20} color={colors.foreground} />
             </View>
-            <Text style={styles.optionText}>Change Cover Photo</Text>
+            <Text style={styles.optionText}>Edit Board Cover</Text>
             <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
           </TouchableOpacity>
 

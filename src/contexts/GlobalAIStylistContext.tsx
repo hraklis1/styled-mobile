@@ -17,7 +17,8 @@ export type StylistOpenSource =
   | 'event_detail'
   | 'calendar_card'
   | 'calendar_hero'
-  | 'closet_selection';
+  | 'closet_selection'
+  | 'board_detail';
 
 export type StylistEventContext = { id: number; title: string };
 

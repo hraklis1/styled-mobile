@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import {
   BottomSheetModal,
@@ -19,6 +19,9 @@ import {
   type BoardEntryRef,
 } from '../../hooks/useBoards';
 import type { Board } from '../../types/board';
+import { useItems } from '../../hooks/useItems';
+import { useOutfits } from '../../hooks/useOutfits';
+import { BoardCover } from './BoardCover';
 import { colors, spacing, typography, radii } from '../../theme';
 
 // Fixed snap point — dynamic sizing collapses to 0 height when the content is a
@@ -37,11 +40,20 @@ export function SaveToBoardSheet({ onClose, target }: Props) {
   const insets = useSafeAreaInsets();
   const ref = useRef<BottomSheetModal>(null);
   const { data: boards = [] } = useBoards();
+  const { data: items = [] } = useItems();
+  const { data: outfits = [] } = useOutfits();
   const { mutate: updateBoard } = useUpdateBoard();
   const { mutate: createBoard } = useCreateBoard();
 
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
+  const [lastChange, setLastChange] = useState<{
+    message: string;
+    board: Board;
+  } | null>(null);
+
+  const itemMap = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
+  const outfitMap = useMemo(() => new Map(outfits.map((outfit) => [outfit.id, outfit])), [outfits]);
 
   const targets: BoardEntryRef[] = target == null ? [] : Array.isArray(target) ? target : [target];
 
@@ -75,6 +87,21 @@ export function SaveToBoardSheet({ onClose, target }: Props) {
       outfitIds: [...outfitIds],
       wishlistIds: [...wishlistIds],
     });
+    setLastChange({
+      message: allIn ? `Removed from ${board.name}` : `Saved to ${board.name}`,
+      board,
+    });
+  }
+
+  function undoLastChange() {
+    if (!lastChange) return;
+    updateBoard({
+      id: lastChange.board.id,
+      itemIds: lastChange.board.itemIds,
+      outfitIds: lastChange.board.outfitIds,
+      wishlistIds: lastChange.board.wishlistIds,
+    });
+    setLastChange(null);
   }
 
   function handleCreate() {
@@ -106,7 +133,22 @@ export function SaveToBoardSheet({ onClose, target }: Props) {
       onDismiss={onClose}
     >
       <BottomSheetView style={[styles.content, { paddingBottom: insets.bottom + spacing.lg }]}>
-        <Text style={styles.title}>{title}</Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>{title}</Text>
+          <TouchableOpacity style={styles.doneButton} onPress={onClose} accessibilityRole="button" accessibilityLabel="Done saving to boards">
+            <Text style={styles.doneText}>Done</Text>
+          </TouchableOpacity>
+        </View>
+
+        {lastChange && (
+          <View style={styles.confirmation} accessibilityLiveRegion="polite">
+            <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+            <Text style={styles.confirmationText} numberOfLines={1}>{lastChange.message}</Text>
+            <TouchableOpacity onPress={undoLastChange} style={styles.undoButton} accessibilityRole="button">
+              <Text style={styles.undoText}>Undo</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {creating ? (
           <View style={styles.createRow}>
@@ -143,15 +185,13 @@ export function SaveToBoardSheet({ onClose, target }: Props) {
                 onPress={() => toggleBoard(board)}
                 activeOpacity={0.7}
               >
-                <View style={styles.boardThumb}>
-                  <Ionicons name="albums-outline" size={18} color={colors.mutedForeground} />
-                </View>
+                <BoardCover board={board} itemMap={itemMap} outfitMap={outfitMap} size={44} compact isDailyFinds={board.name === 'Daily Finds'} />
                 <View style={styles.boardInfo}>
                   <Text style={styles.boardName} numberOfLines={1}>
                     {board.name}
                   </Text>
                   <Text style={styles.boardCount}>
-                    {board.itemIds.length + board.outfitIds.length + board.wishlistIds.length} items
+                    {board.itemIds.length + board.outfitIds.length + board.wishlistIds.length + (board.storeFinds?.length ?? 0)} saved
                   </Text>
                 </View>
                 <Ionicons
@@ -185,6 +225,21 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.bold,
     color: colors.foreground,
   },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 },
+  doneButton: { minWidth: 52, minHeight: 44, alignItems: 'flex-end', justifyContent: 'center' },
+  doneText: { color: colors.primary, fontSize: typography.size.md, fontWeight: typography.weight.semibold },
+  confirmation: {
+    minHeight: 44,
+    borderRadius: radii.md,
+    backgroundColor: `${colors.success}12`,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  confirmationText: { flex: 1, color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.medium },
+  undoButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  undoText: { color: colors.primary, fontSize: typography.size.sm, fontWeight: typography.weight.bold },
   newBoardRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -237,14 +292,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
     paddingVertical: spacing.sm,
-  },
-  boardThumb: {
-    width: 40,
-    height: 40,
-    borderRadius: radii.md,
-    backgroundColor: colors.secondary,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   boardInfo: { flex: 1 },
   boardName: {

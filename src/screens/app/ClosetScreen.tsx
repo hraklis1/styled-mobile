@@ -27,7 +27,7 @@ import { OutfitFilterPanel } from '../../components/outfits/OutfitFilterPanel';
 import { ClosetGrid } from '../../components/wardrobe/ClosetGrid';
 import { BoardCard } from '../../components/boards/BoardCard';
 import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
-import { useBoards, useCreateBoard, type BoardEntryRef } from '../../hooks/useBoards';
+import { useBoards, useCreateBoard, useDeleteBoard, useUpdateBoard, type BoardEntryRef } from '../../hooks/useBoards';
 import { useDailyFindsBoard } from '../../hooks/useDailyFindsBoard';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { parseEventDate } from '../../lib/outfitAssignments';
@@ -42,6 +42,8 @@ import { PressableScale } from '../../components/primitives/PressableScale';
 import { GarmentCardSkeleton } from '../../components/primitives/GarmentCardSkeleton';
 import { ErrorState } from '../../components/primitives/ErrorState';
 import type { ClosetScreenProps } from '../../navigation/types';
+import { useLibraryLaunch } from '../../hooks/useCameraLaunch';
+import type { Board } from '../../types/board';
 
 type ViewMode = 'grid' | 'list';
 type Segment = 'pieces' | 'outfits' | 'boards';
@@ -84,6 +86,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
 
   const [segment, setSegment]               = useState<Segment>('pieces');
   const [search, setSearch]                 = useState('');
+  const [boardSearch, setBoardSearch]       = useState('');
   const [activeCategory, setActiveCategory] = useState<ItemCategory | null>(null);
   const [activeSubcategory, setActiveSubcategory] = useState<string | null>(null);
   const [viewMode, setViewMode]             = useState<ViewMode>('grid');
@@ -104,14 +107,18 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
 
   const itemMap = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
   const outfitMap = useMemo(() => new Map(outfits.map((o) => [o.id, o])), [outfits]);
-  const sortedBoards = useMemo(
-    () =>
-      [...boards].sort((a, b) =>
+  const sortedBoards = useMemo(() => {
+      const normalized = boardSearch.trim().toLowerCase();
+      return [...boards]
+      .filter((board) => !normalized || board.name.toLowerCase().includes(normalized))
+      .sort((a, b) =>
         a.id === dailyFindsBoardId ? -1 : b.id === dailyFindsBoardId ? 1 : 0,
-      ),
-    [boards, dailyFindsBoardId],
-  );
+      );
+    }, [boardSearch, boards, dailyFindsBoardId]);
   const createBoard = useCreateBoard();
+  const updateBoard = useUpdateBoard();
+  const deleteBoard = useDeleteBoard();
+  const launchLibrary = useLibraryLaunch();
 
   // SaveToBoardSheet target for the bulk "Add to Board" action.
   const [saveSheetTarget, setSaveSheetTarget] = useState<BoardEntryRef[] | null>(null);
@@ -422,6 +429,43 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
       createBoard.mutate({ name: 'New board' });
     }
   }, [createBoard]);
+
+  const renameBoard = useCallback((board: Board) => {
+    if (Platform.OS !== 'ios') return;
+    Alert.prompt('Rename board', undefined, (text) => {
+      const name = text?.trim();
+      if (name) updateBoard.mutate({ id: board.id, name });
+    }, 'plain-text', board.name);
+  }, [updateBoard]);
+
+  const uploadBoardCover = useCallback(async (board: Board) => {
+    const image = await launchLibrary({ allowsEditing: true, maxDim: 800 });
+    if (image?.dataUrl) updateBoard.mutate({ id: board.id, coverImageUrl: image.dataUrl });
+  }, [launchLibrary, updateBoard]);
+
+  const confirmDeleteBoard = useCallback((board: Board) => {
+    Alert.alert('Delete board', `Delete “${board.name}”? Everything saved here will stay in your closet.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => deleteBoard.mutate(board.id) },
+    ]);
+  }, [deleteBoard]);
+
+  const handleBoardOptions = useCallback((board: Board) => {
+    const isDailyFinds = board.id === dailyFindsBoardId;
+    Alert.alert(board.name, undefined, [
+      { text: 'Organize', onPress: () => navigation.navigate('BoardDetail', { boardId: board.id, organize: true }) },
+      { text: 'Edit cover', onPress: () => navigation.navigate('BoardDetail', { boardId: board.id, editCover: true }) },
+      ...(!isDailyFinds && Platform.OS === 'ios' ? [{ text: 'Rename', onPress: () => renameBoard(board) }] : []),
+      { text: 'Upload cover photo', onPress: () => uploadBoardCover(board) },
+      ...(!isDailyFinds ? [{ text: 'Delete', style: 'destructive' as const, onPress: () => confirmDeleteBoard(board) }] : []),
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }, [confirmDeleteBoard, dailyFindsBoardId, navigation, renameBoard, uploadBoardCover]);
+
+  const createSmartBoard = useCallback((name: string) => {
+    if (boards.some((board) => board.name.toLowerCase() === name.toLowerCase())) return;
+    createBoard.mutate({ name });
+  }, [boards, createBoard]);
 
   const handleBulkAddToBoard = useCallback(() => {
     if (selectedIds.size === 0) return;
@@ -841,10 +885,59 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
                   width={cardWidth}
                   isDailyFinds={item.id === dailyFindsBoardId}
                   onPress={() => navigation.navigate('BoardDetail', { boardId: item.id })}
+                  onOptions={() => handleBoardOptions(item)}
                 />
               </View>
             )}
-            ListEmptyComponent={emptyBoards}
+            ListHeaderComponent={
+              <View style={styles.boardListHeader}>
+                {boards.length >= 6 && (
+                  <View style={styles.boardSearchWrap}>
+                    <Ionicons name="search-outline" size={17} color={colors.mutedForeground} />
+                    <TextInput
+                      value={boardSearch}
+                      onChangeText={setBoardSearch}
+                      style={styles.boardSearchInput}
+                      placeholder="Search boards…"
+                      placeholderTextColor={colors.mutedForeground}
+                      returnKeyType="search"
+                      accessibilityLabel="Search boards"
+                    />
+                    {!!boardSearch && (
+                      <TouchableOpacity style={styles.boardSearchClear} onPress={() => setBoardSearch('')} accessibilityLabel="Clear board search">
+                        <Ionicons name="close-circle" size={18} color={colors.mutedForeground} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+                <View style={styles.smartBoardHeading}>
+                  <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
+                  <Text style={styles.smartBoardTitle}>Quick private boards</Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.smartBoardRow}>
+                  {['Workwear', 'Vacation', 'Never Worn', 'Seasonal Rotation'].map((name) => {
+                    const exists = boards.some((board) => board.name.toLowerCase() === name.toLowerCase());
+                    return (
+                      <TouchableOpacity
+                        key={name}
+                        style={[styles.smartBoardChip, exists && styles.smartBoardChipDisabled]}
+                        onPress={() => createSmartBoard(name)}
+                        disabled={exists || createBoard.isPending}
+                        accessibilityRole="button"
+                        accessibilityState={{ disabled: exists }}
+                      >
+                        <Ionicons name={exists ? 'checkmark' : 'add'} size={14} color={exists ? colors.mutedForeground : colors.primary} />
+                        <Text style={[styles.smartBoardChipText, exists && styles.smartBoardChipTextDisabled]}>{name}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                {boardSearch.length > 0 && sortedBoards.length === 0 && (
+                  <View style={styles.noBoardResults}><Text style={styles.emptySub}>No boards match “{boardSearch}”.</Text></View>
+                )}
+              </View>
+            }
+            ListEmptyComponent={boards.length === 0 ? emptyBoards : null}
             contentContainerStyle={{
               paddingTop: spacing.md,
               paddingHorizontal: SIDE_PAD - COL_GAP / 2,
@@ -1266,6 +1359,18 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
+  boardListHeader: { paddingHorizontal: COL_GAP / 2, paddingBottom: spacing.lg, gap: spacing.md },
+  boardSearchWrap: { minHeight: 46, paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.secondary, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  boardSearchInput: { flex: 1, minHeight: 46, color: colors.foreground, fontSize: typography.size.md },
+  boardSearchClear: { width: 36, height: 44, alignItems: 'center', justifyContent: 'center' },
+  smartBoardHeading: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  smartBoardTitle: { color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+  smartBoardRow: { gap: spacing.sm, paddingRight: spacing.lg },
+  smartBoardChip: { minHeight: 38, paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.accent, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  smartBoardChipDisabled: { backgroundColor: colors.secondary },
+  smartBoardChipText: { color: colors.secondaryForeground, fontSize: typography.size.xs, fontWeight: typography.weight.semibold },
+  smartBoardChipTextDisabled: { color: colors.mutedForeground },
+  noBoardResults: { paddingVertical: spacing.xl, alignItems: 'center' },
   root: {
     flex: 1,
     backgroundColor: colors.background,

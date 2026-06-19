@@ -28,7 +28,7 @@ export type UpdateBoardInput = {
   itemIds?: number[];
   outfitIds?: number[];
   wishlistIds?: string[];
-  coverImageUrl?: string;
+  coverImageUrl?: string | null;
   storeFinds?: import('../types/storeFind').StoreFind[];
 };
 
