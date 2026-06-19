@@ -11,9 +11,22 @@ type Props = {
   entry: WishlistEntry;
   onClose: () => void;
   onRemove: () => void;
+  removalCopy?: {
+    title: string;
+    message: string;
+    confirmLabel: string;
+    accessibilityLabel: string;
+  };
 };
 
-export function ShopWishlistDetailSheet({ entry, onClose, onRemove }: Props) {
+const DEFAULT_REMOVAL_COPY = {
+  title: 'Remove saved outfit?',
+  message: 'This outfit will be removed from your Shop Wishlist.',
+  confirmLabel: 'Remove',
+  accessibilityLabel: 'Remove saved outfit',
+};
+
+export function ShopWishlistDetailSheet({ entry, onClose, onRemove, removalCopy = DEFAULT_REMOVAL_COPY }: Props) {
   const ref = useRef<BottomSheetModal>(null);
   const insets = useSafeAreaInsets();
   const snapPoints = useMemo(() => ['94%'], []);
@@ -26,10 +39,10 @@ export function ShopWishlistDetailSheet({ entry, onClose, onRemove }: Props) {
   );
 
   const confirmRemove = useCallback(() => {
-    Alert.alert('Remove saved outfit?', 'This outfit will be removed from your Shop Wishlist.', [
+    Alert.alert(removalCopy.title, removalCopy.message, [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Remove',
+        text: removalCopy.confirmLabel,
         style: 'destructive',
         onPress: () => {
           ref.current?.dismiss();
@@ -37,7 +50,7 @@ export function ShopWishlistDetailSheet({ entry, onClose, onRemove }: Props) {
         },
       },
     ]);
-  }, [onRemove]);
+  }, [onRemove, removalCopy]);
 
   return (
     <BottomSheetModal
@@ -60,7 +73,7 @@ export function ShopWishlistDetailSheet({ entry, onClose, onRemove }: Props) {
           style={styles.headerSide}
           onPress={confirmRemove}
           accessibilityRole="button"
-          accessibilityLabel="Remove saved outfit"
+          accessibilityLabel={removalCopy.accessibilityLabel}
         >
           <Ionicons name="trash-outline" size={20} color={colors.error} />
         </TouchableOpacity>

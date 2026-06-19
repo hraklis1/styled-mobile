@@ -1,7 +1,7 @@
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { WishlistEntry } from '../../lib/wishlist';
+import { WishlistOutfitPreview } from './WishlistOutfitPreview';
 import { colors, radii, spacing, typography } from '../../theme';
 
 type Props = {
@@ -9,46 +9,6 @@ type Props = {
   onPress: () => void;
   onMore: () => void;
 };
-
-const CATEGORY_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
-  top: 'shirt-outline',
-  bottom: 'pricetag-outline',
-  shoes: 'footsteps-outline',
-  outerwear: 'partly-sunny-outline',
-  accessory: 'diamond-outline',
-};
-
-function ProductPreview({ entry }: { entry: WishlistEntry }) {
-  const items = entry.outfit.items.slice(0, 4);
-  const cellStyle = (index: number) => {
-    if (items.length === 1) return styles.previewCellFull;
-    if (items.length === 2) return styles.previewCellHalfHorizontal;
-    if (items.length === 3 && index === 0) return styles.previewCellWide;
-    return styles.previewCell;
-  };
-  return (
-    <View style={styles.preview} accessibilityElementsHidden>
-      {items.length === 0 ? (
-        <View style={styles.previewEmpty}>
-          <Ionicons name="bag-handle-outline" size={28} color={colors.primary} />
-        </View>
-      ) : items.map((item, index) => {
-        const category = item.category?.toLocaleLowerCase() ?? '';
-        return (
-          <View key={`${item.brand}-${item.name}-${index}`} style={cellStyle(index)}>
-            {item.imageUrl ? (
-              <Image source={{ uri: item.imageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
-            ) : (
-              <View style={styles.previewFallback}>
-                <Ionicons name={CATEGORY_ICON[category] ?? 'bag-outline'} size={20} color={colors.primary} />
-              </View>
-            )}
-          </View>
-        );
-      })}
-    </View>
-  );
-}
 
 export function ShopWishlistSummaryCard({ entry, onPress, onMore }: Props) {
   const { outfit, eventContext } = entry;
@@ -70,7 +30,7 @@ export function ShopWishlistSummaryCard({ entry, onPress, onMore }: Props) {
       accessibilityLabel={accessibilityLabel}
       accessibilityHint="Opens outfit details"
     >
-      <ProductPreview entry={entry} />
+      <WishlistOutfitPreview entry={entry} style={styles.preview} />
       <View style={styles.content}>
         <View style={styles.topRow}>
           {context ? (
@@ -121,44 +81,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceElevated,
   },
   cardPressed: { opacity: 0.72, transform: [{ scale: 0.99 }] },
-  preview: {
-    width: 104,
-    minHeight: 116,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    overflow: 'hidden',
-    borderRadius: radii.md,
-    borderCurve: 'continuous',
-    backgroundColor: colors.surfaceSubtle,
-  },
-  previewCell: {
-    width: '50%',
-    height: '50%',
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.surfaceElevated,
-  },
-  previewCellFull: {
-    width: '100%',
-    height: '100%',
-    overflow: 'hidden',
-  },
-  previewCellHalfHorizontal: {
-    width: '100%',
-    height: '50%',
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.surfaceElevated,
-  },
-  previewCellWide: {
-    width: '100%',
-    height: '50%',
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.surfaceElevated,
-  },
-  previewFallback: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceSubtle },
-  previewEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  preview: { width: 104, minHeight: 116 },
   content: { flex: 1, minWidth: 0, justifyContent: 'space-between' },
   topRow: { minHeight: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.xs },
   contextRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 },

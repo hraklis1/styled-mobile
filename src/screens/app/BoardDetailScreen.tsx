@@ -31,7 +31,16 @@ import { BoardCoverPickerModal } from '../../components/boards/BoardCoverPickerM
 import { StoreFindFormModal } from '../../components/boards/StoreFindFormModal';
 import { BoardStoreFindCard } from '../../components/boards/BoardStoreFindCard';
 import { StoreFindDetailSheet } from '../../components/boards/StoreFindDetailSheet';
+import { ShopWishlistDetailSheet } from '../../components/outfits/ShopWishlistDetailSheet';
+import { WishlistOutfitPreview } from '../../components/outfits/WishlistOutfitPreview';
 import type { StoreFind } from '../../types/storeFind';
+import type { WishlistEntry } from '../../lib/wishlist';
+import {
+  getWishlistAccessibilityLabel,
+  getWishlistContext,
+  getWishlistMeta,
+  getWishlistTitle,
+} from '../../lib/wishlistPresentation';
 import { useLibraryLaunch } from '../../hooks/useCameraLaunch';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import {
@@ -45,6 +54,12 @@ import {
 const SIDE_PAD = spacing.lg;
 const COL_GAP = spacing.sm;
 const CARD_ASPECT_RATIO = 0.85;
+const BOARD_WISHLIST_REMOVAL_COPY = {
+  title: 'Remove from board?',
+  message: 'This outfit will stay in your Shop Wishlist.',
+  confirmLabel: 'Remove',
+  accessibilityLabel: 'Remove outfit from board',
+};
 const BOARD_FILTERS: { key: BoardFilter; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'item', label: 'Pieces' },
@@ -98,6 +113,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
   const [coverPickerVisible, setCoverPickerVisible] = useState(route.params.editCover === true);
   const [storeFindFormVisible, setStoreFindFormVisible] = useState(false);
   const [detailStoreFind, setDetailStoreFind] = useState<StoreFind | null>(null);
+  const [detailWishlistEntry, setDetailWishlistEntry] = useState<WishlistEntry | null>(null);
   const [editingStoreFind, setEditingStoreFind] = useState<StoreFind | null>(null);
   const [organizeMode, setOrganizeMode] = useState(route.params.organize === true);
   const [lastRemoval, setLastRemoval] = useState<{
@@ -296,6 +312,14 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
     setOptionsMenuVisible(true);
   }, []);
 
+  const removeDetailWishlistFromBoard = useCallback(() => {
+    if (!board || !detailWishlistEntry) return;
+    updateBoard(
+      { id: boardId, wishlistIds: board.wishlistIds.filter((id) => id !== detailWishlistEntry.id) },
+      { onSuccess: () => setDetailWishlistEntry(null) },
+    );
+  }, [board, boardId, detailWishlistEntry, updateBoard]);
+
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<BoardFeedItem>) => {
       const key = item.key;
@@ -365,19 +389,23 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
         );
       }
       // wishlist
-      const o = item.entry.outfit;
+      const wishlistContext = getWishlistContext(item.entry);
       return (
         <View style={styles.cell}>
           <PressableScale
             onLongPress={() => enterMultiselect(key)}
-            onPress={isMultiselect ? () => toggleSelectedKey(key) : undefined}
+            onPress={isMultiselect ? () => toggleSelectedKey(key) : () => setDetailWishlistEntry(item.entry)}
+            accessibilityRole="button"
+            accessibilityLabel={getWishlistAccessibilityLabel(item.entry)}
+            accessibilityHint={isMultiselect ? 'Selects this outfit' : 'Opens outfit details'}
           >
             <View style={[styles.wishlistTile, { width: cardWidth, height: cardWidth }]}>
-              <Ionicons name="bag-handle-outline" size={26} color={colors.primary} />
-              <Text style={styles.wishlistLabel} numberOfLines={1}>
-                {o?.city ? `Shop · ${o.city}` : 'Shop outfit'}
-              </Text>
-              {!!o?.totalBudget && <Text style={styles.wishlistBudget}>{o.totalBudget}</Text>}
+              <WishlistOutfitPreview entry={item.entry} style={styles.wishlistPreview} />
+              <View style={styles.wishlistInfo}>
+                {!!wishlistContext && <Text style={styles.wishlistContext} numberOfLines={1}>{wishlistContext}</Text>}
+                <Text style={styles.wishlistLabel} numberOfLines={2}>{getWishlistTitle(item.entry)}</Text>
+                <Text style={styles.wishlistBudget} numberOfLines={1}>{getWishlistMeta(item.entry)}</Text>
+              </View>
             </View>
           </PressableScale>
           {selectionOverlay}
@@ -617,6 +645,14 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
           setDetailStoreFind(null);
         }}
       />
+      {detailWishlistEntry && (
+        <ShopWishlistDetailSheet
+          entry={detailWishlistEntry}
+          onClose={() => setDetailWishlistEntry(null)}
+          onRemove={removeDetailWishlistFromBoard}
+          removalCopy={BOARD_WISHLIST_REMOVAL_COPY}
+        />
+      )}
       {lastRemoval && (
         <View style={[styles.undoToast, { bottom: insets.bottom + spacing.lg }]} accessibilityLiveRegion="polite">
           <Ionicons name="checkmark-circle" size={18} color={colors.success} />
@@ -677,14 +713,14 @@ const styles = StyleSheet.create({
   },
   wishlistTile: {
     borderRadius: radii.lg,
-    backgroundColor: `${colors.primary}12`,
+    overflow: 'hidden',
+    backgroundColor: colors.surfaceElevated,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.sm,
   },
+  wishlistPreview: { width: '100%', height: '52%', borderRadius: 0 },
+  wishlistInfo: { flex: 1, justifyContent: 'center', gap: 2, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  wishlistContext: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.primary },
   wishlistLabel: {
     fontSize: typography.size.sm,
     fontWeight: typography.weight.semibold,

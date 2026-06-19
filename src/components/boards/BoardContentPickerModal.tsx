@@ -17,11 +17,30 @@ import { useOutfits } from '../../hooks/useOutfits';
 import { useWishlist } from '../../hooks/useWishlist';
 import { useUpdateBoard } from '../../hooks/useBoards';
 import { resolveImageUri } from '../../lib/resolveImageUri';
+import type { WishlistEntry } from '../../lib/wishlist';
+import {
+  getWishlistAccessibilityLabel,
+  getWishlistContext,
+  getWishlistItemSummary,
+  getWishlistMeta,
+  getWishlistSearchText,
+  getWishlistTitle,
+} from '../../lib/wishlistPresentation';
+import { WishlistOutfitPreview } from '../outfits/WishlistOutfitPreview';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { Board } from '../../types/board';
 
 type Tab = 'pieces' | 'outfits' | 'wishlist' | 'finds';
-type Row = { id: string; title: string; subtitle?: string; imageUrl?: string | null };
+type Row = {
+  id: string;
+  title: string;
+  subtitle?: string;
+  meta?: string;
+  imageUrl?: string | null;
+  searchText?: string;
+  accessibilityLabel?: string;
+  wishlistEntry?: WishlistEntry;
+};
 
 type Props = {
   board: Board | null;
@@ -76,12 +95,16 @@ export function BoardContentPickerModal({ board, visible, onClose, onAddStoreFin
       : tab === 'wishlist'
       ? wishlist.map((entry) => ({
           id: entry.id,
-          title: entry.outfit?.city ? `Shop · ${entry.outfit.city}` : 'Shop outfit',
-          subtitle: entry.outfit?.totalBudget ?? undefined,
+          title: getWishlistTitle(entry),
+          subtitle: getWishlistItemSummary(entry),
+          meta: [getWishlistContext(entry), getWishlistMeta(entry)].filter(Boolean).join(' · '),
+          searchText: getWishlistSearchText(entry),
+          accessibilityLabel: getWishlistAccessibilityLabel(entry),
+          wishlistEntry: entry,
         }))
       : [];
     return normalized
-      ? source.filter((row) => `${row.title} ${row.subtitle ?? ''}`.toLowerCase().includes(normalized))
+      ? source.filter((row) => `${row.title} ${row.subtitle ?? ''} ${row.meta ?? ''} ${row.searchText ?? ''}`.toLowerCase().includes(normalized))
       : source;
   }, [items, outfits, query, tab, wishlist]);
 
@@ -190,13 +213,22 @@ export function BoardContentPickerModal({ board, visible, onClose, onAddStoreFin
                       onPress={() => toggle(item.id)}
                       accessibilityRole="checkbox"
                       accessibilityState={{ checked: selected }}
+                      accessibilityLabel={item.accessibilityLabel ?? item.title}
+                      accessibilityHint={selected ? 'Double tap to remove from this board' : 'Double tap to add to this board'}
                     >
                       <View style={styles.thumb}>
-                        {uri ? <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={120} /> : <Ionicons name={tab === 'wishlist' ? 'bag-handle-outline' : tab === 'outfits' ? 'images-outline' : 'shirt-outline'} size={22} color={colors.mutedForeground} />}
+                        {item.wishlistEntry ? (
+                          <WishlistOutfitPreview entry={item.wishlistEntry} style={StyleSheet.absoluteFill} />
+                        ) : uri ? (
+                          <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={120} />
+                        ) : (
+                          <Ionicons name={tab === 'outfits' ? 'images-outline' : 'shirt-outline'} size={22} color={colors.mutedForeground} />
+                        )}
                       </View>
                       <View style={styles.rowInfo}>
-                        <Text style={styles.rowTitle} numberOfLines={1}>{item.title}</Text>
+                        <Text style={styles.rowTitle} numberOfLines={item.wishlistEntry ? 2 : 1}>{item.title}</Text>
                         {!!item.subtitle && <Text style={styles.rowSubtitle} numberOfLines={1}>{item.subtitle}</Text>}
+                        {!!item.meta && <Text style={styles.rowMeta} numberOfLines={1}>{item.meta}</Text>}
                       </View>
                       <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={25} color={selected ? colors.primary : colors.border} />
                     </TouchableOpacity>
@@ -231,12 +263,13 @@ const styles = StyleSheet.create({
   clearButton: { width: 32, height: 44, alignItems: 'center', justifyContent: 'center' },
   loading: { paddingTop: spacing.xxxl },
   list: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xxxl },
-  row: { minHeight: 66, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderRadius: radii.md },
+  row: { minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderRadius: radii.md },
   rowSelected: { backgroundColor: `${colors.primary}0D` },
-  thumb: { width: 48, height: 48, borderRadius: radii.md, overflow: 'hidden', backgroundColor: colors.secondary, alignItems: 'center', justifyContent: 'center' },
+  thumb: { width: 58, height: 58, borderRadius: radii.md, overflow: 'hidden', backgroundColor: colors.secondary, alignItems: 'center', justifyContent: 'center' },
   rowInfo: { flex: 1, minWidth: 0 },
   rowTitle: { color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
-  rowSubtitle: { color: colors.mutedForeground, fontSize: typography.size.xs, textTransform: 'capitalize' },
+  rowSubtitle: { color: colors.mutedForeground, fontSize: typography.size.xs },
+  rowMeta: { color: colors.mutedForeground, fontSize: typography.size.xs, fontVariant: ['tabular-nums'] },
   empty: { paddingTop: spacing.xxxl, textAlign: 'center', color: colors.mutedForeground, fontSize: typography.size.sm },
   findsState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.xl },
   findsIcon: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
