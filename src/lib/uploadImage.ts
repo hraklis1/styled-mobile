@@ -1,4 +1,5 @@
 import { api } from './api';
+import * as Crypto from 'expo-crypto';
 
 /** True for inline base64 data URIs (vs hosted http/https URLs). */
 export function isDataUri(url: string | null | undefined): boolean {
@@ -20,7 +21,7 @@ export async function uploadImageToR2(dataUrl: string, userId: string | number):
   const base64 = dataUrl.slice(commaIdx + 1);
   const mimeType = meta.slice(5).replace(';base64', '') || 'image/jpeg';
   const ext = mimeType.includes('webp') ? 'webp' : 'jpg';
-  const fileName = `users/${userId}/items/${Date.now()}-${crypto.randomUUID()}.${ext}`;
+  const fileName = `users/${userId}/items/${Date.now()}-${Crypto.randomUUID()}.${ext}`;
 
   const { presignedUrl, publicUrl } = await api
     .post<{ presignedUrl: string; publicUrl: string }>('/api/upload-url', {

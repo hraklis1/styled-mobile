@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions, type CameraCapturedPicture } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
@@ -28,6 +28,7 @@ export function DailyFindCaptureModal({ visible, onClose, onCaptured }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraReady, setCameraReady] = useState(false);
   const [isWorking, setIsWorking] = useState(false);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (visible && permission && !permission.granted && permission.canAskAgain) {
@@ -46,10 +47,7 @@ export function DailyFindCaptureModal({ visible, onClose, onCaptured }: Props) {
     setIsWorking(true);
     try {
       await Haptics.selectionAsync();
-      const photo: CameraCapturedPicture = await camera.current.takePictureAsync({
-        quality: 0.9,
-        exif: true,
-      });
+      const photo: CameraCapturedPicture = await camera.current.takePictureAsync({ quality: 0.9, exif: true });
       const uri = await persistCapturedPhoto(photo.uri);
       const location = await capturePhotoLocationData(photo.exif, true);
       finish([uri], location);
@@ -75,9 +73,10 @@ export function DailyFindCaptureModal({ visible, onClose, onCaptured }: Props) {
         exif: true,
       });
       if (result.canceled || !result.assets?.length) return;
-      const uris = await Promise.all(result.assets.slice(0, MAX_PHOTOS).map((asset) => persistCapturedPhoto(asset.uri)));
+      const assets = result.assets.slice(0, MAX_PHOTOS);
+      const uris = await Promise.all(assets.map((asset) => persistCapturedPhoto(asset.uri)));
       let location: CapturedLocation | null = null;
-      for (const asset of result.assets.slice(0, MAX_PHOTOS)) {
+      for (const asset of assets) {
         location = await capturePhotoLocationData(asset.exif, false);
         if (location) break;
       }
@@ -89,6 +88,9 @@ export function DailyFindCaptureModal({ visible, onClose, onCaptured }: Props) {
     }
   }, [finish, isWorking]);
 
+  const safeTop = Math.max(insets.top, 48) + spacing.sm;
+  const safeBottom = Math.max(insets.bottom, spacing.md) + spacing.md;
+
   return (
     <Modal visible={visible} animationType="fade" presentationStyle="fullScreen" onRequestClose={onClose}>
       <View style={styles.root}>
@@ -96,6 +98,7 @@ export function DailyFindCaptureModal({ visible, onClose, onCaptured }: Props) {
           <CameraView
             ref={camera}
             style={StyleSheet.absoluteFill}
+            pointerEvents="none"
             active={visible}
             facing="back"
             mode="picture"
@@ -115,9 +118,9 @@ export function DailyFindCaptureModal({ visible, onClose, onCaptured }: Props) {
           </View>
         )}
 
-        <SafeAreaView style={styles.overlay} pointerEvents="box-none">
-          <View style={styles.topBar}>
-            <TouchableOpacity style={styles.roundButton} onPress={onClose} accessibilityLabel="Close camera">
+        <View style={styles.overlay}>
+          <View style={[styles.topBar, { paddingTop: safeTop }]}>
+            <TouchableOpacity style={styles.roundButton} onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close camera">
               <Ionicons name="close" size={25} color="#fff" />
             </TouchableOpacity>
             <View style={styles.captureLabel}>
@@ -126,7 +129,7 @@ export function DailyFindCaptureModal({ visible, onClose, onCaptured }: Props) {
             <View style={styles.roundButtonPlaceholder} />
           </View>
 
-          <View style={styles.bottomBar}>
+          <View style={[styles.bottomBar, { paddingBottom: safeBottom }]}>
             <TouchableOpacity
               style={styles.galleryButton}
               onPress={() => { void chooseFromLibrary(); }}
@@ -150,7 +153,7 @@ export function DailyFindCaptureModal({ visible, onClose, onCaptured }: Props) {
 
             <View style={styles.controlSpacer} />
           </View>
-        </SafeAreaView>
+        </View>
       </View>
     </Modal>
   );
@@ -163,13 +166,13 @@ const styles = StyleSheet.create({
   permissionCopy: { color: 'rgba(255,255,255,0.72)', fontSize: typography.size.md, textAlign: 'center', lineHeight: 22 },
   permissionButton: { minHeight: 46, paddingHorizontal: spacing.xl, alignItems: 'center', justifyContent: 'center', borderRadius: radii.full, backgroundColor: colors.primary },
   permissionButtonText: { color: colors.primaryForeground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
-  overlay: { ...StyleSheet.absoluteFill, justifyContent: 'space-between' },
-  topBar: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  overlay: { ...StyleSheet.absoluteFill, zIndex: 1, justifyContent: 'space-between' },
+  topBar: { paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   roundButton: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(20,16,14,0.62)' },
   roundButtonPlaceholder: { width: 46, height: 46 },
   captureLabel: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radii.full, backgroundColor: 'rgba(20,16,14,0.55)' },
   captureLabelText: { color: '#fff', fontSize: typography.size.xs, fontWeight: typography.weight.bold, letterSpacing: 1.5 },
-  bottomBar: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xl, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(12,10,9,0.48)' },
+  bottomBar: { paddingHorizontal: spacing.xl, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(12,10,9,0.48)' },
   galleryButton: { width: 76, alignItems: 'center', gap: spacing.xs, paddingTop: spacing.md },
   galleryIcon: { width: 48, height: 48, borderRadius: radii.md, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.18)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.45)' },
   galleryText: { color: '#fff', fontSize: typography.size.xs, fontWeight: typography.weight.semibold },

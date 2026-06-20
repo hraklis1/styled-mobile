@@ -174,7 +174,7 @@ export function StoreFindDetailSheet({ storeFind, onClose, onEdit, onRetry, onDe
                   />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.syncTitle}>
-                      {storeFind.syncStatus === 'failed' ? 'Saved on this device' : 'Waiting to sync'}
+                      {storeFind.syncStatus === 'failed' ? 'Sync failed — saved on this device' : 'Waiting to sync'}
                     </Text>
                     {!!storeFind.syncError && <Text style={styles.syncMessage}>{storeFind.syncError}</Text>}
                   </View>

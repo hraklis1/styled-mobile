@@ -84,7 +84,7 @@ export function BoardStoreFindCard({ storeFind, cardWidth }: Props) {
             color="#fff"
           />
           <Text style={styles.syncText}>
-            {storeFind.syncStatus === 'failed' ? 'Saved offline' : 'Waiting to sync'}
+            {storeFind.syncStatus === 'failed' ? 'Sync failed' : 'Waiting to sync'}
           </Text>
         </View>
       )}
