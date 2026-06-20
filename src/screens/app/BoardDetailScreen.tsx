@@ -46,7 +46,6 @@ import {
   getWishlistTitle,
 } from '../../lib/wishlistPresentation';
 import { useLibraryLaunch } from '../../hooks/useCameraLaunch';
-import type { CapturedLocation } from '../../lib/photoLocation';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import {
   buildBoardStylistPrompt,
@@ -179,13 +178,10 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
   const [optionsMenuVisible, setOptionsMenuVisible] = useState(false);
   const [contentPickerVisible, setContentPickerVisible] = useState(false);
   const [coverPickerVisible, setCoverPickerVisible] = useState(route.params.editCover === true);
-  const [storeFindFormVisible, setStoreFindFormVisible] = useState(false);
   const [detailStoreFind, setDetailStoreFind] = useState<StoreFind | null>(null);
   const [detailWishlistEntry, setDetailWishlistEntry] = useState<WishlistEntry | null>(null);
   const [editingStoreFind, setEditingStoreFind] = useState<StoreFind | null>(null);
   const [findCaptureVisible, setFindCaptureVisible] = useState(false);
-  const [capturedFindImages, setCapturedFindImages] = useState<string[]>([]);
-  const [capturedFindLocation, setCapturedFindLocation] = useState<CapturedLocation | null>(null);
   const [organizeMode, setOrganizeMode] = useState(route.params.organize === true);
   const [lastRemoval, setLastRemoval] = useState<{
     count: number;
@@ -195,9 +191,9 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
     storeFinds: StoreFind[];
   } | null>(null);
 
-  // Auto-open the store find form when navigated from the "Daily Finds" home button.
+  // Auto-open the capture session when navigated from the "Daily Finds" home button.
   useEffect(() => {
-    if (autoOpenStoreFindForm) setStoreFindFormVisible(true);
+    if (autoOpenStoreFindForm) setFindCaptureVisible(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -291,12 +287,6 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
     setFindCaptureVisible(true);
   }, []);
 
-  const handleFindCaptured = useCallback((imageUris: string[], location: CapturedLocation | null) => {
-    setCapturedFindImages(imageUris);
-    setCapturedFindLocation(location);
-    setStoreFindFormVisible(true);
-  }, []);
-
   const handleSaveStoreFind = useCallback(async (data: Omit<StoreFind, 'id' | 'createdAt'>) => {
     const newFind: StoreFind = {
       ...data,
@@ -315,7 +305,8 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
     if (await updateLocalFind(updatedFind)) return;
 
     // Upload any newly-added local photos inline — edits bypass the queue.
-    const hasLocal = (updatedFind.imageUrls ?? []).some((u) => u.startsWith('file://'));
+    const hasLocal = (updatedFind.imageUrls ?? []).some((u) => u.startsWith('file://'))
+      || updatedFind.tagImageUrl?.startsWith('file://');
     if (hasLocal && user?.id) {
       updatedFind = await uploadLocalImages(updatedFind, user.id);
     }
@@ -848,26 +839,17 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
         onUpload={() => { setCoverPickerVisible(false); setTimeout(handleUploadCover, 300); }}
       />
       <StoreFindFormModal
-        visible={storeFindFormVisible || editingStoreFind !== null}
+        visible={editingStoreFind !== null}
         onClose={() => {
-          setStoreFindFormVisible(false);
           setEditingStoreFind(null);
-          setCapturedFindImages([]);
-          setCapturedFindLocation(null);
         }}
-        onSave={editingStoreFind ? handleEditSaveStoreFind : handleSaveStoreFind}
+        onSave={handleEditSaveStoreFind}
         initialValues={editingStoreFind ?? undefined}
-        initialImageUris={capturedFindImages}
-        initialLocation={capturedFindLocation}
-        onSaveAndAddAnother={editingStoreFind ? undefined : async (data) => {
-          await handleSaveStoreFind(data);
-          setTimeout(() => { void startFindCapture(); }, 350);
-        }}
       />
       <DailyFindCaptureModal
         visible={findCaptureVisible}
         onClose={() => setFindCaptureVisible(false)}
-        onCaptured={handleFindCaptured}
+        onSave={handleSaveStoreFind}
       />
       <StoreFindDetailSheet
         storeFind={detailStoreFind}

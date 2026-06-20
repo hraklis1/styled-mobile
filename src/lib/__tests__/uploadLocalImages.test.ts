@@ -47,4 +47,28 @@ describe('uploadLocalImages', () => {
 
     await expect(uploadLocalImages(find, '1')).rejects.toThrow('R2 upload failed: 403');
   });
+
+  it('uploads an optional local tag photo alongside garment photos', async () => {
+    mockReadAsStringAsync
+      .mockResolvedValueOnce('encoded-garment')
+      .mockResolvedValueOnce('encoded-tag');
+    mockUploadImageToR2
+      .mockResolvedValueOnce('https://images.example/find.jpg')
+      .mockResolvedValueOnce('https://images.example/tag.jpg');
+
+    await expect(uploadLocalImages({ ...find, tagImageUrl: 'file:///tag.jpg' }, '1')).resolves.toMatchObject({
+      imageUrls: ['https://images.example/find.jpg'],
+      tagImageUrl: 'https://images.example/tag.jpg',
+    });
+    expect(mockUploadImageToR2).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves legacy finds that do not have a tag photo', async () => {
+    mockReadAsStringAsync.mockResolvedValue('encoded-photo');
+    mockUploadImageToR2.mockResolvedValue('https://images.example/find.jpg');
+
+    await expect(uploadLocalImages(find, '1')).resolves.toMatchObject({
+      tagImageUrl: undefined,
+    });
+  });
 });

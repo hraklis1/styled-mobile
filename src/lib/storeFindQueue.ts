@@ -71,7 +71,10 @@ export async function migrateLegacyStoreFindQueue(userId: string): Promise<void>
         boardId: entry.boardId,
         targetBoardName: 'Daily Finds',
         find: { ...entry.find, syncStatus: entry.find.syncStatus ?? 'pending' },
-        localImageUris: (entry.find.imageUrls ?? []).filter((uri) => uri.startsWith('file://')),
+        localImageUris: [
+          ...(entry.find.imageUrls ?? []),
+          ...(entry.find.tagImageUrl ? [entry.find.tagImageUrl] : []),
+        ].filter((uri) => uri.startsWith('file://')),
         queuedAt: entry.queuedAt,
       });
     }

@@ -136,6 +136,21 @@ export function StoreFindDetailSheet({ storeFind, onClose, onEdit, onRetry, onDe
             )}
 
             <View style={styles.details}>
+              {!!storeFind.tagImageUrl && (
+                <View style={styles.tagPhotoSection}>
+                  <View style={styles.tagPhotoHeading}>
+                    <Ionicons name="pricetag-outline" size={16} color={colors.primary} />
+                    <Text style={styles.tagPhotoTitle}>Tag photo</Text>
+                  </View>
+                  <Image
+                    source={{ uri: storeFind.tagImageUrl }}
+                    style={styles.tagPhoto}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    transition={150}
+                  />
+                </View>
+              )}
               {!!storeFind.description && (
                 <Text style={styles.descriptionText}>{storeFind.description}</Text>
               )}
@@ -281,6 +296,10 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.md,
   },
+  tagPhotoSection: { gap: spacing.sm },
+  tagPhotoHeading: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  tagPhotoTitle: { color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+  tagPhoto: { width: 132, height: 132, borderRadius: radii.lg, backgroundColor: colors.secondary },
   captureDate: { color: colors.mutedForeground, fontSize: typography.size.xs },
   syncBlock: {
     minHeight: 58,

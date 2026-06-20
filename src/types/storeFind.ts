@@ -2,6 +2,7 @@ export type StoreFind = {
   id: string; // Stable UUID minted on-device for idempotent sync
   imageUrl: string | null;
   imageUrls?: string[]; // multi-photo array; imageUrl mirrors imageUrls[0] for backward compat
+  tagImageUrl?: string | null; // optional physical price/care tag photo
   location: string | null;
   locationData?: {
     latitude: number;

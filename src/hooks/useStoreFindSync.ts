@@ -91,7 +91,7 @@ export function useStoreFindSync(boardId?: number) {
           await refresh();
 
           const uploaded = await uploadLocalImages(syncingFind, userId);
-          if ((uploaded.imageUrls ?? []).some((uri) => uri.startsWith('file://'))) {
+          if ((uploaded.imageUrls ?? []).some((uri) => uri.startsWith('file://')) || uploaded.tagImageUrl?.startsWith('file://')) {
             throw new Error('Photo upload is waiting for a better connection.');
           }
           workingFind = uploaded;
@@ -117,7 +117,10 @@ export function useStoreFindSync(boardId?: number) {
           boards = boards.map((board) => (board.id === updatedBoard.id ? updatedBoard : board));
 
           await removeQueuedStoreFind(userId, entry.find.id);
-          await deleteLocalImages(entry.localImageUris ?? (entry.find.imageUrls ?? []).filter((uri) => uri.startsWith('file://')));
+          await deleteLocalImages(entry.localImageUris ?? [
+            ...(entry.find.imageUrls ?? []),
+            ...(entry.find.tagImageUrl ? [entry.find.tagImageUrl] : []),
+          ].filter((uri) => uri.startsWith('file://')));
           qc.setQueryData<Board[]>(BOARDS_QUERY_KEY, boards);
         } catch (error) {
           const attempts = (entry.find.syncAttempts ?? 0) + 1;
@@ -158,7 +161,10 @@ export function useStoreFindSync(boardId?: number) {
       boardId: targetBoardId,
       targetBoardName,
       find: pendingFind,
-      localImageUris: (pendingFind.imageUrls ?? []).filter((uri) => uri.startsWith('file://')),
+      localImageUris: [
+        ...(pendingFind.imageUrls ?? []),
+        ...(pendingFind.tagImageUrl ? [pendingFind.tagImageUrl] : []),
+      ].filter((uri) => uri.startsWith('file://')),
       queuedAt: new Date().toISOString(),
     });
     await refresh();
@@ -189,6 +195,7 @@ export function useStoreFindSync(boardId?: number) {
       localImageUris: Array.from(new Set([
         ...(entry.localImageUris ?? []),
         ...(find.imageUrls ?? []).filter((uri) => uri.startsWith('file://')),
+        ...(find.tagImageUrl?.startsWith('file://') ? [find.tagImageUrl] : []),
       ])),
     });
     await refresh();

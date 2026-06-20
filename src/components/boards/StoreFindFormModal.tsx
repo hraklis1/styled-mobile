@@ -169,6 +169,7 @@ type Props = {
   initialValues?: StoreFind;
   initialImageUris?: string[];
   initialLocation?: CapturedLocation | null;
+  initialDraft?: Partial<StoreFind>;
 };
 
 export function StoreFindFormModal({
@@ -179,8 +180,10 @@ export function StoreFindFormModal({
   initialValues,
   initialImageUris = [],
   initialLocation,
+  initialDraft,
 }: Props) {
   const [imageUris, setImageUris] = useState<string[]>([]);
+  const [tagImageUri, setTagImageUri] = useState<string | null>(null);
   const [description, setDescription] = useState('');
   const [store, setStore] = useState('');
   const [brand, setBrand] = useState('');
@@ -198,16 +201,19 @@ export function StoreFindFormModal({
   useEffect(() => {
     if (!visible) return;
     if (!initialValues) {
-      setImageUris(initialImageUris);
-      setDescription('');
-      setStore('');
-      setBrand('');
-      setPriceStr('');
-      setSizePreset('');
-      setCustomSize('');
-      setNotes('');
-      setLocation(initialLocation?.label ?? null);
-      setLocationData(initialLocation ?? null);
+      const draftSize = initialDraft?.size ?? '';
+      const draftSizeIsPreset = (SIZE_PRESETS as readonly string[]).includes(draftSize);
+      setImageUris(initialDraft?.imageUrls?.length ? initialDraft.imageUrls : initialImageUris);
+      setTagImageUri(initialDraft?.tagImageUrl ?? null);
+      setDescription(initialDraft?.description ?? '');
+      setStore(initialDraft?.store ?? '');
+      setBrand(initialDraft?.brand ?? '');
+      setPriceStr(initialDraft?.price != null ? String(initialDraft.price) : '');
+      setSizePreset(draftSizeIsPreset ? draftSize : draftSize ? 'Custom' : '');
+      setCustomSize(draftSizeIsPreset || !draftSize ? '' : draftSize);
+      setNotes(initialDraft?.notes ?? '');
+      setLocation(initialDraft?.location ?? initialLocation?.label ?? null);
+      setLocationData(initialDraft?.locationData ?? initialLocation ?? null);
       setDetailsExpanded(false);
       return;
     }
@@ -220,6 +226,7 @@ export function StoreFindFormModal({
         ? [initialValues.imageUrl]
         : [],
     );
+    setTagImageUri(initialValues.tagImageUrl ?? null);
     setDescription(initialValues.description ?? '');
     setStore(initialValues.store ?? '');
     setBrand(initialValues.brand ?? '');
@@ -230,7 +237,7 @@ export function StoreFindFormModal({
     setLocation(initialValues.location ?? null);
     setLocationData(initialValues.locationData ?? null);
     setDetailsExpanded(true);
-  }, [visible, initialValues, initialImageUris, initialLocation]);
+  }, [visible, initialDraft, initialValues, initialImageUris, initialLocation]);
 
   const brandSuggestions = useBrandSuggestions();
   const launchCamera = useCameraLaunch();
@@ -255,6 +262,25 @@ export function StoreFindFormModal({
       { text: 'Cancel', style: 'cancel' },
     ]);
   }, [addPhoto]);
+
+  const addTagPhoto = useCallback(async (fromCamera: boolean) => {
+    const launch = fromCamera ? launchCamera : launchLibrary;
+    const image = await launch({ maxDim: 1080, compress: 0.8 });
+    if (!image?.uri) return;
+    try {
+      setTagImageUri(await persistStoreFindPhoto(image.uri));
+    } catch (error) {
+      Alert.alert('Tag photo not saved', error instanceof Error ? error.message : 'Please try again.');
+    }
+  }, [launchCamera, launchLibrary]);
+
+  const handleAddTagPhoto = useCallback(() => {
+    Alert.alert(tagImageUri ? 'Replace Tag Photo' : 'Add Tag Photo', 'Choose a photo source', [
+      { text: 'Camera', onPress: () => addTagPhoto(true) },
+      { text: 'Gallery', onPress: () => addTagPhoto(false) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }, [addTagPhoto, tagImageUri]);
 
   const handleRemovePhoto = useCallback((index: number) => {
     setImageUris((prev) => prev.filter((_, i) => i !== index));
@@ -311,6 +337,7 @@ export function StoreFindFormModal({
     return {
       imageUrl: imageUris[0] ?? null,
       imageUrls: imageUris,
+      tagImageUrl: tagImageUri,
       location,
       locationData: locationData ? { ...locationData, label: location } : null,
       description: description.trim() || null,
@@ -341,6 +368,7 @@ export function StoreFindFormModal({
       else await onSave(data);
 
       setImageUris([]);
+      setTagImageUri(null);
       setDescription('');
       setStore('');
       setBrand('');
@@ -400,6 +428,22 @@ export function StoreFindFormModal({
                 </TouchableOpacity>
               )}
             </ScrollView>
+
+            <View style={styles.tagPhotoRow}>
+              {tagImageUri ? (
+                <View style={styles.tagPhotoThumb}>
+                  <Image source={{ uri: tagImageUri }} style={styles.thumbImage} />
+                  <View style={styles.tagPhotoLabel}><Text style={styles.tagPhotoLabelText}>TAG</Text></View>
+                  <TouchableOpacity style={styles.removePhotoBtn} onPress={() => setTagImageUri(null)}>
+                    <Ionicons name="close-circle" size={20} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+              <TouchableOpacity style={styles.addTagPhotoButton} onPress={handleAddTagPhoto}>
+                <Ionicons name="pricetag-outline" size={18} color={colors.primary} />
+                <Text style={styles.addTagPhotoText}>{tagImageUri ? 'Replace tag photo' : 'Add tag photo'}</Text>
+              </TouchableOpacity>
+            </View>
 
             <View style={[styles.form, { zIndex: 1 }]}>
               {detailsExpanded && <View style={[styles.field, { zIndex: 12 }]}>
@@ -764,6 +808,38 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     paddingLeft: spacing.sm,
   },
+  tagPhotoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  tagPhotoThumb: {
+    width: 72,
+    height: 72,
+    borderRadius: radii.md,
+    overflow: 'hidden',
+    backgroundColor: colors.muted,
+  },
+  tagPhotoLabel: {
+    position: 'absolute',
+    left: spacing.xs,
+    bottom: spacing.xs,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    borderRadius: radii.full,
+    backgroundColor: 'rgba(0,0,0,0.68)',
+  },
+  tagPhotoLabelText: { color: '#fff', fontSize: 9, fontWeight: typography.weight.bold },
+  addTagPhotoButton: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.full,
+    backgroundColor: colors.accent,
+  },
+  addTagPhotoText: { color: colors.primary, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
 
   // Size grid
   sizeGrid: {

@@ -23,11 +23,9 @@ import { useOutfitLogs, useDeleteOutfitLog } from '../../hooks/useOutfitLogs';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
 import { useGlobalOutfitLogger } from '../../contexts/GlobalOutfitLoggerContext';
 import { useDailyFindsBoard } from '../../hooks/useDailyFindsBoard';
-import { StoreFindFormModal } from '../../components/boards/StoreFindFormModal';
 import { DailyFindCaptureModal } from '../../components/boards/DailyFindCaptureModal';
 import type { StoreFind } from '../../types/storeFind';
 import { useStoreFindSync } from '../../hooks/useStoreFindSync';
-import type { CapturedLocation } from '../../lib/photoLocation';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { useGlobalAddSheet } from '../../contexts/GlobalAddSheetContext';
 import { useGlobalScan } from '../../contexts/GlobalScanContext';
@@ -127,9 +125,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const { dailyFindsBoard } = useDailyFindsBoard();
   const { queueFind } = useStoreFindSync(dailyFindsBoard?.id);
   const [findCaptureVisible, setFindCaptureVisible] = useState(false);
-  const [storeFindFormVisible, setStoreFindFormVisible] = useState(false);
-  const [capturedFindImages, setCapturedFindImages] = useState<string[]>([]);
-  const [capturedFindLocation, setCapturedFindLocation] = useState<CapturedLocation | null>(null);
   const { openStylist } = useGlobalAIStylist();
   const { openAddSheet } = useGlobalAddSheet();
   const { openScanItem, openBatchScan } = useGlobalScan();
@@ -190,12 +185,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     setFindCaptureVisible(true);
   }, []);
 
-  const handleFindCaptured = useCallback((imageUris: string[], location: CapturedLocation | null) => {
-    setCapturedFindImages(imageUris);
-    setCapturedFindLocation(location);
-    setStoreFindFormVisible(true);
-  }, []);
-
   const handleSaveStoreFind = useCallback(async (data: Omit<StoreFind, 'id' | 'createdAt'>) => {
     const newFind: StoreFind = {
       ...data,
@@ -206,11 +195,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     };
     await queueFind(newFind, dailyFindsBoard?.id ?? null, 'Daily Finds');
   }, [dailyFindsBoard?.id, queueFind]);
-
-  const handleSaveAndAddAnother = useCallback(async (data: Omit<StoreFind, 'id' | 'createdAt'>) => {
-    await handleSaveStoreFind(data);
-    setTimeout(() => { void startDailyFindCapture(); }, 350);
-  }, [handleSaveStoreFind, startDailyFindCapture]);
 
   const handleAddToCloset = useCallback(() => {
     openAddSheet({
@@ -659,22 +643,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           onClose={() => setLocationSheetVisible(false)}
         />
       )}
-      <StoreFindFormModal
-        visible={storeFindFormVisible}
-        onClose={() => {
-          setStoreFindFormVisible(false);
-          setCapturedFindImages([]);
-          setCapturedFindLocation(null);
-        }}
-        onSave={handleSaveStoreFind}
-        onSaveAndAddAnother={handleSaveAndAddAnother}
-        initialImageUris={capturedFindImages}
-        initialLocation={capturedFindLocation}
-      />
       <DailyFindCaptureModal
         visible={findCaptureVisible}
         onClose={() => setFindCaptureVisible(false)}
-        onCaptured={handleFindCaptured}
+        onSave={handleSaveStoreFind}
       />
     </View>
   );
