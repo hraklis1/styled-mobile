@@ -62,7 +62,10 @@ const linking: LinkingOptions<RootStackParamList> = {
           Home: {
             screens: {
               ShoppingCamera: 'shopping-camera',
-              ShoppingGallery: 'shopping-gallery',
+              ShoppingGallery: {
+                path: 'shopping-gallery',
+                alias: ['daily-finds'],
+              },
             },
           },
         },

@@ -14,18 +14,17 @@ type Props = {
   itemMap: Map<number, Item>;
   outfitMap: Map<number, Outfit>;
   width: number;
-  isDailyFinds?: boolean;
   onPress?: () => void;
   onOptions?: () => void;
 };
 
-export const BoardCard = React.memo(function BoardCard({ board, itemMap, outfitMap, width, isDailyFinds, onPress, onOptions }: Props) {
+export const BoardCard = React.memo(function BoardCard({ board, itemMap, outfitMap, width, onPress, onOptions }: Props) {
   const count = getBoardSavedCount(board);
 
   return (
     <View style={{ width }}>
       <PressableScale onPress={onPress} accessibilityRole="button" accessibilityLabel={`Open ${board.name} board, ${count} saved`}>
-        <BoardCover board={board} itemMap={itemMap} outfitMap={outfitMap} size={width} isDailyFinds={isDailyFinds} />
+        <BoardCover board={board} itemMap={itemMap} outfitMap={outfitMap} size={width} />
       </PressableScale>
       <View style={styles.metaRow}>
         <View style={styles.metaText}>

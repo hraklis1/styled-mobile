@@ -9,7 +9,6 @@ import {
   Linking,
 } from 'react-native';
 import { Image } from 'expo-image';
-import * as Crypto from 'expo-crypto';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
@@ -22,10 +21,6 @@ import { useEvents } from '../../hooks/useEvents';
 import { useOutfitLogs, useDeleteOutfitLog } from '../../hooks/useOutfitLogs';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
 import { useGlobalOutfitLogger } from '../../contexts/GlobalOutfitLoggerContext';
-import { useDailyFindsBoard } from '../../hooks/useDailyFindsBoard';
-import { DailyFindCaptureModal } from '../../components/boards/DailyFindCaptureModal';
-import type { StoreFind } from '../../types/storeFind';
-import { useStoreFindSync } from '../../hooks/useStoreFindSync';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { useGlobalAddSheet } from '../../contexts/GlobalAddSheetContext';
 import { useGlobalScan } from '../../contexts/GlobalScanContext';
@@ -122,9 +117,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [locationSheetVisible, setLocationSheetVisible] = useState(false);
 
   const { openLogger } = useGlobalOutfitLogger();
-  const { dailyFindsBoard } = useDailyFindsBoard();
-  const { queueFind } = useStoreFindSync(dailyFindsBoard?.id);
-  const [findCaptureVisible, setFindCaptureVisible] = useState(false);
   const { openStylist } = useGlobalAIStylist();
   const { openAddSheet } = useGlobalAddSheet();
   const { openScanItem, openBatchScan } = useGlobalScan();
@@ -180,21 +172,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / 2;
   const heroWidth = width - SIDE_PAD * 2;
   const heroHeight = Math.round(heroWidth * 0.78);
-
-  const startDailyFindCapture = useCallback(async () => {
-    setFindCaptureVisible(true);
-  }, []);
-
-  const handleSaveStoreFind = useCallback(async (data: Omit<StoreFind, 'id' | 'createdAt'>) => {
-    const newFind: StoreFind = {
-      ...data,
-      id: Crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
-      syncStatus: 'pending',
-      status: data.status ?? 'saved',
-    };
-    await queueFind(newFind, dailyFindsBoard?.id ?? null, 'Daily Finds');
-  }, [dailyFindsBoard?.id, queueFind]);
 
   const handleAddToCloset = useCallback(() => {
     openAddSheet({
@@ -437,14 +414,14 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         </View>
         <PressableScale
           contentStyle={styles.quickAction}
-          onPress={() => { void startDailyFindCapture(); }}
+          onPress={() => navigation.navigate('ShoppingGallery')}
           accessibilityRole="button"
-          accessibilityLabel="Daily Finds"
+          accessibilityLabel="Open The Shopping Edit"
         >
           <View style={styles.quickActionIcon}>
-            <Ionicons name="flash-outline" size={17} color={colors.primary} />
+            <Ionicons name="images-outline" size={17} color={colors.primary} />
           </View>
-          <Text style={styles.quickActionText}>Daily Finds</Text>
+          <Text style={styles.quickActionText}>The Shopping Edit</Text>
         </PressableScale>
       </View>
 
@@ -643,11 +620,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           onClose={() => setLocationSheetVisible(false)}
         />
       )}
-      <DailyFindCaptureModal
-        visible={findCaptureVisible}
-        onClose={() => setFindCaptureVisible(false)}
-        onSave={handleSaveStoreFind}
-      />
     </View>
   );
 }

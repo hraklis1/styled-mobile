@@ -28,7 +28,7 @@ import { ClosetGrid } from '../../components/wardrobe/ClosetGrid';
 import { BoardCard } from '../../components/boards/BoardCard';
 import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
 import { useBoards, useCreateBoard, useDeleteBoard, useUpdateBoard, type BoardEntryRef } from '../../hooks/useBoards';
-import { useDailyFindsBoard } from '../../hooks/useDailyFindsBoard';
+import { filterVisibleBoards } from '../../lib/legacyBoards';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { parseEventDate } from '../../lib/outfitAssignments';
 import { CATEGORY_LABELS, type ItemCategory } from '../../types/item';
@@ -103,18 +103,14 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const { data: outfits = [] } = useOutfits();
   const { data: events = [] } = useEvents();
   const { data: boards = [] } = useBoards();
-  const { dailyFindsBoardId } = useDailyFindsBoard();
 
   const itemMap = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
   const outfitMap = useMemo(() => new Map(outfits.map((o) => [o.id, o])), [outfits]);
   const sortedBoards = useMemo(() => {
       const normalized = boardSearch.trim().toLowerCase();
-      return [...boards]
+      return filterVisibleBoards(boards)
       .filter((board) => !normalized || board.name.toLowerCase().includes(normalized))
-      .sort((a, b) =>
-        a.id === dailyFindsBoardId ? -1 : b.id === dailyFindsBoardId ? 1 : 0,
-      );
-    }, [boardSearch, boards, dailyFindsBoardId]);
+    }, [boardSearch, boards]);
   const createBoard = useCreateBoard();
   const updateBoard = useUpdateBoard();
   const deleteBoard = useDeleteBoard();
@@ -451,16 +447,15 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   }, [deleteBoard]);
 
   const handleBoardOptions = useCallback((board: Board) => {
-    const isDailyFinds = board.id === dailyFindsBoardId;
     Alert.alert(board.name, undefined, [
       { text: 'Organize', onPress: () => navigation.navigate('BoardDetail', { boardId: board.id, organize: true }) },
       { text: 'Edit cover', onPress: () => navigation.navigate('BoardDetail', { boardId: board.id, editCover: true }) },
-      ...(!isDailyFinds && Platform.OS === 'ios' ? [{ text: 'Rename', onPress: () => renameBoard(board) }] : []),
+      ...(Platform.OS === 'ios' ? [{ text: 'Rename', onPress: () => renameBoard(board) }] : []),
       { text: 'Upload cover photo', onPress: () => uploadBoardCover(board) },
-      ...(!isDailyFinds ? [{ text: 'Delete', style: 'destructive' as const, onPress: () => confirmDeleteBoard(board) }] : []),
+      { text: 'Delete', style: 'destructive' as const, onPress: () => confirmDeleteBoard(board) },
       { text: 'Cancel', style: 'cancel' },
     ]);
-  }, [confirmDeleteBoard, dailyFindsBoardId, navigation, renameBoard, uploadBoardCover]);
+  }, [confirmDeleteBoard, navigation, renameBoard, uploadBoardCover]);
 
   const createSmartBoard = useCallback((name: string) => {
     if (boards.some((board) => board.name.toLowerCase() === name.toLowerCase())) return;
@@ -883,7 +878,6 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
                   itemMap={itemMap}
                   outfitMap={outfitMap}
                   width={cardWidth}
-                  isDailyFinds={item.id === dailyFindsBoardId}
                   onPress={() => navigation.navigate('BoardDetail', { boardId: item.id })}
                   onOptions={() => handleBoardOptions(item)}
                 />
@@ -891,7 +885,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             )}
             ListHeaderComponent={
               <View style={styles.boardListHeader}>
-                {boards.length >= 6 && (
+                {sortedBoards.length >= 6 && (
                   <View style={styles.boardSearchWrap}>
                     <Ionicons name="search-outline" size={17} color={colors.mutedForeground} />
                     <TextInput
@@ -937,7 +931,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
                 )}
               </View>
             }
-            ListEmptyComponent={boards.length === 0 ? emptyBoards : null}
+            ListEmptyComponent={sortedBoards.length === 0 ? emptyBoards : null}
             contentContainerStyle={{
               paddingTop: spacing.md,
               paddingHorizontal: SIDE_PAD - COL_GAP / 2,

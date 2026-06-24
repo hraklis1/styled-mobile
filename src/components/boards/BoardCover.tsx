@@ -15,7 +15,6 @@ type Props = {
   itemMap: Map<number, Item>;
   outfitMap: Map<number, Outfit>;
   size: number;
-  isDailyFinds?: boolean;
   compact?: boolean;
 };
 
@@ -41,7 +40,7 @@ function CoverCell({ uri, recyclingKey }: { uri: string; recyclingKey: string })
   );
 }
 
-export function BoardCover({ board, itemMap, outfitMap, size, isDailyFinds, compact }: Props) {
+export function BoardCover({ board, itemMap, outfitMap, size, compact }: Props) {
   const covers = useMemo(() => getBoardCoverUris(board, itemMap, outfitMap), [board, itemMap, outfitMap]);
 
   const count = getBoardSavedCount(board);
@@ -78,26 +77,18 @@ export function BoardCover({ board, itemMap, outfitMap, size, isDailyFinds, comp
         cell(0)
       ) : (
         <LinearGradient
-          colors={isDailyFinds ? ['#D9B79D', '#956D51'] : ['#F0E6DE', '#DDD0C4']}
+          colors={['#F0E6DE', '#DDD0C4']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.fallback}
         >
           <View style={styles.fallbackIcon}>
-            <Ionicons name={isDailyFinds ? 'camera-outline' : 'albums-outline'} size={compact ? 18 : 30} color={isDailyFinds ? colors.white : colors.primary} />
+            <Ionicons name="albums-outline" size={compact ? 18 : 30} color={colors.primary} />
           </View>
           {!compact && (
-            <Text style={[styles.fallbackText, isDailyFinds && styles.dailyFallbackText]}>
-              {isDailyFinds ? 'Your in-store inspiration' : 'Ready for your ideas'}
-            </Text>
+            <Text style={styles.fallbackText}>Ready for your ideas</Text>
           )}
         </LinearGradient>
-      )}
-      {isDailyFinds && (
-        <View style={[styles.dailyBadge, compact && styles.dailyBadgeCompact]}>
-          <Ionicons name="flash" size={compact ? 9 : 11} color={colors.white} />
-          {!compact && <Text style={styles.dailyBadgeText}>DAILY FINDS</Text>}
-        </View>
       )}
     </View>
   );
@@ -134,19 +125,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   fallbackText: { color: colors.secondaryForeground, fontSize: typography.size.sm, fontWeight: typography.weight.medium, textAlign: 'center' },
-  dailyFallbackText: { color: colors.white },
-  dailyBadge: {
-    position: 'absolute',
-    top: spacing.sm,
-    right: spacing.sm,
-    minHeight: 24,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radii.full,
-    backgroundColor: 'rgba(40,35,31,0.72)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  dailyBadgeCompact: { top: 3, right: 3, minHeight: 18, paddingHorizontal: 5 },
-  dailyBadgeText: { color: colors.white, fontSize: 9, fontWeight: typography.weight.bold, letterSpacing: 0.6 },
 });

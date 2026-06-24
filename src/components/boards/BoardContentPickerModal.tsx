@@ -30,7 +30,7 @@ import { WishlistOutfitPreview } from '../outfits/WishlistOutfitPreview';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { Board } from '../../types/board';
 
-type Tab = 'pieces' | 'outfits' | 'wishlist' | 'finds';
+type Tab = 'pieces' | 'outfits' | 'wishlist';
 type Row = {
   id: string;
   title: string;
@@ -46,17 +46,15 @@ type Props = {
   board: Board | null;
   visible: boolean;
   onClose: () => void;
-  onAddStoreFind: () => void;
 };
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'pieces', label: 'Pieces' },
   { key: 'outfits', label: 'Outfits' },
   { key: 'wishlist', label: 'Wishlist' },
-  { key: 'finds', label: 'Finds' },
 ];
 
-export function BoardContentPickerModal({ board, visible, onClose, onAddStoreFind }: Props) {
+export function BoardContentPickerModal({ board, visible, onClose }: Props) {
   const { data: items = [], isLoading: itemsLoading } = useItems();
   const { data: outfits = [] } = useOutfits();
   const { data: wishlist = [], isLoading: wishlistLoading } = useWishlist();
@@ -92,8 +90,7 @@ export function BoardContentPickerModal({ board, visible, onClose, onAddStoreFin
           subtitle: outfit.tags?.slice(0, 2).join(' · '),
           imageUrl: outfit.aiGeneratedImageUrl,
         }))
-      : tab === 'wishlist'
-      ? wishlist.map((entry) => ({
+      : wishlist.map((entry) => ({
           id: entry.id,
           title: getWishlistTitle(entry),
           subtitle: getWishlistItemSummary(entry),
@@ -101,8 +98,7 @@ export function BoardContentPickerModal({ board, visible, onClose, onAddStoreFin
           searchText: getWishlistSearchText(entry),
           accessibilityLabel: getWishlistAccessibilityLabel(entry),
           wishlistEntry: entry,
-        }))
-      : [];
+        }));
     return normalized
       ? source.filter((row) => `${row.title} ${row.subtitle ?? ''} ${row.meta ?? ''} ${row.searchText ?? ''}`.toLowerCase().includes(normalized))
       : source;
@@ -166,77 +162,59 @@ export function BoardContentPickerModal({ board, visible, onClose, onAddStoreFin
           ))}
         </View>
 
-        {tab === 'finds' ? (
-          <View style={styles.findsState}>
-            <View style={styles.findsIcon}><Ionicons name="camera-outline" size={34} color={colors.primary} /></View>
-            <Text style={styles.findsTitle}>Save something you spot</Text>
-            <Text style={styles.findsCopy}>Photograph an in-store find and keep the details with this board.</Text>
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={() => { onClose(); setTimeout(onAddStoreFind, 300); }}
-              accessibilityRole="button"
-            >
-              <Ionicons name="camera-outline" size={18} color={colors.primaryForeground} />
-              <Text style={styles.primaryButtonText}>Snap a store find</Text>
-            </TouchableOpacity>
-          </View>
+        <View style={styles.searchWrap}>
+          <Ionicons name="search-outline" size={18} color={colors.mutedForeground} />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder={`Search ${TABS.find((option) => option.key === tab)?.label.toLowerCase()}`}
+            placeholderTextColor={colors.mutedForeground}
+            style={styles.searchInput}
+            returnKeyType="search"
+            accessibilityLabel={`Search ${tab}`}
+          />
+          {!!query && <TouchableOpacity onPress={() => setQuery('')} style={styles.clearButton}><Ionicons name="close-circle" size={18} color={colors.mutedForeground} /></TouchableOpacity>}
+        </View>
+        {loading ? (
+          <ActivityIndicator color={colors.primary} style={styles.loading} />
         ) : (
-          <>
-            <View style={styles.searchWrap}>
-              <Ionicons name="search-outline" size={18} color={colors.mutedForeground} />
-              <TextInput
-                value={query}
-                onChangeText={setQuery}
-                placeholder={`Search ${TABS.find((option) => option.key === tab)?.label.toLowerCase()}`}
-                placeholderTextColor={colors.mutedForeground}
-                style={styles.searchInput}
-                returnKeyType="search"
-                accessibilityLabel={`Search ${tab}`}
-              />
-              {!!query && <TouchableOpacity onPress={() => setQuery('')} style={styles.clearButton}><Ionicons name="close-circle" size={18} color={colors.mutedForeground} /></TouchableOpacity>}
-            </View>
-            {loading ? (
-              <ActivityIndicator color={colors.primary} style={styles.loading} />
-            ) : (
-              <FlatList
-                data={rows}
-                keyExtractor={(row) => row.id}
-                keyboardShouldPersistTaps="handled"
-                contentContainerStyle={styles.list}
-                ListEmptyComponent={<Text style={styles.empty}>Nothing matches this search.</Text>}
-                renderItem={({ item }) => {
-                  const selected = isSelected(item.id);
-                  const uri = resolveImageUri(item.imageUrl ?? undefined);
-                  return (
-                    <TouchableOpacity
-                      style={[styles.row, selected && styles.rowSelected]}
-                      onPress={() => toggle(item.id)}
-                      accessibilityRole="checkbox"
-                      accessibilityState={{ checked: selected }}
-                      accessibilityLabel={item.accessibilityLabel ?? item.title}
-                      accessibilityHint={selected ? 'Double tap to remove from this board' : 'Double tap to add to this board'}
-                    >
-                      <View style={styles.thumb}>
-                        {item.wishlistEntry ? (
-                          <WishlistOutfitPreview entry={item.wishlistEntry} style={StyleSheet.absoluteFill} />
-                        ) : uri ? (
-                          <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={120} />
-                        ) : (
-                          <Ionicons name={tab === 'outfits' ? 'images-outline' : 'shirt-outline'} size={22} color={colors.mutedForeground} />
-                        )}
-                      </View>
-                      <View style={styles.rowInfo}>
-                        <Text style={styles.rowTitle} numberOfLines={item.wishlistEntry ? 2 : 1}>{item.title}</Text>
-                        {!!item.subtitle && <Text style={styles.rowSubtitle} numberOfLines={1}>{item.subtitle}</Text>}
-                        {!!item.meta && <Text style={styles.rowMeta} numberOfLines={1}>{item.meta}</Text>}
-                      </View>
-                      <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={25} color={selected ? colors.primary : colors.border} />
-                    </TouchableOpacity>
-                  );
-                }}
-              />
-            )}
-          </>
+          <FlatList
+            data={rows}
+            keyExtractor={(row) => row.id}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.list}
+            ListEmptyComponent={<Text style={styles.empty}>Nothing matches this search.</Text>}
+            renderItem={({ item }) => {
+              const selected = isSelected(item.id);
+              const uri = resolveImageUri(item.imageUrl ?? undefined);
+              return (
+                <TouchableOpacity
+                  style={[styles.row, selected && styles.rowSelected]}
+                  onPress={() => toggle(item.id)}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: selected }}
+                  accessibilityLabel={item.accessibilityLabel ?? item.title}
+                  accessibilityHint={selected ? 'Double tap to remove from this board' : 'Double tap to add to this board'}
+                >
+                  <View style={styles.thumb}>
+                    {item.wishlistEntry ? (
+                      <WishlistOutfitPreview entry={item.wishlistEntry} style={StyleSheet.absoluteFill} />
+                    ) : uri ? (
+                      <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={120} />
+                    ) : (
+                      <Ionicons name={tab === 'outfits' ? 'images-outline' : 'shirt-outline'} size={22} color={colors.mutedForeground} />
+                    )}
+                  </View>
+                  <View style={styles.rowInfo}>
+                    <Text style={styles.rowTitle} numberOfLines={item.wishlistEntry ? 2 : 1}>{item.title}</Text>
+                    {!!item.subtitle && <Text style={styles.rowSubtitle} numberOfLines={1}>{item.subtitle}</Text>}
+                    {!!item.meta && <Text style={styles.rowMeta} numberOfLines={1}>{item.meta}</Text>}
+                  </View>
+                  <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={25} color={selected ? colors.primary : colors.border} />
+                </TouchableOpacity>
+              );
+            }}
+          />
         )}
       </View>
     </Modal>

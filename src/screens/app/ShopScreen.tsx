@@ -110,11 +110,12 @@ export function ShopScreen({ navigation }: ShopScreenProps) {
           </Text>
         </View>
         <TouchableOpacity
-          style={styles.galleryShortcut}
+          style={styles.shoppingEditButton}
           onPress={() => navigation.navigate('ShoppingGallery')}
-          accessibilityLabel="View Shopping Mode gallery"
+          accessibilityLabel="Open The Shopping Edit"
         >
           <Ionicons name="images-outline" size={20} color={colors.foreground} />
+          <Text style={styles.shoppingEditButtonText}>The Shopping Edit</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.shoppingModeButton}
@@ -279,15 +280,22 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     backgroundColor: colors.primary,
   },
-  galleryShortcut: {
-    width: 40,
+  shoppingEditButton: {
     height: 40,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
     borderRadius: radii.full,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surfaceElevated,
+  },
+  shoppingEditButtonText: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    color: colors.foreground,
   },
   shoppingModeButtonText: {
     fontSize: typography.size.xs,

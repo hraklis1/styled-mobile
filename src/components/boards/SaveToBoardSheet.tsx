@@ -21,6 +21,7 @@ import {
 import type { Board } from '../../types/board';
 import { useItems } from '../../hooks/useItems';
 import { useOutfits } from '../../hooks/useOutfits';
+import { filterVisibleBoards } from '../../lib/legacyBoards';
 import { BoardCover } from './BoardCover';
 import { colors, spacing, typography, radii } from '../../theme';
 
@@ -54,6 +55,7 @@ export function SaveToBoardSheet({ onClose, target }: Props) {
 
   const itemMap = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
   const outfitMap = useMemo(() => new Map(outfits.map((outfit) => [outfit.id, outfit])), [outfits]);
+  const visibleBoards = useMemo(() => filterVisibleBoards(boards), [boards]);
 
   const targets: BoardEntryRef[] = target == null ? [] : Array.isArray(target) ? target : [target];
 
@@ -176,7 +178,7 @@ export function SaveToBoardSheet({ onClose, target }: Props) {
         )}
 
         <BottomSheetScrollView style={styles.list} keyboardShouldPersistTaps="handled">
-          {boards.map((board) => {
+          {visibleBoards.map((board) => {
             const checked = allTargetsIn(board);
             return (
               <TouchableOpacity
@@ -185,7 +187,7 @@ export function SaveToBoardSheet({ onClose, target }: Props) {
                 onPress={() => toggleBoard(board)}
                 activeOpacity={0.7}
               >
-                <BoardCover board={board} itemMap={itemMap} outfitMap={outfitMap} size={44} compact isDailyFinds={board.name === 'Daily Finds'} />
+                <BoardCover board={board} itemMap={itemMap} outfitMap={outfitMap} size={44} compact />
                 <View style={styles.boardInfo}>
                   <Text style={styles.boardName} numberOfLines={1}>
                     {board.name}
@@ -202,7 +204,7 @@ export function SaveToBoardSheet({ onClose, target }: Props) {
               </TouchableOpacity>
             );
           })}
-          {boards.length === 0 && (
+          {visibleBoards.length === 0 && (
             <Text style={styles.emptyHint}>No boards yet — create one above.</Text>
           )}
         </BottomSheetScrollView>

@@ -104,12 +104,6 @@ function itemPlaceLabel(item: ShoppingEditItem): string | null {
   return label === 'Location not set' ? null : label;
 }
 
-function itemStatusLabel(item: ShoppingEditItem): string {
-  if (item.needsReview) return item.reviewReasons[0] ?? 'Needs review';
-  if (item.syncStatus === 'pending') return 'Waiting to sync';
-  return 'Ready';
-}
-
 function buildSections(items: ShoppingEditItem[]): GallerySection[] {
   const grouped = new Map<string, { dateLabel: string; storeName: string; placeLabel: string | null; items: ShoppingEditItem[] }>();
 
@@ -650,7 +644,11 @@ function ShoppingEditCard({
   onLongPress: () => void;
 }) {
   const price = priceLabel(item.extractedPrice);
-  const statusLabel = itemStatusLabel(item);
+  const accessibilityStateLabel = item.needsReview
+    ? ', needs review'
+    : item.syncStatus === 'pending'
+      ? ', waiting to sync'
+      : '';
 
   return (
     <TouchableOpacity
@@ -658,7 +656,7 @@ function ShoppingEditCard({
       activeOpacity={0.9}
       onPress={() => onPress(item.primarySnap)}
       onLongPress={onLongPress}
-      accessibilityLabel={`${item.storeName ?? 'Shopping'} item${price ? `, ${price}` : ''}${item.needsReview ? ', needs review' : ''}`}
+      accessibilityLabel={`${item.storeName ?? 'Shopping'} item${price ? `, ${price}` : ''}${accessibilityStateLabel}`}
       accessibilityState={{ selected: isSelected }}
     >
       <Image
@@ -670,9 +668,9 @@ function ShoppingEditCard({
         transition={160}
       />
       <LinearGradient
-        colors={['transparent', 'rgba(20, 15, 12, 0.68)']}
+        colors={['rgba(20, 15, 12, 0.12)', 'transparent', 'rgba(20, 15, 12, 0.18)']}
         style={StyleSheet.absoluteFill}
-        locations={[0.48, 1]}
+        locations={[0, 0.42, 1]}
       />
       {price ? (
         <View style={[styles.priceBadge, selectionMode && styles.priceBadgeSelecting]}>
@@ -685,19 +683,8 @@ function ShoppingEditCard({
         </View>
       ) : null}
       {item.needsReview ? (
-        <View style={styles.reviewBadge}><Text style={styles.reviewBadgeText}>REVIEW</Text></View>
-      ) : null}
-      {item.tagSnaps.length > 0 ? (
-        <View style={styles.itemThumbStack}>
-          {item.tagSnaps.slice(0, 2).map((tagSnap) => (
-            <Image
-              key={tagSnap.id}
-              source={{ uri: tagSnap.imageUri }}
-              style={styles.itemTagThumb}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-            />
-          ))}
+        <View style={[styles.reviewBadge, item.syncStatus === 'pending' && styles.reviewBadgeWithPending]}>
+          <Ionicons name="alert-circle" size={13} color="#FFFFFF" />
         </View>
       ) : null}
       {selectionMode ? (
@@ -705,16 +692,6 @@ function ShoppingEditCard({
           {isSelected ? <Ionicons name="checkmark" size={16} color={colors.primaryForeground} /> : null}
         </View>
       ) : null}
-      <View style={styles.cardFooter}>
-        <Text style={styles.cardStore} numberOfLines={1}>{item.storeName ?? 'Store not set'}</Text>
-        <Text style={styles.cardLocation} numberOfLines={2}>{itemPlaceLabel(item) ?? 'Location not set'}</Text>
-        <View style={styles.cardMetaRow}>
-          <Text style={styles.cardTime}>
-            {item.photoCount} photo{item.photoCount === 1 ? '' : 's'}
-          </Text>
-          <Text style={styles.cardTime} numberOfLines={1}>{statusLabel}</Text>
-        </View>
-      </View>
     </TouchableOpacity>
   );
 }
@@ -1327,18 +1304,11 @@ const styles = StyleSheet.create({
   priceBadge: { position: 'absolute', top: spacing.sm, left: spacing.sm, paddingHorizontal: spacing.sm, paddingVertical: 6, borderRadius: radii.full, backgroundColor: 'rgba(250, 248, 245, 0.94)' },
   priceBadgeSelecting: { top: 46 },
   priceBadgeText: { fontSize: typography.size.xs, fontWeight: typography.weight.bold, color: colors.foreground, fontVariant: ['tabular-nums'] },
-  pendingBadge: { position: 'absolute', top: spacing.sm, right: spacing.sm, width: 29, height: 29, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: 'rgba(149, 109, 81, 0.92)' },
-  reviewBadge: { position: 'absolute', top: 46, right: spacing.sm, paddingHorizontal: 7, paddingVertical: 4, borderRadius: radii.full, backgroundColor: 'rgba(24, 20, 18, 0.78)' },
-  reviewBadgeText: { fontSize: 9, fontWeight: typography.weight.bold, letterSpacing: 0.8, color: '#FFFFFF' },
-  itemThumbStack: { position: 'absolute', left: spacing.sm, bottom: 64, flexDirection: 'row', gap: 4 },
-  itemTagThumb: { width: 36, height: 44, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.72)', borderRadius: 8, backgroundColor: colors.surfaceSubtle },
+  pendingBadge: { position: 'absolute', top: spacing.sm, right: spacing.sm, width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: 'rgba(149, 109, 81, 0.9)' },
+  reviewBadge: { position: 'absolute', right: spacing.sm, bottom: spacing.sm, width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: 'rgba(24, 20, 18, 0.58)' },
+  reviewBadgeWithPending: { bottom: 44 },
   selectionBadge: { position: 'absolute', top: spacing.sm, left: spacing.sm, width: 30, height: 30, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#FFFFFF', borderRadius: 15, backgroundColor: 'rgba(24, 20, 18, 0.42)' },
   selectionBadgeActive: { borderColor: colors.primary, backgroundColor: colors.primary },
-  cardFooter: { position: 'absolute', left: spacing.md, right: spacing.md, bottom: spacing.md },
-  cardStore: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: '#FFFFFF' },
-  cardLocation: { paddingTop: 1, fontSize: 10, lineHeight: 13, fontWeight: typography.weight.medium, color: 'rgba(255,255,255,0.78)' },
-  cardMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, paddingTop: 2 },
-  cardTime: { paddingTop: 2, fontSize: 11, color: 'rgba(255,255,255,0.76)', fontVariant: ['tabular-nums'] },
   emptyState: { flex: 1, minHeight: 420, alignItems: 'center', justifyContent: 'center', gap: spacing.md, paddingHorizontal: spacing.xl },
   emptyMonogram: { width: 76, height: 76, alignItems: 'center', justifyContent: 'center', borderRadius: 38, backgroundColor: colors.accent },
   emptyTitle: { fontFamily: typography.family.display, fontSize: typography.size.xxl, textAlign: 'center', color: colors.foreground },

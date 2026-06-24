@@ -8,31 +8,23 @@ import {
   Alert,
   Platform,
   ScrollView,
-  TextInput,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import type { ListRenderItemInfo } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as Crypto from 'expo-crypto';
 
 import { GarmentCard } from '../../components/wardrobe/GarmentCard';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
 import { PressableScale } from '../../components/primitives/PressableScale';
 import { useBoards, useBoardFeed, flattenBoardFeed, useDeleteBoard, useUpdateBoard } from '../../hooks/useBoards';
-import { useStoreFindSync } from '../../hooks/useStoreFindSync';
-import { uploadLocalImages } from '../../lib/uploadLocalImages';
-import { useAuth } from '../../contexts/AuthContext';
-import { useCreateItem } from '../../hooks/useItems';
 import type { BoardFeedItem } from '../../types/board';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { BoardDetailScreenProps } from '../../navigation/types';
 import { BoardOptionsMenuSheet } from '../../components/boards/BoardOptionsMenuSheet';
 import { BoardContentPickerModal } from '../../components/boards/BoardContentPickerModal';
 import { BoardCoverPickerModal } from '../../components/boards/BoardCoverPickerModal';
-import { StoreFindFormModal } from '../../components/boards/StoreFindFormModal';
-import { DailyFindCaptureModal } from '../../components/boards/DailyFindCaptureModal';
 import { BoardStoreFindCard } from '../../components/boards/BoardStoreFindCard';
 import { StoreFindDetailSheet } from '../../components/boards/StoreFindDetailSheet';
 import { ShopWishlistDetailSheet } from '../../components/outfits/ShopWishlistDetailSheet';
@@ -54,6 +46,7 @@ import {
   type BoardAIIntent,
   type BoardFilter,
 } from '../../lib/boardPresentation';
+import { isLegacyDailyFindsBoard } from '../../lib/legacyBoards';
 
 const SIDE_PAD = spacing.lg;
 const COL_GAP = spacing.sm;
@@ -69,7 +62,6 @@ const BOARD_FILTERS: { key: BoardFilter; label: string }[] = [
   { key: 'item', label: 'Pieces' },
   { key: 'outfit', label: 'Outfits' },
   { key: 'wishlist', label: 'Wishlist' },
-  { key: 'storeFind', label: 'Finds' },
 ];
 
 const NAMED_SWATCHES: Record<string, string> = {
@@ -84,24 +76,16 @@ function swatchColor(value: string): string {
 }
 
 export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps) {
-  const { boardId, autoOpenStoreFindForm } = route.params;
+  const { boardId } = route.params;
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / 2;
 
-  const { user } = useAuth();
   const { openStylist } = useGlobalAIStylist();
   const { data: boards = [] } = useBoards();
   const board = boards.find((b) => b.id === boardId);
-  const isDailyFinds = board?.name === 'Daily Finds';
+  const isDailyFinds = isLegacyDailyFindsBoard(board);
   const [filter, setFilter] = useState<BoardFilter>('all');
-  const [findSearch, setFindSearch] = useState('');
-  const [findSort, setFindSort] = useState<'newest' | 'oldest' | 'priceAsc' | 'priceDesc'>('newest');
-  const [findFiltersOpen, setFindFiltersOpen] = useState(false);
-  const [findStoreFilter, setFindStoreFilter] = useState<string | null>(null);
-  const [findSizeFilter, setFindSizeFilter] = useState<string | null>(null);
-  const [findDateFilter, setFindDateFilter] = useState<'all' | 'today' | 'week'>('all');
-  const [findPricedOnly, setFindPricedOnly] = useState(false);
 
   const feed = useBoardFeed(boardId);
 
@@ -109,79 +93,23 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
     return flattenBoardFeed(feed.data?.pages);
   }, [feed.data?.pages]);
 
-  const {
-    pendingFinds,
-    pendingCount,
-    queueFind,
-    retry: retryStoreFinds,
-    updateLocalFind,
-    discardLocalFind,
-  } = useStoreFindSync(boardId);
-
   const items = useMemo(() => {
-    const pendingIds = new Set(pendingFinds.map((find) => find.id));
-    const withoutDuplicateFinds = remoteItems.filter(
-      (entry) => entry.kind !== 'storeFind' || !pendingIds.has(entry.storeFind.id),
-    );
-    return [
-      ...pendingFinds.map((storeFind): BoardFeedItem => ({
-        kind: 'storeFind',
-        key: `sf_${storeFind.id}`,
-        storeFind,
-      })),
-      ...withoutDuplicateFinds,
-    ];
-  }, [pendingFinds, remoteItems]);
-
-  const dailyFinds = useMemo(
-    () => items.filter((entry): entry is Extract<BoardFeedItem, { kind: 'storeFind' }> => entry.kind === 'storeFind'),
-    [items],
-  );
-  const findStoreOptions = useMemo(
-    () => Array.from(new Set(dailyFinds.map(({ storeFind }) => storeFind.store).filter((value): value is string => !!value))).slice(0, 8),
-    [dailyFinds],
-  );
-  const findSizeOptions = useMemo(
-    () => Array.from(new Set(dailyFinds.map(({ storeFind }) => storeFind.size).filter((value): value is string => !!value))).slice(0, 8),
-    [dailyFinds],
-  );
+    return remoteItems;
+  }, [remoteItems]);
 
   const visibleItems = useMemo(() => {
-    if (!isDailyFinds) return filterBoardFeed(items, filter);
-    const query = findSearch.trim().toLowerCase();
-    const finds = items
-      .filter((entry): entry is Extract<BoardFeedItem, { kind: 'storeFind' }> => entry.kind === 'storeFind')
-      .filter(({ storeFind }) => storeFind.status !== 'archived')
-      .filter(({ storeFind }) => !findStoreFilter || storeFind.store === findStoreFilter)
-      .filter(({ storeFind }) => !findSizeFilter || storeFind.size === findSizeFilter)
-      .filter(({ storeFind }) => !findPricedOnly || storeFind.price != null)
-      .filter(({ storeFind }) => {
-        if (findDateFilter === 'all') return true;
-        const age = Date.now() - new Date(storeFind.createdAt).getTime();
-        return age <= (findDateFilter === 'today' ? 86_400_000 : 7 * 86_400_000);
-      })
-      .filter(({ storeFind }) => !query || [storeFind.store, storeFind.brand, storeFind.description, storeFind.notes]
-        .some((value) => value?.toLowerCase().includes(query)));
-    return finds.sort((a, b) => {
-      if (findSort === 'oldest') return a.storeFind.createdAt.localeCompare(b.storeFind.createdAt);
-      if (findSort === 'priceAsc') return (a.storeFind.price ?? Number.MAX_SAFE_INTEGER) - (b.storeFind.price ?? Number.MAX_SAFE_INTEGER);
-      if (findSort === 'priceDesc') return (b.storeFind.price ?? -1) - (a.storeFind.price ?? -1);
-      return b.storeFind.createdAt.localeCompare(a.storeFind.createdAt);
-    });
-  }, [filter, findDateFilter, findPricedOnly, findSearch, findSizeFilter, findSort, findStoreFilter, isDailyFinds, items]);
+    return filterBoardFeed(items, filter);
+  }, [filter, items]);
 
   const boardInsights = useMemo(() => getBoardInsights(items), [items]);
 
   const { mutate: deleteBoard } = useDeleteBoard();
   const { mutate: updateBoard } = useUpdateBoard();
-  const createClosetItem = useCreateItem();
   const [optionsMenuVisible, setOptionsMenuVisible] = useState(false);
   const [contentPickerVisible, setContentPickerVisible] = useState(false);
   const [coverPickerVisible, setCoverPickerVisible] = useState(route.params.editCover === true);
   const [detailStoreFind, setDetailStoreFind] = useState<StoreFind | null>(null);
   const [detailWishlistEntry, setDetailWishlistEntry] = useState<WishlistEntry | null>(null);
-  const [editingStoreFind, setEditingStoreFind] = useState<StoreFind | null>(null);
-  const [findCaptureVisible, setFindCaptureVisible] = useState(false);
   const [organizeMode, setOrganizeMode] = useState(route.params.organize === true);
   const [lastRemoval, setLastRemoval] = useState<{
     count: number;
@@ -191,11 +119,10 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
     storeFinds: StoreFind[];
   } | null>(null);
 
-  // Auto-open the capture session when navigated from the "Daily Finds" home button.
   useEffect(() => {
-    if (autoOpenStoreFindForm) setFindCaptureVisible(true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!isDailyFinds) return;
+    navigation.getParent()?.navigate('Home', { screen: 'ShoppingGallery' });
+  }, [isDailyFinds, navigation]);
 
   useEffect(() => {
     if (!lastRemoval) return;
@@ -282,106 +209,6 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
   }, [boardId, lastRemoval, updateBoard]);
 
   const launchLibrary = useLibraryLaunch();
-
-  const startFindCapture = useCallback(async () => {
-    setFindCaptureVisible(true);
-  }, []);
-
-  const handleSaveStoreFind = useCallback(async (data: Omit<StoreFind, 'id' | 'createdAt'>) => {
-    const newFind: StoreFind = {
-      ...data,
-      id: Crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
-      syncStatus: 'pending',
-      status: data.status ?? 'saved',
-    };
-    await queueFind(newFind, boardId, board?.name ?? 'Daily Finds');
-  }, [board?.name, boardId, queueFind]);
-
-  const handleEditSaveStoreFind = useCallback(async (data: Omit<StoreFind, 'id' | 'createdAt'>) => {
-    if (!editingStoreFind) return;
-    let updatedFind: StoreFind = { ...editingStoreFind, ...data };
-
-    if (await updateLocalFind(updatedFind)) return;
-
-    // Upload any newly-added local photos inline — edits bypass the queue.
-    const hasLocal = (updatedFind.imageUrls ?? []).some((u) => u.startsWith('file://'))
-      || updatedFind.tagImageUrl?.startsWith('file://');
-    if (hasLocal && user?.id) {
-      updatedFind = await uploadLocalImages(updatedFind, user.id);
-    }
-
-    const current = board?.storeFinds ?? [];
-    const exists = current.some((sf) => sf.id === editingStoreFind.id);
-    const updated = exists
-      ? current.map((sf) => (sf.id === editingStoreFind.id ? updatedFind : sf))
-      : [...current, updatedFind];
-
-    updateBoard({ id: boardId, storeFinds: updated });
-  }, [editingStoreFind, board, boardId, updateBoard, updateLocalFind, user]);
-
-  const handleDeleteStoreFind = useCallback((find: StoreFind) => {
-    Alert.alert('Delete this find?', 'The saved photos and details will be removed.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          void discardLocalFind(find.id).then((removedLocally) => {
-            if (!removedLocally && board) {
-              updateBoard({
-                id: boardId,
-                storeFinds: (board.storeFinds ?? []).filter((candidate) => candidate.id !== find.id),
-              });
-            }
-            setDetailStoreFind(null);
-          });
-        },
-      },
-    ]);
-  }, [board, boardId, discardLocalFind, updateBoard]);
-
-  const handleMarkPurchased = useCallback(async (find: StoreFind) => {
-    const imageUrl = find.imageUrls?.[0] ?? find.imageUrl;
-    if (!imageUrl || imageUrl.startsWith('file://') || find.syncStatus !== 'synced') {
-      Alert.alert('Waiting to sync', 'This find is safely stored. Add it to your closet after its photo finishes syncing.');
-      return;
-    }
-    try {
-      await createClosetItem.mutateAsync({
-        name: find.description || find.brand || find.store || 'Purchased find',
-        brand: find.brand,
-        imageUrl,
-        purchasePrice: find.price,
-        purchaseDate: new Date().toISOString().slice(0, 10),
-        purchaseLocation: find.store || find.location,
-        notes: find.notes,
-        needsDetails: true,
-      });
-      if (board) {
-        const updated: StoreFind = { ...find, status: 'purchased' };
-        updateBoard({
-          id: boardId,
-          storeFinds: (board.storeFinds ?? []).map((candidate) => candidate.id === find.id ? updated : candidate),
-        });
-      }
-      setDetailStoreFind(null);
-      Alert.alert('Added to closet', 'Your find is now ready for closet details.');
-    } catch {
-      // useCreateItem already presents the actionable error.
-    }
-  }, [board, boardId, createClosetItem, updateBoard]);
-
-  const handleArchiveStoreFind = useCallback(async (find: StoreFind) => {
-    const archived = { ...find, status: 'archived' as const };
-    if (!(await updateLocalFind(archived)) && board) {
-      updateBoard({
-        id: boardId,
-        storeFinds: (board.storeFinds ?? []).map((candidate) => candidate.id === find.id ? archived : candidate),
-      });
-    }
-    setDetailStoreFind(null);
-  }, [board, boardId, updateBoard, updateLocalFind]);
 
   const handleRename = useCallback(() => {
     if (Platform.OS === 'ios') {
@@ -549,81 +376,6 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
 
   const showInitialLoading = feed.isLoading && items.length === 0;
 
-  const dailyFindTools = !organizeMode ? (
-    <View style={styles.dailyFindTools}>
-      <View style={styles.dailyFindSearch}>
-        <Ionicons name="search" size={17} color={colors.mutedForeground} />
-        <TextInput
-          style={styles.dailyFindSearchInput}
-          value={findSearch}
-          onChangeText={setFindSearch}
-          placeholder="Search store, brand or notes"
-          placeholderTextColor={colors.mutedForeground}
-          returnKeyType="search"
-          accessibilityLabel="Search Daily Finds"
-        />
-      </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dailySortRow}>
-        {([
-          ['newest', 'Newest'],
-          ['oldest', 'Oldest'],
-          ['priceAsc', 'Price ↑'],
-          ['priceDesc', 'Price ↓'],
-        ] as const).map(([value, label]) => (
-          <TouchableOpacity
-            key={value}
-            style={[styles.dailySortChip, findSort === value && styles.dailySortChipActive]}
-            onPress={() => setFindSort(value)}
-            accessibilityRole="button"
-            accessibilityState={{ selected: findSort === value }}
-          >
-            <Text style={[styles.dailySortText, findSort === value && styles.dailySortTextActive]}>{label}</Text>
-          </TouchableOpacity>
-        ))}
-        {pendingCount > 0 && (
-          <TouchableOpacity style={styles.syncStatusChip} onPress={() => { void retryStoreFinds(); }}>
-            <Ionicons name="cloud-upload-outline" size={14} color={colors.primary} />
-            <Text style={styles.syncStatusText}>{pendingCount} waiting · Retry</Text>
-          </TouchableOpacity>
-        )}
-        {dailyFinds.length >= 8 && (
-          <TouchableOpacity
-            style={[styles.syncStatusChip, findFiltersOpen && styles.dailySortChipActive]}
-            onPress={() => setFindFiltersOpen((open) => !open)}
-          >
-            <Ionicons name="options-outline" size={14} color={findFiltersOpen ? colors.primaryForeground : colors.primary} />
-            <Text style={[styles.syncStatusText, findFiltersOpen && styles.dailySortTextActive]}>Filters</Text>
-          </TouchableOpacity>
-        )}
-      </ScrollView>
-      {findFiltersOpen && dailyFinds.length >= 8 && (
-        <View style={styles.findFilterPanel}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dailySortRow}>
-            <TouchableOpacity style={[styles.dailySortChip, findDateFilter === 'today' && styles.dailySortChipActive]} onPress={() => setFindDateFilter(findDateFilter === 'today' ? 'all' : 'today')}>
-              <Text style={[styles.dailySortText, findDateFilter === 'today' && styles.dailySortTextActive]}>Today</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.dailySortChip, findDateFilter === 'week' && styles.dailySortChipActive]} onPress={() => setFindDateFilter(findDateFilter === 'week' ? 'all' : 'week')}>
-              <Text style={[styles.dailySortText, findDateFilter === 'week' && styles.dailySortTextActive]}>This week</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.dailySortChip, findPricedOnly && styles.dailySortChipActive]} onPress={() => setFindPricedOnly((value) => !value)}>
-              <Text style={[styles.dailySortText, findPricedOnly && styles.dailySortTextActive]}>Has price</Text>
-            </TouchableOpacity>
-            {findStoreOptions.map((store) => (
-              <TouchableOpacity key={store} style={[styles.dailySortChip, findStoreFilter === store && styles.dailySortChipActive]} onPress={() => setFindStoreFilter(findStoreFilter === store ? null : store)}>
-                <Text style={[styles.dailySortText, findStoreFilter === store && styles.dailySortTextActive]}>{store}</Text>
-              </TouchableOpacity>
-            ))}
-            {findSizeOptions.map((size) => (
-              <TouchableOpacity key={`size-${size}`} style={[styles.dailySortChip, findSizeFilter === size && styles.dailySortChipActive]} onPress={() => setFindSizeFilter(findSizeFilter === size ? null : size)}>
-                <Text style={[styles.dailySortText, findSizeFilter === size && styles.dailySortTextActive]}>Size {size}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-    </View>
-  ) : null;
-
   const boardTools = !organizeMode ? (
     <View style={styles.tools}>
       {items.length > 0 && (
@@ -705,9 +457,6 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
               <Text style={styles.headerTitle} numberOfLines={1}>
                 {board?.name ?? 'Board'}
               </Text>
-              {pendingCount > 0 && (
-                <View style={styles.syncDot} accessibilityLabel={`${pendingCount} pending sync`} />
-              )}
             </>
           )}
         </View>
@@ -724,10 +473,10 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
           <View style={{ flexDirection: 'row' }}>
             <TouchableOpacity
               style={styles.headerBtn}
-              onPress={() => { if (isDailyFinds) void startFindCapture(); else setContentPickerVisible(true); }}
-              accessibilityLabel={isDailyFinds ? 'Snap a Daily Find' : 'Add to board'}
+              onPress={() => setContentPickerVisible(true)}
+              accessibilityLabel="Add to board"
             >
-              <Ionicons name={isDailyFinds ? 'camera-outline' : 'add'} size={isDailyFinds ? 23 : 26} color={colors.foreground} />
+              <Ionicons name="add" size={26} color={colors.foreground} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.headerBtn} onPress={handleOverflow} accessibilityLabel="Board options">
               <Ionicons name="ellipsis-horizontal" size={22} color={colors.foreground} />
@@ -736,7 +485,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
         )}
       </View>
 
-      {isDailyFinds ? dailyFindTools : boardTools}
+      {boardTools}
 
       {showInitialLoading ? (
         <View style={styles.centered}>
@@ -744,48 +493,20 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
         </View>
       ) : items.length === 0 ? (
         <View style={styles.centered}>
-          {board?.name === 'Daily Finds' ? (
-            <>
-              <TouchableOpacity
-                style={styles.emptyCamera}
-                onPress={() => { void startFindCapture(); }}
-                activeOpacity={0.75}
-                accessibilityRole="button"
-                accessibilityLabel="Snap a photo to save it here"
-              >
-                <Ionicons name="camera-outline" size={56} color={colors.primary} />
-              </TouchableOpacity>
-              <Text style={styles.emptyTitle}>Spotted something you like?</Text>
-              <Text style={styles.emptySub}>Snap a photo to save it here.</Text>
-              <TouchableOpacity
-                style={styles.emptyBtn}
-                onPress={() => { void startFindCapture(); }}
-                activeOpacity={0.8}
-                accessibilityRole="button"
-                accessibilityLabel="Snap a photo"
-              >
-                <Ionicons name="camera-outline" size={16} color={colors.primaryForeground} />
-                <Text style={styles.emptyBtnText}>Snap a photo</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <View style={styles.emptyIcon}>
-                <Ionicons name="albums-outline" size={30} color={colors.mutedForeground} />
-              </View>
-              <Text style={styles.emptyTitle}>Nothing saved yet</Text>
-              <Text style={styles.emptySub}>Save pieces, outfits, and shop finds to this board.</Text>
-              <TouchableOpacity
-                style={styles.emptyBtn}
-                onPress={() => setContentPickerVisible(true)}
-                activeOpacity={0.8}
-                accessibilityRole="button"
-                accessibilityLabel="Add to board"
-              >
-                <Text style={styles.emptyBtnText}>Add to Board</Text>
-              </TouchableOpacity>
-            </>
-          )}
+          <View style={styles.emptyIcon}>
+            <Ionicons name="albums-outline" size={30} color={colors.mutedForeground} />
+          </View>
+          <Text style={styles.emptyTitle}>Nothing saved yet</Text>
+          <Text style={styles.emptySub}>Save pieces, outfits, and wishlist looks to this board.</Text>
+          <TouchableOpacity
+            style={styles.emptyBtn}
+            onPress={() => setContentPickerVisible(true)}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Add to board"
+          >
+            <Text style={styles.emptyBtnText}>Add to Board</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <View style={{ flex: 1, paddingHorizontal: SIDE_PAD - COL_GAP / 2 }}>
@@ -829,7 +550,6 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
         board={board ?? null}
         visible={contentPickerVisible}
         onClose={() => setContentPickerVisible(false)}
-        onAddStoreFind={() => { void startFindCapture(); }}
       />
       <BoardCoverPickerModal
         visible={coverPickerVisible}
@@ -838,33 +558,9 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
         onSelect={handleSelectCover}
         onUpload={() => { setCoverPickerVisible(false); setTimeout(handleUploadCover, 300); }}
       />
-      <StoreFindFormModal
-        visible={editingStoreFind !== null}
-        onClose={() => {
-          setEditingStoreFind(null);
-        }}
-        onSave={handleEditSaveStoreFind}
-        initialValues={editingStoreFind ?? undefined}
-      />
-      <DailyFindCaptureModal
-        visible={findCaptureVisible}
-        onClose={() => setFindCaptureVisible(false)}
-        onSave={handleSaveStoreFind}
-      />
       <StoreFindDetailSheet
         storeFind={detailStoreFind}
         onClose={() => setDetailStoreFind(null)}
-        onEdit={() => {
-          if (!detailStoreFind) return;
-          setEditingStoreFind(detailStoreFind);
-          setDetailStoreFind(null);
-        }}
-        onRetry={detailStoreFind?.syncStatus === 'failed' || detailStoreFind?.syncStatus === 'pending'
-          ? () => { void retryStoreFinds(detailStoreFind.id); }
-          : undefined}
-        onDelete={detailStoreFind ? () => handleDeleteStoreFind(detailStoreFind) : undefined}
-        onMarkPurchased={detailStoreFind ? () => { void handleMarkPurchased(detailStoreFind); } : undefined}
-        onArchive={detailStoreFind ? () => { void handleArchiveStoreFind(detailStoreFind); } : undefined}
       />
       {detailWishlistEntry && (
         <ShopWishlistDetailSheet
@@ -914,13 +610,6 @@ const styles = StyleSheet.create({
     fontSize: typography.size.lg,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
-  },
-  syncDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: colors.primary,
-    marginTop: 1,
   },
   cell: {
     paddingHorizontal: COL_GAP / 2,
@@ -975,43 +664,6 @@ const styles = StyleSheet.create({
   },
   selectionCheckIdle: { backgroundColor: colors.surfaceElevated, borderWidth: 2, borderColor: colors.border },
   tools: { gap: spacing.sm, paddingBottom: spacing.sm },
-  dailyFindTools: { gap: spacing.sm, paddingBottom: spacing.sm },
-  dailyFindSearch: {
-    minHeight: 44,
-    marginHorizontal: spacing.lg,
-    paddingHorizontal: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    borderRadius: radii.full,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  dailyFindSearchInput: { flex: 1, color: colors.foreground, fontSize: typography.size.sm, paddingVertical: 0 },
-  dailySortRow: { paddingHorizontal: spacing.lg, gap: spacing.xs },
-  dailySortChip: {
-    minHeight: 34,
-    paddingHorizontal: spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.full,
-    backgroundColor: colors.secondary,
-  },
-  dailySortChipActive: { backgroundColor: colors.primary },
-  dailySortText: { color: colors.mutedForeground, fontSize: typography.size.xs, fontWeight: typography.weight.medium },
-  dailySortTextActive: { color: colors.primaryForeground, fontWeight: typography.weight.semibold },
-  syncStatusChip: {
-    minHeight: 34,
-    paddingHorizontal: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    borderRadius: radii.full,
-    backgroundColor: colors.accent,
-  },
-  syncStatusText: { color: colors.primary, fontSize: typography.size.xs, fontWeight: typography.weight.semibold },
-  findFilterPanel: { paddingTop: spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   filterRow: { paddingHorizontal: spacing.lg, gap: spacing.sm },
   filterChip: {
     minHeight: 36,
@@ -1083,15 +735,6 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
     color: colors.mutedForeground,
     textAlign: 'center',
-  },
-  emptyCamera: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: colors.secondary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.xs,
   },
   emptyBtn: {
     flexDirection: 'row',
