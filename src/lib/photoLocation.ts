@@ -5,7 +5,7 @@ import * as Location from 'expo-location';
  * Handles both iOS ({GPS}.Latitude/LatitudeRef) and Android
  * (top-level GPSLatitude/GPSLatitudeRef) formats.
  */
-function extractGpsCoords(
+export function extractGpsCoords(
   exif: Record<string, unknown>,
 ): { latitude: number; longitude: number } | null {
   // iOS: exif['{GPS}'] or exif['GPS']
@@ -44,20 +44,102 @@ export type CapturedLocation = {
   label: string | null;
   address: string | null;
   placeId?: string | null;
+  accuracyMeters?: number | null;
+  branchLabel?: string | null;
+  locality?: string | null;
+  region?: string | null;
+  countryCode?: string | null;
+  capturedAt?: number;
 };
 
-async function reverseGeocode(coords: { latitude: number; longitude: number }): Promise<CapturedLocation> {
+async function reverseGeocode(
+  coords: { latitude: number; longitude: number },
+  accuracyMeters: number | null,
+  capturedAt: number,
+): Promise<CapturedLocation> {
   try {
     const results = await Location.reverseGeocodeAsync(coords);
-    if (!results.length) return { ...coords, label: null, address: null };
+    if (!results.length) {
+      return {
+        ...coords,
+        label: null,
+        accuracyMeters,
+        branchLabel: null,
+        locality: null,
+        region: null,
+        countryCode: null,
+        address: null,
+        capturedAt,
+      };
+    }
     const r = results[0];
-    const label = r.name || r.street || r.city || r.subregion || r.region || null;
     const address = r.formattedAddress
       || [r.name, r.street, r.city, r.region, r.postalCode].filter(Boolean).join(', ')
       || null;
-    return { ...coords, label, address };
+    return {
+      ...coords,
+      label: r.name || r.street || r.city || r.subregion || r.region || null,
+      accuracyMeters,
+      branchLabel: r.name || null,
+      locality: r.city || r.district || r.subregion || null,
+      region: r.region || null,
+      countryCode: r.isoCountryCode || null,
+      address,
+      capturedAt,
+    };
   } catch {
-    return { ...coords, label: null, address: null };
+    return {
+      ...coords,
+      label: null,
+      accuracyMeters,
+      branchLabel: null,
+      locality: null,
+      region: null,
+      countryCode: null,
+      address: null,
+      capturedAt,
+    };
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error('Location timed out')), timeoutMs);
+    }),
+  ]);
+}
+
+/**
+ * Resolve a store-visit location without ever participating in photo capture.
+ * A recent, reasonably accurate cached fix is preferred for instant indoor use;
+ * otherwise a fresh high-accuracy fix gets a short window to resolve.
+ */
+export async function resolveShoppingSessionLocation(): Promise<CapturedLocation | null> {
+  try {
+    let permission = await Location.getForegroundPermissionsAsync();
+    if (permission.status === Location.PermissionStatus.UNDETERMINED) {
+      permission = await Location.requestForegroundPermissionsAsync();
+    }
+    if (!permission.granted) return null;
+
+    const cached = await Location.getLastKnownPositionAsync({
+      maxAge: 2 * 60 * 1000,
+      requiredAccuracy: 100,
+    });
+    const position = cached ?? await withTimeout(
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }),
+      7000,
+    );
+
+    return reverseGeocode(
+      { latitude: position.coords.latitude, longitude: position.coords.longitude },
+      Number.isFinite(position.coords.accuracy) ? position.coords.accuracy : null,
+      position.timestamp,
+    );
+  } catch {
+    return null;
   }
 }
 
@@ -87,7 +169,7 @@ export async function capturePhotoLocationData(
   // 1. EXIF GPS
   if (exif) {
     const coords = extractGpsCoords(exif);
-    if (coords) return reverseGeocode(coords);
+    if (coords) return reverseGeocode(coords, null, Date.now());
   }
 
   // 2. Current device position (camera captures only)
@@ -98,7 +180,7 @@ export async function capturePhotoLocationData(
       const pos = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
-      return reverseGeocode(pos.coords);
+      return reverseGeocode(pos.coords, pos.coords.accuracy, pos.timestamp);
     } catch {
       return null;
     }

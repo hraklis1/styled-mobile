@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '../contexts/AuthContext';
 import { useProfile } from '../hooks/useProfile';
+import { useShoppingSyncManager } from '../hooks/useShoppingSyncManager';
 import { syncLocalWishlistToServer } from '../lib/wishlistSync';
 import { GlobalOutfitLoggerProvider } from '../contexts/GlobalOutfitLoggerContext';
 import { GlobalAIStylistProvider } from '../contexts/GlobalAIStylistContext';
@@ -30,6 +31,8 @@ import { CalendarScreen } from '../screens/app/CalendarScreen';
 import { ProfileScreen } from '../screens/app/ProfileScreen';
 import { SuggestionsScreen } from '../screens/app/SuggestionsScreen';
 import { ShopScreen } from '../screens/app/ShopScreen';
+import { ShoppingCameraScreen } from '../screens/app/ShoppingCameraScreen';
+import { ShoppingGalleryScreen } from '../screens/app/ShoppingGalleryScreen';
 import { StylistScreen } from '../screens/app/StylistScreen';
 import { ErrorState } from '../components/primitives/ErrorState';
 import { colors, spacing, typography } from '../theme';
@@ -52,6 +55,16 @@ const linking: LinkingOptions<RootStackParamList> = {
         screens: {
           // styled://reset-password?token_hash=...&type=recovery
           ResetPassword: 'reset-password',
+        },
+      } as any,
+      App: {
+        screens: {
+          Home: {
+            screens: {
+              ShoppingCamera: 'shopping-camera',
+              ShoppingGallery: 'shopping-gallery',
+            },
+          },
         },
       } as any,
     },
@@ -89,6 +102,8 @@ function HomeNavigator() {
       <HomeStack.Screen name="HomeMain" component={HomeScreen} />
       <HomeStack.Screen name="Suggestions" component={SuggestionsScreen} />
       <HomeStack.Screen name="Shop" component={ShopScreen} />
+      <HomeStack.Screen name="ShoppingCamera" component={ShoppingCameraScreen} />
+      <HomeStack.Screen name="ShoppingGallery" component={ShoppingGalleryScreen} />
     </HomeStack.Navigator>
   );
 }
@@ -236,6 +251,7 @@ function AppGate() {
 
 export function RootNavigator() {
   const { user, isLoading } = useAuth();
+  useShoppingSyncManager();
 
   useEffect(() => {
     if (!isLoading) {

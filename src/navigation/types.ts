@@ -41,6 +41,8 @@ export type HomeStackParamList = {
   HomeMain: undefined;
   Suggestions: { eventId?: number } | undefined;
   Shop: undefined;
+  ShoppingCamera: undefined;
+  ShoppingGallery: undefined;
 };
 
 // Wardrobe nested stack
@@ -73,6 +75,8 @@ export type HomeScreenProps = CompositeScreenProps<
 >;
 export type SuggestionsScreenProps = NativeStackScreenProps<HomeStackParamList, 'Suggestions'>;
 export type ShopScreenProps = NativeStackScreenProps<HomeStackParamList, 'Shop'>;
+export type ShoppingCameraScreenProps = NativeStackScreenProps<HomeStackParamList, 'ShoppingCamera'>;
+export type ShoppingGalleryScreenProps = NativeStackScreenProps<HomeStackParamList, 'ShoppingGallery'>;
 export type CalendarScreenProps = BottomTabScreenProps<AppTabParamList, 'Calendar'>;
 export type ProfileScreenProps = BottomTabScreenProps<AppTabParamList, 'Profile'>;
 

@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { StyledWordmark } from '../../components/brand/StyledWordmark';
 import { colors, spacing, typography, radii } from '../../theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -101,10 +102,7 @@ export function WelcomeScreen({ onComplete }: Props) {
 
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.brandMark}>
-          <Ionicons name="sparkles" size={16} color={colors.primary} />
-          <Text style={styles.brandText}>Styled</Text>
-        </View>
+        <StyledWordmark style={styles.brandMark} />
         <TouchableOpacity
           onPress={onComplete}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -166,14 +164,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
   },
   brandMark: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  brandText: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
+    width: 112,
+    height: 33,
   },
   skipText: {
     fontSize: typography.size.sm,

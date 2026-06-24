@@ -15,6 +15,7 @@ import { makeRedirectUri } from 'expo-auth-session';
 import { track } from '../../lib/analytics';
 import { getDeviceValue, setDeviceValue } from '../../lib/deviceStorage';
 import { useAuth, LAST_LOGIN_EMAIL_KEY } from '../../contexts/AuthContext';
+import { StyledWordmark } from '../../components/brand/StyledWordmark';
 import { Button } from '../../components/primitives/Button';
 import { Input } from '../../components/primitives/Input';
 import { colors, spacing, typography, radii } from '../../theme';
@@ -117,7 +118,7 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.title}>Styled</Text>
+        <StyledWordmark style={styles.wordmark} />
         <Text style={styles.subtitle}>Your AI wardrobe assistant</Text>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -199,11 +200,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.xxxl,
   },
-  title: {
-    fontSize: typography.size.xxxl,
-    fontWeight: typography.weight.bold,
-    color: colors.foreground,
-    letterSpacing: -1,
+  wordmark: {
+    width: 180,
+    height: 52,
     marginBottom: spacing.xs,
   },
   subtitle: {

@@ -51,6 +51,7 @@ export function DailyFindCaptureModal({ visible, onClose, onSave }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraReady, setCameraReady] = useState(false);
   const [isWorking, setIsWorking] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
   const [mode, setMode] = useState<CaptureMode>('item');
   const [imageUris, setImageUris] = useState<string[]>([]);
   const [tagImageUri, setTagImageUri] = useState<string | null>(null);
@@ -65,6 +66,9 @@ export function DailyFindCaptureModal({ visible, onClose, onSave }: Props) {
     if (visible && permission && !permission.granted && permission.canAskAgain) {
       void requestPermission();
     }
+    if (visible) {
+      setIsClosing(false);
+    }
     if (!visible) {
       setCameraReady(false);
       setMode('item');
@@ -77,6 +81,13 @@ export function DailyFindCaptureModal({ visible, onClose, onSave }: Props) {
       setFullDetailsVisible(false);
     }
   }, [permission, requestPermission, visible]);
+
+  const closeCamera = useCallback(() => {
+    setIsClosing(true);
+    setCameraReady(false);
+    void camera.current?.pausePreview().catch(() => undefined);
+    requestAnimationFrame(onClose);
+  }, [onClose]);
 
   const resetCurrentFind = useCallback(() => {
     setImageUris([]);
@@ -204,11 +215,11 @@ export function DailyFindCaptureModal({ visible, onClose, onSave }: Props) {
 
   const safeTop = Math.max(insets.top, 48) + spacing.sm;
   const safeBottom = Math.max(insets.bottom, spacing.md) + spacing.md;
-  const cameraActive = visible && mode !== 'review' && !fullDetailsVisible;
+  const cameraActive = visible && !isClosing && mode !== 'review' && !fullDetailsVisible;
   const locationLabel = sessionLocation?.label || sessionLocation?.address;
 
   return (
-    <Modal visible={visible} animationType="fade" presentationStyle="fullScreen" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="fade" presentationStyle="fullScreen" onRequestClose={closeCamera}>
       <View style={styles.root}>
         {mode === 'review' ? (
           <KeyboardAvoidingView style={styles.reviewRoot} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -333,7 +344,7 @@ export function DailyFindCaptureModal({ visible, onClose, onSave }: Props) {
                   <Text style={styles.captureLabelText}>{mode === 'tag' ? 'TAG PHOTO' : 'DAILY FIND'}</Text>
                 </View>
                 {mode === 'item' ? (
-                  <TouchableOpacity style={styles.doneButton} onPress={onClose} accessibilityLabel="Finish Daily Finds session">
+                  <TouchableOpacity style={styles.doneButton} onPress={closeCamera} accessibilityLabel="Finish Daily Finds session">
                     <Text style={styles.doneButtonText}>Done</Text>
                   </TouchableOpacity>
                 ) : (

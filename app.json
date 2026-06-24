@@ -62,7 +62,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Styled uses your location to autofill event locations and give weather-aware outfit suggestions."
+          "locationWhenInUsePermission": "Styled uses your location to identify the store branch for shopping photos and provide weather-aware outfit suggestions."
         }
       ],
       "expo-image",
@@ -75,7 +75,15 @@
         }
       ],
       "expo-font",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Styled needs camera access to quickly save clothing items and price tags while you shop.",
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": false
+        }
+      ]
     ]
   }
 }

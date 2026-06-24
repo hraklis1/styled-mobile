@@ -9,6 +9,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StyledWordmark } from '../../components/brand/StyledWordmark';
 import { Button } from '../../components/primitives/Button';
 import { Input } from '../../components/primitives/Input';
 import { colors, spacing, typography, radii } from '../../theme';
@@ -71,7 +72,7 @@ export function ResetPasswordScreen({ route, navigation }: ResetPasswordScreenPr
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.wordmark}>Styled</Text>
+        <StyledWordmark style={styles.wordmark} />
 
         <View style={styles.card}>
           {!token_hash ? (
@@ -183,10 +184,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xxxl,
   },
   wordmark: {
-    fontSize: typography.size.xxxl,
-    fontWeight: typography.weight.bold,
-    color: colors.foreground,
-    letterSpacing: -1,
+    width: 180,
+    height: 52,
     marginBottom: spacing.xxl,
   },
   card: {

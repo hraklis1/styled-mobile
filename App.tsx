@@ -14,6 +14,7 @@ import { GlobalAddSheetProvider } from './src/contexts/GlobalAddSheetContext';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { ErrorBoundary } from './src/components/primitives/ErrorBoundary';
 import { OfflineBanner } from './src/components/primitives/OfflineBanner';
+import { useAppStateListener } from './src/hooks/useAppStateListener';
 
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
@@ -26,6 +27,8 @@ initPurchases();
 SplashScreen.preventAutoHideAsync();
 
 function App() {
+  useAppStateListener();
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>

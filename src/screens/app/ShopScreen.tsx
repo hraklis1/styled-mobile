@@ -39,7 +39,7 @@ const SCOPES: { value: WishlistScope; label: string }[] = [
   { value: 'general', label: 'General' },
 ];
 
-export function ShopScreen(_props: ShopScreenProps) {
+export function ShopScreen({ navigation }: ShopScreenProps) {
   const insets = useSafeAreaInsets();
   const { openStylist } = useGlobalAIStylist();
   const { data: entries = [], isLoading: loading, refetch } = useWishlist();
@@ -103,10 +103,27 @@ export function ShopScreen(_props: ShopScreenProps) {
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Shop Wishlist</Text>
-        <Text style={styles.headerSub}>
-          {entries.length === 0 ? 'No saved outfits yet' : `${entries.length} saved outfit${entries.length === 1 ? '' : 's'}`}
-        </Text>
+        <View style={styles.headerCopy}>
+          <Text style={styles.headerTitle}>Shop Wishlist</Text>
+          <Text style={styles.headerSub}>
+            {entries.length === 0 ? 'No saved outfits yet' : `${entries.length} saved outfit${entries.length === 1 ? '' : 's'}`}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.galleryShortcut}
+          onPress={() => navigation.navigate('ShoppingGallery')}
+          accessibilityLabel="View Shopping Mode gallery"
+        >
+          <Ionicons name="images-outline" size={20} color={colors.foreground} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.shoppingModeButton}
+          onPress={() => navigation.navigate('ShoppingCamera')}
+          accessibilityLabel="Open Shopping Mode camera"
+        >
+          <Ionicons name="camera" size={19} color={colors.primaryForeground} />
+          <Text style={styles.shoppingModeButtonText}>Shopping Mode</Text>
+        </TouchableOpacity>
       </View>
 
       {entries.length === 0 ? (
@@ -240,14 +257,43 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   centered: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.lg,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
+  headerCopy: { flex: 1 },
   headerTitle: { fontSize: typography.size.xl, fontWeight: typography.weight.bold, color: colors.foreground, letterSpacing: -0.3 },
   headerSub: { marginTop: 2, fontSize: typography.size.sm, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
+  shoppingModeButton: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.full,
+    backgroundColor: colors.primary,
+  },
+  galleryShortcut: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceElevated,
+  },
+  shoppingModeButtonText: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    color: colors.primaryForeground,
+  },
   browseControls: { padding: spacing.md, gap: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   searchBox: {
