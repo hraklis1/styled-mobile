@@ -295,8 +295,8 @@ function ShoppingSnapOrganizerModal({
         <View style={styles.organizerHeader}>
           <View style={styles.organizerHeaderCopy}>
             <Text style={styles.detailEyebrow}>ORGANIZE</Text>
-            <Text style={styles.organizerTitle}>Sort this snap</Text>
-            <Text style={styles.organizerSubtitle}>Move photos into item piles, then save.</Text>
+            <Text style={styles.organizerTitle}>Group photos</Text>
+            <Text style={styles.organizerSubtitle}>Group related photos into items, then save.</Text>
           </View>
           <TouchableOpacity style={styles.detailIconButton} onPress={onClose} disabled={isSaving} accessibilityLabel="Close organizer">
             <Ionicons name="close" size={22} color={colors.foreground} />
@@ -316,7 +316,7 @@ function ShoppingSnapOrganizerModal({
                 disabled={selectedIds.size === 0 || isSaving}
               >
                 <Ionicons name="albums-outline" size={16} color={colors.primaryForeground} />
-                <Text style={styles.organizerMakeText}>Make item</Text>
+                <Text style={styles.organizerMakeText}>Create item</Text>
               </TouchableOpacity>
             </View>
             <View style={styles.organizerGrid}>
@@ -392,7 +392,11 @@ function ShoppingSnapDetail({
 }) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const detailPhotoWidth = width - spacing.lg * 2;
+  const detailPhotoHeight = Math.min(width * 1.12, 540);
+  const detailPhotoScrollRef = useRef<ScrollView>(null);
   const [ocrExpanded, setOcrExpanded] = useState(false);
+  const [activeDetailPhotoIndex, setActiveDetailPhotoIndex] = useState(0);
   const itemPrice = relatedSnaps.find((related) => related.extractedPrice !== null)?.extractedPrice ?? snap?.extractedPrice ?? null;
   const formattedPrice = priceLabel(itemPrice);
   const itemPhotoCount = relatedSnaps.length || (snap ? 1 : 0);
@@ -404,10 +408,24 @@ function ShoppingSnapDetail({
     .join('\n\n');
   const fullLocationLabel = snap ? formatShoppingDetailLocation(snap) : 'Location not set';
   const canOrganize = relatedSnaps.length > 1 || relatedSnaps.some((related) => related.captureRole === 'unknown');
+  const detailPhotos = useMemo(
+    () => (relatedSnaps.length > 0 ? relatedSnaps : snap ? [snap] : []),
+    [relatedSnaps, snap],
+  );
 
   useEffect(() => {
     setOcrExpanded(false);
   }, [snap?.id]);
+
+  useEffect(() => {
+    if (!snap) return;
+    const snapIndex = detailPhotos.findIndex((photo) => photo.id === snap.id);
+    const nextIndex = Math.max(0, snapIndex);
+    setActiveDetailPhotoIndex(nextIndex);
+    requestAnimationFrame(() => {
+      detailPhotoScrollRef.current?.scrollTo({ x: nextIndex * detailPhotoWidth, animated: false });
+    });
+  }, [detailPhotoWidth, detailPhotos, snap]);
 
   const openMap = useCallback(() => {
     if (!snap || snap.latitude === null || snap.longitude === null) return;
@@ -429,11 +447,12 @@ function ShoppingSnapDetail({
             <View style={styles.detailActions}>
               {canOrganize ? (
                 <TouchableOpacity
-                  style={styles.detailIconButton}
+                  style={styles.detailOrganizeButton}
                   onPress={onOrganize}
                   accessibilityLabel="Organize shopping photos"
                 >
-                  <Ionicons name="albums-outline" size={20} color={colors.foreground} />
+                  <Ionicons name="albums-outline" size={18} color={colors.foreground} />
+                  <Text style={styles.detailOrganizeText}>Organize</Text>
                 </TouchableOpacity>
               ) : null}
               <TouchableOpacity
@@ -455,13 +474,41 @@ function ShoppingSnapDetail({
           </View>
 
           <ScrollView contentContainerStyle={[styles.detailContent, { paddingBottom: insets.bottom + spacing.xl }]}>
-            <Image
-              source={{ uri: snap.imageUri }}
-              style={[styles.detailImage, { height: Math.min(width * 1.12, 540) }]}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              transition={180}
-            />
+            <View style={[styles.detailImageCarousel, { height: detailPhotoHeight }]}>
+              <ScrollView
+                ref={detailPhotoScrollRef}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                scrollEventThrottle={16}
+                onMomentumScrollEnd={(event) => {
+                  const page = Math.round(event.nativeEvent.contentOffset.x / detailPhotoWidth);
+                  const nextIndex = Math.max(0, Math.min(page, detailPhotos.length - 1));
+                  setActiveDetailPhotoIndex(nextIndex);
+                  const nextSnap = detailPhotos[nextIndex];
+                  if (nextSnap && nextSnap.id !== snap.id) onSelect(nextSnap);
+                }}
+              >
+                {detailPhotos.map((photo) => (
+                  <Image
+                    key={photo.id}
+                    source={{ uri: photo.imageUri }}
+                    style={{ width: detailPhotoWidth, height: detailPhotoHeight }}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    recyclingKey={photo.id}
+                    transition={180}
+                  />
+                ))}
+              </ScrollView>
+              {detailPhotos.length > 1 ? (
+                <View style={styles.detailPhotoDots} accessibilityLabel={`Photo ${activeDetailPhotoIndex + 1} of ${detailPhotos.length}`}>
+                  {detailPhotos.map((photo, index) => (
+                    <View key={photo.id} style={[styles.detailPhotoDot, index === activeDetailPhotoIndex && styles.detailPhotoDotActive]} />
+                  ))}
+                </View>
+              ) : null}
+            </View>
 
             <View style={styles.detailMetaRow}>
               {formattedPrice ? <Text style={styles.detailPrice}>{formattedPrice}</Text> : <Text style={styles.detailPriceMuted}>Price not found</Text>}
@@ -584,6 +631,91 @@ function ShoppingSnapDetail({
         </View>
       ) : null}
     </Modal>
+  );
+}
+
+function ShoppingEditCard({
+  item,
+  width,
+  isSelected,
+  selectionMode,
+  onPress,
+  onLongPress,
+}: {
+  item: ShoppingEditItem;
+  width: number;
+  isSelected: boolean;
+  selectionMode: boolean;
+  onPress: (snap: ShoppingSnap) => void;
+  onLongPress: () => void;
+}) {
+  const price = priceLabel(item.extractedPrice);
+  const statusLabel = itemStatusLabel(item);
+
+  return (
+    <TouchableOpacity
+      style={[styles.photoCard, { width }, isSelected && styles.photoCardSelected]}
+      activeOpacity={0.9}
+      onPress={() => onPress(item.primarySnap)}
+      onLongPress={onLongPress}
+      accessibilityLabel={`${item.storeName ?? 'Shopping'} item${price ? `, ${price}` : ''}${item.needsReview ? ', needs review' : ''}`}
+      accessibilityState={{ selected: isSelected }}
+    >
+      <Image
+        source={{ uri: item.primarySnap.imageUri }}
+        style={StyleSheet.absoluteFill}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        recyclingKey={item.primarySnap.id}
+        transition={160}
+      />
+      <LinearGradient
+        colors={['transparent', 'rgba(20, 15, 12, 0.68)']}
+        style={StyleSheet.absoluteFill}
+        locations={[0.48, 1]}
+      />
+      {price ? (
+        <View style={[styles.priceBadge, selectionMode && styles.priceBadgeSelecting]}>
+          <Text style={styles.priceBadgeText}>{price}</Text>
+        </View>
+      ) : null}
+      {item.syncStatus === 'pending' ? (
+        <View style={styles.pendingBadge}>
+          <Ionicons name="cloud-upload-outline" size={13} color="#FFFFFF" />
+        </View>
+      ) : null}
+      {item.needsReview ? (
+        <View style={styles.reviewBadge}><Text style={styles.reviewBadgeText}>REVIEW</Text></View>
+      ) : null}
+      {item.tagSnaps.length > 0 ? (
+        <View style={styles.itemThumbStack}>
+          {item.tagSnaps.slice(0, 2).map((tagSnap) => (
+            <Image
+              key={tagSnap.id}
+              source={{ uri: tagSnap.imageUri }}
+              style={styles.itemTagThumb}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+            />
+          ))}
+        </View>
+      ) : null}
+      {selectionMode ? (
+        <View style={[styles.selectionBadge, isSelected && styles.selectionBadgeActive]}>
+          {isSelected ? <Ionicons name="checkmark" size={16} color={colors.primaryForeground} /> : null}
+        </View>
+      ) : null}
+      <View style={styles.cardFooter}>
+        <Text style={styles.cardStore} numberOfLines={1}>{item.storeName ?? 'Store not set'}</Text>
+        <Text style={styles.cardLocation} numberOfLines={2}>{itemPlaceLabel(item) ?? 'Location not set'}</Text>
+        <View style={styles.cardMetaRow}>
+          <Text style={styles.cardTime}>
+            {item.photoCount} photo{item.photoCount === 1 ? '' : 's'}
+          </Text>
+          <Text style={styles.cardTime} numberOfLines={1}>{statusLabel}</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -854,81 +986,20 @@ export function ShoppingGalleryScreen({ navigation }: ShoppingGalleryScreenProps
     [],
   );
 
-  const renderCard = useCallback((item: ShoppingEditItem) => {
-    const price = priceLabel(item.extractedPrice);
-    const isSelected = selectedItemIds.has(item.id);
-    const primarySnap = item.primarySnap;
-    const statusLabel = itemStatusLabel(item);
-    return (
-      <TouchableOpacity
-        key={item.id}
-        style={[styles.photoCard, { width: cardWidth }, isSelected && styles.photoCardSelected]}
-        activeOpacity={0.9}
-        onPress={() => {
-          if (selectionMode) toggleSelectItem(item.id);
-          else setSelectedSnap(primarySnap);
-        }}
-        onLongPress={() => startSelection(item.id)}
-        accessibilityLabel={`${item.storeName ?? 'Shopping'} item${price ? `, ${price}` : ''}${item.needsReview ? ', needs review' : ''}`}
-        accessibilityState={{ selected: isSelected }}
-      >
-        <Image
-          source={{ uri: primarySnap.imageUri }}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          cachePolicy="memory-disk"
-          recyclingKey={primarySnap.id}
-          transition={160}
-        />
-        <LinearGradient
-          colors={['transparent', 'rgba(20, 15, 12, 0.68)']}
-          style={StyleSheet.absoluteFill}
-          locations={[0.48, 1]}
-        />
-        {price ? (
-          <View style={[styles.priceBadge, selectionMode && styles.priceBadgeSelecting]}>
-            <Text style={styles.priceBadgeText}>{price}</Text>
-          </View>
-        ) : null}
-        {item.syncStatus === 'pending' ? (
-          <View style={styles.pendingBadge}>
-            <Ionicons name="cloud-upload-outline" size={13} color="#FFFFFF" />
-          </View>
-        ) : null}
-        {item.needsReview ? (
-          <View style={styles.reviewBadge}><Text style={styles.reviewBadgeText}>REVIEW</Text></View>
-        ) : null}
-        {item.tagSnaps.length > 0 ? (
-          <View style={styles.itemThumbStack}>
-            {item.tagSnaps.slice(0, 2).map((tagSnap) => (
-              <Image
-                key={tagSnap.id}
-                source={{ uri: tagSnap.imageUri }}
-                style={styles.itemTagThumb}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-              />
-            ))}
-          </View>
-        ) : null}
-        {selectionMode ? (
-          <View style={[styles.selectionBadge, isSelected && styles.selectionBadgeActive]}>
-            {isSelected ? <Ionicons name="checkmark" size={16} color={colors.primaryForeground} /> : null}
-          </View>
-        ) : null}
-        <View style={styles.cardFooter}>
-          <Text style={styles.cardStore} numberOfLines={1}>{item.storeName ?? 'Store not set'}</Text>
-          <Text style={styles.cardLocation} numberOfLines={2}>{itemPlaceLabel(item) ?? 'Location not set'}</Text>
-          <View style={styles.cardMetaRow}>
-            <Text style={styles.cardTime}>
-              {item.photoCount} photo{item.photoCount === 1 ? '' : 's'}
-            </Text>
-            <Text style={styles.cardTime} numberOfLines={1}>{statusLabel}</Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  }, [cardWidth, selectedItemIds, selectionMode, startSelection, toggleSelectItem]);
+  const renderCard = useCallback((item: ShoppingEditItem) => (
+    <ShoppingEditCard
+      key={item.id}
+      item={item}
+      width={cardWidth}
+      isSelected={selectedItemIds.has(item.id)}
+      selectionMode={selectionMode}
+      onPress={(snap) => {
+        if (selectionMode) toggleSelectItem(item.id);
+        else setSelectedSnap(snap);
+      }}
+      onLongPress={() => startSelection(item.id)}
+    />
+  ), [cardWidth, selectedItemIds, selectionMode, startSelection, toggleSelectItem]);
 
   const listHeader = (
     <View>
@@ -1329,10 +1400,15 @@ const styles = StyleSheet.create({
   detailLocation: { paddingTop: 2, maxWidth: 280, fontSize: typography.size.xs, color: colors.mutedForeground },
   detailActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   detailIconButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: colors.surfaceSubtle },
+  detailOrganizeButton: { minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm, borderRadius: 20, backgroundColor: colors.surfaceSubtle },
+  detailOrganizeText: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.foreground },
   detailDelete: { backgroundColor: '#FBEDEA' },
   detailIconButtonDisabled: { opacity: 0.6 },
   detailContent: { gap: spacing.md, paddingHorizontal: spacing.lg },
-  detailImage: { width: '100%', borderRadius: radii.xl, borderCurve: 'continuous', backgroundColor: colors.surfaceSubtle },
+  detailImageCarousel: { width: '100%', overflow: 'hidden', borderRadius: radii.xl, borderCurve: 'continuous', backgroundColor: colors.surfaceSubtle },
+  detailPhotoDots: { position: 'absolute', left: spacing.md, right: spacing.md, bottom: spacing.md, minHeight: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  detailPhotoDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.58)' },
+  detailPhotoDotActive: { width: 18, backgroundColor: '#FFFFFF' },
   detailMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: spacing.sm },
   detailPrice: { fontFamily: typography.family.display, fontSize: typography.size.xxl, color: colors.foreground, fontVariant: ['tabular-nums'] },
   detailPriceMuted: { fontSize: typography.size.sm, color: colors.mutedForeground },
