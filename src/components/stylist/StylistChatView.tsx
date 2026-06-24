@@ -2678,7 +2678,7 @@ const styles = StyleSheet.create({
     fontSize: typography.size.lg,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
-    letterSpacing: -0.2,
+    letterSpacing: 0,
   },
   confirmBody: {
     fontSize: typography.size.sm,
@@ -3000,7 +3000,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: colors.foreground,
     lineHeight: typography.size.xl * 1.25,
-    letterSpacing: -0.4,
+    letterSpacing: 0,
   },
   lookMeta: { fontSize: typography.size.xs, color: colors.mutedForeground },
   collageFrame: {
@@ -3249,7 +3249,7 @@ const styles = StyleSheet.create({
     fontSize: 32,
     color: colors.foreground,
     lineHeight: 38,
-    letterSpacing: -0.5,
+    letterSpacing: 0,
   },
   emptySubtitle: {
     fontSize: typography.size.sm,
@@ -3388,7 +3388,7 @@ const styles = StyleSheet.create({
     fontSize: typography.size.lg,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
-    letterSpacing: -0.3,
+    letterSpacing: 0,
   },
   sheetCloseBtn: {
     width: 32,

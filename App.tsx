@@ -41,7 +41,7 @@ function App() {
               <AuthProvider>
                 <BottomSheetModalProvider>
                   <GlobalAddSheetProvider>
-                    <StatusBar style="auto" />
+                    <StatusBar style="dark" />
                     <RootNavigator />
                     <OfflineBanner />
                   </GlobalAddSheetProvider>

@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { PressableScale } from '../primitives/PressableScale';
+import { EditorialCardMeta } from '../primitives/Editorial';
 import { BoardCover } from './BoardCover';
-import { colors, radii, spacing, typography } from '../../theme';
+import { colors, radii, spacing } from '../../theme';
 import type { Board } from '../../types/board';
 import type { Item } from '../../types/item';
 import type { Outfit } from '../../types/outfit';
@@ -27,10 +28,7 @@ export const BoardCard = React.memo(function BoardCard({ board, itemMap, outfitM
         <BoardCover board={board} itemMap={itemMap} outfitMap={outfitMap} size={width} />
       </PressableScale>
       <View style={styles.metaRow}>
-        <View style={styles.metaText}>
-          <Text style={styles.name} numberOfLines={1}>{board.name}</Text>
-          <Text style={styles.count}>{count} saved</Text>
-        </View>
+        <EditorialCardMeta title={board.name} subtitle={`${count} saved`} />
         {onOptions && (
           <TouchableOpacity
             style={styles.optionsButton}
@@ -48,18 +46,5 @@ export const BoardCard = React.memo(function BoardCard({ board, itemMap, outfitM
 
 const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'flex-start', paddingTop: spacing.sm },
-  metaText: { flex: 1, minWidth: 0 },
-  name: {
-    fontSize: typography.size.md,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  count: {
-    marginTop: 1,
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.medium,
-    color: colors.mutedForeground,
-    fontVariant: ['tabular-nums'],
-  },
   optionsButton: { width: 44, height: 44, marginTop: -6, marginRight: -8, alignItems: 'center', justifyContent: 'center', borderRadius: radii.full },
 });

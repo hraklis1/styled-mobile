@@ -209,7 +209,7 @@ const s = StyleSheet.create({
     fontSize: typography.size.xl,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
-    letterSpacing: -0.3,
+    letterSpacing: 0,
     marginBottom: spacing.xs,
   },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

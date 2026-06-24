@@ -2,23 +2,25 @@ import { Platform } from 'react-native';
 
 // Translated from the web app's HSL CSS variables (index.css)
 export const colors = {
-  background:          '#FAF8F5', // HSL 30 20% 98% — warm off-white
-  foreground:          '#28231F', // HSL 25 15% 15% — deep charcoal brown
-  card:                '#F4EFE9', // HSL 30 25% 96% — warm creamy beige
-  surfaceElevated:     '#FFFFFF', // Primary content and modal surfaces
-  surfaceSubtle:       '#F1EDE8', // Quiet grouped rows and controls
-  surfaceSelected:     '#EEE2D8', // Selected or emphasized content
-  primary:             '#956D51', // HSL 25 30% 45% — clay/earth brown
-  primaryForeground:   '#FAF8F5',
-  secondary:           '#EDE7DC', // HSL 35 25% 90% — soft taupe/sand
-  secondaryForeground: '#5C4A3A',
-  muted:               '#EAE5DF', // HSL 35 15% 92%
-  mutedForeground:     '#7D7168', // HSL 25 10% 45%
-  accent:              '#F0E6DE', // HSL 20 30% 92% — soft terracotta/blush
-  border:              '#DDD6CD', // HSL 30 15% 85%
-  error:               '#BF4040', // HSL 0  50% 50%
+  background:          '#FBFAF7', // Warm ivory
+  foreground:          '#1D1B18', // Soft fashion black
+  card:                '#F3F0EA',
+  surfaceElevated:     '#FFFFFF',
+  surfaceSubtle:       '#F5F3EE',
+  surfaceSelected:     '#ECE6DA',
+  primary:             '#6F5948', // Disciplined atelier taupe
+  primaryForeground:   '#FFFCF7',
+  secondary:           '#EDEAE3',
+  secondaryForeground: '#403A33',
+  muted:               '#EEECE6',
+  mutedForeground:     '#746E66',
+  accent:              '#E8DED1',
+  border:              '#E1DCD3',
+  hairline:            '#EEEAE3',
+  inkSubtle:           '#4E4841',
+  error:               '#B94242',
   destructive:         '#BF4040', // Alias for error
-  success:             '#4A7D59', // Soft green
+  success:             '#4A7D59',
   white:               '#FFFFFF',
 } as const;
 
@@ -60,10 +62,20 @@ export const typography = {
 
 export const radii = {
   sm:   6,
-  md:   10,
-  lg:   16,
-  xl:   24,
+  md:   8,
+  lg:   12,
+  xl:   18,
   full: 9999,
+} as const;
+
+export const editorial = {
+  garmentAspectRatio: 3 / 4,
+  outfitAspectRatio: 4 / 5,
+  lifestyleAspectRatio: 16 / 11,
+  imageFit: {
+    garment: 'contain' as const,
+    editorial: 'cover' as const,
+  },
 } as const;
 
 // Cross-platform shadow tokens.

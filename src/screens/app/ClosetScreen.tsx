@@ -39,6 +39,11 @@ import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { useFabScroll } from '../../contexts/FabScrollContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { PressableScale } from '../../components/primitives/PressableScale';
+import {
+  FilterControl,
+  ScreenHeader,
+  SegmentedControl,
+} from '../../components/primitives/Editorial';
 import { GarmentCardSkeleton } from '../../components/primitives/GarmentCardSkeleton';
 import { ErrorState } from '../../components/primitives/ErrorState';
 import type { ClosetScreenProps } from '../../navigation/types';
@@ -732,80 +737,33 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
 
-      {/* ── Fixed header: title + sparkles + view toggle ── */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>Closet</Text>
-          <Text style={styles.subtitle}>{subtitle}</Text>
-        </View>
-        <View style={styles.headerActions}>
-          <PressableScale
-            contentStyle={styles.primaryHeaderBtn}
-            onPress={handlePrimaryAction}
-            accessibilityRole="button"
-            accessibilityLabel={segment === 'pieces' ? 'Add pieces' : segment === 'boards' ? 'New board' : 'Create outfit'}
-          >
-            <Ionicons name="add" size={16} color={colors.primaryForeground} />
-            <Text style={styles.primaryHeaderBtnText}>
-              {segment === 'pieces' ? 'Add pieces' : segment === 'boards' ? 'New board' : 'Create outfit'}
-            </Text>
-          </PressableScale>
-          {segment !== 'boards' && (
-            <PressableScale
-              contentStyle={styles.headerBtn}
-              onPress={() => setViewMode(v => v === 'grid' ? 'list' : 'grid')}
-              accessibilityLabel="Toggle view"
-            >
-              <Ionicons
-                name={viewMode === 'grid' ? 'list-outline' : 'grid-outline'}
-                size={20}
-                color={colors.foreground}
-              />
-            </PressableScale>
-          )}
-        </View>
-      </View>
+      <ScreenHeader
+        title="Closet"
+        subtitle={subtitle}
+        safeTop={false}
+        primaryAction={{
+          label: segment === 'pieces' ? 'Add pieces' : segment === 'boards' ? 'New board' : 'Create outfit',
+          icon: 'add',
+          onPress: handlePrimaryAction,
+        }}
+        secondaryActions={segment !== 'boards' ? [{
+          label: viewMode === 'grid' ? 'List view' : 'Grid view',
+          icon: viewMode === 'grid' ? 'list-outline' : 'grid-outline',
+          onPress: () => setViewMode(v => v === 'grid' ? 'list' : 'grid'),
+        }] : []}
+      />
 
       {/* ── Segmented control ── */}
       <View style={styles.segmentRow}>
-        <View style={styles.segment}>
-          <TouchableOpacity
-            style={[styles.segmentBtn, segment === 'pieces' && styles.segmentBtnActive]}
-            onPress={() => handleSegmentChange('pieces')}
-            activeOpacity={0.8}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: segment === 'pieces' }}
-            accessibilityLabel="Pieces"
-          >
-            <Text style={[styles.segmentLabel, segment === 'pieces' && styles.segmentLabelActive]}>
-              Pieces
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.segmentBtn, segment === 'outfits' && styles.segmentBtnActive]}
-            onPress={() => handleSegmentChange('outfits')}
-            activeOpacity={0.8}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: segment === 'outfits' }}
-            accessibilityLabel="Outfits"
-          >
-            <Text style={[styles.segmentLabel, segment === 'outfits' && styles.segmentLabelActive]}>
-              Outfits
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.segmentBtn, segment === 'boards' && styles.segmentBtnActive]}
-            onPress={() => handleSegmentChange('boards')}
-            activeOpacity={0.8}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: segment === 'boards' }}
-            accessibilityLabel="Boards"
-          >
-            <Text style={[styles.segmentLabel, segment === 'boards' && styles.segmentLabelActive]}>
-              Boards
-            </Text>
-          </TouchableOpacity>
-        </View>
+        <SegmentedControl
+          value={segment}
+          options={[
+            { value: 'pieces', label: 'Pieces' },
+            { value: 'outfits', label: 'Outfits' },
+            { value: 'boards', label: 'Boards' },
+          ]}
+          onChange={handleSegmentChange}
+        />
       </View>
 
       {/* ── Content area + floating header ── */}
@@ -967,40 +925,14 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             </View>
 
             {segment === 'pieces' && (
-              <PressableScale
-                contentStyle={[styles.filterBtn, activeFilterCount > 0 && styles.filterBtnActive]}
-                onPress={() => setFilterSheetOpen(true)}
-                accessibilityLabel="Sort and filter"
-              >
-                <Ionicons
-                  name="options-outline"
-                  size={18}
-                  color={activeFilterCount > 0 ? colors.primaryForeground : colors.foreground}
-                />
-                {activeFilterCount > 0 && (
-                  <View style={styles.filterBadge}>
-                    <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
-                  </View>
-                )}
-              </PressableScale>
+              <FilterControl count={activeFilterCount} onPress={() => setFilterSheetOpen(true)} />
             )}
             {segment === 'outfits' && (
-              <PressableScale
-                contentStyle={[styles.filterBtn, outfitActiveFilterCount > 0 && styles.filterBtnActive]}
+              <FilterControl
+                count={outfitActiveFilterCount}
                 onPress={() => setOutfitFilterSheetOpen(true)}
-                accessibilityLabel="Sort and filter outfits"
-              >
-                <Ionicons
-                  name="options-outline"
-                  size={18}
-                  color={outfitActiveFilterCount > 0 ? colors.primaryForeground : colors.foreground}
-                />
-                {outfitActiveFilterCount > 0 && (
-                  <View style={styles.filterBadge}>
-                    <Text style={styles.filterBadgeText}>{outfitActiveFilterCount}</Text>
-                  </View>
-                )}
-              </PressableScale>
+                label="Sort and filter outfits"
+              />
             )}
           </View>
 
@@ -1410,7 +1342,7 @@ const styles = StyleSheet.create({
     fontSize: typography.size.xxl,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
-    letterSpacing: -0.5,
+    letterSpacing: 0,
   },
   subtitle: {
     fontSize: typography.size.xs,
@@ -1421,7 +1353,7 @@ const styles = StyleSheet.create({
   // ── Segmented control
   segmentRow: {
     paddingHorizontal: SIDE_PAD,
-    paddingBottom: spacing.md,
+    paddingBottom: spacing.xxl,
   },
   segment: {
     flexDirection: 'row',

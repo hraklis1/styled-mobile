@@ -660,7 +660,7 @@ const styles = StyleSheet.create({
     fontSize: typography.size.lg,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
-    letterSpacing: -0.3,
+    letterSpacing: 0,
     textAlign: 'center',
   },
 

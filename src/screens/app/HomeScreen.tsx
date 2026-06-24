@@ -42,6 +42,7 @@ import {
 } from '../../lib/dailyPickHistory';
 import { colors, shadows, spacing, typography, radii } from '../../theme';
 import { PressableScale } from '../../components/primitives/PressableScale';
+import { ScreenHeader } from '../../components/primitives/Editorial';
 import type { HomeScreenProps } from '../../navigation/types';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -282,34 +283,30 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       onScroll={handleHomeScroll}
       scrollEventThrottle={16}
     >
-      {/* ── Greeting ──────────────────────────────────────────────── */}
-      <View style={styles.greetingSection}>
-        <View style={styles.greetingRow}>
-          <View style={styles.greetingText}>
-            <Text style={styles.greeting}>{getGreeting(user?.displayName)}</Text>
-            <TouchableOpacity
-              style={styles.weatherLocationButton}
-              onPress={() => setLocationSheetVisible(true)}
-              activeOpacity={0.65}
-              accessibilityRole="button"
-              accessibilityLabel={locationAccessibilityLabel}
-            >
-              <Text style={styles.weatherLocationText} numberOfLines={1}>
-                {weatherLocationLine}
-              </Text>
-              <Ionicons name="chevron-down" size={13} color={colors.primary} />
-            </TouchableOpacity>
-          </View>
-          <PressableScale
-            contentStyle={styles.settingsBtn}
-            onPress={() => navigation.navigate('Shop')}
+      <ScreenHeader
+        title={getGreeting(user?.displayName)}
+        safeTop={false}
+        style={styles.greetingSection}
+        subtitleNode={(
+          <TouchableOpacity
+            style={styles.weatherLocationButton}
+            onPress={() => setLocationSheetVisible(true)}
+            activeOpacity={0.65}
             accessibilityRole="button"
-            accessibilityLabel="Open shop wishlist"
+            accessibilityLabel={locationAccessibilityLabel}
           >
-            <Ionicons name="bag-handle-outline" size={20} color={colors.mutedForeground} />
-          </PressableScale>
-        </View>
-      </View>
+            <Text style={styles.weatherLocationText} numberOfLines={1}>
+              {weatherLocationLine}
+            </Text>
+            <Ionicons name="chevron-down" size={13} color={colors.primary} />
+          </TouchableOpacity>
+        )}
+        secondaryActions={[{
+          label: 'Open shop wishlist',
+          icon: 'bag-handle-outline',
+          onPress: () => navigation.navigate('Shop'),
+        }]}
+      />
 
       {/* ── AI Stylist fake input ─────────────────────────────── */}
       <TouchableOpacity
@@ -636,6 +633,7 @@ const styles = StyleSheet.create({
   // Greeting
   greetingSection: {
     marginBottom: spacing.md,
+    marginHorizontal: -SIDE_PAD,
   },
   greetingRow: {
     flexDirection: 'row',
@@ -651,7 +649,7 @@ const styles = StyleSheet.create({
     fontSize: typography.size.xl + 4,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
-    letterSpacing: -0.5,
+    letterSpacing: 0,
   },
   weatherLocationButton: {
     flexDirection: 'row',
@@ -891,7 +889,7 @@ const styles = StyleSheet.create({
     fontSize: typography.size.lg,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
-    letterSpacing: -0.3,
+    letterSpacing: 0,
   },
   featuredArrow: {
     width: 34,

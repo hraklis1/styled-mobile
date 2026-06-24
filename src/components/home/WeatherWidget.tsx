@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
   temp: {
     fontSize: typography.size.md,
     fontWeight: typography.weight.semibold,
-    letterSpacing: -0.2,
+    letterSpacing: 0,
   },
   tempAlt: {
     fontSize: typography.size.xs,

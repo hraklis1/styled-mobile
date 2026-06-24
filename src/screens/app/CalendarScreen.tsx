@@ -45,6 +45,7 @@ import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
 import { colors, spacing, typography, radii } from '../../theme';
 import { ErrorState } from '../../components/primitives/ErrorState';
+import { ScreenHeader } from '../../components/primitives/Editorial';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { presentPaywall } from '../../lib/paywall';
 import { useGlobalAIStylist, type StylistOpenSource } from '../../contexts/GlobalAIStylistContext';
@@ -381,33 +382,14 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
           <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />
         }
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerRow}>
-            <Text style={styles.title}>Calendar</Text>
-            <View style={styles.headerActions}>
-              <TouchableOpacity
-                style={styles.headerIconBtn}
-                onPress={() => setSyncVisible(true)}
-                activeOpacity={0.7}
-                accessibilityRole="button"
-                accessibilityLabel="Sync calendar"
-              >
-                <Ionicons name="sync-outline" size={20} color={colors.mutedForeground} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.addIconBtn}
-                onPress={handleAddEvent}
-                activeOpacity={0.8}
-                accessibilityRole="button"
-                accessibilityLabel="Add event"
-              >
-                <Ionicons name="add" size={22} color={colors.white} />
-              </TouchableOpacity>
-            </View>
-          </View>
-          <Text style={styles.subtitle}>Plan ahead for every occasion.</Text>
-        </View>
+        <ScreenHeader
+          title="Calendar"
+          subtitle="Plan ahead for every occasion."
+          safeTop={false}
+          style={styles.header}
+          primaryAction={{ label: 'Add event', icon: 'add', onPress: handleAddEvent }}
+          secondaryActions={[{ label: 'Sync calendar', icon: 'sync-outline', onPress: () => setSyncVisible(true) }]}
+        />
 
         {/* Week Strip */}
         <WeekStrip
@@ -639,9 +621,9 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   scrollContent: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxxl },
 
-  header: { marginBottom: spacing.lg },
+  header: { marginHorizontal: -spacing.lg, marginBottom: spacing.lg },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { fontSize: typography.size.xxl, fontWeight: typography.weight.bold, color: colors.foreground, letterSpacing: -0.5 },
+  title: { fontSize: typography.size.xxl, fontWeight: typography.weight.bold, color: colors.foreground, letterSpacing: 0 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   headerIconBtn: {
     width: 44, height: 44,

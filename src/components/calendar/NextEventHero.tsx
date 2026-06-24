@@ -170,7 +170,7 @@ const s = StyleSheet.create({
     fontSize: typography.size.lg,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
-    letterSpacing: -0.3,
+    letterSpacing: 0,
   },
   meta: { fontSize: typography.size.sm, color: colors.mutedForeground, fontWeight: typography.weight.medium },
 

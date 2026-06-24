@@ -27,6 +27,12 @@ import {
 } from '../../lib/shopWishlistFilters';
 import type { WishlistEntry } from '../../lib/wishlist';
 import { colors, spacing, typography, radii } from '../../theme';
+import {
+  ActionButton,
+  FilterControl,
+  ScreenHeader,
+  SegmentedControl,
+} from '../../components/primitives/Editorial';
 import type { ShopScreenProps } from '../../navigation/types';
 
 function toggleValue(values: string[], value: string) {
@@ -101,31 +107,23 @@ export function ShopScreen({ navigation }: ShopScreenProps) {
   }
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <View style={styles.headerCopy}>
-          <Text style={styles.headerTitle}>Shop Wishlist</Text>
-          <Text style={styles.headerSub}>
-            {entries.length === 0 ? 'No saved outfits yet' : `${entries.length} saved outfit${entries.length === 1 ? '' : 's'}`}
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={styles.shoppingEditButton}
-          onPress={() => navigation.navigate('ShoppingGallery')}
-          accessibilityLabel="Open The Shopping Edit"
-        >
-          <Ionicons name="images-outline" size={20} color={colors.foreground} />
-          <Text style={styles.shoppingEditButtonText}>The Shopping Edit</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.shoppingModeButton}
-          onPress={() => navigation.navigate('ShoppingCamera')}
-          accessibilityLabel="Open Shopping Mode camera"
-        >
-          <Ionicons name="camera" size={19} color={colors.primaryForeground} />
-          <Text style={styles.shoppingModeButtonText}>Shopping Mode</Text>
-        </TouchableOpacity>
-      </View>
+    <View style={styles.root}>
+      <ScreenHeader
+        title="Shop Wishlist"
+        subtitle={entries.length === 0 ? 'No saved outfits yet' : `${entries.length} saved outfit${entries.length === 1 ? '' : 's'}`}
+        primaryAction={{
+          label: 'Shopping Mode',
+          icon: 'camera',
+          onPress: () => navigation.navigate('ShoppingCamera'),
+          accessibilityLabel: 'Open Shopping Mode camera',
+        }}
+        secondaryActions={[{
+          label: 'The Shopping Edit',
+          icon: 'images-outline',
+          onPress: () => navigation.navigate('ShoppingGallery'),
+          accessibilityLabel: 'Open The Shopping Edit',
+        }]}
+      />
 
       {entries.length === 0 ? (
         <View style={styles.emptyState}>
@@ -136,15 +134,13 @@ export function ShopScreen({ navigation }: ShopScreenProps) {
           <Text style={styles.emptySubtitle}>
             Ask your AI Stylist to shop for a new outfit. When it suggests one, tap “Save” to add it here.
           </Text>
-          <TouchableOpacity
+          <ActionButton
             style={styles.emptyButton}
+            label="Chat with your Stylist"
+            icon="sparkles"
             onPress={() => openStylist({ initialQuery: 'Shop for a new outfit for me', source: 'shop' })}
-            activeOpacity={0.85}
             accessibilityLabel="Open AI Stylist"
-          >
-            <Ionicons name="sparkles" size={15} color={colors.primaryForeground} />
-            <Text style={styles.emptyButtonText}>Chat with your Stylist</Text>
-          </TouchableOpacity>
+          />
         </View>
       ) : (
         <>
@@ -170,32 +166,10 @@ export function ShopScreen({ navigation }: ShopScreenProps) {
                   </TouchableOpacity>
                 )}
               </View>
-              <TouchableOpacity
-                style={[styles.filterButton, activeFilterCount > 0 && styles.filterButtonActive]}
-                onPress={() => setFiltersVisible(true)}
-                accessibilityLabel={`Sort and filter${activeFilterCount ? `, ${activeFilterCount} active` : ''}`}
-              >
-                <Ionicons name="options-outline" size={20} color={activeFilterCount ? colors.primaryForeground : colors.foreground} />
-                {activeFilterCount > 0 && <Text style={styles.filterCount}>{activeFilterCount}</Text>}
-              </TouchableOpacity>
+              <FilterControl count={activeFilterCount} onPress={() => setFiltersVisible(true)} />
             </View>
 
-            <View style={styles.scopeGroup} accessibilityRole="tablist">
-              {SCOPES.map((option) => {
-                const active = scope === option.value;
-                return (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[styles.scopeButton, active && styles.scopeButtonActive]}
-                    onPress={() => setScope(option.value)}
-                    accessibilityRole="tab"
-                    accessibilityState={{ selected: active }}
-                  >
-                    <Text style={[styles.scopeText, active && styles.scopeTextActive]}>{option.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            <SegmentedControl value={scope} options={SCOPES} onChange={setScope} />
           </View>
 
           <FlatList
@@ -257,52 +231,14 @@ export function ShopScreen({ navigation }: ShopScreenProps) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   centered: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.lg,
+  browseControls: {
+    padding: spacing.md,
+    gap: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.hairline,
   },
-  headerCopy: { flex: 1 },
-  headerTitle: { fontSize: typography.size.xl, fontWeight: typography.weight.bold, color: colors.foreground, letterSpacing: -0.3 },
-  headerSub: { marginTop: 2, fontSize: typography.size.sm, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
-  shoppingModeButton: {
-    minHeight: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.full,
-    backgroundColor: colors.primary,
-  },
-  shoppingEditButton: {
-    height: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.full,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceElevated,
-  },
-  shoppingEditButtonText: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  shoppingModeButtonText: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.semibold,
-    color: colors.primaryForeground,
-  },
-  browseControls: { padding: spacing.md, gap: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   searchBox: {
     flex: 1,
@@ -311,38 +247,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
-    borderRadius: radii.md,
+    borderRadius: radii.full,
     borderCurve: 'continuous',
-    backgroundColor: colors.surfaceSubtle,
-  },
-  searchInput: { flex: 1, paddingVertical: spacing.sm, fontSize: typography.size.sm, color: colors.foreground },
-  filterButton: {
-    width: 44,
-    height: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.md,
-    borderCurve: 'continuous',
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
     backgroundColor: colors.surfaceElevated,
   },
-  filterButtonActive: { width: 54, gap: 3, borderColor: colors.primary, backgroundColor: colors.primary },
-  filterCount: { fontSize: typography.size.xs, fontWeight: typography.weight.bold, color: colors.primaryForeground, fontVariant: ['tabular-nums'] },
-  scopeGroup: { flexDirection: 'row', padding: 3, borderRadius: radii.md, backgroundColor: colors.surfaceSubtle },
-  scopeButton: { flex: 1, minHeight: 34, alignItems: 'center', justifyContent: 'center', borderRadius: radii.sm },
-  scopeButtonActive: { backgroundColor: colors.surfaceElevated },
-  scopeText: { fontSize: typography.size.sm, color: colors.mutedForeground },
-  scopeTextActive: { fontWeight: typography.weight.semibold, color: colors.foreground },
+  searchInput: { flex: 1, paddingVertical: spacing.sm, fontSize: typography.size.sm, color: colors.foreground },
   listContent: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxxl },
   listContentEmpty: { flexGrow: 1 },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, gap: spacing.lg },
   emptyIconCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: `${colors.primary}18`, alignItems: 'center', justifyContent: 'center' },
   emptyTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.foreground },
   emptySubtitle: { maxWidth: 280, fontSize: typography.size.sm, lineHeight: 21, color: colors.mutedForeground, textAlign: 'center' },
-  emptyButton: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: radii.md, backgroundColor: colors.primary },
-  emptyButtonText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.primaryForeground },
+  emptyButton: { minHeight: 48, paddingHorizontal: spacing.lg },
   noResults: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.xl },
   noResultsTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.foreground },
   noResultsText: { fontSize: typography.size.sm, color: colors.mutedForeground, textAlign: 'center' },

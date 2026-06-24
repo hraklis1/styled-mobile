@@ -3,7 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { LinearTransition } from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, typography, radii } from '../../theme';
+import { colors, editorial, spacing, typography, radii } from '../../theme';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { CATEGORY_LABELS } from '../../types/item';
 import type { Item } from '../../types/item';
@@ -73,7 +73,7 @@ function GarmentCardComponent({
           <Image
             source={{ uri: imageUri }}
             style={StyleSheet.absoluteFill}
-            contentFit="contain"
+            contentFit={editorial.imageFit.garment}
             transition={200}
             cachePolicy="memory-disk"
             recyclingKey={String(item.id)}
@@ -147,13 +147,15 @@ const styles = StyleSheet.create({
   imageContainer: {
     borderRadius: radii.lg,
     overflow: 'hidden',
-    backgroundColor: '#F2F2F2',
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
   },
   imagePlaceholder: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F2F2F2',
+    backgroundColor: colors.surfaceSubtle,
   },
   selectedOverlay: {
     position: 'absolute',

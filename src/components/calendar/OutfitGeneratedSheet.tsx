@@ -222,7 +222,7 @@ const s = StyleSheet.create({
     fontSize: typography.size.xl,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
-    letterSpacing: -0.3,
+    letterSpacing: 0,
     textAlign: 'center',
   },
   itemsRow: {

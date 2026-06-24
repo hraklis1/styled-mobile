@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import type { WishlistEntry } from '../../lib/wishlist';
-import { colors, radii } from '../../theme';
+import { colors, editorial, radii } from '../../theme';
 
 type Props = {
   entry: WishlistEntry;
@@ -38,7 +38,12 @@ export function WishlistOutfitPreview({ entry, style }: Props) {
         return (
           <View key={`${item.brand}-${item.name}-${index}`} style={cellStyle(index)}>
             {item.imageUrl ? (
-              <Image source={{ uri: item.imageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
+              <Image
+                source={{ uri: item.imageUrl }}
+                style={StyleSheet.absoluteFill}
+                contentFit={editorial.imageFit.garment}
+                transition={150}
+              />
             ) : (
               <View style={styles.fallback}>
                 <Ionicons name={CATEGORY_ICON[category] ?? 'bag-outline'} size={18} color={colors.primary} />

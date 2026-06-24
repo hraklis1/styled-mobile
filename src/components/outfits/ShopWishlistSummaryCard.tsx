@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-nativ
 import type { WishlistEntry } from '../../lib/wishlist';
 import { WishlistOutfitPreview } from './WishlistOutfitPreview';
 import { colors, radii, spacing, typography } from '../../theme';
+import { EditorialCardMeta } from '../primitives/Editorial';
 
 type Props = {
   entry: WishlistEntry;
@@ -53,10 +54,11 @@ export function ShopWishlistSummaryCard({ entry, onPress, onMore }: Props) {
             <Ionicons name="ellipsis-horizontal" size={18} color={colors.mutedForeground} />
           </TouchableOpacity>
         </View>
-        <Text style={styles.intro} numberOfLines={2}>{outfit.intro}</Text>
-        {brands.length > 0 && (
-          <Text style={styles.brands} numberOfLines={1}>{brands.slice(0, 3).join(' · ')}</Text>
-        )}
+        <EditorialCardMeta
+          title={outfit.intro}
+          subtitle={brands.length > 0 ? brands.slice(0, 3).join(' · ') : undefined}
+          titleStyle={styles.intro}
+        />
         <View style={styles.metaRow}>
           <Text style={styles.budget} numberOfLines={1}>{outfit.totalBudget}</Text>
           <Text style={styles.meta}>

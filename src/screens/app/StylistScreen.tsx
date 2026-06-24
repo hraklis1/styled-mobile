@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { StylistChatView } from '../../components/stylist/StylistChatView';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { presentPaywall } from '../../lib/paywall';
 import { colors, radii, spacing, typography } from '../../theme';
+import { ActionButton } from '../../components/primitives/Editorial';
 
 export function StylistScreen() {
   const { isPremium } = useEntitlement();
@@ -32,22 +33,17 @@ export function StylistScreen() {
       <Text style={styles.body}>
         Build looks, plan for events, spot wardrobe gaps, and shop with more intention.
       </Text>
-      <TouchableOpacity
+      <ActionButton
+        label={openingPaywall ? 'Opening...' : 'Meet your stylist'}
+        icon="sparkles"
         style={styles.button}
-        disabled={openingPaywall}
         onPress={async () => {
+          if (openingPaywall) return;
           setOpeningPaywall(true);
           try { await presentPaywall(); } finally { setOpeningPaywall(false); }
         }}
-        accessibilityRole="button"
         accessibilityLabel="See premium plans"
-      >
-        {openingPaywall ? (
-          <ActivityIndicator color={colors.primaryForeground} />
-        ) : (
-          <Text style={styles.buttonText}>Meet your stylist</Text>
-        )}
-      </TouchableOpacity>
+      />
     </View>
   );
 }
@@ -94,15 +90,5 @@ const styles = StyleSheet.create({
     minHeight: 52,
     minWidth: 220,
     marginTop: spacing.md,
-    paddingHorizontal: spacing.xl,
-    borderRadius: radii.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
-  },
-  buttonText: {
-    color: colors.primaryForeground,
-    fontSize: typography.size.md,
-    fontWeight: typography.weight.semibold,
   },
 });

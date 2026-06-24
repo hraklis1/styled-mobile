@@ -3,14 +3,14 @@ import { View, useWindowDimensions } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import type { ListRenderItemInfo } from '@shopify/flash-list';
 import { GarmentCard } from './GarmentCard';
-import { spacing } from '../../theme';
+import { editorial, spacing } from '../../theme';
 import type { Item } from '../../types/item';
 
 const NUM_COLS = 2;
 const SIDE_PAD = spacing.lg;
 const COL_GAP  = spacing.sm;
 
-const CARD_ASPECT_RATIO = 0.85;
+const CARD_ASPECT_RATIO = editorial.garmentAspectRatio;
 
 type ExtraData = {
   selectedIds: Set<number>;

@@ -913,7 +913,7 @@ const styles = StyleSheet.create({
   },
   avatarText: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.primary },
   headerInfo: { flex: 1, gap: 4 },
-  headerTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.foreground, letterSpacing: -0.3 },
+  headerTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.foreground, letterSpacing: 0 },
   progressTrack: { height: 4, backgroundColor: colors.muted, borderRadius: 2, overflow: 'hidden' },
   progressFill: { height: '100%' as any, backgroundColor: colors.primary, borderRadius: 2 },
   summaryMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
