@@ -8,6 +8,8 @@ import {
 import {
   buildShoppingReviewReasonOptions,
   itemRoleSummary,
+  shoppingCatalogChips,
+  shoppingCatalogStatusLabel,
   shoppingItemBadges,
 } from '../shoppingPresentation';
 import { buildShoppingSnapOrganizationUpdates } from '../shoppingSnapOrganizer';
@@ -95,6 +97,9 @@ describe('shoppingGallery', () => {
       isFavorite: true,
       catalogStatus: 'wishlist',
     });
+    expect(shoppingCatalogChips(result[0])).toEqual(['T-shirt', 'Size M', 'Heather blue', 'Cotton blend']);
+    expect(shoppingCatalogStatusLabel(result[0].catalogStatus)).toBe('Wishlist');
+    expect(shoppingItemBadges(result[0])[0]).toEqual({ key: 'favorite', label: 'Favorite', tone: 'success' });
   });
 
   it('summarizes item, store, missing price, and pending counts', () => {

@@ -53,13 +53,14 @@ import {
 import {
   buildShoppingReviewReasonOptions,
   itemHasShoppingReviewReason,
+  SHOPPING_CATALOG_STATUS_OPTIONS,
   type ShoppingReviewReasonKey,
 } from '../../lib/shoppingPresentation';
 import { supabase } from '../../lib/supabase';
 import type { ShoppingGalleryScreenProps } from '../../navigation/types';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import { colors, radii, spacing, typography } from '../../theme';
-import type { ShoppingCaptureRole, ShoppingFindCatalogPatch, ShoppingSnap } from '../../types/shoppingSnap';
+import type { ShoppingCaptureRole, ShoppingFindCatalogPatch, ShoppingFindCatalogStatus, ShoppingSnap } from '../../types/shoppingSnap';
 
 type GalleryRow = ShoppingEditItem[];
 type GallerySection = {
@@ -73,6 +74,7 @@ type GallerySection = {
   data: GalleryRow[];
 };
 type StoreFilterOption = { value: string; label: string };
+type ShoppingCatalogFilter = 'all' | 'favorite' | ShoppingFindCatalogStatus;
 
 const DATE_OPTIONS: { value: ShoppingDateFilter; label: string }[] = [
   { value: 'all', label: 'All time' },
@@ -413,6 +415,7 @@ export function ShoppingGalleryScreen({ navigation }: ShoppingGalleryScreenProps
   const [syncFilter, setSyncFilter] = useState<ShoppingSyncFilter>('all');
   const [reviewFilter, setReviewFilter] = useState<ShoppingReviewFilter>('all');
   const [reviewReasonFilter, setReviewReasonFilter] = useState<ShoppingReviewReasonKey | 'all'>('all');
+  const [catalogFilter, setCatalogFilter] = useState<ShoppingCatalogFilter>('all');
   const [selectedSnap, setSelectedSnap] = useState<ShoppingSnap | null>(null);
   const [organizerSnaps, setOrganizerSnaps] = useState<ShoppingSnap[] | null>(null);
   const [deletingSnapId, setDeletingSnapId] = useState<string | null>(null);
@@ -459,10 +462,15 @@ export function ShoppingGalleryScreen({ navigation }: ShoppingGalleryScreenProps
     [allItems, dateFilter, reviewFilter, storeFilter, syncFilter],
   );
   const filteredItems = useMemo(
-    () => reviewReasonFilter === 'all'
-      ? baseFilteredItems
-      : baseFilteredItems.filter((item) => itemHasShoppingReviewReason(item, reviewReasonFilter)),
-    [baseFilteredItems, reviewReasonFilter],
+    () => {
+      const reviewFiltered = reviewReasonFilter === 'all'
+        ? baseFilteredItems
+        : baseFilteredItems.filter((item) => itemHasShoppingReviewReason(item, reviewReasonFilter));
+      if (catalogFilter === 'all') return reviewFiltered;
+      if (catalogFilter === 'favorite') return reviewFiltered.filter((item) => item.isFavorite);
+      return reviewFiltered.filter((item) => item.catalogStatus === catalogFilter);
+    },
+    [baseFilteredItems, catalogFilter, reviewReasonFilter],
   );
   const sections = useMemo(() => buildSections(filteredItems), [filteredItems]);
   const selectedGroupSnaps = useMemo(() => {
@@ -477,7 +485,7 @@ export function ShoppingGalleryScreen({ navigation }: ShoppingGalleryScreenProps
   );
   const cardWidth = (width - spacing.lg * 2 - spacing.sm) / 2;
   const pendingCount = pendingUploads.length;
-  const activeFilterCount = Number(storeFilter !== 'all') + Number(dateFilter !== 'all') + Number(syncFilter !== 'all') + Number(reviewFilter !== 'all') + Number(reviewReasonFilter !== 'all');
+  const activeFilterCount = Number(storeFilter !== 'all') + Number(dateFilter !== 'all') + Number(syncFilter !== 'all') + Number(reviewFilter !== 'all') + Number(reviewReasonFilter !== 'all') + Number(catalogFilter !== 'all');
 
   useEffect(() => () => {
     if (organizerOpenTimerRef.current) clearTimeout(organizerOpenTimerRef.current);
@@ -691,6 +699,7 @@ export function ShoppingGalleryScreen({ navigation }: ShoppingGalleryScreenProps
     setSyncFilter('all');
     setReviewFilter('all');
     setReviewReasonFilter('all');
+    setCatalogFilter('all');
   }, []);
 
   const focusStoreFilters = useCallback(() => {
@@ -966,7 +975,7 @@ export function ShoppingGalleryScreen({ navigation }: ShoppingGalleryScreenProps
       <BottomSheetModal
         ref={filterSheetRef}
         index={0}
-        snapPoints={['72%']}
+        snapPoints={['82%']}
         backdropComponent={renderBackdrop}
         enablePanDownToClose
         backgroundStyle={styles.filterSheetBackground}
@@ -1040,6 +1049,30 @@ export function ShoppingGalleryScreen({ navigation }: ShoppingGalleryScreenProps
               </View>
             </>
           ) : null}
+          <Text style={styles.filterGroupLabel}>CATALOG</Text>
+          <View style={styles.optionGrid}>
+            <TouchableOpacity
+              style={[styles.optionButton, catalogFilter === 'all' && styles.optionButtonActive]}
+              onPress={() => setCatalogFilter('all')}
+            >
+              <Text style={[styles.optionText, catalogFilter === 'all' && styles.optionTextActive]}>All finds</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.optionButton, catalogFilter === 'favorite' && styles.optionButtonActive]}
+              onPress={() => setCatalogFilter('favorite')}
+            >
+              <Text style={[styles.optionText, catalogFilter === 'favorite' && styles.optionTextActive]}>Favorites</Text>
+            </TouchableOpacity>
+            {SHOPPING_CATALOG_STATUS_OPTIONS.map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                style={[styles.optionButton, catalogFilter === option.value && styles.optionButtonActive]}
+                onPress={() => setCatalogFilter(option.value)}
+              >
+                <Text style={[styles.optionText, catalogFilter === option.value && styles.optionTextActive]}>{option.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
           <TouchableOpacity
             style={styles.doneButton}
             onPress={() => filterSheetRef.current?.dismiss()}
