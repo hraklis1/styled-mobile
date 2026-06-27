@@ -44,6 +44,7 @@ import { SizeProfileInput } from '../primitives/SizeProfileInput';
 import type { SizeProfile } from '../../lib/sizes';
 import { CropAdjustModal, type Bbox } from './CropAdjustModal';
 import { cropImage } from '../../lib/cropImage';
+import { mapWithConcurrency } from '../../lib/asyncPool';
 import * as Haptics from 'expo-haptics';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -76,7 +77,9 @@ type PreExtractItemData = {
   name: string;
   category: string;
   croppedImage: string | null;
+  targetImage: string | null;
   bbox: Bbox | null;
+  previewBbox: Bbox | null;
   sourceImage: string;
   brandHint: string;
 };
@@ -129,34 +132,44 @@ async function buildUploadImage(item: {
   return item.croppedImage;
 }
 
-/**
- * Runs `fn` over `items` with at most `limit` promises in flight at once.
- * Returns settled results in input order so callers can map failures back to
- * their source item. Drop-in concurrency-bounded replacement for Promise.allSettled.
- */
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T, index: number) => Promise<R>,
-): Promise<PromiseSettledResult<R>[]> {
-  const results: PromiseSettledResult<R>[] = new Array(items.length);
-  let cursor = 0;
+function normalizePoseBbox(
+  bbox: PoseScanItem['bbox_pct'] | PoseScanItem['targetBbox_pct'] | PoseScanItem['previewBbox_pct'] | null | undefined,
+): Bbox | null {
+  if (!bbox) return null;
+  return {
+    x: bbox.x,
+    y: bbox.y,
+    width: bbox.width,
+    height: bbox.height,
+  };
+}
 
-  async function worker() {
-    while (true) {
-      const idx = cursor++;
-      if (idx >= items.length) return;
-      try {
-        results[idx] = { status: 'fulfilled', value: await fn(items[idx], idx) };
-      } catch (reason) {
-        results[idx] = { status: 'rejected', reason };
-      }
-    }
-  }
+async function buildPreExtractItemFromPose(
+  poseItem: PoseScanItem,
+  sourceImage: string,
+): Promise<PreExtractItemData> {
+  const targetBbox = normalizePoseBbox(poseItem.targetBbox_pct ?? poseItem.bbox_pct);
+  const previewBbox = normalizePoseBbox(poseItem.previewBbox_pct) ?? targetBbox;
+  const serverPreview = poseItem.croppedWebP
+    ? `data:image/webp;base64,${poseItem.croppedWebP}`
+    : null;
+  const previewImage = serverPreview
+    ?? (previewBbox ? await cropImage(sourceImage, previewBbox, { maxDim: 800 }) : null);
+  const targetImage = targetBbox
+    ? await cropImage(sourceImage, targetBbox, { maxDim: 800 })
+    : previewImage;
 
-  const workers = Array.from({ length: Math.min(limit, items.length) }, worker);
-  await Promise.all(workers);
-  return results;
+  return {
+    tempId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    name: poseItem.name,
+    category: poseItem.category,
+    croppedImage: previewImage,
+    targetImage,
+    bbox: targetBbox,
+    previewBbox,
+    sourceImage,
+    brandHint: '',
+  };
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -278,24 +291,11 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
 
     if (sessionRef.current !== session) return null;
 
-    const preItems: PreExtractItemData[] = poseItems.map((poseItem) => ({
-      tempId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      name: poseItem.name,
-      category: poseItem.category,
-      croppedImage: poseItem.croppedWebP
-        ? `data:image/webp;base64,${poseItem.croppedWebP}`
-        : null,
-      bbox: poseItem.bbox_pct
-        ? {
-            x: poseItem.bbox_pct.x,
-            y: poseItem.bbox_pct.y,
-            width: poseItem.bbox_pct.width,
-            height: poseItem.bbox_pct.height,
-          }
-        : null,
-      sourceImage: compressed.dataUrl,
-      brandHint: '',
-    }));
+    const preItems = await Promise.all(
+      poseItems.map((poseItem) => buildPreExtractItemFromPose(poseItem, compressed.dataUrl)),
+    );
+
+    if (sessionRef.current !== session) return null;
 
     updateJob(job.id, { status: 'done', itemCount: preItems.length });
     return preItems;
@@ -382,7 +382,7 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
         async (preItem) => {
           if (sessionRef.current !== session) throw new Error('session_changed');
 
-          const imageData = preItem.croppedImage ?? preItem.sourceImage;
+          const imageData = preItem.targetImage ?? preItem.croppedImage ?? preItem.sourceImage;
           // Use the full detection set for outfit context, even on a retry of a subset.
           const otherItems = preExtractItems
             .filter((o) => o.tempId !== preItem.tempId)
@@ -393,6 +393,8 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
             imageData,
             outfitContext: otherItems || undefined,
             brandHint: preItem.brandHint || undefined,
+            targetName: preItem.name || undefined,
+            targetCategory: preItem.category || undefined,
           });
 
           if (sessionRef.current !== session) throw new Error('session_changed');
@@ -551,7 +553,12 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
       const newCrop = await cropImage(cropAdjustTarget.sourceImage, newBbox, { maxDim: 800 });
       if (newCrop) {
         if (cropAdjustTarget.scope === 'pre-extract') {
-          updatePreExtractItem(cropAdjustTarget.tempId, { croppedImage: newCrop, bbox: newBbox });
+          updatePreExtractItem(cropAdjustTarget.tempId, {
+            croppedImage: newCrop,
+            targetImage: newCrop,
+            bbox: newBbox,
+            previewBbox: newBbox,
+          });
         } else {
           updateItem(cropAdjustTarget.tempId, { croppedImage: newCrop, bbox: newBbox });
         }

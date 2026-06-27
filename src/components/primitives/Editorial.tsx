@@ -325,7 +325,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     padding: 3,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
+    borderColor: 'transparent',
   },
   segmentButton: {
     flex: 1,

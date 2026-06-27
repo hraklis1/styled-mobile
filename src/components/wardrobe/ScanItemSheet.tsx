@@ -44,6 +44,7 @@ import { SizeProfileInput } from '../primitives/SizeProfileInput';
 import type { SizeProfile } from '../../lib/sizes';
 import { CropAdjustModal, type Bbox } from './CropAdjustModal';
 import { cropImage } from '../../lib/cropImage';
+import { mapWithConcurrency } from '../../lib/asyncPool';
 import { uploadImageToR2 } from '../../lib/uploadImage';
 import { capturePhotoLocation } from '../../lib/photoLocation';
 import { AnimatedProgressBar } from '../primitives/AnimatedProgressBar';
@@ -92,7 +93,9 @@ type PreExtractItemData = {
   name: string;
   category: string;
   croppedImage: string | null;
+  targetImage: string | null;
   bbox: Bbox | null;
+  previewBbox: Bbox | null;
   sourceImage: string;
   brandHint: string;
 };
@@ -105,6 +108,7 @@ interface ScanItemSheetProps {
 }
 
 const SCAN_DRAFT_KEY = 'scan_review_draft';
+const EXTRACTION_CONCURRENCY = 4;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -118,6 +122,46 @@ async function buildUploadImage(item: {
     if (hqCrop) return hqCrop;
   }
   return item.croppedImage;
+}
+
+function normalizePoseBbox(
+  bbox: PoseScanItem['bbox_pct'] | PoseScanItem['targetBbox_pct'] | PoseScanItem['previewBbox_pct'] | null | undefined,
+): Bbox | null {
+  if (!bbox) return null;
+  return {
+    x: bbox.x,
+    y: bbox.y,
+    width: bbox.width,
+    height: bbox.height,
+  };
+}
+
+async function buildPreExtractItemFromPose(
+  poseItem: PoseScanItem,
+  sourceImage: string,
+): Promise<PreExtractItemData> {
+  const targetBbox = normalizePoseBbox(poseItem.targetBbox_pct ?? poseItem.bbox_pct);
+  const previewBbox = normalizePoseBbox(poseItem.previewBbox_pct) ?? targetBbox;
+  const serverPreview = poseItem.croppedWebP
+    ? `data:image/webp;base64,${poseItem.croppedWebP}`
+    : null;
+  const previewImage = serverPreview
+    ?? (previewBbox ? await cropImage(sourceImage, previewBbox, { maxDim: 800 }) : null);
+  const targetImage = targetBbox
+    ? await cropImage(sourceImage, targetBbox, { maxDim: 800 })
+    : previewImage;
+
+  return {
+    tempId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    name: poseItem.name,
+    category: poseItem.category,
+    croppedImage: previewImage,
+    targetImage,
+    bbox: targetBbox,
+    previewBbox,
+    sourceImage,
+    brandHint: '',
+  };
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -349,11 +393,13 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
 
     let completedCount = 0;
 
-    const settled = await Promise.allSettled(
-      preItems.map(async (preItem, idx) => {
+    const settled = await mapWithConcurrency(
+      preItems,
+      EXTRACTION_CONCURRENCY,
+      async (preItem, idx) => {
         if (sessionRef.current !== session) throw new Error('session_changed');
 
-        const imageData = preItem.croppedImage ?? fullImageDataUrl;
+        const imageData = preItem.targetImage ?? preItem.croppedImage ?? fullImageDataUrl;
         const otherItems = preItems
           .filter((_, i) => i !== idx)
           .map((other) => `${other.name} (${other.category})`)
@@ -363,6 +409,8 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
           imageData,
           outfitContext: otherItems || undefined,
           brandHint: preItem.brandHint || undefined,
+          targetName: preItem.name || undefined,
+          targetCategory: preItem.category || undefined,
         });
 
         if (sessionRef.current !== session) throw new Error('session_changed');
@@ -374,7 +422,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
         }
 
         return { result, croppedImage: preItem.croppedImage, bbox: preItem.bbox };
-      }),
+      },
     );
 
     if (sessionRef.current !== session) return;
@@ -544,20 +592,11 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
         return;
       }
 
-      // Build per-item pre-extract data and let the user verify crops + add brand hints
-      const preItems: PreExtractItemData[] = result.items.map((poseItem) => ({
-        tempId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        name: poseItem.name,
-        category: poseItem.category,
-        croppedImage: poseItem.croppedWebP
-          ? `data:image/webp;base64,${poseItem.croppedWebP}`
-          : null,
-        bbox: poseItem.bbox_pct
-          ? { x: poseItem.bbox_pct.x, y: poseItem.bbox_pct.y, width: poseItem.bbox_pct.width, height: poseItem.bbox_pct.height }
-          : null,
-        sourceImage: displayDataUrl,
-        brandHint: '',
-      }));
+      // Build per-item pre-extract data with native-backed target/preview crops.
+      const preItems = await Promise.all(
+        result.items.map((poseItem) => buildPreExtractItemFromPose(poseItem, displayDataUrl)),
+      );
+      if (sessionRef.current !== session) return;
 
       setPreExtractItems(preItems);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -618,7 +657,12 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     const newCrop = await cropImage(cropAdjustTarget.sourceImage, newBbox, { maxDim: 800 });
     if (newCrop) {
       if (cropAdjustTarget.scope === 'pre-extract') {
-        updatePreExtractItem(cropAdjustTarget.tempId, { croppedImage: newCrop, bbox: newBbox });
+        updatePreExtractItem(cropAdjustTarget.tempId, {
+          croppedImage: newCrop,
+          targetImage: newCrop,
+          bbox: newBbox,
+          previewBbox: newBbox,
+        });
       } else {
         updateItem(cropAdjustTarget.tempId, { croppedImage: newCrop, bbox: newBbox });
       }

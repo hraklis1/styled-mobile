@@ -1353,6 +1353,7 @@ const styles = StyleSheet.create({
   // ── Segmented control
   segmentRow: {
     paddingHorizontal: SIDE_PAD,
+    paddingTop: spacing.xs,
     paddingBottom: spacing.xxl,
   },
   segment: {

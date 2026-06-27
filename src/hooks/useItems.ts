@@ -10,13 +10,19 @@ import { OUTFITS_QUERY_KEY } from './useOutfits';
 
 export type { ScanResult };
 
+export type PoseScanBbox = { x: number; y: number; width: number; height: number };
+
 export type PoseScanItem = {
   name: string;
   category: string;
   color: string;
   description?: string;
   croppedWebP?: string | null;
-  bbox_pct?: { x: number; y: number; width: number; height: number } | null;
+  bbox_pct?: PoseScanBbox | null;
+  targetBbox_pct?: PoseScanBbox | null;
+  previewBbox_pct?: PoseScanBbox | null;
+  scene?: string | null;
+  detectionSource?: string | null;
 };
 
 export const ITEMS_QUERY_KEY = ['items'] as const;
@@ -61,15 +67,23 @@ export type CreateItemInput = {
   needsDetails?: boolean;
 };
 
-type ScanInput = { uri: string; brandHint?: string; outfitContext?: string };
+type ScanInput = {
+  uri: string;
+  brandHint?: string;
+  outfitContext?: string;
+  targetName?: string;
+  targetCategory?: string;
+};
 
 export function useScanItem() {
   return useMutation({
-    mutationFn: ({ uri, brandHint, outfitContext }: ScanInput) => {
+    mutationFn: ({ uri, brandHint, outfitContext, targetName, targetCategory }: ScanInput) => {
       const formData = new FormData();
       formData.append('image', { uri, type: 'image/jpeg', name: 'scan.jpg' } as unknown as Blob);
       if (brandHint) formData.append('brandHint', brandHint);
       if (outfitContext) formData.append('outfitContext', outfitContext);
+      if (targetName) formData.append('targetName', targetName);
+      if (targetCategory) formData.append('targetCategory', targetCategory);
       return api
         .post<ScanResult>('/api/items/scan', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
@@ -86,6 +100,8 @@ export async function scanItemDirect(input: {
   imageData: string;
   brandHint?: string;
   outfitContext?: string;
+  targetName?: string;
+  targetCategory?: string;
 }): Promise<ScanResult> {
   return api
     .post<ScanResult>('/api/items/scan', input)
