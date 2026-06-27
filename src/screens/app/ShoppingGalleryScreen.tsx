@@ -59,7 +59,7 @@ import { supabase } from '../../lib/supabase';
 import type { ShoppingGalleryScreenProps } from '../../navigation/types';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import { colors, radii, spacing, typography } from '../../theme';
-import type { ShoppingCaptureRole, ShoppingSnap } from '../../types/shoppingSnap';
+import type { ShoppingCaptureRole, ShoppingFindCatalogPatch, ShoppingSnap } from '../../types/shoppingSnap';
 
 type GalleryRow = ShoppingEditItem[];
 type GallerySection = {
@@ -158,6 +158,32 @@ function stagePrice(snaps: ShoppingSnap[], snapIds: string[]): string | null {
     ?? snaps.find((snap) => snapSet.has(snap.id) && snap.extractedPrice !== null)?.extractedPrice
     ?? null;
   return priceLabel(price);
+}
+
+function applyCatalogPatchToSnap(snap: ShoppingSnap, patch: ShoppingFindCatalogPatch): ShoppingSnap {
+  return {
+    ...snap,
+    category: Object.prototype.hasOwnProperty.call(patch, 'category') ? patch.category ?? null : snap.category,
+    sizeLabel: Object.prototype.hasOwnProperty.call(patch, 'sizeLabel') ? patch.sizeLabel ?? null : snap.sizeLabel,
+    colorLabel: Object.prototype.hasOwnProperty.call(patch, 'colorLabel') ? patch.colorLabel ?? null : snap.colorLabel,
+    materialLabel: Object.prototype.hasOwnProperty.call(patch, 'materialLabel') ? patch.materialLabel ?? null : snap.materialLabel,
+    notes: Object.prototype.hasOwnProperty.call(patch, 'notes') ? patch.notes ?? null : snap.notes,
+    isFavorite: Object.prototype.hasOwnProperty.call(patch, 'isFavorite') ? patch.isFavorite ?? false : snap.isFavorite,
+    catalogStatus: Object.prototype.hasOwnProperty.call(patch, 'catalogStatus') ? patch.catalogStatus ?? 'considering' : snap.catalogStatus,
+  };
+}
+
+function catalogPatchPayload(patch: ShoppingFindCatalogPatch) {
+  return {
+    category: patch.category ?? null,
+    size_label: patch.sizeLabel ?? null,
+    color_label: patch.colorLabel ?? null,
+    material_label: patch.materialLabel ?? null,
+    notes: patch.notes ?? null,
+    is_favorite: patch.isFavorite ?? false,
+    catalog_status: patch.catalogStatus ?? 'considering',
+    updated_at: new Date().toISOString(),
+  };
 }
 
 function ShoppingSnapOrganizerModal({
@@ -381,6 +407,7 @@ export function ShoppingGalleryScreen({ navigation }: ShoppingGalleryScreenProps
   const pendingUploads = useShoppingSessionStore((state) => state.pendingUploads);
   const removePendingUpload = useShoppingSessionStore((state) => state.removePendingUpload);
   const regroupPendingUploads = useShoppingSessionStore((state) => state.regroupPendingUploads);
+  const updatePendingGroupCatalog = useShoppingSessionStore((state) => state.updatePendingGroupCatalog);
   const [storeFilter, setStoreFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState<ShoppingDateFilter>('all');
   const [syncFilter, setSyncFilter] = useState<ShoppingSyncFilter>('all');
@@ -390,6 +417,7 @@ export function ShoppingGalleryScreen({ navigation }: ShoppingGalleryScreenProps
   const [organizerSnaps, setOrganizerSnaps] = useState<ShoppingSnap[] | null>(null);
   const [deletingSnapId, setDeletingSnapId] = useState<string | null>(null);
   const [isSavingOrganization, setIsSavingOrganization] = useState(false);
+  const [isSavingCatalog, setIsSavingCatalog] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(() => new Set());
   const [isDeletingSelection, setIsDeletingSelection] = useState(false);
@@ -581,6 +609,54 @@ export function ShoppingGalleryScreen({ navigation }: ShoppingGalleryScreenProps
       setIsSavingOrganization(false);
     }
   }, [allSnaps, regroupPendingUploads, user]);
+
+  const saveCatalog = useCallback(async (captureGroupId: string, patch: ShoppingFindCatalogPatch) => {
+    const groupSnaps = allSnaps.filter((snap) => snap.captureGroupId === captureGroupId);
+    if (groupSnaps.length === 0) return;
+    const syncedSnaps = groupSnaps.filter((snap) => snap.syncStatus === 'synced');
+    const pendingSnaps = groupSnaps.filter((snap) => snap.syncStatus === 'pending');
+
+    setIsSavingCatalog(true);
+    try {
+      if (syncedSnaps.length > 0) {
+        if (!user) throw new Error('You need to be signed in to save catalog details.');
+        const firstSnap = [...syncedSnaps].sort((a, b) => (
+          a.captureSequence - b.captureSequence
+          || new Date(a.capturedAt).getTime() - new Date(b.capturedAt).getTime()
+        ))[0];
+        const { error } = await supabase
+          .from('shopping_capture_groups')
+          .upsert({
+            id: captureGroupId,
+            user_id: user.id,
+            shopping_session_id: firstSnap.shoppingSessionId ?? null,
+            started_at: new Date(firstSnap.capturedAt).toISOString(),
+            ...catalogPatchPayload(patch),
+          }, { onConflict: 'id' });
+        if (error) throw error;
+      }
+
+      if (pendingSnaps.length > 0) {
+        updatePendingGroupCatalog(captureGroupId, patch);
+      }
+
+      setSelectedSnap((current) => current && current.captureGroupId === captureGroupId
+        ? applyCatalogPatchToSnap(current, patch)
+        : current);
+
+      if (syncedSnaps.length > 0 && user) {
+        queryClient.setQueryData<ShoppingSnap[]>(
+          [...SHOPPING_SNAPS_QUERY_KEY, user.id],
+          (current) => current?.map((snap) => snap.captureGroupId === captureGroupId
+            ? applyCatalogPatchToSnap(snap, patch)
+            : snap),
+        );
+        await queryClient.invalidateQueries({ queryKey: SHOPPING_SNAPS_QUERY_KEY });
+      }
+    } finally {
+      setIsSavingCatalog(false);
+    }
+  }, [allSnaps, updatePendingGroupCatalog, user]);
 
   const toggleSelectItem = useCallback((itemId: string) => {
     void Haptics.selectionAsync();
@@ -979,7 +1055,9 @@ export function ShoppingGalleryScreen({ navigation }: ShoppingGalleryScreenProps
         onSelect={setSelectedSnap}
         onDelete={confirmDeleteSnap}
         onOrganize={openOrganizer}
+        onSaveCatalog={saveCatalog}
         isDeleting={selectedSnap ? deletingSnapId === selectedSnap.id : false}
+        isSavingCatalog={isSavingCatalog}
         onClose={() => setSelectedSnap(null)}
       />
 

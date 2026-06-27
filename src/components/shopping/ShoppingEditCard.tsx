@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   formatShoppingPrice,
   itemRoleSummary,
+  shoppingCatalogChips,
   shoppingItemBadges,
 } from '../../lib/shoppingPresentation';
 import { colors, radii, shadows, spacing, typography } from '../../theme';
@@ -30,6 +31,7 @@ export function ShoppingEditCard({
 }) {
   const price = formatShoppingPrice(item.extractedPrice);
   const badges = shoppingItemBadges(item);
+  const catalogChips = shoppingCatalogChips(item);
   const accessibilityStateLabel = item.needsReview
     ? ', needs review'
     : item.syncStatus === 'pending'
@@ -96,6 +98,9 @@ export function ShoppingEditCard({
           ) : null}
         </View>
         <Text style={styles.roleText} numberOfLines={1}>{itemRoleSummary(item)}</Text>
+        {catalogChips.length > 0 ? (
+          <Text style={styles.catalogText} numberOfLines={1}>{catalogChips.join(' · ')}</Text>
+        ) : null}
         <View style={styles.badgeRow}>
           {badges.map((badge) => (
             <View
@@ -207,6 +212,7 @@ const styles = StyleSheet.create({
     color: colors.foreground,
   },
   roleText: { fontSize: 11, color: colors.mutedForeground },
+  catalogText: { fontSize: 11, fontWeight: typography.weight.semibold, color: colors.primary },
   badgeRow: { minHeight: 24, flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
   badge: {
     maxWidth: '100%',

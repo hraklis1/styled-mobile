@@ -167,11 +167,15 @@ async function uploadShoppingSnap(userId: string, upload: PendingShoppingUpload)
 
   await upsertShoppingSession(userId, upload, storeLocationId);
 
-  const { error: groupError } = await supabase.from('shopping_capture_groups').upsert({
+  const groupPayload = {
     id: captureGroupId,
     user_id: userId,
     shopping_session_id: upload.shoppingSessionId ?? null,
     started_at: new Date(upload.captureGroupStartedAt ?? upload.timestamp).toISOString(),
+  };
+
+  const { error: groupError } = await supabase.from('shopping_capture_groups').upsert({
+    ...groupPayload,
     category: upload.category ?? null,
     size_label: upload.sizeLabel ?? null,
     color_label: upload.colorLabel ?? null,
@@ -181,7 +185,13 @@ async function uploadShoppingSnap(userId: string, upload: PendingShoppingUpload)
     catalog_status: upload.catalogStatus ?? 'considering',
     updated_at: new Date().toISOString(),
   }, { onConflict: 'id' });
-  if (groupError) throw groupError;
+  if (groupError) {
+    if (!isSupabaseSchemaMissing(groupError)) throw groupError;
+    const { error: fallbackGroupError } = await supabase
+      .from('shopping_capture_groups')
+      .upsert(groupPayload, { onConflict: 'id' });
+    if (fallbackGroupError) throw fallbackGroupError;
+  }
 
   const extension = localFile.extension.toLowerCase().replace('.', '') || 'jpg';
   const storagePath = `${userId}/${upload.id}.${extension}`;

@@ -21,6 +21,8 @@ const synced: ShoppingSnap = {
   locationAccuracyMeters: null, locality: null, region: null, countryCode: null,
   locationSource: null,
   capturedAt: '2026-06-20T12:00:00.000Z', syncStatus: 'synced',
+  category: null, sizeLabel: null, colorLabel: null, materialLabel: null, notes: null,
+  isFavorite: false, catalogStatus: 'considering',
 };
 
 describe('shoppingGallery', () => {
@@ -68,6 +70,31 @@ describe('shoppingGallery', () => {
     expect(result[0].tagSnaps.map((snap) => snap.id)).toEqual(['tag']);
     expect(result[0].photoCount).toBe(2);
     expect(result[0].extractedPrice).toBe(118);
+  });
+
+  it('carries group catalog fields onto shopping edit items', () => {
+    const catalogued = {
+      ...synced,
+      category: 'T-shirt',
+      sizeLabel: 'M',
+      colorLabel: 'Heather blue',
+      materialLabel: 'Cotton blend',
+      notes: 'Good with black shorts.',
+      isFavorite: true,
+      catalogStatus: 'wishlist' as const,
+    };
+
+    const result = buildShoppingEditItems([catalogued]);
+
+    expect(result[0]).toMatchObject({
+      category: 'T-shirt',
+      sizeLabel: 'M',
+      colorLabel: 'Heather blue',
+      materialLabel: 'Cotton blend',
+      notes: 'Good with black shorts.',
+      isFavorite: true,
+      catalogStatus: 'wishlist',
+    });
   });
 
   it('summarizes item, store, missing price, and pending counts', () => {

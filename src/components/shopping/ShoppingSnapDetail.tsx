@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   useWindowDimensions,
   View,
@@ -18,11 +19,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   formatShoppingPrice,
   garmentFriendlyContentFit,
+  shoppingCatalogChips,
+  shoppingCatalogStatusLabel,
+  SHOPPING_CATALOG_STATUS_OPTIONS,
   snapRoleLabel,
 } from '../../lib/shoppingPresentation';
 import { formatShoppingDetailLocation } from '../../lib/shoppingLocations';
 import { colors, radii, spacing, typography } from '../../theme';
-import type { ShoppingSnap } from '../../types/shoppingSnap';
+import type { ShoppingFindCatalog, ShoppingFindCatalogPatch, ShoppingFindCatalogStatus, ShoppingSnap } from '../../types/shoppingSnap';
 
 export function ShoppingSnapDetail({
   snap,
@@ -30,7 +34,9 @@ export function ShoppingSnapDetail({
   onSelect,
   onDelete,
   onOrganize,
+  onSaveCatalog,
   isDeleting,
+  isSavingCatalog,
   onClose,
 }: {
   snap: ShoppingSnap | null;
@@ -38,7 +44,9 @@ export function ShoppingSnapDetail({
   onSelect: (snap: ShoppingSnap) => void;
   onDelete: (snap: ShoppingSnap) => void;
   onOrganize: () => void;
+  onSaveCatalog: (captureGroupId: string, patch: ShoppingFindCatalogPatch) => Promise<void>;
   isDeleting: boolean;
+  isSavingCatalog: boolean;
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
@@ -48,6 +56,9 @@ export function ShoppingSnapDetail({
   const detailPhotoScrollRef = useRef<ScrollView>(null);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [smartExpanded, setSmartExpanded] = useState(false);
+  const [catalogEditing, setCatalogEditing] = useState(false);
+  const [catalogDraft, setCatalogDraft] = useState<ShoppingFindCatalog>(() => emptyCatalog());
+  const [catalogError, setCatalogError] = useState<string | null>(null);
   const [activeDetailPhotoIndex, setActiveDetailPhotoIndex] = useState(0);
   const itemPrice = relatedSnaps.find((related) => related.extractedPrice !== null)?.extractedPrice ?? snap?.extractedPrice ?? null;
   const formattedPrice = formatShoppingPrice(itemPrice);
@@ -60,6 +71,8 @@ export function ShoppingSnapDetail({
     .join('\n\n');
   const fullLocationLabel = snap ? formatShoppingDetailLocation(snap) : 'Location not set';
   const canOrganize = relatedSnaps.length > 1 || relatedSnaps.some((related) => related.captureRole === 'unknown');
+  const catalog = snap ? catalogFromSnap(snap) : emptyCatalog();
+  const catalogChips = shoppingCatalogChips(catalog);
   const detailPhotos = useMemo(
     () => (relatedSnaps.length > 0 ? relatedSnaps : snap ? [snap] : []),
     [relatedSnaps, snap],
@@ -68,6 +81,9 @@ export function ShoppingSnapDetail({
   useEffect(() => {
     setDetailsExpanded(false);
     setSmartExpanded(false);
+    setCatalogEditing(false);
+    setCatalogError(null);
+    setCatalogDraft(snap ? catalogFromSnap(snap) : emptyCatalog());
   }, [snap?.id]);
 
   useEffect(() => {
@@ -87,6 +103,20 @@ export function ShoppingSnapDetail({
       `https://maps.apple.com/?q=${encodeURIComponent(`${snap.latitude},${snap.longitude}`)}`,
     );
   }, [snap]);
+
+  const saveCatalog = useCallback(() => {
+    if (!snap) return;
+    const patch = cleanCatalogPatch(catalogDraft);
+    setCatalogError(null);
+    void onSaveCatalog(snap.captureGroupId, patch)
+      .then(() => {
+        setCatalogEditing(false);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      })
+      .catch((error) => {
+        setCatalogError(error instanceof Error ? error.message : 'Please try again.');
+      });
+  }, [catalogDraft, onSaveCatalog, snap]);
 
   return (
     <Modal visible={snap !== null} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
@@ -165,6 +195,19 @@ export function ShoppingSnapDetail({
             </View>
 
             <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={[styles.actionButton, catalogEditing && styles.actionButtonActive]}
+                onPress={() => {
+                  void Haptics.selectionAsync();
+                  setCatalogDraft(catalog);
+                  setCatalogEditing((editing) => !editing);
+                  setCatalogError(null);
+                }}
+                accessibilityLabel={catalogEditing ? 'Cancel catalog editing' : 'Edit catalog details'}
+              >
+                <Ionicons name={catalogEditing ? 'close-circle-outline' : 'pricetags-outline'} size={18} color={colors.foreground} />
+                <Text style={styles.actionText}>{catalogEditing ? 'Cancel edit' : 'Catalog'}</Text>
+              </TouchableOpacity>
               {canOrganize ? (
                 <TouchableOpacity
                   style={styles.actionButton}
@@ -197,6 +240,118 @@ export function ShoppingSnapDetail({
                 )}
                 <Text style={[styles.actionText, styles.deleteText]}>Delete</Text>
               </TouchableOpacity>
+            </View>
+
+            <View style={styles.catalogCard}>
+              <View style={styles.catalogHeader}>
+                <View>
+                  <Text style={styles.sectionTitle}>CATALOG</Text>
+                  <Text style={styles.catalogStatusText}>
+                    {catalog.isFavorite ? 'Favorite · ' : ''}{shoppingCatalogStatusLabel(catalog.catalogStatus)}
+                  </Text>
+                </View>
+                {!catalogEditing ? (
+                  <TouchableOpacity
+                    style={styles.catalogEditButton}
+                    onPress={() => {
+                      setCatalogDraft(catalog);
+                      setCatalogEditing(true);
+                      setCatalogError(null);
+                    }}
+                  >
+                    <Ionicons name="create-outline" size={16} color={colors.primary} />
+                    <Text style={styles.catalogEditText}>Edit</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+
+              {catalogEditing ? (
+                <View style={styles.catalogForm}>
+                  <View style={styles.statusGrid}>
+                    {SHOPPING_CATALOG_STATUS_OPTIONS.map((option) => (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[styles.statusOption, catalogDraft.catalogStatus === option.value && styles.statusOptionActive]}
+                        onPress={() => setCatalogDraft((current) => ({ ...current, catalogStatus: option.value }))}
+                      >
+                        <Text style={[styles.statusOptionText, catalogDraft.catalogStatus === option.value && styles.statusOptionTextActive]}>
+                          {option.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.favoriteToggle, catalogDraft.isFavorite && styles.favoriteToggleActive]}
+                    onPress={() => setCatalogDraft((current) => ({ ...current, isFavorite: !current.isFavorite }))}
+                  >
+                    <Ionicons name={catalogDraft.isFavorite ? 'heart' : 'heart-outline'} size={18} color={catalogDraft.isFavorite ? colors.primaryForeground : colors.primary} />
+                    <Text style={[styles.favoriteToggleText, catalogDraft.isFavorite && styles.favoriteToggleTextActive]}>
+                      Favorite
+                    </Text>
+                  </TouchableOpacity>
+                  <View style={styles.catalogInputGrid}>
+                    <CatalogInput label="Category" value={catalogDraft.category} onChange={(value) => setCatalogDraft((current) => ({ ...current, category: value }))} />
+                    <CatalogInput label="Size" value={catalogDraft.sizeLabel} onChange={(value) => setCatalogDraft((current) => ({ ...current, sizeLabel: value }))} />
+                    <CatalogInput label="Color" value={catalogDraft.colorLabel} onChange={(value) => setCatalogDraft((current) => ({ ...current, colorLabel: value }))} />
+                    <CatalogInput label="Material" value={catalogDraft.materialLabel} onChange={(value) => setCatalogDraft((current) => ({ ...current, materialLabel: value }))} />
+                  </View>
+                  <View style={styles.notesField}>
+                    <Text style={styles.inputLabel}>Notes</Text>
+                    <TextInput
+                      value={catalogDraft.notes ?? ''}
+                      onChangeText={(value) => setCatalogDraft((current) => ({ ...current, notes: value }))}
+                      placeholder="Fit, styling ideas, sale context..."
+                      placeholderTextColor={colors.mutedForeground}
+                      multiline
+                      textAlignVertical="top"
+                      style={styles.notesInput}
+                    />
+                  </View>
+                  {catalogError ? (
+                    <Text selectable style={styles.catalogError}>{catalogError}</Text>
+                  ) : null}
+                  <View style={styles.catalogFormActions}>
+                    <TouchableOpacity
+                      style={styles.catalogCancelButton}
+                      onPress={() => {
+                        setCatalogDraft(catalog);
+                        setCatalogEditing(false);
+                        setCatalogError(null);
+                      }}
+                      disabled={isSavingCatalog}
+                    >
+                      <Text style={styles.catalogCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.catalogSaveButton, isSavingCatalog && styles.actionButtonDisabled]}
+                      onPress={saveCatalog}
+                      disabled={isSavingCatalog}
+                    >
+                      {isSavingCatalog ? (
+                        <ActivityIndicator size="small" color={colors.primaryForeground} />
+                      ) : (
+                        <Ionicons name="checkmark" size={17} color={colors.primaryForeground} />
+                      )}
+                      <Text style={styles.catalogSaveText}>Save</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.catalogRead}>
+                  {catalogChips.length > 0 ? (
+                    <View style={styles.catalogChipRow}>
+                      {catalogChips.map((chip) => (
+                        <View key={chip} style={styles.catalogChip}>
+                          <Text style={styles.catalogChipText}>{chip}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={styles.catalogEmpty}>Add category, size, color, material, and notes.</Text>
+                  )}
+                  {catalog.notes ? <Text selectable style={styles.catalogNotes}>{catalog.notes}</Text> : null}
+                </View>
+              )}
             </View>
 
             {relatedSnaps.length > 1 ? (
@@ -291,6 +446,70 @@ function DetailInfo({ label, value }: { label: string; value: string }) {
   );
 }
 
+function CatalogInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string | null;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <View style={styles.inputField}>
+      <Text style={styles.inputLabel}>{label}</Text>
+      <TextInput
+        value={value ?? ''}
+        onChangeText={onChange}
+        placeholder={label}
+        placeholderTextColor={colors.mutedForeground}
+        style={styles.textInput}
+      />
+    </View>
+  );
+}
+
+function emptyCatalog(): ShoppingFindCatalog {
+  return {
+    category: null,
+    sizeLabel: null,
+    colorLabel: null,
+    materialLabel: null,
+    notes: null,
+    isFavorite: false,
+    catalogStatus: 'considering',
+  };
+}
+
+function catalogFromSnap(snap: ShoppingSnap): ShoppingFindCatalog {
+  return {
+    category: snap.category,
+    sizeLabel: snap.sizeLabel,
+    colorLabel: snap.colorLabel,
+    materialLabel: snap.materialLabel,
+    notes: snap.notes,
+    isFavorite: snap.isFavorite,
+    catalogStatus: snap.catalogStatus,
+  };
+}
+
+function cleanText(value: string | null): string | null {
+  const trimmed = value?.trim() ?? '';
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function cleanCatalogPatch(value: ShoppingFindCatalog): ShoppingFindCatalog {
+  return {
+    category: cleanText(value.category),
+    sizeLabel: cleanText(value.sizeLabel),
+    colorLabel: cleanText(value.colorLabel),
+    materialLabel: cleanText(value.materialLabel),
+    notes: cleanText(value.notes),
+    isFavorite: value.isFavorite,
+    catalogStatus: value.catalogStatus,
+  };
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   header: {
@@ -352,9 +571,43 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceElevated,
   },
   actionButtonDisabled: { opacity: 0.6 },
+  actionButtonActive: { backgroundColor: colors.accent },
   actionText: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.foreground },
   deleteButton: { backgroundColor: '#FBEDEA' },
   deleteText: { color: colors.error },
+  catalogCard: { gap: spacing.md, padding: spacing.lg, borderRadius: radii.lg, backgroundColor: colors.surfaceElevated },
+  catalogHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  catalogStatusText: { paddingTop: 3, fontSize: typography.size.xs, color: colors.mutedForeground },
+  catalogEditButton: { minHeight: 34, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm, borderRadius: radii.full, backgroundColor: colors.accent },
+  catalogEditText: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.primary },
+  catalogRead: { gap: spacing.sm },
+  catalogChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  catalogChip: { paddingHorizontal: spacing.sm, paddingVertical: 6, borderRadius: radii.full, backgroundColor: colors.surfaceSubtle },
+  catalogChipText: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.secondaryForeground },
+  catalogEmpty: { fontSize: typography.size.sm, lineHeight: 20, color: colors.mutedForeground },
+  catalogNotes: { fontSize: typography.size.sm, lineHeight: 20, color: colors.foreground },
+  catalogForm: { gap: spacing.md },
+  statusGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  statusOption: { minHeight: 36, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.surfaceSubtle },
+  statusOptionActive: { backgroundColor: colors.foreground },
+  statusOptionText: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.secondaryForeground },
+  statusOptionTextActive: { color: colors.primaryForeground },
+  favoriteToggle: { alignSelf: 'flex-start', minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radii.full, backgroundColor: colors.background },
+  favoriteToggleActive: { borderColor: colors.primary, backgroundColor: colors.primary },
+  favoriteToggleText: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.primary },
+  favoriteToggleTextActive: { color: colors.primaryForeground },
+  catalogInputGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  inputField: { flexGrow: 1, flexBasis: '47%', gap: spacing.xs },
+  inputLabel: { fontSize: 10, fontWeight: typography.weight.bold, letterSpacing: 1, color: colors.mutedForeground, textTransform: 'uppercase' },
+  textInput: { minHeight: 42, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radii.md, color: colors.foreground, backgroundColor: colors.background },
+  notesField: { gap: spacing.xs },
+  notesInput: { minHeight: 86, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radii.md, color: colors.foreground, backgroundColor: colors.background },
+  catalogError: { fontSize: typography.size.xs, color: colors.error },
+  catalogFormActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  catalogCancelButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md },
+  catalogCancelText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.secondaryForeground },
+  catalogSaveButton: { flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderRadius: radii.md, backgroundColor: colors.primary },
+  catalogSaveText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.primaryForeground },
   section: { gap: spacing.sm, paddingTop: spacing.sm },
   sectionHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sectionTitle: { fontSize: 10, fontWeight: typography.weight.bold, letterSpacing: 1.4, color: colors.primary },
