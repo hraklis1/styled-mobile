@@ -1,5 +1,5 @@
 import type { PendingShoppingUpload } from '../stores/useShoppingSessionStore';
-import type { ShoppingSnap } from '../types/shoppingSnap';
+import type { ShoppingFindCatalogStatus, ShoppingSnap } from '../types/shoppingSnap';
 import { buildShoppingLocationKey, normalizeStoreName, shoppingFilterKey } from './shoppingLocations';
 
 export type ShoppingDateFilter = 'all' | 'today' | '7d' | '30d';
@@ -23,6 +23,13 @@ export type ShoppingEditItem = {
   syncStatus: 'pending' | 'synced';
   needsReview: boolean;
   reviewReasons: string[];
+  category: string | null;
+  sizeLabel: string | null;
+  colorLabel: string | null;
+  materialLabel: string | null;
+  notes: string | null;
+  isFavorite: boolean;
+  catalogStatus: ShoppingFindCatalogStatus;
 };
 
 export type ShoppingEditSummary = {
@@ -80,6 +87,15 @@ export function buildShoppingEditItems(snaps: ShoppingSnap[]): ShoppingEditItem[
       )[0];
       const extractedPrice = priceSnap?.extractedPrice ?? null;
       const storeName = storeSnap?.storeName ?? null;
+      const catalogSnap = sortedSnaps.find((snap) => (
+        snap.category
+        || snap.sizeLabel
+        || snap.colorLabel
+        || snap.materialLabel
+        || snap.notes
+        || snap.isFavorite
+        || snap.catalogStatus !== 'considering'
+      )) ?? primarySnap;
       const reviewReasons = itemReviewReasons(sortedSnaps, extractedPrice, storeName);
       const syncStatus: ShoppingEditItem['syncStatus'] = sortedSnaps.some((snap) => snap.syncStatus === 'pending')
         ? 'pending'
@@ -102,6 +118,13 @@ export function buildShoppingEditItems(snaps: ShoppingSnap[]): ShoppingEditItem[
         syncStatus,
         needsReview: reviewReasons.length > 0,
         reviewReasons,
+        category: catalogSnap.category,
+        sizeLabel: catalogSnap.sizeLabel,
+        colorLabel: catalogSnap.colorLabel,
+        materialLabel: catalogSnap.materialLabel,
+        notes: catalogSnap.notes,
+        isFavorite: catalogSnap.isFavorite,
+        catalogStatus: catalogSnap.catalogStatus,
       };
     })
     .sort((a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime());
@@ -157,6 +180,13 @@ export function mergeShoppingSnaps(
       rawOcrText: upload.rawOcrText,
       capturedAt: new Date(upload.timestamp).toISOString(),
       syncStatus: 'pending',
+      category: upload.category ?? null,
+      sizeLabel: upload.sizeLabel ?? null,
+      colorLabel: upload.colorLabel ?? null,
+      materialLabel: upload.materialLabel ?? null,
+      notes: upload.notes ?? null,
+      isFavorite: upload.isFavorite ?? false,
+      catalogStatus: upload.catalogStatus ?? 'considering',
     });
   }
 

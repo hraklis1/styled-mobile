@@ -1,16 +1,22 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
 import { StylistChatView } from '../../components/stylist/StylistChatView';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { presentPaywall } from '../../lib/paywall';
 import { colors, radii, spacing, typography } from '../../theme';
 import { ActionButton } from '../../components/primitives/Editorial';
+import type { AppTabParamList } from '../../navigation/types';
 
 export function StylistScreen() {
   const { isPremium } = useEntitlement();
   const [openingPaywall, setOpeningPaywall] = useState(false);
+  // From a root tab there's no modal to dismiss, so "Done" exits the stylist by
+  // returning to Home — restoring the close affordance users expect top-right.
+  const navigation = useNavigation<BottomTabNavigationProp<AppTabParamList>>();
 
   if (isPremium) {
     return (
@@ -19,6 +25,7 @@ export function StylistScreen() {
         threadMode="resume"
         openRequestId={1}
         embedded
+        onClose={() => navigation.navigate('Home')}
       />
     );
   }

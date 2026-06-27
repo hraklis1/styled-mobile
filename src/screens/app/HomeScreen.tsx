@@ -28,8 +28,10 @@ import { useFabScroll } from '../../contexts/FabScrollContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { useStylingWeatherToday } from '../../hooks/useWeather';
 import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
+import { useProfile } from '../../hooks/useProfile';
 import { StylingLocationSheet } from '../../components/home/StylingLocationSheet';
 import { resolveImageUri } from '../../lib/resolveImageUri';
+import { formatTemp } from '../../lib/temperature';
 import {
   selectDailyStylistPick,
   toLocalDateKey,
@@ -115,6 +117,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const deleteLog = useDeleteOutfitLog();
   const stylingLocation = useActiveStylingLocation();
   const weather = useStylingWeatherToday(stylingLocation.activeLocation);
+  const { data: profile } = useProfile();
   const [locationSheetVisible, setLocationSheetVisible] = useState(false);
 
   const { openLogger } = useGlobalOutfitLogger();
@@ -206,7 +209,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const locationBadge = isDestination ? 'Trip' : isHomeFallback ? 'Home' : undefined;
   const weatherLocationLine = weather.data
     ? [
-      `${WEATHER_EMOJI[weather.data.current.condition] ?? '🌡️'} ${weather.data.current.temperatureC}°C`,
+      `${WEATHER_EMOJI[weather.data.current.condition] ?? '🌡️'} ${formatTemp(weather.data.current, profile?.tempUnit)}`,
       compactActiveLocation,
       locationBadge,
     ].filter(Boolean).join(' · ')
@@ -228,9 +231,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         logs,
         date: dailyPickDate,
         history: dailyPickHistory,
+        tempUnit: profile?.tempUnit,
       })
       : null,
-    [dailyPickDate, dailyPickHistory, dailyPickHistoryLoaded, events, items, logs, outfits, weather.data],
+    [dailyPickDate, dailyPickHistory, dailyPickHistoryLoaded, events, items, logs, outfits, weather.data, profile?.tempUnit],
   );
   const featuredOutfit = dailyPick?.outfit ?? recentOutfits[0];
   const featuredReason = dailyPick?.reason ?? "Today’s edit";

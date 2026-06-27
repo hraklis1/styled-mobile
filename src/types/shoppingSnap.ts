@@ -1,5 +1,18 @@
 export type ShoppingSnapSyncStatus = 'pending' | 'synced';
 export type ShoppingCaptureRole = 'garment' | 'tag' | 'unknown';
+export type ShoppingFindCatalogStatus = 'considering' | 'wishlist' | 'closet' | 'passed';
+
+export type ShoppingFindCatalog = {
+  category: string | null;
+  sizeLabel: string | null;
+  colorLabel: string | null;
+  materialLabel: string | null;
+  notes: string | null;
+  isFavorite: boolean;
+  catalogStatus: ShoppingFindCatalogStatus;
+};
+
+export type ShoppingFindCatalogPatch = Partial<ShoppingFindCatalog>;
 
 export type ShoppingSnap = {
   id: string;
@@ -23,6 +36,13 @@ export type ShoppingSnap = {
   rawOcrText: string;
   capturedAt: string;
   syncStatus: ShoppingSnapSyncStatus;
+  category: string | null;
+  sizeLabel: string | null;
+  colorLabel: string | null;
+  materialLabel: string | null;
+  notes: string | null;
+  isFavorite: boolean;
+  catalogStatus: ShoppingFindCatalogStatus;
 };
 
 export type RemoteShoppingSnapRow = {
@@ -39,6 +59,23 @@ export type RemoteShoppingSnapRow = {
   extracted_price: number | string | null;
   raw_ocr_text: string | null;
   captured_at: string;
+  shopping_capture_groups: {
+    category: string | null;
+    size_label: string | null;
+    color_label: string | null;
+    material_label: string | null;
+    notes: string | null;
+    is_favorite: boolean | null;
+    catalog_status: ShoppingFindCatalogStatus | null;
+  } | {
+    category: string | null;
+    size_label: string | null;
+    color_label: string | null;
+    material_label: string | null;
+    notes: string | null;
+    is_favorite: boolean | null;
+    catalog_status: ShoppingFindCatalogStatus | null;
+  }[] | null;
   shopping_sessions: {
     store_location_id: string | null;
     branch_label: string | null;

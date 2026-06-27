@@ -110,6 +110,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     overflow: 'hidden',
     backgroundColor: colors.muted,
+    // A hairline inner stroke + the matted gaps make a set of mismatched source
+    // photos read as one cohesive styled look rather than a loose scrapbook.
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
   },
   fill: {
     width: '100%',

@@ -172,6 +172,14 @@ async function uploadShoppingSnap(userId: string, upload: PendingShoppingUpload)
     user_id: userId,
     shopping_session_id: upload.shoppingSessionId ?? null,
     started_at: new Date(upload.captureGroupStartedAt ?? upload.timestamp).toISOString(),
+    category: upload.category ?? null,
+    size_label: upload.sizeLabel ?? null,
+    color_label: upload.colorLabel ?? null,
+    material_label: upload.materialLabel ?? null,
+    notes: upload.notes ?? null,
+    is_favorite: upload.isFavorite ?? false,
+    catalog_status: upload.catalogStatus ?? 'considering',
+    updated_at: new Date().toISOString(),
   }, { onConflict: 'id' });
   if (groupError) throw groupError;
 

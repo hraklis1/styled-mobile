@@ -1,5 +1,5 @@
 import type { ShoppingEditItem } from './shoppingGallery';
-import type { ShoppingCaptureRole, ShoppingSnap } from '../types/shoppingSnap';
+import type { ShoppingCaptureRole, ShoppingFindCatalog, ShoppingFindCatalogStatus, ShoppingSnap } from '../types/shoppingSnap';
 
 export type ShoppingReviewReasonKey = 'missing-price' | 'missing-store' | 'unsorted-photo' | 'text-needs-price-check';
 
@@ -14,6 +14,13 @@ export type ShoppingItemBadge = {
   label: string;
   tone: 'neutral' | 'attention' | 'success';
 };
+
+export const SHOPPING_CATALOG_STATUS_OPTIONS: { value: ShoppingFindCatalogStatus; label: string }[] = [
+  { value: 'considering', label: 'Deciding' },
+  { value: 'wishlist', label: 'Wishlist' },
+  { value: 'closet', label: 'Closet' },
+  { value: 'passed', label: 'Passed' },
+];
 
 const REVIEW_REASON_LABELS: Record<ShoppingReviewReasonKey, string> = {
   'missing-price': 'Needs price',
@@ -77,6 +84,18 @@ export function itemRoleSummary(item: ShoppingEditItem): string {
 export function shoppingItemBadges(item: ShoppingEditItem): ShoppingItemBadge[] {
   const badges: ShoppingItemBadge[] = [];
 
+  if (item.isFavorite) {
+    badges.push({ key: 'favorite', label: 'Favorite', tone: 'success' });
+  }
+  if (item.catalogStatus === 'wishlist') {
+    badges.push({ key: 'wishlist', label: 'Wishlist', tone: 'success' });
+  }
+  if (item.catalogStatus === 'closet') {
+    badges.push({ key: 'closet', label: 'In closet', tone: 'success' });
+  }
+  if (item.catalogStatus === 'passed') {
+    badges.push({ key: 'passed', label: 'Passed', tone: 'neutral' });
+  }
   if (item.syncStatus === 'pending') {
     badges.push({ key: 'pending', label: 'Saved locally', tone: 'attention' });
   }
@@ -100,6 +119,19 @@ export function snapRoleLabel(role: ShoppingCaptureRole): string {
   if (role === 'tag') return 'Tag';
   if (role === 'garment') return 'Garment';
   return 'Unsorted';
+}
+
+export function shoppingCatalogStatusLabel(status: ShoppingFindCatalogStatus): string {
+  return SHOPPING_CATALOG_STATUS_OPTIONS.find((option) => option.value === status)?.label ?? 'Deciding';
+}
+
+export function shoppingCatalogChips(value: ShoppingFindCatalog): string[] {
+  return [
+    value.category,
+    value.sizeLabel ? `Size ${value.sizeLabel}` : null,
+    value.colorLabel,
+    value.materialLabel,
+  ].filter((chip): chip is string => Boolean(chip));
 }
 
 export function garmentFriendlyContentFit(snap: ShoppingSnap): 'cover' | 'contain' {

@@ -76,6 +76,9 @@ type ChatMessage = {
   transcript?: string;
   shopOutfit?: ShopOutfit;
   suggestedItemIds?: number[];
+  // Short editorial name for the look (e.g. "Coastal Off-Duty"), supplied by the
+  // stylist backend. Falls back to a name derived from the items when absent.
+  lookName?: string;
   missingEssentials?: MissingEssential[];
   tripPlan?: TripPlanData;
   // Which stylist intent produced this reply — drives how it's rendered
@@ -196,6 +199,7 @@ const threadKey = (id: number) => `stylist_thread_${id}`;
 type ServerMessagePayload = {
   mode?: StylistMode;
   itemIds?: number[];
+  lookName?: string;
   missingEssentials?: MissingEssential[];
   shopOutfit?: ShopOutfit;
   tripPlan?: TripPlanData;
@@ -216,6 +220,7 @@ function mapServerMessages(rows: ServerMessage[]): ChatMessage[] {
       ...(typeof m.recId === 'number' ? { recId: m.recId } : {}),
       ...(p?.mode ? { mode: p.mode } : {}),
       ...(p?.itemIds?.length ? { suggestedItemIds: p.itemIds } : {}),
+      ...(p?.lookName ? { lookName: p.lookName } : {}),
       ...(p?.missingEssentials?.length ? { missingEssentials: p.missingEssentials } : {}),
       ...(p?.shopOutfit ? { shopOutfit: p.shopOutfit } : {}),
       // Reloaded trip plans are complete, never mid-stream — clear the pending flag.
@@ -577,8 +582,8 @@ export function StylistChatView({
                 if (flushTimer) { clearTimeout(flushTimer); }
                 flushPending();
 
-                const { transcript, responseText, itemIds, missingEssentials: mes, missingEssential: legacyMe, shopOutfit, tripPlan, mode: respMode, recId, conversationId: doneConversationId } =
-                  parsed as { transcript: string; responseText: string; itemIds?: number[]; missingEssentials?: MissingEssential[]; missingEssential?: { label: string; category: string; reason: string } | null; shopOutfit?: ShopOutfit | null; tripPlan?: TripPlanData | null; mode?: StylistMode; recId?: number | null; conversationId?: number | null };
+                const { transcript, responseText, itemIds, lookName, missingEssentials: mes, missingEssential: legacyMe, shopOutfit, tripPlan, mode: respMode, recId, conversationId: doneConversationId } =
+                  parsed as { transcript: string; responseText: string; itemIds?: number[]; lookName?: string; missingEssentials?: MissingEssential[]; missingEssential?: { label: string; category: string; reason: string } | null; shopOutfit?: ShopOutfit | null; tripPlan?: TripPlanData | null; mode?: StylistMode; recId?: number | null; conversationId?: number | null };
 
                 // Adopt the thread id the server created/confirmed for this turn.
                 const resolvedConvId = typeof doneConversationId === 'number' ? doneConversationId : conversationIdRef.current;
@@ -611,6 +616,7 @@ export function StylistChatView({
                   ...(shopOutfit ? { shopOutfit } : {}),
                   ...(tripPlan ? { tripPlan: { ...tripPlan, pending: false } } : {}),
                   ...(itemIds?.length ? { suggestedItemIds: itemIds } : {}),
+                  ...(lookName ? { lookName } : {}),
                   ...(hydratedEssentials.length ? { missingEssentials: hydratedEssentials } : {}),
                   ...(typeof recId === 'number' ? { recId } : {}),
                 };
@@ -1014,7 +1020,7 @@ export function StylistChatView({
           >
             <Ionicons name="ellipsis-horizontal" size={22} color={colors.foreground} />
           </TouchableOpacity>
-          {!embedded && onClose ? (
+          {onClose ? (
             <TouchableOpacity style={styles.doneBtn} onPress={onClose} accessibilityLabel="Done with stylist">
               <Text style={styles.doneBtnText}>Done</Text>
             </TouchableOpacity>
@@ -1068,6 +1074,7 @@ export function StylistChatView({
         {isEmpty ? (
           <EmptyState
             weather={weather.data?.current}
+            tempUnit={profile?.tempUnit === 'C' ? 'C' : 'F'}
             displayName={profile?.displayName}
             location={activeLocation.label}
             wardrobeCount={allItems.length}
@@ -1437,6 +1444,7 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
         <View style={styles.editorialResponse}>
           <OutfitSuggestionCard
             messageText={message.text}
+            lookName={message.lookName}
             itemIds={message.suggestedItemIds}
             allItems={allItems}
             createOutfit={createOutfit}
@@ -1560,6 +1568,7 @@ function outfitNameFromItems(items: Item[]): string {
 
 type OutfitSuggestionCardProps = {
   messageText: string;
+  lookName?: string;
   itemIds: number[];
   allItems: Item[];
   createOutfit: ReturnType<typeof useCreateOutfit>;
@@ -1570,7 +1579,7 @@ type OutfitSuggestionCardProps = {
   recId?: number;
 };
 
-function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, eventContext, onAddToEvent, missingEssentials, onNavigateToShop, recId }: OutfitSuggestionCardProps) {
+function OutfitSuggestionCard({ messageText, lookName, itemIds, allItems, createOutfit, eventContext, onAddToEvent, missingEssentials, onNavigateToShop, recId }: OutfitSuggestionCardProps) {
   const { width } = useWindowDimensions();
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1608,7 +1617,10 @@ function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, ev
     [matchedItems],
   );
   const collageSize = Math.max(240, Math.min(width - spacing.xxl * 2, 420));
-  const lookTitle = outfitNameFromItems(matchedItems);
+  const lookTitle = lookName?.trim() || outfitNameFromItems(matchedItems);
+  // When an event is in context, "Add to [event]" is the primary action, so the
+  // save button steps down to a secondary (outline) style — one filled CTA only.
+  const hasEventCta = !!(onAddToEvent && eventContext);
 
   // ── Edit handlers (clear the saved/added flags so the refined look can be re-saved) ──
   const removeItem = useCallback((id: number) => {
@@ -1655,7 +1667,7 @@ function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, ev
     setSaving(true);
     try {
       const input: CreateOutfitInput = {
-        name: outfitNameFromItems(matchedItems),
+        name: lookName?.trim() || outfitNameFromItems(matchedItems),
         description: messageText.slice(0, 200) || null,
         itemIds: matchedItems.map((i) => ({ id: i.id, category: i.category as string })),
       };
@@ -1817,6 +1829,7 @@ function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, ev
         <TouchableOpacity
           style={[
             styles.saveBtn,
+            hasEventCta && !saved && styles.saveBtnSecondary,
             (saved || saving) && styles.saveBtnDone,
             matchedItems.length === 0 && styles.saveBtnDisabled,
           ]}
@@ -1827,15 +1840,14 @@ function OutfitSuggestionCard({ messageText, itemIds, allItems, createOutfit, ev
           <Ionicons
             name={saved ? 'checkmark-circle' : 'bookmark-outline'}
             size={15}
-            color={saved ? colors.primaryForeground : colors.primary}
+            color={saved ? colors.white : hasEventCta ? colors.primary : colors.white}
           />
-          <Text style={[styles.saveBtnText, saved && styles.saveBtnTextDone]}>
+          <Text style={[styles.saveBtnText, hasEventCta && !saved && styles.saveBtnTextSecondary]}>
             {saving ? 'Saving…' : saved ? 'Saved to outfits' : 'Save this look'}
           </Text>
         </TouchableOpacity>
 
         <View style={styles.feedbackRow}>
-          <Text style={styles.feedbackLabel}>Was this useful?</Text>
           <TouchableOpacity
             style={[styles.feedbackBtn, feedback === 'up' && styles.feedbackBtnActive]}
             onPress={() => handleFeedback('up')}
@@ -2019,7 +2031,16 @@ function TypingIndicator() {
 
 // ── EmptyState ────────────────────────────────────────────────────────────────
 
-function buildEmptyStatePrompts(weather: CurrentWeather | undefined, wardrobeCount: number): string[] {
+// The server bakes a temperature into `weather.summary` in °C. Strip it and
+// re-append the value in the user's preferred unit so every surface (the hero
+// context line, the weather-aware prompt) stays consistent with the header pill.
+function formatWeatherLead(weather: CurrentWeather, tempUnit: 'C' | 'F'): string {
+  const temp = tempUnit === 'C' ? weather.temperatureC : weather.temperatureF;
+  const descriptor = weather.summary.replace(/\s*(at\s+)?-?\d+\s*°\s*[CF]?\.?\s*$/i, '').trim();
+  return descriptor ? `${descriptor} at ${temp}°${tempUnit}` : `${temp}°${tempUnit}`;
+}
+
+function buildEmptyStatePrompts(weather: CurrentWeather | undefined, tempUnit: 'C' | 'F', wardrobeCount: number): string[] {
   const day = new Date().toLocaleDateString('en', { weekday: 'long' });
   const prompts: string[] = [];
 
@@ -2028,8 +2049,8 @@ function buildEmptyStatePrompts(weather: CurrentWeather | undefined, wardrobeCou
   // (e.g. "Beautiful and sunny at 22°C.") so interpolating it mid-sentence reads
   // wrong. Strip trailing punctuation and keep its original casing.
   if (weather) {
-    const { condition, summary } = weather;
-    const lead = summary.replace(/[.\s]+$/, '');
+    const { condition } = weather;
+    const lead = formatWeatherLead(weather, tempUnit);
     if (condition === 'cold') {
       prompts.push(`${lead} — help me stay warm and stylish`);
     } else if (condition === 'rainy') {
@@ -2058,6 +2079,7 @@ function buildEmptyStatePrompts(weather: CurrentWeather | undefined, wardrobeCou
 
 function EmptyState({
   weather,
+  tempUnit,
   displayName,
   location,
   wardrobeCount,
@@ -2065,15 +2087,20 @@ function EmptyState({
   onPrompt,
 }: {
   weather: CurrentWeather | undefined;
+  tempUnit: 'C' | 'F';
   displayName?: string | null;
   location?: string;
   wardrobeCount: number;
   onLocationPress: () => void;
   onPrompt: (q: string) => void;
 }) {
-  const prompts = buildEmptyStatePrompts(weather, wardrobeCount);
+  const prompts = buildEmptyStatePrompts(weather, tempUnit, wardrobeCount);
   const firstName = displayName?.trim().split(/\s+/)[0];
-  const context = location?.trim() || 'Set location';
+
+  // Weather line: temperature in the user's preferred unit (matches the header
+  // pill). The city is intentionally omitted — the persistent header already
+  // shows it, so repeating it on the hero is redundant.
+  const contextDisplay = weather ? formatWeatherLead(weather, tempUnit) : (location?.trim() || 'Set location');
 
   return (
     <View style={styles.emptyState}>
@@ -2087,8 +2114,7 @@ function EmptyState({
         </Text>
         <TouchableOpacity style={styles.contextLine} onPress={onLocationPress} activeOpacity={0.7}>
           <Ionicons name="location-outline" size={14} color={colors.primary} />
-          <Text style={styles.contextLineText} numberOfLines={1}>{context}</Text>
-          {weather?.summary ? <Text style={styles.contextWeather} numberOfLines={1}>· {weather.summary}</Text> : null}
+          <Text style={styles.contextLineText} numberOfLines={1}>{contextDisplay}</Text>
           <Ionicons name="chevron-forward" size={13} color={colors.mutedForeground} />
         </TouchableOpacity>
       </View>
@@ -2098,19 +2124,22 @@ function EmptyState({
           <TouchableOpacity
             key={p}
             style={styles.promptCard}
+            activeOpacity={0.85}
             onPress={() => {
               Haptics.selectionAsync().catch(() => {});
               onPrompt(p);
             }}
           >
-            <View style={styles.promptIcon}>
-              <Ionicons name={PROMPT_INTENTS[index].icon} size={20} color={colors.primary} />
+            <View style={styles.promptCardTop}>
+              <View style={styles.promptIcon}>
+                <Ionicons name={PROMPT_INTENTS[index].icon} size={20} color={colors.primary} />
+              </View>
+              <Ionicons name="arrow-forward" size={15} color={colors.mutedForeground} />
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.promptTitle}>{PROMPT_INTENTS[index].title}</Text>
-              <Text style={styles.promptSubtitle}>{PROMPT_INTENTS[index].subtitle}</Text>
+            <View style={styles.promptCardText}>
+              <Text style={styles.promptTitle} numberOfLines={1}>{PROMPT_INTENTS[index].title}</Text>
+              <Text style={styles.promptSubtitle} numberOfLines={1}>{PROMPT_INTENTS[index].subtitle}</Text>
             </View>
-            <Ionicons name="arrow-forward" size={15} color={colors.mutedForeground} />
           </TouchableOpacity>
         ))}
       </View>
@@ -2778,7 +2807,8 @@ const styles = StyleSheet.create({
   },
   messageListEmpty: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: spacing.xl,
   },
   // Follow-up chips
   chipsBar: {
@@ -3046,8 +3076,6 @@ const styles = StyleSheet.create({
   editIconBtn: {
     width: 32,
     height: 32,
-    borderRadius: radii.full,
-    backgroundColor: colors.surfaceSubtle,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -3111,6 +3139,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     alignSelf: 'flex-start',
   },
+  saveBtnSecondary: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  saveBtnTextSecondary: {
+    color: colors.primary,
+  },
   saveBtnDone: {
     backgroundColor: colors.primary,
     borderWidth: 0,
@@ -3137,19 +3173,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
   },
-  feedbackLabel: { display: 'none', fontSize: 10, color: colors.mutedForeground },
   feedbackBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: radii.full,
-    backgroundColor: colors.surfaceSubtle,
+    width: 30,
+    height: 30,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  feedbackBtnActive: {
-    backgroundColor: `${colors.primary}18`,
-    borderColor: colors.primary,
-  },
+  feedbackBtnActive: {},
   reasonChips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -3266,14 +3296,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   contextLineText: {
+    flexShrink: 1,
     fontSize: 12,
     color: colors.secondaryForeground,
     fontWeight: typography.weight.semibold,
-  },
-  contextWeather: {
-    flex: 1,
-    fontSize: 12,
-    color: colors.mutedForeground,
   },
   locationPicker: {
     flex: 1,
@@ -3352,16 +3378,21 @@ const styles = StyleSheet.create({
   promptList: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   promptCard: {
     width: '48%',
-    minHeight: 116,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    flexWrap: 'wrap',
+    minHeight: 124,
+    flexDirection: 'column',
+    justifyContent: 'space-between',
     gap: spacing.sm,
     borderRadius: radii.lg,
     padding: spacing.md,
     backgroundColor: colors.surfaceElevated,
     ...shadows.xs,
   },
+  promptCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  promptCardText: { width: '100%' },
   promptTitle: {
     fontSize: typography.size.md,
     color: colors.foreground,

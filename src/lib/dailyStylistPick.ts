@@ -4,6 +4,7 @@ import type { Event } from '../types/event';
 import type { Item } from '../types/item';
 import type { Outfit } from '../types/outfit';
 import { parseEventDate } from './outfitAssignments';
+import { formatTemp } from './temperature';
 
 export type DailyPickHistoryEntry = {
   date: string;
@@ -35,6 +36,7 @@ type SelectDailyStylistPickInput = {
   date: string;
   now?: Date;
   history: DailyPickHistoryEntry[];
+  tempUnit?: string | null;
 };
 
 const ZERO_SCORE: DailyPickScoreDetails = {
@@ -158,13 +160,16 @@ function reasonForPick(
   details: DailyPickScoreDetails,
   weather: TodayWeather | undefined,
   event: Event | undefined,
+  tempUnit?: string | null,
 ): string {
   if (details.occasion > 0 && event) return `For today's ${formatOccasion(event.occasion)} plans`;
   if (details.weather > 0 && weather) {
-    const temp = Math.round(weather.current.temperatureC);
-    if (temp <= 8) return `Warm layers for ${temp}°C`;
-    if (temp >= 24) return `Light layers for ${temp}°C`;
-    return `Easy layers for ${temp}°C`;
+    // Threshold checks stay in °C (weather logic); the label shows the user's unit.
+    const tempC = Math.round(weather.current.temperatureC);
+    const label = formatTemp(weather.current, tempUnit);
+    if (tempC <= 8) return `Warm layers for ${label}`;
+    if (tempC >= 24) return `Light layers for ${label}`;
+    return `Easy layers for ${label}`;
   }
   if (details.wearRotation >= 7) return 'A fresh look for today';
   if (details.favorite > 0) return 'A favourite worth revisiting';
@@ -181,6 +186,7 @@ export function selectDailyStylistPick({
   date,
   now = new Date(),
   history,
+  tempUnit,
 }: SelectDailyStylistPickInput): DailyStylistPick | null {
   const eligible = outfits.filter((outfit) => !outfit.isDraft);
   if (eligible.length === 0) return null;
@@ -224,7 +230,7 @@ export function selectDailyStylistPick({
     const details = scoreOutfit(cachedOutfit);
     return {
       outfit: cachedOutfit,
-      reason: reasonForPick(cachedOutfit, details, weather, nextTodayEvent),
+      reason: reasonForPick(cachedOutfit, details, weather, nextTodayEvent, tempUnit),
       scoreDetails: details,
     };
   }
@@ -245,7 +251,7 @@ export function selectDailyStylistPick({
     : scored[0];
   return {
     outfit: selected.outfit,
-    reason: reasonForPick(selected.outfit, selected.details, weather, nextTodayEvent),
+    reason: reasonForPick(selected.outfit, selected.details, weather, nextTodayEvent, tempUnit),
     scoreDetails: selected.details,
   };
 }

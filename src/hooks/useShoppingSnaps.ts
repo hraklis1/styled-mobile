@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { isSupabaseSchemaMissing } from '../lib/supabaseErrors';
 import { supabase } from '../lib/supabase';
-import type { RemoteShoppingSnapRow, ShoppingSnap } from '../types/shoppingSnap';
+import type { RemoteShoppingSnapRow, ShoppingFindCatalogStatus, ShoppingSnap } from '../types/shoppingSnap';
 
 export const SHOPPING_SNAPS_QUERY_KEY = ['shopping-snaps'] as const;
 
@@ -12,6 +12,10 @@ function mapRemoteSnap(row: RemoteShoppingSnapRow): ShoppingSnap {
   const session = Array.isArray(row.shopping_sessions)
     ? row.shopping_sessions[0] ?? null
     : row.shopping_sessions;
+  const group = Array.isArray(row.shopping_capture_groups)
+    ? row.shopping_capture_groups[0] ?? null
+    : row.shopping_capture_groups;
+  const catalogStatus = group?.catalog_status ?? 'considering';
 
   return {
     id: row.id,
@@ -35,14 +39,27 @@ function mapRemoteSnap(row: RemoteShoppingSnapRow): ShoppingSnap {
     rawOcrText: row.raw_ocr_text ?? '',
     capturedAt: row.captured_at,
     syncStatus: 'synced',
+    category: group?.category ?? null,
+    sizeLabel: group?.size_label ?? null,
+    colorLabel: group?.color_label ?? null,
+    materialLabel: group?.material_label ?? null,
+    notes: group?.notes ?? null,
+    isFavorite: group?.is_favorite ?? false,
+    catalogStatus: isShoppingFindCatalogStatus(catalogStatus) ? catalogStatus : 'considering',
   };
 }
 
-function mapRemoteSnapWithoutStoreLocation(row: Omit<RemoteShoppingSnapRow, 'shopping_sessions'> & {
+function isShoppingFindCatalogStatus(value: string): value is ShoppingFindCatalogStatus {
+  return value === 'considering' || value === 'wishlist' || value === 'closet' || value === 'passed';
+}
+
+function mapRemoteSnapFallback(row: Omit<RemoteShoppingSnapRow, 'shopping_sessions' | 'shopping_capture_groups'> & {
   shopping_sessions: Omit<Exclude<RemoteShoppingSnapRow['shopping_sessions'], null>, 'store_location_id'> | null;
+  shopping_capture_groups?: null;
 }): ShoppingSnap {
   return mapRemoteSnap({
     ...row,
+    shopping_capture_groups: null,
     shopping_sessions: Array.isArray(row.shopping_sessions)
       ? row.shopping_sessions.map((session) => ({ ...session, store_location_id: null }))
       : row.shopping_sessions
@@ -66,6 +83,9 @@ export function useShoppingSnaps() {
           id,image_url,storage_path,store_name,shopping_session_id,capture_group_id,capture_role,capture_sequence,
           latitude,longitude,
           extracted_price,raw_ocr_text,captured_at,
+          shopping_capture_groups(
+            category,size_label,color_label,material_label,notes,is_favorite,catalog_status
+          ),
           shopping_sessions(
             store_location_id,branch_label,location_accuracy_meters,locality,region,country_code,location_source
           )
@@ -89,8 +109,8 @@ export function useShoppingSnaps() {
           .eq('user_id', user.id)
           .order('captured_at', { ascending: false });
         if (fallbackError) throw fallbackError;
-        return ((fallbackData ?? []) as unknown as Parameters<typeof mapRemoteSnapWithoutStoreLocation>[0][])
-          .map(mapRemoteSnapWithoutStoreLocation);
+        return ((fallbackData ?? []) as unknown as Parameters<typeof mapRemoteSnapFallback>[0][])
+          .map(mapRemoteSnapFallback);
       }
       return ((data ?? []) as unknown as RemoteShoppingSnapRow[]).map(mapRemoteSnap);
     },

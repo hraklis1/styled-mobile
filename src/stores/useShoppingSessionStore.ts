@@ -4,6 +4,7 @@ import { createJSONStorage, persist, type StateStorage } from 'zustand/middlewar
 
 import type { ShoppingCaptureRole } from '../lib/classifyShoppingCapture';
 import type { ShoppingSnapOrganizationUpdate } from '../lib/shoppingSnapOrganizer';
+import type { ShoppingFindCatalogPatch, ShoppingFindCatalogStatus } from '../types/shoppingSnap';
 
 const MAX_RECENT_STORES = 5;
 
@@ -52,6 +53,13 @@ export type PendingShoppingUpload = {
   rawOcrText: string;
   ocrStatus: 'processing' | 'complete' | 'failed';
   timestamp: number;
+  category?: string | null;
+  sizeLabel?: string | null;
+  colorLabel?: string | null;
+  materialLabel?: string | null;
+  notes?: string | null;
+  isFavorite?: boolean;
+  catalogStatus?: ShoppingFindCatalogStatus;
 };
 
 type PendingUploadOCRPatch = Pick<
@@ -94,6 +102,7 @@ type ShoppingSessionState = {
   ) => CaptureGroupAssignment;
   startNextCaptureGroup: () => void;
   regroupPendingUploads: (updates: ShoppingSnapOrganizationUpdate[]) => void;
+  updatePendingGroupCatalog: (captureGroupId: string, patch: ShoppingFindCatalogPatch) => void;
   updatePendingUploadOCR: (id: string, patch: PendingUploadOCRPatch) => void;
   markPendingUploadLocationUnavailable: (id: string) => void;
   removePendingUpload: (id: string) => void;
@@ -274,6 +283,15 @@ export const useShoppingSessionStore = create<ShoppingSessionState>()(
           }),
         };
       }),
+
+      updatePendingGroupCatalog: (captureGroupId, patch) => set((state) => ({
+        pendingUploads: state.pendingUploads.map((upload) => upload.captureGroupId === captureGroupId
+          ? {
+            ...upload,
+            ...patch,
+          }
+          : upload),
+      })),
 
       updatePendingUploadOCR: (id, patch) => set((state) => {
         const upload = state.pendingUploads.find((item) => item.id === id);
