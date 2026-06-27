@@ -5,6 +5,11 @@ import {
   mergeShoppingSnaps,
   summarizeShoppingEditItems,
 } from '../shoppingGallery';
+import {
+  buildShoppingReviewReasonOptions,
+  itemRoleSummary,
+  shoppingItemBadges,
+} from '../shoppingPresentation';
 import { buildShoppingSnapOrganizationUpdates } from '../shoppingSnapOrganizer';
 import type { ShoppingSnap } from '../../types/shoppingSnap';
 
@@ -65,7 +70,7 @@ describe('shoppingGallery', () => {
     expect(result[0].extractedPrice).toBe(118);
   });
 
-  it('summarizes item, store, missing price, and pending photo counts', () => {
+  it('summarizes item, store, missing price, and pending counts', () => {
     const snaps = [
       synced,
       { ...synced, id: 'pending', captureGroupId: 'group-pending', storeName: 'COS', extractedPrice: null, syncStatus: 'pending' as const },
@@ -77,6 +82,8 @@ describe('shoppingGallery', () => {
     expect(summary).toEqual({
       itemCount: 2,
       storeCount: 2,
+      missingPriceItemCount: 1,
+      pendingItemCount: 1,
       missingPricePhotoCount: 2,
       pendingPhotoCount: 2,
     });
@@ -99,6 +106,36 @@ describe('shoppingGallery', () => {
 
     expect(result.map((item) => item.id)).toEqual(['group-review']);
     expect(result[0].reviewReasons).toEqual(['Missing price', 'Missing store', 'Text needs price check']);
+  });
+
+  it('builds item-level review reason chips and presentation badges', () => {
+    const snaps = [
+      synced,
+      {
+        ...synced,
+        id: 'review',
+        captureGroupId: 'group-review',
+        captureRole: 'unknown' as const,
+        storeName: null,
+        extractedPrice: null,
+        rawOcrText: 'SIZE M $??',
+        syncStatus: 'pending' as const,
+      },
+    ];
+    const items = buildShoppingEditItems(snaps);
+    const reviewItem = items.find((item) => item.id === 'group-review');
+
+    expect(buildShoppingReviewReasonOptions(items)).toEqual([
+      { key: 'missing-price', label: 'Needs price', count: 1 },
+      { key: 'missing-store', label: 'Needs store', count: 1 },
+      { key: 'unsorted-photo', label: 'Unsorted', count: 1 },
+      { key: 'text-needs-price-check', label: 'Check text', count: 1 },
+    ]);
+    expect(reviewItem ? itemRoleSummary(reviewItem) : null).toBe('1 unsorted');
+    expect(reviewItem ? shoppingItemBadges(reviewItem) : []).toEqual([
+      { key: 'pending', label: 'Saved locally', tone: 'attention' },
+      { key: 'missing-price', label: 'Needs price', tone: 'attention' },
+    ]);
   });
 
   it('builds organization updates that split one capture group and reuse the original group', () => {

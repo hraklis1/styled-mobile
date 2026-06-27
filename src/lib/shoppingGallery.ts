@@ -28,6 +28,8 @@ export type ShoppingEditItem = {
 export type ShoppingEditSummary = {
   itemCount: number;
   storeCount: number;
+  missingPriceItemCount: number;
+  pendingItemCount: number;
   missingPricePhotoCount: number;
   pendingPhotoCount: number;
 };
@@ -113,6 +115,8 @@ export function summarizeShoppingEditItems(items: ShoppingEditItem[]): ShoppingE
   return {
     itemCount: items.length,
     storeCount: stores.size,
+    missingPriceItemCount: items.filter((item) => item.extractedPrice === null).length,
+    pendingItemCount: items.filter((item) => item.syncStatus === 'pending').length,
     missingPricePhotoCount: items.reduce(
       (count, item) => count + item.snaps.filter((snap) => snap.extractedPrice === null).length,
       0,
