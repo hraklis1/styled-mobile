@@ -5,6 +5,7 @@ import { StylistChatView } from '../components/stylist/StylistChatView';
 import { useEntitlement } from '../hooks/useEntitlement';
 import { track } from '../lib/analytics';
 import { presentPaywall } from '../lib/paywall';
+import type { StylistEntryContext } from '../features/stylist/types';
 
 // ─── Context ──────────────────────────────────────────────────────────────────
 
@@ -27,6 +28,7 @@ type OpenStylistOptions = {
   destination?: string;
   source: StylistOpenSource;
   eventContext?: StylistEventContext;
+  context?: StylistEntryContext;
 };
 
 type GlobalAIStylistContextValue = {
@@ -58,13 +60,14 @@ export function GlobalAIStylistProvider({ children }: Props) {
   const [initialQuery, setInitialQuery] = useState<string | undefined>(undefined);
   const [initialDestination, setInitialDestination] = useState<string | undefined>(undefined);
   const [eventContext, setEventContext] = useState<StylistEventContext | undefined>(undefined);
+  const [entryContext, setEntryContext] = useState<StylistEntryContext | undefined>(undefined);
   const [promptRequestId, setPromptRequestId] = useState(0);
   const [openRequestId, setOpenRequestId] = useState(0);
   const [source, setSource] = useState<StylistOpenSource | undefined>(undefined);
   const [threadMode, setThreadMode] = useState<'new' | 'resume'>('resume');
   const { isPremium } = useEntitlement();
 
-  const openStylist = useCallback(async ({ initialQuery: query, destination, source, eventContext: event }: OpenStylistOptions) => {
+  const openStylist = useCallback(async ({ initialQuery: query, destination, source, eventContext: event, context }: OpenStylistOptions) => {
     if (!isPremium) {
       const shouldUpgrade = await new Promise<boolean>((resolve) => {
         Alert.alert(
@@ -86,6 +89,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
     setInitialQuery(query);
     setInitialDestination(destination);
     setEventContext(event);
+    setEntryContext(context);
     if (query) setPromptRequestId((id) => id + 1);
     setOpenRequestId((id) => id + 1);
     setVisible(true);
@@ -95,6 +99,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
     setVisible(false);
     setInitialDestination(undefined);
     setEventContext(undefined);
+    setEntryContext(undefined);
   }, []);
   const consumePrompt = useCallback(() => setInitialQuery(undefined), []);
 
@@ -112,6 +117,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
           initialQuery={initialQuery}
           initialDestination={initialDestination}
           eventContext={eventContext}
+          entryContext={entryContext}
           promptRequestId={promptRequestId}
           openRequestId={openRequestId}
           source={source}

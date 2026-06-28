@@ -393,6 +393,14 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           onPress={() => openStylist({
             initialQuery: `How should I style my "${viewItem.name}"?`,
             source: 'item_detail',
+            context: {
+              kind: 'item',
+              itemId: viewItem.id,
+              itemName: viewItem.name,
+              category: viewItem.category ?? null,
+              brand: viewItem.brand ?? null,
+              color: viewItem.color ?? null,
+            },
           })}
           activeOpacity={0.8}
           accessibilityRole="button"

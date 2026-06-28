@@ -242,6 +242,16 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         destination: event.location ?? undefined,
         source,
         eventContext: { id: event.id, title: event.title },
+        context: {
+          kind: 'event',
+          eventId: event.id,
+          title: event.title,
+          date: event.date,
+          location: event.location,
+          occasion: event.occasion,
+          environment: event.environment,
+          itemIds: event.itemIds ?? undefined,
+        },
       });
     }, delay);
   };

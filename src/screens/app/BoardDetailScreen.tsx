@@ -250,6 +250,12 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
       source: 'board_detail',
       destination: board.name,
       initialQuery: buildBoardStylistPrompt(board.name, items, intent),
+      context: {
+        kind: 'board',
+        boardId: board.id,
+        name: board.name,
+        itemIds: items.flatMap((entry) => entry.kind === 'item' ? [entry.item.id] : []),
+      },
     });
   }, [board, items, openStylist]);
 

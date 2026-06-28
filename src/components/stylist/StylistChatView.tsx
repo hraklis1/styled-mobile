@@ -27,7 +27,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { File, Paths, EncodingType } from 'expo-file-system';
-import { api, getAccessToken, API_BASE_URL } from '../../lib/api';
+import { api } from '../../lib/api';
 import { track } from '../../lib/analytics';
 import { compressImageToDataUrl } from '../../lib/compressImage';
 import { resolveImageUri } from '../../lib/resolveImageUri';
@@ -46,65 +46,33 @@ import { ResolvedOutfitCollage } from '../outfits/ResolvedOutfitCollage';
 import { ItemPickerSheet } from '../outfits/ItemPickerSheet';
 import { StylistRichText } from './StylistRichText';
 import { GapCard } from './GapCard';
-import { TripPlanCard, type TripPlanData } from './TripPlanCard';
+import { TripPlanCard } from './TripPlanCard';
 import { colors, radii, shadows, spacing, typography } from '../../theme';
+import { useStylistTransport } from '../../features/stylist/hooks/useStylistTransport';
+import {
+  STYLIST_NEGATIVE_REASON_CHIPS,
+  type StylistAskRequest,
+  type StylistComposerAttachment,
+  type StylistEntryContext,
+  type StylistFeedbackMetadata,
+  type StylistMessage,
+  type StylistMissingEssential,
+  type StylistMode,
+  type StylistNegativeReason,
+  type StylistRenderType,
+  type StylistSendOptions,
+  type StylistTripPlanData,
+} from '../../features/stylist/types';
 import type { ShopOutfit } from '../../types/shop';
 import type { Item } from '../../types/item';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type Role = 'user' | 'assistant';
-
-type MissingEssential = {
-  label: string;
-  category: string;
-  reason: string;
-  context: string;
-  priority: number;
-  // Occasions this gap would unlock (e.g. "Formal", "Date night"); optional —
-  // only populated for advice/audit replies that return it.
-  unlocks?: string[];
-};
-
-type StylistMode = 'from_closet' | 'shop_new' | 'advice' | 'trip';
-
-type ChatMessage = {
-  id: string;
-  role: Role;
-  text: string;
-  isStreaming?: boolean;
-  transcript?: string;
-  shopOutfit?: ShopOutfit;
-  suggestedItemIds?: number[];
-  // Short editorial name for the look (e.g. "Coastal Off-Duty"), supplied by the
-  // stylist backend. Falls back to a name derived from the items when absent.
-  lookName?: string;
-  missingEssentials?: MissingEssential[];
-  tripPlan?: TripPlanData;
-  // Which stylist intent produced this reply — drives how it's rendered
-  // (advice → rich text, trip → carousel, from_closet → outfit card).
-  mode?: StylistMode;
-  // Server-side recommendation ledger id — sent back with feedback so the
-  // backend can link the reaction to the context that produced the suggestion.
-  recId?: number;
-  createdAt?: number;
-  attachment?: ComposerAttachment;
-};
-
-type ComposerAttachment = {
-  type: 'photo' | 'item';
-  label: string;
-  uri?: string | null;
-  itemId?: number;
-};
-
-type SendOptions = {
-  text?: string;
-  displayText?: string;
-  audio?: string;
-  photoData?: string;
-  attachment?: ComposerAttachment;
-};
+type Role = StylistMessage['role'];
+type MissingEssential = StylistMissingEssential;
+type ChatMessage = StylistMessage;
+type ComposerAttachment = StylistComposerAttachment;
+type SendOptions = StylistSendOptions;
 
 // A persisted stylist thread, as summarized by GET /api/stylist/conversations.
 type Conversation = {
@@ -156,10 +124,6 @@ const CHIPS_TRIP = [
   'What am I missing to pack?',
 ];
 
-// Short, structured rejection reasons — kept generic enough to map to a durable
-// style aversion on the backend (see maybeInferStyleAversion).
-const DOWN_REASONS = ['Too formal', 'Too casual', 'Wrong colors', 'Not my fit'];
-
 const PROMPT_INTENTS: Array<{
   title: string;
   subtitle: string;
@@ -202,10 +166,46 @@ type ServerMessagePayload = {
   lookName?: string;
   missingEssentials?: MissingEssential[];
   shopOutfit?: ShopOutfit;
-  tripPlan?: TripPlanData;
+  tripPlan?: StylistTripPlanData;
 };
 
 type ServerMessage = { id: number; role: Role; text: string; recId?: number | null; payload?: ServerMessagePayload | null; createdAt?: string };
+
+function renderTypeForAssistantPayload(payload?: ServerMessagePayload | null): StylistRenderType {
+  if (payload?.tripPlan) return 'trip_plan';
+  if (payload?.shopOutfit) return 'shopping_outfit';
+  if (payload?.mode === 'advice') return 'advice';
+  if (payload?.itemIds?.length) return 'closet_outfit';
+  return 'text';
+}
+
+function renderTypeForAssistantMessage(message: {
+  tripPlan?: StylistTripPlanData;
+  shopOutfit?: ShopOutfit;
+  mode?: StylistMode;
+  suggestedItemIds?: number[];
+}): StylistRenderType {
+  if (message.tripPlan) return 'trip_plan';
+  if (message.shopOutfit) return 'shopping_outfit';
+  if (message.mode === 'advice') return 'advice';
+  if (message.suggestedItemIds?.length) return 'closet_outfit';
+  return 'text';
+}
+
+function normalizeChatMessage(message: ChatMessage): ChatMessage {
+  if (message.role === 'assistant') {
+    return {
+      ...message,
+      kind: 'assistant',
+      renderType: renderTypeForAssistantMessage(message),
+    };
+  }
+  return {
+    ...message,
+    kind: 'user',
+    renderType: 'text',
+  };
+}
 
 // Map a server-stored thread into chat messages. The recId is preserved so
 // feedback still links; the payload (when present) rehydrates rich replies —
@@ -213,9 +213,21 @@ type ServerMessage = { id: number; role: Role; text: string; recId?: number | nu
 function mapServerMessages(rows: ServerMessage[]): ChatMessage[] {
   return rows.map((m) => {
     const p = m.payload ?? undefined;
+    if (m.role === 'user') {
+      return {
+        id: `srv_${m.id}`,
+        role: 'user',
+        kind: 'user',
+        renderType: 'text',
+        text: m.text,
+        ...(m.createdAt ? { createdAt: new Date(m.createdAt).getTime() } : {}),
+      };
+    }
     return {
       id: `srv_${m.id}`,
-      role: m.role,
+      role: 'assistant',
+      kind: 'assistant',
+      renderType: renderTypeForAssistantPayload(p),
       text: m.text,
       ...(typeof m.recId === 'number' ? { recId: m.recId } : {}),
       ...(p?.mode ? { mode: p.mode } : {}),
@@ -283,6 +295,7 @@ type Props = {
   initialQuery?: string;
   initialDestination?: string;
   eventContext?: EventContext;
+  entryContext?: StylistEntryContext;
   promptRequestId?: number;
   // Entry point that opened the stylist — stored on a new thread for analytics.
   source?: string;
@@ -303,6 +316,7 @@ export function StylistChatView({
   initialQuery,
   initialDestination,
   eventContext,
+  entryContext,
   promptRequestId = 0,
   source,
   threadMode = 'resume',
@@ -336,7 +350,6 @@ export function StylistChatView({
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   // Active server thread. null means "unsaved draft" — the next send lazily
@@ -358,7 +371,6 @@ export function StylistChatView({
   const scrollRef = useRef<ScrollView>(null);
   const player = useAudioPlayer(null);
   const playingFileRef = useRef<File | null>(null);
-  const sessionRef = useRef(0);
   const lastPromptRequestIdRef = useRef(0);
   const lastOpenRequestIdRef = useRef(0);
   // Mirror of `messages` so sendMessage can read the latest history without being
@@ -368,7 +380,8 @@ export function StylistChatView({
   // the thread and immediately fires the initial query, so the send must see the
   // cleared id rather than the previous render's value.
   const conversationIdRef = useRef<number | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const tripOutfitsRef = useRef<Record<string, StylistTripPlanData['outfits']>>({});
+  const transportRequestMetaRef = useRef<Record<string, { userMessageId: string; audio?: boolean }>>({});
 
   const setActiveConversationId = useCallback((id: number | null) => {
     conversationIdRef.current = id;
@@ -452,11 +465,150 @@ export function StylistChatView({
     }
   }
 
+  const {
+    isLoading,
+    sendMessage: sendTransportMessage,
+    abortCurrent: abortTransport,
+  } = useStylistTransport({
+    onAssistantStart: (assistantId) => {
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === assistantId)) return prev;
+        return [
+          ...prev,
+          {
+            id: assistantId,
+            role: 'assistant',
+            kind: 'assistant',
+            renderType: 'text',
+            text: '',
+            isStreaming: true,
+          },
+        ];
+      });
+    },
+    onAssistantToken: (assistantId, token) => {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === assistantId ? { ...m, text: m.text + token } : m)),
+      );
+    },
+    onAssistantDone: (assistantId, event) => {
+      const {
+        transcript,
+        responseText,
+        itemIds,
+        lookName,
+        missingEssentials: mes,
+        missingEssential: legacyMe,
+        shopOutfit,
+        tripPlan,
+        mode: respMode,
+        recId,
+        conversationId: doneConversationId,
+      } = event;
+
+      const requestMeta = transportRequestMetaRef.current[assistantId];
+      const resolvedConvId = typeof doneConversationId === 'number' ? doneConversationId : conversationIdRef.current;
+      if (resolvedConvId != null && resolvedConvId !== conversationIdRef.current) {
+        setActiveConversationId(resolvedConvId);
+      }
+
+      const hydratedEssentials: MissingEssential[] =
+        Array.isArray(mes) && mes.length > 0
+          ? mes
+          : legacyMe && typeof legacyMe === 'object' && legacyMe.label
+            ? [{ ...legacyMe, context: '', priority: 1 }]
+            : [];
+
+      if (requestMeta?.audio && transcript) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === requestMeta.userMessageId ? { ...m, text: transcript, transcript } : m,
+          ),
+        );
+      }
+
+      const finalMsg: ChatMessage = {
+        id: assistantId,
+        role: 'assistant',
+        kind: 'assistant',
+        renderType: tripPlan
+          ? 'trip_plan'
+          : shopOutfit
+            ? 'shopping_outfit'
+            : respMode === 'advice'
+              ? 'advice'
+              : itemIds?.length
+                ? 'closet_outfit'
+                : 'text',
+        text: responseText ?? '',
+        isStreaming: false,
+        ...(respMode ? { mode: respMode } : {}),
+        ...(shopOutfit ? { shopOutfit } : {}),
+        ...(tripPlan ? { tripPlan: { ...tripPlan, pending: false } } : {}),
+        ...(itemIds?.length ? { suggestedItemIds: itemIds } : {}),
+        ...(lookName ? { lookName } : {}),
+        ...(hydratedEssentials.length ? { missingEssentials: hydratedEssentials } : {}),
+        ...(typeof recId === 'number' ? { recId } : {}),
+      };
+
+      setMessages((prev) => {
+        const hasAssistant = prev.some((m) => m.id === assistantId);
+        const next = hasAssistant
+          ? prev.map((m) => (m.id === assistantId ? { ...finalMsg, text: finalMsg.text || m.text } : m))
+          : [...prev, finalMsg];
+        messagesRef.current = next;
+        cacheThread(resolvedConvId, next);
+        return next;
+      });
+
+      delete tripOutfitsRef.current[assistantId];
+      delete transportRequestMetaRef.current[assistantId];
+    },
+    onTripOutfit: (assistantId, outfit) => {
+      const snapshot = [...(tripOutfitsRef.current[assistantId] ?? []), outfit];
+      tripOutfitsRef.current[assistantId] = snapshot;
+      setMessages((prev) =>
+        prev.map((m): ChatMessage =>
+          m.id === assistantId && m.role === 'assistant'
+            ? {
+                ...m,
+                kind: 'assistant',
+                renderType: 'trip_plan',
+                mode: 'trip',
+                tripPlan: { intro: m.text, outfits: snapshot, packingList: [], pending: true },
+              }
+            : m,
+        ),
+      );
+    },
+    onTtsReady: (assistantId, event) => {
+      stopCurrentAudio();
+      playAudioFromBase64(assistantId, event.audioReply).catch(() => {});
+    },
+    onTtsFallbackNeeded: (assistantId, text) => {
+      playTts(assistantId, text);
+    },
+    onConversationResolved: (resolvedConversationId) => {
+      if (resolvedConversationId !== conversationIdRef.current) {
+        setActiveConversationId(resolvedConversationId);
+      }
+    },
+    onError: ({ message, request }) => {
+      setErrorMessage(message);
+      setFailedRequest(request.originalOptions ?? null);
+      setMessages((prev) =>
+        prev.filter((m) => m.id !== request.userMessageId && m.id !== request.assistantMessageId),
+      );
+      delete tripOutfitsRef.current[request.assistantMessageId];
+      delete transportRequestMetaRef.current[request.assistantMessageId];
+    },
+  });
+
   // ── Send message ───────────────────────────────────────────────────────────
 
   const sendMessage = useCallback(
-    async (opts: SendOptions) => {
-      const { text, displayText, audio, photoData, attachment } = opts;
+    (opts: SendOptions) => {
+      const { text, displayText, audio, photoData, attachment, context } = opts;
       if (!text && !audio && !photoData) return;
       if (isLoading) return;
 
@@ -465,13 +617,14 @@ export function StylistChatView({
       });
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 
-      const session = ++sessionRef.current;
       setErrorMessage(null);
       setFailedRequest(null);
 
       const userMsg: ChatMessage = {
         id: makeId(),
         role: 'user',
+        kind: 'user',
+        renderType: 'text',
         text: audio ? '🎙 Voice message…' : displayText ?? text ?? '📷 Photo',
         ...(attachment ? { attachment } : {}),
       };
@@ -479,244 +632,66 @@ export function StylistChatView({
       setMessages((prev) => [...prev, userMsg]);
       setInputText('');
       setMentionQuery(null);
-      setIsLoading(true);
-      const controller = new AbortController();
-      abortControllerRef.current?.abort();
-      abortControllerRef.current = controller;
 
       const assistantId = makeId();
-      let assistantAdded = false;
-      let pendingText = '';
-      let flushTimer: ReturnType<typeof setTimeout> | null = null;
-      let finalResponseText = '';
-      let ttsReceivedFromStream = false;
-      // Trip mode streams outfits one at a time so the carousel fills progressively.
-      let tripOutfits: TripPlanData['outfits'] = [];
+      transportRequestMetaRef.current[assistantId] = { userMessageId: userMsg.id, audio: !!audio };
+      tripOutfitsRef.current[assistantId] = [];
 
-      const flushPending = () => {
-        const toFlush = pendingText;
-        pendingText = '';
-        flushTimer = null;
-        if (!toFlush) return;
-        setMessages((prev) =>
-          prev.map((m) => (m.id === assistantId ? { ...m, text: m.text + toFlush } : m)),
-        );
+      const history = buildHistory(messagesRef.current);
+
+      let weatherSummary: string | undefined;
+      if (weather.data) {
+        const useCelsius = profile?.tempUnit === 'C';
+        const tempStr = useCelsius
+          ? `${weather.data.current.temperatureC}°C`
+          : `${weather.data.current.temperatureF}°F`;
+        weatherSummary = `${weather.data.current.summary} ${tempStr}`;
+      }
+
+      const occasionHint = text ? detectOccasionHint(text) : undefined;
+      const requestContext = context ?? entryContext;
+      const locationSource = activeLocation.source === 'destination' ? 'conversation' : activeLocation.source;
+      const request: StylistAskRequest = {
+        ...(text ? { text } : {}),
+        ...(audio ? { audio } : {}),
+        ...(photoData ? { photoData } : {}),
+        ...(weatherSummary ? { weatherSummary } : {}),
+        ...((activeLocation.label || activeLocation.coords) ? {
+          locationContext: {
+            source: locationSource,
+            ...(activeLocation.label ? { label: activeLocation.label } : {}),
+            ...(activeLocation.coords ? { coords: activeLocation.coords } : {}),
+          },
+        } : {}),
+        ...(occasionHint ? { occasionHint } : {}),
+        ...(conversationIdRef.current ? { conversationId: conversationIdRef.current } : {}),
+        ...(source ? { source } : {}),
+        ...(requestContext ? { context: requestContext } : {}),
+        history,
       };
 
-      try {
-        const history = buildHistory(messagesRef.current);
-
-        let weatherSummary: string | undefined;
-        if (weather.data) {
-          const useCelsius = profile?.tempUnit === 'C';
-          const tempStr = useCelsius
-            ? `${weather.data.current.temperatureC}°C`
-            : `${weather.data.current.temperatureF}°F`;
-          weatherSummary = `${weather.data.current.summary} ${tempStr}`;
-        }
-
-        const occasionHint = text ? detectOccasionHint(text) : undefined;
-
-        const token = getAccessToken();
-        const response = await fetch(`${API_BASE_URL}/api/stylist/ask`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            ...(text ? { text } : {}),
-            ...(audio ? { audio } : {}),
-            ...(photoData ? { photoData } : {}),
-            ...(weatherSummary ? { weatherSummary } : {}),
-            ...((activeLocation.label || activeLocation.coords) ? {
-              locationContext: {
-                source: activeLocation.source,
-                ...(activeLocation.label ? { label: activeLocation.label } : {}),
-                ...(activeLocation.coords ? { coords: activeLocation.coords } : {}),
-              },
-            } : {}),
-            ...(occasionHint ? { occasionHint } : {}),
-            ...(conversationIdRef.current ? { conversationId: conversationIdRef.current } : {}),
-            ...(source ? { source } : {}),
-            history,
-            _stream: true,
-          }),
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({})) as { message?: string };
-          throw new Error(errData.message ?? 'Could not reach the stylist. Please try again.');
-        }
-
-        const reader = response.body?.getReader();
-        if (!reader) throw new Error('No response stream');
-
-        const decoder = new TextDecoder();
-        let sseBuffer = '';
-        let currentEvent = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          if (sessionRef.current !== session) { reader.cancel(); break; }
-
-          sseBuffer += decoder.decode(value, { stream: true });
-          const lines = sseBuffer.split('\n');
-          sseBuffer = lines.pop() ?? '';
-
-          for (const line of lines) {
-            if (line.startsWith('event: ')) {
-              currentEvent = line.slice(7).trim();
-            } else if (line.startsWith('data: ')) {
-              let parsed: Record<string, unknown>;
-              try { parsed = JSON.parse(line.slice(6)); } catch { continue; }
-
-              if (currentEvent === 'error') {
-                throw new Error((parsed.message as string) ?? 'Could not reach the stylist. Please try again.');
-              }
-
-              if (currentEvent === 'done') {
-                // Flush any remaining buffered text before processing the done event.
-                if (flushTimer) { clearTimeout(flushTimer); }
-                flushPending();
-
-                const { transcript, responseText, itemIds, lookName, missingEssentials: mes, missingEssential: legacyMe, shopOutfit, tripPlan, mode: respMode, recId, conversationId: doneConversationId } =
-                  parsed as { transcript: string; responseText: string; itemIds?: number[]; lookName?: string; missingEssentials?: MissingEssential[]; missingEssential?: { label: string; category: string; reason: string } | null; shopOutfit?: ShopOutfit | null; tripPlan?: TripPlanData | null; mode?: StylistMode; recId?: number | null; conversationId?: number | null };
-
-                // Adopt the thread id the server created/confirmed for this turn.
-                const resolvedConvId = typeof doneConversationId === 'number' ? doneConversationId : conversationIdRef.current;
-                if (resolvedConvId != null && resolvedConvId !== conversationIdRef.current) {
-                  setActiveConversationId(resolvedConvId);
-                }
-                const hydratedEssentials: MissingEssential[] =
-                  Array.isArray(mes) && mes.length > 0
-                    ? mes
-                    : legacyMe && typeof legacyMe === 'object' && legacyMe.label
-                      ? [{ ...legacyMe, context: '', priority: 1 }]
-                      : [];
-
-                finalResponseText = responseText ?? '';
-
-                if (audio && transcript) {
-                  setMessages((prev) =>
-                    prev.map((m) =>
-                      m.id === userMsg.id ? { ...m, text: transcript, transcript } : m,
-                    ),
-                  );
-                }
-
-                const finalMsg: ChatMessage = {
-                  id: assistantId,
-                  role: 'assistant',
-                  text: finalResponseText,
-                  isStreaming: false,
-                  ...(respMode ? { mode: respMode } : {}),
-                  ...(shopOutfit ? { shopOutfit } : {}),
-                  ...(tripPlan ? { tripPlan: { ...tripPlan, pending: false } } : {}),
-                  ...(itemIds?.length ? { suggestedItemIds: itemIds } : {}),
-                  ...(lookName ? { lookName } : {}),
-                  ...(hydratedEssentials.length ? { missingEssentials: hydratedEssentials } : {}),
-                  ...(typeof recId === 'number' ? { recId } : {}),
-                };
-
-                if (!assistantAdded) {
-                  // shop_new or error case — no tokens were streamed; add message now
-                  setMessages((prev) => {
-                    const next = [...prev, finalMsg];
-                    messagesRef.current = next;
-                    cacheThread(resolvedConvId, next);
-                    return next;
-                  });
-                } else {
-                  // Finalize the streaming bubble
-                  setMessages((prev) => {
-                    const next = prev.map((m) =>
-                      m.id === assistantId
-                        ? { ...finalMsg, text: finalResponseText || m.text }
-                        : m,
-                    );
-                    messagesRef.current = next;
-                    cacheThread(resolvedConvId, next);
-                    return next;
-                  });
-                }
-
-              } else if (currentEvent === 'trip_outfit') {
-                // Progressive trip fill — append the outfit to the streaming
-                // bubble's carousel as each one clears validation server-side.
-                const outfit = parsed as unknown as TripPlanData['outfits'][number];
-                tripOutfits = [...tripOutfits, outfit];
-                const snapshot = tripOutfits;
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantId
-                      ? { ...m, mode: 'trip', tripPlan: { intro: m.text, outfits: snapshot, packingList: [], pending: true } }
-                      : m,
-                  ),
-                );
-              } else if (currentEvent === 'tts_ready') {
-                const { audioReply } = parsed as { audioReply: string };
-                ttsReceivedFromStream = true;
-                stopCurrentAudio();
-                playAudioFromBase64(assistantId, audioReply).catch(() => {});
-              } else if ('t' in parsed && typeof parsed.t === 'string') {
-                // Text token — show streaming bubble on first token
-                if (!assistantAdded) {
-                  assistantAdded = true;
-                  setMessages((prev) => [
-                    ...prev,
-                    { id: assistantId, role: 'assistant', text: '', isStreaming: true },
-                  ]);
-                }
-                pendingText += parsed.t;
-                if (!flushTimer) {
-                  flushTimer = setTimeout(flushPending, 32);
-                }
-              }
-
-              currentEvent = '';
-            }
-          }
-        }
-
-        // Only auto-fetch TTS when the user actually spoke — typed chats stay
-        // silent unless the user taps "Listen" (matches the server's TTS gate,
-        // so we don't pay for speech nobody plays).
-        if (!ttsReceivedFromStream && finalResponseText && !!audio) {
-          playTts(assistantId, finalResponseText);
-        }
-      } catch (err: unknown) {
-        if (flushTimer) clearTimeout(flushTimer);
-        if (sessionRef.current !== session) return;
-        const msg = (err as { message?: string })?.message ?? 'Could not reach the stylist. Please try again.';
-        if ((err as { name?: string })?.name === 'AbortError') return;
-        setErrorMessage(msg);
-        setFailedRequest(opts);
-        setMessages((prev) => prev.filter((m) => m.id !== userMsg.id && m.id !== assistantId));
-      } finally {
-        if (sessionRef.current === session) {
-          setIsLoading(false);
-          abortControllerRef.current = null;
-        }
-      }
+      void sendTransportMessage({
+        request,
+        assistantMessageId: assistantId,
+        userMessageId: userMsg.id,
+        originalOptions: opts,
+        shouldFetchTtsFallback: !!audio,
+      });
     },
-    [activeLocation, isLoading, source, cacheThread, setActiveConversationId, profile?.tempUnit, weather.data],
+    [activeLocation, entryContext, isLoading, profile?.tempUnit, sendTransportMessage, source, weather.data],
   );
 
   // ── Thread lifecycle ─────────────────────────────────────────────────────────
 
   function startFreshThread() {
     stopCurrentAudio();
-    abortControllerRef.current?.abort();
-    abortControllerRef.current = null;
-    sessionRef.current++;
+    abortTransport();
     messagesRef.current = [];
+    tripOutfitsRef.current = {};
+    transportRequestMetaRef.current = {};
     setMessages([]);
     setActiveConversationId(null);
     setInputText('');
-    setIsLoading(false);
     setMentionQuery(null);
     setComposerAttachment(null);
     setComposerPhotoData(null);
@@ -736,8 +711,9 @@ export function StylistChatView({
       const cached = await AsyncStorage.getItem(threadKey(id));
       if (!cached) return false;
       const parsedMsgs: ChatMessage[] = JSON.parse(cached);
-      messagesRef.current = parsedMsgs;
-      setMessages(parsedMsgs);
+      const normalizedMsgs = parsedMsgs.map(normalizeChatMessage);
+      messagesRef.current = normalizedMsgs;
+      setMessages(normalizedMsgs);
       setActiveConversationId(id);
       return true;
     } catch {
@@ -769,7 +745,7 @@ export function StylistChatView({
         try {
           const legacyMsgs: ChatMessage[] = JSON.parse(legacy);
           if (Array.isArray(legacyMsgs) && legacyMsgs.length > 0) {
-            const tail = legacyMsgs.slice(-6);
+            const tail = legacyMsgs.slice(-6).map(normalizeChatMessage);
             messagesRef.current = tail;
             setMessages(tail);
             setActiveConversationId(null);
@@ -801,8 +777,7 @@ export function StylistChatView({
     setDrawerOpen(false);
     if (id === conversationIdRef.current) return;
     stopCurrentAudio();
-    sessionRef.current++;
-    setIsLoading(false);
+    abortTransport();
     try {
       const { data } = await api.get<{ messages: ServerMessage[] }>(`/api/stylist/conversations/${id}`);
       applyServerThread(id, data.messages ?? []);
@@ -931,10 +906,7 @@ export function StylistChatView({
   }
 
   function stopGeneration() {
-    abortControllerRef.current?.abort();
-    abortControllerRef.current = null;
-    sessionRef.current++;
-    setIsLoading(false);
+    abortTransport();
     setMessages((prev) => prev.map((m) => (m.isStreaming ? { ...m, isStreaming: false } : m)));
     Haptics.selectionAsync().catch(() => {});
   }
@@ -1662,6 +1634,16 @@ function OutfitSuggestionCard({ messageText, lookName, itemIds, allItems, create
     else if (picker) swapItem(picker.swapId, item);
   }
 
+  function recordStylistFeedback(metadata: Omit<StylistFeedbackMetadata, 'itemIds'>) {
+    api.post('/api/stylist/feedback', {
+      itemIds: editedIds,
+      source: 'outfit_card',
+      ...(recId ? { recId } : {}),
+      ...(eventContext?.id ? { eventId: eventContext.id } : {}),
+      ...metadata,
+    }).catch(() => {});
+  }
+
   async function handleSave() {
     if (saved || saving || matchedItems.length === 0) return;
     setSaving(true);
@@ -1673,6 +1655,7 @@ function OutfitSuggestionCard({ messageText, lookName, itemIds, allItems, create
       };
       await createOutfit.mutateAsync(input);
       setSaved(true);
+      recordStylistFeedback({ rating: 'up', signal: 'saved' });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     } catch {
       // Error alert handled by the mutation
@@ -1688,6 +1671,7 @@ function OutfitSuggestionCard({ messageText, lookName, itemIds, allItems, create
       // Persist the refined set (editedIds), matching what feedback/save use.
       await onAddToEvent(matchedItems.map((i) => i.id));
       setAdded(true);
+      recordStylistFeedback({ rating: 'up', signal: 'accepted_for_event' });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     } catch {
       // Error alert handled by the mutation
@@ -1704,19 +1688,18 @@ function OutfitSuggestionCard({ messageText, lookName, itemIds, allItems, create
       return;
     }
     setFeedback('up');
-    api.post('/api/stylist/feedback', { itemIds: editedIds, rating: 'up', ...(recId ? { recId } : {}) }).catch(() => {});
+    recordStylistFeedback({ rating: 'up', signal: 'up' });
   }
 
-  function submitDownFeedback(reason?: string) {
+  function submitDownFeedback(reason?: StylistNegativeReason, reasonLabel?: string) {
     if (feedback) return;
     setFeedback('down');
     setChoosingReason(false);
-    api.post('/api/stylist/feedback', {
-      itemIds: editedIds,
+    recordStylistFeedback({
       rating: 'down',
       ...(reason ? { reason } : {}),
-      ...(recId ? { recId } : {}),
-    }).catch(() => {});
+      ...(reasonLabel ? { reasonLabel } : {}),
+    });
   }
 
   return (
@@ -1878,12 +1861,21 @@ function OutfitSuggestionCard({ messageText, lookName, itemIds, allItems, create
       {/* Reason chips — surfaced after 👎 so the rejection becomes a labeled signal */}
       {choosingReason && !feedback && (
         <View style={styles.reasonChips}>
-          {DOWN_REASONS.map((r) => (
-            <TouchableOpacity key={r} style={styles.reasonChip} onPress={() => submitDownFeedback(r)} activeOpacity={0.7}>
-              <Text style={styles.reasonChipText}>{r}</Text>
+          {STYLIST_NEGATIVE_REASON_CHIPS.map((reason) => (
+            <TouchableOpacity
+              key={reason.value}
+              style={styles.reasonChip}
+              onPress={() => submitDownFeedback(reason.value, reason.label)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.reasonChipText}>{reason.label}</Text>
             </TouchableOpacity>
           ))}
-          <TouchableOpacity style={styles.reasonChip} onPress={() => submitDownFeedback()} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={styles.reasonChip}
+            onPress={() => submitDownFeedback('just_not_it', 'Just not it')}
+            activeOpacity={0.7}
+          >
             <Text style={styles.reasonChipText}>Just not it</Text>
           </TouchableOpacity>
         </View>
