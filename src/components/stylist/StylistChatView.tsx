@@ -1575,109 +1575,9 @@ function outfitNameFromItems(items: Item[]): string {
   return sorted.slice(0, 2).map((i) => i.name).join(' · ');
 }
 
-type OutfitPieceCarouselProps = {
-  items: Item[];
-  width: number;
-  activeIndex: number;
-  onActiveIndexChange: (index: number) => void;
-  onItemPress: (item: Item) => void;
-};
-
-function OutfitPieceCarousel({
-  items,
-  width,
-  activeIndex,
-  onActiveIndexChange,
-  onItemPress,
-}: OutfitPieceCarouselProps) {
-  const scrollRef = useRef<ScrollView>(null);
-  const slideWidth = items.length > 1 ? Math.round(width * 0.9) : width;
-  const sideInset = Math.max(0, (width - slideWidth) / 2);
-  const snapInterval = slideWidth + spacing.md;
-  const slideHeight = Math.round(slideWidth * 1.08);
-
-  useEffect(() => {
-    scrollRef.current?.scrollTo({
-      x: activeIndex * snapInterval,
-      animated: false,
-    });
-  }, [activeIndex, items.length, snapInterval]);
-
-  if (items.length === 0) return null;
-
-  return (
-    <View style={[styles.pieceCarousel, { width }]}>
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={[styles.pieceCarouselRail, { paddingHorizontal: sideInset }]}
-        decelerationRate="fast"
-        snapToInterval={snapInterval}
-        disableIntervalMomentum
-        nestedScrollEnabled
-        directionalLockEnabled
-        scrollEventThrottle={16}
-        onMomentumScrollEnd={(event) => {
-          const nextIndex = Math.round(event.nativeEvent.contentOffset.x / snapInterval);
-          onActiveIndexChange(Math.max(0, Math.min(nextIndex, items.length - 1)));
-        }}
-      >
-        {items.map((item) => {
-          const uri = resolveImageUri(item.imageUrl);
-          return (
-            <Pressable
-              key={item.id}
-              style={[styles.pieceSlide, { width: slideWidth, height: slideHeight }]}
-              onPress={() => onItemPress(item)}
-              accessibilityRole="button"
-              accessibilityLabel={`View ${item.name}`}
-            >
-              {uri ? (
-                <ExpoImage
-                  source={{ uri }}
-                  style={styles.pieceImage}
-                  contentFit="contain"
-                  transition={150}
-                  cachePolicy="memory-disk"
-                  recyclingKey={String(item.id)}
-                />
-              ) : (
-                <View style={styles.pieceImageFallback}>
-                  <Ionicons name="shirt-outline" size={Math.min(slideWidth, slideHeight) * 0.18} color={colors.mutedForeground} />
-                </View>
-              )}
-              <View style={styles.pieceCaption}>
-                <Text style={styles.pieceName} numberOfLines={1}>{item.name}</Text>
-                {!!item.category && (
-                  <Text style={styles.pieceCategory} numberOfLines={1}>
-                    {item.category.replace(/_/g, ' ')}
-                  </Text>
-                )}
-              </View>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      {items.length > 1 ? (
-        <View style={styles.piecePagination} accessibilityLabel={`Piece ${activeIndex + 1} of ${items.length}`}>
-          {items.map((item, index) => (
-            <View
-              key={item.id}
-              style={[styles.piecePageDot, index === activeIndex && styles.piecePageDotActive]}
-            />
-          ))}
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
 type OutfitCompleteLookOverviewProps = {
   items: Item[];
-  activeIndex: number;
-  onSelectIndex: (index: number) => void;
+  onItemPress: (item: Item) => void;
   onSwapItem: (itemId: number) => void;
   onAddItem: () => void;
 };
@@ -1688,16 +1588,14 @@ function categoryLabel(category: Item['category']): string {
 
 function OutfitCompleteLookOverview({
   items,
-  activeIndex,
-  onSelectIndex,
+  onItemPress,
   onSwapItem,
   onAddItem,
 }: OutfitCompleteLookOverviewProps) {
   const overviewItems = useMemo(
     () =>
-      items.map((item, originalIndex) => ({
+      items.map((item) => ({
         item,
-        originalIndex,
         uri: resolveImageUri(item.imageUrl),
       })),
     [items],
@@ -1720,44 +1618,40 @@ function OutfitCompleteLookOverview({
         contentContainerStyle={styles.completeLookRailContent}
         nestedScrollEnabled
       >
-        {overviewItems.map(({ item, originalIndex, uri }) => {
-          const selected = originalIndex === activeIndex;
-          return (
-            <Pressable
-              key={item.id}
-              style={[styles.completeLookThumbCard, selected && styles.completeLookThumbCardActive]}
-              onPress={() => onSelectIndex(originalIndex)}
-              onLongPress={() => onSwapItem(item.id)}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              accessibilityLabel={`Show ${item.name} in the outfit carousel`}
-              accessibilityHint="Press and hold to swap."
-            >
-              <View style={styles.completeLookThumb}>
-                {uri ? (
-                  <ExpoImage
-                    source={{ uri }}
-                    style={styles.completeLookThumbImage}
-                    contentFit="cover"
-                    transition={120}
-                    cachePolicy="memory-disk"
-                    recyclingKey={`overview-${item.id}`}
-                  />
-                ) : (
-                  <Ionicons name="shirt-outline" size={18} color={colors.mutedForeground} />
-                )}
-              </View>
-              <View style={styles.completeLookThumbCopy}>
-                <Text style={styles.completeLookThumbCategory} numberOfLines={1}>
-                  {categoryLabel(item.category)}
-                </Text>
-                <Text style={styles.completeLookThumbName} numberOfLines={2}>
-                  {item.name}
-                </Text>
-              </View>
-            </Pressable>
-          );
-        })}
+        {overviewItems.map(({ item, uri }) => (
+          <Pressable
+            key={item.id}
+            style={styles.completeLookThumbCard}
+            onPress={() => onItemPress(item)}
+            onLongPress={() => onSwapItem(item.id)}
+            accessibilityRole="button"
+            accessibilityLabel={`View details for ${item.name}`}
+            accessibilityHint="Press and hold to swap."
+          >
+            <View style={styles.completeLookThumb}>
+              {uri ? (
+                <ExpoImage
+                  source={{ uri }}
+                  style={styles.completeLookThumbImage}
+                  contentFit="cover"
+                  transition={120}
+                  cachePolicy="memory-disk"
+                  recyclingKey={`overview-${item.id}`}
+                />
+              ) : (
+                <Ionicons name="shirt-outline" size={18} color={colors.mutedForeground} />
+              )}
+            </View>
+            <View style={styles.completeLookThumbCopy}>
+              <Text style={styles.completeLookThumbCategory} numberOfLines={1}>
+                {categoryLabel(item.category)}
+              </Text>
+              <Text style={styles.completeLookThumbName} numberOfLines={2}>
+                {item.name}
+              </Text>
+            </View>
+          </Pressable>
+        ))}
         <Pressable
           style={[styles.completeLookThumbCard, styles.completeLookAddCard]}
           onPress={onAddItem}
@@ -1808,14 +1702,12 @@ function OutfitSuggestionCard({
   isPlaying,
   onToggleAudio,
 }: OutfitSuggestionCardProps) {
-  const { width } = useWindowDimensions();
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [added, setAdded] = useState(false);
   const [adding, setAdding] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
-  const [activePieceIndex, setActivePieceIndex] = useState(0);
   // When the user taps 👎 we reveal reason chips before finalizing — a labeled
   // rejection is a much stronger learning signal than a bare thumbs-down.
   const [choosingReason, setChoosingReason] = useState(false);
@@ -1837,10 +1729,6 @@ function OutfitSuggestionCard({
     () => editedIds.map((id) => allItems.find((i) => i.id === id)).filter((i): i is Item => !!i),
     [editedIds, allItems],
   );
-  useEffect(() => {
-    setActivePieceIndex((index) => Math.min(index, Math.max(matchedItems.length - 1, 0)));
-  }, [matchedItems.length]);
-  const carouselWidth = Math.max(240, Math.min(width - spacing.xxl * 2, 420));
   const lookTitle = lookName?.trim() || outfitNameFromItems(matchedItems);
   // When an event is in context, "Add to [event]" is the primary action, so the
   // save button steps down to a secondary (outline) style — one filled CTA only.
@@ -1962,32 +1850,19 @@ function OutfitSuggestionCard({
         <Text style={styles.lookMeta}>{matchedItems.length} pieces from your wardrobe</Text>
       </View>
 
-      {matchedItems.length > 0 && (
-        <OutfitCompleteLookOverview
-          items={matchedItems}
-          activeIndex={activePieceIndex}
-          onSelectIndex={setActivePieceIndex}
-          onSwapItem={(itemId) => setPicker({ swapId: itemId })}
-          onAddItem={() => setPicker('add')}
-        />
-      )}
-
-      {matchedItems.length > 0 && (
-        <View style={styles.pieceCarouselFrame}>
-          <OutfitPieceCarousel
-            items={matchedItems}
-            width={carouselWidth}
-            activeIndex={activePieceIndex}
-            onActiveIndexChange={setActivePieceIndex}
-            onItemPress={setSelectedItem}
-          />
-        </View>
-      )}
-
       <View style={styles.stylistNoteBlock}>
         <Text style={styles.rationaleLabel}>Stylist's note</Text>
         <Text style={styles.outfitCardText}>{messageText}</Text>
       </View>
+
+      {matchedItems.length > 0 && (
+        <OutfitCompleteLookOverview
+          items={matchedItems}
+          onItemPress={setSelectedItem}
+          onSwapItem={(itemId) => setPicker({ swapId: itemId })}
+          onAddItem={() => setPicker('add')}
+        />
+      )}
 
       {onAddToEvent && eventContext && (
         <TouchableOpacity
@@ -3295,10 +3170,6 @@ const styles = StyleSheet.create({
     borderColor: colors.hairline,
     backgroundColor: colors.surfaceElevated,
   },
-  completeLookThumbCardActive: {
-    borderColor: `${colors.primary}66`,
-    backgroundColor: colors.background,
-  },
   completeLookAddCard: {
     borderStyle: 'dashed',
     backgroundColor: `${colors.primary}08`,
@@ -3343,69 +3214,6 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     lineHeight: typography.size.xs * 1.35,
     paddingHorizontal: 2,
-  },
-  pieceCarouselFrame: {
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  pieceCarousel: {
-    alignSelf: 'center',
-    gap: spacing.sm,
-  },
-  pieceCarouselRail: {
-    gap: spacing.md,
-  },
-  pieceSlide: {
-    overflow: 'hidden',
-    padding: spacing.sm,
-    gap: spacing.sm,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    backgroundColor: colors.surfaceElevated,
-  },
-  pieceImage: {
-    width: '100%',
-    flex: 1,
-  },
-  pieceImageFallback: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pieceCaption: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.md,
-    backgroundColor: colors.surfaceSubtle,
-  },
-  pieceName: {
-    color: colors.foreground,
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-  },
-  pieceCategory: {
-    marginTop: 1,
-    color: colors.mutedForeground,
-    fontSize: typography.size.xs,
-    textTransform: 'capitalize',
-  },
-  piecePagination: {
-    minHeight: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-  },
-  piecePageDot: {
-    width: 6,
-    height: 6,
-    borderRadius: radii.full,
-    backgroundColor: colors.border,
-  },
-  piecePageDotActive: {
-    width: 18,
-    backgroundColor: colors.primary,
   },
   rationaleLabel: {
     fontSize: 10,
