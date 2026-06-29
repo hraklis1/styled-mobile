@@ -373,7 +373,6 @@ export function StylistChatView({
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationsLoading, setConversationsLoading] = useState(false);
   const [showNewSessionConfirm, setShowNewSessionConfirm] = useState(false);
-  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const [attachmentSheetVisible, setAttachmentSheetVisible] = useState(false);
   const [wardrobePickerVisible, setWardrobePickerVisible] = useState(false);
   const [composerAttachment, setComposerAttachment] = useState<ComposerAttachment | null>(null);
@@ -1021,34 +1020,25 @@ export function StylistChatView({
         <View style={styles.headerActions}>
           <TouchableOpacity
             style={styles.headerBtn}
-            onPress={() => setHeaderMenuOpen(true)}
-            accessibilityLabel="Stylist options"
+            onPress={openDrawer}
+            accessibilityLabel="Conversation history"
           >
-            <Ionicons name="ellipsis-horizontal" size={22} color={colors.foreground} />
+            <Ionicons name="time-outline" size={21} color={colors.foreground} />
           </TouchableOpacity>
-          {onClose ? (
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={confirmNewConversation}
+            accessibilityLabel="New styling session"
+          >
+            <Ionicons name="create-outline" size={21} color={colors.foreground} />
+          </TouchableOpacity>
+          {onClose && !embedded ? (
             <TouchableOpacity style={styles.doneBtn} onPress={onClose} accessibilityLabel="Done with stylist">
               <Text style={styles.doneBtnText}>Done</Text>
             </TouchableOpacity>
           ) : null}
         </View>
       </BlurView>
-
-      <Modal visible={headerMenuOpen} transparent animationType="fade" onRequestClose={() => setHeaderMenuOpen(false)}>
-        <Pressable style={styles.menuOverlay} onPress={() => setHeaderMenuOpen(false)}>
-          <View style={[styles.headerMenu, { top: insets.top + 52 }]}>
-            <TouchableOpacity style={styles.headerMenuRow} onPress={() => { setHeaderMenuOpen(false); openDrawer(); }}>
-              <Ionicons name="time-outline" size={19} color={colors.foreground} />
-              <Text style={styles.headerMenuText}>Conversation history</Text>
-            </TouchableOpacity>
-            <View style={styles.headerMenuDivider} />
-            <TouchableOpacity style={styles.headerMenuRow} onPress={() => { setHeaderMenuOpen(false); confirmNewConversation(); }}>
-              <Ionicons name="create-outline" size={19} color={colors.primary} />
-              <Text style={styles.headerMenuText}>New styling session</Text>
-            </TouchableOpacity>
-          </View>
-        </Pressable>
-      </Modal>
 
       <ConversationDrawer
         visible={drawerOpen}
@@ -1168,7 +1158,6 @@ export function StylistChatView({
               contentContainerStyle={styles.chipsContent}
               keyboardShouldPersistTaps="handled"
             >
-              <Text style={styles.chipsLabel}>Refine</Text>
               {contextualChips.slice(0, 2).map((chip) => (
                 <TouchableOpacity
                   key={chip}
@@ -1724,6 +1713,7 @@ function OutfitSuggestionCard({
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
   const [activePieceIndex, setActivePieceIndex] = useState(0);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
   // When the user taps 👎 we reveal reason chips before finalizing — a labeled
   // rejection is a much stronger learning signal than a bare thumbs-down.
   const [choosingReason, setChoosingReason] = useState(false);
@@ -1839,6 +1829,7 @@ function OutfitSuggestionCard({
     if (feedback) return;
     if (rating === 'down') {
       // Don't finalize yet — let the user say why.
+      setDetailsExpanded(true);
       setChoosingReason(true);
       return;
     }
@@ -1856,6 +1847,12 @@ function OutfitSuggestionCard({
       ...(reasonLabel ? { reasonLabel } : {}),
     });
   }
+
+  const gapItems = [...(missingEssentials ?? [])].sort((a, b) => a.priority - b.priority);
+  const adjustmentMeta = [
+    matchedItems.length ? `${matchedItems.length} pieces` : null,
+    gapItems.length ? `${gapItems.length} closet ${gapItems.length === 1 ? 'gap' : 'gaps'}` : null,
+  ].filter(Boolean).join(' · ');
 
   return (
     <View style={styles.outfitCard}>
@@ -1881,53 +1878,6 @@ function OutfitSuggestionCard({
           />
         </View>
       )}
-
-      {/* Wardrobe breakdown — tap any row to swap that piece. */}
-      <View style={styles.editList}>
-        {matchedItems.map((item) => {
-          const imgUri = resolveImageUri(item.imageUrl);
-          return (
-            <Pressable
-              key={item.id}
-              style={styles.editRow}
-              onPress={() => setPicker({ swapId: item.id })}
-              accessibilityRole="button"
-              accessibilityLabel={`Swap ${item.name}`}
-            >
-              <View style={styles.editRowMain}>
-                <View style={styles.editThumb}>
-                  {imgUri ? (
-                    <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                  ) : (
-                    <Ionicons name="shirt-outline" size={16} color={colors.mutedForeground} />
-                  )}
-                </View>
-                <View style={styles.editRowText}>
-                  <Text style={styles.editRowName} numberOfLines={1}>{item.name}</Text>
-                  {!!item.category && (
-                    <Text style={styles.editRowCategory} numberOfLines={1}>
-                      {item.category.replace(/_/g, ' ')}
-                    </Text>
-                  )}
-                </View>
-              </View>
-              <Ionicons name="swap-horizontal-outline" size={18} color={colors.mutedForeground} />
-            </Pressable>
-          );
-        })}
-        <TouchableOpacity
-          style={styles.addItemBtn}
-          onPress={() => setPicker('add')}
-          activeOpacity={0.75}
-          accessibilityRole="button"
-          accessibilityLabel="Add an item from your wardrobe"
-        >
-          <View style={styles.addItemIcon}>
-            <Ionicons name="add" size={14} color={colors.primary} />
-          </View>
-          <Text style={styles.addItemBtnText}>Add item</Text>
-        </TouchableOpacity>
-      </View>
 
       <View style={styles.stylistNoteBlock}>
         <Text style={styles.rationaleLabel}>Stylist's note</Text>
@@ -2022,35 +1972,102 @@ function OutfitSuggestionCard({
         </View>
       </View>
 
-      {/* Reason chips — surfaced after 👎 so the rejection becomes a labeled signal */}
-      {choosingReason && !feedback && (
-        <View style={styles.reasonChips}>
-          {STYLIST_NEGATIVE_REASON_CHIPS.map((reason) => (
-            <TouchableOpacity
-              key={reason.value}
-              style={styles.reasonChip}
-              onPress={() => submitDownFeedback(reason.value, reason.label)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.reasonChipText}>{reason.label}</Text>
-            </TouchableOpacity>
-          ))}
-          <TouchableOpacity
-            style={styles.reasonChip}
-            onPress={() => submitDownFeedback('just_not_it', 'Just not it')}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.reasonChipText}>Just not it</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      <View style={styles.adjustPanel}>
+        <TouchableOpacity
+          style={styles.adjustHeader}
+          onPress={() => setDetailsExpanded((open) => !open)}
+          activeOpacity={0.75}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: detailsExpanded }}
+          accessibilityLabel="Adjust this look"
+        >
+          <View style={styles.adjustHeaderCopy}>
+            <Text style={styles.adjustTitle}>Adjust this look</Text>
+            {!!adjustmentMeta && <Text style={styles.adjustMeta}>{adjustmentMeta}</Text>}
+          </View>
+          <Ionicons name={detailsExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.primary} />
+        </TouchableOpacity>
 
-      {/* Wardrobe gap cards — sorted by priority, max 3 */}
-      {[...(missingEssentials ?? [])]
-        .sort((a, b) => a.priority - b.priority)
-        .map((item, i) => (
-          <GapCard key={i} item={item} onPress={onNavigateToShop} />
-        ))}
+        {detailsExpanded ? (
+          <View style={styles.adjustContent}>
+            <View style={styles.editList}>
+              {matchedItems.map((item) => {
+                const imgUri = resolveImageUri(item.imageUrl);
+                return (
+                  <Pressable
+                    key={item.id}
+                    style={styles.editRow}
+                    onPress={() => setPicker({ swapId: item.id })}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Swap ${item.name}`}
+                  >
+                    <View style={styles.editRowMain}>
+                      <View style={styles.editThumb}>
+                        {imgUri ? (
+                          <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                        ) : (
+                          <Ionicons name="shirt-outline" size={16} color={colors.mutedForeground} />
+                        )}
+                      </View>
+                      <View style={styles.editRowText}>
+                        <Text style={styles.editRowName} numberOfLines={1}>{item.name}</Text>
+                        {!!item.category && (
+                          <Text style={styles.editRowCategory} numberOfLines={1}>
+                            {item.category.replace(/_/g, ' ')}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                    <Ionicons name="swap-horizontal-outline" size={18} color={colors.mutedForeground} />
+                  </Pressable>
+                );
+              })}
+              <TouchableOpacity
+                style={styles.addItemBtn}
+                onPress={() => setPicker('add')}
+                activeOpacity={0.75}
+                accessibilityRole="button"
+                accessibilityLabel="Add an item from your wardrobe"
+              >
+                <View style={styles.addItemIcon}>
+                  <Ionicons name="add" size={14} color={colors.primary} />
+                </View>
+                <Text style={styles.addItemBtnText}>Add item</Text>
+              </TouchableOpacity>
+            </View>
+
+            {choosingReason && !feedback && (
+              <View style={styles.reasonChips}>
+                {STYLIST_NEGATIVE_REASON_CHIPS.map((reason) => (
+                  <TouchableOpacity
+                    key={reason.value}
+                    style={styles.reasonChip}
+                    onPress={() => submitDownFeedback(reason.value, reason.label)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.reasonChipText}>{reason.label}</Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity
+                  style={styles.reasonChip}
+                  onPress={() => submitDownFeedback('just_not_it', 'Just not it')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.reasonChipText}>Just not it</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {gapItems.length > 0 ? (
+              <View style={styles.gapList}>
+                {gapItems.map((item, i) => (
+                  <GapCard key={i} item={item} onPress={onNavigateToShop} />
+                ))}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+      </View>
 
       <ItemDetailSheet item={selectedItem} onClose={() => setSelectedItem(null)} />
 
@@ -2252,6 +2269,8 @@ function EmptyState({
 }) {
   const prompts = buildEmptyStatePrompts(weather, tempUnit, wardrobeCount);
   const firstName = displayName?.trim().split(/\s+/)[0];
+  const primaryPrompt = prompts[0];
+  const secondaryPrompts = prompts.slice(1);
 
   // Weather line: temperature in the user's preferred unit (matches the header
   // pill). The city is intentionally omitted — the persistent header already
@@ -2276,28 +2295,40 @@ function EmptyState({
       </View>
 
       <View style={styles.promptList}>
-        {prompts.map((p, index) => (
-          <TouchableOpacity
-            key={p}
-            style={styles.promptCard}
-            activeOpacity={0.85}
-            onPress={() => {
-              Haptics.selectionAsync().catch(() => {});
-              onPrompt(p);
-            }}
-          >
-            <View style={styles.promptCardTop}>
-              <View style={styles.promptIcon}>
-                <Ionicons name={PROMPT_INTENTS[index].icon} size={20} color={colors.primary} />
-              </View>
-              <Ionicons name="arrow-forward" size={15} color={colors.mutedForeground} />
-            </View>
-            <View style={styles.promptCardText}>
-              <Text style={styles.promptTitle} numberOfLines={1}>{PROMPT_INTENTS[index].title}</Text>
-              <Text style={styles.promptSubtitle} numberOfLines={1}>{PROMPT_INTENTS[index].subtitle}</Text>
-            </View>
-          </TouchableOpacity>
-        ))}
+        <TouchableOpacity
+          style={styles.primaryPromptCard}
+          activeOpacity={0.85}
+          onPress={() => {
+            Haptics.selectionAsync().catch(() => {});
+            onPrompt(primaryPrompt);
+          }}
+        >
+          <View style={styles.primaryPromptIcon}>
+            <Ionicons name={PROMPT_INTENTS[0].icon} size={20} color={colors.primary} />
+          </View>
+          <View style={styles.primaryPromptCopy}>
+            <Text style={styles.promptTitle} numberOfLines={1}>{PROMPT_INTENTS[0].title}</Text>
+            <Text style={styles.primaryPromptText} numberOfLines={2}>{primaryPrompt}</Text>
+          </View>
+          <Ionicons name="arrow-forward" size={16} color={colors.primary} />
+        </TouchableOpacity>
+
+        <View style={styles.promptPills}>
+          {secondaryPrompts.map((p, index) => (
+            <TouchableOpacity
+              key={p}
+              style={styles.promptPill}
+              activeOpacity={0.85}
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                onPrompt(p);
+              }}
+            >
+              <Ionicons name={PROMPT_INTENTS[index + 1].icon} size={15} color={colors.primary} />
+              <Text style={styles.promptPillText} numberOfLines={1}>{PROMPT_INTENTS[index + 1].title}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
     </View>
   );
@@ -2683,15 +2714,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
     minHeight: 66,
-    paddingBottom: spacing.md,
+    paddingBottom: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.hairline,
   },
   headerBtn: {
     width: 36,
     height: 36,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: radii.full,
+    backgroundColor: 'rgba(255,255,255,0.34)',
   },
   headerTitle: {
     fontFamily: typography.family.display,
@@ -2715,19 +2748,6 @@ const styles = StyleSheet.create({
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   doneBtn: { minHeight: 36, justifyContent: 'center', paddingHorizontal: spacing.sm },
   doneBtnText: { color: colors.primary, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
-  menuOverlay: { flex: 1, backgroundColor: 'rgba(40,35,31,0.08)' },
-  headerMenu: {
-    position: 'absolute',
-    right: spacing.md,
-    width: 240,
-    paddingVertical: spacing.xs,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surfaceElevated,
-    ...shadows.lg,
-  },
-  headerMenuRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md },
-  headerMenuText: { color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.medium },
-  headerMenuDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginHorizontal: spacing.md },
   // Conversation drawer
   drawerBackdrop: {
     position: 'absolute',
@@ -2958,7 +2978,7 @@ const styles = StyleSheet.create({
   messageList: { flex: 1 },
   messageListContent: {
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.lg,
+    paddingTop: spacing.xl,
     paddingBottom: spacing.xxl,
     gap: spacing.xl,
   },
@@ -2969,17 +2989,15 @@ const styles = StyleSheet.create({
   },
   // Bottom dock — backgroundColor intentionally omitted; BlurView owns the surface.
   bottomDock: {
-    paddingTop: spacing.xs,
+    paddingTop: 2,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.hairline,
     overflow: 'hidden',
   },
   // Follow-up chips
-  chipsBar: {
-    flexGrow: 0,
-  },
   chipsShell: {
-    paddingVertical: spacing.xs,
+    paddingTop: spacing.xs,
+    paddingBottom: 2,
   },
   chipsContent: {
     flexDirection: 'row',
@@ -2988,24 +3006,16 @@ const styles = StyleSheet.create({
     paddingRight: spacing.xl,
     gap: spacing.xs,
   },
-  chipsLabel: {
-    marginRight: spacing.xs,
-    fontSize: 10,
-    fontWeight: typography.weight.bold,
-    color: colors.mutedForeground,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
   chip: {
-    minHeight: 34,
+    minHeight: 31,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
     borderRadius: radii.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs + 1,
-    backgroundColor: 'transparent',
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: spacing.xs,
+    backgroundColor: 'rgba(255,255,255,0.42)',
   },
   chipText: {
     fontSize: typography.size.xs,
@@ -3014,12 +3024,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   moreChip: {
-    width: 34,
-    height: 34,
+    width: 31,
+    height: 31,
     borderRadius: radii.full,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surfaceSelected,
+    backgroundColor: 'rgba(255,255,255,0.5)',
   },
   // @ Mention menu
   mentionMenu: {
@@ -3065,7 +3075,7 @@ const styles = StyleSheet.create({
   // Input bar
   inputBar: {
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
+    paddingTop: spacing.xs,
   },
   attachmentPreview: {
     minHeight: 58,
@@ -3091,16 +3101,16 @@ const styles = StyleSheet.create({
   attachmentLabel: { color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
   attachmentRemove: { width: 36, height: 36, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center' },
   composer: {
-    minHeight: 52,
+    minHeight: 50,
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: spacing.xs,
     backgroundColor: colors.surfaceElevated,
     borderRadius: radii.xl,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: `${colors.primary}33`,
+    borderColor: colors.hairline,
     padding: 4,
-    ...shadows.sm,
+    ...shadows.xs,
   },
   photoBtn: {
     width: 44,
@@ -3193,13 +3203,13 @@ const styles = StyleSheet.create({
     borderRadius: radii.xl,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
-    padding: spacing.lg,
-    gap: spacing.lg,
-    ...shadows.md,
+    padding: spacing.md,
+    gap: spacing.md,
+    ...shadows.sm,
   },
-  lookHeader: { gap: spacing.xs },
+  lookHeader: { gap: 3, paddingHorizontal: spacing.xs },
   lookHeaderTop: {
-    minHeight: 30,
+    minHeight: 24,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -3207,9 +3217,9 @@ const styles = StyleSheet.create({
   },
   lookTitle: {
     fontFamily: typography.family.display,
-    fontSize: 25,
+    fontSize: 26,
     color: colors.foreground,
-    lineHeight: 31,
+    lineHeight: 32,
     letterSpacing: 0,
   },
   lookMeta: { fontSize: typography.size.xs, color: colors.mutedForeground },
@@ -3231,7 +3241,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
-    backgroundColor: colors.surfaceSubtle,
+    backgroundColor: colors.surfaceElevated,
   },
   pieceImage: {
     width: '100%',
@@ -3243,10 +3253,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pieceCaption: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
     borderRadius: radii.md,
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: colors.surfaceSubtle,
   },
   pieceName: {
     color: colors.foreground,
@@ -3276,6 +3286,33 @@ const styles = StyleSheet.create({
     width: 18,
     backgroundColor: colors.primary,
   },
+  adjustPanel: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
+    paddingTop: spacing.xs,
+  },
+  adjustHeader: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
+  adjustHeaderCopy: { flex: 1, gap: 1 },
+  adjustTitle: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.foreground,
+  },
+  adjustMeta: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+  },
+  adjustContent: {
+    gap: spacing.sm,
+    paddingTop: spacing.xs,
+  },
   editList: { width: '100%', gap: spacing.xs },
   editRow: {
     flexDirection: 'row',
@@ -3286,7 +3323,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
     borderRadius: radii.md,
-    backgroundColor: colors.surfaceSubtle,
+    backgroundColor: colors.background,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
   },
   editRowMain: {
     flex: 1,
@@ -3347,12 +3386,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.9,
   },
   stylistNoteBlock: {
-    gap: spacing.sm,
+    gap: spacing.xs,
+    paddingHorizontal: spacing.xs,
   },
   outfitCardText: {
     fontSize: typography.size.sm,
     color: colors.foreground,
-    lineHeight: typography.size.sm * typography.lineHeight.loose,
+    lineHeight: typography.size.sm * 1.6,
   },
   addEventBtn: {
     flexDirection: 'row',
@@ -3363,7 +3403,6 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     paddingVertical: spacing.sm + 3,
     paddingHorizontal: spacing.lg,
-    marginBottom: spacing.sm,
   },
   addEventBtnDone: {
     backgroundColor: colors.primary,
@@ -3427,7 +3466,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surfaceSubtle,
+    backgroundColor: colors.background,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
   },
   cardIconBtnActive: {
     backgroundColor: colors.surfaceSelected,
@@ -3436,7 +3477,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.xs,
-    marginTop: spacing.sm,
   },
   reasonChip: {
     paddingHorizontal: spacing.sm,
@@ -3451,6 +3491,7 @@ const styles = StyleSheet.create({
     color: colors.foreground,
     fontWeight: typography.weight.medium,
   },
+  gapList: { gap: spacing.xs },
   adviceThumbs: { gap: spacing.sm, paddingVertical: spacing.xs },
   responseSection: { gap: spacing.sm, marginTop: spacing.sm },
   responseSectionTitle: { color: colors.foreground, fontFamily: typography.family.display, fontSize: typography.size.lg },
@@ -3512,7 +3553,7 @@ const styles = StyleSheet.create({
   // Empty state
   emptyState: {
     paddingHorizontal: spacing.sm,
-    gap: spacing.lg,
+    gap: spacing.xl,
   },
   emptyHero: {
     alignItems: 'flex-start',
@@ -3528,9 +3569,9 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontFamily: typography.family.display,
-    fontSize: 32,
+    fontSize: 34,
     color: colors.foreground,
-    lineHeight: 38,
+    lineHeight: 40,
     letterSpacing: 0,
   },
   emptySubtitle: {
@@ -3619,38 +3660,60 @@ const styles = StyleSheet.create({
     color: colors.primaryForeground,
     fontWeight: typography.weight.semibold,
   },
-  promptIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radii.full,
-    backgroundColor: colors.surfaceSelected,
+  promptList: { width: '100%', gap: spacing.sm },
+  primaryPromptCard: {
+    width: '100%',
+    minHeight: 82,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  promptList: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  promptCard: {
-    width: '48%',
-    minHeight: 124,
-    flexDirection: 'column',
-    justifyContent: 'space-between',
     gap: spacing.sm,
     borderRadius: radii.lg,
     padding: spacing.md,
     backgroundColor: colors.surfaceElevated,
     ...shadows.xs,
   },
-  promptCardTop: {
-    flexDirection: 'row',
+  primaryPromptIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceSelected,
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
   },
-  promptCardText: { width: '100%' },
+  primaryPromptCopy: { flex: 1, gap: 2 },
   promptTitle: {
     fontSize: typography.size.md,
     color: colors.foreground,
     fontWeight: typography.weight.semibold,
   },
-  promptSubtitle: { marginTop: 2, fontSize: typography.size.xs, color: colors.mutedForeground },
+  primaryPromptText: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+    lineHeight: typography.size.xs * 1.35,
+  },
+  promptPills: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  promptPill: {
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.full,
+    backgroundColor: 'rgba(255,255,255,0.52)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+  },
+  promptPillText: {
+    maxWidth: 128,
+    fontSize: typography.size.xs,
+    color: colors.secondaryForeground,
+    fontWeight: typography.weight.medium,
+  },
   // Item detail sheet
   sheetRoot: {
     flex: 1,
