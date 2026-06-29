@@ -1469,8 +1469,6 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
             createOutfit={createOutfit}
             eventContext={eventContext}
             onAddToEvent={onAddToEvent}
-            missingEssentials={message.missingEssentials}
-            onNavigateToShop={onNavigateToShop}
             recId={message.recId}
             isPlaying={isPlaying}
             onToggleAudio={onToggleAudio}
@@ -1676,6 +1674,115 @@ function OutfitPieceCarousel({
   );
 }
 
+type OutfitCompleteLookOverviewProps = {
+  items: Item[];
+  activeIndex: number;
+  onSelectIndex: (index: number) => void;
+  onSwapItem: (itemId: number) => void;
+  onAddItem: () => void;
+};
+
+function categoryLabel(category: Item['category']): string {
+  return category ? category.replace(/_/g, ' ') : 'piece';
+}
+
+function OutfitCompleteLookOverview({
+  items,
+  activeIndex,
+  onSelectIndex,
+  onSwapItem,
+  onAddItem,
+}: OutfitCompleteLookOverviewProps) {
+  const overviewItems = useMemo(
+    () =>
+      items.map((item, originalIndex) => ({
+        item,
+        originalIndex,
+        uri: resolveImageUri(item.imageUrl),
+      })),
+    [items],
+  );
+
+  if (overviewItems.length === 0) return null;
+
+  return (
+    <View style={styles.completeLookPanel}>
+      <View style={styles.completeLookHeader}>
+        <Text style={styles.completeLookEyebrow}>Complete look</Text>
+        <Text style={styles.completeLookCount}>
+          {items.length} {items.length === 1 ? 'piece' : 'pieces'}
+        </Text>
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.completeLookRailContent}
+        nestedScrollEnabled
+      >
+        {overviewItems.map(({ item, originalIndex, uri }) => {
+          const selected = originalIndex === activeIndex;
+          return (
+            <Pressable
+              key={item.id}
+              style={[styles.completeLookThumbCard, selected && styles.completeLookThumbCardActive]}
+              onPress={() => onSelectIndex(originalIndex)}
+              onLongPress={() => onSwapItem(item.id)}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+              accessibilityLabel={`Show ${item.name} in the outfit carousel`}
+              accessibilityHint="Press and hold to swap."
+            >
+              <View style={styles.completeLookThumb}>
+                {uri ? (
+                  <ExpoImage
+                    source={{ uri }}
+                    style={styles.completeLookThumbImage}
+                    contentFit="cover"
+                    transition={120}
+                    cachePolicy="memory-disk"
+                    recyclingKey={`overview-${item.id}`}
+                  />
+                ) : (
+                  <Ionicons name="shirt-outline" size={18} color={colors.mutedForeground} />
+                )}
+              </View>
+              <View style={styles.completeLookThumbCopy}>
+                <Text style={styles.completeLookThumbCategory} numberOfLines={1}>
+                  {categoryLabel(item.category)}
+                </Text>
+                <Text style={styles.completeLookThumbName} numberOfLines={2}>
+                  {item.name}
+                </Text>
+              </View>
+            </Pressable>
+          );
+        })}
+        <Pressable
+          style={[styles.completeLookThumbCard, styles.completeLookAddCard]}
+          onPress={onAddItem}
+          accessibilityRole="button"
+          accessibilityLabel="Add an item from your wardrobe"
+        >
+          <View style={[styles.completeLookThumb, styles.completeLookAddThumb]}>
+            <Ionicons name="add" size={22} color={colors.primary} />
+          </View>
+          <View style={styles.completeLookThumbCopy}>
+            <Text style={styles.completeLookThumbCategory} numberOfLines={1}>
+              Add
+            </Text>
+            <Text style={styles.completeLookThumbName} numberOfLines={2}>
+              From library
+            </Text>
+          </View>
+        </Pressable>
+      </ScrollView>
+
+      <Text style={styles.completeLookHint}>Press and hold a piece to swap it.</Text>
+    </View>
+  );
+}
+
 type OutfitSuggestionCardProps = {
   messageText: string;
   lookName?: string;
@@ -1684,8 +1791,6 @@ type OutfitSuggestionCardProps = {
   createOutfit: ReturnType<typeof useCreateOutfit>;
   eventContext?: EventContext;
   onAddToEvent?: (itemIds: number[]) => Promise<unknown>;
-  missingEssentials?: MissingEssential[];
-  onNavigateToShop?: () => void;
   recId?: number;
   isPlaying?: boolean;
   onToggleAudio?: () => void;
@@ -1699,8 +1804,6 @@ function OutfitSuggestionCard({
   createOutfit,
   eventContext,
   onAddToEvent,
-  missingEssentials,
-  onNavigateToShop,
   recId,
   isPlaying,
   onToggleAudio,
@@ -1713,7 +1816,6 @@ function OutfitSuggestionCard({
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
   const [activePieceIndex, setActivePieceIndex] = useState(0);
-  const [detailsExpanded, setDetailsExpanded] = useState(false);
   // When the user taps 👎 we reveal reason chips before finalizing — a labeled
   // rejection is a much stronger learning signal than a bare thumbs-down.
   const [choosingReason, setChoosingReason] = useState(false);
@@ -1829,7 +1931,6 @@ function OutfitSuggestionCard({
     if (feedback) return;
     if (rating === 'down') {
       // Don't finalize yet — let the user say why.
-      setDetailsExpanded(true);
       setChoosingReason(true);
       return;
     }
@@ -1848,12 +1949,6 @@ function OutfitSuggestionCard({
     });
   }
 
-  const gapItems = [...(missingEssentials ?? [])].sort((a, b) => a.priority - b.priority);
-  const adjustmentMeta = [
-    matchedItems.length ? `${matchedItems.length} pieces` : null,
-    gapItems.length ? `${gapItems.length} closet ${gapItems.length === 1 ? 'gap' : 'gaps'}` : null,
-  ].filter(Boolean).join(' · ');
-
   return (
     <View style={styles.outfitCard}>
       <View style={styles.lookHeader}>
@@ -1866,6 +1961,16 @@ function OutfitSuggestionCard({
         <Text style={styles.lookTitle} numberOfLines={2}>{lookTitle}</Text>
         <Text style={styles.lookMeta}>{matchedItems.length} pieces from your wardrobe</Text>
       </View>
+
+      {matchedItems.length > 0 && (
+        <OutfitCompleteLookOverview
+          items={matchedItems}
+          activeIndex={activePieceIndex}
+          onSelectIndex={setActivePieceIndex}
+          onSwapItem={(itemId) => setPicker({ swapId: itemId })}
+          onAddItem={() => setPicker('add')}
+        />
+      )}
 
       {matchedItems.length > 0 && (
         <View style={styles.pieceCarouselFrame}>
@@ -1972,102 +2077,27 @@ function OutfitSuggestionCard({
         </View>
       </View>
 
-      <View style={styles.adjustPanel}>
-        <TouchableOpacity
-          style={styles.adjustHeader}
-          onPress={() => setDetailsExpanded((open) => !open)}
-          activeOpacity={0.75}
-          accessibilityRole="button"
-          accessibilityState={{ expanded: detailsExpanded }}
-          accessibilityLabel="Adjust this look"
-        >
-          <View style={styles.adjustHeaderCopy}>
-            <Text style={styles.adjustTitle}>Adjust this look</Text>
-            {!!adjustmentMeta && <Text style={styles.adjustMeta}>{adjustmentMeta}</Text>}
-          </View>
-          <Ionicons name={detailsExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.primary} />
-        </TouchableOpacity>
-
-        {detailsExpanded ? (
-          <View style={styles.adjustContent}>
-            <View style={styles.editList}>
-              {matchedItems.map((item) => {
-                const imgUri = resolveImageUri(item.imageUrl);
-                return (
-                  <Pressable
-                    key={item.id}
-                    style={styles.editRow}
-                    onPress={() => setPicker({ swapId: item.id })}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Swap ${item.name}`}
-                  >
-                    <View style={styles.editRowMain}>
-                      <View style={styles.editThumb}>
-                        {imgUri ? (
-                          <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                        ) : (
-                          <Ionicons name="shirt-outline" size={16} color={colors.mutedForeground} />
-                        )}
-                      </View>
-                      <View style={styles.editRowText}>
-                        <Text style={styles.editRowName} numberOfLines={1}>{item.name}</Text>
-                        {!!item.category && (
-                          <Text style={styles.editRowCategory} numberOfLines={1}>
-                            {item.category.replace(/_/g, ' ')}
-                          </Text>
-                        )}
-                      </View>
-                    </View>
-                    <Ionicons name="swap-horizontal-outline" size={18} color={colors.mutedForeground} />
-                  </Pressable>
-                );
-              })}
-              <TouchableOpacity
-                style={styles.addItemBtn}
-                onPress={() => setPicker('add')}
-                activeOpacity={0.75}
-                accessibilityRole="button"
-                accessibilityLabel="Add an item from your wardrobe"
-              >
-                <View style={styles.addItemIcon}>
-                  <Ionicons name="add" size={14} color={colors.primary} />
-                </View>
-                <Text style={styles.addItemBtnText}>Add item</Text>
-              </TouchableOpacity>
-            </View>
-
-            {choosingReason && !feedback && (
-              <View style={styles.reasonChips}>
-                {STYLIST_NEGATIVE_REASON_CHIPS.map((reason) => (
-                  <TouchableOpacity
-                    key={reason.value}
-                    style={styles.reasonChip}
-                    onPress={() => submitDownFeedback(reason.value, reason.label)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.reasonChipText}>{reason.label}</Text>
-                  </TouchableOpacity>
-                ))}
-                <TouchableOpacity
-                  style={styles.reasonChip}
-                  onPress={() => submitDownFeedback('just_not_it', 'Just not it')}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.reasonChipText}>Just not it</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {gapItems.length > 0 ? (
-              <View style={styles.gapList}>
-                {gapItems.map((item, i) => (
-                  <GapCard key={i} item={item} onPress={onNavigateToShop} />
-                ))}
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-      </View>
+      {choosingReason && !feedback && (
+        <View style={styles.reasonChips}>
+          {STYLIST_NEGATIVE_REASON_CHIPS.map((reason) => (
+            <TouchableOpacity
+              key={reason.value}
+              style={styles.reasonChip}
+              onPress={() => submitDownFeedback(reason.value, reason.label)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.reasonChipText}>{reason.label}</Text>
+            </TouchableOpacity>
+          ))}
+          <TouchableOpacity
+            style={styles.reasonChip}
+            onPress={() => submitDownFeedback('just_not_it', 'Just not it')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.reasonChipText}>Just not it</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <ItemDetailSheet item={selectedItem} onClose={() => setSelectedItem(null)} />
 
@@ -3223,6 +3253,97 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   lookMeta: { fontSize: typography.size.xs, color: colors.mutedForeground },
+  completeLookPanel: {
+    gap: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: radii.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  completeLookHeader: {
+    minHeight: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    paddingHorizontal: 2,
+  },
+  completeLookEyebrow: {
+    fontSize: 10,
+    fontWeight: typography.weight.bold,
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.9,
+  },
+  completeLookCount: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+    fontWeight: typography.weight.medium,
+  },
+  completeLookRailContent: {
+    gap: spacing.xs,
+    paddingRight: spacing.sm,
+  },
+  completeLookThumbCard: {
+    width: 92,
+    minHeight: 134,
+    gap: spacing.xs,
+    padding: spacing.xs,
+    borderRadius: radii.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    backgroundColor: colors.surfaceElevated,
+  },
+  completeLookThumbCardActive: {
+    borderColor: `${colors.primary}66`,
+    backgroundColor: colors.background,
+  },
+  completeLookAddCard: {
+    borderStyle: 'dashed',
+    backgroundColor: `${colors.primary}08`,
+  },
+  completeLookThumb: {
+    width: '100%',
+    height: 64,
+    borderRadius: radii.sm,
+    overflow: 'hidden',
+    backgroundColor: colors.muted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  completeLookAddThumb: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: `${colors.primary}40`,
+    backgroundColor: `${colors.primary}10`,
+  },
+  completeLookThumbImage: {
+    width: '100%',
+    height: '100%',
+  },
+  completeLookThumbCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  completeLookThumbCategory: {
+    fontSize: 9,
+    color: colors.primary,
+    fontWeight: typography.weight.bold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  completeLookThumbName: {
+    fontSize: typography.size.xs,
+    color: colors.foreground,
+    lineHeight: typography.size.xs * 1.25,
+    fontWeight: typography.weight.medium,
+  },
+  completeLookHint: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+    lineHeight: typography.size.xs * 1.35,
+    paddingHorizontal: 2,
+  },
   pieceCarouselFrame: {
     alignItems: 'center',
     gap: spacing.sm,
@@ -3285,98 +3406,6 @@ const styles = StyleSheet.create({
   piecePageDotActive: {
     width: 18,
     backgroundColor: colors.primary,
-  },
-  adjustPanel: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.hairline,
-    paddingTop: spacing.xs,
-  },
-  adjustHeader: {
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.xs,
-  },
-  adjustHeaderCopy: { flex: 1, gap: 1 },
-  adjustTitle: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  adjustMeta: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-  },
-  adjustContent: {
-    gap: spacing.sm,
-    paddingTop: spacing.xs,
-  },
-  editList: { width: '100%', gap: spacing.xs },
-  editRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-    minHeight: 54,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.md,
-    backgroundColor: colors.background,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-  },
-  editRowMain: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  editThumb: {
-    width: 36,
-    height: 42,
-    borderRadius: radii.md,
-    overflow: 'hidden',
-    backgroundColor: colors.muted,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  editRowText: { flex: 1 },
-  editRowName: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.medium,
-    color: colors.foreground,
-  },
-  editRowCategory: {
-    fontSize: 10,
-    color: colors.mutedForeground,
-    textTransform: 'capitalize',
-    marginTop: 1,
-  },
-  addItemBtn: {
-    minHeight: 46,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.md,
-    backgroundColor: `${colors.primary}0D`,
-  },
-  addItemIcon: {
-    width: 22,
-    height: 22,
-    borderRadius: radii.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: `${colors.primary}12`,
-  },
-  addItemBtnText: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.semibold,
-    color: colors.primary,
   },
   rationaleLabel: {
     fontSize: 10,
