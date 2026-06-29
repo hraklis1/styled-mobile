@@ -545,9 +545,12 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
       {optionsMenuVisible && (
         <BoardOptionsMenuSheet
           visible={optionsMenuVisible}
+          boardName={board?.name ?? 'Board'}
+          canRename={Platform.OS === 'ios'}
           onClose={() => setOptionsMenuVisible(false)}
           onRename={handleRename}
           onChangeCover={() => setCoverPickerVisible(true)}
+          onUploadCover={handleUploadCover}
           onOrganize={() => setOrganizeMode(true)}
           onDelete={handleDelete}
         />

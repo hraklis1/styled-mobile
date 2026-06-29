@@ -56,13 +56,16 @@ export function BoardCover({ board, itemMap, outfitMap, size, compact }: Props) 
       accessibilityLabel={`${board.name} cover`}
     >
       {covers.length >= 4 ? (
-        <View style={styles.grid}>
-          <View style={styles.row}>{cell(0)}{cell(1)}</View>
-          <View style={styles.row}>
-            {cell(2)}
-            <View style={styles.flex}>
-              {cell(3)}
-              {overflow > 0 && <View style={styles.overflow}><Text style={styles.overflowText}>+{overflow}</Text></View>}
+        <View style={styles.moodboard}>
+          <View style={styles.heroColumn}>{cell(0)}</View>
+          <View style={styles.sideColumn}>
+            {cell(1)}
+            <View style={styles.row}>
+              {cell(2)}
+              <View style={styles.flex}>
+                {cell(3)}
+                {overflow > 0 && <View style={styles.overflow}><Text style={styles.overflowText}>+{overflow}</Text></View>}
+              </View>
             </View>
           </View>
         </View>
@@ -77,7 +80,7 @@ export function BoardCover({ board, itemMap, outfitMap, size, compact }: Props) 
         cell(0)
       ) : (
         <LinearGradient
-          colors={['#F0E6DE', '#DDD0C4']}
+          colors={['#F4F0E9', '#E7DED3']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.fallback}
@@ -95,7 +98,15 @@ export function BoardCover({ board, itemMap, outfitMap, size, compact }: Props) 
 }
 
 const styles = StyleSheet.create({
-  cover: { overflow: 'hidden', backgroundColor: colors.muted },
+  cover: {
+    overflow: 'hidden',
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+  },
+  moodboard: { flex: 1, flexDirection: 'row', gap: GAP },
+  heroColumn: { flex: 1.18 },
+  sideColumn: { flex: 1, gap: GAP },
   grid: { flex: 1, gap: GAP },
   row: { flex: 1, flexDirection: 'row', gap: GAP },
   column: { flex: 1, gap: GAP },
@@ -106,23 +117,23 @@ const styles = StyleSheet.create({
     minHeight: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.secondary,
+    backgroundColor: colors.surfaceSubtle,
   },
   overflow: {
     ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(40,35,31,0.42)',
+    backgroundColor: 'rgba(40,35,31,0.36)',
   },
   overflowText: { color: colors.white, fontSize: typography.size.lg, fontWeight: typography.weight.semibold },
   fallback: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, padding: spacing.md },
   fallbackIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(250,248,245,0.72)',
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: 'rgba(255,252,247,0.62)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  fallbackText: { color: colors.secondaryForeground, fontSize: typography.size.sm, fontWeight: typography.weight.medium, textAlign: 'center' },
+  fallbackText: { color: colors.inkSubtle, fontSize: typography.size.sm, fontWeight: typography.weight.medium, textAlign: 'center' },
 });

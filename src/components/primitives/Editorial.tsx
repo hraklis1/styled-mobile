@@ -153,15 +153,19 @@ export function SegmentedControl<T extends string>({
   value,
   options,
   onChange,
+  variant = 'pill',
   style,
 }: {
   value: T;
   options: { value: T; label: string }[];
   onChange: (value: T) => void;
+  variant?: 'pill' | 'tabs';
   style?: StyleProp<ViewStyle>;
 }) {
+  const isTabs = variant === 'tabs';
+
   return (
-    <View style={[styles.segment, style]} accessibilityRole="tablist">
+    <View style={[isTabs ? styles.tabsSegment : styles.segment, style]} accessibilityRole="tablist">
       {options.map((option) => {
         const active = option.value === value;
         return (
@@ -169,15 +173,25 @@ export function SegmentedControl<T extends string>({
             key={option.value}
             haptic={false}
             scaleTo={0.98}
-            contentStyle={[styles.segmentButton, active && styles.segmentButtonActive]}
+            contentStyle={[
+              isTabs ? styles.tabsButton : styles.segmentButton,
+              active && !isTabs && styles.segmentButtonActive,
+            ]}
             onPress={() => onChange(option.value)}
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
             accessibilityLabel={option.label}
           >
-            <Text style={[styles.segmentText, active && styles.segmentTextActive]} numberOfLines={1}>
+            <Text
+              style={[
+                isTabs ? styles.tabsText : styles.segmentText,
+                active && (isTabs ? styles.tabsTextActive : styles.segmentTextActive),
+              ]}
+              numberOfLines={1}
+            >
               {option.label}
             </Text>
+            {isTabs && <View style={[styles.tabsUnderline, active && styles.tabsUnderlineActive]} />}
           </PressableScale>
         );
       })}
@@ -347,6 +361,34 @@ const styles = StyleSheet.create({
   segmentTextActive: {
     color: colors.foreground,
     fontWeight: typography.weight.semibold,
+  },
+  tabsSegment: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: spacing.xl,
+  },
+  tabsButton: {
+    minHeight: 34,
+    justifyContent: 'flex-end',
+    gap: 5,
+  },
+  tabsText: {
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.medium,
+    color: colors.mutedForeground,
+  },
+  tabsTextActive: {
+    color: colors.foreground,
+    fontWeight: typography.weight.semibold,
+  },
+  tabsUnderline: {
+    width: '100%',
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: 'transparent',
+  },
+  tabsUnderlineActive: {
+    backgroundColor: colors.primary,
   },
   filterControl: {
     minWidth: 42,

@@ -47,7 +47,7 @@ function ChoiceChips({
             accessibilityRole="checkbox"
             accessibilityState={{ checked: active }}
           >
-            {active && <Ionicons name="checkmark" size={13} color={colors.primaryForeground} />}
+            {active && <Ionicons name="checkmark" size={13} color={colors.foreground} />}
             <Text style={[styles.chipText, active && styles.chipTextActive]}>{value}</Text>
           </TouchableOpacity>
         );
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.hairline,
   },
   headerSide: { width: 64, minHeight: 40, justifyContent: 'center' },
   headerSideRight: { alignItems: 'flex-end' },
@@ -190,14 +190,14 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: spacing.md,
     borderRadius: radii.full,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
     backgroundColor: colors.surfaceElevated,
   },
-  chipActive: { borderColor: colors.primary, backgroundColor: colors.primary },
+  chipActive: { borderColor: colors.border, backgroundColor: colors.surfaceSelected },
   chipText: { fontSize: typography.size.sm, color: colors.foreground },
-  chipTextActive: { fontWeight: typography.weight.semibold, color: colors.primaryForeground },
-  sortGroup: { flexDirection: 'row', padding: 3, borderRadius: radii.md, backgroundColor: colors.surfaceSubtle },
+  chipTextActive: { fontWeight: typography.weight.semibold, color: colors.foreground },
+  sortGroup: { flexDirection: 'row', padding: 3, borderRadius: radii.full, backgroundColor: colors.surfaceSubtle },
   sortChoice: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm, borderRadius: radii.sm },
   sortChoiceActive: { backgroundColor: colors.surfaceElevated },
   sortText: { fontSize: typography.size.sm, color: colors.mutedForeground },
@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
+    borderTopColor: colors.hairline,
     backgroundColor: colors.background,
   },
   doneButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, backgroundColor: colors.primary },

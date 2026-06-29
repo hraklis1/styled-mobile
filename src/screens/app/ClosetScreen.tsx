@@ -26,6 +26,7 @@ import { FilterPanel } from '../../components/wardrobe/FilterPanel';
 import { OutfitFilterPanel } from '../../components/outfits/OutfitFilterPanel';
 import { ClosetGrid } from '../../components/wardrobe/ClosetGrid';
 import { BoardCard } from '../../components/boards/BoardCard';
+import { BoardOptionsMenuSheet } from '../../components/boards/BoardOptionsMenuSheet';
 import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
 import { useBoards, useCreateBoard, useDeleteBoard, useUpdateBoard, type BoardEntryRef } from '../../hooks/useBoards';
 import { filterVisibleBoards } from '../../lib/legacyBoards';
@@ -77,9 +78,9 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 
 // Heights used to size the collapsible region and sheet detents.
 // These are rough constants; adjust if layout changes.
-const SEARCH_ROW_H      = 58;
-const PILL_ROW_H        = 52;
-const SUBCATEGORY_ROW_H = 48;
+const SEARCH_ROW_H      = 52;
+const PILL_ROW_H        = 46;
+const SUBCATEGORY_ROW_H = 42;
 
 export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const insets = useSafeAreaInsets();
@@ -123,6 +124,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
 
   // SaveToBoardSheet target for the bulk "Add to Board" action.
   const [saveSheetTarget, setSaveSheetTarget] = useState<BoardEntryRef[] | null>(null);
+  const [boardOptionsTarget, setBoardOptionsTarget] = useState<Board | null>(null);
   const updateItem = useUpdateItem();
   const deleteItem = useDeleteItem();
   const markWorn = useMarkItemWorn();
@@ -452,15 +454,8 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   }, [deleteBoard]);
 
   const handleBoardOptions = useCallback((board: Board) => {
-    Alert.alert(board.name, undefined, [
-      { text: 'Organize', onPress: () => navigation.navigate('BoardDetail', { boardId: board.id, organize: true }) },
-      { text: 'Edit cover', onPress: () => navigation.navigate('BoardDetail', { boardId: board.id, editCover: true }) },
-      ...(Platform.OS === 'ios' ? [{ text: 'Rename', onPress: () => renameBoard(board) }] : []),
-      { text: 'Upload cover photo', onPress: () => uploadBoardCover(board) },
-      { text: 'Delete', style: 'destructive' as const, onPress: () => confirmDeleteBoard(board) },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  }, [confirmDeleteBoard, navigation, renameBoard, uploadBoardCover]);
+    setBoardOptionsTarget(board);
+  }, []);
 
   const createSmartBoard = useCallback((name: string) => {
     if (boards.some((board) => board.name.toLowerCase() === name.toLowerCase())) return;
@@ -657,6 +652,21 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             </View>
             <View style={styles.outfitInfo}>
               <Text style={styles.outfitName} numberOfLines={1}>{outfit.name}</Text>
+              {(outfit.wearCount > 0 || assignment || outfit.isDraft) && (
+                <View style={styles.outfitMetaRow}>
+                  {outfit.wearCount > 0 ? (
+                    <Text style={styles.outfitWorn} numberOfLines={1}>Worn {outfit.wearCount}×</Text>
+                  ) : null}
+                  {assignment && eventDate ? (
+                    <Text style={styles.outfitWorn} numberOfLines={1}>
+                      {eventDate}{additionalEventCount > 0 ? ` +${additionalEventCount}` : ''}
+                    </Text>
+                  ) : null}
+                  {outfit.isDraft ? (
+                    <Text style={styles.outfitDraftText} numberOfLines={1}>Draft</Text>
+                  ) : null}
+                </View>
+              )}
             </View>
           </PressableScale>
         </View>
@@ -762,6 +772,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
       <View style={styles.segmentRow}>
         <SegmentedControl
           value={segment}
+          variant="tabs"
           options={[
             { value: 'pieces', label: 'Pieces' },
             { value: 'outfits', label: 'Outfits' },
@@ -1283,6 +1294,20 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
           onClose={() => { setSaveSheetTarget(null); exitSelectionMode(); }}
         />
       )}
+
+      {boardOptionsTarget !== null && (
+        <BoardOptionsMenuSheet
+          visible
+          boardName={boardOptionsTarget.name}
+          canRename={Platform.OS === 'ios'}
+          onClose={() => setBoardOptionsTarget(null)}
+          onOrganize={() => navigation.navigate('BoardDetail', { boardId: boardOptionsTarget.id, organize: true })}
+          onChangeCover={() => navigation.navigate('BoardDetail', { boardId: boardOptionsTarget.id, editCover: true })}
+          onUploadCover={() => uploadBoardCover(boardOptionsTarget)}
+          onRename={() => renameBoard(boardOptionsTarget)}
+          onDelete={() => confirmDeleteBoard(boardOptionsTarget)}
+        />
+      )}
     </View>
   );
 }
@@ -1359,7 +1384,7 @@ const styles = StyleSheet.create({
   segmentRow: {
     paddingHorizontal: SIDE_PAD,
     paddingTop: spacing.xs,
-    paddingBottom: spacing.xxl,
+    paddingBottom: spacing.lg,
   },
   segment: {
     flexDirection: 'row',
@@ -1402,19 +1427,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: SIDE_PAD,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
     gap: spacing.sm,
   },
   searchWrap: {
     flex: 1,
+    minHeight: 42,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radii.full,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
     gap: spacing.sm,
   },
   searchIcon: { flexShrink: 0 },
@@ -1455,18 +1480,18 @@ const styles = StyleSheet.create({
 
   // ── Category pills
   pillScroll: { flexShrink: 0 },
-  pillContent: { paddingHorizontal: SIDE_PAD, paddingBottom: spacing.md, gap: spacing.sm },
+  pillContent: { paddingHorizontal: SIDE_PAD, paddingBottom: spacing.sm, gap: spacing.sm },
   pill: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 2,
     borderRadius: radii.full,
-    backgroundColor: colors.muted,
-    borderWidth: 1,
-    borderColor: 'transparent',
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
   },
   pillActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: colors.surfaceSelected,
+    borderColor: colors.border,
   },
   pillLabel: {
     fontSize: typography.size.xs,
@@ -1474,7 +1499,8 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
   },
   pillLabelActive: {
-    color: colors.white,
+    color: colors.foreground,
+    fontWeight: typography.weight.semibold,
   },
 
   // ── List layout
@@ -1490,7 +1516,7 @@ const styles = StyleSheet.create({
   },
   outfitGridItem: {
     paddingHorizontal: COL_GAP / 2,
-    marginBottom: COL_GAP,
+    marginBottom: spacing.lg,
   },
 
   // ── Item row (list mode)
@@ -1547,8 +1573,8 @@ const styles = StyleSheet.create({
   },
   outfitBadgeStack: {
     position: 'absolute',
-    top: spacing.xs,
-    right: spacing.xs,
+    top: spacing.sm,
+    right: spacing.sm,
     alignItems: 'flex-end',
     gap: spacing.xs,
   },
@@ -1556,12 +1582,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    paddingHorizontal: 7,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 4,
     borderRadius: radii.full,
-    backgroundColor: 'rgba(255,255,255,0.94)',
+    backgroundColor: 'rgba(255,252,247,0.92)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: colors.hairline,
     ...shadows.xs,
   },
   eventDateText: {
@@ -1571,12 +1597,12 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   outfitFavBadge: {
-    width: 20,
-    height: 20,
+    width: 22,
+    height: 22,
     borderRadius: radii.full,
-    backgroundColor: colors.white,
+    backgroundColor: 'rgba(255,252,247,0.94)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: colors.hairline,
     alignItems: 'center',
     justifyContent: 'center',
     ...shadows.xs,
@@ -1610,8 +1636,11 @@ const styles = StyleSheet.create({
   // ── Outfit cards
   outfitCard: {},
   collageWrapper: {
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     overflow: 'hidden',
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
   },
   selectedOverlay: {
     position: 'absolute',
@@ -1631,9 +1660,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
   },
   outfitInfo: {
-    paddingTop: spacing.sm,
+    paddingTop: spacing.sm + 2,
     paddingHorizontal: 2,
-    gap: 2,
+    gap: 3,
   },
   outfitName: {
     fontSize: typography.size.sm,
@@ -1643,6 +1672,17 @@ const styles = StyleSheet.create({
   outfitWorn: {
     fontSize: typography.size.xs,
     color: colors.mutedForeground,
+  },
+  outfitMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  outfitDraftText: {
+    fontSize: typography.size.xs,
+    color: colors.primary,
+    fontWeight: typography.weight.semibold,
   },
   outfitRow: {
     flexDirection: 'row',

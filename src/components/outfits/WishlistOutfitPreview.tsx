@@ -26,6 +26,25 @@ export function WishlistOutfitPreview({ entry, style }: Props) {
     if (items.length === 3 && index === 0) return styles.cellWide;
     return styles.cell;
   };
+  const renderCell = (item: (typeof items)[number], index: number, styleOverride?: StyleProp<ViewStyle>) => {
+    const category = item.category?.toLocaleLowerCase() ?? '';
+    return (
+      <View key={`${item.brand}-${item.name}-${index}`} style={[styleOverride ?? cellStyle(index)]}>
+        {item.imageUrl ? (
+          <Image
+            source={{ uri: item.imageUrl }}
+            style={StyleSheet.absoluteFill}
+            contentFit={editorial.imageFit.garment}
+            transition={150}
+          />
+        ) : (
+          <View style={styles.fallback}>
+            <Ionicons name={CATEGORY_ICON[category] ?? 'bag-outline'} size={18} color={colors.primary} />
+          </View>
+        )}
+      </View>
+    );
+  };
 
   return (
     <View style={[styles.preview, style]} accessibilityElementsHidden>
@@ -33,25 +52,20 @@ export function WishlistOutfitPreview({ entry, style }: Props) {
         <View style={styles.empty}>
           <Ionicons name="bag-handle-outline" size={24} color={colors.primary} />
         </View>
-      ) : items.map((item, index) => {
-        const category = item.category?.toLocaleLowerCase() ?? '';
-        return (
-          <View key={`${item.brand}-${item.name}-${index}`} style={cellStyle(index)}>
-            {item.imageUrl ? (
-              <Image
-                source={{ uri: item.imageUrl }}
-                style={StyleSheet.absoluteFill}
-                contentFit={editorial.imageFit.garment}
-                transition={150}
-              />
-            ) : (
-              <View style={styles.fallback}>
-                <Ionicons name={CATEGORY_ICON[category] ?? 'bag-outline'} size={18} color={colors.primary} />
-              </View>
-            )}
+      ) : items.length >= 4 ? (
+        <View style={styles.moodboard}>
+          <View style={styles.heroColumn}>
+            {renderCell(items[0], 0, styles.moodboardCell)}
           </View>
-        );
-      })}
+          <View style={styles.sideColumn}>
+            {renderCell(items[1], 1, styles.moodboardCell)}
+            <View style={styles.row}>
+              {renderCell(items[2], 2, styles.moodboardCell)}
+              {renderCell(items[3], 3, styles.moodboardCell)}
+            </View>
+          </View>
+        </View>
+      ) : items.map((item, index) => renderCell(item, index))}
     </View>
   );
 }
@@ -61,9 +75,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     overflow: 'hidden',
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     borderCurve: 'continuous',
     backgroundColor: colors.surfaceSubtle,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+  },
+  moodboard: { flex: 1, flexDirection: 'row', gap: 1 },
+  heroColumn: { flex: 1.12 },
+  sideColumn: { flex: 1, gap: 1 },
+  row: { flex: 1, flexDirection: 'row', gap: 1 },
+  moodboardCell: {
+    flex: 1,
+    minWidth: 1,
+    minHeight: 1,
+    overflow: 'hidden',
   },
   cell: {
     width: '50%',

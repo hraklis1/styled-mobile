@@ -7,20 +7,37 @@ import { colors, spacing, typography, radii } from '../../theme';
 
 type Props = {
   visible: boolean;
+  boardName: string;
+  canRename?: boolean;
   onClose: () => void;
   onRename: () => void;
   onChangeCover: () => void;
+  onUploadCover: () => void;
   onOrganize: () => void;
   onDelete: () => void;
 };
 
-export function BoardOptionsMenuSheet({ visible, onClose, onRename, onChangeCover, onOrganize, onDelete }: Props) {
+export function BoardOptionsMenuSheet({
+  visible,
+  boardName,
+  canRename = true,
+  onClose,
+  onRename,
+  onChangeCover,
+  onUploadCover,
+  onOrganize,
+  onDelete,
+}: Props) {
   const insets = useSafeAreaInsets();
   const ref = useRef<BottomSheetModal>(null);
 
   useEffect(() => {
-    ref.current?.present();
-  }, []);
+    if (visible) {
+      ref.current?.present();
+    } else {
+      ref.current?.dismiss();
+    }
+  }, [visible]);
 
   const renderBackdrop = useCallback(
     (props: any) => <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} onPress={onClose} />,
@@ -37,8 +54,11 @@ export function BoardOptionsMenuSheet({ visible, onClose, onRename, onChangeCove
       onDismiss={onClose}
     >
       <BottomSheetView style={[styles.content, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
-        <Text style={styles.title}>Board Options</Text>
-        
+        <View style={styles.header}>
+          <Text style={styles.title}>Board options</Text>
+          <Text style={styles.subtitle} numberOfLines={1}>{boardName}</Text>
+        </View>
+
         <View style={styles.menuOptions}>
           <TouchableOpacity
             style={styles.optionRow}
@@ -52,20 +72,22 @@ export function BoardOptionsMenuSheet({ visible, onClose, onRename, onChangeCove
             <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.optionRow} 
-            activeOpacity={0.7} 
-            onPress={() => {
-              onClose();
-              setTimeout(onRename, 300);
-            }}
-          >
-            <View style={[styles.iconBox, { backgroundColor: `${colors.secondary}80` }]}>
-              <Ionicons name="pencil-outline" size={20} color={colors.primary} />
-            </View>
-            <Text style={styles.optionText}>Rename Board</Text>
-            <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
-          </TouchableOpacity>
+          {canRename && (
+            <TouchableOpacity
+              style={styles.optionRow}
+              activeOpacity={0.7}
+              onPress={() => {
+                onClose();
+                setTimeout(onRename, 300);
+              }}
+            >
+              <View style={[styles.iconBox, { backgroundColor: `${colors.secondary}80` }]}>
+                <Ionicons name="pencil-outline" size={20} color={colors.primary} />
+              </View>
+              <Text style={styles.optionText}>Rename Board</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity 
             style={styles.optionRow} 
@@ -79,6 +101,21 @@ export function BoardOptionsMenuSheet({ visible, onClose, onRename, onChangeCove
               <Ionicons name="image-outline" size={20} color={colors.foreground} />
             </View>
             <Text style={styles.optionText}>Edit Board Cover</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.optionRow}
+            activeOpacity={0.7}
+            onPress={() => {
+              onClose();
+              setTimeout(onUploadCover, 300);
+            }}
+          >
+            <View style={[styles.iconBox, { backgroundColor: `${colors.accent}80` }]}>
+              <Ionicons name="cloud-upload-outline" size={20} color={colors.foreground} />
+            </View>
+            <Text style={styles.optionText}>Upload cover photo</Text>
             <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
           </TouchableOpacity>
 
@@ -109,20 +146,27 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     gap: spacing.md,
   },
+  header: {
+    gap: 2,
+    marginBottom: spacing.xs,
+  },
   title: {
     fontSize: typography.size.lg,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
-    marginBottom: spacing.xs,
+  },
+  subtitle: {
+    fontSize: typography.size.sm,
+    color: colors.mutedForeground,
   },
   menuOptions: {
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   optionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingVertical: spacing.sm,
+    minHeight: 58,
   },
   iconBox: {
     width: 44,

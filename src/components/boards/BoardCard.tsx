@@ -21,6 +21,7 @@ type Props = {
 
 export const BoardCard = React.memo(function BoardCard({ board, itemMap, outfitMap, width, onPress, onOptions }: Props) {
   const count = getBoardSavedCount(board);
+  const savedLabel = `${count} saved`;
 
   return (
     <View style={{ width }}>
@@ -28,7 +29,7 @@ export const BoardCard = React.memo(function BoardCard({ board, itemMap, outfitM
         <BoardCover board={board} itemMap={itemMap} outfitMap={outfitMap} size={width} />
       </PressableScale>
       <View style={styles.metaRow}>
-        <EditorialCardMeta title={board.name} subtitle={`${count} saved`} />
+        <EditorialCardMeta title={board.name} subtitle={savedLabel} />
         {onOptions && (
           <TouchableOpacity
             style={styles.optionsButton}
@@ -45,6 +46,21 @@ export const BoardCard = React.memo(function BoardCard({ board, itemMap, outfitM
 });
 
 const styles = StyleSheet.create({
-  metaRow: { flexDirection: 'row', alignItems: 'flex-start', paddingTop: spacing.sm },
-  optionsButton: { width: 44, height: 44, marginTop: -6, marginRight: -8, alignItems: 'center', justifyContent: 'center', borderRadius: radii.full },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingTop: spacing.sm + 1,
+  },
+  optionsButton: {
+    width: 36,
+    height: 36,
+    marginTop: -5,
+    marginRight: -6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+  },
 });

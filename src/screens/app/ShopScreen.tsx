@@ -109,7 +109,8 @@ export function ShopScreen({ navigation }: ShopScreenProps) {
   return (
     <View style={styles.root}>
       <ScreenHeader
-        title="Shop Wishlist"
+        eyebrow="Shop"
+        title="Wishlist"
         subtitle={entries.length === 0 ? 'No saved outfits yet' : `${entries.length} saved outfit${entries.length === 1 ? '' : 's'}`}
         primaryAction={{
           label: 'Shopping Mode',
@@ -169,7 +170,7 @@ export function ShopScreen({ navigation }: ShopScreenProps) {
               <FilterControl count={activeFilterCount} onPress={() => setFiltersVisible(true)} />
             </View>
 
-            <SegmentedControl value={scope} options={SCOPES} onChange={setScope} />
+            <SegmentedControl value={scope} variant="tabs" options={SCOPES} onChange={setScope} />
           </View>
 
           <FlatList
@@ -232,17 +233,15 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   centered: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' },
   browseControls: {
-    padding: spacing.md,
-    gap: spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.hairline,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.hairline,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.md,
+    gap: spacing.md,
   },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   searchBox: {
     flex: 1,
-    minHeight: 44,
+    minHeight: 42,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
@@ -250,11 +249,11 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     borderCurve: 'continuous',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: colors.hairline,
     backgroundColor: colors.surfaceElevated,
   },
-  searchInput: { flex: 1, paddingVertical: spacing.sm, fontSize: typography.size.sm, color: colors.foreground },
-  listContent: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxxl },
+  searchInput: { flex: 1, paddingVertical: 0, fontSize: typography.size.sm, color: colors.foreground },
+  listContent: { paddingHorizontal: spacing.lg, paddingTop: spacing.xs, gap: spacing.lg, paddingBottom: spacing.xxxl },
   listContentEmpty: { flexGrow: 1 },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, gap: spacing.lg },
   emptyIconCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: `${colors.primary}18`, alignItems: 'center', justifyContent: 'center' },
