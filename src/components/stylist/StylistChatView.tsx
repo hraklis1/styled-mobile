@@ -1153,132 +1153,139 @@ export function StylistChatView({
         onClose={() => setLocationPickerVisible(false)}
       />
 
-      {/* Follow-up chips */}
-      {messages.length > 0 && !isLoading && (
-        <View style={styles.chipsShell}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chipsContent}
-            keyboardShouldPersistTaps="handled"
-          >
-            <Text style={styles.chipsLabel}>Refine</Text>
-            {contextualChips.slice(0, 2).map((chip) => (
-              <TouchableOpacity
-                key={chip}
-                style={styles.chip}
-                onPress={() => sendMessage({ text: chip })}
-                disabled={isLoading}
-              >
-                <Text style={styles.chipText}>{chip}</Text>
-              </TouchableOpacity>
-            ))}
-            {contextualChips.length > 2 ? (
-              <TouchableOpacity style={styles.moreChip} onPress={() => setFollowUpsOpen(true)} accessibilityLabel="More follow-up ideas">
-                <Ionicons name="ellipsis-horizontal" size={16} color={colors.primary} />
-              </TouchableOpacity>
-            ) : null}
-          </ScrollView>
-        </View>
-      )}
-
-      {/* @ Mention menu — sits between chips and input bar */}
-      {mentionQuery !== null && mentionItems.length > 0 && (
-        <View style={styles.mentionMenu}>
-          {mentionItems.map((item) => {
-            const imgUri = resolveImageUri(item.imageUrl);
-            return (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.mentionRow}
-                onPress={() => handleMentionSelect(item)}
-              >
-                <View style={styles.mentionThumb}>
-                  {imgUri ? (
-                    <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                  ) : (
-                    <Ionicons name="shirt-outline" size={14} color={colors.mutedForeground} />
-                  )}
-                </View>
-                <View style={styles.mentionInfo}>
-                  <Text style={styles.mentionName}>{item.name}</Text>
-                  {item.category && (
-                    <Text style={styles.mentionCategory}>
-                      {item.category.replace('_', ' ')}
-                    </Text>
-                  )}
-                </View>
-                <Ionicons name="return-down-back-outline" size={14} color={colors.mutedForeground} />
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
-
-      {/* Input bar */}
-      <View style={[styles.inputBar, { paddingBottom: insets.bottom + spacing.sm }]}>
-        {composerAttachment ? (
-          <View style={styles.attachmentPreview}>
-            <View style={styles.attachmentThumb}>
-              {composerAttachment.uri ? (
-                <Image source={{ uri: composerAttachment.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-              ) : (
-                <Ionicons name={composerAttachment.type === 'photo' ? 'image-outline' : 'shirt-outline'} size={18} color={colors.primary} />
-              )}
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.attachmentEyebrow}>{composerAttachment.type === 'photo' ? 'PHOTO' : 'FROM YOUR CLOSET'}</Text>
-              <Text style={styles.attachmentLabel} numberOfLines={1}>{composerAttachment.label}</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.attachmentRemove}
-              onPress={() => { setComposerAttachment(null); setComposerPhotoData(null); }}
-              accessibilityLabel="Remove attachment"
+      <BlurView
+        intensity={42}
+        tint="systemThinMaterialLight"
+        style={[styles.bottomDock, { paddingBottom: insets.bottom + spacing.sm }]}
+        {...(Platform.OS === 'android' && { blurMethod: 'dimezisBlurViewSdk31Plus' })}
+      >
+        {/* Follow-up chips */}
+        {messages.length > 0 && !isLoading && (
+          <View style={styles.chipsShell}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipsContent}
+              keyboardShouldPersistTaps="handled"
             >
-              <Ionicons name="close" size={17} color={colors.mutedForeground} />
-            </TouchableOpacity>
+              <Text style={styles.chipsLabel}>Refine</Text>
+              {contextualChips.slice(0, 2).map((chip) => (
+                <TouchableOpacity
+                  key={chip}
+                  style={styles.chip}
+                  onPress={() => sendMessage({ text: chip })}
+                  disabled={isLoading}
+                >
+                  <Text style={styles.chipText}>{chip}</Text>
+                </TouchableOpacity>
+              ))}
+              {contextualChips.length > 2 ? (
+                <TouchableOpacity style={styles.moreChip} onPress={() => setFollowUpsOpen(true)} accessibilityLabel="More follow-up ideas">
+                  <Ionicons name="add-circle-outline" size={17} color={colors.primary} />
+                </TouchableOpacity>
+              ) : null}
+            </ScrollView>
           </View>
-        ) : null}
-        <View style={styles.composer}>
-          <Pressable
-            style={styles.photoBtn}
-            onPress={() => setAttachmentSheetVisible(true)}
-            disabled={isLoading}
-            accessibilityLabel="Add photo or wardrobe piece"
-          >
-            <Ionicons name="attach-outline" size={20} color={colors.primary} />
-          </Pressable>
+        )}
 
-          <TextInput
-            style={styles.textInput}
-            value={inputText}
-            onChangeText={handleTextChange}
-            placeholder="Ask about an outfit or tag @a piece"
-            placeholderTextColor={colors.mutedForeground}
-            multiline
-            maxLength={2000}
-            returnKeyType="default"
-            editable={!isLoading}
-          />
+        {/* @ Mention menu — sits between chips and input bar */}
+        {mentionQuery !== null && mentionItems.length > 0 && (
+          <View style={styles.mentionMenu}>
+            {mentionItems.map((item) => {
+              const imgUri = resolveImageUri(item.imageUrl);
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.mentionRow}
+                  onPress={() => handleMentionSelect(item)}
+                >
+                  <View style={styles.mentionThumb}>
+                    {imgUri ? (
+                      <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                    ) : (
+                      <Ionicons name="shirt-outline" size={14} color={colors.mutedForeground} />
+                    )}
+                  </View>
+                  <View style={styles.mentionInfo}>
+                    <Text style={styles.mentionName}>{item.name}</Text>
+                    {item.category && (
+                      <Text style={styles.mentionCategory}>
+                        {item.category.replace('_', ' ')}
+                      </Text>
+                    )}
+                  </View>
+                  <Ionicons name="return-down-back-outline" size={14} color={colors.mutedForeground} />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
-          {isLoading ? (
-            <TouchableOpacity style={styles.stopBtn} onPress={stopGeneration} accessibilityLabel="Stop generating">
-              <Ionicons name="stop" size={14} color={colors.primaryForeground} />
-            </TouchableOpacity>
-          ) : inputText.trim() || composerAttachment ? (
-            <TouchableOpacity
-              style={styles.sendBtn}
-              onPress={handleSendText}
+        {/* Input bar */}
+        <View style={styles.inputBar}>
+          {composerAttachment ? (
+            <View style={styles.attachmentPreview}>
+              <View style={styles.attachmentThumb}>
+                {composerAttachment.uri ? (
+                  <Image source={{ uri: composerAttachment.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                ) : (
+                  <Ionicons name={composerAttachment.type === 'photo' ? 'image-outline' : 'shirt-outline'} size={18} color={colors.primary} />
+                )}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.attachmentEyebrow}>{composerAttachment.type === 'photo' ? 'PHOTO' : 'FROM YOUR CLOSET'}</Text>
+                <Text style={styles.attachmentLabel} numberOfLines={1}>{composerAttachment.label}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.attachmentRemove}
+                onPress={() => { setComposerAttachment(null); setComposerPhotoData(null); }}
+                accessibilityLabel="Remove attachment"
+              >
+                <Ionicons name="close" size={17} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            </View>
+          ) : null}
+          <View style={styles.composer}>
+            <Pressable
+              style={styles.photoBtn}
+              onPress={() => setAttachmentSheetVisible(true)}
               disabled={isLoading}
-              accessibilityLabel="Send message"
+              accessibilityLabel="Add photo or wardrobe piece"
             >
-              <Ionicons name="arrow-up" size={19} color={colors.white} />
-            </TouchableOpacity>
-          ) : (
-            <VoiceInputButton onAudioReady={(b64) => sendMessage({ audio: b64 })} disabled={isLoading} />
-          )}
+              <Ionicons name="camera-outline" size={20} color={colors.primary} />
+            </Pressable>
+
+            <TextInput
+              style={styles.textInput}
+              value={inputText}
+              onChangeText={handleTextChange}
+              placeholder="Ask about an outfit or tag @a piece"
+              placeholderTextColor={colors.mutedForeground}
+              multiline
+              maxLength={2000}
+              returnKeyType="default"
+              editable={!isLoading}
+            />
+
+            {isLoading ? (
+              <TouchableOpacity style={styles.stopBtn} onPress={stopGeneration} accessibilityLabel="Stop generating">
+                <Ionicons name="stop" size={14} color={colors.primaryForeground} />
+              </TouchableOpacity>
+            ) : inputText.trim() || composerAttachment ? (
+              <TouchableOpacity
+                style={styles.sendBtn}
+                onPress={handleSendText}
+                disabled={isLoading}
+                accessibilityLabel="Send message"
+              >
+                <Ionicons name="arrow-up" size={19} color={colors.white} />
+              </TouchableOpacity>
+            ) : (
+              <VoiceInputButton onAudioReady={(b64) => sendMessage({ audio: b64 })} disabled={isLoading} />
+            )}
+          </View>
         </View>
-      </View>
+      </BlurView>
 
       <Modal visible={attachmentSheetVisible} transparent animationType="slide" onRequestClose={() => setAttachmentSheetVisible(false)}>
         <Pressable style={styles.sheetBackdrop} onPress={() => setAttachmentSheetVisible(false)}>
@@ -1597,8 +1604,10 @@ function OutfitPieceCarousel({
   onItemPress,
 }: OutfitPieceCarouselProps) {
   const scrollRef = useRef<ScrollView>(null);
-  const snapInterval = width + spacing.md;
-  const slideHeight = Math.round(width * 1.08);
+  const slideWidth = items.length > 1 ? Math.round(width * 0.9) : width;
+  const sideInset = Math.max(0, (width - slideWidth) / 2);
+  const snapInterval = slideWidth + spacing.md;
+  const slideHeight = Math.round(slideWidth * 1.08);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -1615,7 +1624,7 @@ function OutfitPieceCarousel({
         ref={scrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.pieceCarouselRail}
+        contentContainerStyle={[styles.pieceCarouselRail, { paddingHorizontal: sideInset }]}
         decelerationRate="fast"
         snapToInterval={snapInterval}
         disableIntervalMomentum
@@ -1632,7 +1641,7 @@ function OutfitPieceCarousel({
           return (
             <Pressable
               key={item.id}
-              style={[styles.pieceSlide, { width, height: slideHeight }]}
+              style={[styles.pieceSlide, { width: slideWidth, height: slideHeight }]}
               onPress={() => onItemPress(item)}
               accessibilityRole="button"
               accessibilityLabel={`View ${item.name}`}
@@ -1648,7 +1657,7 @@ function OutfitPieceCarousel({
                 />
               ) : (
                 <View style={styles.pieceImageFallback}>
-                  <Ionicons name="shirt-outline" size={Math.min(width, slideHeight) * 0.18} color={colors.mutedForeground} />
+                  <Ionicons name="shirt-outline" size={Math.min(slideWidth, slideHeight) * 0.18} color={colors.mutedForeground} />
                 </View>
               )}
               <View style={styles.pieceCaption}>
@@ -1714,8 +1723,6 @@ function OutfitSuggestionCard({
   const [adding, setAdding] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
-  const [editingPieces, setEditingPieces] = useState(false);
-  const [actionsOpen, setActionsOpen] = useState(false);
   const [activePieceIndex, setActivePieceIndex] = useState(0);
   // When the user taps 👎 we reveal reason chips before finalizing — a labeled
   // rejection is a much stronger learning signal than a bare thumbs-down.
@@ -1729,11 +1736,9 @@ function OutfitSuggestionCard({
   useEffect(() => {
     setEditedIds(itemIds);
     setAdded(false);
-    setEditingPieces(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemIdsKey]);
 
-  // `null` = closed, 'add' = pick any item, { swapId } = replace that item.
   const [picker, setPicker] = useState<'add' | { swapId: number } | null>(null);
 
   const matchedItems = useMemo(
@@ -1750,11 +1755,6 @@ function OutfitSuggestionCard({
   const hasEventCta = !!(onAddToEvent && eventContext);
 
   // ── Edit handlers (clear the saved/added flags so the refined look can be re-saved) ──
-  const removeItem = useCallback((id: number) => {
-    setEditedIds((ids) => ids.filter((x) => x !== id));
-    setSaved(false);
-    setAdded(false);
-  }, []);
   const swapItem = useCallback((oldId: number, newItem: Item) => {
     setEditedIds((ids) => ids.map((x) => (x === oldId ? newItem.id : x)));
     setSaved(false);
@@ -1865,15 +1865,6 @@ function OutfitSuggestionCard({
             <Ionicons name="sparkles" size={13} color={colors.primary} />
             <Text style={styles.sectionEyebrowText}>Styled for you</Text>
           </View>
-          <TouchableOpacity
-            style={styles.refineToggle}
-            onPress={() => setEditingPieces((open) => !open)}
-            activeOpacity={0.75}
-            accessibilityLabel={editingPieces ? 'Finish refining outfit pieces' : 'Refine outfit pieces'}
-          >
-            <Ionicons name={editingPieces ? 'checkmark' : 'options-outline'} size={14} color={colors.primary} />
-            <Text style={styles.refineToggleText}>{editingPieces ? 'Done' : 'Edit'}</Text>
-          </TouchableOpacity>
         </View>
         <Text style={styles.lookTitle} numberOfLines={2}>{lookTitle}</Text>
         <Text style={styles.lookMeta}>{matchedItems.length} pieces from your wardrobe</Text>
@@ -1891,17 +1882,19 @@ function OutfitSuggestionCard({
         </View>
       )}
 
-      {/* Wardrobe breakdown — editing controls stay tucked behind Refine. */}
+      {/* Wardrobe breakdown — tap any row to swap that piece. */}
       <View style={styles.editList}>
         {matchedItems.map((item) => {
           const imgUri = resolveImageUri(item.imageUrl);
           return (
-            <View key={item.id} style={[styles.editRow, !editingPieces && styles.editRowQuiet]}>
-              <Pressable
-                style={styles.editRowMain}
-                onPress={() => setSelectedItem(item)}
-                accessibilityLabel={`View ${item.name}`}
-              >
+            <Pressable
+              key={item.id}
+              style={styles.editRow}
+              onPress={() => setPicker({ swapId: item.id })}
+              accessibilityRole="button"
+              accessibilityLabel={`Swap ${item.name}`}
+            >
+              <View style={styles.editRowMain}>
                 <View style={styles.editThumb}>
                   {imgUri ? (
                     <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
@@ -1917,41 +1910,23 @@ function OutfitSuggestionCard({
                     </Text>
                   )}
                 </View>
-              </Pressable>
-              {editingPieces ? (
-                <>
-                  <TouchableOpacity
-                    style={styles.editIconBtn}
-                    onPress={() => setPicker({ swapId: item.id })}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                    accessibilityLabel={`Swap ${item.name}`}
-                  >
-                    <Ionicons name="swap-horizontal-outline" size={18} color={colors.mutedForeground} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.editIconBtn}
-                    onPress={() => removeItem(item.id)}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                    accessibilityLabel={`Remove ${item.name}`}
-                  >
-                    <Ionicons name="close" size={18} color={colors.mutedForeground} />
-                  </TouchableOpacity>
-                </>
-              ) : null}
-            </View>
+              </View>
+              <Ionicons name="swap-horizontal-outline" size={18} color={colors.mutedForeground} />
+            </Pressable>
           );
         })}
-        {editingPieces ? (
-          <TouchableOpacity
-            style={styles.addItemBtn}
-            onPress={() => setPicker('add')}
-            activeOpacity={0.8}
-            accessibilityLabel="Add an item from your library"
-          >
-            <Ionicons name="add-outline" size={16} color={colors.primary} />
-            <Text style={styles.addItemBtnText}>Add item</Text>
-          </TouchableOpacity>
-        ) : null}
+        <TouchableOpacity
+          style={styles.addItemBtn}
+          onPress={() => setPicker('add')}
+          activeOpacity={0.75}
+          accessibilityRole="button"
+          accessibilityLabel="Add an item from your wardrobe"
+        >
+          <View style={styles.addItemIcon}>
+            <Ionicons name="add" size={14} color={colors.primary} />
+          </View>
+          <Text style={styles.addItemBtnText}>Add item</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.stylistNoteBlock}>
@@ -2000,36 +1975,28 @@ function OutfitSuggestionCard({
             size={15}
             color={saved ? colors.white : hasEventCta ? colors.primary : colors.white}
           />
-          <Text style={[styles.saveBtnText, hasEventCta && !saved && styles.saveBtnTextSecondary]}>
+          <Text style={[styles.saveBtnText, hasEventCta && !saved && styles.saveBtnTextSecondary]} numberOfLines={1}>
             {saving ? 'Saving…' : saved ? 'Saved to outfits' : 'Save this look'}
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.cardMenuBtn, actionsOpen && styles.cardMenuBtnActive]}
-          onPress={() => setActionsOpen((open) => !open)}
-          accessibilityLabel="More styling actions"
-          activeOpacity={0.75}
-        >
-          <Ionicons name="ellipsis-horizontal" size={18} color={colors.primary} />
-        </TouchableOpacity>
-      </View>
-
-      {actionsOpen ? (
-        <View style={styles.secondaryActionTray}>
+        <View style={styles.explicitCardActions}>
           {onToggleAudio ? (
-            <TouchableOpacity style={styles.trayAction} onPress={onToggleAudio} accessibilityLabel="Read styling notes aloud">
+            <TouchableOpacity
+              style={styles.cardIconBtn}
+              onPress={onToggleAudio}
+              accessibilityLabel="Read styling notes aloud"
+              activeOpacity={0.75}
+            >
               <Ionicons
                 name={isPlaying ? 'pause-circle-outline' : 'volume-medium-outline'}
                 size={18}
-                color={colors.mutedForeground}
+                color={isPlaying ? colors.primary : colors.mutedForeground}
               />
-              <Text style={styles.trayActionText}>{isPlaying ? 'Pause notes' : 'Listen'}</Text>
             </TouchableOpacity>
           ) : null}
-        <View style={styles.feedbackRow}>
           <TouchableOpacity
-            style={[styles.feedbackBtn, feedback === 'up' && styles.feedbackBtnActive]}
+            style={[styles.cardIconBtn, feedback === 'up' && styles.cardIconBtnActive]}
             onPress={() => handleFeedback('up')}
             disabled={!!feedback}
             accessibilityLabel="This outfit works for me"
@@ -2041,7 +2008,7 @@ function OutfitSuggestionCard({
             />
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.feedbackBtn, (feedback === 'down' || choosingReason) && styles.feedbackBtnActive]}
+            style={[styles.cardIconBtn, (feedback === 'down' || choosingReason) && styles.cardIconBtnActive]}
             onPress={() => handleFeedback('down')}
             disabled={!!feedback}
             accessibilityLabel="This outfit doesn't work for me"
@@ -2053,8 +2020,7 @@ function OutfitSuggestionCard({
             />
           </TouchableOpacity>
         </View>
-        </View>
-      ) : null}
+      </View>
 
       {/* Reason chips — surfaced after 👎 so the rejection becomes a labeled signal */}
       {choosingReason && !feedback && (
@@ -3001,13 +2967,19 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     paddingTop: spacing.xl,
   },
+  // Bottom dock — backgroundColor intentionally omitted; BlurView owns the surface.
+  bottomDock: {
+    paddingTop: spacing.xs,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
+    overflow: 'hidden',
+  },
   // Follow-up chips
   chipsBar: {
     flexGrow: 0,
   },
   chipsShell: {
     paddingVertical: spacing.xs,
-    backgroundColor: colors.background,
   },
   chipsContent: {
     flexDirection: 'row',
@@ -3094,7 +3066,6 @@ const styles = StyleSheet.create({
   inputBar: {
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
-    backgroundColor: colors.background,
   },
   attachmentPreview: {
     minHeight: 58,
@@ -3129,7 +3100,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: `${colors.primary}33`,
     padding: 4,
-    ...shadows.md,
+    ...shadows.sm,
   },
   photoBtn: {
     width: 44,
@@ -3234,20 +3205,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.md,
   },
-  refineToggle: {
-    minHeight: 30,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radii.full,
-    backgroundColor: colors.surfaceSubtle,
-  },
-  refineToggleText: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.semibold,
-    color: colors.primary,
-  },
   lookTitle: {
     fontFamily: typography.family.display,
     fontSize: 25,
@@ -3323,12 +3280,13 @@ const styles = StyleSheet.create({
   editRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  editRowQuiet: {
-    minHeight: 48,
-    paddingVertical: 2,
+    minHeight: 54,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
+    backgroundColor: colors.surfaceSubtle,
   },
   editRowMain: {
     flex: 1,
@@ -3357,23 +3315,24 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
     marginTop: 1,
   },
-  editIconBtn: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   addItemBtn: {
+    minHeight: 46,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
-    marginTop: spacing.xs,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+    borderRadius: radii.md,
+    backgroundColor: `${colors.primary}0D`,
+  },
+  addItemIcon: {
+    width: 22,
+    height: 22,
     borderRadius: radii.full,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: `${colors.primary}12`,
   },
   addItemBtnText: {
     fontSize: typography.size.xs,
@@ -3388,12 +3347,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.9,
   },
   stylistNoteBlock: {
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
   outfitCardText: {
     fontSize: typography.size.sm,
     color: colors.foreground,
-    lineHeight: typography.size.sm * 1.65,
+    lineHeight: typography.size.sm * typography.lineHeight.loose,
   },
   addEventBtn: {
     flexDirection: 'row',
@@ -3443,6 +3402,7 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   saveBtnText: {
+    flexShrink: 1,
     fontSize: typography.size.xs,
     fontWeight: typography.weight.semibold,
     color: colors.white,
@@ -3456,52 +3416,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.sm,
   },
-  cardMenuBtn: {
-    width: 44,
-    height: 44,
+  explicitCardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  cardIconBtn: {
+    width: 38,
+    height: 38,
     borderRadius: radii.full,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surfaceSubtle,
   },
-  cardMenuBtnActive: {
+  cardIconBtnActive: {
     backgroundColor: colors.surfaceSelected,
   },
-  secondaryActionTray: {
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.full,
-    backgroundColor: colors.surfaceSubtle,
-  },
-  trayAction: {
-    minHeight: 36,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  trayActionText: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-    fontWeight: typography.weight.medium,
-  },
-  feedbackRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  feedbackBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: radii.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surfaceElevated,
-  },
-  feedbackBtnActive: { backgroundColor: colors.surfaceSelected },
   reasonChips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
