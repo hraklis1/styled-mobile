@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
+import { Image as ExpoImage } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -42,7 +43,6 @@ import { addOutfitToWishlist } from '../../hooks/useWishlist';
 import { VoiceInputButton } from '../primitives/VoiceInputButton';
 import { LocationAutocompleteInput } from '../primitives/LocationAutocompleteInput';
 import { ShopOutfitCard } from '../outfits/ShopOutfitCard';
-import { ResolvedOutfitCollage } from '../outfits/ResolvedOutfitCollage';
 import { ItemPickerSheet } from '../outfits/ItemPickerSheet';
 import { StylistRichText } from './StylistRichText';
 import { GapCard } from './GapCard';
@@ -207,6 +207,20 @@ function normalizeChatMessage(message: ChatMessage): ChatMessage {
   };
 }
 
+function isRichAssistantMessage(message: ChatMessage | undefined): message is Extract<ChatMessage, { role: 'assistant' }> {
+  return !!message
+    && message.role === 'assistant'
+    && !message.isStreaming
+    && (
+      message.renderType === 'closet_outfit'
+      || message.renderType === 'shopping_outfit'
+      || message.renderType === 'trip_plan'
+      || !!message.suggestedItemIds?.length
+      || !!message.shopOutfit
+      || !!message.tripPlan
+    );
+}
+
 // Map a server-stored thread into chat messages. The recId is preserved so
 // feedback still links; the payload (when present) rehydrates rich replies —
 // without it, an assistant turn falls back to a plain stylist note.
@@ -369,6 +383,9 @@ export function StylistChatView({
   const [followUpsOpen, setFollowUpsOpen] = useState(false);
 
   const scrollRef = useRef<ScrollView>(null);
+  const messageLayoutsRef = useRef<Record<string, number>>({});
+  const pendingFocusMessageIdRef = useRef<string | null>(null);
+  const focusedRichMessageIdRef = useRef<string | null>(null);
   const player = useAudioPlayer(null);
   const playingFileRef = useRef<File | null>(null);
   const lastPromptRequestIdRef = useRef(0);
@@ -421,6 +438,13 @@ export function StylistChatView({
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  const scrollToMessageStart = useCallback((messageId: string, animated = true) => {
+    const y = messageLayoutsRef.current[messageId];
+    if (typeof y !== 'number') return false;
+    scrollRef.current?.scrollTo({ y: Math.max(y - spacing.md, 0), animated });
+    return true;
+  }, []);
 
   function stopCurrentAudio() {
     try { player.pause(); } catch { /* ignore */ }
@@ -853,10 +877,20 @@ export function StylistChatView({
         scrollRef.current?.scrollTo({ y: 0, animated: false });
         return;
       }
+      const lastMessage = messages[messages.length - 1];
+      if (isRichAssistantMessage(lastMessage) && !isLoading) {
+        if (focusedRichMessageIdRef.current !== lastMessage.id) {
+          focusedRichMessageIdRef.current = lastMessage.id;
+          pendingFocusMessageIdRef.current = lastMessage.id;
+          if (scrollToMessageStart(lastMessage.id)) pendingFocusMessageIdRef.current = null;
+        }
+        return;
+      }
+      pendingFocusMessageIdRef.current = null;
       scrollRef.current?.scrollToEnd({ animated: true });
     }, 100);
     return () => clearTimeout(timer);
-  }, [messages, isLoading]);
+  }, [messages, isLoading, scrollToMessageStart]);
 
   useEffect(() => {
     return () => { stopCurrentAudio(); };
@@ -968,7 +1002,7 @@ export function StylistChatView({
         {...(Platform.OS === 'android' && { blurMethod: 'dimezisBlurViewSdk31Plus' })}
       >
         <View style={styles.headerIdentity}>
-          <Text style={styles.headerTitle}>Stylist</Text>
+          <Text style={styles.headerTitle}>Your Stylist</Text>
           <TouchableOpacity
             style={styles.headerContextPill}
             onPress={() => setLocationPickerVisible(true)}
@@ -1056,24 +1090,33 @@ export function StylistChatView({
         ) : (
           <>
             {messages.map((msg) => (
-              <MessageBubble
+              <View
                 key={msg.id}
-                message={msg}
-                allItems={allItems}
-                isPlaying={playingId === msg.id}
-                createOutfit={createOutfit}
-                eventContext={eventContext}
-                onAddToEvent={onAddToEvent}
-                onNavigateToShop={onNavigateToShop}
-                onToggleAudio={
-                  msg.role === 'assistant' && !msg.isStreaming
-                    ? () =>
-                        playingId === msg.id
-                          ? stopCurrentAudio()
-                          : playTts(msg.id, msg.text)
-                    : undefined
-                }
-              />
+                onLayout={(event) => {
+                  messageLayoutsRef.current[msg.id] = event.nativeEvent.layout.y;
+                  if (pendingFocusMessageIdRef.current === msg.id && scrollToMessageStart(msg.id)) {
+                    pendingFocusMessageIdRef.current = null;
+                  }
+                }}
+              >
+                <MessageBubble
+                  message={msg}
+                  allItems={allItems}
+                  isPlaying={playingId === msg.id}
+                  createOutfit={createOutfit}
+                  eventContext={eventContext}
+                  onAddToEvent={onAddToEvent}
+                  onNavigateToShop={onNavigateToShop}
+                  onToggleAudio={
+                    msg.role === 'assistant' && !msg.isStreaming
+                      ? () =>
+                          playingId === msg.id
+                            ? stopCurrentAudio()
+                            : playTts(msg.id, msg.text)
+                      : undefined
+                  }
+                />
+              </View>
             ))}
             {isLoading && !messages.some((m) => m.isStreaming) && <TypingIndicator />}
             {errorMessage ? (
@@ -1112,22 +1155,30 @@ export function StylistChatView({
 
       {/* Follow-up chips */}
       {messages.length > 0 && !isLoading && (
-        <View style={styles.chipsContent}>
-          {contextualChips.slice(0, 2).map((chip) => (
-            <TouchableOpacity
-              key={chip}
-              style={styles.chip}
-              onPress={() => sendMessage({ text: chip })}
-              disabled={isLoading}
-            >
-              <Text style={styles.chipText}>{chip}</Text>
-            </TouchableOpacity>
-          ))}
-          {contextualChips.length > 2 ? (
-            <TouchableOpacity style={styles.moreChip} onPress={() => setFollowUpsOpen(true)} accessibilityLabel="More follow-up ideas">
-              <Ionicons name="ellipsis-horizontal" size={17} color={colors.primary} />
-            </TouchableOpacity>
-          ) : null}
+        <View style={styles.chipsShell}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipsContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Text style={styles.chipsLabel}>Refine</Text>
+            {contextualChips.slice(0, 2).map((chip) => (
+              <TouchableOpacity
+                key={chip}
+                style={styles.chip}
+                onPress={() => sendMessage({ text: chip })}
+                disabled={isLoading}
+              >
+                <Text style={styles.chipText}>{chip}</Text>
+              </TouchableOpacity>
+            ))}
+            {contextualChips.length > 2 ? (
+              <TouchableOpacity style={styles.moreChip} onPress={() => setFollowUpsOpen(true)} accessibilityLabel="More follow-up ideas">
+                <Ionicons name="ellipsis-horizontal" size={16} color={colors.primary} />
+              </TouchableOpacity>
+            ) : null}
+          </ScrollView>
         </View>
       )}
 
@@ -1425,17 +1476,9 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
             missingEssentials={message.missingEssentials}
             onNavigateToShop={onNavigateToShop}
             recId={message.recId}
+            isPlaying={isPlaying}
+            onToggleAudio={onToggleAudio}
           />
-          {onToggleAudio && (
-            <TouchableOpacity style={styles.quietAudioBtn} onPress={onToggleAudio} accessibilityLabel="Read styling notes aloud">
-              <Ionicons
-                name={isPlaying ? 'pause-circle-outline' : 'volume-medium-outline'}
-                size={18}
-                color={colors.mutedForeground}
-              />
-              <Text style={styles.quietActionText}>{isPlaying ? 'Pause notes' : 'Listen to notes'}</Text>
-            </TouchableOpacity>
-          )}
         </View>
       </EditorialEntrance>
     );
@@ -1538,6 +1581,103 @@ function outfitNameFromItems(items: Item[]): string {
   return sorted.slice(0, 2).map((i) => i.name).join(' · ');
 }
 
+type OutfitPieceCarouselProps = {
+  items: Item[];
+  width: number;
+  activeIndex: number;
+  onActiveIndexChange: (index: number) => void;
+  onItemPress: (item: Item) => void;
+};
+
+function OutfitPieceCarousel({
+  items,
+  width,
+  activeIndex,
+  onActiveIndexChange,
+  onItemPress,
+}: OutfitPieceCarouselProps) {
+  const scrollRef = useRef<ScrollView>(null);
+  const snapInterval = width + spacing.md;
+  const slideHeight = Math.round(width * 1.08);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({
+      x: activeIndex * snapInterval,
+      animated: false,
+    });
+  }, [activeIndex, items.length, snapInterval]);
+
+  if (items.length === 0) return null;
+
+  return (
+    <View style={[styles.pieceCarousel, { width }]}>
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.pieceCarouselRail}
+        decelerationRate="fast"
+        snapToInterval={snapInterval}
+        disableIntervalMomentum
+        nestedScrollEnabled
+        directionalLockEnabled
+        scrollEventThrottle={16}
+        onMomentumScrollEnd={(event) => {
+          const nextIndex = Math.round(event.nativeEvent.contentOffset.x / snapInterval);
+          onActiveIndexChange(Math.max(0, Math.min(nextIndex, items.length - 1)));
+        }}
+      >
+        {items.map((item) => {
+          const uri = resolveImageUri(item.imageUrl);
+          return (
+            <Pressable
+              key={item.id}
+              style={[styles.pieceSlide, { width, height: slideHeight }]}
+              onPress={() => onItemPress(item)}
+              accessibilityRole="button"
+              accessibilityLabel={`View ${item.name}`}
+            >
+              {uri ? (
+                <ExpoImage
+                  source={{ uri }}
+                  style={styles.pieceImage}
+                  contentFit="contain"
+                  transition={150}
+                  cachePolicy="memory-disk"
+                  recyclingKey={String(item.id)}
+                />
+              ) : (
+                <View style={styles.pieceImageFallback}>
+                  <Ionicons name="shirt-outline" size={Math.min(width, slideHeight) * 0.18} color={colors.mutedForeground} />
+                </View>
+              )}
+              <View style={styles.pieceCaption}>
+                <Text style={styles.pieceName} numberOfLines={1}>{item.name}</Text>
+                {!!item.category && (
+                  <Text style={styles.pieceCategory} numberOfLines={1}>
+                    {item.category.replace(/_/g, ' ')}
+                  </Text>
+                )}
+              </View>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      {items.length > 1 ? (
+        <View style={styles.piecePagination} accessibilityLabel={`Piece ${activeIndex + 1} of ${items.length}`}>
+          {items.map((item, index) => (
+            <View
+              key={item.id}
+              style={[styles.piecePageDot, index === activeIndex && styles.piecePageDotActive]}
+            />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 type OutfitSuggestionCardProps = {
   messageText: string;
   lookName?: string;
@@ -1549,9 +1689,24 @@ type OutfitSuggestionCardProps = {
   missingEssentials?: MissingEssential[];
   onNavigateToShop?: () => void;
   recId?: number;
+  isPlaying?: boolean;
+  onToggleAudio?: () => void;
 };
 
-function OutfitSuggestionCard({ messageText, lookName, itemIds, allItems, createOutfit, eventContext, onAddToEvent, missingEssentials, onNavigateToShop, recId }: OutfitSuggestionCardProps) {
+function OutfitSuggestionCard({
+  messageText,
+  lookName,
+  itemIds,
+  allItems,
+  createOutfit,
+  eventContext,
+  onAddToEvent,
+  missingEssentials,
+  onNavigateToShop,
+  recId,
+  isPlaying,
+  onToggleAudio,
+}: OutfitSuggestionCardProps) {
   const { width } = useWindowDimensions();
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1559,6 +1714,9 @@ function OutfitSuggestionCard({ messageText, lookName, itemIds, allItems, create
   const [adding, setAdding] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
+  const [editingPieces, setEditingPieces] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [activePieceIndex, setActivePieceIndex] = useState(0);
   // When the user taps 👎 we reveal reason chips before finalizing — a labeled
   // rejection is a much stronger learning signal than a bare thumbs-down.
   const [choosingReason, setChoosingReason] = useState(false);
@@ -1571,6 +1729,7 @@ function OutfitSuggestionCard({ messageText, lookName, itemIds, allItems, create
   useEffect(() => {
     setEditedIds(itemIds);
     setAdded(false);
+    setEditingPieces(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemIdsKey]);
 
@@ -1581,14 +1740,10 @@ function OutfitSuggestionCard({ messageText, lookName, itemIds, allItems, create
     () => editedIds.map((id) => allItems.find((i) => i.id === id)).filter((i): i is Item => !!i),
     [editedIds, allItems],
   );
-  const collageSlots = useMemo(
-    () => matchedItems.map((item) => ({
-      key: String(item.id),
-      uri: resolveImageUri(item.imageUrl),
-    })),
-    [matchedItems],
-  );
-  const collageSize = Math.max(240, Math.min(width - spacing.xxl * 2, 420));
+  useEffect(() => {
+    setActivePieceIndex((index) => Math.min(index, Math.max(matchedItems.length - 1, 0)));
+  }, [matchedItems.length]);
+  const carouselWidth = Math.max(240, Math.min(width - spacing.xxl * 2, 420));
   const lookTitle = lookName?.trim() || outfitNameFromItems(matchedItems);
   // When an event is in context, "Add to [event]" is the primary action, so the
   // save button steps down to a secondary (outline) style — one filled CTA only.
@@ -1705,31 +1860,43 @@ function OutfitSuggestionCard({ messageText, lookName, itemIds, allItems, create
   return (
     <View style={styles.outfitCard}>
       <View style={styles.lookHeader}>
-        <View style={styles.sectionEyebrow}>
-          <Ionicons name="sparkles" size={13} color={colors.primary} />
-          <Text style={styles.sectionEyebrowText}>Styled for you</Text>
+        <View style={styles.lookHeaderTop}>
+          <View style={styles.sectionEyebrow}>
+            <Ionicons name="sparkles" size={13} color={colors.primary} />
+            <Text style={styles.sectionEyebrowText}>Styled for you</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.refineToggle}
+            onPress={() => setEditingPieces((open) => !open)}
+            activeOpacity={0.75}
+            accessibilityLabel={editingPieces ? 'Finish refining outfit pieces' : 'Refine outfit pieces'}
+          >
+            <Ionicons name={editingPieces ? 'checkmark' : 'options-outline'} size={14} color={colors.primary} />
+            <Text style={styles.refineToggleText}>{editingPieces ? 'Done' : 'Edit'}</Text>
+          </TouchableOpacity>
         </View>
         <Text style={styles.lookTitle} numberOfLines={2}>{lookTitle}</Text>
         <Text style={styles.lookMeta}>{matchedItems.length} pieces from your wardrobe</Text>
       </View>
 
-      {collageSlots.length > 0 && (
-        <View style={styles.collageFrame}>
-          <ResolvedOutfitCollage
-            slots={collageSlots}
-            size={collageSize}
-            height={Math.round(collageSize * 0.88)}
-            borderRadius={radii.lg}
+      {matchedItems.length > 0 && (
+        <View style={styles.pieceCarouselFrame}>
+          <OutfitPieceCarousel
+            items={matchedItems}
+            width={carouselWidth}
+            activeIndex={activePieceIndex}
+            onActiveIndexChange={setActivePieceIndex}
+            onItemPress={setSelectedItem}
           />
         </View>
       )}
 
-      {/* Editable item list — tap name to view, swap, or remove */}
+      {/* Wardrobe breakdown — editing controls stay tucked behind Refine. */}
       <View style={styles.editList}>
         {matchedItems.map((item) => {
           const imgUri = resolveImageUri(item.imageUrl);
           return (
-            <View key={item.id} style={styles.editRow}>
+            <View key={item.id} style={[styles.editRow, !editingPieces && styles.editRowQuiet]}>
               <Pressable
                 style={styles.editRowMain}
                 onPress={() => setSelectedItem(item)}
@@ -1751,38 +1918,46 @@ function OutfitSuggestionCard({ messageText, lookName, itemIds, allItems, create
                   )}
                 </View>
               </Pressable>
-              <TouchableOpacity
-                style={styles.editIconBtn}
-                onPress={() => setPicker({ swapId: item.id })}
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                accessibilityLabel={`Swap ${item.name}`}
-              >
-                <Ionicons name="swap-horizontal-outline" size={18} color={colors.mutedForeground} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.editIconBtn}
-                onPress={() => removeItem(item.id)}
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                accessibilityLabel={`Remove ${item.name}`}
-              >
-                <Ionicons name="close" size={18} color={colors.mutedForeground} />
-              </TouchableOpacity>
+              {editingPieces ? (
+                <>
+                  <TouchableOpacity
+                    style={styles.editIconBtn}
+                    onPress={() => setPicker({ swapId: item.id })}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    accessibilityLabel={`Swap ${item.name}`}
+                  >
+                    <Ionicons name="swap-horizontal-outline" size={18} color={colors.mutedForeground} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.editIconBtn}
+                    onPress={() => removeItem(item.id)}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    accessibilityLabel={`Remove ${item.name}`}
+                  >
+                    <Ionicons name="close" size={18} color={colors.mutedForeground} />
+                  </TouchableOpacity>
+                </>
+              ) : null}
             </View>
           );
         })}
-        <TouchableOpacity
-          style={styles.addItemBtn}
-          onPress={() => setPicker('add')}
-          activeOpacity={0.8}
-          accessibilityLabel="Add an item from your library"
-        >
-          <Ionicons name="add-outline" size={16} color={colors.primary} />
-          <Text style={styles.addItemBtnText}>Add item</Text>
-        </TouchableOpacity>
+        {editingPieces ? (
+          <TouchableOpacity
+            style={styles.addItemBtn}
+            onPress={() => setPicker('add')}
+            activeOpacity={0.8}
+            accessibilityLabel="Add an item from your library"
+          >
+            <Ionicons name="add-outline" size={16} color={colors.primary} />
+            <Text style={styles.addItemBtnText}>Add item</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
-      <Text style={styles.rationaleLabel}>Why it works</Text>
-      <Text style={styles.outfitCardText}>{messageText}</Text>
+      <View style={styles.stylistNoteBlock}>
+        <Text style={styles.rationaleLabel}>Stylist's note</Text>
+        <Text style={styles.outfitCardText}>{messageText}</Text>
+      </View>
 
       {onAddToEvent && eventContext && (
         <TouchableOpacity
@@ -1830,6 +2005,28 @@ function OutfitSuggestionCard({ messageText, lookName, itemIds, allItems, create
           </Text>
         </TouchableOpacity>
 
+        <TouchableOpacity
+          style={[styles.cardMenuBtn, actionsOpen && styles.cardMenuBtnActive]}
+          onPress={() => setActionsOpen((open) => !open)}
+          accessibilityLabel="More styling actions"
+          activeOpacity={0.75}
+        >
+          <Ionicons name="ellipsis-horizontal" size={18} color={colors.primary} />
+        </TouchableOpacity>
+      </View>
+
+      {actionsOpen ? (
+        <View style={styles.secondaryActionTray}>
+          {onToggleAudio ? (
+            <TouchableOpacity style={styles.trayAction} onPress={onToggleAudio} accessibilityLabel="Read styling notes aloud">
+              <Ionicons
+                name={isPlaying ? 'pause-circle-outline' : 'volume-medium-outline'}
+                size={18}
+                color={colors.mutedForeground}
+              />
+              <Text style={styles.trayActionText}>{isPlaying ? 'Pause notes' : 'Listen'}</Text>
+            </TouchableOpacity>
+          ) : null}
         <View style={styles.feedbackRow}>
           <TouchableOpacity
             style={[styles.feedbackBtn, feedback === 'up' && styles.feedbackBtnActive]}
@@ -1856,7 +2053,8 @@ function OutfitSuggestionCard({ messageText, lookName, itemIds, allItems, create
             />
           </TouchableOpacity>
         </View>
-      </View>
+        </View>
+      ) : null}
 
       {/* Reason chips — surfaced after 👎 so the rejection becomes a labeled signal */}
       {choosingReason && !feedback && (
@@ -2531,22 +2729,23 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontFamily: typography.family.display,
-    fontSize: typography.size.xl,
+    fontSize: 24,
+    lineHeight: 30,
     color: colors.foreground,
   },
   headerIdentity: { flex: 1, alignItems: 'flex-start', gap: spacing.xs },
   headerContextPill: {
-    maxWidth: '92%',
-    minHeight: 26,
+    maxWidth: '96%',
+    minHeight: 22,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: 0,
     borderRadius: radii.full,
-    backgroundColor: colors.surfaceSelected,
+    backgroundColor: 'transparent',
   },
-  headerSubtitle: { flexShrink: 1, fontSize: 11, color: colors.secondaryForeground },
-  headerWeather: { fontSize: 11, color: colors.primary, fontWeight: typography.weight.semibold },
+  headerSubtitle: { flexShrink: 1, fontSize: 12, color: colors.mutedForeground },
+  headerWeather: { fontSize: 12, color: colors.primary, fontWeight: typography.weight.semibold },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   doneBtn: { minHeight: 36, justifyContent: 'center', paddingHorizontal: spacing.sm },
   doneBtnText: { color: colors.primary, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
@@ -2806,34 +3005,45 @@ const styles = StyleSheet.create({
   chipsBar: {
     flexGrow: 0,
   },
+  chipsShell: {
+    paddingVertical: spacing.xs,
+    backgroundColor: colors.background,
+  },
   chipsContent: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    gap: spacing.sm,
+    paddingRight: spacing.xl,
+    gap: spacing.xs,
+  },
+  chipsLabel: {
+    marginRight: spacing.xs,
+    fontSize: 10,
+    fontWeight: typography.weight.bold,
+    color: colors.mutedForeground,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
   chip: {
-    flex: 1,
-    minHeight: 38,
+    minHeight: 34,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.hairline,
     borderRadius: radii.full,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs + 2,
-    backgroundColor: colors.surfaceElevated,
+    paddingVertical: spacing.xs + 1,
+    backgroundColor: 'transparent',
   },
   chipText: {
     fontSize: typography.size.xs,
-    color: colors.foreground,
+    color: colors.secondaryForeground,
     fontWeight: typography.weight.medium,
     textAlign: 'center',
   },
   moreChip: {
-    width: 38,
-    height: 38,
+    width: 34,
+    height: 34,
     borderRadius: radii.full,
     alignItems: 'center',
     justifyContent: 'center',
@@ -3011,25 +3221,103 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceElevated,
     borderRadius: radii.xl,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: `${colors.primary}24`,
+    borderColor: colors.hairline,
     padding: spacing.lg,
-    gap: spacing.md,
+    gap: spacing.lg,
     ...shadows.md,
   },
   lookHeader: { gap: spacing.xs },
+  lookHeaderTop: {
+    minHeight: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  refineToggle: {
+    minHeight: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  refineToggleText: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
+  },
   lookTitle: {
     fontFamily: typography.family.display,
-    fontSize: 24,
+    fontSize: 25,
     color: colors.foreground,
-    lineHeight: typography.size.xl * 1.25,
+    lineHeight: 31,
     letterSpacing: 0,
   },
   lookMeta: { fontSize: typography.size.xs, color: colors.mutedForeground },
-  collageFrame: {
+  pieceCarouselFrame: {
     alignItems: 'center',
     gap: spacing.sm,
+  },
+  pieceCarousel: {
+    alignSelf: 'center',
+    gap: spacing.sm,
+  },
+  pieceCarouselRail: {
+    gap: spacing.md,
+  },
+  pieceSlide: {
     overflow: 'hidden',
+    padding: spacing.sm,
+    gap: spacing.sm,
     borderRadius: radii.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  pieceImage: {
+    width: '100%',
+    flex: 1,
+  },
+  pieceImageFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pieceCaption: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
+    backgroundColor: colors.surfaceElevated,
+  },
+  pieceName: {
+    color: colors.foreground,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+  },
+  pieceCategory: {
+    marginTop: 1,
+    color: colors.mutedForeground,
+    fontSize: typography.size.xs,
+    textTransform: 'capitalize',
+  },
+  piecePagination: {
+    minHeight: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+  },
+  piecePageDot: {
+    width: 6,
+    height: 6,
+    borderRadius: radii.full,
+    backgroundColor: colors.border,
+  },
+  piecePageDotActive: {
+    width: 18,
+    backgroundColor: colors.primary,
   },
   editList: { width: '100%', gap: spacing.xs },
   editRow: {
@@ -3037,6 +3325,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     paddingVertical: spacing.xs,
+  },
+  editRowQuiet: {
+    minHeight: 48,
+    paddingVertical: 2,
   },
   editRowMain: {
     flex: 1,
@@ -3047,7 +3339,7 @@ const styles = StyleSheet.create({
   editThumb: {
     width: 36,
     height: 42,
-    borderRadius: radii.sm,
+    borderRadius: radii.md,
     overflow: 'hidden',
     backgroundColor: colors.muted,
     alignItems: 'center',
@@ -3078,7 +3370,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     marginTop: spacing.xs,
     paddingVertical: spacing.sm,
-    borderRadius: radii.md,
+    borderRadius: radii.full,
     borderWidth: 1,
     borderColor: colors.primary,
     borderStyle: 'dashed',
@@ -3091,9 +3383,12 @@ const styles = StyleSheet.create({
   rationaleLabel: {
     fontSize: 10,
     fontWeight: typography.weight.bold,
-    color: colors.mutedForeground,
+    color: colors.primary,
     textTransform: 'uppercase',
     letterSpacing: 0.9,
+  },
+  stylistNoteBlock: {
+    gap: spacing.xs,
   },
   outfitCardText: {
     fontSize: typography.size.sm,
@@ -3121,6 +3416,8 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   saveBtn: {
+    flex: 1,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -3129,7 +3426,6 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     paddingVertical: spacing.sm + 2,
     paddingHorizontal: spacing.lg,
-    alignSelf: 'flex-start',
   },
   saveBtnSecondary: {
     backgroundColor: 'transparent',
@@ -3160,18 +3456,52 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.sm,
   },
+  cardMenuBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceSubtle,
+  },
+  cardMenuBtnActive: {
+    backgroundColor: colors.surfaceSelected,
+  },
+  secondaryActionTray: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  trayAction: {
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  trayActionText: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+    fontWeight: typography.weight.medium,
+  },
   feedbackRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
   },
   feedbackBtn: {
-    width: 30,
-    height: 30,
+    width: 34,
+    height: 34,
+    borderRadius: radii.full,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.surfaceElevated,
   },
-  feedbackBtnActive: {},
+  feedbackBtnActive: { backgroundColor: colors.surfaceSelected },
   reasonChips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
