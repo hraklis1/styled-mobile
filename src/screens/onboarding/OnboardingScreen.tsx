@@ -17,66 +17,16 @@ import * as Location from 'expo-location';
 import { useUpdateProfile } from '../../hooks/useProfile';
 import { track } from '../../lib/analytics';
 import { colors, spacing, typography, radii } from '../../theme';
-
-// ── Options ───────────────────────────────────────────────────────────────────
-
-const STYLE_OPTIONS = [
-  { id: 'minimalist', label: 'Minimalist',    desc: 'Clean lines, neutral, less is more' },
-  { id: 'streetwear', label: 'Streetwear',    desc: 'Urban, relaxed, logo-forward' },
-  { id: 'bohemian',   label: 'Bohemian',      desc: 'Flowy, layered, eclectic' },
-  { id: 'preppy',     label: 'Preppy',        desc: 'Tailored, polished, classic staples' },
-  { id: 'grunge',     label: 'Grunge / Edgy', desc: 'Dark, raw, statement pieces' },
-  { id: 'vintage',    label: 'Vintage',       desc: 'Retro-inspired, timeless finds' },
-];
-
-const OCCASION_OPTIONS = [
-  { id: 'casual',       label: 'Casual / Everyday' },
-  { id: 'smart_casual', label: 'Smart Casual'       },
-  { id: 'work',         label: 'Work / Office'      },
-  { id: 'nights_out',   label: 'Nights Out'         },
-  { id: 'formal',       label: 'Formal Events'      },
-  { id: 'active',       label: 'Active / Gym'       },
-  { id: 'travel',       label: 'Travel'             },
-];
-
-const PALETTE_OPTIONS = [
-  { id: 'neutral',    label: 'Neutrals',      swatch: '#C4B5A5' },
-  { id: 'earthy',     label: 'Earthy',        swatch: '#92400E' },
-  { id: 'monochrome', label: 'Monochrome',    swatch: '#3F3F46' },
-  { id: 'pastels',    label: 'Pastels',       swatch: '#FBBF9B' },
-  { id: 'jewel',      label: 'Jewel Tones',   swatch: '#166534' },
-  { id: 'bright',     label: 'Bright & Bold', swatch: '#EA580C' },
-];
-
-const BUDGET_OPTIONS = [
-  { id: 'thrift',  label: 'Thrift-friendly' },
-  { id: 'mid',     label: 'Mid-range'       },
-  { id: 'premium', label: 'Premium'         },
-  { id: 'luxury',  label: 'Luxury'          },
-];
-
-const BODY_TYPE_OPTIONS = [
-  { id: 'broad_shoulders',   label: 'Broad Shoulders',  desc: 'Upper body is the widest point' },
-  { id: 'straight',          label: 'Straight Frame',   desc: 'Shoulders and hips roughly aligned' },
-  { id: 'wider_lower',       label: 'Wider Lower Body', desc: 'Hips and thighs are the fullest point' },
-  { id: 'balanced',          label: 'Balanced',         desc: 'Defined waist, proportionate build' },
-  { id: 'fuller_midsection', label: 'Fuller Midsection',desc: 'Weight carried through the torso' },
-  { id: 'petite',            label: 'Compact / Petite', desc: 'Shorter stature or smaller overall scale' },
-];
-
-const FIT_OPTIONS = [
-  { id: 'relaxed', label: 'Relaxed', desc: 'Loose, comfort-first' },
-  { id: 'classic', label: 'Classic', desc: 'True to size, clean lines' },
-  { id: 'fitted',  label: 'Fitted',  desc: 'Close to the body' },
-];
-
-const SIZING_REGION_OPTIONS = [
-  { id: 'US', label: 'US' },
-  { id: 'UK', label: 'UK' },
-  { id: 'EU', label: 'EU' },
-];
-
-const SIZE_TOP_OPTIONS = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+import {
+  BODY_TYPE_OPTIONS,
+  BUDGET_OPTIONS,
+  FIT_SILHOUETTE_OPTIONS,
+  OCCASION_OPTIONS,
+  PALETTE_OPTIONS,
+  SIZING_REGION_OPTIONS,
+  STYLE_OPTIONS,
+  TOP_SIZES,
+} from '../../lib/profileOptions';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -152,10 +102,10 @@ function StepOccasions({
     <View style={s.pillWrap}>
       {OCCASION_OPTIONS.map((opt) => (
         <SelectPill
-          key={opt.id}
+          key={opt.value}
           label={opt.label}
-          selected={occasions.includes(opt.id)}
-          onPress={() => setOccasions(toggle(occasions, opt.id))}
+          selected={occasions.includes(opt.value)}
+          onPress={() => setOccasions(toggle(occasions, opt.value))}
         />
       ))}
     </View>
@@ -173,11 +123,11 @@ function StepStyle({
     <View style={s.twoColGrid}>
       {STYLE_OPTIONS.map((opt) => (
         <SelectCard
-          key={opt.id}
+          key={opt.value}
           label={opt.label}
-          desc={opt.desc}
-          selected={stylePreferences.includes(opt.id)}
-          onPress={() => setStylePreferences(toggle(stylePreferences, opt.id))}
+          desc={opt.description}
+          selected={stylePreferences.includes(opt.value)}
+          onPress={() => setStylePreferences(toggle(stylePreferences, opt.value))}
         />
       ))}
     </View>
@@ -202,13 +152,13 @@ function StepColorBudget({
         <View style={s.twoColGrid}>
           {PALETTE_OPTIONS.map((opt) => (
             <TouchableOpacity
-              key={opt.id}
-              onPress={() => setColorPalette(opt.id)}
+              key={opt.value}
+              onPress={() => setColorPalette(opt.value)}
               activeOpacity={0.7}
-              style={[s.paletteCard, colorPalette === opt.id && s.cardSelected]}
+              style={[s.paletteCard, colorPalette === opt.value && s.cardSelected]}
             >
-              <View style={[s.swatch, { backgroundColor: opt.swatch }]} />
-              <Text style={[s.cardLabel, colorPalette === opt.id && s.cardLabelSelected]}>
+              <View style={[s.swatch, { backgroundColor: opt.colors[1] ?? opt.colors[0] }]} />
+              <Text style={[s.cardLabel, colorPalette === opt.value && s.cardLabelSelected]}>
                 {opt.label}
               </Text>
             </TouchableOpacity>
@@ -221,12 +171,12 @@ function StepColorBudget({
         <View style={s.twoColGrid}>
           {BUDGET_OPTIONS.map((opt) => (
             <TouchableOpacity
-              key={opt.id}
-              onPress={() => setBudgetRange(opt.id)}
+              key={opt.value}
+              onPress={() => setBudgetRange(opt.value)}
               activeOpacity={0.7}
-              style={[s.card, budgetRange === opt.id && s.cardSelected]}
+              style={[s.card, budgetRange === opt.value && s.cardSelected]}
             >
-              <Text style={[s.cardLabel, budgetRange === opt.id && s.cardLabelSelected]}>
+              <Text style={[s.cardLabel, budgetRange === opt.value && s.cardLabelSelected]}>
                 {opt.label}
               </Text>
             </TouchableOpacity>
@@ -240,13 +190,13 @@ function StepColorBudget({
 function StepBodyFit({
   bodyType,
   setBodyType,
-  fitPreference,
-  setFitPreference,
+  fitSilhouette,
+  setFitSilhouette,
 }: {
   bodyType: string;
   setBodyType: (v: string) => void;
-  fitPreference: string;
-  setFitPreference: (v: string) => void;
+  fitSilhouette: string;
+  setFitSilhouette: (v: string) => void;
 }) {
   return (
     <View style={{ gap: spacing.xl }}>
@@ -255,11 +205,11 @@ function StepBodyFit({
         <View style={s.twoColGrid}>
           {BODY_TYPE_OPTIONS.map((opt) => (
             <SelectCard
-              key={opt.id}
+              key={opt.value}
               label={opt.label}
-              desc={opt.desc}
-              selected={bodyType === opt.id}
-              onPress={() => setBodyType(opt.id)}
+              desc={opt.description}
+              selected={bodyType === opt.value}
+              onPress={() => setBodyType(opt.value)}
             />
           ))}
         </View>
@@ -268,13 +218,13 @@ function StepBodyFit({
       <View>
         <SectionLabel>Fit preference</SectionLabel>
         <View style={s.threeColGrid}>
-          {FIT_OPTIONS.map((opt) => (
+          {FIT_SILHOUETTE_OPTIONS.map((opt) => (
             <SelectCard
-              key={opt.id}
+              key={opt.value}
               label={opt.label}
-              desc={opt.desc}
-              selected={fitPreference === opt.id}
-              onPress={() => setFitPreference(opt.id)}
+              desc={opt.description}
+              selected={fitSilhouette === opt.value}
+              onPress={() => setFitSilhouette(opt.value)}
             />
           ))}
         </View>
@@ -360,12 +310,12 @@ function StepLocationSizing({
         <View style={s.regionRow}>
           {SIZING_REGION_OPTIONS.map((opt) => (
             <TouchableOpacity
-              key={opt.id}
-              onPress={() => setSizingRegion(opt.id)}
+              key={opt.value}
+              onPress={() => setSizingRegion(opt.value)}
               activeOpacity={0.7}
-              style={[s.regionBtn, sizingRegion === opt.id && s.cardSelected]}
+              style={[s.regionBtn, sizingRegion === opt.value && s.cardSelected]}
             >
-              <Text style={[s.regionBtnText, sizingRegion === opt.id && s.cardLabelSelected]}>
+              <Text style={[s.regionBtnText, sizingRegion === opt.value && s.cardLabelSelected]}>
                 {opt.label}
               </Text>
             </TouchableOpacity>
@@ -379,7 +329,7 @@ function StepLocationSizing({
           <Text style={{ color: colors.mutedForeground, fontWeight: '400' }}>(optional)</Text>
         </SectionLabel>
         <View style={s.sizeRow}>
-          {SIZE_TOP_OPTIONS.map((size) => (
+          {TOP_SIZES.map((size) => (
             <TouchableOpacity
               key={size}
               onPress={() => setSizeTop(sizeTop === size ? '' : size)}
@@ -417,7 +367,7 @@ export function OnboardingScreen() {
   const [colorPalette,     setColorPalette]     = useState('');
   const [budgetRange,      setBudgetRange]      = useState('');
   const [bodyType,         setBodyType]         = useState('');
-  const [fitPreference,    setFitPreference]    = useState('');
+  const [fitSilhouette,    setFitSilhouette]    = useState('');
   const [location,         setLocation]         = useState('');
   const [sizingRegion,     setSizingRegion]     = useState('');
   const [sizeTop,          setSizeTop]          = useState('');
@@ -427,7 +377,7 @@ export function OnboardingScreen() {
       case 0: return occasions.length > 0;
       case 1: return stylePreferences.length > 0;
       case 2: return colorPalette !== '' && budgetRange !== '';
-      case 3: return bodyType !== '' && fitPreference !== '';
+      case 3: return bodyType !== '' && fitSilhouette !== '';
       case 4: return sizingRegion !== '';
       default: return true;
     }
@@ -456,7 +406,7 @@ export function OnboardingScreen() {
         colorPalette:    colorPalette                ? [colorPalette]   : null,
         budgetRange:     budgetRange                 || null,
         bodyType:        bodyType                    || null,
-        fitPreference:   fitPreference               || null,
+        fitSilhouette:   fitSilhouette               || null,
         location:        location.trim()             || null,
         sizingRegion:    sizingRegion                || null,
         sizeTop:         sizeTop                     || null,
@@ -531,8 +481,8 @@ export function OnboardingScreen() {
               <StepBodyFit
                 bodyType={bodyType}
                 setBodyType={setBodyType}
-                fitPreference={fitPreference}
-                setFitPreference={setFitPreference}
+                fitSilhouette={fitSilhouette}
+                setFitSilhouette={setFitSilhouette}
               />
             )}
             {step === 4 && (

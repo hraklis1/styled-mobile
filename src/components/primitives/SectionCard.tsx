@@ -9,6 +9,7 @@ interface SectionCardProps {
   children: React.ReactNode;
   collapsible?: boolean;
   initiallyExpanded?: boolean;
+  summary?: React.ReactNode;
 }
 
 export function SectionCard({
@@ -17,6 +18,7 @@ export function SectionCard({
   children,
   collapsible = false,
   initiallyExpanded = true,
+  summary,
 }: SectionCardProps) {
   const [expanded, setExpanded] = useState(initiallyExpanded);
   const heading = icon ? (
@@ -47,6 +49,7 @@ export function SectionCard({
           activeOpacity={0.7}
         >
           {heading}
+          {!expanded && summary ? <View style={styles.summary}>{summary}</View> : null}
         </TouchableOpacity>
       ) : heading}
       {expanded && children}
@@ -90,5 +93,8 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.8,
     marginBottom: spacing.md,
+  },
+  summary: {
+    marginTop: spacing.sm,
   },
 });

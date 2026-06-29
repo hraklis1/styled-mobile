@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'react-native';
 import { api } from '../lib/api';
-import type { Profile } from '../types/profile';
+import type { Profile, StyleProfileDetails } from '../types/profile';
 
 export const PROFILE_QUERY_KEY = ['profile'] as const;
 
@@ -21,6 +21,8 @@ export type ProfileInput = {
   budgetRange?: string | null;
   bodyType?: string | null;
   fitPreference?: string | null;
+  fitSilhouette?: string | null;
+  styleProfileDetails?: StyleProfileDetails | null;
   sizingRegion?: string | null;
   location?: string | null;
   favoriteRetailers?: string[] | null;
