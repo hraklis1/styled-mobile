@@ -44,6 +44,7 @@ import { VoiceInputButton } from '../primitives/VoiceInputButton';
 import { LocationAutocompleteInput } from '../primitives/LocationAutocompleteInput';
 import { ShopOutfitCard } from '../outfits/ShopOutfitCard';
 import { ItemPickerSheet } from '../outfits/ItemPickerSheet';
+import { ResolvedOutfitCollage } from '../outfits/ResolvedOutfitCollage';
 import { StylistRichText } from './StylistRichText';
 import { GapCard } from './GapCard';
 import { TripPlanCard } from './TripPlanCard';
@@ -1604,75 +1605,70 @@ function OutfitCompleteLookOverview({
   if (overviewItems.length === 0) return null;
 
   return (
-    <View style={styles.completeLookPanel}>
-      <View style={styles.completeLookHeader}>
-        <Text style={styles.completeLookEyebrow}>Complete look</Text>
-        <Text style={styles.completeLookCount}>
-          {items.length} {items.length === 1 ? 'piece' : 'pieces'}
-        </Text>
-      </View>
+    <View style={styles.lineSheet}>
+      <Text style={[styles.rationaleLabel, styles.lineSheetLabel]}>Complete look</Text>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.completeLookRailContent}
-        nestedScrollEnabled
-      >
-        {overviewItems.map(({ item, uri }) => (
-          <Pressable
-            key={item.id}
-            style={styles.completeLookThumbCard}
-            onPress={() => onItemPress(item)}
-            onLongPress={() => onSwapItem(item.id)}
-            accessibilityRole="button"
-            accessibilityLabel={`View details for ${item.name}`}
-            accessibilityHint="Press and hold to swap."
-          >
-            <View style={styles.completeLookThumb}>
-              {uri ? (
-                <ExpoImage
-                  source={{ uri }}
-                  style={styles.completeLookThumbImage}
-                  contentFit="cover"
-                  transition={120}
-                  cachePolicy="memory-disk"
-                  recyclingKey={`overview-${item.id}`}
-                />
-              ) : (
-                <Ionicons name="shirt-outline" size={18} color={colors.mutedForeground} />
-              )}
-            </View>
-            <View style={styles.completeLookThumbCopy}>
-              <Text style={styles.completeLookThumbCategory} numberOfLines={1}>
-                {categoryLabel(item.category)}
-              </Text>
-              <Text style={styles.completeLookThumbName} numberOfLines={2}>
-                {item.name}
-              </Text>
-            </View>
-          </Pressable>
-        ))}
+      {overviewItems.map(({ item, uri }) => (
         <Pressable
-          style={[styles.completeLookThumbCard, styles.completeLookAddCard]}
-          onPress={onAddItem}
+          key={item.id}
+          style={styles.lineSheetRow}
+          onPress={() => onItemPress(item)}
+          onLongPress={() => onSwapItem(item.id)}
           accessibilityRole="button"
-          accessibilityLabel="Add an item from your wardrobe"
+          accessibilityLabel={`View details for ${item.name}`}
         >
-          <View style={[styles.completeLookThumb, styles.completeLookAddThumb]}>
-            <Ionicons name="add" size={22} color={colors.primary} />
+          <View style={styles.lineSheetThumb}>
+            {uri ? (
+              <ExpoImage
+                source={{ uri }}
+                style={styles.lineSheetThumbImage}
+                contentFit="cover"
+                transition={120}
+                cachePolicy="memory-disk"
+                recyclingKey={`overview-${item.id}`}
+              />
+            ) : (
+              <Ionicons name="shirt-outline" size={16} color={colors.mutedForeground} />
+            )}
           </View>
-          <View style={styles.completeLookThumbCopy}>
-            <Text style={styles.completeLookThumbCategory} numberOfLines={1}>
-              Add
+          <View style={styles.lineSheetCopy}>
+            <Text style={styles.lineSheetCategory} numberOfLines={1}>
+              {categoryLabel(item.category)}
             </Text>
-            <Text style={styles.completeLookThumbName} numberOfLines={2}>
-              From library
+            <Text style={styles.lineSheetName} numberOfLines={1}>
+              {item.name}
             </Text>
           </View>
+          <Pressable
+            style={styles.lineSheetSwapBtn}
+            onPress={() => onSwapItem(item.id)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`Swap ${categoryLabel(item.category)}`}
+          >
+            <Ionicons name="swap-horizontal-outline" size={16} color={colors.mutedForeground} />
+          </Pressable>
         </Pressable>
-      </ScrollView>
+      ))}
 
-      <Text style={styles.completeLookHint}>Press and hold a piece to swap it.</Text>
+      <Pressable
+        style={[styles.lineSheetRow, styles.lineSheetAddRow]}
+        onPress={onAddItem}
+        accessibilityRole="button"
+        accessibilityLabel="Add an item from your wardrobe"
+      >
+        <View style={[styles.lineSheetThumb, styles.lineSheetAddThumb]}>
+          <Ionicons name="add" size={18} color={colors.primary} />
+        </View>
+        <View style={styles.lineSheetCopy}>
+          <Text style={styles.lineSheetCategory} numberOfLines={1}>
+            Add a piece
+          </Text>
+          <Text style={styles.lineSheetName} numberOfLines={1}>
+            From your wardrobe
+          </Text>
+        </View>
+      </Pressable>
     </View>
   );
 }
@@ -1730,6 +1726,22 @@ function OutfitSuggestionCard({
     [editedIds, allItems],
   );
   const lookTitle = lookName?.trim() || outfitNameFromItems(matchedItems);
+
+  // Hero collage: card spans the list width, so derive the collage size from the
+  // window minus the list and card padding. At that size the collage renders in
+  // its editorial matted mode. Category order puts the dominant tile on the top.
+  const { width: windowWidth } = useWindowDimensions();
+  const collageSize = windowWidth - spacing.md * 2 - spacing.md * 2;
+  const collageSlots = useMemo(
+    () =>
+      [...matchedItems]
+        .sort(
+          (a, b) =>
+            OUTFIT_CATEGORY_ORDER.indexOf(a.category ?? '') - OUTFIT_CATEGORY_ORDER.indexOf(b.category ?? ''),
+        )
+        .map((item) => ({ key: String(item.id), uri: resolveImageUri(item.imageUrl) })),
+    [matchedItems],
+  );
   // When an event is in context, "Add to [event]" is the primary action, so the
   // save button steps down to a secondary (outline) style — one filled CTA only.
   const hasEventCta = !!(onAddToEvent && eventContext);
@@ -1849,6 +1861,15 @@ function OutfitSuggestionCard({
         <Text style={styles.lookTitle} numberOfLines={2}>{lookTitle}</Text>
         <Text style={styles.lookMeta}>{matchedItems.length} pieces from your wardrobe</Text>
       </View>
+
+      {collageSlots.length > 0 && (
+        <ResolvedOutfitCollage
+          slots={collageSlots}
+          size={collageSize}
+          height={Math.round(collageSize * 0.82)}
+          borderRadius={radii.lg}
+        />
+      )}
 
       <View style={styles.stylistNoteBlock}>
         <Text style={styles.rationaleLabel}>Stylist's note</Text>
@@ -3128,92 +3149,64 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   lookMeta: { fontSize: typography.size.xs, color: colors.mutedForeground },
-  completeLookPanel: {
-    gap: spacing.sm,
-    padding: spacing.sm,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    backgroundColor: colors.surfaceSubtle,
+  lineSheet: {
+    paddingHorizontal: spacing.xs,
   },
-  completeLookHeader: {
-    minHeight: 18,
+  lineSheetLabel: {
+    marginBottom: spacing.xs,
+  },
+  lineSheetRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: spacing.sm,
-    paddingHorizontal: 2,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.hairline,
   },
-  completeLookEyebrow: {
-    fontSize: 10,
-    fontWeight: typography.weight.bold,
-    color: colors.primary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.9,
+  lineSheetAddRow: {
+    borderBottomWidth: 0,
   },
-  completeLookCount: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-    fontWeight: typography.weight.medium,
-  },
-  completeLookRailContent: {
-    gap: spacing.xs,
-    paddingRight: spacing.sm,
-  },
-  completeLookThumbCard: {
-    width: 92,
-    minHeight: 134,
-    gap: spacing.xs,
-    padding: spacing.xs,
-    borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    backgroundColor: colors.surfaceElevated,
-  },
-  completeLookAddCard: {
-    borderStyle: 'dashed',
-    backgroundColor: `${colors.primary}08`,
-  },
-  completeLookThumb: {
-    width: '100%',
-    height: 64,
+  lineSheetThumb: {
+    width: 44,
+    height: 44,
     borderRadius: radii.sm,
     overflow: 'hidden',
     backgroundColor: colors.muted,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  completeLookAddThumb: {
+  lineSheetAddThumb: {
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: `${colors.primary}40`,
-    backgroundColor: `${colors.primary}10`,
+    borderStyle: 'dashed',
+    backgroundColor: `${colors.primary}08`,
   },
-  completeLookThumbImage: {
+  lineSheetThumbImage: {
     width: '100%',
     height: '100%',
   },
-  completeLookThumbCopy: {
+  lineSheetCopy: {
     flex: 1,
-    gap: 2,
+    gap: 1,
   },
-  completeLookThumbCategory: {
-    fontSize: 9,
+  lineSheetCategory: {
+    fontSize: 10,
     color: colors.primary,
     fontWeight: typography.weight.bold,
     textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    letterSpacing: 0.5,
   },
-  completeLookThumbName: {
-    fontSize: typography.size.xs,
+  lineSheetName: {
+    fontSize: typography.size.sm,
     color: colors.foreground,
-    lineHeight: typography.size.xs * 1.25,
+    lineHeight: typography.size.sm * 1.3,
     fontWeight: typography.weight.medium,
   },
-  completeLookHint: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-    lineHeight: typography.size.xs * 1.35,
-    paddingHorizontal: 2,
+  lineSheetSwapBtn: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   rationaleLabel: {
     fontSize: 10,
