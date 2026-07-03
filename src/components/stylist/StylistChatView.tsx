@@ -1312,6 +1312,7 @@ type BubbleProps = {
 
 function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContext, onAddToEvent, onToggleAudio, onNavigateToShop }: BubbleProps) {
   const isUser = message.role === 'user';
+  const [detailItem, setDetailItem] = useState<Item | null>(null);
 
   // Trip plan — multi-outfit carousel + packing list (also renders progressively
   // while streaming, so check before the streaming-text fallback below).
@@ -1352,13 +1353,19 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
                   .map((item) => {
                     const uri = resolveImageUri(item.imageUrl);
                     return (
-                      <View key={item.id} style={styles.adviceThumb}>
+                      <TouchableOpacity
+                        key={item.id}
+                        style={styles.adviceThumb}
+                        onPress={() => setDetailItem(item)}
+                        activeOpacity={0.8}
+                        accessibilityLabel={`View ${item.name} details`}
+                      >
                         {uri ? (
                           <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
                         ) : (
                           <Ionicons name="shirt-outline" size={18} color={colors.mutedForeground} />
                         )}
-                      </View>
+                      </TouchableOpacity>
                     );
                   })}
               </ScrollView>
@@ -1372,6 +1379,7 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
                 .map((item, i) => <GapCard key={i} item={item} onPress={onNavigateToShop} />)}
             </View>
           )}
+          <ItemDetailSheet item={detailItem} onClose={() => setDetailItem(null)} />
           {onToggleAudio && (
             <TouchableOpacity style={styles.quietAudioBtn} onPress={onToggleAudio} accessibilityLabel="Read stylist note aloud">
               <Ionicons
