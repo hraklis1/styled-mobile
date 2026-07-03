@@ -398,7 +398,7 @@ export function StylistChatView({
   // cleared id rather than the previous render's value.
   const conversationIdRef = useRef<number | null>(null);
   const tripOutfitsRef = useRef<Record<string, StylistTripPlanData['outfits']>>({});
-  const transportRequestMetaRef = useRef<Record<string, { userMessageId: string; audio?: boolean }>>({});
+  const transportRequestMetaRef = useRef<Record<string, { userMessageId: string }>>({});
 
   const setActiveConversationId = useCallback((id: number | null) => {
     conversationIdRef.current = id;
@@ -517,7 +517,6 @@ export function StylistChatView({
     },
     onAssistantDone: (assistantId, event) => {
       const {
-        transcript,
         responseText,
         itemIds,
         lookName,
@@ -530,7 +529,6 @@ export function StylistChatView({
         conversationId: doneConversationId,
       } = event;
 
-      const requestMeta = transportRequestMetaRef.current[assistantId];
       const resolvedConvId = typeof doneConversationId === 'number' ? doneConversationId : conversationIdRef.current;
       if (resolvedConvId != null && resolvedConvId !== conversationIdRef.current) {
         setActiveConversationId(resolvedConvId);
@@ -542,14 +540,6 @@ export function StylistChatView({
           : legacyMe && typeof legacyMe === 'object' && legacyMe.label
             ? [{ ...legacyMe, context: '', priority: 1 }]
             : [];
-
-      if (requestMeta?.audio && transcript) {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === requestMeta.userMessageId ? { ...m, text: transcript, transcript } : m,
-          ),
-        );
-      }
 
       const finalMsg: ChatMessage = {
         id: assistantId,
@@ -605,13 +595,6 @@ export function StylistChatView({
         ),
       );
     },
-    onTtsReady: (assistantId, event) => {
-      stopCurrentAudio();
-      playAudioFromBase64(assistantId, event.audioReply).catch(() => {});
-    },
-    onTtsFallbackNeeded: (assistantId, text) => {
-      playTts(assistantId, text);
-    },
     onConversationResolved: (resolvedConversationId) => {
       if (resolvedConversationId !== conversationIdRef.current) {
         setActiveConversationId(resolvedConversationId);
@@ -632,12 +615,12 @@ export function StylistChatView({
 
   const sendMessage = useCallback(
     (opts: SendOptions) => {
-      const { text, displayText, audio, photoData, attachment, context } = opts;
-      if (!text && !audio && !photoData) return;
+      const { text, displayText, photoData, attachment, context } = opts;
+      if (!text && !photoData) return;
       if (isLoading) return;
 
       track('stylist_message_sent', {
-        input_type: audio ? 'voice' : photoData ? 'photo' : 'text',
+        input_type: photoData ? 'photo' : 'text',
       });
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 
@@ -649,7 +632,7 @@ export function StylistChatView({
         role: 'user',
         kind: 'user',
         renderType: 'text',
-        text: audio ? '🎙 Voice message…' : displayText ?? text ?? '📷 Photo',
+        text: displayText ?? text ?? '📷 Photo',
         ...(attachment ? { attachment } : {}),
       };
 
@@ -658,7 +641,7 @@ export function StylistChatView({
       setMentionQuery(null);
 
       const assistantId = makeId();
-      transportRequestMetaRef.current[assistantId] = { userMessageId: userMsg.id, audio: !!audio };
+      transportRequestMetaRef.current[assistantId] = { userMessageId: userMsg.id };
       tripOutfitsRef.current[assistantId] = [];
 
       const history = buildHistory(messagesRef.current);
@@ -677,7 +660,6 @@ export function StylistChatView({
       const locationSource = activeLocation.source === 'destination' ? 'conversation' : activeLocation.source;
       const request: StylistAskRequest = {
         ...(text ? { text } : {}),
-        ...(audio ? { audio } : {}),
         ...(photoData ? { photoData } : {}),
         ...(weatherSummary ? { weatherSummary } : {}),
         ...((activeLocation.label || activeLocation.coords) ? {
@@ -699,7 +681,6 @@ export function StylistChatView({
         assistantMessageId: assistantId,
         userMessageId: userMsg.id,
         originalOptions: opts,
-        shouldFetchTtsFallback: !!audio,
       });
     },
     [activeLocation, entryContext, isLoading, profile?.tempUnit, sendTransportMessage, source, weather.data],

@@ -140,11 +140,9 @@ export type StylistSwapContext = {
 };
 
 export type StylistAskRequest = {
-  audio?: string;
   text?: string;
   history?: StylistHistoryMessage[];
   mode?: StylistMode;
-  autoVoice?: boolean;
   locationContext?: StylistLocationContext;
   currentLocation?: string;
   liveLocation?: {
@@ -180,14 +178,9 @@ export type StylistAskDoneEvent = {
   conversationId?: number | null;
 };
 
-export type StylistTtsReadyEvent = {
-  audioReply: string;
-};
-
 export type StylistSendOptions = {
   text?: string;
   displayText?: string;
-  audio?: string;
   photoData?: string;
   attachment?: StylistComposerAttachment;
   context?: StylistEntryContext;
@@ -241,7 +234,6 @@ export type StylistTransportSendInput = {
   assistantMessageId: string;
   userMessageId?: string;
   originalOptions?: StylistSendOptions;
-  shouldFetchTtsFallback?: boolean;
 };
 
 export type StylistTransportError = {
@@ -255,8 +247,6 @@ export type StylistTransportCallbacks = {
   onAssistantToken?: (assistantMessageId: string, token: string) => void;
   onAssistantDone?: (assistantMessageId: string, event: StylistAskDoneEvent) => void;
   onTripOutfit?: (assistantMessageId: string, outfit: StylistTripOutfit) => void;
-  onTtsReady?: (assistantMessageId: string, event: StylistTtsReadyEvent) => void;
-  onTtsFallbackNeeded?: (assistantMessageId: string, text: string) => void;
   onConversationResolved?: (conversationId: number) => void;
   onError?: (error: StylistTransportError) => void;
 };

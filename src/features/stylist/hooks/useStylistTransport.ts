@@ -6,7 +6,6 @@ import type {
   StylistTransportCallbacks,
   StylistTransportSendInput,
   StylistTripOutfit,
-  StylistTtsReadyEvent,
 } from '../types';
 
 const STYLIST_ERROR_MESSAGE = 'Could not reach the stylist. Please try again.';
@@ -82,8 +81,6 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
     let pendingText = '';
     let flushTimer: ReturnType<typeof setTimeout> | null = null;
     let assistantStarted = false;
-    let finalResponseText = '';
-    let ttsReceivedFromStream = false;
 
     const isCurrentRequest = () => requestIdRef.current === requestId;
 
@@ -120,7 +117,6 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
     const handleDone = (event: StylistAskDoneEvent) => {
       clearFlushTimer();
       flushPending();
-      finalResponseText = event.responseText ?? '';
       const conversationId = event.conversationId;
       if (typeof conversationId === 'number') {
         callbacksRef.current.onConversationResolved?.(conversationId);
@@ -155,12 +151,6 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
         callbacksRef.current.onTripOutfit?.(
           input.assistantMessageId,
           parsed as unknown as StylistTripOutfit,
-        );
-      } else if (currentEventRef.current === 'tts_ready') {
-        ttsReceivedFromStream = true;
-        callbacksRef.current.onTtsReady?.(
-          input.assistantMessageId,
-          parsed as StylistTtsReadyEvent,
         );
       } else if (typeof parsed.t === 'string') {
         handleToken(parsed.t);
@@ -215,15 +205,6 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
       sseBuffer += decoder.decode();
       if (isCurrentRequest() && sseBuffer.trim()) {
         processSseLine(sseBuffer, currentEventRef);
-      }
-
-      if (
-        isCurrentRequest() &&
-        input.shouldFetchTtsFallback &&
-        !ttsReceivedFromStream &&
-        finalResponseText
-      ) {
-        callbacksRef.current.onTtsFallbackNeeded?.(input.assistantMessageId, finalResponseText);
       }
     } catch (error) {
       clearFlushTimer();
