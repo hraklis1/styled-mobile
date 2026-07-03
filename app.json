@@ -53,10 +53,13 @@
           "cameraPermission": "Styled needs camera access to photograph your clothing items."
         }
       ],
+      "expo-audio",
       [
-        "expo-audio",
+        "expo-speech-recognition",
         {
-          "microphonePermission": "Styled needs microphone access to record your voice for the AI stylist."
+          "microphonePermission": "Styled needs microphone access so you can dictate to your stylist.",
+          "speechRecognitionPermission": "Styled uses speech recognition to turn your dictation into text.",
+          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
         }
       ],
       [
