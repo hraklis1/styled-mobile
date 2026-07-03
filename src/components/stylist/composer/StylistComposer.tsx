@@ -1,6 +1,17 @@
 import { useEffect, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Image, Platform, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  ZoomIn,
+  ZoomOut,
+  interpolate,
+  interpolateColor,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { DictationLevelBars } from './DictationLevelBars';
 import { useDictation } from './useDictation';
 import { colors, radii, shadows, spacing, typography } from '../../../theme';
@@ -18,6 +29,11 @@ type Props = {
   onRemoveAttachment: () => void;
   onOpenAttachmentSheet: () => void;
 };
+
+type RightSlotMode = 'stop' | 'done' | 'send' | 'mic';
+
+const slotEnter = ZoomIn.springify().damping(16).stiffness(220);
+const slotExit = ZoomOut.duration(110);
 
 function DictationTimer({ startedAt }: { startedAt: number }) {
   const [now, setNow] = useState(() => Date.now());
@@ -48,60 +64,104 @@ export function StylistComposer({
   const isDictating = dictation.state !== 'idle';
   const isListening = dictation.state === 'listening';
 
+  const focusProgress = useSharedValue(0);
+  const listeningProgress = useSharedValue(0);
+
+  useEffect(() => {
+    listeningProgress.value = withTiming(isListening ? 1 : 0, { duration: 200 });
+  }, [isListening, listeningProgress]);
+
   // A send can start mid-dictation (e.g. a suggestion chip); finish gracefully.
   useEffect(() => {
     if (isLoading && isListening) dictation.done();
   }, [isLoading, isListening, dictation]);
 
+  const cardAnimatedStyle = useAnimatedStyle(() => {
+    const progress = Math.max(focusProgress.value, listeningProgress.value);
+    return {
+      borderColor: interpolateColor(progress, [0, 1], [colors.hairline, `${colors.primary}59`]),
+      ...(Platform.OS === 'ios'
+        ? {
+            shadowOpacity: interpolate(progress, [0, 1], [0.05, 0.07]),
+            shadowRadius: interpolate(progress, [0, 1], [2, 6]),
+          }
+        : {}),
+    };
+  });
+
+  const rightSlotMode: RightSlotMode = isLoading
+    ? 'stop'
+    : isDictating
+      ? 'done'
+      : value.trim() || attachment
+        ? 'send'
+        : 'mic';
+
   return (
     <View style={styles.inputBar}>
-      {attachment ? (
-        <View style={styles.attachmentPreview}>
-          <View style={styles.attachmentThumb}>
+      <Animated.View style={[styles.composer, cardAnimatedStyle]}>
+        {attachment ? (
+          <Animated.View
+            style={styles.attachmentRow}
+            entering={FadeIn.duration(160)}
+            exiting={FadeOut.duration(120)}
+          >
             {attachment.uri ? (
-              <Image source={{ uri: attachment.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+              <View style={styles.attachmentThumbWrap}>
+                <Image source={{ uri: attachment.uri }} style={styles.attachmentThumb} resizeMode="cover" />
+                <TouchableOpacity
+                  style={styles.attachmentBadge}
+                  onPress={onRemoveAttachment}
+                  hitSlop={8}
+                  accessibilityLabel="Remove attachment"
+                >
+                  <Ionicons name="close" size={12} color={colors.white} />
+                </TouchableOpacity>
+              </View>
             ) : (
-              <Ionicons name={attachment.type === 'photo' ? 'image-outline' : 'shirt-outline'} size={18} color={colors.primary} />
+              <View style={styles.attachmentPill}>
+                <Ionicons
+                  name={attachment.type === 'photo' ? 'image-outline' : 'shirt-outline'}
+                  size={15}
+                  color={colors.primary}
+                />
+                <Text style={styles.attachmentPillLabel} numberOfLines={1}>{attachment.label}</Text>
+                <TouchableOpacity onPress={onRemoveAttachment} hitSlop={8} accessibilityLabel="Remove attachment">
+                  <Ionicons name="close" size={15} color={colors.mutedForeground} />
+                </TouchableOpacity>
+              </View>
+            )}
+          </Animated.View>
+        ) : null}
+
+        <View style={styles.composerRow}>
+          <View style={styles.leftSlot}>
+            {isDictating ? (
+              <Animated.View key="cancel" entering={FadeIn.duration(140)} exiting={FadeOut.duration(110)}>
+                <Pressable style={styles.iconBtn} onPress={dictation.cancel} accessibilityLabel="Cancel dictation">
+                  <Ionicons name="close" size={22} color={colors.mutedForeground} />
+                </Pressable>
+              </Animated.View>
+            ) : (
+              <Animated.View key="attach" entering={FadeIn.duration(140)} exiting={FadeOut.duration(110)}>
+                <Pressable
+                  style={styles.iconBtn}
+                  onPress={onOpenAttachmentSheet}
+                  disabled={isLoading}
+                  accessibilityLabel="Add photo or wardrobe piece"
+                >
+                  <Ionicons name="add" size={24} color={colors.inkSubtle} />
+                </Pressable>
+              </Animated.View>
             )}
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.attachmentEyebrow}>{attachment.type === 'photo' ? 'PHOTO' : 'FROM YOUR CLOSET'}</Text>
-            <Text style={styles.attachmentLabel} numberOfLines={1}>{attachment.label}</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.attachmentRemove}
-            onPress={onRemoveAttachment}
-            accessibilityLabel="Remove attachment"
-          >
-            <Ionicons name="close" size={17} color={colors.mutedForeground} />
-          </TouchableOpacity>
-        </View>
-      ) : null}
-      <View style={[styles.composer, isListening && styles.composerListening]}>
-        <View style={styles.composerRow}>
-          {isDictating ? (
-            <Pressable
-              style={styles.photoBtn}
-              onPress={dictation.cancel}
-              accessibilityLabel="Cancel dictation"
-            >
-              <Ionicons name="close" size={22} color={colors.mutedForeground} />
-            </Pressable>
-          ) : (
-            <Pressable
-              style={styles.photoBtn}
-              onPress={onOpenAttachmentSheet}
-              disabled={isLoading}
-              accessibilityLabel="Add photo or wardrobe piece"
-            >
-              <Ionicons name="camera-outline" size={20} color={colors.primary} />
-            </Pressable>
-          )}
 
           <TextInput
             style={styles.textInput}
             value={value}
             onChangeText={onChangeText}
+            onFocus={() => { focusProgress.value = withTiming(1, { duration: 150 }); }}
+            onBlur={() => { focusProgress.value = withTiming(0, { duration: 150 }); }}
             placeholder="Ask about an outfit or tag @a piece"
             placeholderTextColor={colors.mutedForeground}
             multiline
@@ -110,47 +170,53 @@ export function StylistComposer({
             editable={!isLoading && !isDictating}
           />
 
-          {isLoading ? (
-            <TouchableOpacity style={styles.stopBtn} onPress={onStopGeneration} accessibilityLabel="Stop generating">
-              <Ionicons name="stop" size={14} color={colors.primaryForeground} />
-            </TouchableOpacity>
-          ) : isDictating ? (
-            <TouchableOpacity
-              style={styles.sendBtn}
-              onPress={dictation.done}
-              accessibilityLabel="Finish dictation"
-            >
-              <Ionicons name="checkmark" size={20} color={colors.white} />
-            </TouchableOpacity>
-          ) : value.trim() || attachment ? (
-            <TouchableOpacity
-              style={styles.sendBtn}
-              onPress={onSend}
-              accessibilityLabel="Send message"
-            >
-              <Ionicons name="arrow-up" size={19} color={colors.white} />
-            </TouchableOpacity>
-          ) : (
-            <Pressable
-              style={styles.photoBtn}
-              onPress={() => { void dictation.start(value); }}
-              accessibilityLabel="Dictate a message"
-            >
-              <Ionicons name="mic-outline" size={22} color={colors.mutedForeground} />
-            </Pressable>
-          )}
+          <View style={styles.rightSlot}>
+            {rightSlotMode === 'stop' ? (
+              <Animated.View key="stop" entering={slotEnter} exiting={slotExit}>
+                <TouchableOpacity style={styles.stopBtn} onPress={onStopGeneration} accessibilityLabel="Stop generating">
+                  <Ionicons name="stop" size={14} color={colors.primaryForeground} />
+                </TouchableOpacity>
+              </Animated.View>
+            ) : rightSlotMode === 'done' ? (
+              <Animated.View key="done" entering={slotEnter} exiting={slotExit}>
+                <TouchableOpacity style={styles.sendBtn} onPress={dictation.done} accessibilityLabel="Finish dictation">
+                  <Ionicons name="checkmark" size={20} color={colors.white} />
+                </TouchableOpacity>
+              </Animated.View>
+            ) : rightSlotMode === 'send' ? (
+              <Animated.View key="send" entering={slotEnter} exiting={slotExit}>
+                <TouchableOpacity style={styles.sendBtn} onPress={onSend} accessibilityLabel="Send message">
+                  <Ionicons name="arrow-up" size={19} color={colors.white} />
+                </TouchableOpacity>
+              </Animated.View>
+            ) : (
+              <Animated.View key="mic" entering={slotEnter} exiting={slotExit}>
+                <Pressable
+                  style={styles.iconBtn}
+                  onPress={() => { void dictation.start(value); }}
+                  accessibilityLabel="Dictate a message"
+                >
+                  <Ionicons name="mic-outline" size={22} color={colors.inkSubtle} />
+                </Pressable>
+              </Animated.View>
+            )}
+          </View>
         </View>
 
         {isListening ? (
-          <View style={styles.dictationStatusRow}>
+          <Animated.View
+            style={styles.dictationStatusRow}
+            entering={FadeIn.duration(160)}
+            exiting={FadeOut.duration(120)}
+          >
             <View style={styles.dictationDot} />
             {dictation.startedAt != null ? <DictationTimer startedAt={dictation.startedAt} /> : null}
             <View style={styles.dictationBars}>
               <DictationLevelBars level={dictation.level} />
             </View>
-          </View>
+          </Animated.View>
         ) : null}
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -160,29 +226,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.xs,
   },
-  attachmentPreview: {
-    minHeight: 58,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-    padding: spacing.sm,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surfaceElevated,
-    ...shadows.xs,
-  },
-  attachmentThumb: {
-    width: 42,
-    height: 42,
-    borderRadius: radii.md,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surfaceSelected,
-  },
-  attachmentEyebrow: { color: colors.primary, fontSize: 9, fontWeight: typography.weight.bold, letterSpacing: 0.8 },
-  attachmentLabel: { color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
-  attachmentRemove: { width: 36, height: 36, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center' },
   composer: {
     minHeight: 50,
     backgroundColor: colors.surfaceElevated,
@@ -192,15 +235,67 @@ const styles = StyleSheet.create({
     padding: 4,
     ...shadows.xs,
   },
-  composerListening: {
-    borderColor: `${colors.primary}73`,
-  },
   composerRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: spacing.xs,
   },
-  photoBtn: {
+  attachmentRow: {
+    flexDirection: 'row',
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
+  attachmentThumbWrap: {
+    width: 56,
+    height: 56,
+  },
+  attachmentThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surfaceSelected,
+  },
+  attachmentBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 20,
+    height: 20,
+    borderRadius: radii.full,
+    backgroundColor: colors.foreground,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.surfaceElevated,
+  },
+  attachmentPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs + 2,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    maxWidth: '80%',
+  },
+  attachmentPillLabel: {
+    flexShrink: 1,
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.medium,
+    color: colors.foreground,
+  },
+  leftSlot: {
+    width: 44,
+    height: 44,
+  },
+  rightSlot: {
+    width: 44,
+    height: 44,
+  },
+  iconBtn: {
     width: 44,
     height: 44,
     alignItems: 'center',
