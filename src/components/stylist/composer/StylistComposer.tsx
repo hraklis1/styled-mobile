@@ -72,9 +72,10 @@ export function StylistComposer({
   }, [isListening, listeningProgress]);
 
   // A send can start mid-dictation (e.g. a suggestion chip); finish gracefully.
+  const finishDictation = dictation.done;
   useEffect(() => {
-    if (isLoading && isListening) dictation.done();
-  }, [isLoading, isListening, dictation]);
+    if (isLoading && isListening) finishDictation();
+  }, [isLoading, isListening, finishDictation]);
 
   const cardAnimatedStyle = useAnimatedStyle(() => {
     const progress = Math.max(focusProgress.value, listeningProgress.value);
