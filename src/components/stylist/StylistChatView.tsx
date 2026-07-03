@@ -40,7 +40,7 @@ import { conversationLocation, type StylingLocationContext } from '../../lib/sty
 import { useCreateOutfit, type CreateOutfitInput } from '../../hooks/useOutfits';
 import { useAssignEventItems } from '../../hooks/useEvents';
 import { addOutfitToWishlist } from '../../hooks/useWishlist';
-import { VoiceInputButton } from '../primitives/VoiceInputButton';
+import { StylistComposer } from './composer/StylistComposer';
 import { LocationAutocompleteInput } from '../primitives/LocationAutocompleteInput';
 import { ShopOutfitCard } from '../outfits/ShopOutfitCard';
 import { ItemPickerSheet } from '../outfits/ItemPickerSheet';
@@ -1212,69 +1212,17 @@ export function StylistChatView({
         )}
 
         {/* Input bar */}
-        <View style={styles.inputBar}>
-          {composerAttachment ? (
-            <View style={styles.attachmentPreview}>
-              <View style={styles.attachmentThumb}>
-                {composerAttachment.uri ? (
-                  <Image source={{ uri: composerAttachment.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                ) : (
-                  <Ionicons name={composerAttachment.type === 'photo' ? 'image-outline' : 'shirt-outline'} size={18} color={colors.primary} />
-                )}
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.attachmentEyebrow}>{composerAttachment.type === 'photo' ? 'PHOTO' : 'FROM YOUR CLOSET'}</Text>
-                <Text style={styles.attachmentLabel} numberOfLines={1}>{composerAttachment.label}</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.attachmentRemove}
-                onPress={() => { setComposerAttachment(null); setComposerPhotoData(null); }}
-                accessibilityLabel="Remove attachment"
-              >
-                <Ionicons name="close" size={17} color={colors.mutedForeground} />
-              </TouchableOpacity>
-            </View>
-          ) : null}
-          <View style={styles.composer}>
-            <Pressable
-              style={styles.photoBtn}
-              onPress={() => setAttachmentSheetVisible(true)}
-              disabled={isLoading}
-              accessibilityLabel="Add photo or wardrobe piece"
-            >
-              <Ionicons name="camera-outline" size={20} color={colors.primary} />
-            </Pressable>
-
-            <TextInput
-              style={styles.textInput}
-              value={inputText}
-              onChangeText={handleTextChange}
-              placeholder="Ask about an outfit or tag @a piece"
-              placeholderTextColor={colors.mutedForeground}
-              multiline
-              maxLength={2000}
-              returnKeyType="default"
-              editable={!isLoading}
-            />
-
-            {isLoading ? (
-              <TouchableOpacity style={styles.stopBtn} onPress={stopGeneration} accessibilityLabel="Stop generating">
-                <Ionicons name="stop" size={14} color={colors.primaryForeground} />
-              </TouchableOpacity>
-            ) : inputText.trim() || composerAttachment ? (
-              <TouchableOpacity
-                style={styles.sendBtn}
-                onPress={handleSendText}
-                disabled={isLoading}
-                accessibilityLabel="Send message"
-              >
-                <Ionicons name="arrow-up" size={19} color={colors.white} />
-              </TouchableOpacity>
-            ) : (
-              <VoiceInputButton onAudioReady={(b64) => sendMessage({ audio: b64 })} disabled={isLoading} />
-            )}
-          </View>
-        </View>
+        <StylistComposer
+          value={inputText}
+          onChangeText={handleTextChange}
+          onSend={handleSendText}
+          onSendAudio={(b64) => sendMessage({ audio: b64 })}
+          onStopGeneration={stopGeneration}
+          isLoading={isLoading}
+          attachment={composerAttachment}
+          onRemoveAttachment={() => { setComposerAttachment(null); setComposerPhotoData(null); }}
+          onOpenAttachmentSheet={() => setAttachmentSheetVisible(true)}
+        />
       </BlurView>
 
       <Modal visible={attachmentSheetVisible} transparent animationType="slide" onRequestClose={() => setAttachmentSheetVisible(false)}>
@@ -2997,77 +2945,6 @@ const styles = StyleSheet.create({
     fontSize: typography.size.xs,
     color: colors.mutedForeground,
     textTransform: 'capitalize',
-  },
-  // Input bar
-  inputBar: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.xs,
-  },
-  attachmentPreview: {
-    minHeight: 58,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-    padding: spacing.sm,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surfaceElevated,
-    ...shadows.xs,
-  },
-  attachmentThumb: {
-    width: 42,
-    height: 42,
-    borderRadius: radii.md,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surfaceSelected,
-  },
-  attachmentEyebrow: { color: colors.primary, fontSize: 9, fontWeight: typography.weight.bold, letterSpacing: 0.8 },
-  attachmentLabel: { color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
-  attachmentRemove: { width: 36, height: 36, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center' },
-  composer: {
-    minHeight: 50,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: spacing.xs,
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radii.xl,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    padding: 4,
-    ...shadows.xs,
-  },
-  photoBtn: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  textInput: {
-    flex: 1,
-    minHeight: 44,
-    maxHeight: 120,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm + 2,
-    fontSize: typography.size.sm,
-    color: colors.foreground,
-  },
-  sendBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.full,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stopBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.full,
-    backgroundColor: colors.foreground,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   // Message bubbles
   bubbleRow: {
