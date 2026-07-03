@@ -1215,8 +1215,8 @@ export function StylistChatView({
         <StylistComposer
           value={inputText}
           onChangeText={handleTextChange}
+          onDictatedText={setInputText}
           onSend={handleSendText}
-          onSendAudio={(b64) => sendMessage({ audio: b64 })}
           onStopGeneration={stopGeneration}
           isLoading={isLoading}
           attachment={composerAttachment}
