@@ -26,10 +26,16 @@ export function TabQuickMenuSheet({ visible, title, subtitle, options, onClose }
   const insets = useSafeAreaInsets();
   const ref = useRef<BottomSheetModal>(null);
 
+  // Never dismiss() a modal that was never presented: on a fresh BottomSheetModal
+  // it wedges the internal status at DISMISSING and every later present() silently
+  // skips rendering its portal.
+  const hasPresented = useRef(false);
+
   useEffect(() => {
     if (visible) {
+      hasPresented.current = true;
       ref.current?.present();
-    } else {
+    } else if (hasPresented.current) {
       ref.current?.dismiss();
     }
   }, [visible]);
