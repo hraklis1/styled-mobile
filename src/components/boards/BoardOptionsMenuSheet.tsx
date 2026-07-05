@@ -31,19 +31,26 @@ export function BoardOptionsMenuSheet({
   const insets = useSafeAreaInsets();
   const ref = useRef<BottomSheetModal>(null);
 
-  // Never dismiss() a modal that was never presented: on a fresh BottomSheetModal
-  // it wedges the internal status at DISMISSING and every later present() silently
-  // skips rendering its portal.
-  const hasPresented = useRef(false);
+  // Only ever dismiss() a modal that is currently presented: calling dismiss()
+  // on a fresh or already-self-dismissed (e.g. swiped-down) BottomSheetModal
+  // wedges its status at DISMISSING and every later present() silently skips
+  // rendering its portal.
+  const isPresented = useRef(false);
 
   useEffect(() => {
     if (visible) {
-      hasPresented.current = true;
+      isPresented.current = true;
       ref.current?.present();
-    } else if (hasPresented.current) {
+    } else if (isPresented.current) {
+      isPresented.current = false;
       ref.current?.dismiss();
     }
   }, [visible]);
+
+  const handleDismiss = useCallback(() => {
+    isPresented.current = false;
+    onClose();
+  }, [onClose]);
 
   const renderBackdrop = useCallback(
     (props: any) => <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} onPress={onClose} />,
@@ -57,7 +64,7 @@ export function BoardOptionsMenuSheet({
       backdropComponent={renderBackdrop}
       backgroundStyle={styles.sheetBg}
       handleIndicatorStyle={styles.handle}
-      onDismiss={onClose}
+      onDismiss={handleDismiss}
     >
       <BottomSheetView style={[styles.content, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
         <View style={styles.header}>
