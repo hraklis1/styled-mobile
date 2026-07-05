@@ -201,6 +201,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     [outfits],
   );
 
+  const profilePhotoUri = profile?.photoUrl ? resolveImageUri(profile.photoUrl) : undefined;
   const activeLocationLabel = stylingLocation.activeLocation.label?.trim() || undefined;
   const compactActiveLocation = compactLocationLabel(activeLocationLabel);
   const locationSource = stylingLocation.activeLocation.source;
@@ -287,25 +288,45 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       onScroll={handleHomeScroll}
       scrollEventThrottle={16}
     >
-      <ScreenHeader
-        title={getGreeting(user?.displayName)}
-        safeTop={false}
-        style={styles.greetingSection}
-        subtitleNode={(
-          <TouchableOpacity
-            style={styles.weatherLocationButton}
-            onPress={() => setLocationSheetVisible(true)}
-            activeOpacity={0.65}
-            accessibilityRole="button"
-            accessibilityLabel={locationAccessibilityLabel}
-          >
-            <Text style={styles.weatherLocationText} numberOfLines={1}>
-              {weatherLocationLine}
-            </Text>
-            <Ionicons name="chevron-down" size={13} color={colors.primary} />
-          </TouchableOpacity>
-        )}
-      />
+      <View style={styles.headerRow}>
+        <ScreenHeader
+          title={getGreeting(user?.displayName)}
+          safeTop={false}
+          style={styles.greetingHeader}
+          subtitleNode={(
+            <TouchableOpacity
+              style={styles.weatherLocationButton}
+              onPress={() => setLocationSheetVisible(true)}
+              activeOpacity={0.65}
+              accessibilityRole="button"
+              accessibilityLabel={locationAccessibilityLabel}
+            >
+              <Text style={styles.weatherLocationText} numberOfLines={1}>
+                {weatherLocationLine}
+              </Text>
+              <Ionicons name="chevron-down" size={13} color={colors.primary} />
+            </TouchableOpacity>
+          )}
+        />
+        <TouchableOpacity
+          style={styles.avatarBtn}
+          onPress={() => navigation.navigate('Profile')}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Open profile and settings"
+        >
+          {profilePhotoUri ? (
+            <Image
+              source={{ uri: profilePhotoUri }}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              transition={150}
+            />
+          ) : (
+            <Ionicons name="person-outline" size={17} color={colors.primary} />
+          )}
+        </TouchableOpacity>
+      </View>
 
       {/* ── AI Stylist fake input ─────────────────────────────── */}
       <TouchableOpacity
@@ -348,32 +369,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               <Ionicons name="journal-outline" size={17} color={colors.primary} />
             </View>
             <Text style={styles.quickActionText}>Log today's look</Text>
-          </PressableScale>
-        </View>
-        <View style={styles.quickActionsRow}>
-          <PressableScale
-            style={styles.quickActionPressable}
-            contentStyle={styles.quickAction}
-            onPress={() => navigation.navigate('ShoppingGallery')}
-            accessibilityRole="button"
-            accessibilityLabel="Open The Shopping Edit"
-          >
-            <View style={styles.quickActionIcon}>
-              <Ionicons name="images-outline" size={17} color={colors.primary} />
-            </View>
-            <Text style={styles.quickActionText}>The Shopping Edit</Text>
-          </PressableScale>
-          <PressableScale
-            style={styles.quickActionPressable}
-            contentStyle={styles.quickAction}
-            onPress={() => navigation.navigate('Shop')}
-            accessibilityRole="button"
-            accessibilityLabel="Open wishlist"
-          >
-            <View style={styles.quickActionIcon}>
-              <Ionicons name="heart-outline" size={17} color={colors.primary} />
-            </View>
-            <Text style={styles.quickActionText}>Wishlist</Text>
           </PressableScale>
         </View>
       </View>
@@ -646,25 +641,28 @@ const styles = StyleSheet.create({
   },
 
   // Greeting
-  greetingSection: {
-    marginBottom: spacing.md,
-    marginHorizontal: -SIDE_PAD,
-  },
-  greetingRow: {
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    justifyContent: 'space-between',
     gap: spacing.md,
+    marginBottom: spacing.md,
   },
-  greetingText: {
+  greetingHeader: {
     flex: 1,
-    gap: 4,
+    paddingHorizontal: 0,
+    paddingBottom: 0,
   },
-  greeting: {
-    fontSize: typography.size.xl + 4,
-    fontWeight: typography.weight.bold,
-    color: colors.foreground,
-    letterSpacing: 0,
+  avatarBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.full,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: `${colors.primary}10`,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
   },
   weatherLocationButton: {
     flexDirection: 'row',
@@ -678,10 +676,6 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     fontSize: typography.size.xs,
     color: colors.primary,
-  },
-  settingsBtn: {
-    padding: spacing.sm,
-    marginTop: 2,
   },
 
   // AI Stylist fake-input pill

@@ -19,8 +19,8 @@ export type AppTabParamList = {
   Home: undefined;
   Closet: NavigatorScreenParams<ClosetStackParamList> | undefined;
   Stylist: undefined;
+  Shop: NavigatorScreenParams<ShopStackParamList> | undefined;
   Calendar: undefined;
-  Profile: undefined;
 };
 
 // Unified closet stack (items + outfits + boards + their detail screens)
@@ -40,9 +40,14 @@ export type ClosetStackParamList = {
 export type HomeStackParamList = {
   HomeMain: undefined;
   Suggestions: { eventId?: number } | undefined;
-  Shop: undefined;
-  ShoppingCamera: undefined;
+  Profile: undefined;
+};
+
+// Shop nested stack (wishlist + shopping tools)
+export type ShopStackParamList = {
+  ShopMain: undefined;
   ShoppingGallery: undefined;
+  ShoppingCamera: undefined;
 };
 
 // Wardrobe nested stack
@@ -74,11 +79,11 @@ export type HomeScreenProps = CompositeScreenProps<
   BottomTabScreenProps<AppTabParamList>
 >;
 export type SuggestionsScreenProps = NativeStackScreenProps<HomeStackParamList, 'Suggestions'>;
-export type ShopScreenProps = NativeStackScreenProps<HomeStackParamList, 'Shop'>;
-export type ShoppingCameraScreenProps = NativeStackScreenProps<HomeStackParamList, 'ShoppingCamera'>;
-export type ShoppingGalleryScreenProps = NativeStackScreenProps<HomeStackParamList, 'ShoppingGallery'>;
+export type ShopScreenProps = NativeStackScreenProps<ShopStackParamList, 'ShopMain'>;
+export type ShoppingCameraScreenProps = NativeStackScreenProps<ShopStackParamList, 'ShoppingCamera'>;
+export type ShoppingGalleryScreenProps = NativeStackScreenProps<ShopStackParamList, 'ShoppingGallery'>;
 export type CalendarScreenProps = BottomTabScreenProps<AppTabParamList, 'Calendar'>;
-export type ProfileScreenProps = BottomTabScreenProps<AppTabParamList, 'Profile'>;
+export type ProfileScreenProps = NativeStackScreenProps<HomeStackParamList, 'Profile'>;
 
 // Screens now registered in ClosetStack
 export type ItemDetailScreenProps = NativeStackScreenProps<ClosetStackParamList, 'ItemDetail'>;

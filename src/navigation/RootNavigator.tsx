@@ -7,6 +7,7 @@ import { NavigationContainer, LinkingOptions } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 
 import { useAuth } from '../contexts/AuthContext';
 import { useProfile } from '../hooks/useProfile';
@@ -35,6 +36,8 @@ import { ShoppingCameraScreen } from '../screens/app/ShoppingCameraScreen';
 import { ShoppingGalleryScreen } from '../screens/app/ShoppingGalleryScreen';
 import { StylistScreen } from '../screens/app/StylistScreen';
 import { ErrorState } from '../components/primitives/ErrorState';
+import { StylistTabButton } from '../components/navigation/StylistTabButton';
+import { TabQuickMenuSheet, type TabQuickMenuOption } from '../components/navigation/TabQuickMenuSheet';
 import { colors, spacing, typography } from '../theme';
 
 import type {
@@ -43,6 +46,7 @@ import type {
   RootStackParamList,
   HomeStackParamList,
   ClosetStackParamList,
+  ShopStackParamList,
 } from './types';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -59,7 +63,7 @@ const linking: LinkingOptions<RootStackParamList> = {
       } as any,
       App: {
         screens: {
-          Home: {
+          Shop: {
             screens: {
               ShoppingCamera: 'shopping-camera',
               ShoppingGallery: {
@@ -78,13 +82,14 @@ const AppTab = createBottomTabNavigator<AppTabParamList>();
 const HomeStack = createNativeStackNavigator<HomeStackParamList>();
 const ClosetStack = createNativeStackNavigator<ClosetStackParamList>();
 const StylistStack = createNativeStackNavigator();
+const ShopStack = createNativeStackNavigator<ShopStackParamList>();
 
 const TAB_ICONS: Record<string, { default: keyof typeof Ionicons.glyphMap; selected: keyof typeof Ionicons.glyphMap }> = {
   Home: { default: 'home-outline', selected: 'home' },
   Closet: { default: 'file-tray-full-outline', selected: 'file-tray-full' },
   Stylist: { default: 'sparkles-outline', selected: 'sparkles' },
+  Shop: { default: 'bag-outline', selected: 'bag' },
   Calendar: { default: 'calendar-outline', selected: 'calendar' },
-  Profile: { default: 'person-outline', selected: 'person' },
 };
 
 // ── Navigators ────────────────────────────────────────────────────────────────
@@ -104,10 +109,18 @@ function HomeNavigator() {
     <HomeStack.Navigator screenOptions={{ headerShown: false }}>
       <HomeStack.Screen name="HomeMain" component={HomeScreen} />
       <HomeStack.Screen name="Suggestions" component={SuggestionsScreen} />
-      <HomeStack.Screen name="Shop" component={ShopScreen} />
-      <HomeStack.Screen name="ShoppingCamera" component={ShoppingCameraScreen} />
-      <HomeStack.Screen name="ShoppingGallery" component={ShoppingGalleryScreen} />
+      <HomeStack.Screen name="Profile" component={ProfileScreen} options={{ presentation: 'modal' }} />
     </HomeStack.Navigator>
+  );
+}
+
+function ShopNavigator() {
+  return (
+    <ShopStack.Navigator screenOptions={{ headerShown: false }}>
+      <ShopStack.Screen name="ShopMain" component={ShopScreen} />
+      <ShopStack.Screen name="ShoppingGallery" component={ShoppingGalleryScreen} />
+      <ShopStack.Screen name="ShoppingCamera" component={ShoppingCameraScreen} />
+    </ShopStack.Navigator>
   );
 }
 
@@ -133,6 +146,12 @@ function StylistNavigator() {
 
 function AppTabNavigator() {
   const insets = useSafeAreaInsets();
+  const [quickMenu, setQuickMenu] = useState<{
+    title: string;
+    subtitle?: string;
+    options: TabQuickMenuOption[];
+  } | null>(null);
+  const closeQuickMenu = useCallback(() => setQuickMenu(null), []);
 
   // Once per signed-in session, migrate any legacy on-device wishlist to the server.
   useEffect(() => {
@@ -178,17 +197,96 @@ function AppTabNavigator() {
         })}
       >
         <AppTab.Screen name="Home" component={HomeNavigator} />
-        <AppTab.Screen name="Closet" component={ClosetNavigator} />
+        <AppTab.Screen
+          name="Closet"
+          component={ClosetNavigator}
+          listeners={({ navigation }) => ({
+            tabLongPress: () => {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              setQuickMenu({
+                title: 'Closet',
+                subtitle: 'Jump straight to a section',
+                options: [
+                  {
+                    key: 'pieces',
+                    label: 'Pieces',
+                    icon: 'shirt-outline',
+                    onPress: () => navigation.navigate('Closet', { screen: 'ClosetMain', params: { segment: 'pieces' } }),
+                  },
+                  {
+                    key: 'outfits',
+                    label: 'Outfits',
+                    icon: 'layers-outline',
+                    onPress: () => navigation.navigate('Closet', { screen: 'ClosetMain', params: { segment: 'outfits' } }),
+                  },
+                  {
+                    key: 'boards',
+                    label: 'Boards',
+                    icon: 'albums-outline',
+                    onPress: () => navigation.navigate('Closet', { screen: 'ClosetMain', params: { segment: 'boards' } }),
+                  },
+                  {
+                    key: 'refresh',
+                    label: 'Closet Refresh',
+                    icon: 'color-wand-outline',
+                    onPress: () => navigation.navigate('Closet', { screen: 'ClosetRefresh' }),
+                  },
+                ],
+              });
+            },
+          })}
+        />
         <AppTab.Screen
           name="Stylist"
           component={StylistNavigator}
           options={{
             tabBarAccessibilityLabel: 'Stylist',
+            tabBarLabel: () => null,
+            tabBarButton: (props) => <StylistTabButton {...props} />,
           }}
         />
+        <AppTab.Screen
+          name="Shop"
+          component={ShopNavigator}
+          listeners={({ navigation }) => ({
+            tabLongPress: () => {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              setQuickMenu({
+                title: 'Shop',
+                subtitle: 'Jump straight to a section',
+                options: [
+                  {
+                    key: 'wishlist',
+                    label: 'Wishlist',
+                    icon: 'heart-outline',
+                    onPress: () => navigation.navigate('Shop', { screen: 'ShopMain' }),
+                  },
+                  {
+                    key: 'shopping-edit',
+                    label: 'The Shopping Edit',
+                    icon: 'images-outline',
+                    onPress: () => navigation.navigate('Shop', { screen: 'ShoppingGallery' }),
+                  },
+                  {
+                    key: 'shopping-camera',
+                    label: 'Shopping Camera',
+                    icon: 'camera-outline',
+                    onPress: () => navigation.navigate('Shop', { screen: 'ShoppingCamera' }),
+                  },
+                ],
+              });
+            },
+          })}
+        />
         <AppTab.Screen name="Calendar" component={CalendarScreen} />
-        <AppTab.Screen name="Profile" component={ProfileScreen} />
       </AppTab.Navigator>
+      <TabQuickMenuSheet
+        visible={quickMenu !== null}
+        title={quickMenu?.title ?? ''}
+        subtitle={quickMenu?.subtitle}
+        options={quickMenu?.options ?? []}
+        onClose={closeQuickMenu}
+      />
     </View>
   );
 }
