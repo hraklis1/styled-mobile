@@ -305,11 +305,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             <Ionicons name="chevron-down" size={13} color={colors.primary} />
           </TouchableOpacity>
         )}
-        secondaryActions={[{
-          label: 'Open shop wishlist',
-          icon: 'bag-handle-outline',
-          onPress: () => navigation.navigate('Shop'),
-        }]}
       />
 
       {/* ── AI Stylist fake input ─────────────────────────────── */}
@@ -326,6 +321,81 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         </Text>
         <Ionicons name="arrow-forward" size={16} color="#C2A68D" />
       </TouchableOpacity>
+
+      {/* ── Quick creation actions ─────────────────────────────── */}
+      <View style={styles.quickActions}>
+        <View style={styles.quickActionsRow}>
+          <PressableScale
+            style={styles.quickActionPressable}
+            contentStyle={styles.quickAction}
+            onPress={handleAddToCloset}
+            accessibilityRole="button"
+            accessibilityLabel="Add to closet"
+          >
+            <View style={styles.quickActionIcon}>
+              <Ionicons name="add" size={18} color={colors.primary} />
+            </View>
+            <Text style={styles.quickActionText}>Add to closet</Text>
+          </PressableScale>
+          <PressableScale
+            style={styles.quickActionPressable}
+            contentStyle={styles.quickAction}
+            onPress={openLogger}
+            accessibilityRole="button"
+            accessibilityLabel="Log today's look"
+          >
+            <View style={styles.quickActionIcon}>
+              <Ionicons name="journal-outline" size={17} color={colors.primary} />
+            </View>
+            <Text style={styles.quickActionText}>Log today's look</Text>
+          </PressableScale>
+        </View>
+        <View style={styles.quickActionsRow}>
+          <PressableScale
+            style={styles.quickActionPressable}
+            contentStyle={styles.quickAction}
+            onPress={() => navigation.navigate('ShoppingGallery')}
+            accessibilityRole="button"
+            accessibilityLabel="Open The Shopping Edit"
+          >
+            <View style={styles.quickActionIcon}>
+              <Ionicons name="images-outline" size={17} color={colors.primary} />
+            </View>
+            <Text style={styles.quickActionText}>The Shopping Edit</Text>
+          </PressableScale>
+          <PressableScale
+            style={styles.quickActionPressable}
+            contentStyle={styles.quickAction}
+            onPress={() => navigation.navigate('Shop')}
+            accessibilityRole="button"
+            accessibilityLabel="Open wishlist"
+          >
+            <View style={styles.quickActionIcon}>
+              <Ionicons name="heart-outline" size={17} color={colors.primary} />
+            </View>
+            <Text style={styles.quickActionText}>Wishlist</Text>
+          </PressableScale>
+        </View>
+      </View>
+
+      {/* ── Empty wardrobe nudge ───────────────────────────────────── */}
+      {items.length === 0 && (
+        <PressableScale
+          contentStyle={styles.nudgeCard}
+          onPress={handleAddToCloset}
+          accessibilityRole="button"
+          accessibilityLabel="Your wardrobe is empty. Tap to add items"
+        >
+          <View style={styles.nudgeIcon}>
+            <Ionicons name="shirt-outline" size={18} color={colors.primary} />
+          </View>
+          <View style={styles.nudgeText}>
+            <Text style={styles.nudgeTitle}>Your wardrobe is empty</Text>
+            <Text style={styles.nudgeSub}>Add items to unlock outfit suggestions</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+        </PressableScale>
+      )}
 
       {/* ── Featured outfit ────────────────────────────────────── */}
       <View style={styles.section}>
@@ -384,90 +454,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           </View>
         )}
       </View>
-
-      {/* ── Quick creation actions ─────────────────────────────── */}
-      <View style={styles.quickActions}>
-        <View style={styles.quickActionsRow}>
-          <PressableScale
-            style={styles.quickActionPressable}
-            contentStyle={styles.quickAction}
-            onPress={handleAddToCloset}
-            accessibilityRole="button"
-            accessibilityLabel="Add to closet"
-          >
-            <View style={styles.quickActionIcon}>
-              <Ionicons name="add" size={18} color={colors.primary} />
-            </View>
-            <Text style={styles.quickActionText}>Add to closet</Text>
-          </PressableScale>
-          <PressableScale
-            style={styles.quickActionPressable}
-            contentStyle={styles.quickAction}
-            onPress={openLogger}
-            accessibilityRole="button"
-            accessibilityLabel="Log today's look"
-          >
-            <View style={styles.quickActionIcon}>
-              <Ionicons name="journal-outline" size={17} color={colors.primary} />
-            </View>
-            <Text style={styles.quickActionText}>Log today's look</Text>
-          </PressableScale>
-        </View>
-        <PressableScale
-          contentStyle={styles.quickAction}
-          onPress={() => navigation.navigate('ShoppingGallery')}
-          accessibilityRole="button"
-          accessibilityLabel="Open The Shopping Edit"
-        >
-          <View style={styles.quickActionIcon}>
-            <Ionicons name="images-outline" size={17} color={colors.primary} />
-          </View>
-          <Text style={styles.quickActionText}>The Shopping Edit</Text>
-        </PressableScale>
-      </View>
-
-      {remainingOutfits.length > 0 && (
-        <View style={[styles.outfitGrid, styles.secondaryOutfitGrid]}>
-          {remainingOutfits.map((outfit) => (
-            <PressableScale
-              key={outfit.id}
-              contentStyle={[styles.outfitCard, { width: cardWidth }]}
-              onPress={() => navigation.navigate('Closet', {
-                screen: 'OutfitDetail',
-                params: { outfitId: outfit.id },
-              })}
-              accessibilityRole="button"
-              accessibilityLabel={outfit.name}
-            >
-              <View style={styles.collageWrapper}>
-                <OutfitCollage outfit={outfit} size={cardWidth} />
-              </View>
-              <View style={styles.outfitInfo}>
-                <Text style={styles.outfitName} numberOfLines={1}>{outfit.name}</Text>
-              </View>
-            </PressableScale>
-          ))}
-        </View>
-      )}
-
-      {/* ── Empty wardrobe nudge ───────────────────────────────────── */}
-      {items.length === 0 && (
-        <PressableScale
-          contentStyle={styles.nudgeCard}
-          onPress={handleAddToCloset}
-          accessibilityRole="button"
-          accessibilityLabel="Your wardrobe is empty. Tap to add items"
-        >
-          <View style={styles.nudgeIcon}>
-            <Ionicons name="shirt-outline" size={18} color={colors.primary} />
-          </View>
-          <View style={styles.nudgeText}>
-            <Text style={styles.nudgeTitle}>Your wardrobe is empty</Text>
-            <Text style={styles.nudgeSub}>Add items to unlock outfit suggestions</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={16} color={colors.primary} />
-        </PressableScale>
-      )}
 
       {/* ── Upcoming Events ───────────────────────────────────────── */}
       <View style={styles.section}>
@@ -532,6 +518,31 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           </ScrollView>
         )}
       </View>
+
+      {/* ── Recent outfits ─────────────────────────────────────── */}
+      {remainingOutfits.length > 0 && (
+        <View style={[styles.outfitGrid, styles.secondaryOutfitGrid]}>
+          {remainingOutfits.map((outfit) => (
+            <PressableScale
+              key={outfit.id}
+              contentStyle={[styles.outfitCard, { width: cardWidth }]}
+              onPress={() => navigation.navigate('Closet', {
+                screen: 'OutfitDetail',
+                params: { outfitId: outfit.id },
+              })}
+              accessibilityRole="button"
+              accessibilityLabel={outfit.name}
+            >
+              <View style={styles.collageWrapper}>
+                <OutfitCollage outfit={outfit} size={cardWidth} />
+              </View>
+              <View style={styles.outfitInfo}>
+                <Text style={styles.outfitName} numberOfLines={1}>{outfit.name}</Text>
+              </View>
+            </PressableScale>
+          ))}
+        </View>
+      )}
 
       {/* ── Outfit Log History ───────────────────────────────────── */}
       {logs.length > 0 && (
@@ -698,12 +709,12 @@ const styles = StyleSheet.create({
   },
   quickActions: {
     flexDirection: 'column',
-    gap: spacing.xs,
+    gap: COL_GAP,
     marginBottom: spacing.xl,
   },
   quickActionsRow: {
     flexDirection: 'row',
-    gap: spacing.xs,
+    gap: COL_GAP,
   },
   quickActionPressable: {
     flex: 1,
