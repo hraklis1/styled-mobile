@@ -36,6 +36,7 @@ import { ShoppingCameraScreen } from '../screens/app/ShoppingCameraScreen';
 import { ShoppingGalleryScreen } from '../screens/app/ShoppingGalleryScreen';
 import { StylistScreen } from '../screens/app/StylistScreen';
 import { ErrorState } from '../components/primitives/ErrorState';
+import { QuickMenuTabButton } from '../components/navigation/QuickMenuTabButton';
 import { StylistTabButton } from '../components/navigation/StylistTabButton';
 import { TabQuickMenuSheet, type TabQuickMenuOption } from '../components/navigation/TabQuickMenuSheet';
 import { colors, spacing, typography } from '../theme';
@@ -200,6 +201,9 @@ function AppTabNavigator() {
         <AppTab.Screen
           name="Closet"
           component={ClosetNavigator}
+          options={{
+            tabBarButton: (props) => <QuickMenuTabButton {...props} />,
+          }}
           listeners={({ navigation }) => ({
             tabLongPress: () => {
               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -248,6 +252,9 @@ function AppTabNavigator() {
         <AppTab.Screen
           name="Shop"
           component={ShopNavigator}
+          options={{
+            tabBarButton: (props) => <QuickMenuTabButton {...props} />,
+          }}
           listeners={({ navigation }) => ({
             tabLongPress: () => {
               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
