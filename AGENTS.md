@@ -1,3 +1,10 @@
+# Git
+
+Work happens directly on `main`. When a piece of work is done: stage it, commit
+it, push to `origin/main`. Don't ask first, don't create branches, don't open
+PRs. Same rule in the sibling `../Styled` repo. If something should be held
+back, the user will say so.
+
 # Expo HAS CHANGED
 
 Read the exact versioned docs at https://docs.expo.dev/versions/v56.0.0/ before writing any code.
