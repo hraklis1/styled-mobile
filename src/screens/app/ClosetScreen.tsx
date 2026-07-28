@@ -1445,6 +1445,9 @@ const styles = StyleSheet.create({
   searchIcon: { flexShrink: 0 },
   searchInput: {
     flex: 1,
+    // Explicit height: iOS single-line inputs centre their text in the frame,
+    // whereas an intrinsically-sized one clips descenders and sits low.
+    height: 42,
     fontSize: typography.size.sm,
     color: colors.foreground,
     paddingVertical: 0,
