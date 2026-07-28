@@ -86,6 +86,12 @@
           "recordAudioAndroid": false,
           "barcodeScannerEnabled": false
         }
+      ],
+      [
+        "./plugins/withMinimumPodDeploymentTarget",
+        {
+          "minimumDeploymentTarget": "15.0"
+        }
       ]
     ]
   }
