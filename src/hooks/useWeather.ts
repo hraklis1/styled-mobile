@@ -124,6 +124,24 @@ export function useStylingWeatherToday(location: StylingLocationContext) {
   });
 }
 
+// Open-Meteo's daily forecast only covers roughly 16 days ahead (and a few
+// months of past days). Outside that window it rejects the request, so events
+// further out simply have no forecast to show — don't ask for one.
+const FORECAST_MAX_DAYS_AHEAD = 15;
+const FORECAST_MAX_DAYS_BACK = 60;
+
+export function isWithinForecastHorizon(
+  dateStr: string,
+  today = new Date().toISOString().slice(0, 10),
+): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+  const target = Date.parse(`${dateStr}T00:00:00Z`);
+  const from = Date.parse(`${today}T00:00:00Z`);
+  if (Number.isNaN(target) || Number.isNaN(from)) return false;
+  const daysAhead = Math.round((target - from) / 86_400_000);
+  return daysAhead <= FORECAST_MAX_DAYS_AHEAD && daysAhead >= -FORECAST_MAX_DAYS_BACK;
+}
+
 export function useWeatherForecast(
   lat: number | null,
   lon: number | null,
@@ -131,7 +149,8 @@ export function useWeatherForecast(
 ) {
   return useQuery<ForecastWeather, Error>({
     queryKey: ['weather', 'forecast', lat, lon, dateStr],
-    enabled: lat !== null && lon !== null && !!dateStr && dateStr.length === 10,
+    enabled:
+      lat !== null && lon !== null && !!dateStr && isWithinForecastHorizon(dateStr),
     staleTime: 60 * 60 * 1000,
     retry: false,
     queryFn: async () => {
