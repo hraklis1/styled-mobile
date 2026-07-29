@@ -1,9 +1,11 @@
 # Git
 
-Work happens directly on `main`. When a piece of work is done: stage it, commit
-it, push to `origin/main`. Don't ask first, don't create branches, don't open
-PRs. Same rule in the sibling `../Styled` repo. If something should be held
-back, the user will say so.
+Work happens directly on `main`. Don't create branches, don't open PRs.
+
+Never commit or push on your own initiative. Leave finished work staged or
+unstaged in the working tree and say it's ready. Only commit and push when the
+user explicitly asks for it — then commit to `main` and push to `origin/main`
+without further questions. Same rule in the sibling `../Styled` repo.
 
 # Expo HAS CHANGED
 
