@@ -9,6 +9,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useWeatherForecast, type WeatherCondition } from '../../hooks/useWeather';
+import { useTempUnit } from '../../hooks/useTempUnit';
+import { formatTempRange } from '../../lib/temperature';
 import { ItemThumbStack } from './ItemThumbStack';
 import { OCCASIONS, OCCASION_ICONS, formatDayLabel, formatTime, formatCountdown } from './calendarUtils';
 import { colors, spacing, typography, radii } from '../../theme';
@@ -58,6 +60,7 @@ export function EventDetailModal({
     deviceCoords?.lon ?? null,
     eventDateStr,
   );
+  const tempUnit = useTempUnit();
 
   if (!event) return null;
   const d = new Date(event.date);
@@ -93,7 +96,7 @@ export function EventDetailModal({
               <View style={s.forecastChip}>
                 <Ionicons name={WEATHER_ICONS[forecast.data.condition]} size={12} color={colors.mutedForeground} />
                 <Text style={s.forecastText}>
-                  {forecast.data.tempMinF}–{forecast.data.tempMaxF}°F
+                  {formatTempRange(forecast.data, tempUnit)}
                 </Text>
               </View>
             )}

@@ -1,6 +1,8 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useWeatherForecast, type WeatherCondition } from '../../hooks/useWeather';
+import { useTempUnit } from '../../hooks/useTempUnit';
+import { formatTempRange } from '../../lib/temperature';
 import { ItemThumbStack } from './ItemThumbStack';
 import {
   OCCASIONS,
@@ -43,6 +45,7 @@ export function NextEventHero({
     deviceCoords?.lon ?? null,
     event.date.slice(0, 10),
   );
+  const tempUnit = useTempUnit();
 
   const d = new Date(event.date);
   const dayLabel = formatDayLabel(d);
@@ -88,7 +91,7 @@ export function NextEventHero({
           <View style={s.detail}>
             {occasionMeta ? <Text style={s.detailDot}>·</Text> : null}
             <Ionicons name={WEATHER_ICONS[forecast.data.condition]} size={12} color={colors.mutedForeground} />
-            <Text style={s.detailText}>{forecast.data.tempMinF}–{forecast.data.tempMaxF}°F</Text>
+            <Text style={s.detailText}>{formatTempRange(forecast.data, tempUnit)}</Text>
           </View>
         ) : null}
         {event.location ? (

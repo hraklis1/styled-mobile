@@ -31,7 +31,7 @@ import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
 import { useProfile } from '../../hooks/useProfile';
 import { StylingLocationSheet } from '../../components/home/StylingLocationSheet';
 import { resolveImageUri } from '../../lib/resolveImageUri';
-import { formatTemp } from '../../lib/temperature';
+import { formatTemp, resolveTempUnit } from '../../lib/temperature';
 import {
   selectDailyStylistPick,
   toLocalDateKey,
@@ -202,6 +202,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   );
 
   const profilePhotoUri = profile?.photoUrl ? resolveImageUri(profile.photoUrl) : undefined;
+  const tempUnit = resolveTempUnit(profile?.tempUnit, profile?.location);
   const activeLocationLabel = stylingLocation.activeLocation.label?.trim() || undefined;
   const compactActiveLocation = compactLocationLabel(activeLocationLabel);
   const locationSource = stylingLocation.activeLocation.source;
@@ -210,7 +211,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const locationBadge = isDestination ? 'Trip' : isHomeFallback ? 'Home' : undefined;
   const weatherLocationLine = weather.data
     ? [
-      `${WEATHER_EMOJI[weather.data.current.condition] ?? '🌡️'} ${formatTemp(weather.data.current, profile?.tempUnit)}`,
+      `${WEATHER_EMOJI[weather.data.current.condition] ?? '🌡️'} ${formatTemp(weather.data.current, tempUnit)}`,
       compactActiveLocation,
       locationBadge,
     ].filter(Boolean).join(' · ')
@@ -232,10 +233,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         logs,
         date: dailyPickDate,
         history: dailyPickHistory,
-        tempUnit: profile?.tempUnit,
+        tempUnit,
       })
       : null,
-    [dailyPickDate, dailyPickHistory, dailyPickHistoryLoaded, events, items, logs, outfits, weather.data, profile?.tempUnit],
+    [dailyPickDate, dailyPickHistory, dailyPickHistoryLoaded, events, items, logs, outfits, weather.data, tempUnit],
   );
   const featuredOutfit = dailyPick?.outfit ?? recentOutfits[0];
   const featuredReason = dailyPick?.reason ?? "Today’s edit";

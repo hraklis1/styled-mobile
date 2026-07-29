@@ -1,6 +1,8 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useWeatherCurrent, type WeatherCondition } from '../../hooks/useWeather';
+import { useTempUnit } from '../../hooks/useTempUnit';
+import { formatTemp } from '../../lib/temperature';
 import { colors, spacing, typography, radii } from '../../theme';
 
 // ── Condition config ─────────────────────────────────────────────────────────
@@ -56,6 +58,7 @@ type Props = {
 
 export function WeatherWidget({ onPress }: Props) {
   const { data, isLoading, isError, refetch } = useWeatherCurrent();
+  const tempUnit = useTempUnit();
 
   if (isLoading) {
     return (
@@ -88,8 +91,10 @@ export function WeatherWidget({ onPress }: Props) {
 
       <View style={styles.textBlock}>
         <Text style={[styles.temp, { color: meta.textColor }]}>
-          {CONDITION_LABELS[data.condition]} · {data.temperatureC}°C
-          <Text style={styles.tempAlt}> / {data.temperatureF}°F</Text>
+          {CONDITION_LABELS[data.condition]} · {formatTemp(data, tempUnit)}
+          <Text style={styles.tempAlt}>
+            {' / '}{tempUnit === 'C' ? `${Math.round(data.temperatureF)}°F` : `${Math.round(data.temperatureC)}°C`}
+          </Text>
         </Text>
         {onPress ? (
           <Text style={[styles.cta, { color: meta.textColor }]} numberOfLines={1}>

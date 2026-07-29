@@ -62,6 +62,7 @@ import {
   JACKET_LENGTH_OPTIONS,
 } from '../../hooks/useProfileForm';
 import { useProfile } from '../../hooks/useProfile';
+import { resolveTempUnit } from '../../lib/temperature';
 import type { CategoryBudgetKey, StyleProfileDetails } from '../../types/profile';
 
 const STYLIST_VOICES = [
@@ -347,6 +348,7 @@ export function ProfileScreen(_props: ProfileScreenProps) {
   const { user, logout } = useAuth();
   const form = useProfileForm();
   const { isError: profileError, refetch: refetchProfile } = useProfile();
+  const autoTempUnit = resolveTempUnit(null, form.location);
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [newFavoriteColor, setNewFavoriteColor] = useState('');
@@ -1001,7 +1003,7 @@ export function ProfileScreen(_props: ProfileScreenProps) {
           initiallyExpanded={false}
           summary={<SummaryLine values={[
             form.location || 'No home city',
-            form.tempUnit === 'auto' ? 'Auto temp' : `${form.tempUnit} temp`,
+            form.tempUnit === 'auto' ? `Auto temp (°${autoTempUnit})` : `${form.tempUnit} temp`,
             optionLabel(STYLIST_VOICES, form.stylistVoice),
           ]} />}
         >
@@ -1032,6 +1034,11 @@ export function ProfileScreen(_props: ProfileScreenProps) {
                 </TouchableOpacity>
               ))}
             </View>
+            <Text style={styles.hint}>
+              {form.location.trim()
+                ? `Auto follows your home location — currently °${autoTempUnit}.`
+                : `Auto follows your home location. Add one above; until then it shows °${autoTempUnit}.`}
+            </Text>
           </View>
 
           <View style={styles.field}>

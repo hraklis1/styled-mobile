@@ -37,6 +37,7 @@ import { useItems } from '../../hooks/useItems';
 import { useProfile } from '../../hooks/useProfile';
 import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
 import { conversationLocation, type StylingLocationContext } from '../../lib/stylingLocation';
+import { resolveTempUnit } from '../../lib/temperature';
 import { useCreateOutfit, type CreateOutfitInput } from '../../hooks/useOutfits';
 import { useAssignEventItems } from '../../hooks/useEvents';
 import { addOutfitToWishlist } from '../../hooks/useWishlist';
@@ -344,6 +345,7 @@ export function StylistChatView({
   const insets = useSafeAreaInsets();
   const { data: allItems = [] } = useItems();
   const { data: profile } = useProfile();
+  const tempUnit = resolveTempUnit(profile?.tempUnit, profile?.location);
   const stylingLocation = useActiveStylingLocation();
   const [conversationLocationContext, setConversationLocationContext] = useState<StylingLocationContext | null>(
     initialDestination ? conversationLocation(initialDestination) : null,
@@ -648,8 +650,7 @@ export function StylistChatView({
 
       let weatherSummary: string | undefined;
       if (weather.data) {
-        const useCelsius = profile?.tempUnit === 'C';
-        const tempStr = useCelsius
+        const tempStr = tempUnit === 'C'
           ? `${weather.data.current.temperatureC}°C`
           : `${weather.data.current.temperatureF}°F`;
         weatherSummary = `${weather.data.current.summary} ${tempStr}`;
@@ -683,7 +684,7 @@ export function StylistChatView({
         originalOptions: opts,
       });
     },
-    [activeLocation, entryContext, isLoading, profile?.tempUnit, sendTransportMessage, source, weather.data],
+    [activeLocation, entryContext, isLoading, tempUnit, sendTransportMessage, source, weather.data],
   );
 
   // ── Thread lifecycle ─────────────────────────────────────────────────────────
@@ -994,7 +995,7 @@ export function StylistChatView({
             <Text style={styles.headerSubtitle} numberOfLines={1}>{activeLocation.label || 'Set location'}</Text>
             {weather.data?.current ? (
               <Text style={styles.headerWeather}>
-                {profile?.tempUnit === 'C' ? `${weather.data.current.temperatureC}°` : `${weather.data.current.temperatureF}°`}
+                {tempUnit === 'C' ? `${weather.data.current.temperatureC}°` : `${weather.data.current.temperatureF}°`}
               </Text>
             ) : null}
           </TouchableOpacity>
@@ -1052,7 +1053,7 @@ export function StylistChatView({
         {isEmpty ? (
           <EmptyState
             weather={weather.data?.current}
-            tempUnit={profile?.tempUnit === 'C' ? 'C' : 'F'}
+            tempUnit={tempUnit}
             displayName={profile?.displayName}
             location={activeLocation.label}
             wardrobeCount={allItems.length}
