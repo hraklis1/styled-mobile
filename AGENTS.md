@@ -1,11 +1,21 @@
 # Git
 
-Work happens directly on `main`. Don't create branches, don't open PRs.
+Feature work happens directly on `main`. Don't create branches for it, don't
+open PRs.
 
 Never commit or push on your own initiative. Leave finished work staged or
 unstaged in the working tree and say it's ready. Only commit and push when the
 user explicitly asks for it — then commit to `main` and push to `origin/main`
 without further questions. Same rule in the sibling `../Styled` repo.
+
+## Throwaway experiment branches
+
+Risky or exploratory ideas may live on their own branch so `main` stays safe
+and the whole attempt can be discarded in one command. On such a branch —
+and only there — commit as you go without asking, since frequent commits are
+what make the escape hatch work. This does not extend to `main`, and it never
+authorises `git push`; ask before anything leaves the machine. When the trial
+ends, the user decides between merging the branch into `main` and deleting it.
 
 # Expo HAS CHANGED
 
