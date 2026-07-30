@@ -19,12 +19,15 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { compressImageToDataUrl } from '../../lib/compressImage';
 import { useQueryClient } from '@tanstack/react-query';
-import { useItems, useUpdateItem, useDeleteItem, useMarkItemWorn, useRefineImage } from '../../hooks/useItems';
+import {
+  useItems, useUpdateItem, useDeleteItem, useMarkItemWorn, useRefineImage,
+  usePrettifyItem, usePlainCutout,
+} from '../../hooks/useItems';
 import { OUTFITS_QUERY_KEY } from '../../hooks/useOutfits';
 import type { Outfit } from '../../types/outfit';
 import { api } from '../../lib/api';
 import { resolveImageUri } from '../../lib/resolveImageUri';
-import { hasCutout } from '../../lib/itemImage';
+import { hasCutout, hasPrettified } from '../../lib/itemImage';
 import { normalizeTag, dedupeTags } from '../../lib/tags';
 import { colors, spacing, typography, radii } from '../../theme';
 import { CATEGORY_LABELS, SEASON_LABELS } from '../../types/item';
@@ -88,9 +91,13 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const [showOriginalPhoto, setShowOriginalPhoto] = useState(false);
   const [cuttingOut, setCuttingOut] = useState(false);
 
-  // Handlers run before the `viewItem` narrowing below, so read the cutout flag
+  // Handlers run before the `viewItem` narrowing below, so read the cutout flags
   // off the possibly-null item here.
   const viewHasCutout = hasCutout(item);
+  const viewIsPrettified = hasPrettified(item);
+
+  const prettifyItem = usePrettifyItem();
+  const plainCutout = usePlainCutout();
 
   // ── Tag scanner ──────────────────────────────────────────────────────────────
   const tagScanner = useTagScanner(item ?? null);
@@ -285,6 +292,33 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     );
   };
 
+  /**
+   * Regenerate this item as a studio catalog shot.
+   *
+   * Foregrounded rather than fire-and-forget like the cutout: it costs real
+   * money per tap, takes several seconds, and visibly changes the garment, so
+   * the user waits and sees the result.
+   */
+  const handlePrettify = () => {
+    if (!item) return;
+    prettifyItem.mutate(item.id, {
+      onSuccess: () => setShowOriginalPhoto(false),
+      onError: (err: any) => {
+        if (err?.response?.data?.code === 'PRETTIFY_QUOTA_EXCEEDED') {
+          Alert.alert('Out of prettify credits', err.response.data.message);
+          return;
+        }
+        Alert.alert('Prettify failed', 'Could not generate a catalog image. Your photo is unchanged.');
+      },
+    });
+  };
+
+  /** Revert to the faithful cutout, discarding the generated image. */
+  const handleUsePlainCutout = () => {
+    if (!item) return;
+    plainCutout.mutate(item.id);
+  };
+
   /** Discard the cutout so the item shows its original photo everywhere. */
   const handleUseOriginal = () => {
     if (!item) return;
@@ -322,11 +356,18 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     // to create one when the item has a photo but no cutout.
     const cutoutAction = viewHasCutout ? 'Use Original Photo' : 'Remove Background';
     const onCutoutAction = viewHasCutout ? handleUseOriginal : handleCreateCutout;
+    // Contextual in the same way as the cutout action: offer to generate the
+    // catalog shot when there isn't one, and to drop it when there is.
+    const prettifyAction = viewIsPrettified ? 'Use Plain Cutout' : 'Prettify Photo';
+    const onPrettifyAction = viewIsPrettified ? handleUsePlainCutout : handlePrettify;
 
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
-          options: ['Cancel', 'Take Photo', 'Choose from Library', 'Generate AI Image', cutoutAction],
+          options: [
+            'Cancel', 'Take Photo', 'Choose from Library',
+            'Generate AI Image', cutoutAction, prettifyAction,
+          ],
           cancelButtonIndex: 0,
         },
         (idx) => {
@@ -334,6 +375,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           if (idx === 2) pickAndChangePhoto('library');
           if (idx === 3) handleRefineImage();
           if (idx === 4) onCutoutAction();
+          if (idx === 5) onPrettifyAction();
         }
       );
     } else {
@@ -343,6 +385,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         { text: 'Photo Library', onPress: () => pickAndChangePhoto('library') },
         { text: 'Generate AI Image', onPress: handleRefineImage },
         { text: cutoutAction, onPress: onCutoutAction },
+        { text: prettifyAction, onPress: onPrettifyAction },
       ]);
     }
   };
@@ -382,8 +425,12 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   // user checks what the segmentation actually did.
   const cutoutAvailable = viewHasCutout;
   const showingCutout = cutoutAvailable && !showOriginalPhoto;
+  // Prettified first when it exists, then the faithful cutout. The original
+  // photo stays reachable through the same toggle either way — with a
+  // generative image on screen, being able to check it against the real
+  // garment matters more, not less.
   const imageUri = showingCutout
-    ? resolveImageUri(viewItem.cutoutUrl)
+    ? resolveImageUri(viewItem.prettifiedUrl ?? viewItem.cutoutUrl)
     : resolveImageUri(viewItem.imageUrl);
   const breadcrumb = [
     viewItem.category ? CATEGORY_LABELS[viewItem.category] : null,
@@ -394,7 +441,8 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     viewItem.subcategory || viewItem.style || viewItem.pattern || viewItem.material || viewItem.fit ||
     (viewItem.formalityStyles?.length > 0) || (viewItem.notableDetails?.length > 0)
   );
-  const isBusy = updateItem.isPending || markWorn.isPending || deleteItem.isPending || refineImage.isPending || cuttingOut;
+  const isBusy = updateItem.isPending || markWorn.isPending || deleteItem.isPending || refineImage.isPending
+    || cuttingOut || prettifyItem.isPending || plainCutout.isPending;
 
   return (
     <View style={styles.flex}>

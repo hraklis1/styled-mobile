@@ -244,6 +244,38 @@ export function useRefineImage() {
   });
 }
 
+/**
+ * Regenerate one item as an idealised catalog shot.
+ *
+ * Quota'd server-side (402 PRETTIFY_QUOTA_EXCEEDED) because it is the only
+ * genuinely expensive call in the image pipeline. The result lands in its own
+ * column, so `usePlainCutout` reverts it without touching the real photo.
+ */
+export function usePrettifyItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (itemId: number) =>
+      api
+        .post<{ prettifiedUrl: string; item: Item }>(`/api/items/${itemId}/prettify`, {})
+        .then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
+    },
+  });
+}
+
+/** Drop the prettified image and fall back to the faithful cutout. */
+export function usePlainCutout() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (itemId: number) =>
+      api.delete<{ item: Item }>(`/api/items/${itemId}/prettify`).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
+    },
+  });
+}
+
 export function useArchivedItems() {
   return useQuery({
     queryKey: ARCHIVED_ITEMS_QUERY_KEY,
