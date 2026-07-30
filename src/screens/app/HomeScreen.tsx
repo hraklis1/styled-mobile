@@ -31,6 +31,7 @@ import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
 import { useProfile } from '../../hooks/useProfile';
 import { StylingLocationSheet } from '../../components/home/StylingLocationSheet';
 import { resolveImageUri } from '../../lib/resolveImageUri';
+import { itemImageUri } from '../../lib/itemImage';
 import { formatTemp, resolveTempUnit } from '../../lib/temperature';
 import {
   selectDailyStylistPick,
@@ -557,7 +558,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                   {/* Stacked thumbnails */}
                   <View style={styles.logThumbs}>
                     {logItems.slice(0, 4).map((item, idx) => {
-                      const imgUri = resolveImageUri(item.imageUrl);
+                      const imgUri = itemImageUri(item);
                       return (
                         <View
                           key={item.id}

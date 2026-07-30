@@ -2,6 +2,7 @@ import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, radii } from '../../theme';
 import { resolveImageUri } from '../../lib/resolveImageUri';
+import { itemImageUri } from '../../lib/itemImage';
 import type { Item } from '../../types/item';
 
 const THUMB_SIZE = 60;
@@ -37,7 +38,7 @@ export function WardrobeListRow({
   onToggleSelect,
   onFavorite,
 }: Props) {
-  const imageUri = resolveImageUri(item.imageUrl);
+  const imageUri = itemImageUri(item);
   const handlePress = selectionMode ? onToggleSelect : onPress;
   const visibleTags = item.tags.slice(0, 2);
   const overflowCount = item.tags.length - visibleTags.length;

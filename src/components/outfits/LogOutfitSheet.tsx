@@ -23,6 +23,7 @@ import { useItems } from '../../hooks/useItems';
 import { useCreateOutfitLog, useScanOutfitLog, type OutfitScanResult } from '../../hooks/useOutfitLogs';
 import { useCameraLaunch, useLibraryLaunch } from '../../hooks/useCameraLaunch';
 import { resolveImageUri } from '../../lib/resolveImageUri';
+import { itemImageUri } from '../../lib/itemImage';
 import { LocationAutocompleteInput } from '../primitives/LocationAutocompleteInput';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { Item } from '../../types/item';
@@ -561,7 +562,7 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
                 }
                 renderItem={({ item }) => {
                   const isSelected = selectedIds.includes(item.id);
-                  const imgUri = resolveImageUri(item.imageUrl);
+                  const imgUri = itemImageUri(item);
                   return (
                     <TouchableOpacity
                       style={[styles.pickerCard, { width: pickerCardWidth }]}
@@ -652,7 +653,7 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
                         : null;
                       const isSelected = result.match_id !== null && scanSel.has(result.match_id);
                       const isMatchable = result.match_id !== null;
-                      const imgUri = matched ? resolveImageUri(matched.imageUrl) : null;
+                      const imgUri = matched ? itemImageUri(matched) : null;
 
                       return (
                         <TouchableOpacity
@@ -720,7 +721,7 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
 // ─── SelectedItemRow ──────────────────────────────────────────────────────────
 
 function SelectedItemRow({ item, onRemove }: { item: Item; onRemove: () => void }) {
-  const imgUri = resolveImageUri(item.imageUrl);
+  const imgUri = itemImageUri(item);
   return (
     <View style={styles.selectedRow}>
       <View style={styles.selectedThumb}>

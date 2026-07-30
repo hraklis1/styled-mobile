@@ -19,9 +19,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { track } from '../lib/analytics';
-import { useCreateItem, useBrandSuggestions } from '../hooks/useItems';
+import { useCreateItem, useUpdateItem, useBrandSuggestions } from '../hooks/useItems';
 import { useAuth } from '../contexts/AuthContext';
 import { uploadImageToR2, isDataUri } from '../lib/uploadImage';
+import { generateCutoutForItem } from '../lib/cutout';
 import { colors, spacing, typography, radii } from '../theme';
 import {
   type Item, type ItemCategory, type NormalizedColor, type Season, type Occasion,
@@ -58,6 +59,7 @@ export function AddActionSheet({
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const createItem = useCreateItem();
+  const updateItem = useUpdateItem();
   const bottomSheetRef = useRef<BottomSheetModal>(null);
   const brandSuggestions = useBrandSuggestions();
 
@@ -193,6 +195,18 @@ export function AddActionSheet({
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           onItemsSaved?.([created]);
           bottomSheetRef.current?.dismiss();
+
+          // Cut out after the item is already saved and on screen, never before:
+          // segmentation is a second or so of server work, and making the user
+          // watch a spinner for an optional thumbnail would be a bad trade. If
+          // it lands, the card quietly upgrades itself; if not, nothing is lost.
+          if (created.imageUrl) {
+            void generateCutoutForItem({ item: created, userId: user!.id })
+              .then((cutoutUrl) => {
+                if (cutoutUrl) updateItem.mutate({ id: created.id, cutoutUrl });
+              })
+              .catch(() => {});
+          }
         },
         onError: () => {
           Alert.alert('Save failed', 'Could not save item. Please try again.');
@@ -200,7 +214,7 @@ export function AddActionSheet({
         },
       },
     );
-  }, [manualName, manualBrand, manualCategory, manualColor, manualColorNormalized, manualSubcategory, manualStyle, manualSeasons, manualOccasions, manualImageDataUrl, createItem, onItemsSaved, user]);
+  }, [manualName, manualBrand, manualCategory, manualColor, manualColorNormalized, manualSubcategory, manualStyle, manualSeasons, manualOccasions, manualImageDataUrl, createItem, updateItem, onItemsSaved, user]);
 
   const canClose = view !== 'saving';
 

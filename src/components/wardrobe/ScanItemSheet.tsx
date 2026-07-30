@@ -43,7 +43,9 @@ import { TaxonomySelector } from '../primitives/TaxonomySelector';
 import { SizeProfileInput } from '../primitives/SizeProfileInput';
 import type { SizeProfile } from '../../lib/sizes';
 import { CropAdjustModal, type Bbox } from './CropAdjustModal';
+import { CutoutReviewThumb } from './CutoutReviewThumb';
 import { cropImage } from '../../lib/cropImage';
+import { tryRequestCutout } from '../../lib/cutout';
 import { mapWithConcurrency } from '../../lib/asyncPool';
 import { uploadImageToR2 } from '../../lib/uploadImage';
 import { capturePhotoLocation } from '../../lib/photoLocation';
@@ -81,6 +83,10 @@ type EditableItem = {
   colorTemperature: string | null;
   warmthRating: number | null;
   croppedImage: string | null;
+  /** Background-removed thumbnail from the scan, if segmentation produced one. */
+  cutoutImage: string | null;
+  /** False when the user has rejected the cutout in review. */
+  useCutout: boolean;
   expanded: boolean;
   sizeProfile: SizeProfile | null;
   bbox: Bbox | null;
@@ -93,11 +99,16 @@ type PreExtractItemData = {
   name: string;
   category: string;
   croppedImage: string | null;
+  cutoutImage: string | null;
+  /** False when the user has rejected the cutout in review. */
+  useCutout: boolean;
   targetImage: string | null;
   bbox: Bbox | null;
   previewBbox: Bbox | null;
   sourceImage: string;
   brandHint: string;
+  /** Scene the server routed this photo to — decides the cutout mask model. */
+  scene: string | null;
 };
 
 interface ScanItemSheetProps {
@@ -156,11 +167,16 @@ async function buildPreExtractItemFromPose(
     name: poseItem.name,
     category: poseItem.category,
     croppedImage: previewImage,
+    // Comes back with the scan itself — the pipeline reuses a mask it already
+    // computed, so there's no extra request and nothing to wait on here.
+    cutoutImage: poseItem.cutoutWebP ? `data:image/webp;base64,${poseItem.cutoutWebP}` : null,
+    useCutout: true,
     targetImage,
     bbox: targetBbox,
     previewBbox,
     sourceImage,
     brandHint: '',
+    scene: poseItem.scene ?? null,
   };
 }
 
@@ -184,6 +200,9 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     bbox: Bbox;
     itemName: string;
     scope: 'pre-extract' | 'review';
+    /** Carried so a re-crop can request a matching cutout for the new box. */
+    category: string | null;
+    scene: string | null;
   } | null>(null);
 
   const { user } = useAuth();
@@ -329,6 +348,19 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
         }
       }
 
+      // The cutout is a separate, much smaller object (~30 KB) so the original
+      // stays authoritative and the item is still complete without it. A failed
+      // cutout upload is dropped rather than inlined as base64: unlike the photo
+      // it's optional, and inlining would put a data URL in every closet payload.
+      let cutoutUrl: string | null = null;
+      if (item.cutoutImage && item.useCutout) {
+        try {
+          cutoutUrl = await uploadImageToR2(item.cutoutImage, user!.id);
+        } catch {
+          cutoutUrl = null;
+        }
+      }
+
       try {
         const created = await new Promise<Item>((resolve, reject) => {
           createItem.mutate(
@@ -353,6 +385,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
               notableDetails: item.notableDetails.length > 0 ? item.notableDetails : undefined,
               colorPalette: item.colorPalette.length > 0 ? item.colorPalette : undefined,
               imageUrl,
+              cutoutUrl,
               sizeProfile: item.sizeProfile ?? null,
               purchaseLocation: item.purchaseLocation ?? null,
               needsDetails,
@@ -421,7 +454,13 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
           setExtractedThumbs((prev) => [...prev, preItem.croppedImage!]);
         }
 
-        return { result, croppedImage: preItem.croppedImage, bbox: preItem.bbox };
+        return {
+          result,
+          croppedImage: preItem.croppedImage,
+          cutoutImage: preItem.cutoutImage,
+          useCutout: preItem.useCutout,
+          bbox: preItem.bbox,
+        };
       },
     );
 
@@ -430,7 +469,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     const extracted: EditableItem[] = [];
     for (const s of settled) {
       if (s.status !== 'fulfilled') continue;
-      const { result, croppedImage, bbox } = s.value;
+      const { result, croppedImage, cutoutImage, useCutout, bbox } = s.value;
       extracted.push({
         tempId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         name: result.name || 'Unknown Item',
@@ -453,6 +492,8 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
         colorTemperature: result.colorTemperature ?? null,
         warmthRating: result.warmthRating ?? null,
         croppedImage,
+        cutoutImage,
+        useCutout,
         expanded: false,
         sizeProfile: null,
         bbox,
@@ -643,29 +684,53 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
   const handleAdjustCrop = useCallback((tempId: string) => {
     const item = detectedItems.find((it) => it.tempId === tempId);
     if (!item?.sourceImage || !item.bbox) return;
-    setCropAdjustTarget({ tempId, sourceImage: item.sourceImage, bbox: item.bbox, itemName: item.name, scope: 'review' });
+    setCropAdjustTarget({
+      tempId, sourceImage: item.sourceImage, bbox: item.bbox, itemName: item.name,
+      scope: 'review', category: item.category, scene: null,
+    });
   }, [detectedItems]);
 
   const handlePreExtractAdjustCrop = useCallback((tempId: string) => {
     const item = preExtractItems.find((it) => it.tempId === tempId);
     if (!item?.bbox) return;
-    setCropAdjustTarget({ tempId, sourceImage: item.sourceImage, bbox: item.bbox, itemName: item.name, scope: 'pre-extract' });
+    setCropAdjustTarget({
+      tempId, sourceImage: item.sourceImage, bbox: item.bbox, itemName: item.name,
+      scope: 'pre-extract', category: item.category, scene: item.scene,
+    });
   }, [preExtractItems]);
 
   const handleCropApply = useCallback(async (newBbox: Bbox) => {
     if (!cropAdjustTarget) return;
-    const newCrop = await cropImage(cropAdjustTarget.sourceImage, newBbox, { maxDim: 800 });
+    const { tempId, sourceImage, scope, category, scene } = cropAdjustTarget;
+    const newCrop = await cropImage(sourceImage, newBbox, { maxDim: 800 });
     if (newCrop) {
-      if (cropAdjustTarget.scope === 'pre-extract') {
-        updatePreExtractItem(cropAdjustTarget.tempId, {
+      // Drop the old cutout straight away — it was masked to the previous box,
+      // so keeping it visible would contradict the crop the user just chose.
+      if (scope === 'pre-extract') {
+        updatePreExtractItem(tempId, {
           croppedImage: newCrop,
           targetImage: newCrop,
+          cutoutImage: null,
           bbox: newBbox,
           previewBbox: newBbox,
         });
       } else {
-        updateItem(cropAdjustTarget.tempId, { croppedImage: newCrop, bbox: newBbox });
+        updateItem(tempId, { croppedImage: newCrop, cutoutImage: null, bbox: newBbox });
       }
+
+      // Re-cut in the background against the new box. The user carries on
+      // editing; if it never lands, the item simply keeps its plain crop.
+      const session = sessionRef.current;
+      void tryRequestCutout({
+        imageDataUrl: sourceImage,
+        bbox: newBbox,
+        category,
+        scene,
+      }).then((cutoutImage) => {
+        if (!cutoutImage || sessionRef.current !== session) return;
+        if (scope === 'pre-extract') updatePreExtractItem(tempId, { cutoutImage, useCutout: true });
+        else updateItem(tempId, { cutoutImage, useCutout: true });
+      });
     }
     setCropAdjustTarget(null);
   }, [cropAdjustTarget, updatePreExtractItem, updateItem]);
@@ -1065,13 +1130,14 @@ function PreExtractCard({
 }) {
   return (
     <View style={preExtractCardStyles.card}>
-      {/* Thumbnail with optional crop-adjust button */}
-      <View style={cardStyles.thumb}>
-        {item.croppedImage ? (
-          <Image source={{ uri: item.croppedImage }} style={cardStyles.thumbImg} resizeMode="cover" />
-        ) : (
-          <Ionicons name="shirt-outline" size={22} color={colors.mutedForeground} />
-        )}
+      {/* Thumbnail with cutout toggle and optional crop-adjust button */}
+      <CutoutReviewThumb
+        style={cardStyles.thumb}
+        croppedImage={item.croppedImage}
+        cutoutImage={item.cutoutImage}
+        useCutout={item.useCutout}
+        onToggleCutout={() => onUpdate({ useCutout: !item.useCutout })}
+      >
         {item.bbox && (
           <TouchableOpacity
             style={cardStyles.cropBtn}
@@ -1082,7 +1148,7 @@ function PreExtractCard({
             <Ionicons name="crop-outline" size={11} color={colors.white} />
           </TouchableOpacity>
         )}
-      </View>
+      </CutoutReviewThumb>
 
       {/* Right column: detected name + brand input */}
       <View style={preExtractCardStyles.content}>
@@ -1223,13 +1289,14 @@ function ItemCard({
     <View style={cardStyles.card}>
       {/* Collapsed row */}
       <View style={cardStyles.row}>
-        {/* Thumbnail */}
-        <View style={cardStyles.thumb}>
-          {item.croppedImage ? (
-            <Image source={{ uri: item.croppedImage }} style={cardStyles.thumbImg} resizeMode="cover" />
-          ) : (
-            <Ionicons name="shirt-outline" size={22} color={colors.mutedForeground} />
-          )}
+        {/* Thumbnail with cutout toggle */}
+        <CutoutReviewThumb
+          style={cardStyles.thumb}
+          croppedImage={item.croppedImage}
+          cutoutImage={item.cutoutImage}
+          useCutout={item.useCutout}
+          onToggleCutout={() => !disabled && onUpdate({ useCutout: !item.useCutout })}
+        >
           {!disabled && item.sourceImage && item.bbox && (
             <TouchableOpacity
               style={cardStyles.cropBtn}
@@ -1240,7 +1307,7 @@ function ItemCard({
               <Ionicons name="crop-outline" size={11} color={colors.white} />
             </TouchableOpacity>
           )}
-        </View>
+        </CutoutReviewThumb>
 
         {/* Info — tappable to toggle expand */}
         <TouchableOpacity style={cardStyles.info} onPress={toggleExpand} activeOpacity={0.7}>

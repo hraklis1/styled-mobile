@@ -31,6 +31,7 @@ import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
 import { useBoards, useCreateBoard, useDeleteBoard, useUpdateBoard, type BoardEntryRef } from '../../hooks/useBoards';
 import { filterVisibleBoards } from '../../lib/legacyBoards';
 import { resolveImageUri } from '../../lib/resolveImageUri';
+import { itemImageUri } from '../../lib/itemImage';
 import { parseEventDate } from '../../lib/outfitAssignments';
 import { CATEGORY_LABELS, type ItemCategory } from '../../types/item';
 import { colors, shadows, spacing, typography, radii } from '../../theme';
@@ -498,7 +499,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
 
   const renderItemRow = useCallback(
     ({ item }: { item: (typeof items)[number] }) => {
-      const uri = resolveImageUri(item.imageUrl);
+      const uri = itemImageUri(item);
       const isSelected = selectedIds.has(item.id);
       return (
         <PressableScale

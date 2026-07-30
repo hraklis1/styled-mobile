@@ -154,6 +154,13 @@ export type Item = {
   name: string;
   userId: number;
   imageUrl: string | null;
+  /**
+   * Background-removed thumbnail (transparent WebP). Display surfaces prefer
+   * this over `imageUrl` — see `itemImageUri` in lib/itemImage.ts. Null when the
+   * item predates cutouts, segmentation was unavailable, or the result failed
+   * the server's quality gate; `imageUrl` is always the fallback.
+   */
+  cutoutUrl: string | null;
   color: string | null;
   colorPalette: string[];
   colorNormalized: string | null;

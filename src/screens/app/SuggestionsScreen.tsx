@@ -32,6 +32,7 @@ import {
 import { useItems } from '../../hooks/useItems';
 import { useEvents } from '../../hooks/useEvents';
 import { resolveImageUri } from '../../lib/resolveImageUri';
+import { itemImageUri } from '../../lib/itemImage';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { SuggestionsScreenProps } from '../../navigation/types';
 import type { Item } from '../../types/item';
@@ -66,7 +67,7 @@ function formatEventDate(isoDate: string): string {
 // ── Item card inside result ───────────────────────────────────────────────────
 
 function OutfitItemCard({ item }: { item: Item }) {
-  const uri = resolveImageUri(item.imageUrl);
+  const uri = itemImageUri(item);
   return (
     <View style={styles.itemCard}>
       <View style={styles.itemImageBox}>

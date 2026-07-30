@@ -21,6 +21,7 @@ import { useOutfits, useDeleteOutfit, useMarkOutfitWorn, useVisualizeOutfit, use
 import { useItems } from '../../hooks/useItems';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
 import { resolveImageUri } from '../../lib/resolveImageUri';
+import { itemImageUri } from '../../lib/itemImage';
 import { CommonActions } from '@react-navigation/native';
 import { colors, spacing, typography, radii } from '../../theme';
 import { CATEGORY_LABELS } from '../../types/item';
@@ -526,7 +527,7 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
                     </View>
                   );
                 }
-                const uri = resolveImageUri(item.imageUrl);
+                const uri = itemImageUri(item);
                 return (
                   <TouchableOpacity
                     key={item.id}

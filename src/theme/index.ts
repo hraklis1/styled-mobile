@@ -78,6 +78,34 @@ export const editorial = {
   },
 } as const;
 
+// ── Cutout presentation ──────────────────────────────────────────────────────
+//
+// Cutouts are trimmed to the garment's own bounds server-side, so without any
+// inset every item would run edge-to-edge in its card — a crowded look, and one
+// where a sock reads as visually equal to a coat. The inset gives each garment
+// air; the per-category scale restores the size relationship a catalog would
+// show, so small goods sit smaller in the frame than outerwear.
+//
+// Values are the fraction of the frame the garment is allowed to occupy.
+export const cutout = {
+  defaultScale: 0.80,
+  scaleByCategory: {
+    outerwear: 0.88,
+    full_body: 0.88,
+    top:       0.82,
+    bottom:    0.82,
+    shoes:     0.72,
+    accessory: 0.62,
+    valuables: 0.58,
+  } as Record<string, number>,
+} as const;
+
+/** Fraction of a card a cutout garment should occupy, by item category. */
+export function cutoutScaleFor(category: string | null | undefined): number {
+  if (!category) return cutout.defaultScale;
+  return cutout.scaleByCategory[category] ?? cutout.defaultScale;
+}
+
 // Cross-platform shadow tokens.
 //
 // iOS:     full warm shadow API (shadowColor + offset + opacity + radius)

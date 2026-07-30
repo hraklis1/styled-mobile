@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { resolveImageUri } from '../../lib/resolveImageUri';
+import { itemImageUri } from '../../lib/itemImage';
 import { colors, spacing, typography, radii } from '../../theme';
 import { OCCASION_LABELS, SEASON_LABELS } from '../../types/item';
 import type { Item, Occasion, Season } from '../../types/item';
@@ -361,7 +362,7 @@ export function ItemPickerSheet({
           }
           renderItem={({ item }) => {
             const isSelected = selectedId === item.id;
-            const imgUri = resolveImageUri(item.imageUrl);
+            const imgUri = itemImageUri(item);
             return (
               <TouchableOpacity
                 style={[styles.pickerCard, { width: cardWidth }]}

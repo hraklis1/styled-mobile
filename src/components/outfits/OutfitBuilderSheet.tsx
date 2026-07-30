@@ -21,6 +21,7 @@ import { track } from '../../lib/analytics';
 import { useItems } from '../../hooks/useItems';
 import { useCreateOutfit } from '../../hooks/useOutfits';
 import { resolveImageUri } from '../../lib/resolveImageUri';
+import { itemImageUri } from '../../lib/itemImage';
 import { colors, spacing, typography, radii } from '../../theme';
 import { OutfitCollage } from './OutfitCollage';
 import { OCCASIONS } from '../../lib/occasions';
@@ -515,7 +516,7 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
                   const selectedItem = slots[slot.key];
                   const disabled = slot.key === 'bottomId' && isFullBodyTop;
                   const imgUri = selectedItem
-                    ? resolveImageUri(selectedItem.imageUrl)
+                    ? itemImageUri(selectedItem)
                     : undefined;
 
                   return (
@@ -599,7 +600,7 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
                         : 'These items have no category — tap a slot above to add them manually.'}
                     </Text>
                     {unmatchedItems.map((item) => {
-                      const imgUri = resolveImageUri(item.imageUrl);
+                      const imgUri = itemImageUri(item);
                       return (
                         <View key={item.id} style={styles.unmatchedRow}>
                           <View style={styles.slotThumb}>
@@ -846,7 +847,7 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
                 }
                 renderItem={({ item }) => {
                   const isSelected = slots[activeSlot]?.id === item.id;
-                  const imgUri = resolveImageUri(item.imageUrl);
+                  const imgUri = itemImageUri(item);
                   return (
                     <TouchableOpacity
                       style={[

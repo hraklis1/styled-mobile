@@ -81,7 +81,9 @@ export function BoardContentPickerModal({ board, visible, onClose }: Props) {
           id: String(item.id),
           title: item.name,
           subtitle: [item.brand, item.category].filter(Boolean).join(' · '),
-          imageUrl: item.imageUrl,
+          // Rows are a normalized shape shared with outfits and wishlist entries,
+          // so the cutout preference is resolved here rather than at render.
+          imageUrl: item.cutoutUrl ?? item.imageUrl,
         }))
       : tab === 'outfits'
       ? outfits.map((outfit) => ({

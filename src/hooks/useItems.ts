@@ -18,6 +18,12 @@ export type PoseScanItem = {
   color: string;
   description?: string;
   croppedWebP?: string | null;
+  /**
+   * Background-removed thumbnail, base64 WebP with alpha. Produced inline by
+   * the scan (it reuses a mask the pipeline already computed), so it costs no
+   * extra round trip. Null when segmentation failed the server's quality gate.
+   */
+  cutoutWebP?: string | null;
   bbox_pct?: PoseScanBbox | null;
   targetBbox_pct?: PoseScanBbox | null;
   previewBbox_pct?: PoseScanBbox | null;
@@ -44,6 +50,7 @@ export type CreateItemInput = {
   colorTemperature?: string | null;
   tags?: string[];
   imageUrl?: string | null;
+  cutoutUrl?: string | null;
   subcategory?: string | null;
   style?: string | null;
   seasons?: string[];

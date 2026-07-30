@@ -32,6 +32,7 @@ import { api } from '../../lib/api';
 import { track } from '../../lib/analytics';
 import { compressImageToDataUrl } from '../../lib/compressImage';
 import { resolveImageUri } from '../../lib/resolveImageUri';
+import { itemImageUri } from '../../lib/itemImage';
 import { useStylingWeatherToday, type CurrentWeather } from '../../hooks/useWeather';
 import { useItems } from '../../hooks/useItems';
 import { useProfile } from '../../hooks/useProfile';
@@ -941,7 +942,7 @@ export function StylistChatView({
   }
 
   function handleMentionSelect(item: Item) {
-    const uri = resolveImageUri(item.imageUrl);
+    const uri = itemImageUri(item);
     const lastAt = inputText.lastIndexOf('@');
     setInputText(lastAt >= 0 ? inputText.slice(0, lastAt) : inputText);
     setComposerAttachment({ type: 'item', label: item.name, uri, itemId: item.id });
@@ -1164,7 +1165,7 @@ export function StylistChatView({
         {mentionQuery !== null && mentionItems.length > 0 && (
           <View style={styles.mentionMenu}>
             {mentionItems.map((item) => {
-              const imgUri = resolveImageUri(item.imageUrl);
+              const imgUri = itemImageUri(item);
               return (
                 <TouchableOpacity
                   key={item.id}
@@ -1233,7 +1234,7 @@ export function StylistChatView({
         items={allItems}
         selectedId={composerAttachment?.type === 'item' ? composerAttachment.itemId : undefined}
         onSelect={(item) => {
-          setComposerAttachment({ type: 'item', label: item.name, itemId: item.id, uri: resolveImageUri(item.imageUrl) });
+          setComposerAttachment({ type: 'item', label: item.name, itemId: item.id, uri: itemImageUri(item) });
           setComposerPhotoData(null);
           setWardrobePickerVisible(false);
         }}
@@ -1352,7 +1353,7 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
                   .map((id) => allItems.find((i) => i.id === id))
                   .filter((i): i is Item => !!i)
                   .map((item) => {
-                    const uri = resolveImageUri(item.imageUrl);
+                    const uri = itemImageUri(item);
                     return (
                       <TouchableOpacity
                         key={item.id}
@@ -1535,7 +1536,7 @@ function OutfitCompleteLookOverview({
     () =>
       items.map((item) => ({
         item,
-        uri: resolveImageUri(item.imageUrl),
+        uri: itemImageUri(item),
       })),
     [items],
   );
@@ -1677,7 +1678,7 @@ function OutfitSuggestionCard({
           (a, b) =>
             OUTFIT_CATEGORY_ORDER.indexOf(a.category ?? '') - OUTFIT_CATEGORY_ORDER.indexOf(b.category ?? ''),
         )
-        .map((item) => ({ key: String(item.id), uri: resolveImageUri(item.imageUrl) })),
+        .map((item) => ({ key: String(item.id), uri: itemImageUri(item) })),
     [matchedItems],
   );
   // When an event is in context, "Add to [event]" is the primary action, so the
@@ -1956,7 +1957,7 @@ type ItemDetailSheetProps = {
 
 function ItemDetailSheet({ item, onClose }: ItemDetailSheetProps) {
   const insets = useSafeAreaInsets();
-  const imgUri = item ? resolveImageUri(item.imageUrl) : null;
+  const imgUri = item ? itemImageUri(item) : null;
 
   const metaRows = item
     ? ([

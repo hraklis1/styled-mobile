@@ -26,6 +26,7 @@ import { api } from '../../lib/api';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { ProfileScreenProps } from '../../navigation/types';
 import { SectionCard } from '../../components/primitives/SectionCard';
+import { ClosetVisualsCard } from '../../components/profile/ClosetVisualsCard';
 import { SelectRow } from '../../components/profile/SelectRow';
 import { ProfilePickerModal } from '../../components/profile/ProfilePickerModal';
 import { LocationAutocompleteInput } from '../../components/primitives/LocationAutocompleteInput';
@@ -1075,6 +1076,8 @@ export function ProfileScreen(_props: ProfileScreenProps) {
             <Text style={styles.hint}>{form.fitNotes.length}/240</Text>
           </View>
         </SectionCard>
+
+        <ClosetVisualsCard />
 
         <SectionCard icon="settings-outline" title="ACCOUNT" collapsible initiallyExpanded={false}>
           {user?.authProvider === 'local' && (

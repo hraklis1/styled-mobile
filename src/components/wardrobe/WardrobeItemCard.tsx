@@ -2,6 +2,7 @@ import { View, Text, Image, TouchableOpacity, StyleSheet, useWindowDimensions } 
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, radii } from '../../theme';
 import { resolveImageUri } from '../../lib/resolveImageUri';
+import { itemImageUri } from '../../lib/itemImage';
 import type { Item } from '../../types/item';
 
 const COLUMN_COUNT = 2;
@@ -31,7 +32,7 @@ export function WardrobeItemCard({
   const cardWidth = (width - SIDE_PADDING * 2 - COLUMN_GAP) / COLUMN_COUNT;
   const imageHeight = cardWidth * 1.25; // 4:5 portrait ratio
 
-  const imageUri = resolveImageUri(item.imageUrl);
+  const imageUri = itemImageUri(item);
 
   const handlePress = selectionMode ? onToggleSelect : onPress;
 

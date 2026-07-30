@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { resolveImageUri } from '../../lib/resolveImageUri';
+import { itemImageUri } from '../../lib/itemImage';
 import { ResolvedOutfitCollage } from '../outfits/ResolvedOutfitCollage';
 import { useCreateOutfit, type CreateOutfitInput } from '../../hooks/useOutfits';
 import { colors, radii, spacing, typography } from '../../theme';
@@ -60,7 +61,7 @@ function TripOutfitCard({
     [outfit.itemIds, allItems],
   );
   const slots = useMemo(
-    () => items.map((i) => ({ key: String(i.id), uri: resolveImageUri(i.imageUrl) })),
+    () => items.map((i) => ({ key: String(i.id), uri: itemImageUri(i) })),
     [items],
   );
 
