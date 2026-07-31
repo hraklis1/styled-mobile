@@ -38,8 +38,9 @@ column.
 | `../Styled/server/vision/` | Built, typechecks, benched, simulator-verified |
 | Routes wiring, migration 0027 | Built; **migration already applied to the DB** |
 | Mobile client | Committed on `experiment/photo-algorithm` (`78d4d9c`) |
-| `../Styled` working tree | **Uncommitted — that repo is on `main`** (see Phase 0) |
-| `python_service` | Untouched and still the default |
+| `../Styled` working tree | Phase 0 committed (`a1eb08d`), unpushed. **Phase 1 changes uncommitted:** `eval/scan/**`, `scripts/bench-vision.ts`, `server/vision/scanPhoto.ts` |
+| Eval set | 9 labelled cases, recall 0.763 / IoU 0.777 — short of the ~25 Phase 1 asks for |
+| `python_service` | Untouched and still the default. Its unrelated garment-gate edits are still dirty in that tree — don't sweep them in |
 
 ---
 
@@ -95,19 +96,43 @@ Settled with evidence. Do not re-open casually.
 - Schema changes go in `../Styled/migrations/` and are applied by direct SQL.
   **Never `npm run db:push`** in `../Styled` — it drops the session table.
 
+**Benching** (cost an afternoon in Phase 1; the failure is silent by design)
+- A failed labelling call degrades to "every region is a non-garment", which is
+  byte-identical to an empty scan. `.env` has `TAGGING_PROVIDER=google`, and the
+  **Gemini free tier allows 20 requests/day** — the bench spends one label call
+  per photo, so a 25-photo run exhausts it. Seventeen consecutive photos
+  reported `0 items` while SAM 3 was returning healthy detections, and it read
+  exactly like a model regression.
+- `scanPhoto` now records `telemetry.labelError` and the bench prints
+  `LABEL_ERR`, **withholds** recall/IoU for that row rather than scoring the
+  failure as 0.00, and exits non-zero. The user-facing degradation is
+  unchanged — a scan still returns empty rather than 500ing.
+- Before reading any bench result as a regression, check that column. A 25-photo
+  run needs paid Gemini quota, or `TAGGING_PROVIDER` pointed elsewhere — but
+  note that benching a different labeller than production runs makes recall and
+  IoU non-transferable.
+- **At n=9, the reported p95 is just the maximum** (`floor(9 × 0.95) = 8`, the
+  last index), so the "p95 under 10 s" gate is really "no single photo over
+  10 s" and one slow LLM response fails it. Compare **medians** across runs
+  instead: labelling latency swings several seconds run to run on identical
+  input — the same photo measured 14.2 s and 5.8 s on consecutive runs. Getting
+  the fixture set to ~25 would make p95 mean what it says.
+
 ---
 
 ## Phases
 
 Each phase is self-contained. Preconditions are real; don't skip them.
 
-### Phase 0 — Land the backend changes
+### Phase 0 — Land the backend changes ✅ Done (2026-07-30)
 **Precondition for every other phase.**
 
-`../Styled` is on `main` with the whole `server/vision/` module uncommitted, and
-project rules forbid committing to `main` unprompted. Decide with the user
-whether that work goes on a branch mirroring `experiment/photo-algorithm` or
-straight to `main`, then commit it. Nothing pushes without an explicit ask.
+Landed as `a1eb08d` on `../Styled`'s new `experiment/photo-algorithm` branch,
+mirroring this repo's branch name. Unpushed, and `main` there is untouched.
+`python_service/`'s unrelated garment-gate changes (including untracked
+`tools/probe_cutout.py`) were left out and are still uncommitted on that branch.
+
+Note: `../Styled` has no `AGENTS.md` — only this repo does.
 
 Files: `server/vision/**`, `server/routes.ts`, `server/storage.ts`,
 `shared/schema.ts`, `migrations/0027_vision_cost_and_prettified.sql`,
@@ -121,41 +146,107 @@ in `../Styled` is clean of vision-pipeline files.
 
 ---
 
-### Phase 1 — Make the bench actually gate
+### Phase 1 — Make the bench actually gate ⚠ Partly done (2026-07-30)
 **Depends on:** Phase 0.
 
-`eval/scan/` has **2 fixtures and no `manifest.json`**, so `bench-vision.ts`
-reports `—` for recall and IoU. Until that changes there is no objective
-evidence for deleting anything in Phase 4.
+`manifest.json` now exists with **9 labelled cases / 38 items**, and the bench
+reports real numbers:
 
-Build a labelled set of ~25 photos under `../Styled/eval/scan/images/` spanning
-the three scenes — worn outfit, flat lay, single garment — including the cases
-the old pipeline special-cased: belts, watches, hats, ties, two-piece suits, and
-at least two with footwear. Copy `manifest.example.json` to `manifest.json` and
-label each case with `expectedItems` and percentage `bbox`es.
+| | at Phase 1 | after the Phase 2 prompt fix |
+|---|---|---|
+| Overall recall | 0.763 (29/38) | **0.974** (37/38) |
+| Mean IoU | 0.777 | 0.733 |
+| Striping guard | 0 / 34 cutouts | **0** |
+| Median latency | 5.9 s | ~7.3 s |
+| Cost | $0.006/photo | $0.008/photo |
+
+All three done-conditions hold — but on 9 cases, not the ~25 asked for, so this
+is not closed. Blocking the rest: the user's first batch was 14 thumbnail-sized
+files (126×168 to 516×387) and 2 watermarked Alamy stock photos, all held in
+`eval/scan/images/incoming/rejected/`. **Still missing: real flat lays** (the
+only stand-in is `rail-shirts-01`, a drying rack) **and a tie** (zero coverage).
+
+The two original fixtures were dropped: `flat-lay-layered-01` was a screenshot
+with a crop-tool overlay burned into it, and both were replaced on the user's
+call. They are recoverable from git history.
+
+Label boxes **by eye**, never from SAM 3's own output — ground truth taken from
+the model under test scores its boxes against themselves and yields an IoU near
+1.00 that means nothing. A percentage-grid overlay read at ~1300px gets to about
+±1.5%, ample at an IoU threshold of 0.3. Omit items too small or too clipped to
+label honestly and say so in the case's `_notes`; a guessed box is worse than a
+missing one.
 
 The photos have to come from the user; ask rather than inventing fixtures.
 
 Run: `npx tsx scripts/bench-vision.ts --manifest eval/scan/manifest.json --out /tmp/bench`
 
-**Done when:** recall and IoU are real numbers, the striping guard reports 0, and
-p95 latency is under 10 s.
+**Done when:** the set reaches ~25 cases covering all three scenes plus belts,
+watches, hats, ties, two-piece suits and footwear — recall and IoU are already
+real, the striping guard already reports 0, and p95 is already under 10 s.
 
 ---
 
-### Phase 2 — Soak and tune on real photos
+### Phase 2 — Soak and tune on real photos ⚠ Mostly done (2026-07-30)
 **Depends on:** Phase 1.
+
+Miss and false-positive rates are now quantified and the threshold change is
+recorded, so the done-condition is met — but on the nine-case set, not ~25, and
+two items below are still open (`pairGroup`, and the unverifiable
+false-positive issue). `bench-vision.ts` gained `prec` and `unmatched` columns
+plus item-weighted totals to make this measurable at all.
 
 Run the user's actual closet photos through the pipeline and tune the two knobs
 that decide precision: `SEGMENT_MIN_SCORE` and the labeller's `isGarment`
 prompt in `server/vision/label.ts`.
 
-Known issue to fix here: the single-garment fixture yields one false positive (a
-fabric sliver labelled "Blue Top"). Fix it in the label prompt, not with a
-geometry rule — see Locked decisions.
+**Finding 1 — small accessories are missed at the SEGMENT stage, not the label
+stage.** This is the answer to "whether any garment class is still being missed
+the way footwear was", and yes: hats, belts and watches are. From the Phase 1
+run, note `raw` is at or barely above `items`, meaning SAM 3 never *proposed* a
+region for them, so no amount of label-prompt work can recover them:
 
-Also worth measuring: whether the `bag` concept prompt earns its charge, and
-whether any garment class is still being missed the way footwear was.
+| case | recall | raw | never proposed |
+|---|---|---|---|
+| `worn-hat-tee-01` | 0.33 | 1 | bucket hat, bracelet |
+| `worn-polo-belt-trousers-01` | 0.40 | 2 | belt, watch, bracelet |
+| `worn-tee-chinos-watch-01` | 0.60 | 3 | watch, sunglasses, bag |
+
+**Fixed (2026-07-30).** The default is now `clothing,shoe,bag,accessory`.
+Overall recall **0.763 → 0.974** (29/38 → 37/38); eight of nine cases are at
+1.00, and `worn-polo-belt-trousers-01` at 0.80 is the only one left short.
+
+One generic phrase beat four specific ones outright — `hat,belt,watch,sunglasses`
+scored 0.77 on the three accessory-heavy cases where `accessory` alone scored
+0.92, at twice the added cost and ~4s more latency. **Prefer the general term**;
+adding phrases is not free.
+
+Cost $0.006 → $0.008/photo, median latency 5.9s → ~7.3s. Mean IoU dips
+0.760 → 0.705 because more small items now match and small boxes score lower
+IoU — that is more found, not worse boxes.
+
+It costs some precision: **>=0.879 → >=0.804** (29/33 → 37/46). Of the 13 extra
+predictions, 8 are correct and 5 match nothing labelled — and several of those 5
+are garments the manifest omits on purpose, so the real cost is smaller.
+
+Taken deliberately, because **the trade is asymmetric**: this pass only fills a
+review UI, so a spurious item costs the user one tap, while a garment SAM 3
+never proposes can never reach the closet at all. Do not "fix" the precision
+number by making segmentation stricter — that trades a cheap error for an
+unrecoverable one.
+
+**Finding 2 — `pairGroup` did not merge a pair.** In `worn-suit-twopiece-01`
+the two brown loafers came back as two separate "Brown Leather Loafer" items.
+Both were clipped at the frame edge, which may be the cause. Fix in the label
+prompt, not with geometry — see Locked decisions.
+
+The old known issue — the single-garment fixture yielding a false-positive
+fabric sliver labelled "Blue Top" — **is no longer reproducible**: that fixture
+(`single-blazer-01`) was replaced in Phase 1. Its successor,
+`single-turtleneck-01`, scores recall 1.00 from 1 raw region with no false
+positive, so the fabric-sliver problem is unverified rather than fixed. Treat
+`single-turtleneck-01` as the case to watch: a hand, a vase and a side table are
+in frame and must not come back as items.
 
 **Done when:** false-positive and miss rates are quantified on the Phase 1
 manifest, and any threshold change is recorded in this file.
