@@ -477,19 +477,46 @@ ceiling and it dwarfs everything this phase touched.
 
 ---
 
-### Phase 4 — Cost visibility
+### Phase 4 — Cost visibility ✅ Done (2026-07-31)
 **Depends on:** Phase 0. Independent of the rest.
 
-Migration 0027 added `ai_token_log.cost_usd`, and `server/vision/cost.ts` writes
-it for per-call models (tokens are zero — an image endpoint has no prompt or
-completion tokens). **Nothing reads it yet.**
+`scripts/show-ai-spend.ts` reports spend per endpoint (or `--by model`) over a
+date range, reconciling the ledger's two row shapes: per-call rows carry an
+exact `cost_usd` written by `server/vision/cost.ts`, token rows are costed from
+a `TOKEN_PRICING` table.
 
-Extend the usage reporting in `../Styled/scripts/` to aggregate dollars, so
-per-call vision spend and token-billed LLM spend appear side by side. Token rows
-leave `cost_usd` null and are still costed from model + token counts.
+```sh
+./node_modules/.bin/tsx --env-file=.env scripts/show-ai-spend.ts --from 2026-07-01 --to 2026-07-31
+```
+
+Two things worth knowing before touching it:
+
+**`cachedTokens` is a subset of `promptTokens`, not a sibling.** The Anthropic
+adapter deliberately normalises to OpenAI semantics
+(`server/llm/providers/anthropic.ts`), so costing `promptTokens × inputRate`
+bills the cached portion twice over at up to 10× its real price. The script
+splits them. (Known approximation: Anthropic cache *writes* land in
+`promptTokens` but not `cachedTokens` and cost 1.25×, so they read slightly
+low — small next to per-call vision spend and not worth a schema change.)
+
+**An unpriced model is reported, never costed at zero.** Models absent from
+`TOKEN_PRICING` are excluded from the total and listed separately with their
+call and token volumes. A cost report that silently prices unknown models at
+zero is worse than no report, because it reads as authoritative — this is the
+same silent-failure shape as the EXIF and striping bugs in Locked decisions.
+
+OpenAI and Google models are deliberately left unpriced rather than guessed:
+they are the largest token consumers in the ledger (~1.5M tokens across
+`gpt-4o-mini`, `gemini-3.6-flash`, `gpt-4.1-mini`), so a wrong number there
+would dominate the report. Fill them in from the provider pricing pages and
+they light up with no other change.
+
+First run, 2026-06-01 → 2026-08-01: **$1.85 total** — $1.74 per-call
+(`vision/scan/segment` $1.31, `vision/prettify` $0.23, `vision/cutout` $0.19),
+$0.11 token-billed, with 316 calls flagged unpriced.
 
 **Done when:** one command reports spend per endpoint over a date range,
-including scan and prettify.
+including scan and prettify. ✅
 
 ---
 
