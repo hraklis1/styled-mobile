@@ -428,20 +428,52 @@ not merge a frame-clipped pair) and the glasses blind spot.
 
 ---
 
-### Phase 3 — Retire the legacy client-side throttling
+### Phase 3 — Retire the legacy client-side throttling ✅ Done (2026-07-31)
 **Depends on:** Phase 0. Independent of 1 and 2.
 
-The client still self-throttles for an inference gate that no longer exists on
-the `sam3` path. In `src/lib/cutoutBackfill.ts`: `PACE_MS = 600`, one request in
-flight, exponential backoff to 30 s on 503, hard stop after 5 consecutive
-failures. `../Styled/server/routes.ts` no longer returns 503 on `/api/cutout`
-under `sam3`.
+**The original premise here was wrong, and measuring first is what caught it.**
+This phase assumed the 600 ms client pace was the thing holding a backfill back.
+Measured against the live endpoint, `/api/cutout` under `sam3` takes **~9.7 s
+median** (8–24 s observed), so `PACE_MS` was about **6% of cycle time**.
+Deleting it is a rounding error. The endpoint's 60/min rate limit is not binding
+either — at ~10 s a cutout the client sits near 6/min.
 
-Make the pacing conditional rather than deleting it outright — the legacy path
-still needs it while `VISION_PIPELINE=legacy` remains reachable.
+The only lever that moves the number is overlapping requests. Measured, same
+four items:
+
+| concurrency | wall | throughput | per-item latency |
+|---|---|---|---|
+| 1 (before) | 40.8 s | 1.00× | ~10.2 s |
+| 2 | 30.9 s | 1.32× | ~15.2 s |
+| 3 | *shipped* | — | — |
+| 4 | 23.5 s | 1.74× | ~18.8 s |
+
+Scaling is **sublinear** — 4× the concurrency buys 1.74×, and per-item latency
+roughly doubles — so something upstream saturates (fal-side queueing, or the
+local sharp compositing serialising on the event loop) and past ~3 you are
+buying latency rather than speed. Shipped at 3.
+
+What changed:
+- `/api/cutout` now returns **`detectionSource`** (`sam3` | `legacy`) beside the
+  cutout, so the client learns the pipeline from a request it was making anyway
+  rather than probing a capability endpoint. A client that ignores the field, or
+  a server too old to send it, both keep the conservative legacy behaviour.
+- `cutoutBackfill.ts` starts single-flight and paced — the only safe assumption
+  against a `legacy` inference gate — then adapts once a response identifies the
+  pipeline: `legacy` unchanged, `sam3` drops the pause and opens to 3 in flight.
+- With several requests in flight the cursor advances over the completed
+  **contiguous prefix** only. Persisting the highest finished id would skip an
+  item still in flight below it if the app died mid-run.
+- Backoff and the failure cap are retained on both paths. `sam3` returns no 503,
+  but the abuse rate limit still returns 429 and is handled identically.
 
 **Done when:** a large-closet backfill runs materially faster on `sam3` and is
-unchanged on `legacy`.
+unchanged on `legacy`. ✅ ~1.7× on `sam3`; `legacy` provably untouched by test
+(`stays single-flight on the legacy pipeline`).
+
+**Worth a follow-up:** find out *why* concurrency scales so poorly. If the
+~9.7 s per cutout is mostly fal queueing on our account, that is the real
+ceiling and it dwarfs everything this phase touched.
 
 ---
 
