@@ -38,8 +38,8 @@ column.
 | `../Styled/server/vision/` | Built, typechecks, benched, simulator-verified |
 | Routes wiring, migration 0027 | Built; **migration already applied to the DB** |
 | Mobile client | Committed on `experiment/photo-algorithm` (`78d4d9c`) |
-| `../Styled` working tree | Phase 0 committed (`a1eb08d`), unpushed. **Phase 1 changes uncommitted:** `eval/scan/**`, `scripts/bench-vision.ts`, `server/vision/scanPhoto.ts` |
-| Eval set | 9 labelled cases, recall 0.763 / IoU 0.777 — short of the ~25 Phase 1 asks for |
+| `../Styled` working tree | Phase 0 `a1eb08d`, Phase 1 `0c2b7fa`, Phase 2 `bc0a03e` — all on `experiment/photo-algorithm`, unpushed. **2026-07-31 changes uncommitted:** `eval/scan/**`, `server/vision/{label,config,scanPhoto}.ts`, `.env.example` |
+| Eval set | **25 labelled cases / 85 items**, recall 0.976 / IoU 0.759 / precision >=0.865. Phase 1 target met |
 | `python_service` | Untouched and still the default. Its unrelated garment-gate edits are still dirty in that tree — don't sweep them in |
 
 ---
@@ -67,6 +67,24 @@ Settled with evidence. Do not re-open casually.
 - `SEGMENT_MIN_SCORE` is deliberately low (0.55). A genuine NY cap scored 0.63;
   an "obviously safe" 0.85 silently drops real items. Semantic rejection is the
   label pass's `isGarment`, not a score cut-off.
+- **Phase 2 re-examined this at n=25 and left it at 0.55, now with direct
+  evidence.** Lowering it to **0.05 — eleven times lower — recovered nothing**
+  on the cases that were missing items. The misses are not low-scoring regions
+  being filtered out; SAM 3 proposes *no region at all*. The threshold is not
+  the knob those failures respond to, and the knob that does work is the concept
+  prompt list.
+- Separately, every false positive measured was a *fragment of a real garment*
+  (a sleeve, a strap, a waistband), never a low-scoring non-garment, so raising
+  the cut-off would drop real items to fix a problem it does not address. Zero
+  non-garment objects were returned across all 25 cases.
+- Concept phrases are not free (~$0.002 each) and must pay for themselves in
+  recall — **but measure that on a fixture where the item stands alone.** `bag`
+  was removed in Phase 2 on an A/B showing 16/16 recall either way, then
+  **restored the same day** when standalone-bag fixtures were added: without it,
+  a tote, a backpack and a handbag each returned **zero regions**. The original
+  A/B only had crossbody bags worn on a dressed person, where `clothing` already
+  covered them. A phrase measured only where another phrase overlaps it will
+  always look free to delete. Default is `clothing,shoe,bag,accessory,tie`.
 - Pairs (left/right shoe) are merged via the labeller's `pairGroup`, **not**
   geometry. Hand-tuned size/adjacency heuristics are exactly what made the old
   pipeline unmaintainable.
@@ -81,6 +99,22 @@ Settled with evidence. Do not re-open casually.
   `PRETTIFY_MODEL` for anyone who needs open weights.
 - fal 422s on any source under **256×256**; real cutouts often are. Sources are
   flattened onto off-white and fitted to 1024 first.
+
+**EXIF orientation** (found 2026-07-31; the worst silent failure yet)
+- **fal applies EXIF orientation; sharp does not.** On a photo tagged
+  orientation 6 — the normal case for a portrait phone shot — SAM 3 returns
+  boxes in upright space while `metadata()`, `extract()` and every local mask
+  operation work in stored space. They disagree by 90°.
+- The result looks completely healthy: a real 4000×3000 fixture produced **nine
+  confidently-named items** whose cutouts were bathroom wall and ceiling, with
+  the striping guard clean, the bench reporting `1/1 ok`, and normal cost and
+  latency. Nothing downstream can detect it.
+- Fixed in `normalizeImage()` (`scanPhoto.ts`), which now bakes the rotation
+  into the pixels with `sharp().rotate()` before anything else runs. Only images
+  that need it are re-encoded. `worn-suit-mirror-01` is the regression fixture —
+  the only one in the set with a rotation tag.
+- **Ground-truth boxes must be read off an EXIF-corrected render** (PIL
+  `ImageOps.exif_transpose`) or they are silently transposed.
 
 **sharp** (both silently produce plausible-looking garbage)
 - `dest-in` blend and `joinChannel()` do **not** apply a 1-channel mask as alpha
@@ -115,8 +149,16 @@ Settled with evidence. Do not re-open casually.
   last index), so the "p95 under 10 s" gate is really "no single photo over
   10 s" and one slow LLM response fails it. Compare **medians** across runs
   instead: labelling latency swings several seconds run to run on identical
-  input — the same photo measured 14.2 s and 5.8 s on consecutive runs. Getting
-  the fixture set to ~25 would make p95 mean what it says.
+  input — the same photo measured 14.2 s and 5.8 s on consecutive runs.
+  At n=25 `floor(25 × 0.95) = 23`, the second-to-last index, so p95 finally
+  means something — it now tolerates exactly one outlier.
+- **The bench has no HTTP timeout and will hang forever on a dead socket.** If
+  the machine sleeps mid-run, the fal connections die and the run blocks
+  silently rather than failing. Observed: 18 minutes with an empty output
+  directory on a run that normally takes two. Symptom is an out dir with no
+  per-case JSON in it. Kill and restart — and **do not pipe the bench through
+  `tail`**, which buffers all progress output until the pipe closes and hides
+  exactly the per-case lines you need to tell a hang from a slow run.
 
 ---
 
@@ -146,11 +188,34 @@ in `../Styled` is clean of vision-pipeline files.
 
 ---
 
-### Phase 1 — Make the bench actually gate ⚠ Partly done (2026-07-30)
+### Phase 1 — Make the bench actually gate ✅ Done (2026-07-31)
 **Depends on:** Phase 0.
 
-`manifest.json` now exists with **9 labelled cases / 38 items**, and the bench
-reports real numbers:
+`manifest.json` holds **25 labelled cases / 85 items** — the ~25 asked for.
+Scenes: `worn_outfit` 9, `single_garment` 9, `flat_lay` 7. Every class the
+done-condition names is covered: belts, watches, hats, **ties**, two-piece suits
+(×2) and footwear (five unclipped pairs), plus tote / backpack / handbag, socks
+and glasses.
+
+**The last ten cases paid for themselves immediately** — they overturned a Phase
+2 conclusion (the `bag` removal) and exposed the EXIF bug in Locked decisions.
+Both were invisible at n=15 because no fixture isolated the failure. Coverage is
+not box-ticking; it is what makes a wrong conclusion falsifiable.
+
+Caveats, all recorded in the manifest `_comment`:
+- **Only `worn-suit-mirror-01` is the user's own camera photo.** The rest are
+  web-sourced, and many fall below the ≥1200px short-edge floor the original
+  nine meet (577×767 upward). The styled shots are evenly lit with
+  well-separated garments, so recall on them reads **optimistic** against a real
+  scan. `flat-lay-carpet-cap-belt-01` and `worn-suit-mirror-01` are the honest
+  baselines.
+- Boxes are in **display orientation**; read them off an EXIF-corrected render.
+- Every box was re-rendered over its photo and checked by eye. That pass caught
+  **five wrong boxes** that would otherwise have been scored as model failures —
+  a watch off by 8%, and a whole lower body off by ~25% on the EXIF fixture.
+  Do not skip it; an unverified box is indistinguishable from a real miss.
+
+The Phase 1 numbers below are the historical nine-case figures:
 
 | | at Phase 1 | after the Phase 2 prompt fix |
 |---|---|---|
@@ -160,11 +225,18 @@ reports real numbers:
 | Median latency | 5.9 s | ~7.3 s |
 | Cost | $0.006/photo | $0.008/photo |
 
-All three done-conditions hold — but on 9 cases, not the ~25 asked for, so this
-is not closed. Blocking the rest: the user's first batch was 14 thumbnail-sized
-files (126×168 to 516×387) and 2 watermarked Alamy stock photos, all held in
-`eval/scan/images/incoming/rejected/`. **Still missing: real flat lays** (the
-only stand-in is `rail-shirts-01`, a drying rack) **and a tie** (zero coverage).
+All three done-conditions hold, now at n=25. Rejected material lives in
+`eval/scan/images/incoming/rejected/`, accepted originals in `incoming/accepted/`:
+14 thumbnail-sized files (126×168 to 516×387), 2 watermarked Alamy stock photos,
+and a watermarked depositphotos flat lay. A sixth flat-lay candidate was also
+rejected — an Instagram carousel screenshot whose next-arrow chevron is burned
+in **on top of the t-shirt**, the same defect that dropped `flat-lay-layered-01`.
+
+**Worth adding next**, in value order: more of the user's **own** camera photos
+at full resolution (only one in the set, and it is the fixture that found the
+EXIF bug); a second **EXIF-rotated** photo, ideally orientation 8, since one
+regression fixture for a bug that silently destroyed every cutout is thin; and
+a **tie worn under a jacket collar**, the framing where a tie is smallest.
 
 The two original fixtures were dropped: `flat-lay-layered-01` was a screenshot
 with a crop-tool overlay burned into it, and both were replaced on the user's
@@ -187,18 +259,98 @@ real, the striping guard already reports 0, and p95 is already under 10 s.
 
 ---
 
-### Phase 2 — Soak and tune on real photos ⚠ Mostly done (2026-07-30)
+### Phase 2 — Soak and tune on real photos ⚠ Mostly done (2026-07-31)
 **Depends on:** Phase 1.
 
-Miss and false-positive rates are now quantified and the threshold change is
-recorded, so the done-condition is met — but on the nine-case set, not ~25, and
-two items below are still open (`pairGroup`, and the unverifiable
-false-positive issue). `bench-vision.ts` gained `prec` and `unmatched` columns
+Miss and false-positive rates are quantified and every config change is recorded,
+so the done-condition is met — but on 15 cases, not ~25, and one item below is
+still open (`pairGroup`). `bench-vision.ts` gained `prec` and `unmatched` columns
 plus item-weighted totals to make this measurable at all.
 
-Run the user's actual closet photos through the pipeline and tune the two knobs
-that decide precision: `SEGMENT_MIN_SCORE` and the labeller's `isGarment`
-prompt in `server/vision/label.ts`.
+**Final state, all 25 cases** (`clothing,shoe,bag,accessory,tie`, label prompt
+`vision-label-2`, EXIF normalisation on):
+
+| | Phase 1 config | final |
+|---|---|---|
+| Recall | 0.918 (78/85) | **0.976** (83/85) |
+| Precision | >=0.867 (78/90) | >=0.865 (83/96) |
+| Mean IoU | 0.759 | 0.759 |
+| Striping guard | 0 | **0** |
+| Median latency | 6.5 s | 6.8 s |
+| Cost | $0.006/photo | $0.010/photo |
+
+Recall 0.918 → **0.976** at +$0.004/photo, precision flat. The extra spend is
+two concept phrases (`bag`, `tie`) that each recover items nothing else sees.
+
+**Only two items in 85 are now missed**, and one is not really a miss:
+
+| case | item | best IoU | what it is |
+|---|---|---|---|
+| `flat-lay-loafers-glasses-01` | tortoiseshell glasses | 0.00 | genuine — no region proposed |
+| `worn-polo-belt-trousers-01` | black smartwatch | 0.14 | detected as `Black Watch`; boxed on the face, ground truth includes the strap |
+
+So the one true remaining blind spot is **glasses**. Judge small accessories on
+recall, not IoU — at that size a tight-vs-loose box swings IoU past the 0.3
+threshold on its own.
+
+**`SEGMENT_MIN_SCORE` was re-examined and deliberately left at 0.55** — see
+Locked decisions. Nothing in the measured failure set argues for changing it.
+
+**Finding 3 — the false positives are fragmentation, not hallucination.**
+Across all 15 cases the pipeline returned **zero non-garment objects**. The
+lamp, ceramic vase, coffee cup, books, nightstand, knit throw, Bleu de Chanel
+bottle, hand, vase, side table, hangers, bedding and carpet in the fixtures were
+all correctly rejected by `isGarment`. Every false positive was instead a *part
+of a real garment* returned as its own item: `Grey Waist Portion Trousers`,
+`Blue Plaid Shirt Sleeve`, `Crossbody Bag Strap`.
+
+This reframes the knob. Precision here is not an `isGarment` problem and not a
+score-threshold problem — it is a *grouping* problem, which is why the fix went
+into `pairGroup` rather than `isGarment`. Generalising `pairGroup` from "two
+halves of one item" to also cover "a part and its whole" removed 2 of the ~5
+fragments and cost no recall. The rest persist; see Finding 2.
+
+**Finding 4 — `bag` was removed on good-looking evidence, and that was wrong.**
+Keep this one; it is the most transferable lesson in the phase.
+
+The removal A/B covered the only three bag cases then in the set, all crossbody
+bags worn on a dressed person. Recall was 16/16 with and without `bag`, so it
+read as pure waste and was dropped to save $0.002/photo. The caveat written at
+the time — "all three are crossbody bags, re-test before extending this" — was
+correct, and the re-test inverted the result:
+
+| case | without `bag` | with `bag` |
+|---|---|---|
+| `single-tote-01` | 0.00 | **1.00** |
+| `single-backpack-01` | 0.00, **0 raw regions** | **1.00**, IoU 0.89 |
+| `single-handbag-01` | 0.00, **0 raw regions** | **1.00**, IoU 0.92 |
+
+Not low scores — *no regions at all*. `clothing` finds a bag hanging off an
+outfit; nothing but `bag` finds a bag on its own. **The generalisable point: a
+concept phrase measured only on fixtures where another phrase already covers the
+item will always look free to delete.** Before removing one, check the eval set
+actually isolates it.
+
+**Finding 6 — `tie` added; the threshold was ruled out as the cause.**
+`single-tie-01` puts a tie alone, filling the frame, and it returned **0 raw
+regions**. Two probes:
+
+- `SEGMENT_MIN_SCORE` 0.55 → **0.05**, eleven times lower: still 0 regions. The
+  threshold is not what gates these misses, which settles the Phase 2 brief's
+  question about that knob (see Locked decisions).
+- Adding a `tie` phrase: `single-tie-01` 0.00 → **1.00** (IoU 0.94) and
+  `flat-lay-tie-knit-01` 0.80 → **1.00**, both at precision 1.00 with no new
+  false positives.
+
+Phase 1's "prefer the general term" still holds where a general term works —
+`accessory` simply does not cover ties, so this is the case for a specific one.
+
+**Finding 7 — EXIF orientation destroyed every cutout, silently.** Found by the
+first real camera photo in the set. Full write-up in Locked decisions; the short
+version is that fal honours EXIF rotation and sharp does not, so boxes and mask
+math disagreed by 90°, and the run reported nine confidently-named items whose
+cutouts were bathroom wall. Fixed in `normalizeImage()`; `worn-suit-mirror-01`
+now scores recall 1.00 and is the regression fixture.
 
 **Finding 1 — small accessories are missed at the SEGMENT stage, not the label
 stage.** This is the answer to "whether any garment class is still being missed
@@ -235,21 +387,44 @@ never proposes can never reach the closet at all. Do not "fix" the precision
 number by making segmentation stricter — that trades a cheap error for an
 unrecoverable one.
 
-**Finding 2 — `pairGroup` did not merge a pair.** In `worn-suit-twopiece-01`
-the two brown loafers came back as two separate "Brown Leather Loafer" items.
-Both were clipped at the frame edge, which may be the cause. Fix in the label
-prompt, not with geometry — see Locked decisions.
+**Finding 2 — `pairGroup` still does not merge a clipped pair. STILL OPEN.**
+In `worn-suit-twopiece-01` the two brown loafers still come back as two items,
+and the `vision-label-2` prompt did not fix it despite explicitly telling the
+model that a frame-clipped half is the same pair. The three *unclipped* pairs
+added on 2026-07-31 (`flat-lay-loafers-glasses-01`, `flat-lay-wood-halfzip-01`,
+`flat-lay-navy-sneakers-01`) all merge correctly and score recall 1.00 on
+footwear — **so clipping is confirmed as the trigger**, which was only a guess
+before. That is the thing to attack next, still in the prompt, not geometry.
+
+Note `scanPhoto` does not emit `pairGroup` in its output, so the bench can only
+observe the merged result, not whether the model set the field. Instrument it
+before the next attempt or you will be debugging blind.
+
+**Finding 5 — the misses are always at the SEGMENT stage, never the label
+stage.** Every recall failure across all three phases has the same shape: SAM 3
+proposes no region, so nothing downstream can recover it. Footwear before
+`shoe`, accessories before `accessory`, standalone bags before `bag` was
+restored, ties before `tie`. **The diagnostic is the `raw` column** — when `raw`
+sits at or below `items` on a case that is missing something, it is a
+segmentation gap and no amount of label-prompt work will touch it. Glasses are
+the one instance still open.
 
 The old known issue — the single-garment fixture yielding a false-positive
-fabric sliver labelled "Blue Top" — **is no longer reproducible**: that fixture
-(`single-blazer-01`) was replaced in Phase 1. Its successor,
-`single-turtleneck-01`, scores recall 1.00 from 1 raw region with no false
-positive, so the fabric-sliver problem is unverified rather than fixed. Treat
-`single-turtleneck-01` as the case to watch: a hand, a vase and a side table are
-in frame and must not come back as items.
+fabric sliver labelled "Blue Top" — **remains unreproducible and is now largely
+answered.** That fixture (`single-blazer-01`) was replaced in Phase 1;
+`single-turtleneck-01` still scores recall 1.00 from 1 raw region with the hand,
+vase and side table correctly rejected. More to the point, Finding 3 shows the
+whole *class* of error — a non-garment sliver named as a garment — did not occur
+once in 15 cases. The one sliver-shaped detection
+(`flat-lay-navy-sneakers-01`, a 53×6% strip labelled `White T-shirt`) is a real
+layered garment the manifest omits on purpose. Treat the "Blue Top" bug as
+resolved by the `isGarment` prompt rather than merely unverified — while noting
+`single_garment` is still n=1, which is too thin to call a rate.
 
 **Done when:** false-positive and miss rates are quantified on the Phase 1
-manifest, and any threshold change is recorded in this file.
+manifest, and any threshold change is recorded in this file. ✅ Done at n=25 on
+2026-07-31. Still open and worth a follow-up: **Finding 2** (`pairGroup` will
+not merge a frame-clipped pair) and the glasses blind spot.
 
 ---
 
