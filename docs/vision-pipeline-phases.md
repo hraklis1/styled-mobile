@@ -520,6 +520,49 @@ including scan and prettify. ✅
 
 ---
 
+### Observability — the soak precondition ✅ Done (2026-08-01)
+**Depends on:** Phase 0. **Blocks:** any meaningful soak, and therefore Phase 5.
+
+`scanPhoto` already computed everything needed to detect a regression, and
+`routes.ts` already logged it — to `console.info`, where nothing read it. There
+is no Sentry, Datadog or metrics anywhere in the server. `labelError` is the
+sharpest example: it exists *specifically* to stop a 429 degrading into an
+indistinguishable "0 garments found", and it was write-only. Same shape as
+`cost_usd` before Phase 4.
+
+Flipping `VISION_PIPELINE=sam3` without this would have been soaking blind —
+every failure this pipeline has produced so far was silent (see Locked
+decisions), so "no complaints" would not have meant "no problem".
+
+- **`scan_telemetry`** (migration `0028`) — one row per scan, distinct from
+  `ai_token_log`, which is one row per *model call*. Written on the sam3 happy
+  path, the sam3 throw path (an outage otherwise reads as a dip in volume, not
+  as errors), and the legacy path, so a soak compares pipelines on one table.
+  Fire-and-forget with a swallowed error: the code that reports failures must
+  not be able to cause one.
+- **`scripts/show-scan-health.ts`** — summary by pipeline, day-over-day (so a
+  regression arriving with a deploy shows as a step change rather than being
+  averaged away), and the most recent failures with a diagnosis.
+
+The diagnosis follows Phase 2's Finding 5: **`raw_count` vs `item_count` is the
+signal.** `raw=0` is a segmentation gap that no label-prompt work can fix (the
+shape that hid ties and standalone bags); `raw>0, items=0` is labelling
+rejecting everything, and `label_error` says whether that was deliberate or a
+failure. Verified live — a garment-free photo was correctly reported as
+`no regions proposed (segmentation gap)`, not as a labelling rejection.
+
+```sh
+./node_modules/.bin/tsx --env-file=.env scripts/show-scan-health.ts --days 7
+```
+
+**Still blind:** the striping guard (`alphaLooksStriped`) lives in
+`scripts/bench-vision.ts`, not in the production path, so shredded alpha would
+still ship unseen. Moving it would mean an alpha scan on every cutout — a real
+CPU cost per scan, and a deliberate deferral rather than an oversight. The
+health script says so in its own output.
+
+---
+
 ### Phase 5 — Delete the Python detection stack
 **Depends on:** Phases 1 and 2, plus a real soak period on `VISION_PIPELINE=sam3`.
 **Do not start this early.** It is irreversible-ish and unblocked only by evidence.
