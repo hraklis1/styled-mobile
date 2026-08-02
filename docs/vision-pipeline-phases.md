@@ -11,7 +11,7 @@ update this file in the same change — don't silently diverge.
 
 ---
 
-## Where things stand (2026-07-30)
+## Where things stand (2026-08-02)
 
 Garment detection was moved off `../Styled/python_service` onto hosted SAM 3.
 `../Styled/server/vision/` now does in two model calls what the Python service
@@ -40,8 +40,8 @@ column.
 | Mobile client | Committed on `experiment/photo-algorithm` (`78d4d9c`) |
 | `../Styled` | Phases 0–4 + observability, all committed and **pushed** to `origin/experiment/photo-algorithm` (2026-08-01). Working tree clean apart from unrelated `python_service/` edits |
 | Pipeline default | **`sam3`** as of 2026-08-01. `VISION_PIPELINE=legacy` is the rollback |
-| Eval set | **25 labelled cases / 85 items**, recall 0.976 / IoU 0.759 / precision >=0.865. Phase 1 target met |
-| `python_service` | Untouched and still the default. Its unrelated garment-gate edits are still dirty in that tree — don't sweep them in |
+| Eval set | **25 labelled cases / 85 items**, recall 0.988 / IoU 0.759 / precision >=0.866 (2026-08-02). Phase 1 target met |
+| `python_service` | Still present and unchanged, but **no longer on the scan path** — it serves the `legacy` rollback branch and whatever else still calls it. Deleting it is Phase 5. Its unrelated garment-gate edits are still dirty in that tree — don't sweep them in |
 
 ---
 
@@ -92,10 +92,14 @@ Settled with evidence. Do not re-open casually.
   a tote, a backpack and a handbag each returned **zero regions**. The original
   A/B only had crossbody bags worn on a dressed person, where `clothing` already
   covered them. A phrase measured only where another phrase overlaps it will
-  always look free to delete. Default is `clothing,shoe,bag,accessory,tie`.
+  always look free to delete. `glasses` (2026-08-02) is the third phrase added
+  for this exact reason, after `bag` and `tie`. Default is
+  `clothing,shoe,bag,accessory,tie,glasses`.
 - Pairs (left/right shoe) are merged via the labeller's `pairGroup`, **not**
   geometry. Hand-tuned size/adjacency heuristics are exactly what made the old
-  pipeline unmaintainable.
+  pipeline unmaintainable. Verified merging clipped and unclipped pairs alike on
+  2026-08-02; `ScanItem.pairGroup` / `.regionCount` and the bench's `merged` /
+  `orphanPg` columns exist so this stays observable.
 
 **Models**
 - **BiRefNet is off on purpose.** Measured worse than SAM 3's instance masks —
@@ -267,39 +271,57 @@ real, the striping guard already reports 0, and p95 is already under 10 s.
 
 ---
 
-### Phase 2 — Soak and tune on real photos ⚠ Mostly done (2026-07-31)
+### Phase 2 — Soak and tune on real photos ✅ Done (2026-08-02)
 **Depends on:** Phase 1.
 
-Miss and false-positive rates are quantified and every config change is recorded,
-so the done-condition is met — but on 15 cases, not ~25, and one item below is
-still open (`pairGroup`). `bench-vision.ts` gained `prec` and `unmatched` columns
-plus item-weighted totals to make this measurable at all.
+Miss and false-positive rates are quantified and every config change is recorded.
+`bench-vision.ts` gained `prec` and `unmatched` columns plus item-weighted totals
+to make this measurable at all, and on 2026-08-02 `merged` / `orphanPg` to make
+the pair-merge step observable (see Finding 2).
 
-**Final state, all 25 cases** (`clothing,shoe,bag,accessory,tie`, label prompt
-`vision-label-2`, EXIF normalisation on):
+**Final state, all 25 cases** (`clothing,shoe,bag,accessory,tie,glasses`, label
+prompt `vision-label-2`, EXIF normalisation on):
 
-| | Phase 1 config | final |
-|---|---|---|
-| Recall | 0.918 (78/85) | **0.976** (83/85) |
-| Precision | >=0.867 (78/90) | >=0.865 (83/96) |
-| Mean IoU | 0.759 | 0.759 |
-| Striping guard | 0 | **0** |
-| Median latency | 6.5 s | 6.8 s |
-| Cost | $0.006/photo | $0.010/photo |
+| | Phase 1 config | 2026-07-31 | final (2026-08-02) |
+|---|---|---|---|
+| Recall | 0.918 (78/85) | 0.976 (83/85) | **0.988** (84/85) |
+| Precision | >=0.867 (78/90) | >=0.865 (83/96) | >=0.866 (84/97) |
+| Mean IoU | 0.759 | 0.759 | 0.759 |
+| Striping guard | 0 | 0 | **0** |
+| Median latency | 6.5 s | 6.8 s | 9.5 s |
+| Cost | $0.006/photo | $0.010/photo | $0.012/photo |
 
-Recall 0.918 → **0.976** at +$0.004/photo, precision flat. The extra spend is
-two concept phrases (`bag`, `tie`) that each recover items nothing else sees.
+Recall 0.918 → **0.988** at +$0.006/photo, precision flat throughout. The extra
+spend is three concept phrases (`bag`, `tie`, `glasses`) that each recover items
+nothing else sees.
 
-**Only two items in 85 are now missed**, and one is not really a miss:
+Treat that median latency with suspicion rather than as a regression: the
+2026-08-02 run coincided with the labelling provider shedding load (see
+"Provider flakiness" below), and `segMs` moved with it on the same cases whose
+config did not change. `glasses` is one more concurrent SAM 3 call, not a serial
+one.
+
+**One item in 85 is now missed, and it is not really a miss:**
 
 | case | item | best IoU | what it is |
 |---|---|---|---|
-| `flat-lay-loafers-glasses-01` | tortoiseshell glasses | 0.00 | genuine — no region proposed |
 | `worn-polo-belt-trousers-01` | black smartwatch | 0.14 | detected as `Black Watch`; boxed on the face, ground truth includes the strap |
 
-So the one true remaining blind spot is **glasses**. Judge small accessories on
-recall, not IoU — at that size a tight-vs-loose box swings IoU past the 0.3
-threshold on its own.
+**The glasses blind spot is closed** (2026-08-02). `accessory` already caught
+sunglasses *on a face* — both worn fixtures returned them — but a folded pair
+lying in a flat lay was proposed by nothing at all: the standalone-bag and tie
+failure shape for the third time. Adding `glasses` took
+`flat-lay-loafers-glasses-01` from recall 0.80 to **1.00** at precision 1.00,
+with the pair coming back as `Tortoiseshell Eyeglasses` and **13 → 13 unmatched
+predictions across the whole set**, i.e. no precision cost that the eval can see.
+
+That is now three phrases added for the same reason. The generalisation worth
+keeping: **`accessory` covers a category worn, not the same category alone in
+frame.** Expect the next gap to look identical, and reach for the `raw` column
+before touching prompts.
+
+Judge small accessories on recall, not IoU — at that size a tight-vs-loose box
+swings IoU past the 0.3 threshold on its own.
 
 **`SEGMENT_MIN_SCORE` was re-examined and deliberately left at 0.55** — see
 Locked decisions. Nothing in the measured failure set argues for changing it.
@@ -316,7 +338,14 @@ This reframes the knob. Precision here is not an `isGarment` problem and not a
 score-threshold problem — it is a *grouping* problem, which is why the fix went
 into `pairGroup` rather than `isGarment`. Generalising `pairGroup` from "two
 halves of one item" to also cover "a part and its whole" removed 2 of the ~5
-fragments and cost no recall. The rest persist; see Finding 2.
+fragments and cost no recall.
+
+The rest persist, and they are the whole of the remaining precision gap:
+`Crossbody Bag Strap` and `White Shirt Collar` were both still standing alone on
+2026-08-02, with `pairGroup` null rather than pointing at the garment they
+belong to. Note this is the *part-and-whole* half of `pairGroup` — the
+*two-halves-of-a-pair* half works (Finding 2). Whether it is worth closing is a
+judgement about one extra tap in a review UI, not a correctness question.
 
 **Finding 4 — `bag` was removed on good-looking evidence, and that was wrong.**
 Keep this one; it is the most transferable lesson in the phase.
@@ -395,18 +424,31 @@ never proposes can never reach the closet at all. Do not "fix" the precision
 number by making segmentation stricter — that trades a cheap error for an
 unrecoverable one.
 
-**Finding 2 — `pairGroup` still does not merge a clipped pair. STILL OPEN.**
-In `worn-suit-twopiece-01` the two brown loafers still come back as two items,
-and the `vision-label-2` prompt did not fix it despite explicitly telling the
-model that a frame-clipped half is the same pair. The three *unclipped* pairs
-added on 2026-07-31 (`flat-lay-loafers-glasses-01`, `flat-lay-wood-halfzip-01`,
-`flat-lay-navy-sneakers-01`) all merge correctly and score recall 1.00 on
-footwear — **so clipping is confirmed as the trigger**, which was only a guess
-before. That is the thing to attack next, still in the prompt, not geometry.
+**Finding 2 — the clipped-pair merge failure did not survive instrumentation.
+CLOSED (2026-08-02), and the lesson is about the measurement, not the model.**
 
-Note `scanPhoto` does not emit `pairGroup` in its output, so the bench can only
-observe the merged result, not whether the model set the field. Instrument it
-before the next attempt or you will be debugging blind.
+The instrumentation was built first, exactly as the previous note demanded:
+`ScanItem` now carries `pairGroup` (the labeller's raw answer, unrenumbered) and
+`regionCount` (how many SAM 3 regions were fused), and `bench-vision.ts` reports
+`merged` and `orphanPg`. Those two columns separate the failure modes the merged
+item list cannot: the model never setting the field (both columns 0) from the
+model setting it but splitting one pair across two numbers (`orphanPg` > 0).
+
+With that in place the bug would not reproduce. `worn-suit-twopiece-01` was run
+**5 times** and merged both pairs every time — including the brown loafers at the
+very bottom edge, which are the frame-clipped pair the finding was about:
+
+```
+Black Dress Shoes   pg=1  n=2
+Brown Loafers       pg=2  n=2     ← clipped at y=96..100%, merged anyway
+```
+
+Across the full 25-case set, `orphanPg` is 0 on 24 cases and 1 on one, and every
+footwear pair merges. So `vision-label-2` does handle clipping; the earlier
+conclusion came from watching the merged output, where "not grouped" and
+"grouped wrongly" look the same. **Do not re-open this on a single-run
+observation** — check `merged` / `orphanPg` first, and re-run, because the
+labeller is non-deterministic and the previous finding is what that looks like.
 
 **Finding 5 — the misses are always at the SEGMENT stage, never the label
 stage.** Every recall failure across all three phases has the same shape: SAM 3
@@ -414,8 +456,10 @@ proposes no region, so nothing downstream can recover it. Footwear before
 `shoe`, accessories before `accessory`, standalone bags before `bag` was
 restored, ties before `tie`. **The diagnostic is the `raw` column** — when `raw`
 sits at or below `items` on a case that is missing something, it is a
-segmentation gap and no amount of label-prompt work will touch it. Glasses are
-the one instance still open.
+segmentation gap and no amount of label-prompt work will touch it. Glasses were
+the last open instance and are closed as of 2026-08-02; **no known segmentation
+gap remains**, which means the next one will be a class the eval set does not
+cover rather than one it does.
 
 The old known issue — the single-garment fixture yielding a false-positive
 fabric sliver labelled "Blue Top" — **remains unreproducible and is now largely
@@ -429,10 +473,31 @@ layered garment the manifest omits on purpose. Treat the "Blue Top" bug as
 resolved by the `isGarment` prompt rather than merely unverified — while noting
 `single_garment` is still n=1, which is too thin to call a rate.
 
+**Provider flakiness — an operational finding, not a pipeline one (2026-08-02).**
+Across ~35 scans during this session the `tagging` provider (`google` /
+`gemini-3.6-flash`) returned **503 "high demand"** on roughly 1 call in 8, in
+bursts: 2 of 3 consecutive single-case runs at one point, then 1 of 25 on a full
+sweep half an hour later. Nothing here is wrong — `labelError` caught every one,
+the bench refused to score those cases and exited non-zero, and the user-facing
+path degrades to an empty scan rather than an error. But it is the first
+measured evidence of how often that happens, and it means:
+
+- **A soak will see empty scans that are not regressions.** `label err` in
+  `show-scan-health.ts` is the column that separates them; a rise in `empty
+  scans` with `label err` flat is a real regression, and the two moving together
+  is the provider.
+- **Bench runs need re-running, not interpreting, when a case reports
+  `LABEL_ERR`.** Comparing two sweeps with different label-failure counts also
+  changes the denominator — the 2026-08-02 baseline scored 80 items and the
+  `glasses` run 85 for exactly this reason.
+- A retry on 503 in the `tagging` route is the obvious mitigation and is **not**
+  done. It is a real gap, deliberately left rather than bundled into an eval
+  change; it belongs with Phase 5 or its own change.
+
 **Done when:** false-positive and miss rates are quantified on the Phase 1
 manifest, and any threshold change is recorded in this file. ✅ Done at n=25 on
-2026-07-31. Still open and worth a follow-up: **Finding 2** (`pairGroup` will
-not merge a frame-clipped pair) and the glasses blind spot.
+2026-07-31, and the two follow-ups it left — Finding 2 and the glasses blind
+spot — are both closed as of 2026-08-02.
 
 ---
 
