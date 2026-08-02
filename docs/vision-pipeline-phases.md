@@ -571,6 +571,57 @@ health script says so in its own output.
 
 ---
 
+### legacy vs sam3 — the comparison that had never been run (2026-08-01)
+
+Every quality number in this document was **sam3 in isolation**. The claim that
+it beats `legacy` was architectural — 2 model calls instead of 6–12, no
+hand-tuned geometry — and had never been measured. `scripts/bench-vision.ts`
+imports `server/vision` directly, so it structurally *cannot* measure legacy;
+that is why the number never existed.
+
+Both pipelines, same 25 fixtures, same manifest, same greedy IoU≥0.3 matcher,
+both driven through `/api/scan-vision-pose` over HTTP so neither gets a
+shortcut:
+
+| | legacy | sam3 |
+|---|---|---|
+| Recall | 0.459 (39/85) | **0.976** (83/85) |
+| Precision | 0.453 (39/86) | **0.865** (83/96) |
+| Mean IoU | 0.490 | **0.759** |
+| Median latency | **7.97 s** | 9.41 s |
+| p95 latency | **15.1 s** | 18.9 s |
+
+**2.1× the recall, 1.9× the precision.** Legacy wins one column — it is about
+1.4 s faster at the median. The sam3 arm reproduced the bench numbers exactly
+(0.976 / 0.865 / 0.759), which validates the harness rather than the harness
+flattering sam3.
+
+**Why the gap is what it is, and it is not a labelling-convention artifact.**
+Legacy names items well and localises them barely at all. On
+`worn-hat-tee-01` it returned the right three garments with these boxes:
+
+```
+Bucket Hat   x=10.0  y= 0.0  w=80.0  h=20.0
+T-Shirt      x=10.0  y=20.0  w=80.0  h=40.0
+Watch        x=70.0  y=30.0  w=10.0  h=10.0
+```
+
+Every value is round. That is a templated layout — hat in the top 20%, shirt in
+the next 40% — not a measurement of the image. On `single-turtleneck-01`, one
+garment filling the frame, it returned a 9%×10% box near the bottom edge
+against a ground truth of 55%×74%. The classification is decent; the geometry
+is largely synthetic, which is the "hand-tuned geometry heuristics" problem in
+Locked decisions showing up as a number.
+
+**This matters because boxes drive cutouts.** A template box crops the wrong
+region, so the gap is not academic — it is what the user sees in their closet.
+
+The harness lives in the session scratchpad rather than the repo. Worth checking
+in before Phase 5, since "can we delete the Python service yet" is exactly the
+question it answers.
+
+---
+
 ### The flip ✅ Done (2026-08-01)
 
 `sam3` became the code default once the pipeline could report on itself. Held
