@@ -64,6 +64,25 @@ export type CutoutRequest = {
  * cutout for this image"; everyone else can ignore the distinction and treat a
  * throw as null.
  */
+/**
+ * Which server pipeline last answered a cutout request.
+ *
+ * `legacy` serialises segmentation behind an inference gate, so callers must
+ * trickle; `sam3` is hosted and has no such gate. The backfill uses this to
+ * decide its pacing and concurrency, learning it from a request it was going
+ * to make anyway rather than probing a capability endpoint.
+ *
+ * Starts `unknown` and stays there against a server too old to send the field,
+ * which correctly keeps callers on the conservative legacy behaviour.
+ */
+export type CutoutPipeline = 'sam3' | 'legacy' | 'unknown';
+
+let observedPipeline: CutoutPipeline = 'unknown';
+
+export function observedCutoutPipeline(): CutoutPipeline {
+  return observedPipeline;
+}
+
 export async function requestCutout({
   imageDataUrl,
   imageUrl,
@@ -73,7 +92,10 @@ export async function requestCutout({
 }: CutoutRequest): Promise<string | null> {
   if (!imageDataUrl && !imageUrl) return null;
   try {
-    const { data } = await api.post<{ cutoutWebP?: string | null }>(
+    const { data } = await api.post<{
+      cutoutWebP?: string | null;
+      detectionSource?: string | null;
+    }>(
       '/api/cutout',
       {
         imageBase64: imageDataUrl ?? null,
@@ -86,6 +108,9 @@ export async function requestCutout({
       // 15s api default, but stay under the server's own 60s proxy timeout.
       { timeout: 45_000 },
     );
+    if (data?.detectionSource === 'sam3' || data?.detectionSource === 'legacy') {
+      observedPipeline = data.detectionSource;
+    }
     return data?.cutoutWebP ? `data:image/webp;base64,${data.cutoutWebP}` : null;
   } catch (err: any) {
     const status = err?.response?.status;

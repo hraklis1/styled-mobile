@@ -1,5 +1,10 @@
 const mockGenerateCutoutForItem = jest.fn();
 
+// Which pipeline the backfill believes it is talking to. Defaults to 'unknown'
+// so the existing cases keep exercising the conservative single-flight, paced
+// path; the concurrency cases set it to 'sam3'.
+let mockPipeline: 'sam3' | 'legacy' | 'unknown' = 'unknown';
+
 jest.mock('../cutout', () => {
   // Mirrors the real module: a tagged plain Error, recognised by property
   // rather than by class identity.
@@ -13,6 +18,7 @@ jest.mock('../cutout', () => {
     cutoutBusyError,
     isCutoutBusyError: (err: unknown) => !!err && (err as any).isCutoutBusy === true,
     generateCutoutForItem: (...args: unknown[]) => mockGenerateCutoutForItem(...args),
+    observedCutoutPipeline: () => mockPipeline,
   };
 });
 
@@ -43,6 +49,7 @@ function item(id: number, patch: Partial<Item> = {}): Item {
 beforeEach(() => {
   mockStorage.clear();
   mockGenerateCutoutForItem.mockReset();
+  mockPipeline = 'unknown';
   jest.useRealTimers();
 });
 
@@ -81,6 +88,79 @@ describe('runCutoutBackfill', () => {
     expect(result.completed).toBe(3);
     expect(result.succeeded).toBe(3);
     expect(result.stoppedReason).toBeNull();
+  });
+
+  it('stays single-flight on the legacy pipeline, whose server serialises anyway', async () => {
+    mockPipeline = 'legacy';
+    let inFlight = 0;
+    let peak = 0;
+    mockGenerateCutoutForItem.mockImplementation(async () => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 5));
+      inFlight -= 1;
+      return 'https://cdn.example/cut.webp';
+    });
+
+    const result = await runCutoutBackfill({
+      items: [item(1), item(2), item(3), item(4)],
+      userId: 1,
+    }).done;
+
+    expect(peak).toBe(1);
+    expect(result.completed).toBe(4);
+  });
+
+  it('opens up to several requests in flight once the server identifies as sam3', async () => {
+    mockPipeline = 'sam3';
+    let inFlight = 0;
+    let peak = 0;
+    mockGenerateCutoutForItem.mockImplementation(async () => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 20));
+      inFlight -= 1;
+      return 'https://cdn.example/cut.webp';
+    });
+
+    const result = await runCutoutBackfill({
+      items: [item(1), item(2), item(3), item(4), item(5), item(6)],
+      userId: 1,
+    }).done;
+
+    // The first request is always alone — the pipeline is unknown until one
+    // comes back — so the run ramps only after it settles.
+    expect(peak).toBeGreaterThan(1);
+    expect(result.completed).toBe(6);
+    expect(result.succeeded).toBe(6);
+    expect(result.stoppedReason).toBeNull();
+  });
+
+  it('advances the cursor over the finished prefix only, never past an item still in flight', async () => {
+    mockPipeline = 'sam3';
+    // Item 2 outlives 3 and 4. If the cursor tracked "highest finished id" it
+    // would jump to 4 while 2 was unresolved, and a resume would skip it.
+    const release: Record<number, () => void> = {};
+    mockGenerateCutoutForItem.mockImplementation(async ({ item: it }: any) => {
+      if (it.id === 2) {
+        await new Promise<void>((r) => { release[2] = r; });
+      }
+      return 'https://cdn.example/cut.webp';
+    });
+
+    const handle = runCutoutBackfill({
+      items: [item(1), item(2), item(3), item(4)],
+      userId: 1,
+    });
+
+    // Let 1, 3 and 4 finish while 2 is parked.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mockStorage.get('cutout_backfill_cursor')).toBe('1');
+
+    release[2]?.();
+    await handle.done;
+    // A clean run clears the cursor entirely.
+    expect(mockStorage.get('cutout_backfill_cursor')).toBeUndefined();
   });
 
   it('retries the same item when the server is busy, without advancing', async () => {

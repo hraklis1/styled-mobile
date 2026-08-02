@@ -59,6 +59,11 @@ const MAX_PHOTOS = 10;
 // dozens of concurrent LLM-vision requests (provider rate limits / socket timeouts).
 const EXTRACTION_CONCURRENCY = 4;
 
+// Photos scanned at once. Kept below EXTRACTION_CONCURRENCY because each photo
+// fans out into its own segmentation and labelling calls, and the server-side
+// scan rate limit is 20/min per user — 3 keeps a full 10-photo batch inside it.
+const PHOTO_SCAN_CONCURRENCY = 3;
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Phase = 'idle' | 'processing' | 'pre-extract' | 'extracting' | 'review' | 'saving';
@@ -331,15 +336,21 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
     setPhotoJobs(jobs);
     setPhase('processing');
 
-    const accumulated: PreExtractItemData[] = [];
-
-    for (const job of jobs) {
-      if (sessionRef.current !== session) return;
-      const preItems = await scanPhotoJob(job, session);
-      if (preItems) accumulated.push(...preItems);
-    }
+    // Photos used to be scanned strictly one at a time, because the Python
+    // service serialised all segmentation behind a single-slot gate and
+    // overlapping requests just queued (or 503'd). The hosted pipeline has no
+    // such gate, so N photos no longer cost N full round trips end to end.
+    const settled = await mapWithConcurrency(jobs, PHOTO_SCAN_CONCURRENCY, (job) =>
+      scanPhotoJob(job, session),
+    );
 
     if (sessionRef.current !== session) return;
+
+    // Keep photo order regardless of completion order — the review list should
+    // read in the order the user picked, not the order the network finished in.
+    const accumulated: PreExtractItemData[] = settled.flatMap((r) =>
+      r.status === 'fulfilled' && r.value ? r.value : [],
+    );
 
     if (accumulated.length === 0) {
       Alert.alert(
@@ -364,14 +375,15 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
 
     setPhase('processing');
 
-    const accumulated: PreExtractItemData[] = [];
-    for (const job of failed) {
-      if (sessionRef.current !== session) return;
-      const preItems = await scanPhotoJob(job, session);
-      if (preItems) accumulated.push(...preItems);
-    }
+    const settled = await mapWithConcurrency(failed, PHOTO_SCAN_CONCURRENCY, (job) =>
+      scanPhotoJob(job, session),
+    );
 
     if (sessionRef.current !== session) return;
+
+    const accumulated: PreExtractItemData[] = settled.flatMap((r) =>
+      r.status === 'fulfilled' && r.value ? r.value : [],
+    );
 
     if (accumulated.length > 0) {
       setPreExtractItems((prev) => [...prev, ...accumulated]);

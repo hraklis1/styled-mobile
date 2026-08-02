@@ -161,6 +161,12 @@ export type Item = {
    * the server's quality gate; `imageUrl` is always the fallback.
    */
   cutoutUrl: string | null;
+  /**
+   * Generative "Prettify" result — an idealised catalog shot. Preferred over
+   * `cutoutUrl` for display when present, but kept separate so the faithful
+   * cutout and the original photo both survive; clearing it reverts the item.
+   */
+  prettifiedUrl: string | null;
   color: string | null;
   colorPalette: string[];
   colorNormalized: string | null;
