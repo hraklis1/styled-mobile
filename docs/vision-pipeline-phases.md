@@ -571,30 +571,38 @@ health script says so in its own output.
 
 ---
 
-### legacy vs sam3 — the comparison that had never been run (2026-08-01)
+### legacy vs sam3 — measured at last (2026-08-01)
 
-Every quality number in this document was **sam3 in isolation**. The claim that
-it beats `legacy` was architectural — 2 model calls instead of 6–12, no
-hand-tuned geometry — and had never been measured. `scripts/bench-vision.ts`
-imports `server/vision` directly, so it structurally *cannot* measure legacy;
-that is why the number never existed.
+Every quality number in this document had been **sam3 in isolation**. The claim
+that it beats `legacy` was architectural — 2 model calls instead of 6–12, no
+hand-tuned geometry — and nobody had run the comparison.
 
-Both pipelines, same 25 fixtures, same manifest, same greedy IoU≥0.3 matcher,
-both driven through `/api/scan-vision-pose` over HTTP so neither gets a
-shortcut:
+**The tool for it already existed:** `scripts/bench-vision.ts --legacy <url>`
+calls the Python service on the same fixtures and scores it with the same
+`scoreCase` matcher. Use it; do not write a second harness, because two
+scorers that drift apart produce incomparable numbers.
+
+```sh
+npx tsx scripts/bench-vision.ts --manifest eval/scan/manifest.json \
+    --legacy http://localhost:5001/scan-vision-pose
+```
 
 | | legacy | sam3 |
 |---|---|---|
-| Recall | 0.459 (39/85) | **0.976** (83/85) |
-| Precision | 0.453 (39/86) | **0.865** (83/96) |
-| Mean IoU | 0.490 | **0.759** |
-| Median latency | **7.97 s** | 9.41 s |
-| p95 latency | **15.1 s** | 18.9 s |
+| Recall | 0.46 – 0.51 | **0.976** (83/85) |
+| Mean IoU | ~0.48 | **0.759** |
+| Median latency | **~8 s** | ~9.5 s |
 
-**2.1× the recall, 1.9× the precision.** Legacy wins one column — it is about
-1.4 s faster at the median. The sam3 arm reproduced the bench numbers exactly
-(0.976 / 0.865 / 0.759), which validates the harness rather than the harness
-flattering sam3.
+**Roughly 2× the recall and 1.6× the IoU.** Legacy wins one column, being about
+1.5 s faster at the median.
+
+**Legacy is quoted as a range on purpose.** Two runs over identical fixtures
+scored 0.506 and 0.459 and **disagreed on 10 of 25 cases** — its GPT-4o-mini
+micro-passes are stochastic, so any single legacy number carries about ±5
+points. sam3 returned 0.976 on three separate runs across two different code
+paths (in-process bench, and HTTP through the route). Reproducibility is itself
+part of the result: you can regression-test sam3 and you cannot really
+regression-test legacy.
 
 **Why the gap is what it is, and it is not a labelling-convention artifact.**
 Legacy names items well and localises them barely at all. On
@@ -615,10 +623,12 @@ Locked decisions showing up as a number.
 
 **This matters because boxes drive cutouts.** A template box crops the wrong
 region, so the gap is not academic — it is what the user sees in their closet.
+It also explains the non-determinism: when geometry comes from a template
+chosen per photo rather than measured from it, which template gets chosen can
+flip between runs.
 
-The harness lives in the session scratchpad rather than the repo. Worth checking
-in before Phase 5, since "can we delete the Python service yet" is exactly the
-question it answers.
+Re-run the command above before Phase 5 — "can we delete the Python service
+yet" is the same question, and it is already tooled.
 
 ---
 
