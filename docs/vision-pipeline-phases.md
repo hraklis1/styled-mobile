@@ -39,9 +39,11 @@ column.
 | Routes wiring, migration 0027 | Built; **migration already applied to the DB** |
 | Mobile client | Committed on `experiment/photo-algorithm` (`78d4d9c`) |
 | `../Styled` | Phases 0–4 + observability, all committed and **pushed** to `origin/experiment/photo-algorithm` (2026-08-01). Working tree clean apart from unrelated `python_service/` edits |
-| Pipeline default | **`sam3`** as of 2026-08-01. `VISION_PIPELINE=legacy` is the rollback |
+| Pipeline | **`sam3`, and now the only one.** Phase 5 removed the legacy branch and the `VISION_PIPELINE` lever on 2026-08-02; the rollback is `git revert` |
 | Eval set | **25 labelled cases / 85 items**, recall 0.988 / IoU 0.759 / precision >=0.866 (2026-08-02). Phase 1 target met |
-| `python_service` | Still present and unchanged, but **no longer on the scan path** — it serves the `legacy` rollback branch and whatever else still calls it. Deleting it is Phase 5. Its unrelated garment-gate edits are still dirty in that tree — don't sweep them in |
+| `python_service` | **A legacy microservice, retained only for `/crop-items` and `/rescan-crop`** (both web-client callers). Nothing in the scan or cutout path reaches it; the mobile app never calls it. Deletion pass 1 removed 993 lines of strictly dead code — see Phase 5 |
+| Branches | **Merged to `main` and pushed in both repos (2026-08-02);** `experiment/photo-algorithm` deleted local and remote. All further work is normal `main` work |
+| Only phase left | **Phase 5**, in progress — routing is Python-free and pass 1 of the deletion is done; pass 2 and the port of the two survivors remain |
 
 ---
 
@@ -490,9 +492,28 @@ measured evidence of how often that happens, and it means:
   `LABEL_ERR`.** Comparing two sweeps with different label-failure counts also
   changes the denominator — the 2026-08-02 baseline scored 80 items and the
   `glasses` run 85 for exactly this reason.
-- A retry on 503 in the `tagging` route is the obvious mitigation and is **not**
-  done. It is a real gap, deliberately left rather than bundled into an eval
-  change; it belongs with Phase 5 or its own change.
+**Retry landed 2026-08-02**, in `server/llm/index.ts` rather than in the vision
+code — `completeStructured` is the single chokepoint every non-streaming call
+goes through, so tagging, stylist and summarization all get it at once.
+
+- Retries 408/409/429/5xx and connection-level errors; **never** 4xx like a bad
+  schema, where a retry only spends the same money twice.
+- Two retries by default (`LLM_MAX_RETRIES`, 0 disables), honouring `Retry-After`
+  when sent and otherwise backing off exponentially **with jitter** — a scan's
+  label pass runs concurrently with other calls, and retrying in lockstep would
+  re-spike the load that caused the 503.
+- `completeStream` is deliberately excluded: by the time most stream failures
+  surface, tokens are already on the wire and restarting would duplicate them
+  mid-sentence. Retrying there means buffering to the first chunk, a separate
+  change.
+- Verified by injecting the failures, since a 503 burst cannot be summoned on
+  demand: `scripts/check-llm-retry.ts` covers recovery, non-retry of 400,
+  rethrowing the original error when exhausted, `limit 0`, connection errors,
+  the untouched happy path, and `Retry-After`. 7/7.
+
+This changes how `label err` reads: it now counts calls that failed *after* the
+retry gave up, so a rise there means the provider is down rather than busy.
+Transient 503s that recovered appear only in the server log.
 
 **Done when:** false-positive and miss rates are quantified on the Phase 1
 manifest, and any threshold change is recorded in this file. ✅ Done at n=25 on
@@ -628,6 +649,17 @@ failure. Verified live — a garment-free photo was correctly reported as
 ./node_modules/.bin/tsx --env-file=.env scripts/show-scan-health.ts --days 7
 ```
 
+**The diagnosis columns are sam3-only, and used not to be (fixed 2026-08-02).**
+The legacy proxy exposes no raw region count, so `routes.ts` writes `raw_count:
+0` for every legacy scan — which the report then read as "no regions proposed
+(segmentation gap)". The first real comparison showed **27 of 27 legacy scans
+diagnosed as segmentation gaps while averaging 3.3 items found**. A diagnosis
+column that fires on healthy rows is worse than no column at all, exactly the
+authoritative-looking-but-wrong shape as costing unpriced models at zero, so
+`no regions` now reports `—` on legacy and the per-failure line says the proxy
+reports no stage detail. The comparable legacy columns are scans, avg items,
+empty scans and latency.
+
 **Still blind:** the striping guard (`alphaLooksStriped`) lives in
 `scripts/bench-vision.ts`, not in the production path, so shredded alpha would
 still ship unseen. Moving it would mean an alpha scan on every cutout — a real
@@ -725,9 +757,106 @@ Roll back by setting `VISION_PIPELINE=legacy` — no deploy required.
 
 ---
 
-### Phase 5 — Delete the Python detection stack
-**Depends on:** Phases 1 and 2, plus a real soak period on `VISION_PIPELINE=sam3`.
-**Do not start this early.** It is irreversible-ish and unblocked only by evidence.
+### Phase 5 — Delete the Python detection stack ◐ TypeScript half done (2026-08-02)
+
+**The soak gate was waived deliberately, and by whom matters.** The owner is the
+only person testing the app, so waiting for production evidence would have meant
+waiting for evidence that was never going to arrive. The decision was: open the
+phase, accept that issues get troubleshot as they surface. Recorded here so
+nobody later reads the missing soak as an oversight.
+
+What made that defensible rather than reckless is that Phase 5's *own* stated
+bar — "the bench shows parity or better" — was already cleared twice over
+(recall 0.988 vs 0.46–0.51), and the deleted branch is one `git revert` away.
+
+**Done — the routing layer no longer knows about Python detection:**
+
+- `/api/scan-vision-pose` is `scanPhoto` unconditionally; the proxy to
+  `python_service/scan-vision-pose`, including its ECONNREFUSED-retry, is gone.
+- `/api/cutout` is `matteGarment` unconditionally; the 503 "Segmentation busy"
+  passthrough went with it, since only the Python inference gate ever produced
+  one.
+- `VISION_PIPELINE` is retired. A deployment that still sets it now gets a
+  startup warning instead of silence, because the failure mode of a lever that
+  quietly does nothing is someone believing they rolled back.
+- `detectionSource: "sam3"` is **kept** on the cutout response even though it is
+  now the only possible value. Shipped clients read it to pace the backfill and
+  fall back to conservative legacy pacing when it is absent, so removing it
+  would silently slow every app already installed.
+
+**The goal changed, because the original one was unreachable.** Phase 5 was
+written as "the app runs with no Python service at all". Tracing callers on
+2026-08-02 showed that cannot follow from deleting the detection stack: two live
+features depend on code that was itself *on the deletion list*.
+
+| endpoint | caller | needs |
+|---|---|---|
+| `/crop-items` | `/api/crop-items` + `/api/items/cropSingle` (web add-to-closet) | **MediaPipe pose machinery** — was on the deletion list |
+| `/rescan-crop` | web `use-scan-item.ts` | **`gpt_classify_single_item`** + outfit extractor — was on the deletion list |
+
+The note that `/crop-items` "may survive" understated it: both must, and so must
+the service hosting them.
+
+### What `python_service` is now
+
+**A legacy microservice retained for exactly two web callers.** Not a component
+of the vision pipeline — nothing in the scan or cutout path reaches it any more.
+Read it as a holding pen: it exists so the web client's add-to-closet and
+manual-recrop flows keep working, and it should shrink to nothing when a future
+sub-phase ports those two endpoints to the hosted stack. Until then, treat any
+code in it that is not reachable from `/crop-items` or `/rescan-crop` as dead
+weight awaiting removal rather than as a working alternative to `server/vision`.
+
+The mobile app does not call it at all.
+
+### Deletion pass 1 — strictly dead code (2026-08-02)
+
+The garment-gate calibration work that blocked this was abandoned as moot (the
+gate it calibrates is no longer reachable in production) and stashed rather than
+discarded — `git stash list` in `../Styled` still has it.
+
+Removed, each verified as having no caller in either repo or the web client:
+
+- **`/detect-and-crop`** and its request/response models — the TFLite
+  EfficientDet / OpenCV contour detection path.
+- **`/video/upload`** and the whole video pipeline behind it: `extract_frames`,
+  `laplacian_blur_score`, `identify_items_with_gpt`, `normalize_items`,
+  `deduplicate_items`, `frame_to_base64`, plus the now-unused `uuid`, `shutil`,
+  `File` and `UploadFile` imports.
+- In `processor.py`, the subsystem that only `/detect-and-crop` reached:
+  `process_image`, `get_detector_source`, `np_to_b64_jpeg`, `detect_garments`,
+  `person_to_garment_regions`, `_detect_mediapipe`, `_detect_tflite`,
+  `_detect_selective_search`, `_detect_edges`, and `_pose_garment_regions`.
+
+**993 lines gone.** `main.py` 3,329 → 2,920, `processor.py` 2,087 → 1,504.
+
+Deliberately kept, because the surviving endpoints need them:
+`pose_square_crop_for_category` and `_load_detector` (`/crop-items`),
+`semantic_square_crop` and `sample_bg_np` (shared), and
+`_pose_garment_regions_extended` (still referenced by the Python
+`/scan-vision-pose`, which is dead but not yet removed — see below).
+
+Verified: both files compile, `main.py` imports and exposes exactly
+`/crop-items`, `/rescan-crop`, `/cutout`, `/scan-vision-pose` and `/health`, the
+80 unit tests pass, and no dangling references remain. (`_np_to_b64_jpeg` in
+`main.py` is a *different* function from the deleted `np_to_b64_jpeg` and is
+still used.)
+
+### Deletion pass 2 — not started
+
+The Python `/scan-vision-pose` and `/cutout` endpoints are now dead too: the
+backend stopped calling them when the routing half landed. They were left in
+place deliberately, as they are the large cut rather than the strictly-dead one,
+and they are what still holds `_GPT_IDENTIFY_PROMPT`, `_FLAT_LAY_PROMPT`, the
+`_MICRO_*` prompts, `gpt_flat_lay_items`, `gpt_identify_items`,
+`_cv_flat_lay_boxes` and the watershed splitter, `_dedup_gpt_items`,
+`_nms_bbox_pct`, `_landmark_in_bbox_pct`, `_is_skin_dominant`, the rembg
+sessions, `_INFERENCE_GATE` / `run_gated`, `cutout_quality.py` and
+`garment_gate.py`.
+
+Removing them also frees `_pose_garment_regions_extended` and the head/waist/
+wrist region crops. **Check each against `/crop-items` and `/rescan-crop` before
+cutting** — those two are the only things in this service that still matter.
 
 Once the hosted pipeline has been the default for a while and the bench shows
 parity or better, `../Styled/python_service` loses the large majority of
