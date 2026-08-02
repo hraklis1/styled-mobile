@@ -38,7 +38,8 @@ column.
 | `../Styled/server/vision/` | Built, typechecks, benched, simulator-verified |
 | Routes wiring, migration 0027 | Built; **migration already applied to the DB** |
 | Mobile client | Committed on `experiment/photo-algorithm` (`78d4d9c`) |
-| `../Styled` working tree | Phase 0 `a1eb08d`, Phase 1 `0c2b7fa`, Phase 2 `bc0a03e` — all on `experiment/photo-algorithm`, unpushed. **2026-07-31 changes uncommitted:** `eval/scan/**`, `server/vision/{label,config,scanPhoto}.ts`, `.env.example` |
+| `../Styled` | Phases 0–4 + observability, all committed and **pushed** to `origin/experiment/photo-algorithm` (2026-08-01). Working tree clean apart from unrelated `python_service/` edits |
+| Pipeline default | **`sam3`** as of 2026-08-01. `VISION_PIPELINE=legacy` is the rollback |
 | Eval set | **25 labelled cases / 85 items**, recall 0.976 / IoU 0.759 / precision >=0.865. Phase 1 target met |
 | `python_service` | Untouched and still the default. Its unrelated garment-gate edits are still dirty in that tree — don't sweep them in |
 
@@ -49,8 +50,15 @@ column.
 Settled with evidence. Do not re-open casually.
 
 **Rollout**
-- `VISION_PIPELINE=legacy|sam3`, default `legacy`; anything unrecognised falls
-  back to `legacy`. This is the rollback lever — keep it working.
+- `VISION_PIPELINE=legacy|sam3`, **default `sam3` since 2026-08-01** (it was
+  `legacy` while the pipeline was unobservable in production). Setting `legacy`
+  is now the rollback lever — no deploy needed beyond the variable. Keep it
+  working.
+- Anything unrecognised still resolves to `legacy` **and warns once**. That
+  warning is new and load-bearing: under the old default a typo'd rollback
+  (`legcy`) was harmless because legacy was the default anyway; under the new
+  one the same silence would send an attempted rollback straight back to the
+  pipeline someone was rolling *off*.
 - The `/api/scan-vision-pose` response is **byte-compatible** with the Python
   service's shape. That contract is why the mobile client needed no changes.
   Breaking it means touching `ScanItemSheet`, `BatchScanSheet` and the backfill.
@@ -560,6 +568,34 @@ failure. Verified live — a garment-free photo was correctly reported as
 still ship unseen. Moving it would mean an alpha scan on every cutout — a real
 CPU cost per scan, and a deliberate deferral rather than an oversight. The
 health script says so in its own output.
+
+---
+
+### The flip ✅ Done (2026-08-01)
+
+`sam3` became the code default once the pipeline could report on itself. Held
+until then on purpose: with no production telemetry, "no complaints" would not
+have meant "no problem" — every failure this pipeline has produced was silent.
+
+Verified with **no `VISION_PIPELINE` set at all**: the scan returned 7 items
+with `detectionSource: sam3`, and `scan_telemetry` recorded `pipeline='sam3'`.
+The full resolution matrix was exercised — unset/empty/`sam3`/`SAM3`/` sam3 `
+→ sam3; `legacy`/`LEGACY` → legacy; `legcy`/`nonsense` → legacy plus a
+one-time warning.
+
+**This is the code default only.** A deployment that explicitly sets
+`VISION_PIPELINE=legacy` is unaffected until that variable is removed — check
+the hosting config, not just this repo.
+
+**Watch the rollout:**
+
+```sh
+./node_modules/.bin/tsx --env-file=.env scripts/show-scan-health.ts --days 7
+```
+
+`label err` and `empty scans` are the columns that move on a regression;
+`no regions` vs `all rejected` says which half of the pipeline to look at.
+Roll back by setting `VISION_PIPELINE=legacy` — no deploy required.
 
 ---
 
