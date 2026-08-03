@@ -247,16 +247,16 @@ export function useRefineImage() {
 /**
  * Regenerate one item as an idealised catalog shot.
  *
- * Quota'd server-side (402 PRETTIFY_QUOTA_EXCEEDED) because it is the only
+ * Quota'd server-side (402 POLISH_QUOTA_EXCEEDED) because it is the only
  * genuinely expensive call in the image pipeline. The result lands in its own
  * column, so `usePlainCutout` reverts it without touching the real photo.
  */
-export function usePrettifyItem() {
+export function usePolishItem() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (itemId: number) =>
       api
-        .post<{ prettifiedUrl: string; item: Item }>(`/api/items/${itemId}/prettify`, {})
+        .post<{ polishedUrl: string; item: Item }>(`/api/items/${itemId}/polish`, {})
         .then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
@@ -264,12 +264,12 @@ export function usePrettifyItem() {
   });
 }
 
-/** Drop the prettified image and fall back to the faithful cutout. */
+/** Drop the polished image and fall back to the faithful cutout. */
 export function usePlainCutout() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (itemId: number) =>
-      api.delete<{ item: Item }>(`/api/items/${itemId}/prettify`).then((r) => r.data),
+      api.delete<{ item: Item }>(`/api/items/${itemId}/polish`).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
     },

@@ -21,13 +21,13 @@ import { compressImageToDataUrl } from '../../lib/compressImage';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useItems, useUpdateItem, useDeleteItem, useMarkItemWorn, useRefineImage,
-  usePrettifyItem, usePlainCutout,
+  usePolishItem, usePlainCutout,
 } from '../../hooks/useItems';
 import { OUTFITS_QUERY_KEY } from '../../hooks/useOutfits';
 import type { Outfit } from '../../types/outfit';
 import { api } from '../../lib/api';
 import { resolveImageUri } from '../../lib/resolveImageUri';
-import { hasCutout, hasPrettified } from '../../lib/itemImage';
+import { hasCutout, hasPolished } from '../../lib/itemImage';
 import { normalizeTag, dedupeTags } from '../../lib/tags';
 import { colors, spacing, typography, radii } from '../../theme';
 import { CATEGORY_LABELS, SEASON_LABELS } from '../../types/item';
@@ -94,9 +94,9 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   // Handlers run before the `viewItem` narrowing below, so read the cutout flags
   // off the possibly-null item here.
   const viewHasCutout = hasCutout(item);
-  const viewIsPrettified = hasPrettified(item);
+  const viewIsPolished = hasPolished(item);
 
-  const prettifyItem = usePrettifyItem();
+  const polishItem = usePolishItem();
   const plainCutout = usePlainCutout();
 
   // ── Tag scanner ──────────────────────────────────────────────────────────────
@@ -299,16 +299,16 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
    * money per tap, takes several seconds, and visibly changes the garment, so
    * the user waits and sees the result.
    */
-  const handlePrettify = () => {
+  const handlePolish = () => {
     if (!item) return;
-    prettifyItem.mutate(item.id, {
+    polishItem.mutate(item.id, {
       onSuccess: () => setShowOriginalPhoto(false),
       onError: (err: any) => {
-        if (err?.response?.data?.code === 'PRETTIFY_QUOTA_EXCEEDED') {
-          Alert.alert('Out of prettify credits', err.response.data.message);
+        if (err?.response?.data?.code === 'POLISH_QUOTA_EXCEEDED') {
+          Alert.alert('Out of polish credits', err.response.data.message);
           return;
         }
-        Alert.alert('Prettify failed', 'Could not generate a catalog image. Your photo is unchanged.');
+        Alert.alert('Polish failed', 'Could not generate a catalog image. Your photo is unchanged.');
       },
     });
   };
@@ -358,15 +358,15 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     const onCutoutAction = viewHasCutout ? handleUseOriginal : handleCreateCutout;
     // Contextual in the same way as the cutout action: offer to generate the
     // catalog shot when there isn't one, and to drop it when there is.
-    const prettifyAction = viewIsPrettified ? 'Use Plain Cutout' : 'Prettify Photo';
-    const onPrettifyAction = viewIsPrettified ? handleUsePlainCutout : handlePrettify;
+    const polishAction = viewIsPolished ? 'Use Plain Cutout' : 'Polish Photo';
+    const onPolishAction = viewIsPolished ? handleUsePlainCutout : handlePolish;
 
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
           options: [
             'Cancel', 'Take Photo', 'Choose from Library',
-            'Generate AI Image', cutoutAction, prettifyAction,
+            'Generate AI Image', cutoutAction, polishAction,
           ],
           cancelButtonIndex: 0,
         },
@@ -375,7 +375,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           if (idx === 2) pickAndChangePhoto('library');
           if (idx === 3) handleRefineImage();
           if (idx === 4) onCutoutAction();
-          if (idx === 5) onPrettifyAction();
+          if (idx === 5) onPolishAction();
         }
       );
     } else {
@@ -385,7 +385,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         { text: 'Photo Library', onPress: () => pickAndChangePhoto('library') },
         { text: 'Generate AI Image', onPress: handleRefineImage },
         { text: cutoutAction, onPress: onCutoutAction },
-        { text: prettifyAction, onPress: onPrettifyAction },
+        { text: polishAction, onPress: onPolishAction },
       ]);
     }
   };
@@ -425,12 +425,12 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   // user checks what the segmentation actually did.
   const cutoutAvailable = viewHasCutout;
   const showingCutout = cutoutAvailable && !showOriginalPhoto;
-  // Prettified first when it exists, then the faithful cutout. The original
+  // Polished first when it exists, then the faithful cutout. The original
   // photo stays reachable through the same toggle either way — with a
   // generative image on screen, being able to check it against the real
   // garment matters more, not less.
   const imageUri = showingCutout
-    ? resolveImageUri(viewItem.prettifiedUrl ?? viewItem.cutoutUrl)
+    ? resolveImageUri(viewItem.polishedUrl ?? viewItem.cutoutUrl)
     : resolveImageUri(viewItem.imageUrl);
   const breadcrumb = [
     viewItem.category ? CATEGORY_LABELS[viewItem.category] : null,
@@ -442,7 +442,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     (viewItem.formalityStyles?.length > 0) || (viewItem.notableDetails?.length > 0)
   );
   const isBusy = updateItem.isPending || markWorn.isPending || deleteItem.isPending || refineImage.isPending
-    || cuttingOut || prettifyItem.isPending || plainCutout.isPending;
+    || cuttingOut || polishItem.isPending || plainCutout.isPending;
 
   return (
     <View style={styles.flex}>

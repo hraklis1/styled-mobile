@@ -34,7 +34,7 @@ function item(id: number, patch: Partial<Item> = {}): Item {
     userId: 1,
     imageUrl: null,
     cutoutUrl: null,
-    prettifiedUrl: null,
+    polishedUrl: null,
     color: null,
     colorPalette: [],
     colorNormalized: null,

@@ -27,9 +27,12 @@ Everything else is local pixel work in `server/vision/mask.ts`.
 Measured on a real worn-outfit photo: **3 items, 3.6 s, $0.006**, against 20–60 s
 before. Full attribute extraction (`POST /api/items/scan`) is unchanged.
 
-**Prettify** regenerates one garment as a catalog flat-lay
-(`POST /api/items/:id/prettify`), quota'd, writing to its own `prettified_url`
-column.
+**Polish** regenerates one garment as a catalog flat-lay
+(`POST /api/items/:id/polish`), quota'd, writing to its own `polished_url`
+column. It shipped under a different name, dropped on 2026-08-02 because that
+name is another app's trademark; `migrations/0029_rename_to_polish.sql` carries
+the columns and the cost-ledger rows over. Migration 0027, which created them
+under the old name, is left as-is — it is the record of what was applied.
 
 ### Status by area
 
@@ -107,10 +110,10 @@ Settled with evidence. Do not re-open casually.
 - **BiRefNet is off on purpose.** Measured worse than SAM 3's instance masks —
   halo on crops, alpha bleed through garment interiors. `MATTE_REFINE=birefnet`
   re-enables it as an intersection (can only remove pixels).
-- **Prettify uses `fal-ai/nano-banana/edit`, sourced from the ORIGINAL photo.**
+- **Polish uses `fal-ai/nano-banana/edit`, sourced from the ORIGINAL photo.**
   Qwen-Image-Edit (Apache 2.0) turned a plain heather-grey crewneck into a teal
   colour-blocked sweatshirt with invented lettering. It stays selectable via
-  `PRETTIFY_MODEL` for anyone who needs open weights.
+  `POLISH_MODEL` for anyone who needs open weights.
 - fal 422s on any source under **256×256**; real cutouts often are. Sources are
   flattened onto off-white and fitted to 1024 first.
 
@@ -139,8 +142,8 @@ Settled with evidence. Do not re-open casually.
   in the bench guards this and is verified to fire.
 
 **Data**
-- `prettified_url` is a **third** column. Never overwrite `cutout_url` or
-  `image_url` — Prettify is generative and the faithful cutout must survive it.
+- `polished_url` is a **third** column. Never overwrite `cutout_url` or
+  `image_url` — Polish is generative and the faithful cutout must survive it.
 - Schema changes go in `../Styled/migrations/` and are applied by direct SQL.
   **Never `npm run db:push`** in `../Styled` — it drops the session table.
 
@@ -606,11 +609,11 @@ would dominate the report. Fill them in from the provider pricing pages and
 they light up with no other change.
 
 First run, 2026-06-01 → 2026-08-01: **$1.85 total** — $1.74 per-call
-(`vision/scan/segment` $1.31, `vision/prettify` $0.23, `vision/cutout` $0.19),
+(`vision/scan/segment` $1.31, `vision/polish` $0.23, `vision/cutout` $0.19),
 $0.11 token-billed, with 316 calls flagged unpriced.
 
 **Done when:** one command reports spend per endpoint over a date range,
-including scan and prettify. ✅
+including scan and polish. ✅
 
 ---
 

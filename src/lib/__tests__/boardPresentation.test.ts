@@ -24,7 +24,7 @@ const board: Board = {
 };
 
 const makeItem = (id: number, name: string, imageUrl: string | null, category: Item['category'], colors: string[]): Item => ({
-  id, name, imageUrl, cutoutUrl: null, prettifiedUrl: null, category, colorPalette: colors, colorNormalized: colors[0] ?? null,
+  id, name, imageUrl, cutoutUrl: null, polishedUrl: null, category, colorPalette: colors, colorNormalized: colors[0] ?? null,
   userId: 1, color: null, colorTemperature: null, subcategory: null, brand: null, style: null,
   seasons: [], occasions: [], material: null, fit: null, pattern: null, neckline: null, sleeveLength: null,
   tags: [], formalityStyles: [], notableDetails: [], notes: null, care: null, condition: null, warmthRating: null,
