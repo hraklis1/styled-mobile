@@ -44,8 +44,8 @@ under the old name, is left as-is — it is the record of what was applied.
 | Both repos | Phases 0–5 committed and **pushed to `origin/main`**. Working trees clean |
 | Pipeline | **`sam3`, and now the only one.** Phase 5 removed the legacy branch and the `VISION_PIPELINE` lever on 2026-08-02; the rollback is `git revert` |
 | Eval set | **25 labelled cases / 85 items**, recall 0.988 / IoU 0.759 / precision >=0.866 (2026-08-02). Phase 1 target met |
-| `python_service` | **Down to a single endpoint, `/crop-items`** (plus `/health`). ~4,300 lines deleted across two passes; it no longer needs an OpenAI key at all. The mobile app never calls it |
-| Only thing left | **`/crop-items`** — blocked on the absence of a pose model in the TypeScript stack, not on effort. Delete `python_service` the day that is solved |
+| `python_service` | **Deleted (2026-08-02).** Every endpoint it served now runs in `server/vision`. `start.sh` launches one process; there is no venv, no ONNX, no MediaPipe, no 60s health-check wait |
+| Localisation | **One SAM 3 path for both pipelines** — the closet scan and the outfit log call the same `scanPhoto`. No LLM-estimated bounding boxes anywhere |
 
 ---
 
@@ -888,7 +888,11 @@ ledger — the Python path had neither. Verified live: `single-tie-01` →
 "Navy and Pink Plaid Necktie" (silk, plaid) in 2.6 s, `single-handbag-01` →
 "Black Leather Top-Handle Handbag" with the brand read off the print.
 
-**`/crop-items` ⛔ NOT ported — blocked on a missing model, not on effort.**
+**`/crop-items` ✅ resolved by deleting it (2026-08-02) — see Phase 6 below.**
+The analysis that follows is why a straight port was the wrong move, and is
+kept because it is what pointed at the right one.
+
+**`/crop-items` — blocked on a missing model, not on effort.**
 
 Its primary path is `pose_square_crop_for_category`: MediaPipe Pose landmarks,
 with padding offsets scaled to the subject's torso length and per-category
@@ -963,6 +967,70 @@ whose other position is strictly worse is not optionality.
 
 **Done when:** the app runs with no Python service at all, both repos typecheck,
 mobile tests pass, and a simulator scan of each of the three scenes still works.
+✅ **Met 2026-08-02 by Phase 6**, which removed the reason `/crop-items` existed
+rather than porting it.
+
+---
+
+### Phase 6 — Unify localisation on SAM 3 ✅ Done (2026-08-02)
+
+`python_service` is **deleted**. The thing that unblocked it was noticing that
+`/crop-items` was solving a problem the outfit log had given itself.
+
+**The old outfit-log scan made up to four LLM calls**, and two of them existed
+only to produce bounding boxes:
+
+1. a category-detect call, to shrink the wardrobe catalogue,
+2. a matching call that also had to identify and locate every garment,
+3. `runBboxLocalize`, a second pass to fix the boxes call 2 got wrong,
+4. a `gpt-4o` retry of the whole thing when call 2 came back empty,
+
+then one `/crop-items` round trip **per garment**, each running MediaPipe Pose,
+to produce a crop the boxes were too unreliable to cut directly.
+
+**Now: two passes, neither guessing coordinates.**
+
+1. `scanPhoto` — the same SAM 3 call the closet scan uses. Returns real boxes
+   *and* a per-garment crop cut from the mask, one flat charge per photo
+   regardless of garment count.
+2. `server/vision/matchWardrobe.ts` — one call whose only job is matching the
+   found garments against the wardrobe. It is given the boxes; it is explicitly
+   told not to produce any.
+
+Everything else fell out of that. The category-detect call is gone because SAM 3
+already labels each garment, so the catalogue filters for free. `runBboxLocalize`
+is gone because nothing estimates boxes. The `gpt-4o` fallback is gone because
+finding garments is no longer the LLM's job. The per-item crop round trip is
+gone because the pixels were already cut during localisation — the crop rides
+back on the scan response as `crop`.
+
+**Measured end to end** on `worn-suit-twopiece-01` against a four-item test
+catalogue with deliberate decoys: 5 garments localised in 10.7 s for $0.012,
+matched in 7.9 s. The black tee matched "Black Crew Tee" at 0.85 and the jacket
+matched "Brown Suit Jacket" at 0.88, while the brown loafers and brown trousers
+were correctly returned as **new items** rather than being forced onto the
+red-shoe and green-shorts decoys. Real crops for every garment, 199×131 up to
+382×512.
+
+Latency is not the win here and should not be claimed as one — the old path was
+never measured end to end, and this one is ~18 s. The wins are correctness
+(boxes come from segmentation, not estimation), one localisation path shared
+with the closet scan, and a deployment with no Python in it.
+
+**Also deleted:** `/api/items/crop-single`, which was registered but called by
+nothing in either client; `/api/crop-items`; the `tryPythonCrop` client; and
+`server/vision/cropGeometry.ts` with its fixtures — that was groundwork for
+porting `/crop-items`, and unifying on SAM 3 removed the endpoint it was for.
+Deleting work from the previous session was the right call: keeping it would
+have meant keeping a second, unused crop path.
+
+`start.sh` no longer bootstraps a venv or blocks up to 60 s on a health check.
+
+**One thing to watch:** the outfit log now pays SAM 3's per-photo charge
+($0.012) where it previously paid for cheaper text-heavy LLM calls. It is a flat
+charge per photo rather than per garment, so it does not scale with outfit
+complexity — but it is a real change in cost shape, and `show-scan-health.ts`
+now sees outfit-log scans too, since both pipelines write to `scan_telemetry`.
 
 ---
 
