@@ -1,7 +1,8 @@
 # Vision Pipeline — Phase Handoff
 
-Cross-repo work: `Styled-mobile` (this repo, branch `experiment/photo-algorithm`)
-and the sibling backend `../Styled`.
+Cross-repo work: `Styled-mobile` (this repo) and the sibling backend `../Styled`.
+Both on `main` — the `experiment/photo-algorithm` branch was merged and deleted
+on 2026-08-02, so everything here is normal `main` work now.
 
 This file exists so each phase can be picked up in a **fresh session** without
 re-deriving context or quietly re-deciding something that was already settled.
@@ -39,13 +40,11 @@ under the old name, is left as-is — it is the record of what was applied.
 | Area | State |
 |---|---|
 | `../Styled/server/vision/` | Built, typechecks, benched, simulator-verified |
-| Routes wiring, migration 0027 | Built; **migration already applied to the DB** |
-| Mobile client | Committed on `experiment/photo-algorithm` (`78d4d9c`) |
-| `../Styled` | Phases 0–4 + observability, all committed and **pushed** to `origin/experiment/photo-algorithm` (2026-08-01). Working tree clean apart from unrelated `python_service/` edits |
+| Migrations | 0027 (cost + Polish columns), 0028 (`scan_telemetry`), 0029 (Prettify→Polish rename). **All three applied to the DB**, rename verified against `information_schema` on 2026-08-02 |
+| Both repos | Phases 0–5 committed and **pushed to `origin/main`**. Working trees clean |
 | Pipeline | **`sam3`, and now the only one.** Phase 5 removed the legacy branch and the `VISION_PIPELINE` lever on 2026-08-02; the rollback is `git revert` |
 | Eval set | **25 labelled cases / 85 items**, recall 0.988 / IoU 0.759 / precision >=0.866 (2026-08-02). Phase 1 target met |
 | `python_service` | **Down to a single endpoint, `/crop-items`** (plus `/health`). ~4,300 lines deleted across two passes; it no longer needs an OpenAI key at all. The mobile app never calls it |
-| Branches | **Merged to `main` and pushed in both repos (2026-08-02);** `experiment/photo-algorithm` deleted local and remote. All further work is normal `main` work |
 | Only thing left | **`/crop-items`** — blocked on the absence of a pose model in the TypeScript stack, not on effort. Delete `python_service` the day that is solved |
 
 ---
@@ -55,18 +54,24 @@ under the old name, is left as-is — it is the record of what was applied.
 Settled with evidence. Do not re-open casually.
 
 **Rollout**
-- `VISION_PIPELINE=legacy|sam3`, **default `sam3` since 2026-08-01** (it was
-  `legacy` while the pipeline was unobservable in production). Setting `legacy`
-  is now the rollback lever — no deploy needed beyond the variable. Keep it
-  working.
-- Anything unrecognised still resolves to `legacy` **and warns once**. That
-  warning is new and load-bearing: under the old default a typo'd rollback
-  (`legcy`) was harmless because legacy was the default anyway; under the new
-  one the same silence would send an attempted rollback straight back to the
-  pipeline someone was rolling *off*.
+- **There is no `VISION_PIPELINE` lever, and there is no env-var rollback.**
+  It defaulted to `sam3` on 2026-08-01 and was deleted in Phase 5 on
+  2026-08-02 together with the Python stack it selected. `sam3` is not the
+  default pipeline; it is the only one.
+  <br>*This entry used to say "setting `legacy` is the rollback lever — keep it
+  working", and that survived here for a while after it stopped being true.
+  Worth noticing how it read: a stale line in the section headed "do not
+  re-open casually" is more dangerous than a stale line anywhere else in this
+  file, because it is the part written to be obeyed without re-checking. If you
+  are reaching for a rollback mid-incident, the answer is `git revert`, not an
+  environment variable.*
+- A deployment that still sets `VISION_PIPELINE` gets a **one-time startup
+  warning** saying the variable no longer does anything. That is deliberate: a
+  flag that is silently ignored lets someone believe they rolled back.
 - The `/api/scan-vision-pose` response is **byte-compatible** with the Python
-  service's shape. That contract is why the mobile client needed no changes.
-  Breaking it means touching `ScanItemSheet`, `BatchScanSheet` and the backfill.
+  service's shape. That contract is why the mobile client needed no changes,
+  and it still holds — keep it. Breaking it means touching `ScanItemSheet`,
+  `BatchScanSheet` and the backfill.
 
 **SAM 3 API** (verified by experiment; all three cost real debugging time)
 - `masks[]` is **positionally aligned** with `metadata[]`/`boxes[]`/`scores[]`.
@@ -744,9 +749,10 @@ The full resolution matrix was exercised — unset/empty/`sam3`/`SAM3`/` sam3 `
 → sam3; `legacy`/`LEGACY` → legacy; `legcy`/`nonsense` → legacy plus a
 one-time warning.
 
-**This is the code default only.** A deployment that explicitly sets
-`VISION_PIPELINE=legacy` is unaffected until that variable is removed — check
-the hosting config, not just this repo.
+**This was the code default only.** At the time, a deployment that explicitly
+set `VISION_PIPELINE=legacy` was unaffected until the variable was removed.
+*Superseded a day later: Phase 5 deleted the variable and the legacy path, so
+setting it now only produces a startup warning.*
 
 **Watch the rollout:**
 
@@ -756,7 +762,10 @@ the hosting config, not just this repo.
 
 `label err` and `empty scans` are the columns that move on a regression;
 `no regions` vs `all rejected` says which half of the pipeline to look at.
-Roll back by setting `VISION_PIPELINE=legacy` — no deploy required.
+
+~~Roll back by setting `VISION_PIPELINE=legacy` — no deploy required.~~
+**No longer true.** Phase 5 removed the lever and the pipeline behind it; the
+rollback is `git revert`. The monitoring command above is still correct.
 
 ---
 
@@ -943,8 +952,14 @@ parity or better, `../Styled/python_service` loses the large majority of
 
 `/crop-items` may survive. Check callers before removing any endpoint.
 
-Retire the `VISION_PIPELINE` branch in the same change **only if** the Python
-service is gone entirely; otherwise keep the lever.
+~~Retire the `VISION_PIPELINE` branch in the same change **only if** the Python
+service is gone entirely; otherwise keep the lever.~~ **Overtaken by events, and
+worth recording why.** The lever was retired on 2026-08-02 while
+`python_service` was still running, which this rule said not to do. The rule
+assumed the lever pointed at something worth keeping; by then it pointed at a
+pipeline measured at half the recall, and the surviving Python endpoints
+(`/crop-items`) had nothing to do with pipeline selection. Keeping a switch
+whose other position is strictly worse is not optionality.
 
 **Done when:** the app runs with no Python service at all, both repos typecheck,
 mobile tests pass, and a simulator scan of each of the three scenes still works.
@@ -964,6 +979,7 @@ npm run typecheck && npm run lint && npm test
 
 Backend has no `lint` or `test` script; `npm run check` is tsc.
 
-Simulator: start the backend with `VISION_PIPELINE=sam3` on port 3001 (see
-`docs/local-development.md`), then `npm run ios:sim`. Simulator taps are in
-**points** — divide screenshot pixels by ~2.29.
+Simulator: start the backend on port 3001 (see `docs/local-development.md`),
+then `npm run ios:sim`. No `VISION_PIPELINE` — it was removed in Phase 5, and
+setting it now just prints a warning. Simulator taps are in **points** — divide
+screenshot pixels by ~2.29.
