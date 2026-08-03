@@ -41,9 +41,9 @@ column.
 | `../Styled` | Phases 0–4 + observability, all committed and **pushed** to `origin/experiment/photo-algorithm` (2026-08-01). Working tree clean apart from unrelated `python_service/` edits |
 | Pipeline | **`sam3`, and now the only one.** Phase 5 removed the legacy branch and the `VISION_PIPELINE` lever on 2026-08-02; the rollback is `git revert` |
 | Eval set | **25 labelled cases / 85 items**, recall 0.988 / IoU 0.759 / precision >=0.866 (2026-08-02). Phase 1 target met |
-| `python_service` | **A legacy microservice, retained only for `/crop-items` and `/rescan-crop`** (both web-client callers). Nothing in the scan or cutout path reaches it; the mobile app never calls it. Deletion pass 1 removed 993 lines of strictly dead code — see Phase 5 |
+| `python_service` | **Down to a single endpoint, `/crop-items`** (plus `/health`). ~4,300 lines deleted across two passes; it no longer needs an OpenAI key at all. The mobile app never calls it |
 | Branches | **Merged to `main` and pushed in both repos (2026-08-02);** `experiment/photo-algorithm` deleted local and remote. All further work is normal `main` work |
-| Only phase left | **Phase 5**, in progress — routing is Python-free and pass 1 of the deletion is done; pass 2 and the port of the two survivors remain |
+| Only thing left | **`/crop-items`** — blocked on the absence of a pose model in the TypeScript stack, not on effort. Delete `python_service` the day that is solved |
 
 ---
 
@@ -842,21 +842,90 @@ Verified: both files compile, `main.py` imports and exposes exactly
 `main.py` is a *different* function from the deleted `np_to_b64_jpeg` and is
 still used.)
 
-### Deletion pass 2 — not started
+### Deletion pass 2 ✅ Done (2026-08-02)
 
-The Python `/scan-vision-pose` and `/cutout` endpoints are now dead too: the
-backend stopped calling them when the routing half landed. They were left in
-place deliberately, as they are the large cut rather than the strictly-dead one,
-and they are what still holds `_GPT_IDENTIFY_PROMPT`, `_FLAT_LAY_PROMPT`, the
-`_MICRO_*` prompts, `gpt_flat_lay_items`, `gpt_identify_items`,
-`_cv_flat_lay_boxes` and the watershed splitter, `_dedup_gpt_items`,
-`_nms_bbox_pct`, `_landmark_in_bbox_pct`, `_is_skin_dominant`, the rembg
-sessions, `_INFERENCE_GATE` / `run_gated`, `cutout_quality.py` and
-`garment_gate.py`.
+Removed the Python `/scan-vision-pose` and `/cutout` endpoints and everything
+that only they reached: the GPT identify / flat-lay / `_MICRO_*` prompts,
+`_cv_flat_lay_boxes` and the watershed splitter, the dedup and NMS helpers, the
+rembg sessions, `_INFERENCE_GATE` / `run_gated`, `MaskCache`,
+`build_cutout_webp`, and — as whole files — `cutout_quality.py`,
+`garment_gate.py` and `scan_pipeline_utils.py` with their tools and tests.
 
-Removing them also frees `_pose_garment_regions_extended` and the head/waist/
-wrist region crops. **Check each against `/crop-items` and `/rescan-crop` before
-cutting** — those two are the only things in this service that still matter.
+Done by reference count rather than by eye, iterating until the set was stable.
+**Two lessons from doing it that way**, both worth keeping:
+
+- A regex-based pass left `build_cutout_webp` alive on a single *docstring*
+  mention in `garment_gate.py`. Counting identifiers from the parsed AST instead
+  of the text is what actually finds dead code.
+- The first pass nearly removed `_startup`, a FastAPI `@app.on_event` hook that
+  is referenced by the framework and never by name. Any pruner has to excuse
+  `app.*`-decorated definitions or it will delete the service's lifecycle.
+
+`/health` was rewritten in the same pass. It reported ONNX session residency,
+free inference slots and garment-gate mode — all describing machinery that had
+just been deleted, and all of it a reliable way to send someone debugging in the
+wrong direction.
+
+### Porting the survivors
+
+**`/rescan-crop` ✅ ported (2026-08-02)** to `server/vision/identifyCrop.ts`.
+Same two vision calls run concurrently (classify + 3-tier extract), same
+response keys, so `client/src/hooks/use-scan-item.ts` is untouched. Going
+through `server/llm` means it now inherits the 503 retry and lands in the cost
+ledger — the Python path had neither. Verified live: `single-tie-01` →
+"Navy and Pink Plaid Necktie" (silk, plaid) in 2.6 s, `single-handbag-01` →
+"Black Leather Top-Handle Handbag" with the brand read off the print.
+
+**`/crop-items` ⛔ NOT ported — blocked on a missing model, not on effort.**
+
+Its primary path is `pose_square_crop_for_category`: MediaPipe Pose landmarks,
+with padding offsets scaled to the subject's torso length and per-category
+region rules. There is no MediaPipe in the TypeScript stack.
+
+The obvious shortcut does not work, and the reason is written in the caller.
+`client/src/components/LogOutfitOverlay.tsx` says plainly that when the crop
+fails it shows the full image with a focus pin, because **"LLM bbox coords are
+spatially unreliable for hard crops"**. So falling back to a bbox-only crop is
+not a graceful degradation — it ships exactly the output that comment rejects.
+
+Real options, in preference order:
+
+1. **SAM 3.** The hosted pipeline already segments garments better than pose
+   landmarks localise them. Costs ~$0.002 per crop where the current path is
+   free local CPU, and `/crop-items` is called per item in a batch — so this is
+   a real per-use cost on a currently-free operation, and it needs its own eval
+   before replacing a working feature.
+2. **Hosted pose model** — closest to parity, same per-call cost objection.
+3. **Leave it in Python**, which is where it is.
+
+**Parity testing was the wrong frame here and the fixtures say so.** Any of
+these changes the geometry, so byte-parity against the Python output is
+unachievable by construction; the fixtures assert *behaviour* instead.
+
+### Crop fixtures (2026-08-02)
+
+`eval/crop/fixtures.ts` + `scripts/check-crop-fixtures.ts`, 20 assertions, no
+network or keys. Payload shapes are taken from the real callers, including
+`bbox: item.bbox ?? null` — a null bbox is a normal payload, not an error.
+
+The test image is a gradient encoding its own coordinates (red = x, green = y),
+so decoding a pixel from the output says exactly which part of the source it
+came from. That matters because the dangerous crop bug is not an exception, it
+is landing on the wrong pixels while returning a perfectly valid JPEG.
+
+It earned its keep immediately: the first run failed 6 of 20 and found a real
+defect in the new code — **sharp applies `resize` before `composite` regardless
+of chain order**, so canvas-space offsets were being applied to an already
+shrunk canvas. That silently mis-centred every padded crop and threw outright on
+a full-frame bbox. Composite and resize have to be two passes.
+
+Covered: typical/full-frame/scaled boxes; clips at the left and bottom edges;
+boxes overflowing past 100%; negative origins; and the malformed set that must
+fall through to the centre square — null, zero-area, negative size, NaN,
+entirely off-screen, missing fields, and string-typed numbers.
+
+`server/vision/cropGeometry.ts` ports tiers 2 and 3 of the chain (bbox square
+crop, centre square) and is what the fixtures exercise. **Tier 1 is the gap.**
 
 Once the hosted pipeline has been the default for a while and the bench shows
 parity or better, `../Styled/python_service` loses the large majority of
