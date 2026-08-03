@@ -6,10 +6,8 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  ActionSheetIOS,
   Modal,
   TextInput,
-  Platform,
   useWindowDimensions,
   ActivityIndicator,
 } from 'react-native';
@@ -44,6 +42,10 @@ import { Chip } from '../../components/primitives/Chip';
 import { SLEEVE_LENGTH_LABELS } from '../../types/item';
 import { ErrorState } from '../../components/primitives/ErrorState';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
+import {
+  TabQuickMenuSheet,
+  type TabQuickMenuOption,
+} from '../../components/navigation/TabQuickMenuSheet';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -78,6 +80,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   // ── Edit modal visibility ────────────────────────────────────────────────────
   const [editOpen, setEditOpen] = useState(false);
   const [saveSheetOpen, setSaveSheetOpen] = useState(false);
+  const [photoMenuOpen, setPhotoMenuOpen] = useState(false);
 
   // ── Inline tag state ─────────────────────────────────────────────────────────
   const [inlineTagActive, setInlineTagActive] = useState(false);
@@ -352,42 +355,8 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   };
 
   const handleChangePhoto = () => {
-    // The cutout action is contextual: offer to remove it when one exists, and
-    // to create one when the item has a photo but no cutout.
-    const cutoutAction = viewHasCutout ? 'Use Original Photo' : 'Remove Background';
-    const onCutoutAction = viewHasCutout ? handleUseOriginal : handleCreateCutout;
-    // Contextual in the same way as the cutout action: offer to generate the
-    // catalog shot when there isn't one, and to drop it when there is.
-    const polishAction = viewIsPolished ? 'Use Plain Cutout' : 'Polish Photo';
-    const onPolishAction = viewIsPolished ? handleUsePlainCutout : handlePolish;
-
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: [
-            'Cancel', 'Take Photo', 'Choose from Library',
-            'Generate AI Image', cutoutAction, polishAction,
-          ],
-          cancelButtonIndex: 0,
-        },
-        (idx) => {
-          if (idx === 1) pickAndChangePhoto('camera');
-          if (idx === 2) pickAndChangePhoto('library');
-          if (idx === 3) handleRefineImage();
-          if (idx === 4) onCutoutAction();
-          if (idx === 5) onPolishAction();
-        }
-      );
-    } else {
-      Alert.alert('Change photo', 'Choose a source', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Camera', onPress: () => pickAndChangePhoto('camera') },
-        { text: 'Photo Library', onPress: () => pickAndChangePhoto('library') },
-        { text: 'Generate AI Image', onPress: handleRefineImage },
-        { text: cutoutAction, onPress: onCutoutAction },
-        { text: polishAction, onPress: onPolishAction },
-      ]);
-    }
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setPhotoMenuOpen(true);
   };
 
   // ── Create mode early return ──────────────────────────────────────────────────
@@ -443,6 +412,46 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   );
   const isBusy = updateItem.isPending || markWorn.isPending || deleteItem.isPending || refineImage.isPending
     || cuttingOut || polishItem.isPending || plainCutout.isPending;
+  // Image treatments are contextual: once a treatment exists, offer the
+  // faithful way back instead of repeating the same action.
+  const photoMenuOptions: TabQuickMenuOption[] = [
+    {
+      key: 'camera',
+      label: 'Take a New Photo',
+      icon: 'camera-outline',
+      onPress: () => { void pickAndChangePhoto('camera'); },
+    },
+    {
+      key: 'library',
+      label: 'Choose from Library',
+      icon: 'images-outline',
+      iconColor: colors.foreground,
+      iconBg: colors.secondary,
+      onPress: () => { void pickAndChangePhoto('library'); },
+    },
+    {
+      key: 'generate',
+      label: 'Generate AI Image',
+      icon: 'color-wand-outline',
+      iconBg: colors.accent,
+      onPress: handleRefineImage,
+    },
+    {
+      key: 'cutout',
+      label: viewHasCutout ? 'Use Original Photo' : 'Remove Background',
+      icon: viewHasCutout ? 'image-outline' : 'cut-outline',
+      iconColor: colors.foreground,
+      iconBg: colors.secondary,
+      onPress: viewHasCutout ? handleUseOriginal : () => { void handleCreateCutout(); },
+    },
+    {
+      key: 'polish',
+      label: viewIsPolished ? 'Use Plain Cutout' : 'Polish Photo',
+      icon: viewIsPolished ? 'shirt-outline' : 'sparkles-outline',
+      iconBg: colors.accent,
+      onPress: viewIsPolished ? handleUsePlainCutout : handlePolish,
+    },
+  ];
 
   return (
     <View style={styles.flex}>
@@ -899,6 +908,14 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           onClose={() => setSaveSheetOpen(false)}
         />
       )}
+
+      <TabQuickMenuSheet
+        visible={photoMenuOpen}
+        title="Photo options"
+        subtitle={viewItem.name || 'Wardrobe item'}
+        options={photoMenuOptions}
+        onClose={() => setPhotoMenuOpen(false)}
+      />
     </View>
   );
 }
