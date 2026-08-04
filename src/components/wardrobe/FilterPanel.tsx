@@ -265,6 +265,8 @@ export function FilterPanel({
     <BottomSheetModal
       ref={bottomSheetRef}
       snapPoints={snapPoints}
+      enableDynamicSizing={false}
+      topInset={insets.top}
       onDismiss={handleDismiss}
       backdropComponent={renderBackdrop}
       footerComponent={renderFooter}
