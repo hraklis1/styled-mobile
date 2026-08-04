@@ -7,6 +7,9 @@ export type ItemCategory =
   | 'accessory'
   | 'valuables';
 
+export const COVER_IMAGE_VARIANTS = ['original', 'cutout', 'polished'] as const;
+export type CoverImageVariant = typeof COVER_IMAGE_VARIANTS[number];
+
 export const CATEGORY_LABELS: Record<ItemCategory, string> = {
   top:        'Tops',
   bottom:     'Bottoms',
@@ -155,18 +158,22 @@ export type Item = {
   userId: number;
   imageUrl: string | null;
   /**
-   * Background-removed thumbnail (transparent WebP). Display surfaces prefer
-   * this over `imageUrl` — see `itemImageUri` in lib/itemImage.ts. Null when the
-   * item predates cutouts, segmentation was unavailable, or the result failed
-   * the server's quality gate; `imageUrl` is always the fallback.
+   * Background-removed thumbnail (transparent WebP). Retained independently
+   * for processing and as an optional user-selected cover. Null when the item
+   * predates cutouts, segmentation was unavailable, or generation failed.
    */
   cutoutUrl: string | null;
   /**
-   * Generative "Polish" result — an idealised catalog shot. Preferred over
-   * `cutoutUrl` for display when present, but kept separate so the faithful
-   * cutout and the original photo both survive; clearing it reverts the item.
+   * Generative "Polish" result — an idealised catalog shot. Kept separate so
+   * the faithful cutout and original photo both survive cover changes.
    */
   polishedUrl: string | null;
+  /**
+   * The asset selected to represent this item across the app. This preference
+   * never owns or deletes any image; imageUrl, cutoutUrl, and polishedUrl stay
+   * available independently.
+   */
+  coverImageVariant: CoverImageVariant;
   color: string | null;
   colorPalette: string[];
   colorNormalized: string | null;

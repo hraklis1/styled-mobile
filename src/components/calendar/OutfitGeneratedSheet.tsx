@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { GenerateOutfitResult } from '../../hooks/useOutfits';
 import type { Item } from '../../types/item';
+import { itemCoverPresentation } from '../../lib/itemImage';
 
 export function OutfitGeneratedSheet({
   result,
@@ -113,17 +114,20 @@ export function OutfitGeneratedSheet({
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={s.itemsRow}
               >
-                {items.map((item) => (
-                  <View key={item.id} style={s.itemThumb}>
-                    {item.imageUrl ? (
-                      <Image source={{ uri: item.imageUrl }} style={s.itemImg} />
-                    ) : (
-                      <View style={s.itemFallback}>
-                        <Text style={s.itemInitials}>{item.name.slice(0, 2).toUpperCase()}</Text>
-                      </View>
-                    )}
-                  </View>
-                ))}
+                {items.map((item) => {
+                  const cover = itemCoverPresentation(item);
+                  return (
+                    <View key={item.id} style={s.itemThumb}>
+                      {cover.uri ? (
+                        <Image source={{ uri: cover.uri }} style={s.itemImg} resizeMode={cover.contentFit} />
+                      ) : (
+                        <View style={s.itemFallback}>
+                          <Text style={s.itemInitials}>{item.name.slice(0, 2).toUpperCase()}</Text>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
               </ScrollView>
             )}
 

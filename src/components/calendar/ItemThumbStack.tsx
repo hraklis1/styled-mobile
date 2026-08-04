@@ -1,6 +1,7 @@
 import { View, TouchableOpacity, Image, Text, StyleSheet } from 'react-native';
 import { colors, typography } from '../../theme';
 import type { Item } from '../../types/item';
+import { itemCoverPresentation } from '../../lib/itemImage';
 
 export function ItemThumbStack({ itemIds, allItems, onPress }: { itemIds: number[]; allItems: Item[]; onPress: () => void }) {
   const visible = itemIds
@@ -12,14 +13,17 @@ export function ItemThumbStack({ itemIds, allItems, onPress }: { itemIds: number
   return (
     <TouchableOpacity style={s.row} onPress={onPress} activeOpacity={0.7}>
       <View style={s.stack}>
-        {visible.map((item, idx) => (
-          <View key={item.id} style={[s.thumb, { marginLeft: idx === 0 ? 0 : -8, zIndex: visible.length - idx }]}>
-            {item.imageUrl
-              ? <Image source={{ uri: item.imageUrl }} style={s.thumbImg} />
-              : <View style={s.thumbFallback}><Text style={s.thumbInitials}>{item.name.slice(0, 2).toUpperCase()}</Text></View>
-            }
-          </View>
-        ))}
+        {visible.map((item, idx) => {
+          const cover = itemCoverPresentation(item);
+          return (
+            <View key={item.id} style={[s.thumb, { marginLeft: idx === 0 ? 0 : -8, zIndex: visible.length - idx }]}>
+              {cover.uri
+                ? <Image source={{ uri: cover.uri }} style={s.thumbImg} resizeMode={cover.contentFit} />
+                : <View style={s.thumbFallback}><Text style={s.thumbInitials}>{item.name.slice(0, 2).toUpperCase()}</Text></View>
+              }
+            </View>
+          );
+        })}
       </View>
       {overflow > 0 && <Text style={s.overflow}>+{overflow}</Text>}
     </TouchableOpacity>

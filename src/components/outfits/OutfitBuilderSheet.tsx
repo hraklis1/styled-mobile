@@ -21,7 +21,7 @@ import { track } from '../../lib/analytics';
 import { useItems } from '../../hooks/useItems';
 import { useCreateOutfit } from '../../hooks/useOutfits';
 import { resolveImageUri } from '../../lib/resolveImageUri';
-import { itemImageUri } from '../../lib/itemImage';
+import { itemImageContentFit, itemImageUri } from '../../lib/itemImage';
 import { colors, spacing, typography, radii } from '../../theme';
 import { OutfitCollage } from './OutfitCollage';
 import { OCCASIONS } from '../../lib/occasions';
@@ -533,7 +533,7 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
                           <Image
                             source={{ uri: imgUri }}
                             style={StyleSheet.absoluteFill}
-                            resizeMode="cover"
+                            resizeMode={itemImageContentFit(selectedItem)}
                           />
                         ) : (
                           <Ionicons
@@ -605,7 +605,7 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
                         <View key={item.id} style={styles.unmatchedRow}>
                           <View style={styles.slotThumb}>
                             {imgUri ? (
-                              <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                              <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill} resizeMode={itemImageContentFit(item)} />
                             ) : (
                               <Ionicons name="shirt-outline" size={20} color={colors.mutedForeground} />
                             )}
@@ -868,7 +868,7 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
                           <Image
                             source={{ uri: imgUri }}
                             style={StyleSheet.absoluteFill}
-                            resizeMode="cover"
+                            resizeMode={itemImageContentFit(item)}
                           />
                         ) : (
                           <View style={styles.pickerCardPlaceholder}>

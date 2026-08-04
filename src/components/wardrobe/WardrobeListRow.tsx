@@ -1,8 +1,8 @@
-import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, radii } from '../../theme';
-import { resolveImageUri } from '../../lib/resolveImageUri';
-import { itemImageUri } from '../../lib/itemImage';
+import { itemCoverPresentation } from '../../lib/itemImage';
 import type { Item } from '../../types/item';
 
 const THUMB_SIZE = 60;
@@ -38,7 +38,8 @@ export function WardrobeListRow({
   onToggleSelect,
   onFavorite,
 }: Props) {
-  const imageUri = itemImageUri(item);
+  const cover = itemCoverPresentation(item);
+  const imageUri = cover.uri;
   const handlePress = selectionMode ? onToggleSelect : onPress;
   const visibleTags = item.tags.slice(0, 2);
   const overflowCount = item.tags.length - visibleTags.length;
@@ -61,7 +62,7 @@ export function WardrobeListRow({
       {/* Thumbnail */}
       <View style={styles.thumb}>
         {imageUri ? (
-          <Image source={{ uri: imageUri }} style={styles.thumbImage} resizeMode="cover" />
+          <Image source={{ uri: imageUri }} style={[styles.thumbImage, cover.isCatalogStyle && styles.catalogThumb]} contentFit={cover.contentFit} transition={150} cachePolicy="memory-disk" />
         ) : (
           <View style={styles.thumbPlaceholder}>
             <Ionicons name="shirt-outline" size={22} color={colors.border} />
@@ -161,6 +162,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  catalogThumb: { padding: spacing.xs },
   thumbPlaceholder: {
     flex: 1,
     alignItems: 'center',

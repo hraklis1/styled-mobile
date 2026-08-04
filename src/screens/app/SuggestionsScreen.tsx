@@ -32,7 +32,7 @@ import {
 import { useItems } from '../../hooks/useItems';
 import { useEvents } from '../../hooks/useEvents';
 import { resolveImageUri } from '../../lib/resolveImageUri';
-import { itemImageUri } from '../../lib/itemImage';
+import { itemCoverPresentation } from '../../lib/itemImage';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { SuggestionsScreenProps } from '../../navigation/types';
 import type { Item } from '../../types/item';
@@ -67,12 +67,13 @@ function formatEventDate(isoDate: string): string {
 // ── Item card inside result ───────────────────────────────────────────────────
 
 function OutfitItemCard({ item }: { item: Item }) {
-  const uri = itemImageUri(item);
+  const itemCover = itemCoverPresentation(item);
+  const uri = itemCover.uri;
   return (
     <View style={styles.itemCard}>
       <View style={styles.itemImageBox}>
         {uri ? (
-          <Image source={{ uri }} style={styles.itemImage} resizeMode="contain" />
+          <Image source={{ uri }} style={styles.itemImage} resizeMode={itemCover.contentFit} />
         ) : (
           <Ionicons name="shirt-outline" size={28} color={colors.border} />
         )}

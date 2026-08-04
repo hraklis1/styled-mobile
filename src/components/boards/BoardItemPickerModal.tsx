@@ -14,6 +14,7 @@ import {
   Platform,
 } from 'react-native';
 import { useItems } from '../../hooks/useItems';
+import { itemCoverPresentation } from '../../lib/itemImage';
 import { useUpdateBoard } from '../../hooks/useBoards';
 import { getSubcategories } from '../../lib/taxonomy';
 import { CATEGORY_ORDER, CATEGORY_LABELS, type ItemCategory } from '../../types/item';
@@ -188,6 +189,7 @@ export function BoardItemPickerModal({
               keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => {
                 const isSelected = selected.has(item.id);
+                const itemCover = itemCoverPresentation(item);
                 return (
                   <TouchableOpacity
                     style={[s.itemRow, isSelected && s.itemRowSelected]}
@@ -195,8 +197,8 @@ export function BoardItemPickerModal({
                     activeOpacity={0.7}
                   >
                     <View style={s.itemThumb}>
-                      {item.imageUrl
-                        ? <Image source={{ uri: item.imageUrl }} style={s.itemThumbImg} />
+                      {itemCover.uri
+                        ? <Image source={{ uri: itemCover.uri }} style={s.itemThumbImg} resizeMode={itemCover.contentFit} />
                         : <View style={s.itemThumbFallback}><Text style={s.itemThumbInitials}>{item.name.slice(0, 2).toUpperCase()}</Text></View>
                       }
                     </View>

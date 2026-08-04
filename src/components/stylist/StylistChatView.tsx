@@ -32,7 +32,7 @@ import { api } from '../../lib/api';
 import { track } from '../../lib/analytics';
 import { compressImageToDataUrl } from '../../lib/compressImage';
 import { resolveImageUri } from '../../lib/resolveImageUri';
-import { itemImageUri } from '../../lib/itemImage';
+import { itemImageContentFit, itemImageUri } from '../../lib/itemImage';
 import { useStylingWeatherToday, type CurrentWeather } from '../../hooks/useWeather';
 import { useItems } from '../../hooks/useItems';
 import { useProfile } from '../../hooks/useProfile';
@@ -1174,7 +1174,7 @@ export function StylistChatView({
                 >
                   <View style={styles.mentionThumb}>
                     {imgUri ? (
-                      <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                      <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill} resizeMode={itemImageContentFit(item)} />
                     ) : (
                       <Ionicons name="shirt-outline" size={14} color={colors.mutedForeground} />
                     )}
@@ -1363,7 +1363,7 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
                         accessibilityLabel={`View ${item.name} details`}
                       >
                         {uri ? (
-                          <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                          <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode={itemImageContentFit(item)} />
                         ) : (
                           <Ionicons name="shirt-outline" size={18} color={colors.mutedForeground} />
                         )}
@@ -1537,6 +1537,7 @@ function OutfitCompleteLookOverview({
       items.map((item) => ({
         item,
         uri: itemImageUri(item),
+        contentFit: itemImageContentFit(item),
       })),
     [items],
   );
@@ -1547,7 +1548,7 @@ function OutfitCompleteLookOverview({
     <View style={styles.lineSheet}>
       <Text style={[styles.rationaleLabel, styles.lineSheetLabel]}>Complete look</Text>
 
-      {overviewItems.map(({ item, uri }) => (
+      {overviewItems.map(({ item, uri, contentFit }) => (
         <Pressable
           key={item.id}
           style={styles.lineSheetRow}
@@ -1561,7 +1562,7 @@ function OutfitCompleteLookOverview({
               <ExpoImage
                 source={{ uri }}
                 style={styles.lineSheetThumbImage}
-                contentFit="cover"
+                contentFit={contentFit}
                 transition={120}
                 cachePolicy="memory-disk"
                 recyclingKey={`overview-${item.id}`}
@@ -1678,7 +1679,11 @@ function OutfitSuggestionCard({
           (a, b) =>
             OUTFIT_CATEGORY_ORDER.indexOf(a.category ?? '') - OUTFIT_CATEGORY_ORDER.indexOf(b.category ?? ''),
         )
-        .map((item) => ({ key: String(item.id), uri: itemImageUri(item) })),
+        .map((item) => ({
+          key: String(item.id),
+          uri: itemImageUri(item),
+          contentFit: itemImageContentFit(item),
+        })),
     [matchedItems],
   );
   // When an event is in context, "Add to [event]" is the primary action, so the
@@ -1958,6 +1963,7 @@ type ItemDetailSheetProps = {
 function ItemDetailSheet({ item, onClose }: ItemDetailSheetProps) {
   const insets = useSafeAreaInsets();
   const imgUri = item ? itemImageUri(item) : null;
+  const imageFit = itemImageContentFit(item);
 
   const metaRows = item
     ? ([
@@ -1991,7 +1997,7 @@ function ItemDetailSheet({ item, onClose }: ItemDetailSheetProps) {
           >
             <View style={styles.sheetImageWrap}>
               {imgUri ? (
-                <Image source={{ uri: imgUri }} style={styles.sheetImage} resizeMode="contain" />
+                <Image source={{ uri: imgUri }} style={styles.sheetImage} resizeMode={imageFit} />
               ) : (
                 <View style={styles.sheetImagePlaceholder}>
                   <Ionicons name="shirt-outline" size={48} color={colors.border} />

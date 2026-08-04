@@ -1,7 +1,7 @@
 import { View, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { resolveImageUri } from '../../lib/resolveImageUri';
-import { itemImageUri } from '../../lib/itemImage';
+import { itemCoverPresentation } from '../../lib/itemImage';
 import { colors, radii } from '../../theme';
 import { useItems } from '../../hooks/useItems';
 import type { Outfit } from '../../types/outfit';
@@ -31,9 +31,11 @@ export function OutfitCollage({ outfit, size, height = size, borderRadius = radi
         .map((entry, originalIndex) => {
           const resolved = itemMap.get(entry.id);
           const category = resolved?.category ?? (entry.category as ItemCategory | null);
+          const cover = itemCoverPresentation(resolved);
           return {
             key: String(entry.id),
-            uri: itemImageUri(resolved),
+            uri: cover.uri,
+            contentFit: cover.contentFit,
             ghost: !resolved,
             priority: getOutfitCategoryPriority(category),
             originalIndex,

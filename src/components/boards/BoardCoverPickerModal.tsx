@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 
 import { resolveImageUri } from '../../lib/resolveImageUri';
+import { itemImageUri } from '../../lib/itemImage';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { BoardFeedItem } from '../../types/board';
 
@@ -16,14 +17,13 @@ type Props = {
 
 export function BoardCoverPickerModal({ visible, items, onClose, onSelect, onUpload }: Props) {
   const choices = items.flatMap((item) => {
-    const raw = item.kind === 'item'
-      ? item.item.imageUrl
-      : item.kind === 'outfit'
+    const uri = item.kind === 'item'
+      ? itemImageUri(item.item)
+      : resolveImageUri((item.kind === 'outfit'
       ? item.outfit.aiGeneratedImageUrl
       : item.kind === 'storeFind'
       ? item.storeFind.imageUrls?.[0] ?? item.storeFind.imageUrl
-      : null;
-    const uri = resolveImageUri(raw ?? undefined);
+      : null) ?? undefined);
     return uri ? [{ key: item.key, uri }] : [];
   });
 

@@ -3,8 +3,8 @@ import { View, Text, StyleSheet } from 'react-native';
 import { LinearTransition } from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, cutoutScaleFor, editorial, spacing, typography, radii } from '../../theme';
-import { hasCutout, itemImageUri } from '../../lib/itemImage';
+import { colors, cutoutScaleFor, spacing, typography, radii } from '../../theme';
+import { itemCoverPresentation } from '../../lib/itemImage';
 import { CATEGORY_LABELS } from '../../types/item';
 import type { Item } from '../../types/item';
 import { PressableScale } from '../primitives/PressableScale';
@@ -40,15 +40,15 @@ function GarmentCardComponent({
   isSelected = false,
   onToggleSelect,
 }: Props) {
-  const imageUri = itemImageUri(item);
+  const cover = itemCoverPresentation(item);
+  const imageUri = cover.uri;
   const imageHeight = cardWidth / aspectRatio;
   const handlePress = selectionMode ? onToggleSelect : onPress;
   const colorHex = resolveCardColor(item);
 
   // Scale is applied as a margin rather than a transform so the garment stays
   // centred and `contentFit: contain` still does the letterboxing.
-  const showCutout = hasCutout(item);
-  const cutoutMargin = showCutout
+  const catalogMargin = cover.isCatalogStyle
     ? (Math.min(cardWidth, imageHeight) * (1 - cutoutScaleFor(item.category))) / 2
     : 0;
 
@@ -82,11 +82,11 @@ function GarmentCardComponent({
             // A cutout is inset so the garment floats on the card's surface with
             // even margins; a plain photo crop still fills its frame, since its
             // own background is part of the image.
-            style={[StyleSheet.absoluteFill, showCutout && { margin: cutoutMargin }]}
-            contentFit={editorial.imageFit.garment}
+            style={[StyleSheet.absoluteFill, cover.isCatalogStyle && { margin: catalogMargin }]}
+            contentFit={cover.contentFit}
             transition={200}
             cachePolicy="memory-disk"
-            recyclingKey={String(item.id)}
+            recyclingKey={`${item.id}:${cover.variant}`}
           />
         ) : (
           <View style={styles.imagePlaceholder}>

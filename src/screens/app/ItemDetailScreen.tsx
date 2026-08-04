@@ -18,24 +18,26 @@ import * as ImagePicker from 'expo-image-picker';
 import { compressImageToDataUrl } from '../../lib/compressImage';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  useItems, useUpdateItem, useDeleteItem, useMarkItemWorn, useRefineImage,
-  usePolishItem, usePlainCutout,
+  useItems, useUpdateItem, useDeleteItem, useMarkItemWorn, usePolishItem,
 } from '../../hooks/useItems';
 import { OUTFITS_QUERY_KEY } from '../../hooks/useOutfits';
 import type { Outfit } from '../../types/outfit';
 import { api } from '../../lib/api';
-import { resolveImageUri } from '../../lib/resolveImageUri';
-import { hasCutout, hasPolished } from '../../lib/itemImage';
+import {
+  coverImageVariantLabel,
+  hasCutout,
+  hasPolished,
+  itemCoverPresentation,
+} from '../../lib/itemImage';
 import { normalizeTag, dedupeTags } from '../../lib/tags';
 import { colors, spacing, typography, radii } from '../../theme';
 import { CATEGORY_LABELS, SEASON_LABELS } from '../../types/item';
-import type { Item, Season } from '../../types/item';
+import type { CoverImageVariant, Item, Season } from '../../types/item';
 import type { ItemDetailScreenProps } from '../../navigation/types';
 import * as Haptics from 'expo-haptics';
 import { useTagScanner } from '../../hooks/useTagScanner';
 import { EditItemModal } from '../../components/item/EditItemModal';
 import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
-import { uploadImageToR2 } from '../../lib/uploadImage';
 import { generateCutoutForItem } from '../../lib/cutout';
 import { SectionCard } from '../../components/primitives/SectionCard';
 import { Chip } from '../../components/primitives/Chip';
@@ -46,6 +48,7 @@ import {
   TabQuickMenuSheet,
   type TabQuickMenuOption,
 } from '../../components/navigation/TabQuickMenuSheet';
+import { CoverImageSheet } from '../../components/item/cover-image-sheet';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -70,7 +73,6 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const updateItem = useUpdateItem();
   const deleteItem = useDeleteItem();
   const markWorn = useMarkItemWorn();
-  const refineImage = useRefineImage();
   const { openStylist } = useGlobalAIStylist();
 
   const { width } = useWindowDimensions();
@@ -90,8 +92,8 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   // ── Re-scan state ────────────────────────────────────────────────────────────
   const [rescanning, setRescanning] = useState(false);
 
-  // ── Hero image source toggle (cutout vs original photo) ──────────────────────
-  const [showOriginalPhoto, setShowOriginalPhoto] = useState(false);
+  // ── Cover image selection ────────────────────────────────────────────────────
+  const [coverSheetOpen, setCoverSheetOpen] = useState(false);
   const [cuttingOut, setCuttingOut] = useState(false);
 
   // Handlers run before the `viewItem` narrowing below, so read the cutout flags
@@ -100,7 +102,6 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const viewIsPolished = hasPolished(item);
 
   const polishItem = usePolishItem();
-  const plainCutout = usePlainCutout();
 
   // ── Tag scanner ──────────────────────────────────────────────────────────────
   const tagScanner = useTagScanner(item ?? null);
@@ -200,9 +201,14 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         res = await api.post('/api/items/scan', { imageData });
       }
       const scanned = res.data as any;
-      updateItem.mutate({
+      await updateItem.mutateAsync({
         id: item.id,
-        ...(overrideImageData ? { imageUrl: overrideImageData } : {}),
+        ...(overrideImageData ? {
+          imageUrl: overrideImageData,
+          cutoutUrl: null,
+          polishedUrl: null,
+          coverImageVariant: 'original' as const,
+        } : {}),
         name: scanned.name || item.name,
         brand: scanned.brand || item.brand,
         category: scanned.category || item.category,
@@ -237,9 +243,6 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     const result = await pickFn({ mediaTypes: ['images'], allowsEditing: true, quality: 1 });
     if (result.canceled || !result.assets[0]) return;
     const { uri, dataUrl } = await compressImageToDataUrl(result.assets[0], 1024, 0.8);
-    // Clear the old cutout up front: it belongs to the photo being replaced, so
-    // leaving it in place would show the previous garment against the new one.
-    if (item?.cutoutUrl) updateItem.mutate({ id: item.id, cutoutUrl: null });
     await handleRescan(dataUrl, uri);
     if (item) void refreshCutout(dataUrl);
   };
@@ -265,36 +268,6 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     }
   };
 
-  const handleRefineImage = () => {
-    if (!item) return;
-    if (!item.category) {
-      Alert.alert('Category required', 'Please set a category for this item before generating an AI image.');
-      return;
-    }
-    refineImage.mutate(
-      { name: item.name, color: item.color || 'neutral', brand: item.brand, category: item.category },
-      {
-        onSuccess: async ({ imageData }) => {
-          try {
-            // Upload the generated image to R2 and store the hosted URL — never
-            // the raw base64 — so the closet payload stays small.
-            const hosted = await uploadImageToR2(imageData, item.userId);
-            // The generated image is already a clean studio flat-lay, and the
-            // old cutout was masked from the photo it replaces — drop it rather
-            // than leave the previous garment showing on the card.
-            updateItem.mutate({ id: item.id, imageUrl: hosted, cutoutUrl: null });
-          } catch {
-            Alert.alert('Save failed', 'Generated the image but could not save it. Please try again.');
-          }
-        },
-        onError: (err: any) => {
-          const msg = err?.response?.data?.message ?? 'Could not generate image. Please try again.';
-          Alert.alert('Generation failed', msg);
-        },
-      }
-    );
-  };
-
   /**
    * Regenerate this item as a studio catalog shot.
    *
@@ -305,7 +278,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const handlePolish = () => {
     if (!item) return;
     polishItem.mutate(item.id, {
-      onSuccess: () => setShowOriginalPhoto(false),
+      onSuccess: () => setCoverSheetOpen(false),
       onError: (err: any) => {
         if (err?.response?.data?.code === 'POLISH_QUOTA_EXCEEDED') {
           Alert.alert('Out of polish credits', err.response.data.message);
@@ -314,19 +287,6 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         Alert.alert('Polish failed', 'Could not generate a catalog image. Your photo is unchanged.');
       },
     });
-  };
-
-  /** Revert to the faithful cutout, discarding the generated image. */
-  const handleUsePlainCutout = () => {
-    if (!item) return;
-    plainCutout.mutate(item.id);
-  };
-
-  /** Discard the cutout so the item shows its original photo everywhere. */
-  const handleUseOriginal = () => {
-    if (!item) return;
-    setShowOriginalPhoto(false);
-    updateItem.mutate({ id: item.id, cutoutUrl: null });
   };
 
   /** Re-run background removal against the item's current photo. */
@@ -339,8 +299,8 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         userId: item.userId,
       });
       if (cutoutUrl) {
-        setShowOriginalPhoto(false);
-        updateItem.mutate({ id: item.id, cutoutUrl });
+        await updateItem.mutateAsync({ id: item.id, cutoutUrl });
+        setCoverSheetOpen(true);
       } else {
         Alert.alert(
           "Couldn't isolate this item",
@@ -389,18 +349,8 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   // ── View mode: item is guaranteed non-null past this point ───────────────────
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   const viewItem = item!;
-  // The hero shows the cutout by default when there is one, but the original
-  // photo stays one tap away — it's the full-resolution source, and it's how the
-  // user checks what the segmentation actually did.
-  const cutoutAvailable = viewHasCutout;
-  const showingCutout = cutoutAvailable && !showOriginalPhoto;
-  // Polished first when it exists, then the faithful cutout. The original
-  // photo stays reachable through the same toggle either way — with a
-  // generative image on screen, being able to check it against the real
-  // garment matters more, not less.
-  const imageUri = showingCutout
-    ? resolveImageUri(viewItem.polishedUrl ?? viewItem.cutoutUrl)
-    : resolveImageUri(viewItem.imageUrl);
+  const cover = itemCoverPresentation(viewItem);
+  const imageUri = cover.uri;
   const breadcrumb = [
     viewItem.category ? CATEGORY_LABELS[viewItem.category] : null,
     viewItem.subcategory,
@@ -410,10 +360,8 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     viewItem.subcategory || viewItem.style || viewItem.pattern || viewItem.material || viewItem.fit ||
     (viewItem.formalityStyles?.length > 0) || (viewItem.notableDetails?.length > 0)
   );
-  const isBusy = updateItem.isPending || markWorn.isPending || deleteItem.isPending || refineImage.isPending
-    || cuttingOut || polishItem.isPending || plainCutout.isPending;
-  // Image treatments are contextual: once a treatment exists, offer the
-  // faithful way back instead of repeating the same action.
+  const isBusy = updateItem.isPending || markWorn.isPending || deleteItem.isPending
+    || cuttingOut || polishItem.isPending;
   const photoMenuOptions: TabQuickMenuOption[] = [
     {
       key: 'camera',
@@ -430,26 +378,19 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
       onPress: () => { void pickAndChangePhoto('library'); },
     },
     {
-      key: 'generate',
-      label: 'Generate AI Image',
-      icon: 'color-wand-outline',
-      iconBg: colors.accent,
-      onPress: handleRefineImage,
-    },
-    {
       key: 'cutout',
-      label: viewHasCutout ? 'Use Original Photo' : 'Remove Background',
-      icon: viewHasCutout ? 'image-outline' : 'cut-outline',
+      label: viewHasCutout ? 'Recreate Cutout' : 'Remove Background',
+      icon: 'cut-outline',
       iconColor: colors.foreground,
       iconBg: colors.secondary,
-      onPress: viewHasCutout ? handleUseOriginal : () => { void handleCreateCutout(); },
+      onPress: () => { void handleCreateCutout(); },
     },
     {
       key: 'polish',
-      label: viewIsPolished ? 'Use Plain Cutout' : 'Polish Photo',
-      icon: viewIsPolished ? 'shirt-outline' : 'sparkles-outline',
+      label: viewIsPolished ? 'Regenerate AI Polish' : 'Polish Photo',
+      icon: 'sparkles-outline',
       iconBg: colors.accent,
-      onPress: viewIsPolished ? handleUsePlainCutout : handlePolish,
+      onPress: handlePolish,
     },
   ];
 
@@ -465,10 +406,8 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           {imageUri ? (
             <Image
               source={{ uri: imageUri }}
-              // A cutout has no background of its own, so it's contained and
-              // padded against the surface; a photo still fills the hero.
-              style={[styles.image, showingCutout && styles.heroCutout]}
-              contentFit={showingCutout ? 'contain' : 'cover'}
+              style={[styles.image, cover.isCatalogStyle && styles.heroCatalogImage]}
+              contentFit={cover.contentFit}
               transition={200}
             />
           ) : (
@@ -477,23 +416,25 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
             </View>
           )}
 
-          {cutoutAvailable && (
-            <TouchableOpacity
-              style={[styles.originalToggle, { top: insets.top + spacing.sm }]}
-              onPress={() => setShowOriginalPhoto((v) => !v)}
-              accessibilityRole="button"
-              accessibilityLabel={showingCutout ? 'Show original photo' : 'Show cutout'}
-            >
-              <Ionicons
-                name={showingCutout ? 'image-outline' : 'sparkles-outline'}
-                size={14}
-                color={colors.foreground}
-              />
-              <Text style={styles.originalToggleText}>
-                {showingCutout ? 'Original' : 'Cutout'}
-              </Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={[styles.coverPickerButton, { top: insets.top + spacing.sm }]}
+            onPress={() => setCoverSheetOpen(true)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: coverSheetOpen }}
+            accessibilityLabel={`Cover image: ${coverImageVariantLabel(cover.variant)}. Choose a different cover image.`}
+          >
+            <Ionicons
+              name={cover.variant === 'original'
+                ? 'image-outline'
+                : cover.variant === 'cutout'
+                  ? 'cut-outline'
+                  : 'sparkles-outline'}
+              size={14}
+              color={colors.foreground}
+            />
+            <Text style={styles.coverPickerText}>{coverImageVariantLabel(cover.variant)}</Text>
+            <Ionicons name="chevron-down" size={13} color={colors.mutedForeground} />
+          </TouchableOpacity>
           <TouchableOpacity
             style={[styles.backButton, { top: insets.top + spacing.sm }]}
             onPress={() => navigation.goBack()}
@@ -501,16 +442,16 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
             <Ionicons name="chevron-back" size={22} color={colors.foreground} />
           </TouchableOpacity>
           {viewItem.isFavorite && (
-            <View style={[styles.favBadge, { top: insets.top + spacing.sm }]}>
+            <View style={[styles.favBadge, { top: insets.top + spacing.xxxl }]}>
               <Ionicons name="heart" size={14} color={colors.primary} />
             </View>
           )}
           <TouchableOpacity
             style={styles.changePhotoBtn}
             onPress={handleChangePhoto}
-            disabled={rescanning || refineImage.isPending}
+            disabled={rescanning}
           >
-            {rescanning || refineImage.isPending ? (
+            {rescanning ? (
               <ActivityIndicator size="small" color={colors.primaryForeground} />
             ) : (
               <Ionicons name="camera" size={16} color={colors.primaryForeground} />
@@ -916,6 +857,21 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         options={photoMenuOptions}
         onClose={() => setPhotoMenuOpen(false)}
       />
+
+      <CoverImageSheet
+        item={viewItem}
+        visible={coverSheetOpen}
+        isUpdating={updateItem.isPending}
+        isPolishing={polishItem.isPending}
+        onClose={() => setCoverSheetOpen(false)}
+        onSelect={(variant: CoverImageVariant) => {
+          updateItem.mutate(
+            { id: viewItem.id, coverImageVariant: variant },
+            { onSuccess: () => setCoverSheetOpen(false) },
+          );
+        }}
+        onPolish={handlePolish}
+      />
     </View>
   );
 }
@@ -942,9 +898,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.muted,
   },
   image: { width: '100%', height: '100%' },
-  // Cutouts are trimmed to the garment, so the hero supplies the breathing room.
-  heroCutout: { padding: spacing.xl },
-  originalToggle: {
+  // Cutouts and catalog images are trimmed, so the hero supplies breathing room.
+  heroCatalogImage: { padding: spacing.xl },
+  coverPickerButton: {
     position: 'absolute',
     right: spacing.lg,
     flexDirection: 'row',
@@ -957,7 +913,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: spacing.xs + 1,
   },
-  originalToggleText: {
+  coverPickerText: {
     fontSize: typography.size.xs,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,

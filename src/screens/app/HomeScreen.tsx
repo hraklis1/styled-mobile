@@ -31,7 +31,7 @@ import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
 import { useProfile } from '../../hooks/useProfile';
 import { StylingLocationSheet } from '../../components/home/StylingLocationSheet';
 import { resolveImageUri } from '../../lib/resolveImageUri';
-import { itemImageUri } from '../../lib/itemImage';
+import { itemCoverPresentation } from '../../lib/itemImage';
 import { formatTemp, resolveTempUnit } from '../../lib/temperature';
 import {
   selectDailyStylistPick,
@@ -558,7 +558,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                   {/* Stacked thumbnails */}
                   <View style={styles.logThumbs}>
                     {logItems.slice(0, 4).map((item, idx) => {
-                      const imgUri = itemImageUri(item);
+                      const itemCover = itemCoverPresentation(item);
+                      const imgUri = itemCover.uri;
                       return (
                         <View
                           key={item.id}
@@ -571,7 +572,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                             <Image
                               source={{ uri: imgUri }}
                               style={StyleSheet.absoluteFill}
-                              contentFit="cover"
+                              contentFit={itemCover.contentFit}
                               transition={150}
                             />
                           ) : (

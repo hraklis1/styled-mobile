@@ -8,7 +8,7 @@ type Props = {
   croppedImage: string | null;
   /** Background-removed version, when the server produced an acceptable one. */
   cutoutImage: string | null;
-  /** False once the user has chosen the original over the cutout. */
+  /** True when the user has selected the cutout as this item's cover. */
   useCutout: boolean;
   onToggleCutout: () => void;
   /** Container style — callers pass their own card's thumb dimensions. */
@@ -18,8 +18,7 @@ type Props = {
 };
 
 /**
- * Review-step thumbnail that lets the user accept or reject a cutout before the
- * item is ever saved.
+ * Review-step thumbnail that lets the user choose the item's initial cover.
  *
  * The server-side quality gate rejects the masks it can recognise as broken, but
  * segmentation on casual photos is inconsistent enough that some bad results get
@@ -61,17 +60,17 @@ export function CutoutReviewThumb({
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
           accessibilityRole="switch"
           accessibilityState={{ checked: showingCutout }}
-          accessibilityLabel={
-            showingCutout ? 'Using cutout. Tap to use the original photo.' : 'Using original photo. Tap to use the cutout.'
-          }
+          accessibilityLabel={showingCutout
+            ? 'Cover image is Cutout. Tap to use Photo.'
+            : 'Cover image is Photo. Tap to use Cutout.'}
         >
           <Ionicons
-            name={showingCutout ? 'sparkles' : 'image-outline'}
+            name={showingCutout ? 'cut-outline' : 'image-outline'}
             size={9}
             color={showingCutout ? colors.white : colors.foreground}
           />
           <Text style={[styles.badgeText, showingCutout && styles.badgeTextActive]}>
-            {showingCutout ? 'Cut' : 'Orig'}
+            {showingCutout ? 'Cutout' : 'Photo'}
           </Text>
         </TouchableOpacity>
       )}
@@ -91,8 +90,8 @@ const styles = StyleSheet.create({
     left: 2,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 1,
-    paddingHorizontal: 3,
+    gap: 2,
+    paddingHorizontal: 4,
     paddingVertical: 1,
     borderRadius: radii.sm,
     backgroundColor: 'rgba(255,252,247,0.92)',

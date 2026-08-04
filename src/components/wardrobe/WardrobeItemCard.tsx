@@ -1,8 +1,8 @@
-import { View, Text, Image, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, radii } from '../../theme';
-import { resolveImageUri } from '../../lib/resolveImageUri';
-import { itemImageUri } from '../../lib/itemImage';
+import { itemCoverPresentation } from '../../lib/itemImage';
 import type { Item } from '../../types/item';
 
 const COLUMN_COUNT = 2;
@@ -32,7 +32,8 @@ export function WardrobeItemCard({
   const cardWidth = (width - SIDE_PADDING * 2 - COLUMN_GAP) / COLUMN_COUNT;
   const imageHeight = cardWidth * 1.25; // 4:5 portrait ratio
 
-  const imageUri = itemImageUri(item);
+  const cover = itemCoverPresentation(item);
+  const imageUri = cover.uri;
 
   const handlePress = selectionMode ? onToggleSelect : onPress;
 
@@ -46,7 +47,7 @@ export function WardrobeItemCard({
     >
       <View style={[styles.imageContainer, { height: imageHeight }]}>
         {imageUri ? (
-          <Image source={{ uri: imageUri }} style={styles.image} resizeMode="cover" />
+          <Image source={{ uri: imageUri }} style={[styles.image, cover.isCatalogStyle && styles.catalogImage]} contentFit={cover.contentFit} transition={150} cachePolicy="memory-disk" />
         ) : (
           <View style={styles.imagePlaceholder}>
             <Ionicons name="shirt-outline" size={32} color={colors.border} />
@@ -109,6 +110,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  catalogImage: { padding: spacing.md },
   imagePlaceholder: {
     flex: 1,
     alignItems: 'center',

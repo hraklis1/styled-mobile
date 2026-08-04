@@ -17,6 +17,7 @@ import { useOutfits } from '../../hooks/useOutfits';
 import { useWishlist } from '../../hooks/useWishlist';
 import { useUpdateBoard } from '../../hooks/useBoards';
 import { resolveImageUri } from '../../lib/resolveImageUri';
+import { itemCoverPresentation } from '../../lib/itemImage';
 import type { WishlistEntry } from '../../lib/wishlist';
 import {
   getWishlistAccessibilityLabel,
@@ -37,6 +38,7 @@ type Row = {
   subtitle?: string;
   meta?: string;
   imageUrl?: string | null;
+  imageFit?: 'cover' | 'contain';
   searchText?: string;
   accessibilityLabel?: string;
   wishlistEntry?: WishlistEntry;
@@ -77,14 +79,16 @@ export function BoardContentPickerModal({ board, visible, onClose }: Props) {
   const rows = useMemo<Row[]>(() => {
     const normalized = query.trim().toLowerCase();
     const source: Row[] = tab === 'pieces'
-      ? items.map((item) => ({
-          id: String(item.id),
-          title: item.name,
-          subtitle: [item.brand, item.category].filter(Boolean).join(' · '),
-          // Rows are a normalized shape shared with outfits and wishlist entries,
-          // so the cutout preference is resolved here rather than at render.
-          imageUrl: item.cutoutUrl ?? item.imageUrl,
-        }))
+      ? items.map((item) => {
+          const cover = itemCoverPresentation(item);
+          return {
+            id: String(item.id),
+            title: item.name,
+            subtitle: [item.brand, item.category].filter(Boolean).join(' · '),
+            imageUrl: cover.uri,
+            imageFit: cover.contentFit,
+          };
+        })
       : tab === 'outfits'
       ? outfits.map((outfit) => ({
           id: String(outfit.id),
@@ -202,7 +206,7 @@ export function BoardContentPickerModal({ board, visible, onClose }: Props) {
                     {item.wishlistEntry ? (
                       <WishlistOutfitPreview entry={item.wishlistEntry} style={StyleSheet.absoluteFill} />
                     ) : uri ? (
-                      <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={120} />
+                      <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit={item.imageFit ?? 'cover'} transition={120} />
                     ) : (
                       <Ionicons name={tab === 'outfits' ? 'images-outline' : 'shirt-outline'} size={22} color={colors.mutedForeground} />
                     )}

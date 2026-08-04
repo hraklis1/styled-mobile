@@ -20,6 +20,7 @@ import { CATEGORY_ORDER, CATEGORY_LABELS, type ItemCategory } from '../../types/
 import { colors, spacing, typography, radii } from '../../theme';
 import type { Event } from '../../types/event';
 import { getEventItemsActionLabel } from './calendarPlanning';
+import { itemCoverPresentation } from '../../lib/itemImage';
 
 export function EventItemPickerModal({
   event,
@@ -189,6 +190,7 @@ export function EventItemPickerModal({
               keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => {
                 const isSelected = selected.has(item.id);
+                const cover = itemCoverPresentation(item);
                 return (
                   <TouchableOpacity
                     style={[s.itemRow, isSelected && s.itemRowSelected]}
@@ -196,8 +198,8 @@ export function EventItemPickerModal({
                     activeOpacity={0.7}
                   >
                     <View style={s.itemThumb}>
-                      {item.imageUrl
-                        ? <Image source={{ uri: item.imageUrl }} style={s.itemThumbImg} />
+                      {cover.uri
+                        ? <Image source={{ uri: cover.uri }} style={s.itemThumbImg} resizeMode={cover.contentFit} />
                         : <View style={s.itemThumbFallback}><Text style={s.itemThumbInitials}>{item.name.slice(0, 2).toUpperCase()}</Text></View>
                       }
                     </View>

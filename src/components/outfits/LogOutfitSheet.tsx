@@ -23,7 +23,7 @@ import { useItems } from '../../hooks/useItems';
 import { useCreateOutfitLog, useScanOutfitLog, type OutfitScanResult } from '../../hooks/useOutfitLogs';
 import { useCameraLaunch, useLibraryLaunch } from '../../hooks/useCameraLaunch';
 import { resolveImageUri } from '../../lib/resolveImageUri';
-import { itemImageUri } from '../../lib/itemImage';
+import { itemImageContentFit, itemImageUri } from '../../lib/itemImage';
 import { LocationAutocompleteInput } from '../primitives/LocationAutocompleteInput';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { Item } from '../../types/item';
@@ -574,7 +574,7 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
                           <Image
                             source={{ uri: imgUri }}
                             style={StyleSheet.absoluteFill}
-                            resizeMode="cover"
+                            resizeMode={itemImageContentFit(item)}
                           />
                         ) : (
                           <View style={styles.pickerCardPlaceholder}>
@@ -667,7 +667,7 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
                               <Image
                                 source={{ uri: imgUri }}
                                 style={StyleSheet.absoluteFill}
-                                resizeMode="cover"
+                                resizeMode={itemImageContentFit(matched)}
                               />
                             ) : (
                               <Ionicons name="shirt-outline" size={20} color={colors.mutedForeground} />
@@ -726,7 +726,7 @@ function SelectedItemRow({ item, onRemove }: { item: Item; onRemove: () => void 
     <View style={styles.selectedRow}>
       <View style={styles.selectedThumb}>
         {imgUri ? (
-          <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill} resizeMode={itemImageContentFit(item)} />
         ) : (
           <Ionicons name="shirt-outline" size={16} color={colors.mutedForeground} />
         )}

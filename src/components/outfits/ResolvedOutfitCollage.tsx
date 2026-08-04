@@ -11,6 +11,7 @@ import {
 export type ResolvedOutfitSlot = {
   key: string;
   uri: string | null | undefined;
+  contentFit?: 'cover' | 'contain';
   ghost?: boolean;
 };
 
@@ -36,7 +37,7 @@ export function ResolvedOutfitCollage({
     return (
       <View style={[styles.container, { width: size, height, borderRadius }]}>
         {slot?.uri ? (
-          <Image source={{ uri: slot.uri }} style={styles.fill} contentFit="cover" transition={150} cachePolicy="memory-disk" recyclingKey={slot?.key} />
+          <Image source={{ uri: slot.uri }} style={styles.fill} contentFit={slot.contentFit ?? 'cover'} transition={150} cachePolicy="memory-disk" recyclingKey={slot?.key} />
         ) : slot?.ghost ? (
           <View style={styles.placeholder}>
             <Ionicons name="unlink-outline" size={Math.min(size, height) * 0.25} color={colors.border} />
@@ -76,7 +77,7 @@ export function ResolvedOutfitCollage({
             style={[styles.tile, { left, top, width: cellW, height: cellH, borderRadius: tileRadius }]}
           >
             {slot?.uri ? (
-              <Image source={{ uri: slot.uri }} style={styles.fill} contentFit="cover" transition={150} cachePolicy="memory-disk" recyclingKey={slot?.key} />
+              <Image source={{ uri: slot.uri }} style={styles.fill} contentFit={slot.contentFit ?? 'cover'} transition={150} cachePolicy="memory-disk" recyclingKey={slot?.key} />
             ) : slot?.ghost ? (
               <View style={[styles.fill, styles.ghostCell]}>
                 <Ionicons name="unlink-outline" size={Math.min(cellW, cellH) * 0.3} color={colors.border} />

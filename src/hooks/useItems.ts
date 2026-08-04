@@ -4,7 +4,7 @@ import { Alert } from 'react-native';
 import { api, isNetworkError } from '../lib/api';
 import { FASHION_BRANDS } from '../lib/fashionBrands';
 import { track } from '../lib/analytics';
-import type { Item, ItemCategory, ScanResult } from '../types/item';
+import type { CoverImageVariant, Item, ItemCategory, ScanResult } from '../types/item';
 import type { SizeProfile } from '../lib/sizes';
 import { OUTFITS_QUERY_KEY } from './useOutfits';
 
@@ -51,6 +51,7 @@ export type CreateItemInput = {
   tags?: string[];
   imageUrl?: string | null;
   cutoutUrl?: string | null;
+  coverImageVariant?: CoverImageVariant;
   subcategory?: string | null;
   style?: string | null;
   seasons?: string[];
@@ -249,7 +250,7 @@ export function useRefineImage() {
  *
  * Quota'd server-side (402 POLISH_QUOTA_EXCEEDED) because it is the only
  * genuinely expensive call in the image pipeline. The result lands in its own
- * column, so `usePlainCutout` reverts it without touching the real photo.
+ * column and becomes the cover without touching the real photo or cutout.
  */
 export function usePolishItem() {
   const queryClient = useQueryClient();
@@ -258,20 +259,11 @@ export function usePolishItem() {
       api
         .post<{ polishedUrl: string; item: Item }>(`/api/items/${itemId}/polish`, {})
         .then((r) => r.data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
-    },
-  });
-}
-
-/** Drop the polished image and fall back to the faithful cutout. */
-export function usePlainCutout() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (itemId: number) =>
-      api.delete<{ item: Item }>(`/api/items/${itemId}/polish`).then((r) => r.data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
+    onSuccess: ({ item }) => {
+      queryClient.setQueryData<Item[]>(ITEMS_QUERY_KEY, (old) =>
+        old?.map((current) => current.id === item.id ? item : current) ?? [item]
+      );
+      invalidateItemQueries(queryClient);
     },
   });
 }

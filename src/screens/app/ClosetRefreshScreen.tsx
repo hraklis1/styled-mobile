@@ -22,6 +22,7 @@ import {
 import { colors, spacing, typography, radii } from '../../theme';
 import type { ClosetRefreshScreenProps } from '../../navigation/types';
 import type { Item } from '../../types/item';
+import { itemCoverPresentation } from '../../lib/itemImage';
 
 type StaleEntry = ClosetRefreshData['staleItems'][number];
 type SimilarGroup = ClosetRefreshData['similarGroups'][number];
@@ -30,10 +31,11 @@ type ActiveBucket = 'never_worn' | 'stale' | 'duplicates' | null;
 // ─── ItemThumb ───────────────────────────────────────────────────────────────
 
 function ItemThumb({ item, size = 56 }: { item: Item; size?: number }) {
+  const cover = itemCoverPresentation(item);
   return (
     <View style={[styles.thumb, { width: size, height: size, borderRadius: radii.md }]}>
-      {item.imageUrl ? (
-        <Image source={{ uri: item.imageUrl }} style={styles.thumbImg} />
+      {cover.uri ? (
+        <Image source={{ uri: cover.uri }} style={styles.thumbImg} resizeMode={cover.contentFit} />
       ) : (
         <Text style={styles.thumbFallback}>{item.name.charAt(0).toUpperCase()}</Text>
       )}

@@ -86,7 +86,7 @@ type EditableItem = {
   croppedImage: string | null;
   /** Background-removed thumbnail from the scan, if segmentation produced one. */
   cutoutImage: string | null;
-  /** False when the user has rejected the cutout in review. */
+  /** True when the user selects the cutout as the initial cover. */
   useCutout: boolean;
   expanded: boolean;
   sizeProfile: SizeProfile | null;
@@ -101,7 +101,7 @@ type PreExtractItemData = {
   category: string;
   croppedImage: string | null;
   cutoutImage: string | null;
-  /** False when the user has rejected the cutout in review. */
+  /** True when the user selects the cutout as the initial cover. */
   useCutout: boolean;
   targetImage: string | null;
   bbox: Bbox | null;
@@ -171,7 +171,7 @@ async function buildPreExtractItemFromPose(
     // Comes back with the scan itself — the pipeline reuses a mask it already
     // computed, so there's no extra request and nothing to wait on here.
     cutoutImage: poseItem.cutoutWebP ? `data:image/webp;base64,${poseItem.cutoutWebP}` : null,
-    useCutout: true,
+    useCutout: false,
     targetImage,
     bbox: targetBbox,
     previewBbox,
@@ -354,7 +354,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
       // cutout upload is dropped rather than inlined as base64: unlike the photo
       // it's optional, and inlining would put a data URL in every closet payload.
       let cutoutUrl: string | null = null;
-      if (item.cutoutImage && item.useCutout) {
+      if (item.cutoutImage) {
         try {
           cutoutUrl = await uploadImageToR2(item.cutoutImage, user!.id);
         } catch {
@@ -388,6 +388,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
               colorPalette: item.colorPalette.length > 0 ? item.colorPalette : undefined,
               imageUrl,
               cutoutUrl,
+              coverImageVariant: item.useCutout && cutoutUrl ? 'cutout' : 'original',
               sizeProfile: item.sizeProfile ?? null,
               purchaseLocation: item.purchaseLocation ?? null,
               needsDetails,
@@ -731,8 +732,8 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
         scene,
       }).then((cutoutImage) => {
         if (!cutoutImage || sessionRef.current !== session) return;
-        if (scope === 'pre-extract') updatePreExtractItem(tempId, { cutoutImage, useCutout: true });
-        else updateItem(tempId, { cutoutImage, useCutout: true });
+        if (scope === 'pre-extract') updatePreExtractItem(tempId, { cutoutImage });
+        else updateItem(tempId, { cutoutImage });
       });
     }
     setCropAdjustTarget(null);
