@@ -405,6 +405,11 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const viewItem = item!;
   const cover = itemCoverPresentation(viewItem);
   const imageUri = cover.uri;
+  const catalogTopInset = cover.variant === 'cutout'
+    ? spacing.xxxl
+    : spacing.xxl + spacing.sm;
+  const catalogBottomInset = spacing.xl;
+  const catalogImageHeight = imageHeight - catalogTopInset - catalogBottomInset;
   const breadcrumb = [
     viewItem.category ? CATEGORY_LABELS[viewItem.category] : null,
     viewItem.subcategory,
@@ -538,6 +543,9 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         style={styles.flex}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="always"
+        onTouchStart={() => inlineTagRef.current?.blur()}
       >
         {/* Image */}
         <View style={[styles.imageContainer, { height: heroHeight }]}>
@@ -545,8 +553,17 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
             {imageUri ? (
               <Image
                 source={{ uri: imageUri }}
-                style={[styles.image, cover.isCatalogStyle && styles.heroCatalogImage]}
-                contentFit={cover.contentFit}
+                style={cover.isCatalogStyle
+                  ? [
+                    styles.heroCatalogImage,
+                    {
+                      height: catalogImageHeight,
+                      marginTop: catalogTopInset,
+                      marginBottom: catalogBottomInset,
+                    },
+                  ]
+                  : styles.image}
+                contentFit={cover.variant === 'original' ? 'contain' : cover.contentFit}
                 transition={200}
                 accessible
                 accessibilityLabel={`${viewItem.name || 'Wardrobe item'} cover image`}
@@ -803,6 +820,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
                 autoCapitalize="none"
                 returnKeyType="done"
                 accessibilityLabel="New tag name"
+                onTouchStart={(event) => event.stopPropagation()}
               />
             ) : (
               <TouchableOpacity
@@ -996,10 +1014,11 @@ const styles = StyleSheet.create({
   },
   // Keep the hero surface edge-to-edge, but begin the actual garment below
   // system UI so the status bar and Dynamic Island never cover the item.
-  imageFrame: { width: '100%' },
+  imageFrame: { width: '100%', overflow: 'hidden' },
   image: { width: '100%', height: '100%' },
-  // Cutouts and catalog images are trimmed, so the hero supplies breathing room.
-  heroCatalogImage: { padding: spacing.xl },
+  // Catalog variants receive an explicit bounded height so the native image
+  // view cannot consume the reserved top and bottom whitespace.
+  heroCatalogImage: { width: '100%' },
   polishOverlay: {
     position: 'absolute',
     top: 0,
