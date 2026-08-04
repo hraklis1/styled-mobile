@@ -1,4 +1,7 @@
 import type { Event } from '../../types/event';
+import type { Item } from '../../types/item';
+import { itemCoverPresentation } from '../../lib/itemImage';
+import { getOutfitCategoryPriority } from '../outfits/outfitMosaic';
 
 const URL_PATTERN = /https?:\/\/[^\s]+/gi;
 const TRAILING_URL_PUNCTUATION = /[),.;!?]+$/;
@@ -20,6 +23,15 @@ export type CalendarEventPresentation = {
   readinessShortLabel: 'Planned' | 'Needs outfit';
   monthLabel: string;
   dayLabel: string;
+};
+
+export type EventLookPiecePresentation = {
+  key: string;
+  itemId: number;
+  item: Item | null;
+  uri: string | undefined;
+  contentFit: 'cover' | 'contain';
+  ghost: boolean;
 };
 
 function sourceLabel(url: string): string {
@@ -79,4 +91,29 @@ export function presentCalendarEvent(event: Event): CalendarEventPresentation {
     monthLabel: date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(),
     dayLabel: date.toLocaleDateString('en-US', { day: 'numeric' }),
   };
+}
+
+export function presentEventLook(
+  itemIds: number[] | null | undefined,
+  allItems: Item[],
+): EventLookPiecePresentation[] {
+  const itemMap = new Map(allItems.map((item) => [item.id, item]));
+
+  return (itemIds ?? [])
+    .map((itemId, originalIndex) => {
+      const item = itemMap.get(itemId) ?? null;
+      const cover = itemCoverPresentation(item);
+      return {
+        key: `${itemId}-${originalIndex}`,
+        itemId,
+        item,
+        uri: cover.uri,
+        contentFit: cover.contentFit,
+        ghost: item === null,
+        priority: getOutfitCategoryPriority(item?.category ?? null),
+        originalIndex,
+      };
+    })
+    .sort((a, b) => a.priority - b.priority || a.originalIndex - b.originalIndex)
+    .map(({ priority: _priority, originalIndex: _originalIndex, ...piece }) => piece);
 }

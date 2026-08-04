@@ -81,7 +81,7 @@ export function EventItemPickerModal({
   const handleConfirm = () => {
     if (!event) return;
     const itemIds = selected.size > 0 ? Array.from(selected) : null;
-    assignItems.mutate({ id: event.id, itemIds }, { onSuccess: onClose });
+    assignItems.mutate({ id: event.id, itemIds, outfitId: null }, { onSuccess: onClose });
   };
 
   const handleCategoryPress = (category: ItemCategory | null) => {

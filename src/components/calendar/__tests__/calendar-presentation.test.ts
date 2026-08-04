@@ -1,5 +1,10 @@
-import { presentCalendarEvent, presentEventNotes } from '../calendar-presentation';
+jest.mock('../../../lib/api', () => ({
+  API_BASE_URL: 'https://api.styled.test',
+}));
+
+import { presentCalendarEvent, presentEventLook, presentEventNotes } from '../calendar-presentation';
 import type { Event } from '../../../types/event';
+import type { Item } from '../../../types/item';
 
 const baseEvent: Event = {
   id: 1,
@@ -52,5 +57,62 @@ describe('calendar presentation', () => {
       links: [{ url: 'https://example.com', label: 'Open source link' }],
       hasMore: true,
     });
+  });
+
+  it('orders an event look by outfit hierarchy and preserves unavailable pieces', () => {
+    const makeItem = (id: number, category: Item['category']): Item => ({
+      id,
+      name: `Piece ${id}`,
+      userId: 1,
+      imageUrl: `https://example.com/${id}.jpg`,
+      cutoutUrl: null,
+      polishedUrl: null,
+      coverImageVariant: 'original',
+      color: null,
+      colorPalette: [],
+      colorNormalized: null,
+      colorTemperature: null,
+      category,
+      subcategory: null,
+      brand: null,
+      style: null,
+      seasons: [],
+      occasions: [],
+      material: null,
+      fit: null,
+      pattern: null,
+      neckline: null,
+      sleeveLength: null,
+      tags: [],
+      formalityStyles: [],
+      notableDetails: [],
+      notes: null,
+      care: null,
+      condition: null,
+      warmthRating: null,
+      purchasePrice: null,
+      purchaseDate: null,
+      wearCount: 0,
+      lastWornAt: null,
+      isFavorite: false,
+      isArchived: false,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    const items = [
+      makeItem(1, 'accessory'),
+      makeItem(2, 'shoes'),
+      makeItem(3, 'top'),
+      makeItem(4, 'bottom'),
+    ];
+
+    const look = presentEventLook([1, 99, 2, 4, 3], items);
+
+    expect(look.map((piece) => piece.itemId)).toEqual([3, 4, 2, 1, 99]);
+    expect(look.at(-1)).toEqual(expect.objectContaining({
+      itemId: 99,
+      item: null,
+      uri: undefined,
+      ghost: true,
+    }));
   });
 });

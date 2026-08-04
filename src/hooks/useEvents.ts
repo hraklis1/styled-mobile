@@ -61,7 +61,9 @@ export function useAssignEventItems() {
       await qc.cancelQueries({ queryKey: EVENTS_QUERY_KEY });
       const previous = qc.getQueryData<Event[]>(EVENTS_QUERY_KEY);
       qc.setQueryData<Event[]>(EVENTS_QUERY_KEY, (old) =>
-        old?.map((e) => (e.id === id ? { ...e, itemIds, outfitId: outfitId ?? null } : e)) ?? []
+        old?.map((e) => (e.id === id
+          ? { ...e, itemIds, outfitId: outfitId === undefined ? e.outfitId : outfitId }
+          : e)) ?? []
       );
       return { previous };
     },

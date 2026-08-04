@@ -9,6 +9,7 @@ import {
   ActionSheetIOS,
   Alert,
   Linking,
+  useWindowDimensions,
 } from 'react-native';
 import { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,12 +18,12 @@ import type { StylingLocationContext } from '../../lib/stylingLocation';
 import { useTempUnit } from '../../hooks/useTempUnit';
 import { formatTempRange } from '../../lib/temperature';
 import Animated, { FadeInDown, FadeOutUp } from 'react-native-reanimated';
-import { ItemThumbStack } from './ItemThumbStack';
+import { EventLookCollage } from './EventLookCollage';
 import { OCCASIONS, OCCASION_ICONS, formatDayLabel, formatTime, formatCountdown } from './calendarUtils';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { Item } from '../../types/item';
 import type { Event } from '../../types/event';
-import { getEventItemsActionLabel, getEventPlanActionLabel } from './calendarPlanning';
+import { getEventItemsActionLabel } from './calendarPlanning';
 import { presentCalendarEvent, presentEventNotes } from './calendar-presentation';
 
 const WEATHER_ICONS: Record<WeatherCondition, keyof typeof Ionicons.glyphMap> = {
@@ -40,6 +41,8 @@ export function EventDetailModal({
   onDelete,
   onAssign,
   onChooseOutfit,
+  onOpenOutfit,
+  onChangeLook,
   allItems,
   onPlanOutfit,
   isPlanning,
@@ -54,6 +57,8 @@ export function EventDetailModal({
   onDelete: (ev: Event) => void;
   onAssign: (ev: Event) => void;
   onChooseOutfit: (ev: Event) => void;
+  onOpenOutfit: (ev: Event) => void;
+  onChangeLook: (ev: Event) => void;
   allItems: Item[];
   onPlanOutfit: (event: Event) => void;
   isPlanning: boolean;
@@ -68,6 +73,7 @@ export function EventDetailModal({
     eventDateStr,
   );
   const tempUnit = useTempUnit();
+  const { width } = useWindowDimensions();
   const [manualExpanded, setManualExpanded] = useState(false);
   const [notesExpanded, setNotesExpanded] = useState(false);
 
@@ -85,6 +91,8 @@ export function EventDetailModal({
   const presentation = presentCalendarEvent(event);
   const notesPresentation = presentEventNotes(event.notes);
   const hasOutfit = presentation.hasOutfit;
+  const pieceCount = event.itemIds?.length ?? 0;
+  const lookWidth = Math.max(240, Math.min(width - spacing.lg * 4, 480));
 
   const openEventMenu = () => {
     const edit = () => onEdit(event);
@@ -244,12 +252,38 @@ export function EventDetailModal({
                   <Ionicons name="checkmark" size={14} color={colors.success} />
                 </View>
               </View>
-              <View style={s.outfitRow}>
-                <ItemThumbStack itemIds={event.itemIds!} allItems={allItems} onPress={() => onAssign(event)} />
-                <TouchableOpacity onPress={() => onAssign(event)} style={s.changeOutfitBtn}>
-                  <Text style={s.changeOutfitText}>Edit pieces</Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                style={s.lookPreviewButton}
+                onPress={() => onOpenOutfit(event)}
+                activeOpacity={0.82}
+                disabled={event.outfitId == null}
+                accessibilityRole={event.outfitId == null ? undefined : 'button'}
+                accessibilityLabel={event.outfitId == null
+                  ? `Custom look for ${event.title}, ${pieceCount} ${pieceCount === 1 ? 'piece' : 'pieces'}`
+                  : `View outfit for ${event.title}, ${pieceCount} ${pieceCount === 1 ? 'piece' : 'pieces'}`}
+              >
+                <View style={s.lookPreviewCollage}>
+                  <EventLookCollage
+                    itemIds={event.itemIds ?? []}
+                    allItems={allItems}
+                    size={lookWidth}
+                    height={Math.min(lookWidth * 0.62, 240)}
+                    borderRadius={radii.lg}
+                  />
+                </View>
+                <View style={s.lookPreviewFooter}>
+                  <View>
+                    <Text style={s.lookPreviewTitle}>{event.outfitId == null ? 'Custom look' : 'Your outfit'}</Text>
+                    <Text style={s.lookPreviewMeta}>{pieceCount} {pieceCount === 1 ? 'piece' : 'pieces'}</Text>
+                  </View>
+                  {event.outfitId != null ? (
+                    <View style={s.viewLookPill}>
+                      <Text style={s.viewLookText}>View outfit</Text>
+                      <Ionicons name="arrow-forward" size={14} color={colors.primary} />
+                    </View>
+                  ) : null}
+                </View>
+              </TouchableOpacity>
             </View>
           ) : (
             <View style={[s.outfitCard, s.outfitCardEmpty]}>
@@ -267,22 +301,24 @@ export function EventDetailModal({
         <View style={s.actions}>
           <TouchableOpacity
             style={[s.generateBtn, isPlanning && s.generateBtnDisabled]}
-            onPress={() => onPlanOutfit(event)}
+            onPress={() => hasOutfit ? onChangeLook(event) : onPlanOutfit(event)}
             disabled={isPlanning}
             activeOpacity={0.85}
             accessibilityRole="button"
-            accessibilityLabel={`${getEventPlanActionLabel(hasOutfit)} for ${event.title}${isPremium ? '' : ', Premium feature'}`}
+            accessibilityLabel={hasOutfit
+              ? `Change look for ${event.title}`
+              : `Generate outfit for ${event.title}${isPremium ? '' : ', Premium feature'}`}
             accessibilityState={{ disabled: isPlanning, busy: isPlanning }}
           >
             {isPlanning ? (
               <ActivityIndicator size="small" color={colors.white} />
             ) : (
-              <Ionicons name="sparkles-outline" size={18} color={colors.white} />
+              <Ionicons name={hasOutfit ? 'options-outline' : 'sparkles-outline'} size={18} color={colors.white} />
             )}
             <Text style={s.generateBtnText}>
-              {isPlanning ? 'Planning…' : getEventPlanActionLabel(hasOutfit)}
+              {isPlanning ? 'Planning…' : hasOutfit ? 'Change look' : 'Generate outfit'}
             </Text>
-            {!isPremium && !isPlanning ? (
+            {!isPremium && !hasOutfit && !isPlanning ? (
               <View style={s.proPill}>
                 <Text style={s.proPillText}>PRO</Text>
               </View>
@@ -293,27 +329,31 @@ export function EventDetailModal({
             <Text style={s.stylistBtnText}>Ask stylist about this</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={s.manualToggle}
-            onPress={() => setManualExpanded((current) => !current)}
-            activeOpacity={0.75}
-            accessibilityRole="button"
-            accessibilityState={{ expanded: manualExpanded }}
-          >
-            <Text style={s.manualToggleText}>Choose manually</Text>
-            <Ionicons name={manualExpanded ? 'chevron-up' : 'chevron-down'} size={14} color={colors.mutedForeground} />
-          </TouchableOpacity>
-          {manualExpanded ? (
-            <Animated.View style={s.actionRow} entering={FadeInDown.duration(180)} exiting={FadeOutUp.duration(140)}>
-              <TouchableOpacity style={s.assignBtn} onPress={() => onChooseOutfit(event)} activeOpacity={0.8}>
-                <Ionicons name="albums-outline" size={18} color={colors.foreground} />
-                <Text style={s.assignBtnText}>Choose outfit</Text>
+          {!hasOutfit ? (
+            <>
+              <TouchableOpacity
+                style={s.manualToggle}
+                onPress={() => setManualExpanded((current) => !current)}
+                activeOpacity={0.75}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: manualExpanded }}
+              >
+                <Text style={s.manualToggleText}>Choose manually</Text>
+                <Ionicons name={manualExpanded ? 'chevron-up' : 'chevron-down'} size={14} color={colors.mutedForeground} />
               </TouchableOpacity>
-              <TouchableOpacity style={s.assignBtn} onPress={() => onAssign(event)} activeOpacity={0.8}>
-                <Ionicons name="shirt-outline" size={18} color={colors.foreground} />
-                <Text style={s.assignBtnText}>{getEventItemsActionLabel(hasOutfit)}</Text>
-              </TouchableOpacity>
-            </Animated.View>
+              {manualExpanded ? (
+                <Animated.View style={s.actionRow} entering={FadeInDown.duration(180)} exiting={FadeOutUp.duration(140)}>
+                  <TouchableOpacity style={s.assignBtn} onPress={() => onChooseOutfit(event)} activeOpacity={0.8}>
+                    <Ionicons name="albums-outline" size={18} color={colors.foreground} />
+                    <Text style={s.assignBtnText}>Choose outfit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={s.assignBtn} onPress={() => onAssign(event)} activeOpacity={0.8}>
+                    <Ionicons name="shirt-outline" size={18} color={colors.foreground} />
+                    <Text style={s.assignBtnText}>{getEventItemsActionLabel(hasOutfit)}</Text>
+                  </TouchableOpacity>
+                </Animated.View>
+              ) : null}
+            </>
           ) : null}
         </View>
       </View>
@@ -532,21 +572,49 @@ const s = StyleSheet.create({
   },
   outfitSubtext: { fontSize: typography.size.xs, color: colors.mutedForeground, lineHeight: 17, marginTop: 2 },
   readyMark: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#E8F0EA', alignItems: 'center', justifyContent: 'center' },
-  outfitRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  lookPreviewButton: {
+    overflow: 'hidden',
+    borderRadius: radii.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSubtle,
+    borderCurve: 'continuous',
+  },
+  lookPreviewCollage: { overflow: 'hidden' },
+  lookPreviewFooter: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    padding: spacing.md,
+  },
+  lookPreviewTitle: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.foreground,
+  },
+  lookPreviewMeta: { marginTop: 2, fontSize: typography.size.xs, color: colors.mutedForeground },
+  viewLookPill: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.full,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceElevated,
+  },
+  viewLookText: {
+    fontSize: typography.size.xs,
+    color: colors.primary,
+    fontWeight: typography.weight.semibold,
+  },
   emptyOutfitIcon: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: colors.surfaceSelected,
     alignItems: 'center', justifyContent: 'center',
   },
   emptyOutfitTitle: { fontSize: typography.size.sm, color: colors.foreground, fontWeight: typography.weight.semibold },
-  changeOutfitBtn: {
-    minHeight: 36,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.full,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceElevated,
-    justifyContent: 'center',
-  },
-  changeOutfitText: { fontSize: typography.size.xs, color: colors.primary, fontWeight: typography.weight.semibold },
 });

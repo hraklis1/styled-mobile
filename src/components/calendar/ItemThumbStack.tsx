@@ -3,15 +3,23 @@ import { colors, typography } from '../../theme';
 import type { Item } from '../../types/item';
 import { itemCoverPresentation } from '../../lib/itemImage';
 
-export function ItemThumbStack({ itemIds, allItems, onPress }: { itemIds: number[]; allItems: Item[]; onPress: () => void }) {
+export function ItemThumbStack({
+  itemIds,
+  allItems,
+  onPress,
+}: {
+  itemIds: number[];
+  allItems: Item[];
+  onPress?: () => void;
+}) {
   const visible = itemIds
     .map((id) => allItems.find((i) => i.id === id))
     .filter(Boolean)
     .slice(0, 3) as Item[];
   const overflow = itemIds.length - 3;
   if (visible.length === 0) return null;
-  return (
-    <TouchableOpacity style={s.row} onPress={onPress} activeOpacity={0.7}>
+  const content = (
+    <>
       <View style={s.stack}>
         {visible.map((item, idx) => {
           const cover = itemCoverPresentation(item);
@@ -26,8 +34,18 @@ export function ItemThumbStack({ itemIds, allItems, onPress }: { itemIds: number
         })}
       </View>
       {overflow > 0 && <Text style={s.overflow}>+{overflow}</Text>}
-    </TouchableOpacity>
+    </>
   );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity style={s.row} onPress={onPress} activeOpacity={0.7}>
+        {content}
+      </TouchableOpacity>
+    );
+  }
+
+  return <View style={s.row}>{content}</View>;
 }
 
 const s = StyleSheet.create({

@@ -4,6 +4,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
+  ActionSheetIOS,
   RefreshControl,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
@@ -276,19 +277,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
     setReturnToDetailEventId(ev.id);
     setDetailEvent(null);
     setEditingEvent(ev);
-    setFormVisible(true);
-  };
-
-  const openItemPicker = (ev: Event, returnToDetail = false) => {
-    setReturnToDetailEventId(returnToDetail ? ev.id : null);
-    if (returnToDetail) setDetailEvent(null);
-    setPickerEvent(ev);
-  };
-
-  const openOutfitPicker = (ev: Event, returnToDetail = false) => {
-    setReturnToDetailEventId(returnToDetail ? ev.id : null);
-    if (returnToDetail) setDetailEvent(null);
-    setOutfitPickerEvent(ev);
+    setTimeout(() => setFormVisible(true), 300);
   };
 
   const restoreDetailAfterChildClose = (eventId: number | null) => {
@@ -297,6 +286,40 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
       const event = eventsRef.current.find((candidate) => candidate.id === eventId);
       if (event) setDetailEvent(event);
     }, 300);
+  };
+
+  const openAssignedOutfit = (event: Event, fromDetail = false) => {
+    if (event.outfitId == null) {
+      if (!fromDetail) setDetailEvent(event);
+      return;
+    }
+
+    const showOutfit = () => navigation.navigate('Closet', {
+      screen: 'OutfitDetail',
+      params: { outfitId: event.outfitId! },
+    });
+    if (!fromDetail) {
+      showOutfit();
+      return;
+    }
+    setDetailEvent(null);
+    setTimeout(showOutfit, 300);
+  };
+
+  const openItemPicker = (ev: Event, returnToDetail = false) => {
+    setReturnToDetailEventId(returnToDetail ? ev.id : null);
+    if (returnToDetail) setDetailEvent(null);
+    const showPicker = () => setPickerEvent(ev);
+    if (returnToDetail) setTimeout(showPicker, 300);
+    else showPicker();
+  };
+
+  const openOutfitPicker = (ev: Event, returnToDetail = false) => {
+    setReturnToDetailEventId(returnToDetail ? ev.id : null);
+    if (returnToDetail) setDetailEvent(null);
+    const showPicker = () => setOutfitPickerEvent(ev);
+    if (returnToDetail) setTimeout(showPicker, 300);
+    else showPicker();
   };
 
   const closeEventForm = () => {
@@ -367,7 +390,11 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
     }, delay);
   };
 
-  const planOutfitForEvent = async (event: Event, previousCandidateId?: string) => {
+  const planOutfitForEvent = async (
+    event: Event,
+    previousCandidateId?: string,
+    returnToDetail = false,
+  ) => {
     if (!isPremium) {
       const shouldUpgrade = await new Promise<boolean>((resolve) => {
         Alert.alert(
@@ -382,10 +409,10 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
       if (shouldUpgrade) await presentPaywall();
       return;
     }
-    // Keep event details visible while the plan is generated so the user sees
-    // the in-sheet progress state. Dismiss only once the result is ready, then
-    // present the result sheet after the page-sheet transition completes.
-    const fromDetail = !previousCandidateId && detailEvent?.id === event.id;
+    // Keep the originating sheet visible while the plan is generated so the
+    // user sees progress. Dismiss only once the result is ready, then present
+    // the result after the page-sheet transition completes.
+    const returnEventId = !previousCandidateId && returnToDetail ? event.id : null;
     setPlannedEvent(event);
     generatePlan.mutate(
       {
@@ -399,8 +426,8 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
             setGeneratedPlan(result);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
           };
-          if (fromDetail) {
-            setReturnToDetailEventId(event.id);
+          if (returnEventId !== null) {
+            setReturnToDetailEventId(returnEventId);
             setDetailEvent(null);
             // iOS rejects presenting a modal while another is still dismissing.
             setTimeout(showSheet, 300);
@@ -422,21 +449,21 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
   const acceptGeneratedPlan = () => {
     if (!plannedEvent || !generatedPlan) return;
     const eventId = plannedEvent.id;
-    const restoreId = returnToDetailEventId;
+    const restoreEventId = returnToDetailEventId;
     acceptPlan.mutate(
       { eventId, candidateId: generatedPlan.candidateId },
       {
-        onSuccess: ({ itemIds }) => {
+        onSuccess: ({ itemIds, outfit }) => {
           // Optimistically apply the new outfit so the list and the restored
           // detail modal show the assigned items immediately (no empty-state flash
           // before the query invalidation refetch lands).
           queryClient.setQueryData<Event[]>(EVENTS_QUERY_KEY, (old) =>
-            old?.map((e) => (e.id === eventId ? { ...e, itemIds } : e)) ?? old,
+            old?.map((e) => (e.id === eventId ? { ...e, itemIds, outfitId: outfit.id } : e)) ?? old,
           );
           setGeneratedPlan(null);
           setPlannedEvent(null);
           setReturnToDetailEventId(null);
-          restoreDetailAfterChildClose(restoreId);
+          restoreDetailAfterChildClose(restoreEventId);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
         },
         onError: (err: any) => {
@@ -444,6 +471,38 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         },
       },
     );
+  };
+
+  const openChangeLookMenu = (event: Event) => {
+    const generateAnother = () => {
+      void planOutfitForEvent(event, undefined, true);
+    };
+    const chooseSavedOutfit = () => openOutfitPicker(event, true);
+    const editPieces = () => openItemPicker(event, true);
+
+    if (process.env.EXPO_OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: event.title,
+          message: 'How would you like to change this look?',
+          options: ['Cancel', 'Generate another', 'Choose saved outfit', 'Edit pieces'],
+          cancelButtonIndex: 0,
+        },
+        (index) => {
+          if (index === 1) generateAnother();
+          if (index === 2) chooseSavedOutfit();
+          if (index === 3) editPieces();
+        },
+      );
+      return;
+    }
+
+    Alert.alert(event.title, 'How would you like to change this look?', [
+      { text: 'Generate another', onPress: generateAnother },
+      { text: 'Choose saved outfit', onPress: chooseSavedOutfit },
+      { text: 'Edit pieces', onPress: editPieces },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
   const handleSelectDate = (s: string) => {
@@ -455,43 +514,54 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
     const occasion = OCCASIONS.find((option) => option.id === event.occasion)?.label ?? event.occasion;
     const presentation = presentCalendarEvent(event);
     return (
-      <TouchableOpacity
-        style={styles.eventCard}
-        onPress={() => setDetailEvent(event)}
-        activeOpacity={0.8}
-        accessibilityRole="button"
-        accessibilityLabel={`${event.title}, ${presentation.readinessLabel}`}
-      >
-        <View style={styles.eventIconBox}>
-          <Ionicons name={iconName} size={18} color={colors.primary} />
-        </View>
-        <View style={styles.eventBody}>
-          <Text style={styles.eventTitle} numberOfLines={1}>{event.title}</Text>
-          <View style={styles.eventMeta}>
-            <Text style={styles.eventTime}>{formatTime(new Date(event.date))}</Text>
-            <Text style={styles.dot}>·</Text>
-            <Text style={styles.eventOccasion} numberOfLines={1}>{occasion}</Text>
-            {event.location ? (
-              <>
-                <Text style={styles.dot}>·</Text>
-                <Text style={styles.eventLoc} numberOfLines={1}>{event.location}</Text>
-              </>
-            ) : null}
+      <View style={styles.eventCard}>
+        <TouchableOpacity
+          style={styles.eventMain}
+          onPress={() => setDetailEvent(event)}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={`${event.title}, ${presentation.readinessLabel}`}
+        >
+          <View style={styles.eventIconBox}>
+            <Ionicons name={iconName} size={18} color={colors.primary} />
           </View>
-        </View>
-        <View style={styles.eventReadiness}>
-          {presentation.hasOutfit ? (
-            <ItemThumbStack itemIds={event.itemIds!} allItems={allItems} onPress={() => openItemPicker(event)} />
-          ) : (
+          <View style={styles.eventBody}>
+            <Text style={styles.eventTitle} numberOfLines={1}>{event.title}</Text>
+            <View style={styles.eventMeta}>
+              <Text style={styles.eventTime}>{formatTime(new Date(event.date))}</Text>
+              <Text style={styles.dot}>·</Text>
+              <Text style={styles.eventOccasion} numberOfLines={1}>{occasion}</Text>
+              {event.location ? (
+                <>
+                  <Text style={styles.dot}>·</Text>
+                  <Text style={styles.eventLoc} numberOfLines={1}>{event.location}</Text>
+                </>
+              ) : null}
+            </View>
+          </View>
+        </TouchableOpacity>
+        {presentation.hasOutfit ? (
+          <TouchableOpacity
+            style={styles.eventLookButton}
+            onPress={() => openAssignedOutfit(event)}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel={`${event.outfitId == null ? 'View details' : 'View outfit'} for ${event.title}, ${event.itemIds!.length} pieces`}
+          >
+            <ItemThumbStack itemIds={event.itemIds!} allItems={allItems} />
+            <Text style={styles.eventLookText}>{event.outfitId == null ? 'View details' : 'View outfit'}</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.eventReadiness}>
             <View style={styles.needsOutfitIcon}>
               <Ionicons name="sparkles-outline" size={12} color={colors.primary} />
             </View>
-          )}
-          <Text style={[styles.readinessText, presentation.hasOutfit && styles.readinessTextPlanned]}>
+            <Text style={styles.readinessText}>
             {presentation.readinessShortLabel}
-          </Text>
-        </View>
-      </TouchableOpacity>
+            </Text>
+          </View>
+        )}
+      </View>
     );
   };
 
@@ -570,7 +640,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
             isPremium={isPremium}
             onPress={() => setDetailEvent(item.event)}
             onPlanOutfit={() => planOutfitForEvent(item.event)}
-            onPressOutfit={() => openItemPicker(item.event)}
+            onOpenOutfit={() => openAssignedOutfit(item.event)}
             isPlanning={generatePlan.isPending && plannedEvent?.id === item.event.id}
           />
         );
@@ -624,28 +694,46 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
             <Ionicons name={item.expanded ? 'chevron-up' : 'chevron-down'} size={17} color={colors.mutedForeground} />
           </TouchableOpacity>
         );
-      case 'past-event':
+      case 'past-event': {
+        const pastPresentation = presentCalendarEvent(item.event);
         return (
-          <TouchableOpacity
-            style={styles.pastCard}
-            onPress={() => setDetailEvent(item.event)}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel={item.event.title}
-          >
-            <View style={styles.pastDateBlock}>
-              <Text style={styles.pastMonth}>{presentCalendarEvent(item.event).monthLabel}</Text>
-              <Text style={styles.pastDay}>{presentCalendarEvent(item.event).dayLabel}</Text>
-            </View>
-            <View style={styles.pastBody}>
-              <Text style={styles.pastTitle} numberOfLines={1}>{item.event.title}</Text>
-              <Text style={styles.pastDate} numberOfLines={1}>
-                {new Date(item.event.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={14} color={colors.border} />
-          </TouchableOpacity>
+          <View style={styles.pastCard}>
+            <TouchableOpacity
+              style={styles.pastMain}
+              onPress={() => setDetailEvent(item.event)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={item.event.title}
+            >
+              <View style={styles.pastDateBlock}>
+                <Text style={styles.pastMonth}>{pastPresentation.monthLabel}</Text>
+                <Text style={styles.pastDay}>{pastPresentation.dayLabel}</Text>
+              </View>
+              <View style={styles.pastBody}>
+                <Text style={styles.pastTitle} numberOfLines={1}>{item.event.title}</Text>
+                <Text style={styles.pastDate} numberOfLines={1}>
+                  {new Date(item.event.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                </Text>
+              </View>
+              {!pastPresentation.hasOutfit ? (
+                <Ionicons name="chevron-forward" size={14} color={colors.border} />
+              ) : null}
+            </TouchableOpacity>
+            {pastPresentation.hasOutfit ? (
+              <TouchableOpacity
+                style={styles.pastLookButton}
+                onPress={() => openAssignedOutfit(item.event)}
+                activeOpacity={0.75}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.event.outfitId == null ? 'View details' : 'View outfit'} for ${item.event.title}, ${item.event.itemIds!.length} pieces`}
+              >
+                <ItemThumbStack itemIds={item.event.itemIds!} allItems={allItems} />
+                <Text style={styles.pastLookText}>{item.event.outfitId == null ? 'Details' : 'Outfit'}</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         );
+      }
     }
   };
 
@@ -705,8 +793,10 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         onDelete={handleDelete}
         onAssign={(ev) => openItemPicker(ev, true)}
         onChooseOutfit={(ev) => openOutfitPicker(ev, true)}
+        onOpenOutfit={(ev) => openAssignedOutfit(ev, true)}
+        onChangeLook={openChangeLookMenu}
         allItems={allItems}
-        onPlanOutfit={planOutfitForEvent}
+        onPlanOutfit={(event) => planOutfitForEvent(event, undefined, true)}
         isPlanning={generatePlan.isPending && plannedEvent?.id === detailEvent?.id}
         onOpenStylist={(event) => openStylistForEvent(event, 'event_detail')}
         weatherFallback={activeLocation}
@@ -736,11 +826,11 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         result={generatedPlan}
         allItems={allItems}
         onDone={() => {
-          const restoreId = returnToDetailEventId;
+          const restoreEventId = returnToDetailEventId;
           setGeneratedPlan(null);
           setPlannedEvent(null);
           setReturnToDetailEventId(null);
-          restoreDetailAfterChildClose(restoreId);
+          restoreDetailAfterChildClose(restoreEventId);
         }}
         onAccept={acceptGeneratedPlan}
         onTryAnother={() => {
@@ -835,10 +925,17 @@ const styles = StyleSheet.create({
   dayCountdown: { fontSize: 11, fontWeight: typography.weight.medium, color: colors.primary },
 
   eventCard: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    flexDirection: 'row', alignItems: 'stretch',
     minHeight: 72,
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border,
     paddingVertical: spacing.sm,
+  },
+  eventMain: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   eventIconBox: {
     width: 38, height: 38, borderRadius: radii.lg,
@@ -859,13 +956,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 3,
   },
+  eventLookButton: {
+    minWidth: 82,
+    minHeight: 56,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 3,
+    paddingLeft: spacing.sm,
+  },
+  eventLookText: {
+    fontSize: 10,
+    color: colors.primary,
+    fontWeight: typography.weight.semibold,
+  },
   needsOutfitIcon: {
     width: 28, height: 28, borderRadius: 14,
     backgroundColor: colors.surfaceSelected,
     alignItems: 'center', justifyContent: 'center',
   },
   readinessText: { fontSize: 10, color: colors.primary, fontWeight: typography.weight.semibold },
-  readinessTextPlanned: { color: colors.success },
 
   pastToggle: {
     minHeight: 64,
@@ -882,13 +991,20 @@ const styles = StyleSheet.create({
   pastToggleMeta: { fontSize: 11, color: colors.mutedForeground, marginTop: 2 },
 
   pastCard: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    flexDirection: 'row', alignItems: 'stretch',
     minHeight: 68,
     opacity: 0.72,
     paddingHorizontal: spacing.xs,
-    paddingVertical: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
+  },
+  pastMain: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
   },
   pastDateBlock: {
     width: 40,
@@ -900,6 +1016,19 @@ const styles = StyleSheet.create({
   pastBody: { flex: 1, gap: 2 },
   pastTitle: { fontSize: typography.size.sm, fontWeight: typography.weight.medium, color: colors.foreground },
   pastDate: { fontSize: typography.size.xs, color: colors.mutedForeground },
+  pastLookButton: {
+    minWidth: 76,
+    minHeight: 56,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 2,
+    paddingLeft: spacing.sm,
+  },
+  pastLookText: {
+    fontSize: 10,
+    color: colors.primary,
+    fontWeight: typography.weight.semibold,
+  },
 
   showMore: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,

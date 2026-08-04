@@ -4,7 +4,7 @@ import { useEventWeatherForecast, type WeatherCondition } from '../../hooks/useW
 import type { StylingLocationContext } from '../../lib/stylingLocation';
 import { useTempUnit } from '../../hooks/useTempUnit';
 import { formatTempRange } from '../../lib/temperature';
-import { ItemThumbStack } from './ItemThumbStack';
+import { EventLookCollage } from './EventLookCollage';
 import {
   OCCASIONS,
   formatDayLabel,
@@ -30,7 +30,7 @@ export function NextEventHero({
   isPremium,
   onPress,
   onPlanOutfit,
-  onPressOutfit,
+  onOpenOutfit,
   isPlanning,
 }: {
   event: Event;
@@ -39,7 +39,7 @@ export function NextEventHero({
   isPremium: boolean;
   onPress: () => void;
   onPlanOutfit: () => void;
-  onPressOutfit: () => void;
+  onOpenOutfit: () => void;
   isPlanning: boolean;
 }) {
   const forecast = useEventWeatherForecast(
@@ -55,69 +55,88 @@ export function NextEventHero({
   const occasionMeta = OCCASIONS.find((o) => o.id === event.occasion);
   const presentation = presentCalendarEvent(event);
   const hasOutfit = presentation.hasOutfit;
-  const actionLabel = hasOutfit ? 'View outfit' : 'Plan outfit';
+  const pieceCount = event.itemIds?.length ?? 0;
 
   return (
-    <TouchableOpacity
-      style={s.card}
-      onPress={onPress}
-      activeOpacity={0.9}
-      accessibilityRole="button"
-      accessibilityLabel={`Next event: ${event.title}`}
-    >
-      <View style={s.topRow}>
-        <Text style={s.upNext}>Up next</Text>
-        {badge ? (
-          <View style={s.badge}>
-            <Text style={s.badgeText}>{badge}</Text>
-          </View>
-        ) : null}
-      </View>
-
-      <View style={s.mainRow}>
-        <View style={s.dateBlock}>
-          <Text style={s.dateMonth}>{presentation.monthLabel}</Text>
-          <Text style={s.dateDay}>{presentation.dayLabel}</Text>
-        </View>
-        <View style={s.body}>
-          <Text style={s.title} numberOfLines={2}>{event.title}</Text>
-          <Text style={s.meta}>
-            {d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · {formatTime(d)}
-          </Text>
-        </View>
-      </View>
-
-      <View style={s.metaDetails}>
-        {occasionMeta ? (
-          <View style={s.detail}>
-            <Ionicons name="shirt-outline" size={12} color={colors.primary} />
-            <Text style={[s.detailText, s.detailTextAccent]}>{occasionMeta.label}</Text>
-          </View>
-        ) : null}
-        {event.location ? (
-          <View style={[s.detail, s.detailShrink]}>
-            <Ionicons name="location-outline" size={12} color={colors.mutedForeground} />
-            <Text style={s.detailText} numberOfLines={1}>{event.location}</Text>
-          </View>
-        ) : null}
-        {forecast.data ? (
-          <View style={s.detail}>
-            <Ionicons name={WEATHER_ICONS[forecast.data.condition]} size={12} color={colors.mutedForeground} />
-            <Text style={s.detailText}>{formatTempRange(forecast.data, tempUnit)}</Text>
-          </View>
-        ) : null}
-      </View>
-
-      <View style={s.actionRow}>
-        {hasOutfit ? (
-          <View style={s.outfitStatus}>
-            <ItemThumbStack itemIds={event.itemIds!} allItems={allItems} onPress={onPressOutfit} />
-            <View style={s.outfitCopy}>
-              <Text style={s.outfitReady}>Outfit ready</Text>
-              <Text style={s.outfitHint}>Tap to review your pieces</Text>
+    <View style={s.card}>
+      <TouchableOpacity
+        style={s.eventButton}
+        onPress={onPress}
+        activeOpacity={0.82}
+        accessibilityRole="button"
+        accessibilityLabel={`Next event: ${event.title}`}
+      >
+        <View style={s.topRow}>
+          <Text style={s.upNext}>Up next</Text>
+          {badge ? (
+            <View style={s.badge}>
+              <Text style={s.badgeText}>{badge}</Text>
             </View>
+          ) : null}
+        </View>
+
+        <View style={s.mainRow}>
+          <View style={s.dateBlock}>
+            <Text style={s.dateMonth}>{presentation.monthLabel}</Text>
+            <Text style={s.dateDay}>{presentation.dayLabel}</Text>
           </View>
-        ) : (
+          <View style={s.body}>
+            <Text style={s.title} numberOfLines={2}>{event.title}</Text>
+            <Text style={s.meta}>
+              {d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · {formatTime(d)}
+            </Text>
+          </View>
+        </View>
+
+        <View style={s.metaDetails}>
+          {occasionMeta ? (
+            <View style={s.detail}>
+              <Ionicons name="shirt-outline" size={12} color={colors.primary} />
+              <Text style={[s.detailText, s.detailTextAccent]}>{occasionMeta.label}</Text>
+            </View>
+          ) : null}
+          {event.location ? (
+            <View style={[s.detail, s.detailShrink]}>
+              <Ionicons name="location-outline" size={12} color={colors.mutedForeground} />
+              <Text style={s.detailText} numberOfLines={1}>{event.location}</Text>
+            </View>
+          ) : null}
+          {forecast.data ? (
+            <View style={s.detail}>
+              <Ionicons name={WEATHER_ICONS[forecast.data.condition]} size={12} color={colors.mutedForeground} />
+              <Text style={s.detailText}>{formatTempRange(forecast.data, tempUnit)}</Text>
+            </View>
+          ) : null}
+        </View>
+      </TouchableOpacity>
+
+      {hasOutfit ? (
+        <TouchableOpacity
+          style={s.lookPreview}
+          onPress={onOpenOutfit}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={`${event.outfitId == null ? 'View details' : 'View outfit'} for ${event.title}, ${pieceCount} ${pieceCount === 1 ? 'piece' : 'pieces'}`}
+        >
+          <View style={s.lookCollage}>
+            <EventLookCollage
+              itemIds={event.itemIds ?? []}
+              allItems={allItems}
+              size={56}
+              borderRadius={radii.lg}
+            />
+          </View>
+          <View style={s.outfitCopy}>
+            <Text style={s.outfitReady}>{event.outfitId == null ? 'Custom look' : 'Your outfit'}</Text>
+            <Text style={s.outfitHint}>{pieceCount} {pieceCount === 1 ? 'piece' : 'pieces'}</Text>
+          </View>
+          <View style={s.viewLookPill}>
+            <Text style={s.viewLookText}>{event.outfitId == null ? 'View details' : 'View outfit'}</Text>
+            <Ionicons name="arrow-forward" size={14} color={colors.primary} />
+          </View>
+        </TouchableOpacity>
+      ) : (
+        <View style={s.actionRow}>
           <View style={s.outfitStatus}>
             <View style={s.planIcon}>
               <Ionicons name="sparkles-outline" size={15} color={colors.primary} />
@@ -127,38 +146,32 @@ export function NextEventHero({
               <Text style={s.outfitHint}>Plan from your wardrobe</Text>
             </View>
           </View>
-        )}
-        <TouchableOpacity
-          style={[s.planBtn, hasOutfit && s.planBtnSecondary, isPlanning && s.planBtnDisabled]}
-          onPress={hasOutfit ? onPressOutfit : onPlanOutfit}
-          disabled={isPlanning}
-          activeOpacity={0.85}
-          accessibilityRole="button"
-          accessibilityLabel={isPlanning
-            ? `Styling an outfit for ${event.title}`
-            : `${actionLabel} for ${event.title}${isPremium || hasOutfit ? '' : ', Premium feature'}`}
-          accessibilityState={{ disabled: isPlanning, busy: isPlanning }}
-        >
-          {isPlanning ? (
-            <ActivityIndicator size="small" color={hasOutfit ? colors.primary : colors.white} />
-          ) : (
-            <Ionicons
-              name={hasOutfit ? 'arrow-forward' : 'sparkles-outline'}
-              size={14}
-              color={hasOutfit ? colors.primary : colors.white}
-            />
-          )}
-          <Text style={[s.planBtnText, hasOutfit && s.planBtnTextSecondary]}>
-            {isPlanning ? 'Styling…' : actionLabel}
-          </Text>
-          {!isPremium && !hasOutfit ? (
-            <View style={s.proPill}>
-              <Text style={s.proPillText}>PRO</Text>
-            </View>
-          ) : null}
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.planBtn, isPlanning && s.planBtnDisabled]}
+            onPress={onPlanOutfit}
+            disabled={isPlanning}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={isPlanning
+              ? `Styling an outfit for ${event.title}`
+              : `Plan outfit for ${event.title}${isPremium ? '' : ', Premium feature'}`}
+            accessibilityState={{ disabled: isPlanning, busy: isPlanning }}
+          >
+            {isPlanning ? (
+              <ActivityIndicator size="small" color={colors.white} />
+            ) : (
+              <Ionicons name="sparkles-outline" size={14} color={colors.white} />
+            )}
+            <Text style={s.planBtnText}>{isPlanning ? 'Styling…' : 'Plan outfit'}</Text>
+            {!isPremium ? (
+              <View style={s.proPill}>
+                <Text style={s.proPillText}>PRO</Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -168,11 +181,11 @@ const s = StyleSheet.create({
     borderRadius: radii.xl,
     padding: spacing.lg,
     marginBottom: spacing.lg,
-    gap: spacing.md,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
     borderCurve: 'continuous',
   },
+  eventButton: { gap: spacing.md },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   upNext: {
     fontSize: typography.size.xs,
@@ -226,6 +239,41 @@ const s = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
+  lookPreview: {
+    minHeight: 76,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  lookCollage: {
+    width: 56,
+    height: 56,
+    overflow: 'hidden',
+    borderRadius: radii.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    borderCurve: 'continuous',
+  },
+  viewLookPill: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.full,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  viewLookText: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
+  },
   outfitStatus: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   outfitCopy: { flex: 1, minWidth: 0, gap: 1 },
   outfitReady: {
@@ -247,13 +295,8 @@ const s = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  planBtnSecondary: {
-    backgroundColor: colors.background,
-    borderWidth: 1, borderColor: colors.border,
-  },
   planBtnDisabled: { opacity: 0.72 },
   planBtnText: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.white },
-  planBtnTextSecondary: { color: colors.primary },
   proPill: {
     backgroundColor: 'rgba(255,255,255,0.22)',
     borderRadius: radii.full,
