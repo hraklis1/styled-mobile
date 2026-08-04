@@ -46,9 +46,11 @@ function GarmentCardComponent({
   const handlePress = selectionMode ? onToggleSelect : onPress;
   const colorHex = resolveCardColor(item);
 
-  // Scale is applied as a margin rather than a transform so the garment stays
-  // centred and `contentFit: contain` still does the letterboxing.
-  const catalogMargin = cover.isCatalogStyle
+  // Transparent cutouts are tightly trimmed and need category-aware breathing
+  // room. AI-polished images already include a studio canvas, so applying this
+  // inset to them creates double padding and makes the garment look miniature.
+  // A margin keeps true cutouts centred while `contentFit: contain` letterboxes.
+  const cutoutMargin = cover.variant === 'cutout'
     ? (Math.min(cardWidth, imageHeight) * (1 - cutoutScaleFor(item.category))) / 2
     : 0;
 
@@ -79,10 +81,10 @@ function GarmentCardComponent({
         {imageUri ? (
           <Image
             source={{ uri: imageUri }}
-            // A cutout is inset so the garment floats on the card's surface with
-            // even margins; a plain photo crop still fills its frame, since its
-            // own background is part of the image.
-            style={[StyleSheet.absoluteFill, cover.isCatalogStyle && { margin: catalogMargin }]}
+            // Only a tightly trimmed cutout needs card-supplied air. Polished
+            // images retain their own studio whitespace at the largest safe
+            // `contain` scale, while ordinary photos continue to fill the card.
+            style={[StyleSheet.absoluteFill, cover.variant === 'cutout' && { margin: cutoutMargin }]}
             contentFit={cover.contentFit}
             transition={200}
             cachePolicy="memory-disk"
