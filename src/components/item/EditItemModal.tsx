@@ -22,7 +22,7 @@ import {
   COLOR_TEMPERATURE_OPTIONS, COLOR_TEMPERATURE_LABELS, MATERIAL_OPTIONS, CARE_OPTIONS,
   SEASON_OPTIONS, SEASON_LABELS, OCCASION_OPTIONS, OCCASION_LABELS,
   CONDITION_OPTIONS, CONDITION_LABELS, WARMTH_RATINGS, WARMTH_LABELS,
-  FIT_OPTIONS_BY_CATEGORY, FIT_OPTIONS_DEFAULT, FORMALITY_STYLE_TAGS,
+  FIT_OPTIONS_BY_CATEGORY, FIT_OPTIONS_DEFAULT,
   SLEEVE_LENGTH_OPTIONS, SLEEVE_LENGTH_LABELS,
 } from '../../types/item';
 import type { ItemCategory, Item, NormalizedColor, ScanResult, SleeveLength } from '../../types/item';
@@ -98,7 +98,6 @@ export function EditItemModal({
   const [editFit, setEditFit] = useState('');
   const [editNeckline, setEditNeckline] = useState('');
   const [editSleeveLength, setEditSleeveLength] = useState('');
-  const [editFormalityStyles, setEditFormalityStyles] = useState<string[]>([]);
   const [editTags, setEditTags] = useState<string[]>([]);
   const [editTagInput, setEditTagInput] = useState('');
   const [editNotes, setEditNotes] = useState('');
@@ -130,7 +129,6 @@ export function EditItemModal({
       setEditFit(scanData.fit ?? '');
       setEditNeckline(scanData.neckline ?? '');
       setEditSleeveLength(scanData.sleeveLength ?? '');
-      setEditFormalityStyles(Array.isArray(scanData.formalityStyles) ? [...scanData.formalityStyles] : []);
       setEditTags(Array.isArray(scanData.tags) ? [...scanData.tags] : []);
       setEditTagInput('');
       setEditNotes('');
@@ -159,7 +157,6 @@ export function EditItemModal({
       setEditFit(item.fit ?? '');
       setEditNeckline(item.neckline ?? '');
       setEditSleeveLength(item.sleeveLength ?? '');
-      setEditFormalityStyles(Array.isArray(item.formalityStyles) ? [...item.formalityStyles] : []);
       setEditTags(Array.isArray(item.tags) ? [...item.tags] : []);
       setEditTagInput('');
       setEditNotes(item.notes ?? '');
@@ -206,11 +203,6 @@ export function EditItemModal({
 
   const removeEditTag = (tag: string) => setEditTags((prev) => prev.filter((t) => t !== tag));
 
-  const toggleEditFormality = (s: string) =>
-    setEditFormalityStyles((prev) =>
-      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
-    );
-
   const handleSave = () => {
     const pendingTag = normalizeTag(editTagInput);
     const finalTags = pendingTag && !editTags.includes(pendingTag)
@@ -251,7 +243,6 @@ export function EditItemModal({
           fit: editFit.trim() || null,
           neckline: necklineValue,
           sleeveLength: sleeveLengthValue,
-          formalityStyles: editFormalityStyles,
           tags: finalTags,
           notes: editNotes.trim() || null,
           material: derivedMaterial,
@@ -288,7 +279,6 @@ export function EditItemModal({
           fit: editFit.trim() || null,
           neckline: necklineValue,
           sleeveLength: sleeveLengthValue,
-          formalityStyles: editFormalityStyles,
           tags: finalTags,
           notes: editNotes.trim() || null,
           material: derivedMaterial,
@@ -514,16 +504,6 @@ export function EditItemModal({
               multi
               multiValue={editOccasions}
               onMultiToggle={(v) => setEditOccasions((prev) => prev.includes(v) ? prev.filter((o) => o !== v) : [...prev, v])}
-            />
-          </EditSection>
-
-          {/* Style Context */}
-          <EditSection title="Style Context">
-            <OptionChips
-              options={[...FORMALITY_STYLE_TAGS]}
-              multi
-              multiValue={editFormalityStyles}
-              onMultiToggle={toggleEditFormality}
             />
           </EditSection>
 

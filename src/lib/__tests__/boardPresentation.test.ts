@@ -27,7 +27,7 @@ const makeItem = (id: number, name: string, imageUrl: string | null, category: I
   id, name, imageUrl, cutoutUrl: null, polishedUrl: null, coverImageVariant: 'original', category, colorPalette: colors, colorNormalized: colors[0] ?? null,
   userId: 1, color: null, colorTemperature: null, subcategory: null, brand: null, style: null,
   seasons: [], occasions: [], material: null, fit: null, pattern: null, neckline: null, sleeveLength: null,
-  tags: [], formalityStyles: [], notableDetails: [], notes: null, care: null, condition: null, warmthRating: null,
+  tags: [], notableDetails: [], notes: null, care: null, condition: null, warmthRating: null,
   purchasePrice: null, purchaseDate: null, wearCount: 0, lastWornAt: null, isFavorite: false, isArchived: false, createdAt: '',
 });
 

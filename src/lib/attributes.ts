@@ -81,25 +81,88 @@ export const SEASON_LABELS: Record<Season, string> = {
 
 // ── Occasion ────────────────────────────────────────────────────────────────
 
+/**
+ * One formality axis, ordered least to most formal.
+ *
+ * There used to be two, filled by the same scan and both read by the stylist:
+ * `occasions` (casual, smart_casual, business, formal, party, workout) and
+ * `formalityStyles` (Athleisure, Lounge, Casual, Smart Casual, Business Casual,
+ * Professional, Night Out, Formal). They answered the same question in
+ * different words, and the live data showed `formalityStyles` was usually the
+ * richer of the two — one item carried `occasions: ["business"]` against
+ * `formalityStyles: [Professional, Business Casual, Night Out, Smart Casual,
+ * Formal]`.
+ *
+ * The merged vocabulary is the finer one, in the snake_case the surviving
+ * `occasions` column already stores. `occasions` survives because it is the
+ * column with `NOT NULL DEFAULT '{}'`, the closet filters, the retrieval boost
+ * and the wardrobe gap analysis behind it.
+ *
+ * The ordering is load-bearing: `OCCASION_RANK` below turns it into a formality
+ * floor.
+ */
 export const OCCASION_OPTIONS = [
-  "casual", "smart_casual", "business", "formal", "party", "workout",
+  "athleisure", "lounge", "casual", "smart_casual",
+  "business_casual", "professional", "night_out", "formal",
 ] as const;
 export type Occasion = typeof OCCASION_OPTIONS[number];
 export const OCCASION_LABELS: Record<Occasion, string> = {
-  casual:       "Casual",
-  smart_casual: "Smart Casual",
-  business:     "Business",
-  formal:       "Formal",
-  party:        "Party",
-  workout:      "Workout",
+  athleisure:      "Athleisure",
+  lounge:          "Lounge",
+  casual:          "Casual",
+  smart_casual:    "Smart Casual",
+  business_casual: "Business Casual",
+  professional:    "Professional",
+  night_out:       "Night Out",
+  formal:          "Formal",
 };
 
+/** Position on the formality scale. Higher is dressier. */
+export const OCCASION_RANK: Record<Occasion, number> =
+  Object.fromEntries(OCCASION_OPTIONS.map((o, i) => [o, i])) as Record<Occasion, number>;
+
 /**
- * The finer formality tags, stored alongside `occasions`.
+ * Retired vocabularies, mapped onto the merged one.
  *
- * Two vocabularies for one axis, both filled by the same scan and both read by
- * the stylist. They are merged in a later phase; until then this is the
- * canonical spelling and `shared/schema.ts` re-exports it.
+ * Kept in the shared module rather than buried in a migration because model
+ * output, legacy rows and any client that has not shipped yet all keep
+ * producing the old words. Used by the migration AND by `normalizeOccasion`.
+ */
+const LEGACY_OCCASION_ALIASES: Record<string, Occasion> = {
+  // The old `occasions` vocabulary.
+  workout: "athleisure",
+  business: "professional",
+  party: "night_out",
+  // The old `formalityStyles` vocabulary, lowercased.
+  "smart casual": "smart_casual",
+  "business casual": "business_casual",
+  "night out": "night_out",
+  // Words a model reaches for that were never in either list.
+  gym: "athleisure",
+  athletic: "athleisure",
+  sport: "athleisure",
+  loungewear: "lounge",
+  work: "professional",
+  office: "professional",
+  evening: "night_out",
+  cocktail: "night_out",
+  "black tie": "formal",
+};
+
+/** Map any spelling — current, retired, or near-miss — onto the merged axis. */
+export function normalizeOccasion(raw: unknown): Occasion | null {
+  if (typeof raw !== "string") return null;
+  const v = raw.trim().toLowerCase().replace(/[-]+/g, " ").replace(/\s+/g, " ");
+  if (!v) return null;
+  const direct = OCCASION_OPTIONS.find((o) => o === v || o.replace(/_/g, " ") === v);
+  if (direct) return direct;
+  return LEGACY_OCCASION_ALIASES[v] ?? null;
+}
+
+/**
+ * @deprecated The `formality_styles` column is retired — its values are merged
+ * into `occasions`. Retained only so the column and its zod schema still
+ * typecheck until the column is dropped. Do not read it in new code.
  */
 export const FORMALITY_STYLE_TAGS = [
   "Athleisure", "Lounge", "Casual", "Smart Casual",

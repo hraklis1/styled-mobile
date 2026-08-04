@@ -229,7 +229,6 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         // sleeve length but never to correct a wrong one — the one operation a
         // user reaches for after seeing the wrong sleeves.
         sleeveLength: scanned.sleeveLength || null,
-        formalityStyles: Array.isArray(scanned.formalityStyles) ? scanned.formalityStyles : [],
         notableDetails: Array.isArray(scanned.notableDetails) ? scanned.notableDetails : [],
         colorPalette: Array.isArray(scanned.colorPalette) ? scanned.colorPalette : [],
       });
@@ -362,7 +361,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   ].filter(Boolean).join(' › ');
   const hasRichProfile = !!(
     viewItem.subcategory || viewItem.style || viewItem.pattern || viewItem.material || viewItem.fit ||
-    (viewItem.formalityStyles?.length > 0) || (viewItem.notableDetails?.length > 0)
+    (viewItem.notableDetails?.length > 0)
   );
   const isBusy = updateItem.isPending || markWorn.isPending || deleteItem.isPending
     || cuttingOut || polishItem.isPending;
@@ -587,7 +586,6 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
                 {viewItem.fit ? <Chip label={viewItem.fit} /> : null}
                 {viewItem.neckline ? <Chip label={viewItem.neckline} /> : null}
                 {viewItem.sleeveLength ? <Chip label={SLEEVE_LENGTH_LABELS[viewItem.sleeveLength]} /> : null}
-                {viewItem.formalityStyles?.map((s) => <Chip key={s} label={s} />)}
                 {viewItem.notableDetails?.map((d) => <Chip key={d} label={d} />)}
               </View>
             </>

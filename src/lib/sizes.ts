@@ -89,12 +89,18 @@ export function getSizeProfileType(
   category: string | null | undefined,
   subcategory: string | null | undefined,
   style: string | null | undefined,
-  formalityStyles: string[] | null | undefined,
+  /**
+   * Formality values for the item. Historically the retired `formalityStyles`
+   * column in Title Case ("Formal"); now the merged `occasions` column in
+   * snake_case ("formal"). Compared case-insensitively so both work — a size
+   * profile must not change shape because a column was renamed under it.
+   */
+  formalityValues: string[] | null | undefined,
 ): SizeProfileVariant | null {
   const cat = (category ?? "").toLowerCase().trim();
   const sub = (subcategory ?? "").trim();
   const sty = (style ?? "").trim();
-  const formal = Array.isArray(formalityStyles) ? formalityStyles : [];
+  const formal = (Array.isArray(formalityValues) ? formalityValues : []).map((f) => String(f).toLowerCase());
 
   if (cat === "top") return "alpha";
   if (cat === "bottom") return "bottom";
@@ -104,7 +110,7 @@ export function getSizeProfileType(
 
   if (cat === "outerwear") {
     const isCoatOrBlazer = sub === "Coats" || sty === "Blazer";
-    const isFormal = formal.includes("Formal");
+    const isFormal = formal.includes("formal");
     if (isCoatOrBlazer && isFormal) return "outerwear_formal";
     return "alpha";
   }

@@ -67,7 +67,6 @@ export type CreateItemInput = {
   purchasePrice?: number | null;
   purchaseDate?: string | null;
   purchaseLocation?: string | null;
-  formalityStyles?: string[];
   notableDetails?: string[];
   colorPalette?: string[];
   notes?: string | null;

@@ -111,7 +111,6 @@ type EditableItem = {
   neckline: string | null;
   sleeveLength: SleeveLength | null;
   care: string | null;
-  formalityStyles: string[];
   notableDetails: string[];
   colorPalette: string[];
   colorNormalized: string | null;
@@ -470,7 +469,6 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
           neckline: result.neckline ?? null,
           sleeveLength: result.sleeveLength ?? null,
           care: result.care ?? null,
-          formalityStyles: result.formalityStyles ?? [],
           notableDetails: result.notableDetails ?? [],
           colorPalette: result.colorPalette ?? [],
           colorNormalized: result.colorNormalized ?? null,
@@ -674,7 +672,6 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
               neckline: item.neckline || null,
               sleeveLength: item.sleeveLength || null,
               care: item.care || null,
-              formalityStyles: item.formalityStyles.length > 0 ? item.formalityStyles : undefined,
               notableDetails: item.notableDetails.length > 0 ? item.notableDetails : undefined,
               colorPalette: item.colorPalette.length > 0 ? item.colorPalette : undefined,
               imageUrl,
@@ -1608,7 +1605,7 @@ function ItemCard({
             category={item.category}
             subcategory={item.subcategory}
             style={item.style}
-            formalityStyles={item.formalityStyles}
+            formalityValues={item.occasions}
             value={item.sizeProfile}
             onChange={(p) => onUpdate({ sizeProfile: p })}
           />

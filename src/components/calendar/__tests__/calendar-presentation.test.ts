@@ -84,7 +84,6 @@ describe('calendar presentation', () => {
       neckline: null,
       sleeveLength: null,
       tags: [],
-      formalityStyles: [],
       notableDetails: [],
       notes: null,
       care: null,

@@ -52,7 +52,6 @@ function item(id: number, patch: Partial<Item> = {}): Item {
     neckline: null,
     sleeveLength: null,
     tags: [],
-    formalityStyles: [],
     notableDetails: [],
     notes: null,
     care: null,

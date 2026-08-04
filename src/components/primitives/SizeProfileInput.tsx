@@ -31,7 +31,8 @@ interface SizeProfileInputProps {
   category: string | null | undefined;
   subcategory?: string | null;
   style?: string | null;
-  formalityStyles?: string[] | null;
+  /** Formality values — the merged `occasions` column. */
+  formalityValues?: string[] | null;
   value: SizeProfile | null | undefined;
   onChange: (profile: SizeProfile | null) => void;
   containerStyle?: StyleProp<ViewStyle>;
@@ -41,12 +42,12 @@ export function SizeProfileInput({
   category,
   subcategory,
   style,
-  formalityStyles,
+  formalityValues,
   value,
   onChange,
   containerStyle,
 }: SizeProfileInputProps) {
-  const variant = getSizeProfileType(category, subcategory, style, formalityStyles);
+  const variant = getSizeProfileType(category, subcategory, style, formalityValues);
 
   // Reset when the variant changes (e.g. user switches category)
   useEffect(() => {

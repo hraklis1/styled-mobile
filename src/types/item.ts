@@ -102,7 +102,6 @@ export type ScanResult = {
   sleeveLength: SleeveLength | null;
   material: string | null;
   care: string | null;
-  formalityStyles: string[];
   notableDetails: string[];
   colorPalette: string[];
   colorNormalized: string | null;
@@ -148,7 +147,6 @@ export type Item = {
   neckline: string | null;
   sleeveLength: SleeveLength | null;
   tags: string[];
-  formalityStyles: string[];
   notableDetails: string[];
   notes: string | null;
   care: string | null;
