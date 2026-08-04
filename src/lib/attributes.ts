@@ -257,14 +257,23 @@ export const ALL_FITS: readonly string[] = [
  * Title Case is canonical. The scan prompt asked for "a single lowercase word",
  * so every stored value was lowercase and no equality filter against this list
  * ever matched.
+ *
+ * The list was garment-fabric only, which left whole taxonomy branches
+ * undescribable: a watch case, a pair of sunglasses, a straw sun hat and a
+ * canvas tote have materials, and none of them is a textile. The attribute
+ * bench surfaced this as the only non-zero off-vocabulary rate, on two
+ * consecutive runs with different values each time ("Resin", then "Canvas"
+ * twice) — a structural gap rather than a one-off, and "Canvas Belt" is
+ * literally a style in the accessory branch.
  */
 export const MATERIAL_OPTIONS = [
-  "Acrylic", "Bamboo", "Cashmere", "Chiffon", "Corduroy", "Cotton",
-  "Denim", "Elastane", "Flannel", "Fleece", "Hemp", "Latex",
-  "Leather", "Linen", "Lyocell", "Mesh", "Modal", "Neoprene",
-  "Nylon", "Organza", "Polyamide", "Polyester", "Rayon", "Rubber",
-  "Satin", "Silk", "Spandex", "Suede", "Tencel", "Tweed",
-  "Velvet", "Viscose", "Wool",
+  "Acetate", "Acrylic", "Bamboo", "Canvas", "Cashmere", "Chiffon",
+  "Cork", "Corduroy", "Cotton", "Denim", "Down", "Elastane",
+  "Faux Leather", "Flannel", "Fleece", "Hemp", "Latex", "Leather",
+  "Linen", "Lyocell", "Mesh", "Modal", "Neoprene", "Nylon",
+  "Organza", "Polyamide", "Polyester", "Rayon", "Resin", "Rubber",
+  "Satin", "Shearling", "Silk", "Spandex", "Stainless Steel", "Straw",
+  "Suede", "Tencel", "Tweed", "Velvet", "Viscose", "Wool",
 ] as const;
 export type Material = typeof MATERIAL_OPTIONS[number];
 

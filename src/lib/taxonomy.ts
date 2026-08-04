@@ -1,8 +1,8 @@
 export const TAXONOMY: Record<string, Record<string, string[]>> = {
   top: {
-    'T-Shirts': ['Crew Neck', 'V-Neck', 'Pocket Tee', 'Longline', 'Oversized', 'Fitted', 'Graphic', 'Polo', 'Henley', 'Other'],
+    'T-Shirts': ['Pocket Tee', 'Polo', 'Henley', 'Ringer Tee', 'Other'],
     'Shirts': ['Oxford', 'Button-Down', 'Chambray', 'Flannel', 'Dress Shirt', 'Linen Shirt', 'Cuban Collar', 'Overshirt', 'Other'],
-    'Blouses': ['Silk Blouse', 'Wrap Blouse', 'Peplum', 'Off-Shoulder', 'Tie-Front', 'Peasant', 'Balloon Sleeve', 'Other'],
+    'Blouses': ['Silk Blouse', 'Wrap Blouse', 'Peplum', 'Tie-Front', 'Peasant', 'Balloon Sleeve', 'Other'],
     'Knitwear': ['Crewneck Sweater', 'V-Neck Sweater', 'Turtleneck', 'Mock Neck', 'Quarter-Zip', 'Half-Zip', 'Cardigan', 'Vest', 'Shrug', 'Other'],
     'Hoodies & Sweatshirts': ['Pullover Hoodie', 'Zip-Up Hoodie', 'Graphic Sweatshirt', 'Crewneck Sweatshirt', 'Oversized Hoodie', 'Other'],
     'Tanks & Camisoles': ['Tank Top', 'Camisole', 'Crop Top', 'Bralette', 'Tube Top', 'Spaghetti Strap', 'Muscle Tank', 'Other'],
@@ -10,8 +10,8 @@ export const TAXONOMY: Record<string, Record<string, string[]>> = {
     'Other': ['Other'],
   },
   bottom: {
-    'Denim': ['Slim Fit', 'Straight Leg', 'Skinny', 'Relaxed Fit', 'Wide Leg', 'Bootcut', 'Flared', 'Cropped', 'Distressed', 'Other'],
-    'Trousers': ['Slim Fit', 'Straight Leg', 'Pleated', 'Tapered', 'Relaxed', 'Wide Leg', 'Chinos', 'Dress Pants', 'Linen Trousers', 'Other'],
+    'Denim': ['Distressed', 'Raw / Selvedge', 'Acid Wash', 'Coated', 'Other'],
+    'Trousers': ['Pleated', 'Chinos', 'Dress Pants', 'Linen Trousers', 'Cargo Trousers', 'Other'],
     'Shorts': ['Chino Shorts', 'Denim Shorts', 'Athletic Shorts', 'Board Shorts', 'Bermuda', 'Cargo Shorts', 'Biker Shorts', 'Other'],
     'Skirts': ['Mini Skirt', 'Midi Skirt', 'Maxi Skirt', 'A-Line', 'Pencil', 'Wrap Skirt', 'Pleated', 'Asymmetric', 'Other'],
     'Leggings & Tights': ['Full Length Leggings', 'Capri Leggings', 'High-Waist Leggings', 'Thermal Tights', 'Sheer Tights', 'Other'],
@@ -20,7 +20,7 @@ export const TAXONOMY: Record<string, Record<string, string[]>> = {
     'Other': ['Other'],
   },
   full_body: {
-    'Dresses': ['Mini Dress', 'Midi Dress', 'Maxi Dress', 'Shift Dress', 'Wrap Dress', 'Slip Dress', 'A-Line Dress', 'Bodycon', 'Shirt Dress', 'Other'],
+    'Dresses': ['Mini Dress', 'Midi Dress', 'Maxi Dress', 'Shift Dress', 'Wrap Dress', 'Slip Dress', 'A-Line Dress', 'Shirt Dress', 'Other'],
     'Jumpsuits': ['Wide Leg Jumpsuit', 'Slim Fit Jumpsuit', 'Strapless Jumpsuit', 'Utility Jumpsuit', 'Other'],
     'Rompers': ['Casual Romper', 'Denim Romper', 'Floral Romper', 'Linen Romper', 'Other'],
     'Suits': ['Single-Breasted', 'Double-Breasted', 'Three-Piece', 'Power Suit', 'Linen Suit', 'Other'],
@@ -28,7 +28,7 @@ export const TAXONOMY: Record<string, Record<string, string[]>> = {
     'Other': ['Other'],
   },
   shoes: {
-    'Sneakers': ['Low-Top', 'High-Top', 'Slip-On', 'Running', 'Training', 'Court', 'Platform', 'Dad Sneaker', 'Other'],
+    'Sneakers': ['Low-Top', 'High-Top', 'Slip-On', 'Training', 'Court', 'Platform', 'Dad Sneaker', 'Other'],
     'Boots': ['Chelsea', 'Ankle Boot', 'Combat Boot', 'Knee-High', 'Over-the-Knee', 'Desert Boot', 'Cowboy Boot', 'Hiking Boot', 'Chukka', 'Other'],
     'Loafers & Dress Shoes': ['Penny Loafer', 'Bit Loafer', 'Oxford', 'Derby', 'Monk Strap', 'Brogues', 'Mule', 'Other'],
     'Sandals': ['Slide', 'Flip Flop', 'Strappy Sandal', 'Platform Sandal', 'Birkenstock Style', 'Espadrille', 'Other'],

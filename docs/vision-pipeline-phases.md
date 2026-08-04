@@ -49,6 +49,81 @@ under the old name, is left as-is — it is the record of what was applied.
 
 ---
 
+## De-conflating the axes (2026-08-04)
+
+`style` was doing three jobs. `bottom/Denim` listed `Slim Fit, Straight Leg,
+Skinny, Relaxed Fit, Wide Leg, Bootcut, Flared, Cropped` — every one of them
+also a value in `FIT_OPTIONS_BY_CATEGORY.bottom`. `top/T-Shirts` listed
+`Crew Neck` and `V-Neck` (necklines), `Oversized`, `Fitted` and `Longline`
+(fits), and `Graphic` (a pattern).
+
+**The same fact could be stored in either of two columns, and whichever one the
+user did not fill stayed null.** The live data proves it: of the 7 rows whose
+style no longer exists in the tree, **5 already hold the identical value in the
+correct column**. One (`id=34`, `Denim/Flared`) had `fit = "Fitted"` — which is
+not even a legal bottom fit — while the style column held `Flared`, the right
+answer, in the wrong place.
+
+The rule applied: **a value that names a garment you would buy is a `style`; a
+value that names a property of a garment belongs to its own facet.** So
+`Pocket Tee`, `Polo`, `Henley`, `Turtleneck` and `Crewneck Sweater` stay — they
+are nouns for things you own — while bare `Crew Neck`, `Wide Leg` and `Graphic`
+move out.
+
+`shoes/Sneakers/Running` and `shoes/Athletic Shoes/Running Shoe` were the same
+garment in two branches; merged into the latter.
+
+**Nothing is dropped on the floor.** `snapToTaxonomy` now returns a `recovered`
+facet alongside `{subcategory, style}`: anything that fails to snap to a style
+is offered to `fit`, `neckline` and `pattern`, and the sanitizer uses it only
+where the model gave that field nothing directly. This is deliberately *not* a
+retirement table — a general rule survives the next tree change, and the model
+will keep answering "wide leg" because that is how garments are sold.
+
+A facet value in the style slot also yields `style: null`, never `"Other"`.
+`"Other"` asserts the item HAS a style outside the list, which is a different
+claim from "that word belongs in another column".
+
+**Two deviations from the plan, both deliberate:**
+
+- The plan said `Polo`, `Henley`, `Turtleneck` and `Mock Neck` would come *out*
+  of `NECKLINE_OPTIONS`. They did not. A shirt can have a polo collar without
+  being a polo shirt and a dress can have a turtleneck neckline, so removing
+  them loses real expressiveness while fixing nothing measurable. The harmful
+  overlap was style-vs-fit and style-vs-bare-neckline, not these.
+- `bottom/Denim` was going to be left thin. It got `Raw / Selvedge`, `Acid Wash`
+  and `Coated` — genuine denim identities, not fit values under new names.
+  `top/T-Shirts` is down to four and is honestly thin: most "t-shirt styles"
+  really *are* the facets.
+
+**Extraction accuracy is unchanged, and confirming that took two runs.** The
+first post-change run read 94.9% against 96.6%, which looks like a regression
+and is not: a re-run returned exactly 96.6%. The swing is ±2 items on `pattern`,
+entirely on textured-but-single-colour things (a heather hoodie, ribbed socks,
+a woven belt) where `Solid` versus `Textured` is genuinely arguable and my
+ground-truth labels chose `Solid`. This is the same non-determinism recorded in
+Finding 2 — **do not read one bench run as a regression.**
+
+The runs did surface one real gap, consistently and with different values each
+time: `MATERIAL_OPTIONS` was garment-fabric only, so a watch case, sunglasses, a
+straw hat and a canvas tote had no describable material. Nine non-textile values
+were added; `Canvas` was the clearest case, since `Canvas Belt` is already a
+style in the accessory branch. **That closed it — material off-vocabulary went
+1.2% → 2.4% → 0.0%**, and every field is now clean.
+
+Three runs, for the record:
+
+| | scalar overall | material off-vocab |
+|---|---|---|
+| run 1 | 94.9% | 1.2% (`Resin`) |
+| run 2 | 96.6% | 2.4% (`Canvas` ×2) |
+| run 3, materials added | **97.5%** | **0.0%** |
+
+Three misses remain in the whole run: one category (pink checked bottoms on a
+rail read as a top), one sleeve length, and one `Solid` vs `Textured`.
+
+---
+
 ## Vocabularies: one source of truth (2026-08-04)
 
 `../Styled/shared/attributes.ts` is now the only definition of every garment
