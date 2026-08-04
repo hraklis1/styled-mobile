@@ -1,4 +1,3 @@
-import { InteractionManager } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { Directory, Paths } from 'expo-file-system';
@@ -62,10 +61,14 @@ export async function maintainImageCache(now = Date.now()): Promise<boolean> {
  * Schedule a cache check off the critical path.
  *
  * `Directory.info()` is a synchronous recursive walk, so it must not run during
- * launch or render — this waits for interactions to settle first.
+ * launch or render — this waits for an idle frame first. The timeout stops the
+ * walk being starved indefinitely if the JS thread never goes quiet.
  */
 export function scheduleImageCacheMaintenance(): void {
-  InteractionManager.runAfterInteractions(() => {
-    void maintainImageCache();
-  });
+  requestIdleCallback(
+    () => {
+      void maintainImageCache();
+    },
+    { timeout: 10_000 },
+  );
 }
