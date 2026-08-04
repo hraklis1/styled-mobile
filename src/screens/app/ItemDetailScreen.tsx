@@ -279,10 +279,15 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
    * the user waits and sees the result.
    */
   const handlePolish = () => {
-    if (!item) return;
+    if (!item || polishItem.isPending) return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     polishItem.mutate(item.id, {
-      onSuccess: () => setCoverSheetOpen(false),
+      onSuccess: () => {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setCoverSheetOpen(false);
+      },
       onError: (err: any) => {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         if (err?.response?.data?.code === 'POLISH_QUOTA_EXCEEDED') {
           Alert.alert('Out of polish credits', err.response.data.message);
           return;
@@ -419,11 +424,36 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
             </View>
           )}
 
+          {polishItem.isPending && (
+            <View
+              style={styles.polishOverlay}
+              pointerEvents="none"
+              accessibilityRole="progressbar"
+              accessibilityLiveRegion="polite"
+              accessibilityLabel="Polishing your piece. Creating a clean catalog image."
+            >
+              <View style={styles.polishStatusCard}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <View style={styles.polishStatusCopy}>
+                  <Text style={styles.polishStatusTitle}>Polishing your piece</Text>
+                  <Text style={styles.polishStatusText}>
+                    Creating a clean catalog image… This usually takes 10–20 seconds.
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
+
           <TouchableOpacity
-            style={[styles.coverPickerButton, { top: insets.top + spacing.sm }]}
+            style={[
+              styles.coverPickerButton,
+              { top: insets.top + spacing.sm },
+              polishItem.isPending && styles.actionDisabled,
+            ]}
             onPress={() => setCoverSheetOpen(true)}
+            disabled={polishItem.isPending}
             accessibilityRole="button"
-            accessibilityState={{ expanded: coverSheetOpen }}
+            accessibilityState={{ expanded: coverSheetOpen, disabled: polishItem.isPending }}
             accessibilityLabel={`Cover image: ${coverImageVariantLabel(cover.variant)}. Choose a different cover image.`}
           >
             <Ionicons
@@ -450,9 +480,10 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
             </View>
           )}
           <TouchableOpacity
-            style={styles.changePhotoBtn}
+            style={[styles.changePhotoBtn, polishItem.isPending && styles.actionDisabled]}
             onPress={handleChangePhoto}
-            disabled={rescanning}
+            disabled={rescanning || polishItem.isPending}
+            accessibilityState={{ disabled: rescanning || polishItem.isPending }}
           >
             {rescanning ? (
               <ActivityIndicator size="small" color={colors.primaryForeground} />
@@ -902,8 +933,47 @@ const styles = StyleSheet.create({
   image: { width: '100%', height: '100%' },
   // Cutouts and catalog images are trimmed, so the hero supplies breathing room.
   heroCatalogImage: { padding: spacing.xl },
+  polishOverlay: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+    backgroundColor: 'rgba(246,243,238,0.72)',
+  },
+  polishStatusCard: {
+    width: '100%',
+    maxWidth: 330,
+    minHeight: 78,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radii.lg,
+    borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    backgroundColor: 'rgba(255,252,247,0.96)',
+  },
+  polishStatusCopy: { flex: 1, gap: 3 },
+  polishStatusTitle: {
+    color: colors.foreground,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+  },
+  polishStatusText: {
+    color: colors.mutedForeground,
+    fontSize: typography.size.xs,
+    lineHeight: 17,
+  },
   coverPickerButton: {
     position: 'absolute',
+    zIndex: 2,
     right: spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
@@ -928,6 +998,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     position: 'absolute',
+    zIndex: 2,
     left: spacing.lg,
     backgroundColor: colors.white,
     borderRadius: radii.full,
@@ -942,6 +1013,7 @@ const styles = StyleSheet.create({
   },
   favBadge: {
     position: 'absolute',
+    zIndex: 2,
     right: spacing.lg,
     backgroundColor: colors.white,
     borderRadius: radii.full,
@@ -956,6 +1028,7 @@ const styles = StyleSheet.create({
   },
   changePhotoBtn: {
     position: 'absolute',
+    zIndex: 2,
     bottom: spacing.md,
     right: spacing.md,
     backgroundColor: colors.primary,
