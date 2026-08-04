@@ -49,6 +49,77 @@ under the old name, is left as-is — it is the record of what was applied.
 
 ---
 
+## Attribute extraction — baseline (2026-08-04)
+
+Everything above measures **localisation**: was the garment found, was the box
+right. Attribute extraction — the stage that fills every column in the closet —
+was covered by no eval at all, which is why a cap recorded as a sun hat and a
+striped shirt recorded as checked both reached the database looking healthy and
+were found weeks later by eye, in a generated image.
+
+`scripts/bench-attributes.ts` closes that. It crops each item from its
+**hand-labelled ground-truth bbox** and calls the extractor on it, so a bad score
+is an extraction failure and never a segmentation one. Read it as an upper bound
+on production: "how well do we describe a garment we cropped correctly."
+
+```sh
+npx tsx scripts/bench-attributes.ts --manifest eval/scan/manifest.json --out /tmp/attr
+```
+
+| field | labelled | accuracy |
+|---|---|---|
+| category | 85 | **98.8%** |
+| subcategory | 10 | 100% |
+| style | 4 | 100% |
+| neckline | 3 | 100% |
+| material | 1 | 100% |
+| sleeveLength | 6 | 83.3% |
+| **pattern** | 9 | **66.7%** |
+| scalar overall | 118 | **95.8%** |
+
+Off-vocabulary rate is **0% on every field that has a server-side vocabulary**
+(category, subcategory, style, sleeveLength, seasons, occasions,
+colorNormalized) and `n/a` on the four that do not: **pattern, fit, neckline and
+material are enumerated only in the mobile client**, so the server cannot check
+them and a value the app's own picker cannot represent reaches the column
+unchallenged. That is the finding, not a gap in the script.
+
+`pattern` is both the weakest field and one of the four with no vocabulary,
+which is not a coincidence. Its three misses: one is pure drift
+(`"Graphic"` where canon is `"Graphic / Print"`), two are a real over-eagerness
+to call a small embroidered logo `"Graphic"` on an otherwise solid garment.
+
+**The cap bug does not reproduce, and that is now measured rather than asserted.**
+Fed the crop with a deliberately wrong detection guess, the extractor corrects it:
+
+```
+poison="Sun Hat"          -> Hats & Headwear / Baseball Cap
+poison="White Bucket Hat" -> Hats & Headwear / Baseball Cap
+poison=null               -> Hats & Headwear / Baseball Cap
+```
+
+That is commit `43088c2`'s rewrite of the target hint from a decision to obey
+into a region pointer to correct, working. `worn-hat-tee-01` carries a genuine
+bucket hat and `flat-lay-carpet-cap-belt-01` a genuine baseball cap, so the pair
+tests the distinction in both directions.
+
+**Two traps, both hit while building this:**
+
+- **The EXIF trap again, one level down.** `metadata()` on an unresolved
+  `sharp().rotate()` pipeline reports the **stored** dimensions, not the rotated
+  ones, so measuring from the pipeline transposes W and H on any portrait phone
+  photo. The first baseline scored `worn-suit-mirror-01` at 3/5 on category with
+  one crash; the crops were wall and carpet. Rotate to a buffer, *then* measure.
+  Same fixture, same bug shape, third time — see Finding 7.
+- **Coverage is 12 attribute-labelled items across 4 cases**, not 85. Every
+  unlabelled field is skipped, never scored as a miss, so `subcategory 100%` means
+  10 for 10 — not that subcategory is solved. `category` is the only field
+  labelled on all 85. Worth labelling next, in value order: the two two-piece
+  suit cases (the only formal fixtures), a bottom with an unambiguous fit, and
+  more of `worn-suit-mirror-01`, the sole photo from the user's own camera.
+
+---
+
 ## Locked decisions
 
 Settled with evidence. Do not re-open casually.
