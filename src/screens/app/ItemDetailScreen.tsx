@@ -78,6 +78,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const { width } = useWindowDimensions();
   const imageHeight = width * 0.85;
   const insets = useSafeAreaInsets();
+  const heroHeight = imageHeight + insets.top;
 
   // ── Edit modal visibility ────────────────────────────────────────────────────
   const [editOpen, setEditOpen] = useState(false);
@@ -410,19 +411,21 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         showsVerticalScrollIndicator={false}
       >
         {/* Image */}
-        <View style={[styles.imageContainer, { height: imageHeight }]}>
-          {imageUri ? (
-            <Image
-              source={{ uri: imageUri }}
-              style={[styles.image, cover.isCatalogStyle && styles.heroCatalogImage]}
-              contentFit={cover.contentFit}
-              transition={200}
-            />
-          ) : (
-            <View style={[styles.imagePlaceholder, { height: imageHeight }]}>
-              <Ionicons name="shirt-outline" size={64} color={colors.border} />
-            </View>
-          )}
+        <View style={[styles.imageContainer, { height: heroHeight }]}>
+          <View style={[styles.imageFrame, { height: imageHeight, marginTop: insets.top }]}>
+            {imageUri ? (
+              <Image
+                source={{ uri: imageUri }}
+                style={[styles.image, cover.isCatalogStyle && styles.heroCatalogImage]}
+                contentFit={cover.contentFit}
+                transition={200}
+              />
+            ) : (
+              <View style={styles.imagePlaceholder}>
+                <Ionicons name="shirt-outline" size={64} color={colors.border} />
+              </View>
+            )}
+          </View>
 
           {polishItem.isPending && (
             <View
@@ -930,6 +933,9 @@ const styles = StyleSheet.create({
     width: '100%',
     backgroundColor: colors.muted,
   },
+  // Keep the hero surface edge-to-edge, but begin the actual garment below
+  // system UI so the status bar and Dynamic Island never cover the item.
+  imageFrame: { width: '100%' },
   image: { width: '100%', height: '100%' },
   // Cutouts and catalog images are trimmed, so the hero supplies breathing room.
   heroCatalogImage: { padding: spacing.xl },
