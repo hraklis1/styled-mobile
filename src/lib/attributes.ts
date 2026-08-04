@@ -365,3 +365,322 @@ export const PLACEHOLDER_VALUES: readonly string[] = [
 export function isPlaceholder(value: unknown): boolean {
   return typeof value !== "string" || PLACEHOLDER_VALUES.includes(value.trim().toLowerCase());
 }
+
+// ── Fuzzy matching ──────────────────────────────────────────────────────────
+//
+// These live here rather than in taxonomy.ts because BOTH files need them:
+// the tree snaps subcategories and styles, and the vocabularies below snap
+// pattern, fit, neckline and material. taxonomy.ts imports them from here, so
+// there is one matcher and one set of lessons about it, not two.
+
+/**
+ * Substring matching on a single word is only meaningful once the word is long
+ * enough to be distinctive. Below this, "sun" matches "sunglasses" and a sun
+ * visor gets filed under eyewear.
+ */
+export const MIN_FUZZY_WORD = 4;
+
+/**
+ * Strip a plural "s" so "tie" matches "Ties" and "short" matches "Shorts".
+ *
+ * Needed because the length floor above is measured in characters, and several
+ * of the commonest garment words — tie, cap, hat, bag — are three letters. They
+ * could never fuzzy-match their own plural group name, so "Silk Tie" landed in
+ * accessory/Other rather than anywhere near Ties.
+ *
+ * Words ending "ss" keep it: "dress" must not become "dres".
+ */
+export function depluralize(word: string): string {
+  return word.length > 3 && word.endsWith("s") && !word.endsWith("ss") ? word.slice(0, -1) : word;
+}
+
+/**
+ * An exact word match scores its own LENGTH, not a flat 2.
+ *
+ * A long word is more distinctive evidence than a short one. "baseball hat"
+ * should reach "Baseball Cap" on the strength of "baseball" (8) rather than
+ * tying with "Bucket Hat" and "Sun Hat", which only share the generic "hat"
+ * (3). Flat scoring made those three indistinguishable and let list position
+ * decide — the original Bucket Hat bug.
+ */
+export function wordScore(rawWord: string, candWord: string): number {
+  if (rawWord === candWord) return rawWord.length;
+  // Singular/plural is an exact match, not a fuzzy one — it does not reopen the
+  // "sun" -> "sunglasses" hole, which is a substring problem and still gated by
+  // MIN_FUZZY_WORD below.
+  if (depluralize(rawWord) === depluralize(candWord)) return depluralize(rawWord).length;
+  const shorter = rawWord.length <= candWord.length ? rawWord : candWord;
+  if (shorter.length >= MIN_FUZZY_WORD && (candWord.includes(rawWord) || rawWord.includes(candWord))) {
+    return 1;
+  }
+  return 0;
+}
+
+/**
+ * Exact or whole-phrase containment only — no per-word fuzz.
+ *
+ * Returns null when several candidates contain the value equally well. "Tie" is
+ * inside Necktie, Bow Tie, Skinny Tie, Knit Tie and Bolo Tie; "Boot" is inside
+ * five of the Boots styles. Picking the longest is picking by list position,
+ * which is exactly how every unrecognised "... Hat" became "Bucket Hat".
+ * A generic word is genuine ambiguity and the caller should fall back to the
+ * group with no style.
+ */
+export function strictMatch(candidates: string[], raw: string): string | null {
+  const lc = raw.trim().toLowerCase();
+  if (!lc) return null;
+  const exact = candidates.find((s) => s.toLowerCase() === lc);
+  if (exact) return exact;
+  const contained = candidates.filter((s) => {
+    const c = s.toLowerCase();
+    return lc.includes(c) || c.includes(lc);
+  });
+  if (contained.length !== 1) return null;
+  return contained[0];
+}
+
+/**
+ * Map a free-text value onto the closest taxonomy entry.
+ *
+ * Scores every candidate and takes the best rather than returning the first
+ * with any word in common. First-match-wins meant a shared generic word decided
+ * the answer by list position: every unrecognised "... Hat" collapsed to
+ * "Bucket Hat" purely because it sits above "Sun Hat" in the list.
+ */
+export function bestMatch(candidates: string[], raw: string): string | null {
+  const lc = raw.trim().toLowerCase();
+  if (!lc) return null;
+
+  const strict = strictMatch(candidates, lc);
+  if (strict) return strict;
+
+  const words = lc.split(/[\s,/-]+/).filter(Boolean);
+  let best: string | null = null;
+  let bestScore = 0;
+  let tiedAtBest = 0;
+  for (const cand of candidates) {
+    const cWords = cand.toLowerCase().split(/[\s,/-]+/).filter(Boolean);
+    let score = 0;
+    for (const w of words) {
+      score += Math.max(0, ...cWords.map((cw) => wordScore(w, cw)));
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      best = cand;
+      tiedAtBest = 1;
+    } else if (score === bestScore && score > 0) {
+      tiedAtBest++;
+    }
+  }
+  // A tie means the evidence does not distinguish the candidates — "Silk Tie"
+  // matches Bow Tie, Skinny Tie, Knit Tie and Bolo Tie equally, all on the word
+  // "tie". Returning the first is returning whichever happens to sit highest in
+  // the list. Say nothing instead and let the caller fall back to the group.
+  if (tiedAtBest > 1) return null;
+  return best;
+}
+// ── Enforcement ─────────────────────────────────────────────────────────────
+
+/**
+ * Snap one free-text value onto a vocabulary, or return null.
+ *
+ * Strict first, then scored — the same order `snapToTaxonomy` uses, and for the
+ * same reason: a whole-phrase match is real evidence, a per-word one is a guess
+ * that must not beat it.
+ */
+export function snapToVocabulary(
+  value: unknown,
+  vocabulary: readonly string[],
+): string | null {
+  if (typeof value !== "string") return null;
+  const raw = value.trim();
+  if (!raw || isPlaceholder(raw)) return null;
+  return strictMatch([...vocabulary], raw) ?? bestMatch([...vocabulary], raw);
+}
+
+/**
+ * Words the matcher cannot reach on its own.
+ *
+ * "Checkered" is not a variant of "Checked" — different word, no shared prefix
+ * or suffix — so no amount of fuzz gets there. It needs naming, and it earns
+ * the entry: the scan prompt asked for it by name for months and one live row
+ * still holds it. The rest are the other spellings that prompt used, plus the
+ * abbreviations a model reaches for.
+ */
+const PATTERN_ALIASES: Record<string, string> = {
+  "checkered": "Checked",
+  "checker": "Checked",
+  "checks": "Checked",
+  "check": "Checked",
+  "gingham": "Checked",
+  "tartan": "Plaid / Tartan",
+  "stripe": "Striped",
+  "stripes": "Striped",
+  "pinstripe": "Striped",
+  "pinstriped": "Striped",
+  "print": "Graphic / Print",
+  "printed": "Graphic / Print",
+  "logo": "Graphic / Print",
+  "camo": "Camouflage",
+  "animal": "Animal Print",
+  "leopard": "Animal Print",
+  "zebra": "Animal Print",
+  "ombre": "Ombré",
+  "texture": "Textured",
+  "solid colour": "Solid",
+  "solid color": "Solid",
+  "plain": "Solid",
+};
+
+export function snapPattern(value: unknown): string | null {
+  if (typeof value === "string") {
+    const alias = PATTERN_ALIASES[value.trim().toLowerCase()];
+    if (alias) return alias;
+  }
+  return snapToVocabulary(value, PATTERN_OPTIONS);
+}
+
+export function snapMaterial(value: unknown): string | null {
+  return snapToVocabulary(value, MATERIAL_OPTIONS);
+}
+
+export function snapFit(category: unknown, value: unknown): string | null {
+  const cat = typeof category === "string" ? (category as ItemCategory) : undefined;
+  if (cat && !(FIT_CATEGORIES as readonly string[]).includes(cat)) return null;
+  const vocab = (cat && FIT_OPTIONS_BY_CATEGORY[cat]) || ALL_FITS;
+  return snapToVocabulary(value, vocab);
+}
+
+export function snapNeckline(category: unknown, value: unknown): string | null {
+  const cat = typeof category === "string" ? (category as ItemCategory) : undefined;
+  if (!cat || !(NECKLINE_CATEGORIES as readonly string[]).includes(cat)) return null;
+  return snapToVocabulary(value, NECKLINE_OPTIONS_BY_CATEGORY[cat] ?? ALL_NECKLINES);
+}
+
+/**
+ * Sleeve length, from whatever the source called it.
+ *
+ * The model answers "Short", "short sleeve", "Short-Sleeved", "3/4". A bare
+ * whitelist turned every one of those into null, and a null here is not inert —
+ * it reached the polish prompt as "sleeves neatly at the sides", which drew
+ * long sleeves on a short-sleeved shirt.
+ */
+const SLEEVE_ALIASES: Record<string, SleeveLength> = {
+  "short": "short", "short sleeve": "short", "short sleeves": "short",
+  "short sleeved": "short", "cap": "short", "cap sleeve": "short",
+  "cap sleeves": "short",
+  "long": "long", "long sleeve": "long", "long sleeves": "long",
+  "long sleeved": "long", "full": "long", "full length": "long",
+  "3/4": "long", "3/4 length": "long", "three quarter": "long",
+  "three quarter length": "long", "wrist": "long", "wrist length": "long",
+  "rolled": "long", "rolled up": "long",
+  "sleeveless": "sleeveless", "no sleeves": "sleeveless", "none": "sleeveless",
+  "tank": "sleeveless", "strapless": "sleeveless", "spaghetti strap": "sleeveless",
+};
+
+export function snapSleeveLength(category: unknown, value: unknown): SleeveLength | null {
+  const cat = typeof category === "string" ? category : "";
+  if (cat && !(SLEEVE_CATEGORIES as readonly string[]).includes(cat)) return null;
+  if (typeof value !== "string") return null;
+  const v = value.trim().toLowerCase().replace(/[-_]+/g, " ").replace(/\s+/g, " ");
+  if (!v || isPlaceholder(v)) return null;
+  return SLEEVE_ALIASES[v] ?? null;
+}
+
+/** Seasons, deduped and in calendar order. Handles the retired `spring_fall`/`all`. */
+export function snapSeasons(value: unknown): Season[] {
+  const raw = Array.isArray(value) ? value : typeof value === "string" ? [value] : [];
+  const out = new Set<Season>();
+  for (const entry of raw) {
+    if (typeof entry !== "string") continue;
+    const v = entry.trim().toLowerCase().replace(/[-\s]+/g, "_");
+    // Retired collapsed forms. `spring_fall` is migration 0013's shape and
+    // `all` was a sanitizer default that matched no filter anywhere; both
+    // expand rather than being dropped, because they carry real intent.
+    if (v === "spring_fall" || v === "fall_spring") { out.add("spring"); out.add("fall"); continue; }
+    if (v === "all" || v === "all_season" || v === "all_year") {
+      for (const s of SEASON_OPTIONS) out.add(s);
+      continue;
+    }
+    const hit = SEASON_OPTIONS.find((s) => s === v);
+    if (hit) out.add(hit);
+  }
+  return SEASON_OPTIONS.filter((s) => out.has(s));
+}
+
+/** Occasions, deduped and ordered least to most formal. */
+export function snapOccasions(value: unknown): Occasion[] {
+  const raw = Array.isArray(value) ? value : typeof value === "string" ? [value] : [];
+  const out = new Set<Occasion>();
+  for (const entry of raw) {
+    const hit = normalizeOccasion(entry);
+    if (hit) out.add(hit);
+  }
+  return OCCASION_OPTIONS.filter((o) => out.has(o));
+}
+
+/** The subset of item fields this module owns. */
+export interface NormalizableItem {
+  category?: string | null;
+  pattern?: string | null;
+  fit?: string | null;
+  neckline?: string | null;
+  material?: string | null;
+  sleeveLength?: string | null;
+  colorNormalized?: string | null;
+  colorTemperature?: string | null;
+  condition?: string | null;
+  warmthRating?: number | null;
+  seasons?: string[] | null;
+  occasions?: string[] | null;
+}
+
+/**
+ * Force every attribute on an item-shaped object onto its vocabulary.
+ *
+ * Called at the STORAGE boundary, not in a route handler, so no write path can
+ * skip it. `snapToTaxonomy` was called in exactly one place — the scan
+ * sanitizer — which meant `POST /api/items`, the update route, wishlist
+ * promotion and outfit-log matches all wrote whatever they were handed. That is
+ * how one row came to hold the literal string "null" in `fit`.
+ *
+ * ONLY KEYS PRESENT ON THE INPUT ARE TOUCHED. A partial update must not
+ * resurrect a field the caller never mentioned, so `"pattern" in input` gates
+ * every branch rather than `input.pattern != null`.
+ *
+ * An unrecognised value becomes null rather than being passed through. That is
+ * a deliberate trade: a null reads as "unknown" everywhere and can be filled in
+ * later, whereas a value outside the vocabulary renders as no selection in the
+ * picker, matches no filter, and — as "Checkered" did — reaches an image model
+ * as an instruction.
+ */
+export function normalizeItemAttributes<T extends NormalizableItem>(input: T): T {
+  const out: any = { ...input };
+  const category = input.category ?? undefined;
+
+  if ("pattern" in input) out.pattern = snapPattern(input.pattern);
+  if ("material" in input) out.material = snapMaterial(input.material);
+  if ("fit" in input) out.fit = snapFit(category, input.fit);
+  if ("neckline" in input) out.neckline = snapNeckline(category, input.neckline);
+  if ("sleeveLength" in input) out.sleeveLength = snapSleeveLength(category, input.sleeveLength);
+  if ("seasons" in input) out.seasons = snapSeasons(input.seasons);
+  if ("occasions" in input) out.occasions = snapOccasions(input.occasions);
+  if ("colorNormalized" in input) {
+    out.colorNormalized = snapToVocabulary(input.colorNormalized, NORMALIZED_COLORS);
+  }
+  if ("colorTemperature" in input) {
+    out.colorTemperature =
+      snapToVocabulary(input.colorTemperature, COLOR_TEMPERATURE_OPTIONS) ??
+      (out.colorNormalized
+        ? COLOR_TEMPERATURE_MAP[out.colorNormalized as NormalizedColor] ?? null
+        : null);
+  }
+  if ("condition" in input) {
+    out.condition = snapToVocabulary(input.condition, CONDITION_OPTIONS);
+  }
+  if ("warmthRating" in input) {
+    const n = typeof input.warmthRating === "number" ? Math.round(input.warmthRating) : NaN;
+    out.warmthRating = Number.isFinite(n) && n >= 1 && n <= 5 ? n : null;
+  }
+  return out as T;
+}
