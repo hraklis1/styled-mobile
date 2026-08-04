@@ -19,7 +19,10 @@ import { colors, spacing, typography, radii } from '../../theme';
 import {
   CATEGORY_LABELS, CATEGORY_ORDER, NORMALIZED_COLORS,
   PATTERN_OPTIONS, NECKLINE_OPTIONS_BY_CATEGORY,
-  COLOR_TEMPERATURE_OPTIONS, MATERIAL_OPTIONS, CARE_OPTIONS,
+  COLOR_TEMPERATURE_OPTIONS, COLOR_TEMPERATURE_LABELS, MATERIAL_OPTIONS, CARE_OPTIONS,
+  SEASON_OPTIONS, SEASON_LABELS, OCCASION_OPTIONS, OCCASION_LABELS,
+  CONDITION_OPTIONS, CONDITION_LABELS, WARMTH_RATINGS, WARMTH_LABELS,
+  FIT_OPTIONS_BY_CATEGORY, FIT_OPTIONS_DEFAULT, FORMALITY_STYLE_TAGS,
   SLEEVE_LENGTH_OPTIONS, SLEEVE_LENGTH_LABELS,
 } from '../../types/item';
 import type { ItemCategory, Item, NormalizedColor, ScanResult, SleeveLength } from '../../types/item';
@@ -32,74 +35,13 @@ import { BottomSheetDropdown } from '../primitives/BottomSheetDropdown';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const SEASONS: { value: string; label: string }[] = [
-  { value: 'spring', label: 'Spring' },
-  { value: 'summer', label: 'Summer' },
-  { value: 'fall',   label: 'Fall' },
-  { value: 'winter', label: 'Winter' },
-];
+const SEASONS = SEASON_OPTIONS.map((value) => ({ value, label: SEASON_LABELS[value] }));
 
-const OCCASIONS: { value: string; label: string }[] = [
-  { value: 'casual', label: 'Casual' },
-  { value: 'smart_casual', label: 'Smart Casual' },
-  { value: 'business', label: 'Business' },
-  { value: 'formal', label: 'Formal' },
-  { value: 'party', label: 'Party' },
-  { value: 'workout', label: 'Workout' },
-];
+const OCCASIONS = OCCASION_OPTIONS.map((value) => ({ value, label: OCCASION_LABELS[value] }));
 
-const CONDITIONS: { value: string; label: string }[] = [
-  { value: 'new', label: 'New' },
-  { value: 'good', label: 'Good' },
-  { value: 'worn', label: 'Worn' },
-  { value: 'needs_repair', label: 'Needs Repair' },
-  { value: 'donate', label: 'Donate' },
-];
+const CONDITIONS = CONDITION_OPTIONS.map((value) => ({ value, label: CONDITION_LABELS[value] }));
 
-const WARMTH_OPTIONS: { value: number; label: string }[] = [
-  { value: 1, label: 'Very Light' },
-  { value: 2, label: 'Light' },
-  { value: 3, label: 'Medium' },
-  { value: 4, label: 'Warm' },
-  { value: 5, label: 'Very Warm' },
-];
-
-const FORMALITY_OPTIONS = [
-  'Athleisure', 'Lounge', 'Casual', 'Smart Casual',
-  'Business Casual', 'Professional', 'Night Out', 'Formal',
-];
-
-const FIT_OPTIONS_BY_CATEGORY: Record<string, string[]> = {
-  top: [
-    'Slim Fit', 'Regular Fit', 'Relaxed Fit', 'Oversized',
-    'Fitted', 'Tailored', 'Athletic Fit', 'Compression',
-    'Boxy', 'Cropped', 'Longline',
-  ],
-  bottom: [
-    'Slim Fit', 'Regular Fit', 'Relaxed Fit',
-    'Skinny', 'Straight Leg', 'Tapered', 'Wide Leg', 'Bootcut', 'Flared',
-    'Cropped', 'Athletic Fit', 'Compression',
-  ],
-  full_body: [
-    'Slim Fit', 'Regular Fit', 'Relaxed Fit', 'Oversized',
-    'Fitted', 'Tailored', 'Bodycon', 'A-Line', 'Wrap',
-    'Boxy', 'Cropped', 'Longline',
-  ],
-  outerwear: [
-    'Slim Fit', 'Regular Fit', 'Relaxed Fit', 'Oversized',
-    'Fitted', 'Tailored', 'Athletic Fit', 'Boxy', 'Cropped', 'Longline',
-  ],
-  shoes: ['Regular Width', 'Wide Width', 'Narrow Width', 'Slim', 'Regular'],
-  accessory: [],
-  valuables: [],
-};
-
-const FIT_OPTIONS_DEFAULT = [
-  'Slim Fit', 'Regular Fit', 'Relaxed Fit', 'Oversized', 'Fitted', 'Tailored',
-  'Athletic Fit', 'Compression', 'Boxy', 'Cropped', 'Longline',
-  'Skinny', 'Straight Leg', 'Tapered', 'Wide Leg', 'Bootcut', 'Flared',
-  'A-Line', 'Bodycon', 'Wrap',
-];
+const WARMTH_OPTIONS = WARMTH_RATINGS.map((value) => ({ value, label: WARMTH_LABELS[value] }));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -495,7 +437,7 @@ export function EditItemModal({
             <EditLabel>Fit</EditLabel>
             <FitDropdown
               value={editFit}
-              options={editCategory ? (FIT_OPTIONS_BY_CATEGORY[editCategory] ?? []) : FIT_OPTIONS_DEFAULT}
+              options={[...(editCategory ? (FIT_OPTIONS_BY_CATEGORY[editCategory] ?? []) : FIT_OPTIONS_DEFAULT)]}
               onChange={setEditFit}
             />
             {(editCategory ? NECKLINE_OPTIONS_BY_CATEGORY[editCategory] : undefined) && (
@@ -504,7 +446,7 @@ export function EditItemModal({
                 <EditLabel>Neckline</EditLabel>
                 <BottomSheetDropdown
                   title="Neckline"
-                  options={(editCategory ? NECKLINE_OPTIONS_BY_CATEGORY[editCategory] : undefined) ?? []}
+                  options={[...((editCategory ? NECKLINE_OPTIONS_BY_CATEGORY[editCategory] : undefined) ?? [])]}
                   value={editNeckline}
                   onChange={setEditNeckline}
                   placeholder="Select neckline…"
@@ -553,7 +495,7 @@ export function EditItemModal({
             <View style={styles.spacer} />
             <EditLabel>Colour temperature</EditLabel>
             <OptionChips
-              options={[...COLOR_TEMPERATURE_OPTIONS] as { value: string; label: string }[]}
+              options={COLOR_TEMPERATURE_OPTIONS.map((value) => ({ value, label: COLOR_TEMPERATURE_LABELS[value] }))}
               value={editColorTemperature as any}
               onSelect={(v: any) => setEditColorTemperature(editColorTemperature === v ? null : v)}
             />
@@ -578,7 +520,7 @@ export function EditItemModal({
           {/* Style Context */}
           <EditSection title="Style Context">
             <OptionChips
-              options={FORMALITY_OPTIONS}
+              options={[...FORMALITY_STYLE_TAGS]}
               multi
               multiValue={editFormalityStyles}
               onMultiToggle={toggleEditFormality}

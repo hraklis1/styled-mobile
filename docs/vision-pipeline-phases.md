@@ -49,6 +49,41 @@ under the old name, is left as-is — it is the record of what was applied.
 
 ---
 
+## Vocabularies: one source of truth (2026-08-04)
+
+`../Styled/shared/attributes.ts` is now the only definition of every garment
+attribute vocabulary — pattern, fit, neckline, material, seasons, occasions,
+colours, warmth, sleeve length, condition, care. It has **zero imports**, and
+that is load-bearing: it is mirrored byte-for-byte to `src/lib/attributes.ts`
+here, and `npm run check:vocab` in the backend fails when the two diverge.
+
+**That check is the entire price of keeping the repos decoupled.** It is
+verified to fail, not just to pass — both halves were tested by injecting real
+drift (a `"Checkered"` spelling into the mirror, a `"Bobble Hat"` style into the
+mobile taxonomy). It compares `attributes.ts` and `sizes.ts` by bytes and the
+taxonomy tree by value, because the backend taxonomy legitimately also carries
+`snapToTaxonomy`.
+
+Where the copies used to live, and what each was doing wrong:
+
+| was | now |
+|---|---|
+| `EditItemModal.tsx` owned the whole `fit` vocabulary | imported |
+| `ALLOWED_*` in the scan sanitizer | aliases of the shared lists |
+| The scan prompt restated them in prose | **generated** from the module |
+| `wardrobeOptions.ts` (web) had `["summer","winter","spring_fall","all"]` | imported — this was the source of the ten `spring_fall` rows |
+| `ScanItemDialog.tsx` offered a "Fall/Spring" pill writing `spring_fall` | derived |
+| `shared/routes.ts` declared the scan response's seasons as `summer\|winter\|spring_fall` | `z.enum(SEASON_OPTIONS)` |
+
+The scan response contract was also missing `sleeveLength`, `notableDetails` and
+`bbox` entirely — three fields the endpoint has always returned.
+
+**Fixing the web client mattered more than it looks.** Without it, the Phase 6
+migration that cleans up `spring_fall` would have been undone by the next item
+saved from the web.
+
+---
+
 ## Attribute extraction — baseline (2026-08-04)
 
 Everything above measures **localisation**: was the garment found, was the box
@@ -66,28 +101,33 @@ on production: "how well do we describe a garment we cropped correctly."
 npx tsx scripts/bench-attributes.ts --manifest eval/scan/manifest.json --out /tmp/attr
 ```
 
-| field | labelled | accuracy |
-|---|---|---|
-| category | 85 | **98.8%** |
-| subcategory | 10 | 100% |
-| style | 4 | 100% |
-| neckline | 3 | 100% |
-| material | 1 | 100% |
-| sleeveLength | 6 | 83.3% |
-| **pattern** | 9 | **66.7%** |
-| scalar overall | 118 | **95.8%** |
+| field | labelled | baseline | after one source of truth |
+|---|---|---|---|
+| category | 85 | 98.8% | 98.8% |
+| subcategory | 10 | 100% | 100% |
+| style | 4 | 100% | 100% |
+| neckline | 3 | 100% | 100% |
+| material | 1 | 100% | 100% |
+| sleeveLength | 6 | 83.3% | 83.3% |
+| **pattern** | 9 | **66.7%** | **77.8%** |
+| scalar overall | 118 | 95.8% | **96.6%** |
 
-Off-vocabulary rate is **0% on every field that has a server-side vocabulary**
-(category, subcategory, style, sleeveLength, seasons, occasions,
-colorNormalized) and `n/a` on the four that do not: **pattern, fit, neckline and
-material are enumerated only in the mobile client**, so the server cannot check
-them and a value the app's own picker cannot represent reaches the column
-unchallenged. That is the finding, not a gap in the script.
+**Off-vocabulary is the number that moved most, and it went from unmeasurable to
+zero.** At baseline it read 0% on every field that had a server-side vocabulary
+and `n/a` on four that did not — **pattern, fit, neckline and material were
+enumerated only in the mobile client**, so nothing could check them and a value
+the app's own picker cannot display reached the column unchallenged. After
+`shared/attributes.ts`, with the prompt generated from it rather than restating
+it, all four report **0.0% across 85 items**.
 
-`pattern` is both the weakest field and one of the four with no vocabulary,
-which is not a coincidence. Its three misses: one is pure drift
-(`"Graphic"` where canon is `"Graphic / Print"`), two are a real over-eagerness
-to call a small embroidered logo `"Graphic"` on an otherwise solid garment.
+That distinction matters more than the accuracy delta. A wrong-but-legal value
+costs the user one tap in the review UI; an off-vocabulary value renders as *no
+selection at all* and no filter will ever match it. `pattern`'s one recovered
+miss was exactly this — the model said `"Graphic"` where canon is
+`"Graphic / Print"` — and the two that remain are genuine perception
+disagreements about whether a small embroidered logo makes a garment
+`Graphic / Print` rather than `Solid`. All four remaining misses across the whole
+run are now perception, not vocabulary.
 
 **The cap bug does not reproduce, and that is now measured rather than asserted.**
 Fed the crop with a deliberately wrong detection guess, the extractor corrects it:

@@ -1,15 +1,66 @@
-export type ItemCategory =
-  | 'top'
-  | 'bottom'
-  | 'full_body'
-  | 'shoes'
-  | 'outerwear'
-  | 'accessory'
-  | 'valuables';
+/**
+ * Item types, and the app-facing surface for the shared attribute vocabularies.
+ *
+ * The vocabularies themselves live in `src/lib/attributes.ts`, a byte-for-byte
+ * mirror of `../Styled/shared/attributes.ts`. DO NOT EDIT THE MIRROR HERE —
+ * edit the backend copy and re-run `npm run check:vocab` there, which fails
+ * when the two drift apart. That check is the entire price of keeping the two
+ * repos decoupled, and drift is not hypothetical: `seasons` once reached four
+ * different vocabularies at the same time.
+ *
+ * They are re-exported through this module because ~50 files already import
+ * them from here.
+ */
+export {
+  ITEM_CATEGORIES,
+  type ItemCategory,
+  NECKLINE_CATEGORIES,
+  SLEEVE_CATEGORIES,
+  FIT_CATEGORIES,
+  SEASON_OPTIONS,
+  SEASON_LABELS,
+  type Season,
+  OCCASION_OPTIONS,
+  OCCASION_LABELS,
+  type Occasion,
+  CONDITION_OPTIONS,
+  CONDITION_LABELS,
+  type ItemCondition,
+  NORMALIZED_COLORS,
+  type NormalizedColor,
+  COLOR_TEMPERATURE_OPTIONS,
+  COLOR_TEMPERATURE_LABELS,
+  type ColorTemperature,
+  WARMTH_RATINGS,
+  WARMTH_LABELS,
+  SLEEVE_LENGTH_OPTIONS,
+  SLEEVE_LENGTH_LABELS,
+  type SleeveLength,
+  PATTERN_OPTIONS,
+  type Pattern,
+  NECKLINE_OPTIONS_BY_CATEGORY,
+  FIT_OPTIONS_BY_CATEGORY,
+  FIT_OPTIONS_DEFAULT,
+  MATERIAL_OPTIONS,
+  type Material,
+  CARE_OPTIONS,
+  FORMALITY_STYLE_TAGS,
+  type FormalityStyleTag,
+} from '../lib/attributes';
+
+import { ITEM_CATEGORIES, type ItemCategory, type SleeveLength } from '../lib/attributes';
 
 export const COVER_IMAGE_VARIANTS = ['original', 'cutout', 'polished'] as const;
 export type CoverImageVariant = typeof COVER_IMAGE_VARIANTS[number];
 
+/**
+ * Display labels are deliberately NOT shared with the backend.
+ *
+ * `CATEGORY_DISPLAY_NAMES` there says "Footwear" and "Full Body"; the app says
+ * "Shoes" and "Dresses & Sets". That is product copy for two different
+ * surfaces, not a vocabulary — the STORED values are what has to agree, and
+ * those are shared.
+ */
 export const CATEGORY_LABELS: Record<ItemCategory, string> = {
   top:        'Tops',
   bottom:     'Bottoms',
@@ -20,106 +71,13 @@ export const CATEGORY_LABELS: Record<ItemCategory, string> = {
   valuables:  'Valuables',
 };
 
-export const CATEGORY_ORDER: ItemCategory[] = [
-  'top', 'bottom', 'full_body', 'shoes', 'outerwear', 'accessory', 'valuables',
-];
+export const CATEGORY_ORDER: ItemCategory[] = [...ITEM_CATEGORIES];
 
-export const SEASON_OPTIONS = ['spring', 'summer', 'fall', 'winter'] as const;
-export type Season = typeof SEASON_OPTIONS[number];
-export const SEASON_LABELS: Record<Season, string> = {
-  spring: 'Spring',
-  summer: 'Summer',
-  fall:   'Fall',
-  winter: 'Winter',
-};
-
-export const OCCASION_OPTIONS = ['casual', 'smart_casual', 'business', 'formal', 'party', 'workout'] as const;
-export type Occasion = typeof OCCASION_OPTIONS[number];
-export const OCCASION_LABELS: Record<Occasion, string> = {
-  casual:       'Casual',
-  smart_casual: 'Smart Casual',
-  business:     'Business',
-  formal:       'Formal',
-  party:        'Party',
-  workout:      'Workout',
-};
-
-export const CONDITION_OPTIONS = ['new', 'good', 'worn', 'needs_repair', 'donate'] as const;
-export type ItemCondition = typeof CONDITION_OPTIONS[number];
-export const CONDITION_LABELS: Record<ItemCondition, string> = {
-  new:          'New',
-  good:         'Good',
-  worn:         'Worn',
-  needs_repair: 'Needs Repair',
-  donate:       'Donate',
-};
-
-export const NORMALIZED_COLORS = [
-  'black', 'white', 'grey', 'navy', 'blue', 'light-blue',
-  'green', 'olive', 'khaki', 'red', 'burgundy', 'pink',
-  'orange', 'yellow', 'brown', 'tan', 'beige', 'cream',
-  'purple', 'lavender', 'gold', 'silver', 'multi',
-] as const;
-export type NormalizedColor = typeof NORMALIZED_COLORS[number];
-
-export const WARMTH_LABELS: Record<number, string> = {
-  1: 'Very Light', 2: 'Light', 3: 'Medium', 4: 'Warm', 5: 'Very Warm',
-};
-
-export const SLEEVE_LENGTH_OPTIONS = ['short', 'long', 'sleeveless'] as const;
-export type SleeveLength = typeof SLEEVE_LENGTH_OPTIONS[number];
-export const SLEEVE_LENGTH_LABELS: Record<SleeveLength, string> = {
-  short:      'Short Sleeve',
-  long:       'Long Sleeve',
-  sleeveless: 'Sleeveless',
-};
-
-export const PATTERN_OPTIONS = [
-  'Solid', 'Striped', 'Plaid / Tartan', 'Checked', 'Houndstooth',
-  'Floral', 'Geometric', 'Abstract', 'Animal Print', 'Camouflage',
-  'Tie-Dye', 'Ombré', 'Graphic / Print', 'Textured',
-] as const;
-export type Pattern = typeof PATTERN_OPTIONS[number];
-
-export const NECKLINE_OPTIONS_BY_CATEGORY: Partial<Record<ItemCategory, string[]>> = {
-  top: [
-    'Crew Neck', 'V-Neck', 'Scoop Neck', 'Square Neck', 'Boat Neck / Bateau',
-    'Turtleneck', 'Mock Neck', 'Cowl Neck', 'Off-Shoulder', 'One-Shoulder',
-    'Halter', 'Strapless', 'Keyhole', 'Henley', 'Collared', 'Polo', 'Wrap', 'Sweetheart',
-  ],
-  outerwear: [
-    'Collared', 'Lapel / Notch', 'Peaked Lapel', 'Shawl Collar', 'Stand Collar',
-    'Hood', 'Funnel Neck', 'Turtleneck', 'Crew Neck', 'V-Neck',
-  ],
-  full_body: [
-    'Crew Neck', 'V-Neck', 'Scoop Neck', 'Square Neck', 'Boat Neck / Bateau',
-    'Off-Shoulder', 'One-Shoulder', 'Halter', 'Strapless', 'Sweetheart', 'Wrap', 'Cowl Neck',
-  ],
-};
-
-export const COLOR_TEMPERATURE_OPTIONS = [
-  { value: 'warm', label: 'Warm' },
-  { value: 'cool', label: 'Cool' },
-  { value: 'neutral', label: 'Neutral' },
-] as const;
-export type ColorTemperature = typeof COLOR_TEMPERATURE_OPTIONS[number]['value'];
-
-export const MATERIAL_OPTIONS = [
-  'Acrylic', 'Bamboo', 'Cashmere', 'Chiffon', 'Corduroy', 'Cotton',
-  'Denim', 'Elastane', 'Flannel', 'Fleece', 'Hemp', 'Latex',
-  'Leather', 'Linen', 'Lyocell', 'Mesh', 'Modal', 'Neoprene',
-  'Nylon', 'Organza', 'Polyamide', 'Polyester', 'Rayon', 'Rubber',
-  'Satin', 'Silk', 'Spandex', 'Suede', 'Tencel', 'Tweed',
-  'Velvet', 'Viscose', 'Wool',
-] as const;
-
-export const CARE_OPTIONS = [
-  'Machine Wash Cold', 'Machine Wash Warm', 'Hand Wash Only', 'Dry Clean Only',
-  'Tumble Dry Low', 'Tumble Dry Medium', 'No Tumble Dry', 'Hang Dry',
-  'Lay Flat to Dry', 'Iron Low Heat', 'Iron Medium Heat', 'Do Not Iron',
-  'Dry Clean or Hand Wash', 'Spot Clean Only',
-] as const;
-
+/**
+ * Mobile-only, and currently inert: there is no `laundry_status` column on the
+ * items table, so nothing populates this and the filter and card badge that
+ * read it cannot fire.
+ */
 export const LAUNDRY_STATUS_OPTIONS = ['clean', 'in_wash', 'in_storage'] as const;
 export type LaundryStatus = typeof LAUNDRY_STATUS_OPTIONS[number];
 export const LAUNDRY_STATUS_LABELS: Record<LaundryStatus, string> = {

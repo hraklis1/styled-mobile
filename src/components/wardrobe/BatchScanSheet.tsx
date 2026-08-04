@@ -38,7 +38,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../lib/api';
 import { colors, spacing, typography, radii } from '../../theme';
-import { CATEGORY_LABELS, type Item, type ItemCategory, type SleeveLength } from '../../types/item';
+import { CATEGORY_LABELS, SEASON_OPTIONS, SEASON_LABELS, type Item, type ItemCategory, type SleeveLength } from '../../types/item';
 import { BrandAutocompleteInput } from '../primitives/BrandAutocompleteInput';
 import { TaxonomySelector } from '../primitives/TaxonomySelector';
 import { SizeProfileInput } from '../primitives/SizeProfileInput';
@@ -1409,12 +1409,9 @@ const reviewStyles = StyleSheet.create({
 
 // ─── ItemCard ─────────────────────────────────────────────────────────────────
 
-const SEASON_OPTIONS = [
-  { label: 'Spring', value: 'spring' },
-  { label: 'Summer', value: 'summer' },
-  { label: 'Fall',   value: 'fall' },
-  { label: 'Winter', value: 'winter' },
-] as const;
+// Derived from the shared vocabulary rather than restated. Named CHIPS
+// because the shared export is the value list; this is its presentation.
+const SEASON_CHIPS = SEASON_OPTIONS.map((value) => ({ value, label: SEASON_LABELS[value] }));
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -1556,7 +1553,7 @@ function ItemCard({
           <Field label="Season">
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View style={cardStyles.pillRow}>
-                {SEASON_OPTIONS.map(({ label, value }) => {
+                {SEASON_CHIPS.map(({ label, value }) => {
                   const active = (item.seasons ?? []).includes(value);
                   return (
                     <TouchableOpacity
