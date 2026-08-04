@@ -51,6 +51,15 @@ under the old name, is left as-is — it is the record of what was applied.
 
 ## De-conflating the axes (2026-08-04)
 
+> Reference docs live in the backend repo, next to the code they describe:
+> [`../Styled/docs/garment-taxonomy.md`](../../Styled/docs/garment-taxonomy.md)
+> — the tree, the facets, the `MATERIAL_OPTIONS` additions and the `pattern`
+> annotation guideline; and
+> [`../Styled/docs/adr/0001-garment-attribute-axes.md`](../../Styled/docs/adr/0001-garment-attribute-axes.md)
+> — why `Polo`/`Henley`/`Turtleneck`/`Mock Neck` stayed in `NECKLINE_OPTIONS`
+> and why `Denim` was expanded rather than left thin. **Read the ADR before any
+> future taxonomy refactor**; both of those look like oversights and are not.
+
 `style` was doing three jobs. `bottom/Denim` listed `Slim Fit, Straight Leg,
 Skinny, Relaxed Fit, Wide Leg, Bootcut, Flared, Cropped` — every one of them
 also a value in `FIT_OPTIONS_BY_CATEGORY.bottom`. `top/T-Shirts` listed
