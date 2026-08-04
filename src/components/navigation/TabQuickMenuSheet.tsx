@@ -11,6 +11,7 @@ export type TabQuickMenuOption = {
   icon: keyof typeof Ionicons.glyphMap;
   iconColor?: string;
   iconBg?: string;
+  tone?: 'default' | 'destructive';
   onPress: () => void;
 };
 
@@ -68,25 +69,37 @@ export function TabQuickMenuSheet({ visible, title, subtitle, options, onClose }
         </View>
 
         <View style={styles.menuOptions}>
-          {options.map((option) => (
-            <TouchableOpacity
-              key={option.key}
-              style={styles.optionRow}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel={option.label}
-              onPress={() => {
-                onClose();
-                setTimeout(option.onPress, 300);
-              }}
-            >
-              <View style={[styles.iconBox, { backgroundColor: option.iconBg ?? `${colors.primary}15` }]}>
-                <Ionicons name={option.icon} size={20} color={option.iconColor ?? colors.primary} />
-              </View>
-              <Text style={styles.optionText}>{option.label}</Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
-            </TouchableOpacity>
-          ))}
+          {options.map((option) => {
+            const destructive = option.tone === 'destructive';
+            const optionColor = option.iconColor ?? (destructive ? colors.error : colors.primary);
+            const optionBackground = option.iconBg ?? (destructive ? `${colors.error}12` : `${colors.primary}15`);
+
+            return (
+              <TouchableOpacity
+                key={option.key}
+                style={styles.optionRow}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={option.label}
+                onPress={() => {
+                  onClose();
+                  setTimeout(option.onPress, 300);
+                }}
+              >
+                <View style={[styles.iconBox, { backgroundColor: optionBackground }]}>
+                  <Ionicons name={option.icon} size={20} color={optionColor} />
+                </View>
+                <Text style={[styles.optionText, destructive && styles.optionTextDestructive]}>
+                  {option.label}
+                </Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={16}
+                  color={destructive ? colors.error : colors.mutedForeground}
+                />
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </BottomSheetView>
     </BottomSheetModal>
@@ -136,4 +149,5 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.medium,
     color: colors.foreground,
   },
+  optionTextDestructive: { color: colors.error },
 });

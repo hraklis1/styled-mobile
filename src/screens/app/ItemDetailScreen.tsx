@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type ReactNode } from 'react';
 import {
   View,
   Text,
@@ -39,8 +39,6 @@ import { useTagScanner } from '../../hooks/useTagScanner';
 import { EditItemModal } from '../../components/item/EditItemModal';
 import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
 import { generateCutoutForItem } from '../../lib/cutout';
-import { SectionCard } from '../../components/primitives/SectionCard';
-import { Chip } from '../../components/primitives/Chip';
 import { SLEEVE_LENGTH_LABELS } from '../../types/item';
 import { ErrorState } from '../../components/primitives/ErrorState';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
@@ -57,6 +55,51 @@ function formatDate(iso: string | null | undefined): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return 'Never';
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function titleCase(value: string): string {
+  return value
+    .replace(/_/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+type EditorialDetailRow = {
+  label: string;
+  value: string;
+  numeric?: boolean;
+};
+
+function EditorialSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <View style={styles.editorialSection}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {children}
+    </View>
+  );
+}
+
+function EditorialDetailList({ rows }: { rows: EditorialDetailRow[] }) {
+  return (
+    <View>
+      {rows.map((row, index) => (
+        <View
+          key={row.label}
+          style={[styles.editorialDetailRow, index < rows.length - 1 && styles.editorialDetailRowBorder]}
+        >
+          <Text style={styles.detailLabel}>{row.label}</Text>
+          <Text
+            selectable
+            style={[styles.detailValue, row.numeric && styles.numericValue]}
+          >
+            {row.value}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
 }
 
 
@@ -76,7 +119,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const { openStylist } = useGlobalAIStylist();
 
   const { width } = useWindowDimensions();
-  const imageHeight = width * 0.85;
+  const imageHeight = width * 0.92;
   const insets = useSafeAreaInsets();
   const heroHeight = imageHeight + insets.top;
 
@@ -84,6 +127,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [saveSheetOpen, setSaveSheetOpen] = useState(false);
   const [photoMenuOpen, setPhotoMenuOpen] = useState(false);
+  const [itemMenuOpen, setItemMenuOpen] = useState(false);
 
   // ── Inline tag state ─────────────────────────────────────────────────────────
   const [inlineTagActive, setInlineTagActive] = useState(false);
@@ -136,6 +180,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
 
   const handleMarkWorn = () => {
     if (!item) return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     markWorn.mutate(item.id);
   };
 
@@ -365,12 +410,96 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     viewItem.subcategory,
     viewItem.style,
   ].filter(Boolean).join(' › ');
-  const hasRichProfile = !!(
-    viewItem.subcategory || viewItem.style || viewItem.pattern || viewItem.material || viewItem.fit ||
-    (viewItem.notableDetails?.length > 0)
-  );
+  const warmthLabel = viewItem.warmthRating != null
+    ? ['Very Light', 'Light', 'Medium', 'Warm', 'Very Warm'][viewItem.warmthRating - 1]
+    : null;
+  const essentialFacts = [
+    viewItem.color,
+    viewItem.material,
+    warmthLabel ? `${warmthLabel} warmth` : null,
+  ].filter((value): value is string => !!value);
+  const styleDescriptors = [
+    viewItem.pattern,
+    viewItem.fit,
+    viewItem.neckline,
+    viewItem.sleeveLength ? SLEEVE_LENGTH_LABELS[viewItem.sleeveLength] : null,
+    ...(viewItem.notableDetails ?? []),
+  ]
+    .filter((value): value is string => !!value)
+    .map(titleCase);
+  const hasStyleProfile = styleDescriptors.length > 0 || (viewItem.colorPalette?.length ?? 0) > 0;
+
+  const atAGlanceRows: EditorialDetailRow[] = [];
+  if (viewItem.color) atAGlanceRows.push({ label: 'Colour', value: viewItem.color });
+  if (viewItem.material) atAGlanceRows.push({ label: 'Material', value: viewItem.material });
+  if (warmthLabel) atAGlanceRows.push({ label: 'Warmth', value: warmthLabel });
+  if (viewItem.seasons?.length > 0) {
+    atAGlanceRows.push({
+      label: 'Seasons',
+      value: viewItem.seasons
+        .map((season) => SEASON_LABELS[season as Season] ?? titleCase(season))
+        .join(', '),
+    });
+  }
+  if (viewItem.occasions?.length > 0) {
+    atAGlanceRows.push({
+      label: 'Occasions',
+      value: viewItem.occasions.map(titleCase).join(', '),
+    });
+  }
+  if (viewItem.condition && viewItem.condition !== 'good') {
+    atAGlanceRows.push({ label: 'Condition', value: titleCase(viewItem.condition) });
+  }
+
+  const wearHistoryRows: EditorialDetailRow[] = [
+    { label: 'Times worn', value: String(viewItem.wearCount), numeric: true },
+  ];
+  if (viewItem.lastWornAt) {
+    wearHistoryRows.push({ label: 'Last worn', value: formatDate(viewItem.lastWornAt) });
+  }
+  if (viewItem.purchasePrice != null) {
+    wearHistoryRows.push({ label: 'Paid', value: `$${viewItem.purchasePrice.toFixed(2)}`, numeric: true });
+  }
+  if (viewItem.wearCount > 0 && viewItem.purchasePrice != null) {
+    wearHistoryRows.push({
+      label: 'Cost per wear',
+      value: `$${(viewItem.purchasePrice / viewItem.wearCount).toFixed(2)}`,
+      numeric: true,
+    });
+  }
+  if (viewItem.purchaseLocation) {
+    wearHistoryRows.push({ label: 'Purchased in', value: viewItem.purchaseLocation });
+  }
+
   const isBusy = updateItem.isPending || markWorn.isPending || deleteItem.isPending
     || cuttingOut || polishItem.isPending;
+  const itemMenuOptions: TabQuickMenuOption[] = [
+    {
+      key: 'edit',
+      label: 'Edit details',
+      icon: 'pencil-outline',
+      onPress: () => setEditOpen(true),
+    },
+    {
+      key: 'photo',
+      label: 'Photo options',
+      icon: 'camera-outline',
+      onPress: handleChangePhoto,
+    },
+    ...(viewItem.imageUrl ? [{
+      key: 'rescan',
+      label: 'Re-scan style profile',
+      icon: 'refresh-outline' as const,
+      onPress: () => { void handleRescan(); },
+    }] : []),
+    {
+      key: 'remove',
+      label: 'Remove from wardrobe',
+      icon: 'trash-outline',
+      tone: 'destructive',
+      onPress: handleDelete,
+    },
+  ];
   const photoMenuOptions: TabQuickMenuOption[] = [
     {
       key: 'camera',
@@ -419,6 +548,8 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
                 style={[styles.image, cover.isCatalogStyle && styles.heroCatalogImage]}
                 contentFit={cover.contentFit}
                 transition={200}
+                accessible
+                accessibilityLabel={`${viewItem.name || 'Wardrobe item'} cover image`}
               />
             ) : (
               <View style={styles.imagePlaceholder}>
@@ -474,65 +605,37 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           <TouchableOpacity
             style={[styles.backButton, { top: insets.top + spacing.sm }]}
             onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            accessibilityLabel="Back to closet"
           >
             <Ionicons name="chevron-back" size={22} color={colors.foreground} />
           </TouchableOpacity>
-          {viewItem.isFavorite && (
-            <View style={[styles.favBadge, { top: insets.top + spacing.xxxl }]}>
-              <Ionicons name="heart" size={14} color={colors.primary} />
-            </View>
-          )}
           <TouchableOpacity
-            style={[styles.changePhotoBtn, polishItem.isPending && styles.actionDisabled]}
-            onPress={handleChangePhoto}
-            disabled={rescanning || polishItem.isPending}
-            accessibilityState={{ disabled: rescanning || polishItem.isPending }}
+            style={[
+              styles.itemOptionsButton,
+              { top: insets.top + spacing.sm },
+              isBusy && styles.actionDisabled,
+            ]}
+            onPress={() => setItemMenuOpen(true)}
+            disabled={isBusy}
+            accessibilityRole="button"
+            accessibilityLabel="Item options"
+            accessibilityState={{ expanded: itemMenuOpen, disabled: isBusy }}
           >
-            {rescanning ? (
-              <ActivityIndicator size="small" color={colors.primaryForeground} />
-            ) : (
-              <Ionicons name="camera" size={16} color={colors.primaryForeground} />
-            )}
+            <Ionicons name="ellipsis-horizontal" size={20} color={colors.foreground} />
           </TouchableOpacity>
         </View>
 
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerText}>
-            <Text style={styles.name}>{viewItem.name || 'Unnamed Item'}</Text>
-            {viewItem.brand ? <Text style={styles.brand}>{viewItem.brand}</Text> : null}
-            {breadcrumb ? <Text style={styles.breadcrumb}>{breadcrumb}</Text> : null}
+            <Text selectable style={styles.name}>{viewItem.name || 'Unnamed Item'}</Text>
+            {viewItem.brand ? <Text selectable style={styles.brand}>{viewItem.brand}</Text> : null}
+            {breadcrumb ? <Text selectable style={styles.breadcrumb}>{breadcrumb}</Text> : null}
+            {essentialFacts.length > 0 ? (
+              <Text selectable style={styles.essentialFacts}>{essentialFacts.join(' · ')}</Text>
+            ) : null}
           </View>
-        </View>
-
-        {/* Actions */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[styles.actionButton, markWorn.isPending && styles.actionDisabled]}
-            onPress={handleMarkWorn}
-            disabled={isBusy}
-          >
-            <Ionicons name="checkmark-circle-outline" size={20} color={colors.primary} />
-            <Text style={styles.actionLabel}>Worn today</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, updateItem.isPending && styles.actionDisabled]}
-            onPress={handleToggleFavorite}
-            disabled={isBusy}
-          >
-            <Ionicons
-              name={viewItem.isFavorite ? 'heart' : 'heart-outline'}
-              size={20}
-              color={viewItem.isFavorite ? colors.primary : colors.foreground}
-            />
-            <Text style={styles.actionLabel}>{viewItem.isFavorite ? 'Favourited' : 'Favourite'}</Text>
-          </TouchableOpacity>
-          {!isCreateMode && !!itemId && (
-            <TouchableOpacity style={styles.actionButton} onPress={() => setSaveSheetOpen(true)}>
-              <Ionicons name="bookmark-outline" size={20} color={colors.foreground} />
-              <Text style={styles.actionLabel}>Save</Text>
-            </TouchableOpacity>
-          )}
         </View>
 
         <TouchableOpacity
@@ -553,227 +656,187 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           accessibilityRole="button"
           accessibilityLabel={`Ask AI Stylist how to style ${viewItem.name}`}
         >
-          <Ionicons name="sparkles" size={17} color={colors.primary} />
-          <Text style={styles.stylistButtonText}>How should I style this?</Text>
+          <Ionicons name="sparkles" size={18} color={colors.primaryForeground} />
+          <Text style={styles.stylistButtonText}>Style this item</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.removeRow, isBusy && styles.actionDisabled]}
-          onPress={handleDelete}
-          disabled={isBusy}
-          activeOpacity={0.6}
-        >
-          <Ionicons name="trash-outline" size={14} color={colors.error} />
-          <Text style={styles.removeText}>Remove from wardrobe</Text>
-        </TouchableOpacity>
-
-        {/* AI Style Profile */}
-        <SectionCard title="AI Style Profile">
-          {!hasRichProfile ? (
-            <View style={styles.rescanEmpty}>
-              <Text style={styles.rescanEmptyText}>
-                Detailed stylist profile not yet available.
-              </Text>
-              <TouchableOpacity
-                style={[styles.rescanButton, (rescanning || !viewItem.imageUrl) && styles.actionDisabled]}
-                onPress={() => handleRescan()}
-                disabled={rescanning || !viewItem.imageUrl}
-              >
-                {rescanning ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <Ionicons name="refresh-outline" size={16} color={colors.primary} />
-                )}
-                <Text style={styles.rescanButtonText}>
-                  {rescanning ? 'Analysing…' : 'Re-scan item'}
-                </Text>
-              </TouchableOpacity>
-              {!viewItem.imageUrl && (
-                <Text style={styles.rescanHint}>Add a photo first to enable re-scanning.</Text>
-              )}
-            </View>
-          ) : (
+        {/* Wardrobe actions */}
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.actionButton, markWorn.isPending && styles.actionDisabled]}
+            onPress={handleMarkWorn}
+            disabled={isBusy}
+            accessibilityRole="button"
+            accessibilityLabel={`Mark ${viewItem.name} as worn today`}
+            accessibilityState={{ disabled: isBusy }}
+          >
+            <Ionicons name="checkmark-circle-outline" size={20} color={colors.primary} />
+            <Text style={styles.actionLabel}>Worn today</Text>
+          </TouchableOpacity>
+          <View style={styles.actionDivider} />
+          <TouchableOpacity
+            style={[styles.actionButton, updateItem.isPending && styles.actionDisabled]}
+            onPress={handleToggleFavorite}
+            disabled={isBusy}
+            accessibilityRole="button"
+            accessibilityLabel={viewItem.isFavorite ? 'Remove from favourites' : 'Add to favourites'}
+            accessibilityState={{ selected: viewItem.isFavorite, disabled: isBusy }}
+          >
+            <Ionicons
+              name={viewItem.isFavorite ? 'heart' : 'heart-outline'}
+              size={20}
+              color={viewItem.isFavorite ? colors.primary : colors.foreground}
+            />
+            <Text style={styles.actionLabel}>{viewItem.isFavorite ? 'Favourited' : 'Favourite'}</Text>
+          </TouchableOpacity>
+          {!isCreateMode && !!itemId && (
             <>
-              {viewItem.imageUrl && (
+              <View style={styles.actionDivider} />
+              <TouchableOpacity
+                style={[styles.actionButton, isBusy && styles.actionDisabled]}
+                onPress={() => setSaveSheetOpen(true)}
+                disabled={isBusy}
+                accessibilityRole="button"
+                accessibilityLabel={`Add ${viewItem.name} to a board`}
+                accessibilityState={{ disabled: isBusy }}
+              >
+                <Ionicons name="bookmark-outline" size={20} color={colors.foreground} />
+                <Text style={styles.actionLabel}>Board</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+
+        {/* Style Profile */}
+        <EditorialSection title="Style profile">
+          {!hasStyleProfile ? (
+            <View style={styles.profileEmptyRow}>
+              <View style={styles.profileEmptyCopy}>
+                <Text style={styles.profileEmptyTitle}>No style profile yet</Text>
+                <Text style={styles.profileEmptyText}>
+                  {viewItem.imageUrl
+                    ? 'Analyse the photo for silhouette and design details.'
+                    : 'Add a photo to analyse silhouette and design details.'}
+                </Text>
+              </View>
+              {viewItem.imageUrl ? (
                 <TouchableOpacity
-                  style={styles.rescanMini}
-                  onPress={() => handleRescan()}
+                  style={[styles.analyseButton, rescanning && styles.actionDisabled]}
+                  onPress={() => { void handleRescan(); }}
                   disabled={rescanning}
+                  accessibilityRole="button"
+                  accessibilityLabel="Analyse item style profile"
+                  accessibilityState={{ disabled: rescanning }}
                 >
                   {rescanning ? (
-                    <ActivityIndicator size="small" color={colors.mutedForeground} />
+                    <ActivityIndicator size="small" color={colors.primary} />
                   ) : (
-                    <Ionicons name="refresh-outline" size={14} color={colors.mutedForeground} />
+                    <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
                   )}
-                  <Text style={styles.rescanMiniText}>Re-scan</Text>
+                  <Text style={styles.analyseButtonText}>{rescanning ? 'Analysing' : 'Analyse'}</Text>
                 </TouchableOpacity>
-              )}
+              ) : null}
+            </View>
+          ) : (
+            <View style={styles.profileBody}>
               {viewItem.colorPalette?.length > 0 && (
-                <View style={styles.swatchRow}>
-                  {viewItem.colorPalette.map((hex, i) => (
-                    <View key={i} style={[styles.swatch, { backgroundColor: hex }]} />
+                <View
+                  style={styles.swatchRow}
+                  accessible
+                  accessibilityLabel={`Colour palette: ${viewItem.colorPalette.join(', ')}`}
+                >
+                  {viewItem.colorPalette.map((hex, index) => (
+                    <View key={`${hex}-${index}`} style={[styles.swatch, { backgroundColor: hex }]} />
                   ))}
                 </View>
               )}
-              <View style={styles.chipRow}>
-                {viewItem.pattern ? <Chip label={viewItem.pattern} /> : null}
-                {viewItem.fit ? <Chip label={viewItem.fit} /> : null}
-                {viewItem.neckline ? <Chip label={viewItem.neckline} /> : null}
-                {viewItem.sleeveLength ? <Chip label={SLEEVE_LENGTH_LABELS[viewItem.sleeveLength]} /> : null}
-                {viewItem.notableDetails?.map((d) => <Chip key={d} label={d} />)}
-              </View>
-            </>
-          )}
-        </SectionCard>
-
-        {/* Details */}
-        <SectionCard title="Details">
-          <View style={styles.detailGrid}>
-            {viewItem.color && (
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Colour</Text>
-                <Text style={styles.detailValue}>{viewItem.color}</Text>
-              </View>
-            )}
-            {viewItem.seasons?.length > 0 && (
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Season</Text>
-                <Text style={styles.detailValue}>
-                  {(viewItem.seasons ?? []).map((s) => SEASON_LABELS[s as Season] ?? (s.charAt(0).toUpperCase() + s.slice(1))).join(', ')}
+              {styleDescriptors.length > 0 ? (
+                <Text selectable style={styles.profileDescriptors}>
+                  {styleDescriptors.join(' · ')}
                 </Text>
-              </View>
-            )}
-            {viewItem.occasions?.length > 0 && (
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Occasion</Text>
-                <Text style={styles.detailValue}>{viewItem.occasions.map((o) => o.replace('_', ' ')).join(', ')}</Text>
-              </View>
-            )}
-            {viewItem.condition && viewItem.condition !== 'good' && (
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Condition</Text>
-                <Text style={styles.detailValue}>{viewItem.condition.replace('_', ' ')}</Text>
-              </View>
-            )}
-            {viewItem.warmthRating != null && (
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Warmth</Text>
-                <Text style={styles.detailValue}>
-                  {['Very Light', 'Light', 'Medium', 'Warm', 'Very Warm'][viewItem.warmthRating - 1] ?? String(viewItem.warmthRating)}
-                </Text>
-              </View>
-            )}
-            {viewItem.purchasePrice != null && (
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Paid</Text>
-                <Text style={styles.detailValue}>${viewItem.purchasePrice}</Text>
-              </View>
-            )}
-            {viewItem.wearCount > 0 && viewItem.purchasePrice != null && (
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Cost/Wear</Text>
-                <Text style={styles.detailValue}>${(viewItem.purchasePrice / viewItem.wearCount).toFixed(2)}</Text>
-              </View>
-            )}
-            {!!viewItem.purchaseLocation && (
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Purchased in</Text>
-                <Text style={styles.detailValue}>{viewItem.purchaseLocation}</Text>
-              </View>
-            )}
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Times worn</Text>
-              <Text style={styles.detailValue}>{viewItem.wearCount}</Text>
+              ) : null}
             </View>
-            {viewItem.lastWornAt && (
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Last worn</Text>
-                <Text style={styles.detailValue}>{formatDate(viewItem.lastWornAt)}</Text>
-              </View>
-            )}
-          </View>
-        </SectionCard>
+          )}
+        </EditorialSection>
+
+        {atAGlanceRows.length > 0 ? (
+          <EditorialSection title="At a glance">
+            <EditorialDetailList rows={atAGlanceRows} />
+          </EditorialSection>
+        ) : null}
+
+        <EditorialSection title="Wear history">
+          <EditorialDetailList rows={wearHistoryRows} />
+        </EditorialSection>
 
         {/* Tags */}
-        <SectionCard title="Tags">
-          {(viewItem.tags ?? []).length === 0 && !inlineTagActive ? (
-            <TouchableOpacity
-              style={styles.tagDropzone}
-              onPress={() => {
-                setInlineTagActive(true);
-                setTimeout(() => inlineTagRef.current?.focus(), 50);
-              }}
-              activeOpacity={0.7}
-              disabled={updateItem.isPending}
-            >
-              <Ionicons name="add-circle-outline" size={20} color={colors.mutedForeground} />
-              <Text style={styles.tagDropzoneText}>No tags yet — tap to add one</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.chipRow}>
-              {(viewItem.tags ?? []).map((tag) => (
-                <TouchableOpacity
-                  key={tag}
-                  style={styles.tagChip}
-                  onPress={() => removeTagInline(tag)}
-                  activeOpacity={0.7}
-                  disabled={updateItem.isPending}
-                >
-                  <Text style={styles.tagChipText}>{tag}</Text>
-                  <Ionicons name="close" size={11} color={colors.mutedForeground} style={{ marginLeft: 3 }} />
-                </TouchableOpacity>
-              ))}
-              {inlineTagActive ? (
-                <TextInput
-                  ref={inlineTagRef}
-                  style={styles.inlineTagInput}
-                  value={inlineTagValue}
-                  onChangeText={setInlineTagValue}
-                  onSubmitEditing={commitInlineTag}
-                  onBlur={commitInlineTag}
-                  placeholder="tag name…"
-                  placeholderTextColor={colors.mutedForeground}
-                  autoFocus
-                  maxLength={40}
-                  autoCapitalize="none"
-                  returnKeyType="done"
-                />
-              ) : (
-                <TouchableOpacity
-                  style={styles.addTagButton}
-                  onPress={() => {
-                    setInlineTagActive(true);
-                    setTimeout(() => inlineTagRef.current?.focus(), 50);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="add" size={13} color={colors.mutedForeground} />
-                  <Text style={styles.addTagText}>Add tag</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-        </SectionCard>
+        <EditorialSection title="Tags">
+          <View style={styles.chipRow}>
+            {(viewItem.tags ?? []).map((tag) => (
+              <TouchableOpacity
+                key={tag}
+                style={styles.tagChip}
+                onPress={() => removeTagInline(tag)}
+                activeOpacity={0.7}
+                disabled={updateItem.isPending}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={`Remove tag ${tag}`}
+                accessibilityState={{ disabled: updateItem.isPending }}
+              >
+                <Text style={styles.tagChipText}>{tag}</Text>
+                <Ionicons name="close" size={11} color={colors.mutedForeground} style={{ marginLeft: 3 }} />
+              </TouchableOpacity>
+            ))}
+            {inlineTagActive ? (
+              <TextInput
+                ref={inlineTagRef}
+                style={styles.inlineTagInput}
+                value={inlineTagValue}
+                onChangeText={setInlineTagValue}
+                onSubmitEditing={commitInlineTag}
+                onBlur={commitInlineTag}
+                placeholder="Tag name"
+                placeholderTextColor={colors.mutedForeground}
+                autoFocus
+                maxLength={40}
+                autoCapitalize="none"
+                returnKeyType="done"
+                accessibilityLabel="New tag name"
+              />
+            ) : (
+              <TouchableOpacity
+                style={styles.addTagButton}
+                onPress={() => {
+                  setInlineTagActive(true);
+                  setTimeout(() => inlineTagRef.current?.focus(), 50);
+                }}
+                activeOpacity={0.7}
+                disabled={updateItem.isPending}
+                accessibilityRole="button"
+                accessibilityLabel="Add tag"
+                accessibilityState={{ disabled: updateItem.isPending }}
+              >
+                <Ionicons name="add" size={14} color={colors.primary} />
+                <Text style={styles.addTagText}>Add tag</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </EditorialSection>
 
         {/* Fabric & Care */}
-        <SectionCard title="Fabric & Care">
-          {viewItem.material && (
-            <View style={styles.careRow}>
-              <Text style={styles.detailLabel}>Material</Text>
-              <Text style={[styles.detailValue, { flex: 3 }]}>{viewItem.material}</Text>
-            </View>
-          )}
-          {viewItem.care && (
-            <View style={styles.careRow}>
-              <Text style={styles.detailLabel}>Care</Text>
-              <Text style={[styles.detailValue, { flex: 3 }]}>{viewItem.care}</Text>
-            </View>
-          )}
+        <EditorialSection title="Fabric & care">
+          {viewItem.care ? (
+            <EditorialDetailList rows={[{ label: 'Care', value: viewItem.care }]} />
+          ) : null}
           <TouchableOpacity
             style={[styles.scanLabelBtn, tagScanner.isScanning && styles.actionDisabled]}
             onPress={tagScanner.handleScanLabel}
             disabled={tagScanner.isScanning}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Scan clothing label"
+            accessibilityState={{ disabled: tagScanner.isScanning }}
           >
             {tagScanner.isScanning ? (
               <ActivityIndicator size="small" color={colors.primary} />
@@ -784,24 +847,14 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
               {tagScanner.isScanning ? 'Reading label…' : 'Scan clothing label'}
             </Text>
           </TouchableOpacity>
-        </SectionCard>
+        </EditorialSection>
 
         {/* Notes */}
         {viewItem.notes ? (
-          <SectionCard title="Notes">
-            <Text style={styles.notes}>{viewItem.notes}</Text>
-          </SectionCard>
+          <EditorialSection title="Notes">
+            <Text selectable style={styles.notes}>{viewItem.notes}</Text>
+          </EditorialSection>
         ) : null}
-
-        {/* Edit button */}
-        <TouchableOpacity
-          style={styles.editButton}
-          onPress={() => setEditOpen(true)}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="pencil-outline" size={18} color={colors.foreground} />
-          <Text style={styles.editButtonText}>Edit details</Text>
-        </TouchableOpacity>
       </ScrollView>
 
       {/* ── Label scan result sheet ─────────────────────────────────────────── */}
@@ -885,6 +938,14 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           onClose={() => setSaveSheetOpen(false)}
         />
       )}
+
+      <TabQuickMenuSheet
+        visible={itemMenuOpen}
+        title="Item options"
+        subtitle={viewItem.name || 'Wardrobe item'}
+        options={itemMenuOptions}
+        onClose={() => setItemMenuOpen(false)}
+      />
 
       <TabQuickMenuSheet
         visible={photoMenuOpen}
@@ -980,16 +1041,18 @@ const styles = StyleSheet.create({
   coverPickerButton: {
     position: 'absolute',
     zIndex: 2,
-    right: spacing.lg,
+    right: spacing.lg + 44 + spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
+    minHeight: 44,
+    maxWidth: '54%',
     backgroundColor: 'rgba(255,252,247,0.94)',
     borderRadius: radii.full,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
     paddingHorizontal: spacing.sm + 2,
-    paddingVertical: spacing.xs + 1,
+    borderCurve: 'continuous',
   },
   coverPickerText: {
     fontSize: typography.size.xs,
@@ -998,6 +1061,7 @@ const styles = StyleSheet.create({
   },
   imagePlaceholder: {
     width: '100%',
+    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.muted,
@@ -1012,112 +1076,95 @@ const styles = StyleSheet.create({
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
+    borderCurve: 'continuous',
+    boxShadow: '0 2px 8px rgba(29,27,24,0.12)',
   },
-  favBadge: {
+  itemOptionsButton: {
     position: 'absolute',
     zIndex: 2,
     right: spacing.lg,
-    backgroundColor: colors.white,
+    backgroundColor: 'rgba(255,252,247,0.94)',
     borderRadius: radii.full,
     width: 44,
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  changePhotoBtn: {
-    position: 'absolute',
-    zIndex: 2,
-    bottom: spacing.md,
-    right: spacing.md,
-    backgroundColor: colors.primary,
-    borderRadius: radii.full,
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
+    borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    boxShadow: '0 2px 8px rgba(29,27,24,0.10)',
   },
 
   header: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.sm,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.md,
   },
-  headerText: { gap: 4 },
+  headerText: { gap: 5 },
   name: {
-    fontSize: typography.size.xl,
-    fontWeight: typography.weight.bold,
+    fontFamily: typography.family.display,
+    fontSize: typography.size.xxl,
+    lineHeight: 34,
+    fontWeight: typography.weight.regular,
     color: colors.foreground,
-    letterSpacing: 0,
+    letterSpacing: -0.3,
   },
   brand: {
     fontSize: typography.size.md,
-    color: colors.mutedForeground,
+    lineHeight: 21,
+    fontWeight: typography.weight.medium,
+    color: colors.inkSubtle,
   },
   breadcrumb: {
     fontSize: typography.size.sm,
+    lineHeight: 19,
     color: colors.mutedForeground,
-    marginTop: 2,
+  },
+  essentialFacts: {
+    marginTop: spacing.xs,
+    fontSize: typography.size.sm,
+    lineHeight: 20,
+    color: colors.inkSubtle,
   },
 
-  actionRow: {
-    flexDirection: 'row',
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.xs,
-    gap: spacing.sm,
-  },
-  actionButton: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.card,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
   stylistButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    paddingVertical: spacing.md,
+    minHeight: 52,
+    paddingHorizontal: spacing.lg,
     marginHorizontal: spacing.lg,
-    marginBottom: spacing.xs,
-    backgroundColor: colors.accent,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: `${colors.primary}30`,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.primary,
+    borderRadius: radii.full,
   },
   stylistButtonText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.size.md,
     fontWeight: typography.weight.semibold,
-    color: colors.primary,
+    color: colors.primaryForeground,
   },
-  removeRow: {
+  actionRow: {
     flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    minHeight: 68,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+  },
+  actionButton: {
+    flex: 1,
+    minHeight: 68,
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
-    paddingVertical: spacing.sm,
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.md,
   },
-  removeText: {
-    fontSize: typography.size.sm,
-    color: colors.error,
+  actionDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 32,
+    backgroundColor: colors.border,
   },
   actionDisabled: { opacity: 0.5 },
   actionLabel: {
@@ -1126,53 +1173,58 @@ const styles = StyleSheet.create({
     color: colors.foreground,
   },
 
-  rescanEmpty: {
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
+  editorialSection: {
+    marginHorizontal: spacing.lg,
+    paddingVertical: spacing.xl,
     gap: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
   },
-  rescanEmptyText: {
-    fontSize: typography.size.sm,
+  sectionTitle: {
+    fontSize: typography.size.xs,
+    lineHeight: 18,
+    fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
-    textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 1.1,
   },
-  rescanButton: {
+  profileEmptyRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.lg,
+  },
+  profileEmptyCopy: { flex: 1, gap: 3 },
+  profileEmptyTitle: {
+    fontSize: typography.size.md,
+    lineHeight: 21,
+    fontWeight: typography.weight.medium,
+    color: colors.foreground,
+  },
+  profileEmptyText: {
+    fontSize: typography.size.sm,
+    lineHeight: 19,
+    color: colors.mutedForeground,
+  },
+  analyseButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: spacing.xs,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
     borderRadius: radii.full,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-    backgroundColor: colors.card,
   },
-  rescanButtonText: {
+  analyseButtonText: {
     fontSize: typography.size.sm,
     color: colors.primary,
-    fontWeight: typography.weight.medium,
+    fontWeight: typography.weight.semibold,
   },
-  rescanHint: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-    textAlign: 'center',
-  },
-  rescanMini: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    alignSelf: 'flex-end',
-    marginBottom: spacing.sm,
-  },
-  rescanMiniText: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-  },
-
+  profileBody: { gap: spacing.md },
   swatchRow: {
     flexDirection: 'row',
     gap: spacing.sm,
-    marginBottom: spacing.md,
   },
   swatch: {
     width: 28,
@@ -1181,51 +1233,53 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  profileDescriptors: {
+    fontSize: typography.size.md,
+    lineHeight: 23,
+    color: colors.foreground,
+  },
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-  },
-
-  detailGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    columnGap: spacing.md,
+    columnGap: spacing.sm,
     rowGap: spacing.sm,
   },
-  detailItem: {
-    flexBasis: '48%',
-    flexGrow: 1,
-  },
-  careRow: {
+
+  editorialDetailRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: spacing.sm,
     gap: spacing.lg,
+    minHeight: 44,
+    paddingVertical: 10,
+  },
+  editorialDetailRowBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.hairline,
   },
   detailLabel: {
-    fontSize: typography.size.xs,
+    flexBasis: 104,
+    flexShrink: 0,
+    fontSize: typography.size.sm,
+    lineHeight: 21,
     color: colors.mutedForeground,
-    marginBottom: 2,
   },
   detailValue: {
-    fontSize: typography.size.sm,
+    flex: 1,
+    fontSize: typography.size.md,
+    lineHeight: 22,
     color: colors.foreground,
     fontWeight: typography.weight.medium,
-    textTransform: 'capitalize',
+    textAlign: 'right',
   },
+  numericValue: { fontVariant: ['tabular-nums'] },
 
   tagChip: {
     flexDirection: 'row',
     alignItems: 'center',
+    minHeight: 34,
     paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 5,
     borderRadius: radii.full,
     backgroundColor: colors.muted,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginRight: spacing.xs,
-    marginBottom: spacing.xs,
   },
   tagChipText: {
     fontSize: typography.size.xs,
@@ -1233,44 +1287,30 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.medium,
   },
   inlineTagInput: {
-    height: 30,
+    minHeight: 44,
     minWidth: 100,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.primary,
     borderRadius: radii.full,
-    paddingHorizontal: spacing.sm + 2,
-    fontSize: typography.size.xs,
+    paddingHorizontal: spacing.md,
+    fontSize: typography.size.sm,
     color: colors.foreground,
-    marginBottom: spacing.xs,
   },
   addTagButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 5,
+    justifyContent: 'center',
+    gap: spacing.xs,
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
     borderRadius: radii.full,
-    borderWidth: 1,
-    borderStyle: 'dashed',
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-    marginBottom: spacing.xs,
   },
   addTagText: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-  },
-  tagDropzone: {
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingVertical: spacing.md + 2,
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  tagDropzoneText: {
     fontSize: typography.size.sm,
-    color: colors.mutedForeground,
+    color: colors.primary,
+    fontWeight: typography.weight.medium,
   },
 
   notes: {
@@ -1282,39 +1322,16 @@ const styles = StyleSheet.create({
   scanLabelBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     gap: spacing.xs,
-    marginTop: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.full,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
+    alignSelf: 'flex-start',
+    minHeight: 44,
+    paddingHorizontal: 0,
   },
   scanLabelBtnText: {
     fontSize: typography.size.sm,
     color: colors.primary,
     fontWeight: typography.weight.medium,
-  },
-
-  editButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.sm,
-    paddingVertical: spacing.md + 2,
-    backgroundColor: colors.card,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  editButtonText: {
-    fontSize: typography.size.md,
-    fontWeight: typography.weight.medium,
-    color: colors.foreground,
   },
 });
 
