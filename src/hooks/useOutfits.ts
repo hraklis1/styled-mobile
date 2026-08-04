@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 
 import { api, isNetworkError } from '../lib/api';
 import { track } from '../lib/analytics';
+import { useTempUnit } from './useTempUnit';
 import type { Outfit, OutfitItemEntry } from '../types/outfit';
 import type { Event } from '../types/event';
 import { EVENTS_QUERY_KEY } from './useEvents';
@@ -106,6 +107,8 @@ export type GenerateOutfitResult = {
 };
 
 export function useGenerateEventOutfitPlan() {
+  const tempUnit = useTempUnit();
+
   return useMutation({
     mutationFn: ({
       eventId,
@@ -116,7 +119,10 @@ export function useGenerateEventOutfitPlan() {
       lon?: number;
       previousCandidateId?: string;
     }) =>
-      api.post<GenerateOutfitResult>(`/api/events/${eventId}/outfit-plan`, input).then((r) => r.data),
+      api.post<GenerateOutfitResult>(`/api/events/${eventId}/outfit-plan`, {
+        ...input,
+        tempUnit,
+      }).then((r) => r.data),
     retry: (failureCount, error) => isNetworkError(error) && failureCount < 2,
     onSuccess: (_result, { eventId, previousCandidateId }) => {
       track('calendar_outfit_plan_generated', {

@@ -21,6 +21,11 @@ export type ForecastWeather = {
   tempMinF: number;
 };
 
+export type EventForecast = ForecastWeather & {
+  locationLabel: string;
+  locationSource: 'destination' | 'fallback';
+};
+
 async function getDeviceCoords(): Promise<{ lat: number; lon: number }> {
   const { status } = await Location.requestForegroundPermissionsAsync();
   if (status !== 'granted') throw new Error('Location permission denied');
@@ -160,4 +165,83 @@ export function useWeatherForecast(
       return res.data;
     },
   });
+}
+
+export function useEventWeatherForecast(
+  eventLocation: string | null | undefined,
+  fallbackLocation: StylingLocationContext | null | undefined,
+  dateStr: string | null,
+) {
+  const destination = eventLocation?.trim() || null;
+  const fallbackLabel = fallbackLocation?.label?.trim() || null;
+  const fallbackCoords = fallbackLocation?.coords;
+
+  return useQuery<EventForecast, Error>({
+    queryKey: [
+      'weather',
+      'event-forecast',
+      destination,
+      fallbackLocation?.source ?? null,
+      fallbackLabel,
+      fallbackCoords?.lat ?? null,
+      fallbackCoords?.lon ?? null,
+      dateStr,
+    ],
+    enabled: Boolean(
+      dateStr
+      && isWithinForecastHorizon(dateStr)
+      && (destination || fallbackLabel || fallbackCoords),
+    ),
+    staleTime: 60 * 60 * 1000,
+    retry: false,
+    queryFn: () => fetchEventWeatherForecast(destination, fallbackLocation, dateStr!),
+  });
+}
+
+export async function fetchEventWeatherForecast(
+  eventLocation: string | null | undefined,
+  fallbackLocation: StylingLocationContext | null | undefined,
+  dateStr: string,
+): Promise<EventForecast> {
+  const destination = eventLocation?.trim() || null;
+  const fallbackLabel = fallbackLocation?.label?.trim() || null;
+  const fallbackCoords = fallbackLocation?.coords;
+  let lat: number | undefined;
+  let lon: number | undefined;
+  let locationLabel: string | null = null;
+  let locationSource: EventForecast['locationSource'] = 'fallback';
+
+  if (destination) {
+    const [geocoded] = await Location.geocodeAsync(destination).catch(() => []);
+    if (geocoded) {
+      lat = geocoded.latitude;
+      lon = geocoded.longitude;
+      locationLabel = destination;
+      locationSource = 'destination';
+    }
+  }
+
+  if (lat === undefined || lon === undefined) {
+    if (fallbackCoords) {
+      lat = fallbackCoords.lat;
+      lon = fallbackCoords.lon;
+      locationLabel = fallbackLabel || 'Current location';
+    } else if (fallbackLabel) {
+      const [geocoded] = await Location.geocodeAsync(fallbackLabel).catch(() => []);
+      if (geocoded) {
+        lat = geocoded.latitude;
+        lon = geocoded.longitude;
+        locationLabel = fallbackLabel;
+      }
+    }
+  }
+
+  if (lat === undefined || lon === undefined || !locationLabel) {
+    throw new Error('No weather location is available');
+  }
+
+  const res = await api.get<ForecastWeather>(
+    `/api/weather/forecast?lat=${lat}&lon=${lon}&date=${dateStr}`,
+  );
+  return { ...res.data, locationLabel, locationSource };
 }

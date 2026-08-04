@@ -1,13 +1,12 @@
 import {
   View,
   Text,
-  ScrollView,
   TouchableOpacity,
   StyleSheet,
   Alert,
-  ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useMemo, useEffect, useRef } from 'react';
@@ -47,16 +46,61 @@ import { colors, spacing, typography, radii } from '../../theme';
 import { ErrorState } from '../../components/primitives/ErrorState';
 import { ScreenHeader } from '../../components/primitives/Editorial';
 import { useEntitlement } from '../../hooks/useEntitlement';
+import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
 import { presentPaywall } from '../../lib/paywall';
 import { useGlobalAIStylist, type StylistOpenSource } from '../../contexts/GlobalAIStylistContext';
 import type { CalendarScreenProps } from '../../navigation/types';
 import type { Event } from '../../types/event';
+import { presentCalendarEvent } from '../../components/calendar/calendar-presentation';
 
 const FREE_EVENT_LIMIT = 5;
+
+type CalendarTimelineItem =
+  | { kind: 'loading'; key: string }
+  | { kind: 'error'; key: string }
+  | { kind: 'empty'; key: string }
+  | { kind: 'selected-heading'; key: string; label: string }
+  | { kind: 'selected-empty'; key: string }
+  | { kind: 'hero'; key: string; event: Event }
+  | { kind: 'section-heading'; key: string; label: string; count?: number; muted?: boolean }
+  | { kind: 'day-heading'; key: string; dateStr: string }
+  | { kind: 'event'; key: string; event: Event }
+  | { kind: 'show-upcoming'; key: string; expanded: boolean; count: number }
+  | { kind: 'past-toggle'; key: string; expanded: boolean; count: number }
+  | { kind: 'past-event'; key: string; event: Event };
+
+function CalendarLoadingSkeleton() {
+  return (
+    <View style={styles.skeletonWrap} accessibilityLabel="Loading calendar events">
+      <View style={styles.skeletonHero}>
+        <View style={[styles.skeletonLine, { width: 72 }]} />
+        <View style={styles.skeletonHeroMain}>
+          <View style={styles.skeletonDate} />
+          <View style={{ flex: 1, gap: spacing.sm }}>
+            <View style={[styles.skeletonLine, { width: '78%', height: 16 }]} />
+            <View style={[styles.skeletonLine, { width: '52%' }]} />
+          </View>
+        </View>
+        <View style={[styles.skeletonLine, { width: '100%', height: 42 }]} />
+      </View>
+      {[0, 1, 2].map((index) => (
+        <View key={index} style={styles.skeletonRow}>
+          <View style={styles.skeletonIcon} />
+          <View style={{ flex: 1, gap: spacing.sm }}>
+            <View style={[styles.skeletonLine, { width: `${72 - index * 8}%`, height: 13 }]} />
+            <View style={[styles.skeletonLine, { width: '52%' }]} />
+          </View>
+          <View style={[styles.skeletonLine, { width: 60, height: 24 }]} />
+        </View>
+      ))}
+    </View>
+  );
+}
 
 export function CalendarScreen({ navigation }: CalendarScreenProps) {
   const insets = useSafeAreaInsets();
   const { isPremium } = useEntitlement();
+  const { activeLocation } = useActiveStylingLocation();
   const { openStylist } = useGlobalAIStylist();
   const { data: events = [], isLoading, refetch, isRefetching, isError } = useEvents();
   const { data: allItems = [] } = useItems();
@@ -88,13 +132,12 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
   const [outfitPickerEvent, setOutfitPickerEvent] = useState<Event | null>(null);
   const [returnToDetailEventId, setReturnToDetailEventId] = useState<number | null>(null);
   const [showAllUpcoming, setShowAllUpcoming] = useState(false);
-  const [showAllPast, setShowAllPast] = useState(false);
+  const [pastExpanded, setPastExpanded] = useState(false);
   const [syncVisible, setSyncVisible] = useState(false);
   const [plannedEvent, setPlannedEvent] = useState<Event | null>(null);
   const [generatedPlan, setGeneratedPlan] = useState<GenerateOutfitResult | null>(null);
 
   const UPCOMING_LIMIT = 4;
-  const PAST_LIMIT = 5;
 
   // Events stay in "Upcoming" until their day ends, not the minute they start
   const startOfToday = new Date();
@@ -149,7 +192,75 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
   const upcomingRest = upcoming.slice(1);
   const visibleUpcoming = showAllUpcoming ? upcomingRest : upcomingRest.slice(0, UPCOMING_LIMIT);
   const groupedUpcoming = useMemo(() => groupByDate(visibleUpcoming), [visibleUpcoming]);
-  const visiblePast = showAllPast ? past : past.slice(0, PAST_LIMIT);
+
+  const timelineItems = useMemo<CalendarTimelineItem[]>(() => {
+    if (isLoading) return [{ kind: 'loading', key: 'loading' }];
+    if (isError) return [{ kind: 'error', key: 'error' }];
+
+    if (selectedDate) {
+      const selected: CalendarTimelineItem[] = [{
+        kind: 'selected-heading',
+        key: `selected-${selectedDate}`,
+        label: formatDayLabel(new Date(`${selectedDate}T00:00:00`)),
+      }];
+      if (dayEvents.length === 0) selected.push({ kind: 'selected-empty', key: 'selected-empty' });
+      else dayEvents.forEach((event) => selected.push({ kind: 'event', key: `event-${event.id}`, event }));
+      return selected;
+    }
+
+    if (events.length === 0) return [{ kind: 'empty', key: 'empty' }];
+
+    const items: CalendarTimelineItem[] = [];
+    if (nextEvent) items.push({ kind: 'hero', key: `hero-${nextEvent.id}`, event: nextEvent });
+
+    if (upcomingRest.length > 0) {
+      items.push({
+        kind: 'section-heading',
+        key: 'later-heading',
+        label: 'Later',
+        count: upcomingRest.length > UPCOMING_LIMIT ? upcomingRest.length : undefined,
+      });
+      groupedUpcoming.forEach(([dateStr, group]) => {
+        items.push({ kind: 'day-heading', key: `day-${dateStr}`, dateStr });
+        group.forEach((event) => items.push({ kind: 'event', key: `event-${event.id}`, event }));
+      });
+      if (upcomingRest.length > UPCOMING_LIMIT) {
+        items.push({
+          kind: 'show-upcoming',
+          key: 'show-upcoming',
+          expanded: showAllUpcoming,
+          count: upcomingRest.length,
+        });
+      }
+    }
+
+    if (past.length > 0) {
+      items.push({
+        kind: 'past-toggle',
+        key: 'past-toggle',
+        expanded: pastExpanded,
+        count: past.length,
+      });
+      if (pastExpanded) {
+        past.forEach((event) => items.push({ kind: 'past-event', key: `past-${event.id}`, event }));
+      }
+    }
+
+    return items;
+  }, [
+    UPCOMING_LIMIT,
+    dayEvents,
+    events.length,
+    groupedUpcoming,
+    isError,
+    isLoading,
+    nextEvent,
+    past,
+    pastExpanded,
+    selectedDate,
+    showAllUpcoming,
+    upcomingRest.length,
+  ]);
 
   const handleAddEvent = async () => {
     if (!isPremium && events.length >= FREE_EVENT_LIMIT) {
@@ -271,14 +382,10 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
       if (shouldUpgrade) await presentPaywall();
       return;
     }
-    // When planning from the open detail modal, dismiss it first so the result
-    // sheet isn't presented behind the pageSheet — and remember to restore it.
-    // (Skip on "Try another", where the sheet is already the active modal.)
+    // Keep event details visible while the plan is generated so the user sees
+    // the in-sheet progress state. Dismiss only once the result is ready, then
+    // present the result sheet after the page-sheet transition completes.
     const fromDetail = !previousCandidateId && detailEvent?.id === event.id;
-    if (fromDetail) {
-      setReturnToDetailEventId(event.id);
-      setDetailEvent(null);
-    }
     setPlannedEvent(event);
     generatePlan.mutate(
       {
@@ -292,20 +399,21 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
             setGeneratedPlan(result);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
           };
-          // Let the detail dismissal animation finish before mounting the sheet;
-          // iOS rejects presenting a modal while another is still dismissing.
-          if (fromDetail) setTimeout(showSheet, 300);
-          else showSheet();
+          if (fromDetail) {
+            setReturnToDetailEventId(event.id);
+            setDetailEvent(null);
+            // iOS rejects presenting a modal while another is still dismissing.
+            setTimeout(showSheet, 300);
+          } else {
+            showSheet();
+          }
         },
         onError: (err: any) => {
           Alert.alert(
             'Could not plan outfit',
             err?.response?.data?.message ?? 'Please try again.',
           );
-          if (fromDetail) {
-            setReturnToDetailEventId(null);
-            restoreDetailAfterChildClose(event.id);
-          }
+          if (!previousCandidateId) setPlannedEvent(null);
         },
       },
     );
@@ -344,14 +452,15 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
 
   const renderEventCard = (event: Event) => {
     const iconName = (OCCASION_ICONS[event.occasion] ?? 'calendar-outline') as keyof typeof Ionicons.glyphMap;
+    const occasion = OCCASIONS.find((option) => option.id === event.occasion)?.label ?? event.occasion;
+    const presentation = presentCalendarEvent(event);
     return (
       <TouchableOpacity
-        key={event.id}
         style={styles.eventCard}
         onPress={() => setDetailEvent(event)}
         activeOpacity={0.8}
         accessibilityRole="button"
-        accessibilityLabel={event.title}
+        accessibilityLabel={`${event.title}, ${presentation.readinessLabel}`}
       >
         <View style={styles.eventIconBox}>
           <Ionicons name={iconName} size={18} color={colors.primary} />
@@ -360,107 +469,47 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
           <Text style={styles.eventTitle} numberOfLines={1}>{event.title}</Text>
           <View style={styles.eventMeta}>
             <Text style={styles.eventTime}>{formatTime(new Date(event.date))}</Text>
+            <Text style={styles.dot}>·</Text>
+            <Text style={styles.eventOccasion} numberOfLines={1}>{occasion}</Text>
             {event.location ? (
               <>
                 <Text style={styles.dot}>·</Text>
-                <Ionicons name="location-outline" size={11} color={colors.mutedForeground} />
                 <Text style={styles.eventLoc} numberOfLines={1}>{event.location}</Text>
               </>
             ) : null}
           </View>
-          <View style={styles.occasionBadge}>
-            <Text style={styles.occasionBadgeText}>
-              {OCCASIONS.find((o) => o.id === event.occasion)?.label ?? event.occasion}
-            </Text>
-          </View>
         </View>
-        {(event.itemIds ?? []).length > 0 ? (
-          <ItemThumbStack itemIds={event.itemIds!} allItems={allItems} onPress={() => openItemPicker(event)} />
-        ) : null}
-        <Ionicons name="chevron-forward" size={14} color={colors.border} />
+        <View style={styles.eventReadiness}>
+          {presentation.hasOutfit ? (
+            <ItemThumbStack itemIds={event.itemIds!} allItems={allItems} onPress={() => openItemPicker(event)} />
+          ) : (
+            <View style={styles.needsOutfitIcon}>
+              <Ionicons name="sparkles-outline" size={12} color={colors.primary} />
+            </View>
+          )}
+          <Text style={[styles.readinessText, presentation.hasOutfit && styles.readinessTextPlanned]}>
+            {presentation.readinessShortLabel}
+          </Text>
+        </View>
       </TouchableOpacity>
     );
   };
 
-  return (
-    <View style={styles.root}>
-      <ScrollView
-        style={styles.flex}
-        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + spacing.lg }]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />
-        }
-      >
-        <ScreenHeader
-          title="Calendar"
-          subtitle="Plan ahead for every occasion."
-          safeTop={false}
-          style={styles.header}
-          primaryAction={{ label: 'Add event', icon: 'add', onPress: handleAddEvent }}
-          secondaryActions={[{ label: 'Sync calendar', icon: 'sync-outline', onPress: () => setSyncVisible(true) }]}
-        />
-
-        {/* Week Strip */}
-        <WeekStrip
-          weekDays={weekDays}
-          selectedDate={selectedDate}
-          onSelectDate={handleSelectDate}
-          onPrevWeek={() => setWeekOffset((o) => o - 1)}
-          onNextWeek={() => setWeekOffset((o) => o + 1)}
-          onToday={() => { setWeekOffset(0); setSelectedDate(null); }}
-          eventDateSet={eventDateSet}
-          weekOffset={weekOffset}
-        />
-
-        {isLoading ? (
-          <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xxxl }} />
-        ) : isError ? (
-          <ErrorState message="Couldn't load events" onRetry={refetch} />
-        ) : selectedDate ? (
-          /* Day-filter mode: tapped a day in the strip */
-          <View style={styles.section}>
-            <View style={styles.filterHeader}>
-              <Text style={styles.filterTitle}>
-                {formatDayLabel(new Date(selectedDate + 'T00:00:00'))}
-              </Text>
-              <TouchableOpacity
-                style={styles.clearFilterBtn}
-                onPress={() => setSelectedDate(null)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityRole="button"
-                accessibilityLabel="Show all events"
-              >
-                <Ionicons name="close" size={12} color={colors.mutedForeground} />
-                <Text style={styles.clearFilterText}>Show all</Text>
-              </TouchableOpacity>
-            </View>
-            {dayEvents.length === 0 ? (
-              <View style={styles.dayEmpty}>
-                <Text style={styles.dayEmptyText}>Nothing planned for this day.</Text>
-                <TouchableOpacity
-                  style={styles.dayEmptyBtn}
-                  onPress={handleAddEvent}
-                  activeOpacity={0.8}
-                  accessibilityRole="button"
-                  accessibilityLabel="Add event on this day"
-                >
-                  <Ionicons name="add" size={14} color={colors.primary} />
-                  <Text style={styles.dayEmptyBtnText}>Add event</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              dayEvents.map(renderEventCard)
-            )}
-          </View>
-        ) : events.length === 0 ? (
+  const renderTimelineItem = ({ item }: { item: CalendarTimelineItem }) => {
+    switch (item.kind) {
+      case 'loading':
+        return <CalendarLoadingSkeleton />;
+      case 'error':
+        return <ErrorState message="Couldn't load events" onRetry={refetch} />;
+      case 'empty':
+        return (
           <View style={styles.empty}>
             <View style={styles.emptyIconBox}>
-              <Ionicons name="calendar-outline" size={36} color={colors.mutedForeground} />
+              <Ionicons name="calendar-outline" size={32} color={colors.primary} />
             </View>
-            <Text style={styles.emptyTitle}>No events yet</Text>
+            <Text style={styles.emptyTitle}>Your style calendar starts here</Text>
             <Text style={styles.emptySubtitle}>
-              Add upcoming events to plan the perfect outfit for each one.
+              Add an occasion and Styled will help you prepare the look.
             </Text>
             <TouchableOpacity
               style={styles.emptyBtn}
@@ -473,98 +522,179 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
               <Text style={styles.emptyBtnText}>Add your first event</Text>
             </TouchableOpacity>
           </View>
-        ) : (
-          <>
-            {/* Next event hero */}
-            {nextEvent && (
-              <NextEventHero
-                event={nextEvent}
-                allItems={allItems}
-                deviceCoords={deviceCoords}
-                isPremium={isPremium}
-                onPress={() => setDetailEvent(nextEvent)}
-                onPlanOutfit={() => planOutfitForEvent(nextEvent)}
-                onPressOutfit={() => openItemPicker(nextEvent)}
-              />
-            )}
+        );
+      case 'selected-heading':
+        return (
+          <View style={styles.filterHeader}>
+            <View>
+              <Text style={styles.sectionEyebrow}>Selected day</Text>
+              <Text style={styles.filterTitle}>{item.label}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.clearFilterBtn}
+              onPress={() => setSelectedDate(null)}
+              accessibilityRole="button"
+              accessibilityLabel="Show all events"
+            >
+              <Ionicons name="close" size={12} color={colors.mutedForeground} />
+              <Text style={styles.clearFilterText}>Show all</Text>
+            </TouchableOpacity>
+          </View>
+        );
+      case 'selected-empty':
+        return (
+          <View style={styles.dayEmpty}>
+            <View style={styles.dayEmptyIcon}>
+              <Ionicons name="sunny-outline" size={19} color={colors.primary} />
+            </View>
+            <Text style={styles.dayEmptyTitle}>Nothing planned</Text>
+            <Text style={styles.dayEmptyText}>Keep the day open or add an occasion.</Text>
+            <TouchableOpacity
+              style={styles.dayEmptyBtn}
+              onPress={handleAddEvent}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Add event on this day"
+            >
+              <Ionicons name="add" size={14} color={colors.primary} />
+              <Text style={styles.dayEmptyBtnText}>Add event</Text>
+            </TouchableOpacity>
+          </View>
+        );
+      case 'hero':
+        return (
+          <NextEventHero
+            event={item.event}
+            allItems={allItems}
+            weatherFallback={activeLocation}
+            isPremium={isPremium}
+            onPress={() => setDetailEvent(item.event)}
+            onPlanOutfit={() => planOutfitForEvent(item.event)}
+            onPressOutfit={() => openItemPicker(item.event)}
+            isPlanning={generatePlan.isPending && plannedEvent?.id === item.event.id}
+          />
+        );
+      case 'section-heading':
+        return (
+          <View style={styles.sectionHeading}>
+            <Text style={[styles.sectionTitle, item.muted && styles.sectionTitleMuted]}>{item.label}</Text>
+            {item.count ? <Text style={styles.sectionCount}>{item.count}</Text> : null}
+          </View>
+        );
+      case 'day-heading': {
+        const dayDate = new Date(`${item.dateStr}T00:00:00`);
+        const countdown = formatCountdown(dayDate);
+        return (
+          <View style={styles.dayHeader}>
+            <Text style={styles.dayLabel}>{formatDayLabel(dayDate)}</Text>
+            <View style={styles.dayDivider} />
+            {countdown ? <Text style={styles.dayCountdown}>{countdown}</Text> : null}
+          </View>
+        );
+      }
+      case 'event':
+        return renderEventCard(item.event);
+      case 'show-upcoming':
+        return (
+          <TouchableOpacity
+            style={styles.showMore}
+            onPress={() => setShowAllUpcoming(!item.expanded)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: item.expanded }}
+          >
+            <Text style={styles.showMoreText}>
+              {item.expanded ? 'Show fewer events' : `View all ${item.count} upcoming events`}
+            </Text>
+            <Ionicons name={item.expanded ? 'chevron-up' : 'chevron-down'} size={15} color={colors.mutedForeground} />
+          </TouchableOpacity>
+        );
+      case 'past-toggle':
+        return (
+          <TouchableOpacity
+            style={styles.pastToggle}
+            onPress={() => setPastExpanded(!item.expanded)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: item.expanded }}
+            accessibilityLabel={`${item.expanded ? 'Collapse' : 'Expand'} ${item.count} past events`}
+          >
+            <View>
+              <Text style={styles.pastToggleTitle}>Past</Text>
+              <Text style={styles.pastToggleMeta}>{item.count} previous {item.count === 1 ? 'event' : 'events'}</Text>
+            </View>
+            <Ionicons name={item.expanded ? 'chevron-up' : 'chevron-down'} size={17} color={colors.mutedForeground} />
+          </TouchableOpacity>
+        );
+      case 'past-event':
+        return (
+          <TouchableOpacity
+            style={styles.pastCard}
+            onPress={() => setDetailEvent(item.event)}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={item.event.title}
+          >
+            <View style={styles.pastDateBlock}>
+              <Text style={styles.pastMonth}>{presentCalendarEvent(item.event).monthLabel}</Text>
+              <Text style={styles.pastDay}>{presentCalendarEvent(item.event).dayLabel}</Text>
+            </View>
+            <View style={styles.pastBody}>
+              <Text style={styles.pastTitle} numberOfLines={1}>{item.event.title}</Text>
+              <Text style={styles.pastDate} numberOfLines={1}>
+                {new Date(item.event.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={14} color={colors.border} />
+          </TouchableOpacity>
+        );
+    }
+  };
 
-            {/* Upcoming (after the hero) */}
-            {upcomingRest.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>
-                  Later{upcomingRest.length > UPCOMING_LIMIT
-                    ? <Text style={styles.sectionCount}> ({upcomingRest.length})</Text>
-                    : null}
-                </Text>
-
-                {groupedUpcoming.map(([dateStr, group]) => {
-                  const dayDate = new Date(dateStr + 'T00:00:00');
-                  const countdown = formatCountdown(dayDate);
-                  return (
-                    <View key={dateStr} style={styles.dayGroup}>
-                      <View style={styles.dayHeader}>
-                        <Text style={styles.dayLabel}>{formatDayLabel(dayDate)}</Text>
-                        <View style={styles.dayDivider} />
-                        {countdown ? <Text style={styles.dayCountdown}>{countdown}</Text> : null}
-                      </View>
-
-                      {group.map(renderEventCard)}
-                    </View>
-                  );
-                })}
-
-                {upcomingRest.length > UPCOMING_LIMIT && !showAllUpcoming && (
-                  <TouchableOpacity style={styles.showMore} onPress={() => setShowAllUpcoming(true)}>
-                    <Ionicons name="chevron-down" size={16} color={colors.mutedForeground} />
-                    <Text style={styles.showMoreText}>View all {upcomingRest.length} upcoming events</Text>
-                  </TouchableOpacity>
-                )}
-                {showAllUpcoming && upcomingRest.length > UPCOMING_LIMIT && (
-                  <TouchableOpacity style={styles.showMore} onPress={() => setShowAllUpcoming(false)}>
-                    <Text style={styles.showMoreText}>Show less</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-
-            {/* Past */}
-            {past.length > 0 && (
-              <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>Past</Text>
-                {visiblePast.map((event) => (
-                  <TouchableOpacity
-                    key={event.id}
-                    style={styles.pastCard}
-                    onPress={() => setDetailEvent(event)}
-                    activeOpacity={0.8}
-                    accessibilityRole="button"
-                    accessibilityLabel={event.title}
-                  >
-                    <View style={styles.pastIconBox}>
-                      <Ionicons name="calendar-outline" size={16} color={colors.mutedForeground} />
-                    </View>
-                    <View style={styles.pastBody}>
-                      <Text style={styles.pastTitle} numberOfLines={1}>{event.title}</Text>
-                      <Text style={styles.pastDate}>
-                        {new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </Text>
-                    </View>
-                    <TouchableOpacity onPress={() => handleDelete(event)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel={`Delete ${event.title}`}>
-                      <Ionicons name="trash-outline" size={16} color={colors.mutedForeground} />
-                    </TouchableOpacity>
-                  </TouchableOpacity>
-                ))}
-                {past.length > PAST_LIMIT && !showAllPast && (
-                  <TouchableOpacity style={styles.showMore} onPress={() => setShowAllPast(true)}>
-                    <Ionicons name="chevron-down" size={16} color={colors.mutedForeground} />
-                    <Text style={styles.showMoreText}>View {past.length - PAST_LIMIT} more past events</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-          </>
+  return (
+    <View style={styles.root}>
+      <FlashList
+        data={timelineItems}
+        renderItem={renderTimelineItem}
+        keyExtractor={(item) => item.key}
+        getItemType={(item) => item.kind}
+        style={styles.flex}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: insets.top + spacing.lg, paddingBottom: spacing.xxxl * 2 + insets.bottom },
+        ]}
+        showsVerticalScrollIndicator={false}
+        contentInsetAdjustmentBehavior="never"
+        ListHeaderComponent={(
+          <View>
+            <ScreenHeader
+              title="Calendar"
+              subtitle="Plan ahead for every occasion."
+              safeTop={false}
+              style={styles.header}
+              primaryAction={{ label: 'Add event', icon: 'add', onPress: handleAddEvent }}
+              secondaryActions={[{
+                label: 'Calendars',
+                accessibilityLabel: 'Calendars and syncing',
+                icon: 'calendar-outline',
+                variant: 'ghost',
+                onPress: () => setSyncVisible(true),
+              }]}
+            />
+            <WeekStrip
+              weekDays={weekDays}
+              selectedDate={selectedDate}
+              onSelectDate={handleSelectDate}
+              onPrevWeek={() => setWeekOffset((offset) => offset - 1)}
+              onNextWeek={() => setWeekOffset((offset) => offset + 1)}
+              onToday={() => { setWeekOffset(0); setSelectedDate(null); }}
+              eventDateSet={eventDateSet}
+              weekOffset={weekOffset}
+            />
+          </View>
         )}
-      </ScrollView>
+        refreshControl={
+          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />
+        }
+      />
 
       {/* Modals */}
       <EventDetailModal
@@ -579,7 +709,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         onPlanOutfit={planOutfitForEvent}
         isPlanning={generatePlan.isPending && plannedEvent?.id === detailEvent?.id}
         onOpenStylist={(event) => openStylistForEvent(event, 'event_detail')}
-        deviceCoords={deviceCoords}
+        weatherFallback={activeLocation}
         isPremium={isPremium}
       />
       <EventFormModal
@@ -629,120 +759,193 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
-  scrollContent: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxxl },
+  scrollContent: { paddingHorizontal: spacing.lg },
 
-  header: { marginHorizontal: -spacing.lg, marginBottom: spacing.lg },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { fontSize: typography.size.xxl, fontWeight: typography.weight.bold, color: colors.foreground, letterSpacing: 0 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  headerIconBtn: {
-    width: 44, height: 44,
-    alignItems: 'center', justifyContent: 'center',
+  header: { marginHorizontal: -spacing.lg, marginBottom: spacing.md },
+  sectionHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    marginBottom: spacing.md,
   },
-  addIconBtn: {
-    width: 44, height: 44,
+  sectionTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.foreground },
+  sectionTitleMuted: { color: colors.mutedForeground },
+  sectionCount: {
+    minWidth: 24,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
     borderRadius: radii.full,
-    backgroundColor: colors.primary,
-    alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden',
+    backgroundColor: colors.muted,
+    color: colors.mutedForeground,
+    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: typography.weight.semibold,
+    fontVariant: ['tabular-nums'],
   },
-  subtitle: { fontSize: typography.size.sm, color: colors.mutedForeground, marginTop: 2 },
-
-  section: { marginBottom: spacing.xl },
-  sectionTitle: { fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: colors.foreground, marginBottom: spacing.md },
-  sectionCount: { fontWeight: typography.weight.regular, color: colors.mutedForeground },
+  sectionEyebrow: {
+    fontSize: 10,
+    fontWeight: typography.weight.bold,
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
 
   filterHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: spacing.md,
+    marginTop: spacing.sm,
+    marginBottom: spacing.lg,
   },
-  filterTitle: { fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: colors.foreground },
+  filterTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.foreground },
   clearFilterBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: spacing.sm + 2, paddingVertical: 5,
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
     borderRadius: radii.full, backgroundColor: colors.muted,
   },
   clearFilterText: { fontSize: 11, fontWeight: typography.weight.medium, color: colors.mutedForeground },
 
   dayEmpty: {
     alignItems: 'center', gap: spacing.sm,
-    paddingVertical: spacing.xl,
+    paddingVertical: spacing.xxl,
+    paddingHorizontal: spacing.xl,
     borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed',
-    borderRadius: radii.lg,
+    borderRadius: radii.xl,
   },
-  dayEmptyText: { fontSize: typography.size.sm, color: colors.mutedForeground },
+  dayEmptyIcon: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: colors.surfaceSelected,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  dayEmptyTitle: { fontSize: typography.size.md, color: colors.foreground, fontWeight: typography.weight.semibold },
+  dayEmptyText: { fontSize: typography.size.sm, color: colors.mutedForeground, textAlign: 'center' },
   dayEmptyBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2,
-    borderRadius: radii.full, backgroundColor: `${colors.primary}12`,
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.full, backgroundColor: colors.surfaceSelected,
   },
   dayEmptyBtnText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.primary },
 
-  dayGroup: { marginBottom: spacing.md },
-  dayHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  dayHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.xs },
   dayLabel: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 0.5 },
-  dayDivider: { flex: 1, height: 1, backgroundColor: colors.border },
-  dayCountdown: { fontSize: 11, fontWeight: typography.weight.semibold, color: colors.primary },
+  dayDivider: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+  dayCountdown: { fontSize: 11, fontWeight: typography.weight.medium, color: colors.primary },
 
   eventCard: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-    minHeight: 64,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-    paddingHorizontal: spacing.xs, paddingVertical: spacing.sm,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    minHeight: 72,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border,
+    paddingVertical: spacing.sm,
   },
   eventIconBox: {
-    width: 36, height: 36, borderRadius: radii.md,
-    backgroundColor: `${colors.primary}15`,
+    width: 38, height: 38, borderRadius: radii.lg,
+    backgroundColor: colors.surfaceSelected,
     alignItems: 'center', justifyContent: 'center',
+    borderCurve: 'continuous',
   },
-  eventBody: { flex: 1, gap: 2 },
+  eventBody: { flex: 1, minWidth: 0, gap: 4 },
   eventTitle: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.foreground },
-  eventMeta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  eventMeta: { flexDirection: 'row', alignItems: 'center', gap: 3, minWidth: 0 },
   eventTime: { fontSize: typography.size.xs, color: colors.mutedForeground, fontWeight: typography.weight.medium },
   dot: { fontSize: typography.size.xs, color: colors.mutedForeground },
+  eventOccasion: { fontSize: typography.size.xs, color: colors.primary, fontWeight: typography.weight.medium, flexShrink: 0 },
   eventLoc: { fontSize: typography.size.xs, color: colors.mutedForeground, flex: 1 },
-  occasionBadge: {
-    alignSelf: 'flex-start', marginTop: 2,
+  eventReadiness: {
+    minWidth: 70,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 3,
   },
-  occasionBadgeText: { fontSize: 10, fontWeight: typography.weight.semibold, color: colors.primary, textTransform: 'capitalize' },
+  needsOutfitIcon: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: colors.surfaceSelected,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  readinessText: { fontSize: 10, color: colors.primary, fontWeight: typography.weight.semibold },
+  readinessTextPlanned: { color: colors.success },
+
+  pastToggle: {
+    minHeight: 64,
+    marginTop: spacing.xl,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  pastToggleTitle: { fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: colors.mutedForeground },
+  pastToggleMeta: { fontSize: 11, color: colors.mutedForeground, marginTop: 2 },
 
   pastCard: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-    backgroundColor: colors.card, borderRadius: radii.lg,
-    borderWidth: 1, borderColor: colors.border, opacity: 0.7,
-    padding: spacing.md, marginBottom: spacing.sm,
+    minHeight: 68,
+    opacity: 0.72,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
-  pastIconBox: {
-    width: 36, height: 36, borderRadius: radii.md, backgroundColor: colors.muted,
-    alignItems: 'center', justifyContent: 'center',
+  pastDateBlock: {
+    width: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  pastMonth: { fontSize: 9, color: colors.mutedForeground, fontWeight: typography.weight.bold, letterSpacing: 0.6 },
+  pastDay: { fontSize: typography.size.lg, color: colors.mutedForeground, fontWeight: typography.weight.semibold, fontVariant: ['tabular-nums'] },
   pastBody: { flex: 1, gap: 2 },
   pastTitle: { fontSize: typography.size.sm, fontWeight: typography.weight.medium, color: colors.foreground },
   pastDate: { fontSize: typography.size.xs, color: colors.mutedForeground },
 
   showMore: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
-    paddingVertical: spacing.md, borderRadius: radii.md,
-    borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed', marginTop: spacing.xs,
+    minHeight: 44, borderRadius: radii.md,
+    marginTop: spacing.sm,
   },
-  showMoreText: { fontSize: typography.size.sm, color: colors.mutedForeground },
+  showMoreText: { fontSize: typography.size.xs, color: colors.mutedForeground, fontWeight: typography.weight.medium },
 
-  empty: { alignItems: 'center', paddingTop: spacing.xxxl * 2, gap: spacing.md },
+  empty: { alignItems: 'center', paddingTop: spacing.xxxl, paddingHorizontal: spacing.xl, gap: spacing.md },
   emptyIconBox: {
-    width: 72, height: 72, borderRadius: radii.xl,
-    backgroundColor: colors.muted, alignItems: 'center', justifyContent: 'center',
+    width: 68, height: 68, borderRadius: 34,
+    backgroundColor: colors.surfaceSelected, alignItems: 'center', justifyContent: 'center',
   },
-  emptyTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.foreground },
+  emptyTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.foreground, textAlign: 'center' },
   emptySubtitle: { fontSize: typography.size.sm, color: colors.mutedForeground, textAlign: 'center', maxWidth: 260 },
   emptyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
     backgroundColor: colors.primary,
-    borderRadius: radii.md,
+    minHeight: 44,
+    borderRadius: radii.full,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm + 2,
     marginTop: spacing.sm,
   },
   emptyBtnText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.white },
+
+  skeletonWrap: { gap: spacing.md, paddingTop: spacing.sm },
+  skeletonHero: {
+    backgroundColor: colors.card,
+    borderRadius: radii.xl,
+    padding: spacing.md,
+    gap: spacing.md,
+    borderCurve: 'continuous',
+  },
+  skeletonHeroMain: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  skeletonDate: { width: 48, height: 52, borderRadius: radii.lg, backgroundColor: colors.muted },
+  skeletonLine: { height: 10, borderRadius: radii.full, backgroundColor: colors.muted },
+  skeletonRow: {
+    minHeight: 68,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  skeletonIcon: { width: 38, height: 38, borderRadius: radii.lg, backgroundColor: colors.muted },
 
 });

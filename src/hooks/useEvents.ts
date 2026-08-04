@@ -29,9 +29,6 @@ export function useCreateEvent() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: EVENTS_QUERY_KEY });
     },
-    onError: () => {
-      Alert.alert('Error', "Couldn't create event. Please try again.");
-    },
   });
 }
 
@@ -50,7 +47,6 @@ export function useUpdateEvent() {
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.previous) qc.setQueryData(EVENTS_QUERY_KEY, ctx.previous);
-      Alert.alert('Error', "Couldn't update event. Please try again.");
     },
     onSettled: () => qc.invalidateQueries({ queryKey: EVENTS_QUERY_KEY }),
   });
