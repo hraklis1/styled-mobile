@@ -37,7 +37,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../lib/api';
 import { colors, spacing, typography, radii } from '../../theme';
-import { CATEGORY_LABELS, type Item, type ItemCategory } from '../../types/item';
+import { CATEGORY_LABELS, type Item, type ItemCategory, type SleeveLength } from '../../types/item';
 import { BrandAutocompleteInput } from '../primitives/BrandAutocompleteInput';
 import { TaxonomySelector } from '../primitives/TaxonomySelector';
 import { SizeProfileInput } from '../primitives/SizeProfileInput';
@@ -75,6 +75,7 @@ type EditableItem = {
   fit: string | null;
   pattern: string | null;
   neckline: string | null;
+  sleeveLength: SleeveLength | null;
   care: string | null;
   formalityStyles: string[];
   notableDetails: string[];
@@ -380,6 +381,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
               fit: item.fit || null,
               pattern: item.pattern || null,
               neckline: item.neckline || null,
+              sleeveLength: item.sleeveLength || null,
               care: item.care || null,
               formalityStyles: item.formalityStyles.length > 0 ? item.formalityStyles : undefined,
               notableDetails: item.notableDetails.length > 0 ? item.notableDetails : undefined,
@@ -484,6 +486,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
         fit: result.fit ?? null,
         pattern: result.pattern ?? null,
         neckline: result.neckline ?? null,
+        sleeveLength: result.sleeveLength ?? null,
         care: result.care ?? null,
         formalityStyles: result.formalityStyles ?? [],
         notableDetails: result.notableDetails ?? [],
