@@ -51,8 +51,11 @@ const SLOTS: SlotDef[] = [
   { key: 'shoesId',     label: 'Shoes',          categories: ['shoes'],             icon: 'footsteps-outline' },
   { key: 'outerwearId', label: 'Outerwear',      categories: ['outerwear'],         icon: 'trending-up-outline' },
   { key: 'headwearId',  label: 'Hat / Headwear', categories: ['accessory'], subcategories: ['Hats & Headwear'], icon: 'glasses-outline' },
-  { key: 'bagId',       label: 'Bag',            categories: ['accessory'], subcategories: ['Bags & Purses'],   icon: 'bag-outline' },
-  { key: 'accessoryId', label: 'Accessory',      categories: ['accessory'], excludedSubcategories: ['Hats & Headwear', 'Bags & Purses'], icon: 'watch-outline' },
+  // 'Bags' is the taxonomy group name (shared/taxonomy.ts). This said
+  // 'Bags & Purses', which matches nothing, so the Bag slot was empty for every
+  // closet and the exclusion below was a no-op that leaked bags into Accessory.
+  { key: 'bagId',       label: 'Bag',            categories: ['accessory'], subcategories: ['Bags'],   icon: 'bag-outline' },
+  { key: 'accessoryId', label: 'Accessory',      categories: ['accessory'], excludedSubcategories: ['Hats & Headwear', 'Bags'], icon: 'watch-outline' },
 ];
 
 type SlotMap = Partial<Record<SlotKey, Item>>;

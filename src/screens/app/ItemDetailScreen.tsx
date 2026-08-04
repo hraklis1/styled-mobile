@@ -224,7 +224,11 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         material: scanned.material || null,
         fit: scanned.fit || null,
         neckline: scanned.neckline || null,
-        sleeveLength: scanned.sleeveLength || item.sleeveLength,
+        // Takes the scan's answer including null, like pattern/fit/neckline
+        // above. Falling back to the stored value made a rescan able to add a
+        // sleeve length but never to correct a wrong one — the one operation a
+        // user reaches for after seeing the wrong sleeves.
+        sleeveLength: scanned.sleeveLength || null,
         formalityStyles: Array.isArray(scanned.formalityStyles) ? scanned.formalityStyles : [],
         notableDetails: Array.isArray(scanned.notableDetails) ? scanned.notableDetails : [],
         colorPalette: Array.isArray(scanned.colorPalette) ? scanned.colorPalette : [],
