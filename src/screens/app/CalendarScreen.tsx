@@ -296,7 +296,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
 
     const showOutfit = () => navigation.navigate('Closet', {
       screen: 'OutfitDetail',
-      params: { outfitId: event.outfitId! },
+      params: { outfitId: event.outfitId!, returnTo: 'Calendar' },
     });
     if (!fromDetail) {
       showOutfit();

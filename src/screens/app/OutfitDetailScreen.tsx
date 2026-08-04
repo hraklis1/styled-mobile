@@ -22,7 +22,7 @@ import { useItems } from '../../hooks/useItems';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { itemCoverPresentation } from '../../lib/itemImage';
-import { CommonActions } from '@react-navigation/native';
+import { CommonActions, usePreventRemove } from '@react-navigation/native';
 import { colors, spacing, typography, radii } from '../../theme';
 import { CATEGORY_LABELS } from '../../types/item';
 import type { OutfitDetailScreenProps } from '../../navigation/types';
@@ -141,7 +141,7 @@ const overlayStyles = StyleSheet.create({
 });
 
 export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProps) {
-  const { outfitId } = route.params;
+  const { outfitId, returnTo } = route.params;
   const { data: outfits = [] } = useOutfits();
   const { data: items = [] } = useItems();
   const { data: events = [] } = useEvents();
@@ -160,6 +160,20 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   const [tagDraft, setTagDraft] = useState('');
   const [eventPickerVisible, setEventPickerVisible] = useState(false);
   const [saveSheetOpen, setSaveSheetOpen] = useState(false);
+  const [returningToCalendar, setReturningToCalendar] = useState(false);
+
+  usePreventRemove(returnTo === 'Calendar' && !returningToCalendar, () => {
+    setReturningToCalendar(true);
+  });
+
+  useEffect(() => {
+    if (!returningToCalendar) return;
+    const timeout = setTimeout(() => {
+      navigation.reset({ index: 0, routes: [{ name: 'ClosetMain' }] });
+      navigation.dispatch(CommonActions.navigate({ name: 'Calendar' }));
+    }, 0);
+    return () => clearTimeout(timeout);
+  }, [navigation, returningToCalendar]);
 
   useEffect(() => {
     if (outfit) {
@@ -257,6 +271,10 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   // goBack() would bubble up to the tab navigator and go to Home — but leave OutfitDetail
   // at the top of the ClosetStack. Reset to ClosetMain first so the Closet tab is clean.
   const handleBack = () => {
+    if (returnTo === 'Calendar') {
+      setReturningToCalendar(true);
+      return;
+    }
     const { routes } = navigation.getState();
     if (routes.length > 1) {
       navigation.goBack();
