@@ -307,7 +307,15 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     if (!item) return;
     try {
       const cutoutUrl = await generateCutoutForItem({
-        item: { id: item.id, imageUrl: item.imageUrl, category: item.category },
+        item: {
+          id: item.id,
+          imageUrl: item.imageUrl,
+          name: item.name,
+          category: item.category,
+          subcategory: item.subcategory,
+          style: item.style,
+          color: item.color,
+        },
         userId: item.userId,
         imageDataUrl,
       });
@@ -346,10 +354,19 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   /** Re-run background removal against the item's current photo. */
   const handleCreateCutout = async () => {
     if (!item) return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setCuttingOut(true);
     try {
       const cutoutUrl = await generateCutoutForItem({
-        item: { id: item.id, imageUrl: item.imageUrl, category: item.category },
+        item: {
+          id: item.id,
+          imageUrl: item.imageUrl,
+          name: item.name,
+          category: item.category,
+          subcategory: item.subcategory,
+          style: item.style,
+          color: item.color,
+        },
         userId: item.userId,
       });
       if (cutoutUrl) {

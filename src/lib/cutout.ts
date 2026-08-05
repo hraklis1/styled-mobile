@@ -42,8 +42,12 @@ export type CutoutRequest = {
   imageUrl?: string;
   /** Region of the photo to cut out, in percentages. Whole image when omitted. */
   bbox?: Bbox | null;
-  /** Item category — decides between the garment and subject segmentation models. */
+  /** Trusted closet metadata used to target one garment in a multi-item photo. */
+  name?: string | null;
   category?: string | null;
+  subcategory?: string | null;
+  style?: string | null;
+  color?: string | null;
   /** Scene hint ('flat_lay' | 'single_garment' | anything person-ish). */
   scene?: string | null;
 };
@@ -87,7 +91,11 @@ export async function requestCutout({
   imageDataUrl,
   imageUrl,
   bbox,
+  name,
   category,
+  subcategory,
+  style,
+  color,
   scene,
 }: CutoutRequest): Promise<string | null> {
   if (!imageDataUrl && !imageUrl) return null;
@@ -101,7 +109,11 @@ export async function requestCutout({
         imageBase64: imageDataUrl ?? null,
         imageUrl: imageUrl ?? null,
         bbox: bbox ?? null,
+        name: name ?? null,
         category: category ?? null,
+        subcategory: subcategory ?? null,
+        style: style ?? null,
+        color: color ?? null,
         scene: scene ?? null,
       },
       // Segmentation can queue behind another request; allow well past the
@@ -147,7 +159,15 @@ export async function generateCutoutForItem({
   userId,
   imageDataUrl,
 }: {
-  item: { id: number; imageUrl: string | null; category?: string | null };
+  item: {
+    id: number;
+    imageUrl: string | null;
+    name?: string | null;
+    category?: string | null;
+    subcategory?: string | null;
+    style?: string | null;
+    color?: string | null;
+  };
   userId: string | number;
   /** Local source, when one is already in hand — saves a server-side fetch. */
   imageDataUrl?: string | null;
@@ -168,7 +188,11 @@ export async function generateCutoutForItem({
   const cutoutDataUrl = await requestCutout({
     imageDataUrl: localSource ?? undefined,
     imageUrl: localSource ? undefined : item.imageUrl!,
+    name: item.name ?? null,
     category: item.category ?? null,
+    subcategory: item.subcategory ?? null,
+    style: item.style ?? null,
+    color: item.color ?? null,
   });
   if (!cutoutDataUrl) return null;
 
