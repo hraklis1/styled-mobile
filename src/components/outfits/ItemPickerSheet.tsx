@@ -93,7 +93,6 @@ export function ItemPickerSheet({
   const [search, setSearch] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
-  const [availableOnly, setAvailableOnly] = useState(false);
   const [colorFilters, setColorFilters] = useState<string[]>([]);
   const [seasonFilters, setSeasonFilters] = useState<string[]>([]);
   const [occasionFilters, setOccasionFilters] = useState<string[]>([]);
@@ -111,7 +110,6 @@ export function ItemPickerSheet({
     return items
       .filter((item) => {
         if (favoritesOnly && !item.isFavorite) return false;
-        if (availableOnly && item.laundryStatus && item.laundryStatus !== 'clean') return false;
         const itemColor = item.colorNormalized ?? item.color;
         if (colorFilters.length > 0 && (!itemColor || !colorFilters.includes(itemColor))) return false;
         if (seasonFilters.length > 0 && !item.seasons?.some((value) => seasonFilters.includes(value))) return false;
@@ -144,7 +142,6 @@ export function ItemPickerSheet({
     items,
     search,
     favoritesOnly,
-    availableOnly,
     colorFilters,
     seasonFilters,
     occasionFilters,
@@ -153,14 +150,12 @@ export function ItemPickerSheet({
 
   const activeFilterCount =
     Number(favoritesOnly) +
-    Number(availableOnly) +
     colorFilters.length +
     seasonFilters.length +
     occasionFilters.length;
 
   const clearFilters = useCallback(() => {
     setFavoritesOnly(false);
-    setAvailableOnly(false);
     setColorFilters([]);
     setSeasonFilters([]);
     setOccasionFilters([]);
@@ -289,15 +284,6 @@ export function ItemPickerSheet({
                 />
                 <Text style={[styles.pickerFilterChipText, favoritesOnly && styles.pickerFilterChipTextActive]}>
                   Favorites
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.pickerFilterChip, availableOnly && styles.pickerFilterChipActive]}
-                onPress={() => setAvailableOnly((value) => !value)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.pickerFilterChipText, availableOnly && styles.pickerFilterChipTextActive]}>
-                  Available
                 </Text>
               </TouchableOpacity>
             </ScrollView>

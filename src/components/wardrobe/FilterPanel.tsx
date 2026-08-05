@@ -20,7 +20,6 @@ import { colors, spacing, typography, radii } from '../../theme';
 import {
   CATEGORY_ORDER, CATEGORY_LABELS,
   OCCASION_OPTIONS, OCCASION_LABELS,
-  LAUNDRY_STATUS_OPTIONS, LAUNDRY_STATUS_LABELS,
   SLEEVE_LENGTH_OPTIONS, SLEEVE_LENGTH_LABELS,
 } from '../../types/item';
 import {
@@ -424,32 +423,6 @@ export function FilterPanel({
           </AccordionSection>
         )}
 
-        {/* ── Status ── */}
-        {onToggleStatus && (
-          <AccordionSection
-            title="Status"
-            badge={(selectedStatuses ?? []).length}
-            defaultExpanded={false}
-          >
-            <View style={styles.chips}>
-              {LAUNDRY_STATUS_OPTIONS.map(status => {
-                const active = (selectedStatuses ?? []).includes(status);
-                return (
-                  <TouchableOpacity
-                    key={status}
-                    style={[styles.chip, active && styles.chipActive]}
-                    onPress={() => onToggleStatus(status)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                      {LAUNDRY_STATUS_LABELS[status]}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </AccordionSection>
-        )}
 
         {/* ── Colour ── */}
         {allColors.length > 0 && (

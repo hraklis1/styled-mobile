@@ -162,8 +162,6 @@ export function useClosetFilters({ items, outfits, events, search }: UseClosetFi
       result = result.filter(i => i.warmthRating != null && selectedWarmth.includes(i.warmthRating));
     if (selectedOccasions.length)
       result = result.filter(i => (i.occasions ?? []).some(o => selectedOccasions.includes(o)));
-    if (selectedStatuses.length)
-      result = result.filter(i => i.laundryStatus != null && selectedStatuses.includes(i.laundryStatus));
     if (selectedMaterials.length)
       result = result.filter(i =>
         parseMaterialString(i.material ?? '').some(m => selectedMaterials.includes(m))

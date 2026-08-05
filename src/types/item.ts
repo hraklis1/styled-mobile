@@ -44,8 +44,6 @@ export {
   MATERIAL_OPTIONS,
   type Material,
   CARE_OPTIONS,
-  FORMALITY_STYLE_TAGS,
-  type FormalityStyleTag,
 } from '../lib/attributes';
 
 import { ITEM_CATEGORIES, type ItemCategory, type SleeveLength } from '../lib/attributes';
@@ -73,18 +71,6 @@ export const CATEGORY_LABELS: Record<ItemCategory, string> = {
 
 export const CATEGORY_ORDER: ItemCategory[] = [...ITEM_CATEGORIES];
 
-/**
- * Mobile-only, and currently inert: there is no `laundry_status` column on the
- * items table, so nothing populates this and the filter and card badge that
- * read it cannot fire.
- */
-export const LAUNDRY_STATUS_OPTIONS = ['clean', 'in_wash', 'in_storage'] as const;
-export type LaundryStatus = typeof LAUNDRY_STATUS_OPTIONS[number];
-export const LAUNDRY_STATUS_LABELS: Record<LaundryStatus, string> = {
-  clean:      'Clean',
-  in_wash:    'In the Wash',
-  in_storage: 'In Storage',
-};
 
 export type ScanResult = {
   name: string;
@@ -159,6 +145,5 @@ export type Item = {
   lastWornAt: string | null;
   isFavorite: boolean;
   isArchived: boolean;
-  laundryStatus?: LaundryStatus | null;
   createdAt: string;
 };

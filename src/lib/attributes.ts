@@ -159,17 +159,6 @@ export function normalizeOccasion(raw: unknown): Occasion | null {
   return LEGACY_OCCASION_ALIASES[v] ?? null;
 }
 
-/**
- * @deprecated The `formality_styles` column is retired — its values are merged
- * into `occasions`. Retained only so the column and its zod schema still
- * typecheck until the column is dropped. Do not read it in new code.
- */
-export const FORMALITY_STYLE_TAGS = [
-  "Athleisure", "Lounge", "Casual", "Smart Casual",
-  "Business Casual", "Professional", "Night Out", "Formal",
-] as const;
-export type FormalityStyleTag = typeof FORMALITY_STYLE_TAGS[number];
-
 // ── Condition ───────────────────────────────────────────────────────────────
 
 export const CONDITION_OPTIONS = ["new", "good", "worn", "needs_repair", "donate"] as const;

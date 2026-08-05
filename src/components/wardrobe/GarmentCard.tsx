@@ -33,9 +33,6 @@ function GarmentCardComponent({
   const imageHeight = cardWidth / aspectRatio;
   const handlePress = selectionMode ? onToggleSelect : onPress;
 
-  const showLaundry = !selectionMode && item.laundryStatus && item.laundryStatus !== 'clean';
-  const laundryLabel = item.laundryStatus === 'in_wash' ? 'Washing' : 'Stored';
-  const laundryColor = item.laundryStatus === 'in_wash' ? '#D97706' : '#6B7280';
 
   const showConditionDot = item.condition === 'needs_repair' || item.condition === 'donate';
   const conditionColor = item.condition === 'donate' ? colors.error : '#D97706';
@@ -73,12 +70,6 @@ function GarmentCardComponent({
           </View>
         )}
 
-        {/* Laundry status pill — top-left */}
-        {showLaundry && (
-          <View style={[styles.laundryPill, { borderColor: laundryColor + '55' }]}>
-            <Text style={[styles.laundryText, { color: laundryColor }]}>{laundryLabel}</Text>
-          </View>
-        )}
 
         {/* Condition warning dot — bottom-left */}
         {showConditionDot && (
@@ -136,20 +127,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 1 },
-  },
-  laundryPill: {
-    position: 'absolute',
-    top: spacing.sm,
-    left: spacing.sm,
-    backgroundColor: 'rgba(255,252,247,0.92)',
-    borderRadius: radii.full,
-    borderWidth: 1,
-    paddingHorizontal: spacing.xs + 2,
-    paddingVertical: 2,
-  },
-  laundryText: {
-    fontSize: 10,
-    fontWeight: '600' as const,
   },
   conditionDot: {
     position: 'absolute',

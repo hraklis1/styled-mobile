@@ -148,7 +148,6 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
   const [pickerSearch, setPickerSearch] = useState('');
   const [pickerFiltersOpen, setPickerFiltersOpen] = useState(false);
   const [pickerFavoritesOnly, setPickerFavoritesOnly] = useState(false);
-  const [pickerAvailableOnly, setPickerAvailableOnly] = useState(false);
   const [pickerColors, setPickerColors] = useState<string[]>([]);
   const [pickerSeasons, setPickerSeasons] = useState<string[]>([]);
   const [pickerOccasions, setPickerOccasions] = useState<string[]>([]);
@@ -204,7 +203,6 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
     return categoryPickerItems
       .filter((item) => {
         if (pickerFavoritesOnly && !item.isFavorite) return false;
-        if (pickerAvailableOnly && item.laundryStatus && item.laundryStatus !== 'clean') return false;
         const itemColor = item.colorNormalized ?? item.color;
         if (pickerColors.length > 0 && (!itemColor || !pickerColors.includes(itemColor))) return false;
         if (pickerSeasons.length > 0 && !item.seasons?.some((value) => pickerSeasons.includes(value))) return false;
@@ -236,7 +234,6 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
   }, [
     activeSlot,
     categoryPickerItems,
-    pickerAvailableOnly,
     pickerColors,
     pickerFavoritesOnly,
     pickerOccasions,
@@ -247,14 +244,12 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
 
   const pickerActiveFilterCount =
     Number(pickerFavoritesOnly) +
-    Number(pickerAvailableOnly) +
     pickerColors.length +
     pickerSeasons.length +
     pickerOccasions.length;
 
   const clearPickerFilters = useCallback(() => {
     setPickerFavoritesOnly(false);
-    setPickerAvailableOnly(false);
     setPickerColors([]);
     setPickerSeasons([]);
     setPickerOccasions([]);
@@ -777,15 +772,6 @@ export function OutfitBuilderSheet({ visible, onClose, onCreated, initialItems }
                       />
                       <Text style={[styles.pickerFilterChipText, pickerFavoritesOnly && styles.pickerFilterChipTextActive]}>
                         Favorites
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.pickerFilterChip, pickerAvailableOnly && styles.pickerFilterChipActive]}
-                      onPress={() => setPickerAvailableOnly((value) => !value)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[styles.pickerFilterChipText, pickerAvailableOnly && styles.pickerFilterChipTextActive]}>
-                        Available
                       </Text>
                     </TouchableOpacity>
                   </ScrollView>
