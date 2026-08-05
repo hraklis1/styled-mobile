@@ -1,15 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { LinearTransition } from 'react-native-reanimated';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, cutoutScaleFor, spacing, typography, radii } from '../../theme';
-import { itemCoverPresentation } from '../../lib/itemImage';
-import { CATEGORY_LABELS } from '../../types/item';
+import { colors, radii, spacing, typography } from '../../theme';
+import { getItemCardAccessibilityLabel } from '../../lib/closet-presentation';
 import type { Item } from '../../types/item';
 import { PressableScale } from '../primitives/PressableScale';
-import { NORMALIZED_COLOR_HEX } from '../../lib/colorUtils';
-import type { NormalizedColor } from '../../types/item';
+import { GarmentImage } from './garment-image';
+import { ItemSecondaryMeta } from './item-secondary-meta';
 
 type Props = {
   item: Item;
@@ -22,14 +20,6 @@ type Props = {
   onToggleSelect?: () => void;
 };
 
-function resolveCardColor(item: Item): string | null {
-  if (item.colorPalette?.length > 0) return item.colorPalette[0];
-  if (item.colorNormalized) {
-    return NORMALIZED_COLOR_HEX[item.colorNormalized as NormalizedColor] ?? null;
-  }
-  return null;
-}
-
 function GarmentCardComponent({
   item,
   aspectRatio,
@@ -40,19 +30,8 @@ function GarmentCardComponent({
   isSelected = false,
   onToggleSelect,
 }: Props) {
-  const cover = itemCoverPresentation(item);
-  const imageUri = cover.uri;
   const imageHeight = cardWidth / aspectRatio;
   const handlePress = selectionMode ? onToggleSelect : onPress;
-  const colorHex = resolveCardColor(item);
-
-  // Transparent cutouts are tightly trimmed and need category-aware breathing
-  // room. AI-polished images already include a studio canvas, so applying this
-  // inset to them creates double padding and makes the garment look miniature.
-  // A margin keeps true cutouts centred while `contentFit: contain` letterboxes.
-  const cutoutMargin = cover.variant === 'cutout'
-    ? (Math.min(cardWidth, imageHeight) * (1 - cutoutScaleFor(item.category))) / 2
-    : 0;
 
   const showLaundry = !selectionMode && item.laundryStatus && item.laundryStatus !== 'clean';
   const laundryLabel = item.laundryStatus === 'in_wash' ? 'Washing' : 'Stored';
@@ -61,10 +40,7 @@ function GarmentCardComponent({
   const showConditionDot = item.condition === 'needs_repair' || item.condition === 'donate';
   const conditionColor = item.condition === 'donate' ? colors.error : '#D97706';
 
-  const itemLabel = [
-    item.name || 'Unnamed item',
-    item.brand || (item.category && CATEGORY_LABELS[item.category]),
-  ].filter(Boolean).join(', ');
+  const itemLabel = getItemCardAccessibilityLabel(item);
 
   return (
     <PressableScale
@@ -77,25 +53,7 @@ function GarmentCardComponent({
       accessibilityLabel={selectionMode ? `${itemLabel}, ${isSelected ? 'selected' : 'not selected'}` : itemLabel}
       accessibilityState={selectionMode ? { selected: isSelected } : undefined}
     >
-      <View style={[styles.imageContainer, { height: imageHeight }]}>
-        {imageUri ? (
-          <Image
-            source={{ uri: imageUri }}
-            // Only a tightly trimmed cutout needs card-supplied air. Polished
-            // images retain their own studio whitespace at the largest safe
-            // `contain` scale, while ordinary photos continue to fill the card.
-            style={[StyleSheet.absoluteFill, cover.variant === 'cutout' && { margin: cutoutMargin }]}
-            contentFit={cover.contentFit}
-            transition={200}
-            cachePolicy="memory-disk"
-            recyclingKey={`${item.id}:${cover.variant}`}
-          />
-        ) : (
-          <View style={styles.imagePlaceholder}>
-            <Ionicons name="shirt-outline" size={40} color={colors.mutedForeground} />
-          </View>
-        )}
-
+      <GarmentImage item={item} width={cardWidth} height={imageHeight}>
         {selectionMode && isSelected && <View style={styles.selectedOverlay} />}
 
         {selectionMode && (
@@ -126,24 +84,13 @@ function GarmentCardComponent({
         {showConditionDot && (
           <View style={[styles.conditionDot, { backgroundColor: conditionColor }]} />
         )}
-      </View>
+      </GarmentImage>
 
       <View style={styles.info}>
-        <View style={styles.nameRow}>
-          {colorHex && (
-            <View style={[styles.colorDot, { backgroundColor: colorHex }]} />
-          )}
-          <Text style={styles.name} numberOfLines={1}>
-            {item.name || 'Unnamed Item'}
-          </Text>
-        </View>
-        {item.brand ? (
-          <Text style={styles.brand} numberOfLines={1}>{item.brand}</Text>
-        ) : item.category && CATEGORY_LABELS[item.category] ? (
-          <Text style={styles.category} numberOfLines={1}>
-            {CATEGORY_LABELS[item.category]}
-          </Text>
-        ) : null}
+        <Text style={styles.name} numberOfLines={2}>
+          {item.name || 'Unnamed Item'}
+        </Text>
+        <ItemSecondaryMeta item={item} />
       </View>
     </PressableScale>
   );
@@ -155,19 +102,6 @@ const styles = StyleSheet.create({
   card: {
     marginBottom: spacing.md,
     marginHorizontal: spacing.sm / 2,
-  },
-  imageContainer: {
-    borderRadius: radii.lg,
-    overflow: 'hidden',
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0ECE5',
-  },
-  imagePlaceholder: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surfaceSubtle,
   },
   selectedOverlay: {
     position: 'absolute',
@@ -231,32 +165,13 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm + 1,
     paddingHorizontal: 2,
     gap: 3,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  colorDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    flexShrink: 0,
+    minHeight: 62,
   },
   name: {
     fontSize: typography.size.sm,
+    lineHeight: 17,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
-    flex: 1,
-  },
-  brand: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-  },
-  category: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
+    minHeight: 34,
   },
 });

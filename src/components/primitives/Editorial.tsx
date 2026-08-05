@@ -222,6 +222,42 @@ export function FilterControl({
   );
 }
 
+export function ViewModeControl({
+  value,
+  onChange,
+}: {
+  value: 'grid' | 'list';
+  onChange: (value: 'grid' | 'list') => void;
+}) {
+  return (
+    <View style={styles.viewModeControl} accessibilityRole="tablist">
+      {([
+        { value: 'grid' as const, icon: 'grid-outline' as const, label: 'Grid view' },
+        { value: 'list' as const, icon: 'list-outline' as const, label: 'List view' },
+      ]).map((option) => {
+        const selected = value === option.value;
+        return (
+          <PressableScale
+            key={option.value}
+            scaleTo={0.96}
+            contentStyle={[styles.viewModeButton, selected && styles.viewModeButtonActive]}
+            onPress={() => onChange(option.value)}
+            accessibilityRole="tab"
+            accessibilityLabel={option.label}
+            accessibilityState={{ selected }}
+          >
+            <Ionicons
+              name={option.icon}
+              size={18}
+              color={selected ? colors.foreground : colors.mutedForeground}
+            />
+          </PressableScale>
+        );
+      })}
+    </View>
+  );
+}
+
 export function EditorialCardMeta({
   title,
   subtitle,
@@ -391,8 +427,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   filterControl: {
-    minWidth: 42,
-    height: 42,
+    minWidth: 44,
+    height: 44,
     borderRadius: radii.full,
     backgroundColor: colors.surfaceElevated,
     borderWidth: StyleSheet.hairlineWidth,
@@ -412,6 +448,26 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.bold,
     color: colors.primaryForeground,
     fontVariant: ['tabular-nums'],
+  },
+  viewModeControl: {
+    height: 44,
+    flexDirection: 'row',
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  viewModeButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.full,
+  },
+  viewModeButtonActive: {
+    backgroundColor: colors.surfaceElevated,
+    ...shadows.xs,
   },
   cardMeta: {
     flex: 1,

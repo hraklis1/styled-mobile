@@ -1,7 +1,7 @@
-import React, { useCallback } from 'react';
+import React, { forwardRef, useCallback } from 'react';
 import { View, useWindowDimensions } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import type { ListRenderItemInfo } from '@shopify/flash-list';
+import type { FlashListRef, ListRenderItemInfo, ViewToken } from '@shopify/flash-list';
 import { GarmentCard } from './GarmentCard';
 import { editorial, spacing } from '../../theme';
 import type { Item } from '../../types/item';
@@ -30,12 +30,15 @@ type Props = {
   scrollEventThrottle?: number;
   contentInset?: { top?: number; bottom?: number };
   listPaddingTop?: number;
+  initialScrollIndex?: number;
+  onViewableItemsChanged?: (info: { viewableItems: ViewToken<Item>[]; changed: ViewToken<Item>[] }) => void;
+  viewabilityConfig?: { itemVisiblePercentThreshold?: number };
 };
 
-// Overhead = info paddingTop (6) + name line (17) + gap (2) + brand/cat line (16) + card marginBottom (12)
-const CARD_OVERHEAD = 53;
+// Overhead reserves two title lines, one metadata line, and the card's spacing.
+const CARD_OVERHEAD = 74;
 
-function ClosetGridComponent({
+const ClosetGridComponent = forwardRef<FlashListRef<Item>, Props>(function ClosetGridComponent({
   items,
   selectedIds,
   selectionMode,
@@ -48,7 +51,10 @@ function ClosetGridComponent({
   scrollEventThrottle = 16,
   contentInset,
   listPaddingTop = 0,
-}: Props) {
+  initialScrollIndex,
+  onViewableItemsChanged,
+  viewabilityConfig,
+}, ref) {
   const { width } = useWindowDimensions();
   const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / NUM_COLS;
   const itemHeight = Math.round(cardWidth / CARD_ASPECT_RATIO) + CARD_OVERHEAD;
@@ -81,6 +87,7 @@ function ClosetGridComponent({
   return (
     <View style={{ flex: 1, paddingHorizontal: SIDE_PAD - COL_GAP / 2 }}>
       <FlashList
+        ref={ref}
         data={items}
         numColumns={NUM_COLS}
         renderItem={renderItem}
@@ -92,6 +99,9 @@ function ClosetGridComponent({
         onScroll={onScroll}
         scrollEventThrottle={scrollEventThrottle}
         contentInset={contentInset}
+        initialScrollIndex={initialScrollIndex}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
         overrideItemLayout={overrideItemLayout}
         drawDistance={600}
         contentContainerStyle={{
@@ -101,6 +111,6 @@ function ClosetGridComponent({
       />
     </View>
   );
-}
+});
 
 export const ClosetGrid = React.memo(ClosetGridComponent);

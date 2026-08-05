@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo, type ReactNode } from 'react';
 import {
   View,
   Text,
@@ -12,9 +12,10 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { Image } from 'expo-image';
-import { FlashList } from '@shopify/flash-list';
+import { LinearGradient } from 'expo-linear-gradient';
+import { FlashList, type FlashListRef, type ViewToken } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
+import Reanimated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useItems, useUpdateItem, useDeleteItem, useMarkItemWorn } from '../../hooks/useItems';
 import { useOutfits, useMarkOutfitWorn, useDeleteOutfit, useUpdateOutfit } from '../../hooks/useOutfits';
@@ -31,9 +32,8 @@ import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
 import { useBoards, useCreateBoard, useDeleteBoard, useUpdateBoard, type BoardEntryRef } from '../../hooks/useBoards';
 import { filterVisibleBoards } from '../../lib/legacyBoards';
 import { resolveImageUri } from '../../lib/resolveImageUri';
-import { itemCoverPresentation } from '../../lib/itemImage';
 import { parseEventDate } from '../../lib/outfitAssignments';
-import { CATEGORY_LABELS, type ItemCategory } from '../../types/item';
+import { CATEGORY_LABELS, type Item, type ItemCategory } from '../../types/item';
 import { colors, shadows, spacing, typography, radii } from '../../theme';
 import { useGlobalScan } from '../../contexts/GlobalScanContext';
 import { useGlobalAddSheet } from '../../contexts/GlobalAddSheetContext';
@@ -45,12 +45,25 @@ import {
   FilterControl,
   ScreenHeader,
   SegmentedControl,
+  ViewModeControl,
 } from '../../components/primitives/Editorial';
 import { GarmentCardSkeleton } from '../../components/primitives/GarmentCardSkeleton';
 import { ErrorState } from '../../components/primitives/ErrorState';
 import type { ClosetScreenProps } from '../../navigation/types';
 import { useLibraryLaunch } from '../../hooks/useCameraLaunch';
 import type { Board } from '../../types/board';
+import { GarmentImage } from '../../components/wardrobe/garment-image';
+import {
+  getItemCardAccessibilityLabel,
+  hasActivePieceFilters,
+  shouldClearActiveSubcategory,
+} from '../../lib/closet-presentation';
+import {
+  loadPiecesViewMode,
+  savePiecesViewMode,
+  type PiecesViewMode,
+} from '../../lib/closet-preferences';
+import { ItemSecondaryMeta } from '../../components/wardrobe/item-secondary-meta';
 
 type ViewMode = 'grid' | 'list';
 type Segment = 'pieces' | 'outfits' | 'boards';
@@ -79,9 +92,69 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 
 // Heights used to size the collapsible region and sheet detents.
 // These are rough constants; adjust if layout changes.
-const SEARCH_ROW_H      = 52;
-const PILL_ROW_H        = 46;
+const SEARCH_ROW_H      = 50;
+const PILL_ROW_H        = 42;
 const SUBCATEGORY_ROW_H = 42;
+
+function FadedPillScroll({ children }: { children: ReactNode }) {
+  const viewportWidth = useRef(0);
+  const contentWidth = useRef(0);
+  const offsetX = useRef(0);
+  const [showLeftFade, setShowLeftFade] = useState(false);
+  const [showRightFade, setShowRightFade] = useState(false);
+
+  const syncFades = useCallback(() => {
+    setShowLeftFade(offsetX.current > 4);
+    setShowRightFade(
+      contentWidth.current > viewportWidth.current
+      && offsetX.current + viewportWidth.current < contentWidth.current - 4,
+    );
+  }, []);
+
+  return (
+    <View style={styles.pillScrollWrap}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.pillScroll}
+        contentContainerStyle={styles.pillContent}
+        onLayout={(event) => {
+          viewportWidth.current = event.nativeEvent.layout.width;
+          syncFades();
+        }}
+        onContentSizeChange={(width) => {
+          contentWidth.current = width;
+          syncFades();
+        }}
+        onScroll={(event) => {
+          offsetX.current = event.nativeEvent.contentOffset.x;
+          syncFades();
+        }}
+        scrollEventThrottle={16}
+      >
+        {children}
+      </ScrollView>
+      {showLeftFade ? (
+        <LinearGradient
+          pointerEvents="none"
+          colors={[colors.background, 'rgba(251,250,247,0)']}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={[styles.pillFade, styles.pillFadeLeft]}
+        />
+      ) : null}
+      {showRightFade ? (
+        <LinearGradient
+          pointerEvents="none"
+          colors={['rgba(251,250,247,0)', colors.background]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={[styles.pillFade, styles.pillFadeRight]}
+        />
+      ) : null}
+    </View>
+  );
+}
 
 export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const insets = useSafeAreaInsets();
@@ -94,9 +167,13 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const [segment, setSegment]               = useState<Segment>('pieces');
   const [search, setSearch]                 = useState('');
   const [boardSearch, setBoardSearch]       = useState('');
-  const [activeCategory, setActiveCategory] = useState<ItemCategory | null>(null);
-  const [activeSubcategory, setActiveSubcategory] = useState<string | null>(null);
-  const [viewMode, setViewMode]             = useState<ViewMode>('grid');
+  const [piecesViewMode, setPiecesViewMode] = useState<PiecesViewMode>('grid');
+  const [outfitViewMode, setOutfitViewMode] = useState<ViewMode>('grid');
+  const piecesViewTouched = useRef(false);
+  const piecesAnchorItemId = useRef<number | null>(null);
+  const piecesGridRef = useRef<FlashListRef<Item>>(null);
+  const piecesListRef = useRef<FlashListRef<Item>>(null);
+  const piecesViewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
 
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds]     = useState<Set<number>>(new Set());
@@ -105,6 +182,14 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const justLongPressedRef = useRef(false);
   const [outfitBuilderVisible, setOutfitBuilderVisible] = useState(false);
   const [outfitBuilderItems, setOutfitBuilderItems]     = useState<typeof items>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadPiecesViewMode().then((storedViewMode) => {
+      if (!cancelled && !piecesViewTouched.current) setPiecesViewMode(storedViewMode);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const { data: items = [], isLoading: itemsLoading, isError: itemsError, refetch: refetchItems } = useItems();
   const { data: outfits = [] } = useOutfits();
@@ -145,6 +230,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     selectedStatuses, setSelectedStatuses,
     selectedMaterials, setSelectedMaterials,
     selectedSleeveLengths, setSelectedSleeveLengths,
+    activeSubcategory, setActiveSubcategory,
     outfitSortKey, setOutfitSortKey,
     outfitFilterSheetOpen, setOutfitFilterSheetOpen,
     outfitSelectedTags, setOutfitSelectedTags,
@@ -158,7 +244,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     availableCategories, availableSubcategories,
     filteredItems, filteredOutfits,
     clearSheetFilters, clearOutfitFilters, resetAll,
-  } = useClosetFilters({ items, outfits, events, search, activeCategory, activeSubcategory });
+  } = useClosetFilters({ items, outfits, events, search });
 
   const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / 2;
 
@@ -236,8 +322,6 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     (next: Segment) => {
       if (next === segment) return;
       setSearch('');
-      setActiveCategory(null);
-      setActiveSubcategory(null);
       setSelectionMode(false);
       setSelectedIds(new Set());
       setOutfitSelectionMode(false);
@@ -256,10 +340,43 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     navigation.setParams({ segment: undefined });
   }, [handleSegmentChange, navigation, route.params?.segment, segment]);
 
+  const applySelectedCategories = useCallback((next: string[]) => {
+    if (shouldClearActiveSubcategory(selectedCategories, next)) setActiveSubcategory(null);
+    setSelectedCategories(next);
+  }, [selectedCategories, setActiveSubcategory, setSelectedCategories]);
+
   const handleCategoryPress = useCallback((cat: ItemCategory) => {
-    setActiveCategory(prev => (prev === cat ? null : cat));
-    setActiveSubcategory(null);
-  }, []);
+    applySelectedCategories(
+      selectedCategories.includes(cat)
+        ? selectedCategories.filter(current => current !== cat)
+        : [...selectedCategories, cat],
+    );
+  }, [applySelectedCategories, selectedCategories]);
+
+  const handlePiecesViewModeChange = useCallback((next: PiecesViewMode) => {
+    if (next === piecesViewMode) return;
+    piecesViewTouched.current = true;
+    setPiecesViewMode(next);
+    void savePiecesViewMode(next);
+  }, [piecesViewMode]);
+
+  const handlePiecesViewableItemsChanged = useRef(({
+    viewableItems,
+  }: {
+    viewableItems: ViewToken<Item>[];
+  }) => {
+    const firstVisible = viewableItems
+      .filter(token => token.isViewable && token.index != null)
+      .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))[0];
+    if (firstVisible?.item) piecesAnchorItemId.current = firstVisible.item.id;
+  }).current;
+
+  const piecesInitialScrollIndex = useMemo(() => {
+    if (piecesAnchorItemId.current == null) return undefined;
+    const index = filteredItems.findIndex(item => item.id === piecesAnchorItemId.current);
+    if (index <= 0) return undefined;
+    return piecesViewMode === 'grid' ? index - (index % 2) : index;
+  }, [filteredItems, piecesViewMode]);
 
   // ── Subtitle ───────────────────────────────────────────────────────────────
 
@@ -499,8 +616,6 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
 
   const renderItemRow = useCallback(
     ({ item }: { item: (typeof items)[number] }) => {
-      const itemCover = itemCoverPresentation(item);
-      const uri = itemCover.uri;
       const isSelected = selectedIds.has(item.id);
       return (
         <PressableScale
@@ -509,7 +624,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
           onLongPress={selectionMode ? undefined : () => handleLongPress(item)}
           delayLongPress={450}
           accessibilityRole="button"
-          accessibilityLabel={[item.name, item.category ? CATEGORY_LABELS[item.category] : null].filter(Boolean).join(', ')}
+          accessibilityLabel={getItemCardAccessibilityLabel(item)}
           accessibilityState={selectionMode ? { selected: isSelected } : undefined}
         >
           {selectionMode && (
@@ -521,23 +636,22 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
               />
             </View>
           )}
-          <View style={styles.itemRowThumb}>
-            {uri ? (
-              <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit={itemCover.contentFit} transition={150} cachePolicy="memory-disk" recyclingKey={`${item.id}:${itemCover.variant}`} />
-            ) : (
-              <View style={styles.itemThumbPlaceholder}>
-                <Ionicons name="shirt-outline" size={20} color={colors.mutedForeground} />
-              </View>
-            )}
-          </View>
+          <GarmentImage
+            item={item}
+            width={64}
+            height={64}
+            borderRadius={radii.md}
+            placeholderIconSize={20}
+          />
           <View style={styles.itemRowInfo}>
             <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
-            {item.category && CATEGORY_LABELS[item.category] ? (
-              <Text style={styles.itemCategory}>{CATEGORY_LABELS[item.category]}</Text>
-            ) : null}
+            <ItemSecondaryMeta item={item} />
           </View>
           {!selectionMode && item.isFavorite && (
             <Ionicons name="heart" size={16} color={colors.primary} />
+          )}
+          {!selectionMode && (
+            <Ionicons name="chevron-forward" size={16} color={colors.border} />
           )}
         </PressableScale>
       );
@@ -556,7 +670,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
       const assignmentLabel = assignment
         ? `, assigned to ${assignment.nextEvent.title} on ${eventDate}${additionalEventCount > 0 ? ` and ${additionalEventCount} more upcoming event${additionalEventCount === 1 ? '' : 's'}` : ''}`
         : '';
-      if (viewMode === 'list') {
+      if (outfitViewMode === 'list') {
         const thumbSize = 72;
         return (
           <PressableScale
@@ -674,10 +788,12 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         </View>
       );
     },
-    [cardWidth, navigation, viewMode, outfitSelectionMode, selectedOutfitIds, toggleOutfitSelect, handleOutfitLongPress, upcomingAssignmentSummaries],
+    [cardWidth, navigation, outfitViewMode, outfitSelectionMode, selectedOutfitIds, toggleOutfitSelect, handleOutfitLongPress, upcomingAssignmentSummaries],
   );
 
   // ── Empty states ───────────────────────────────────────────────────────────
+
+  const hasActivePiecesFilters = hasActivePieceFilters(search, activeFilterCount);
 
   const emptyPieces = (
     <View style={styles.emptyState}>
@@ -685,14 +801,14 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         <Ionicons name="shirt-outline" size={32} color={colors.mutedForeground} />
       </View>
       <Text style={styles.emptyTitle}>
-        {search || activeCategory ? 'No pieces match' : 'Your wardrobe is empty'}
+        {hasActivePiecesFilters ? 'No pieces match' : 'Your wardrobe is empty'}
       </Text>
       <Text style={styles.emptySub}>
-        {search || activeCategory
+        {hasActivePiecesFilters
           ? 'Try a different search or filter'
           : 'Start by adding your first item'}
       </Text>
-      {!search && !activeCategory && (
+      {!hasActivePiecesFilters && (
         <TouchableOpacity style={styles.emptyBtn} onPress={handleAddPieces} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel="Add your first item">
           <Ionicons name="add" size={16} color={colors.primaryForeground} />
           <Text style={styles.emptyBtnText}>Add your first item</Text>
@@ -759,14 +875,15 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         subtitle={subtitle}
         safeTop={false}
         primaryAction={{
-          label: segment === 'pieces' ? 'Add pieces' : segment === 'boards' ? 'New board' : 'Create outfit',
+          label: segment === 'pieces' ? 'Add' : segment === 'boards' ? 'New board' : 'Create outfit',
           icon: 'add',
           onPress: handlePrimaryAction,
+          accessibilityLabel: segment === 'pieces' ? 'Add pieces' : undefined,
         }}
-        secondaryActions={segment !== 'boards' ? [{
-          label: viewMode === 'grid' ? 'List view' : 'Grid view',
-          icon: viewMode === 'grid' ? 'list-outline' : 'grid-outline',
-          onPress: () => setViewMode(v => v === 'grid' ? 'list' : 'grid'),
+        secondaryActions={segment === 'outfits' ? [{
+          label: outfitViewMode === 'grid' ? 'List view' : 'Grid view',
+          icon: outfitViewMode === 'grid' ? 'list-outline' : 'grid-outline',
+          onPress: () => setOutfitViewMode(v => v === 'grid' ? 'list' : 'grid'),
         }] : []}
       />
 
@@ -797,8 +914,14 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             <ErrorState message="Couldn't load your closet" onRetry={refetchItems} />
           </View>
         ) : segment === 'pieces' ? (
-          viewMode === 'grid' ? (
+          <Reanimated.View
+            key={`pieces-${piecesViewMode}`}
+            entering={FadeIn.duration(170)}
+            style={styles.piecesListStage}
+          >
+          {piecesViewMode === 'grid' ? (
             <ClosetGrid
+              ref={piecesGridRef}
               items={filteredItems}
               selectedIds={selectedIds}
               selectionMode={selectionMode}
@@ -809,9 +932,13 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
               onScroll={handleScroll}
               scrollEventThrottle={16}
               listPaddingTop={listPaddingTop}
+              initialScrollIndex={piecesInitialScrollIndex}
+              onViewableItemsChanged={handlePiecesViewableItemsChanged}
+              viewabilityConfig={piecesViewabilityConfig}
             />
           ) : (
             <FlashList
+              ref={piecesListRef}
               data={filteredItems}
               keyExtractor={item => String(item.id)}
               renderItem={renderItemRow}
@@ -821,19 +948,24 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
               showsVerticalScrollIndicator={false}
               onScroll={handleScroll}
               scrollEventThrottle={16}
+              initialScrollIndex={piecesInitialScrollIndex}
+              onViewableItemsChanged={handlePiecesViewableItemsChanged}
+              viewabilityConfig={piecesViewabilityConfig}
             />
           )
+          }
+          </Reanimated.View>
         ) : segment === 'outfits' ? (
           <FlashList
-            key={`outfits-${viewMode}`}
+            key={`outfits-${outfitViewMode}`}
             data={filteredOutfits}
             keyExtractor={outfit => String(outfit.id)}
             renderItem={renderOutfitCard}
             extraData={{ outfitSelectionMode, selectedOutfitIds }}
-            numColumns={viewMode === 'list' ? 1 : 2}
+            numColumns={outfitViewMode === 'list' ? 1 : 2}
             ListEmptyComponent={emptyOutfits}
             contentContainerStyle={
-              viewMode === 'list'
+              outfitViewMode === 'list'
                 ? { paddingTop: listPaddingTop, paddingHorizontal: SIDE_PAD }
                 : { paddingTop: listPaddingTop, paddingHorizontal: SIDE_PAD - COL_GAP / 2, paddingBottom: spacing.xxxl * 2 }
             }
@@ -923,7 +1055,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         <Animated.View
           style={[styles.floatingHeader, { transform: [{ translateY: headerTranslateY }] }]}
         >
-          {/* Search bar + Sort&Filter button */}
+          {/* Search, filters, and the Pieces-only layout control */}
           <View style={styles.searchRow}>
             <View style={styles.searchWrap}>
               <Ionicons name="search-outline" size={16} color={colors.mutedForeground} style={styles.searchIcon} />
@@ -943,7 +1075,10 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             </View>
 
             {segment === 'pieces' && (
-              <FilterControl count={activeFilterCount} onPress={() => setFilterSheetOpen(true)} />
+              <>
+                <FilterControl count={activeFilterCount} onPress={() => setFilterSheetOpen(true)} />
+                <ViewModeControl value={piecesViewMode} onChange={handlePiecesViewModeChange} />
+              </>
             )}
             {segment === 'outfits' && (
               <FilterControl
@@ -956,49 +1091,42 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
 
           {/* Category pills — pieces only */}
           {hasCategoryPills && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.pillScroll}
-              contentContainerStyle={styles.pillContent}
-            >
+            <FadedPillScroll>
               <PressableScale
-                contentStyle={[styles.pill, activeCategory === null && styles.pillActive]}
-                onPress={() => { setActiveCategory(null); setActiveSubcategory(null); }}
+                contentStyle={[styles.pill, selectedCategories.length === 0 && styles.pillActive]}
+                onPress={() => applySelectedCategories([])}
                 accessibilityRole="button"
                 accessibilityLabel="All categories"
-                accessibilityState={{ selected: activeCategory === null }}
+                accessibilityState={{ selected: selectedCategories.length === 0 }}
               >
-                <Text style={[styles.pillLabel, activeCategory === null && styles.pillLabelActive]}>
+                <Text style={[styles.pillLabel, selectedCategories.length === 0 && styles.pillLabelActive]}>
                   All
                 </Text>
               </PressableScale>
-              {availableCategories.map(cat => (
-                <PressableScale
-                  key={cat}
-                  contentStyle={[styles.pill, activeCategory === cat && styles.pillActive]}
-                  onPress={() => handleCategoryPress(cat)}
-                  accessibilityRole="button"
-                  accessibilityLabel={CATEGORY_LABELS[cat]}
-                  accessibilityState={{ selected: activeCategory === cat }}
-                >
-                  <Text style={[styles.pillLabel, activeCategory === cat && styles.pillLabelActive]}>
-                    {CATEGORY_LABELS[cat]}
-                  </Text>
-                </PressableScale>
-              ))}
-            </ScrollView>
+              {availableCategories.map(cat => {
+                const active = selectedCategories.includes(cat);
+                return (
+                  <PressableScale
+                    key={cat}
+                    contentStyle={[styles.pill, active && styles.pillActive]}
+                    onPress={() => handleCategoryPress(cat)}
+                    accessibilityRole="button"
+                    accessibilityLabel={CATEGORY_LABELS[cat]}
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text style={[styles.pillLabel, active && styles.pillLabelActive]}>
+                      {CATEGORY_LABELS[cat]}
+                    </Text>
+                  </PressableScale>
+                );
+              })}
+            </FadedPillScroll>
           )}
 
           {/* Subcategory pills — shown/hidden without animation; listPaddingTop
               and subcatVisible update in the same render so there is no gap */}
           {subcatVisible && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.pillScroll}
-              contentContainerStyle={styles.pillContent}
-            >
+            <FadedPillScroll>
               {availableSubcategories.map(sub => (
                 <PressableScale
                   key={sub}
@@ -1013,7 +1141,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
                   </Text>
                 </PressableScale>
               ))}
-            </ScrollView>
+            </FadedPillScroll>
           )}
         </Animated.View>
         )}
@@ -1210,11 +1338,11 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
           )
         }
         selectedCategories={selectedCategories}
-        onToggleCategory={(cat) =>
-          setSelectedCategories(prev =>
-            prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
-          )
-        }
+        onToggleCategory={(cat) => applySelectedCategories(
+          selectedCategories.includes(cat)
+            ? selectedCategories.filter(current => current !== cat)
+            : [...selectedCategories, cat],
+        )}
         selectedOccasions={selectedOccasions}
         onToggleOccasion={(occ) =>
           setSelectedOccasions(prev =>
@@ -1386,7 +1514,7 @@ const styles = StyleSheet.create({
   segmentRow: {
     paddingHorizontal: SIDE_PAD,
     paddingTop: spacing.xs,
-    paddingBottom: spacing.lg,
+    paddingBottom: spacing.md,
   },
   segment: {
     flexDirection: 'row',
@@ -1434,7 +1562,8 @@ const styles = StyleSheet.create({
   },
   searchWrap: {
     flex: 1,
-    minHeight: 42,
+    minWidth: 0,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surfaceElevated,
@@ -1449,7 +1578,7 @@ const styles = StyleSheet.create({
     flex: 1,
     // Explicit height: iOS single-line inputs centre their text in the frame,
     // whereas an intrinsically-sized one clips descenders and sits low.
-    height: 42,
+    height: 44,
     fontSize: typography.size.sm,
     color: colors.foreground,
     paddingVertical: 0,
@@ -1484,8 +1613,17 @@ const styles = StyleSheet.create({
   },
 
   // ── Category pills
+  pillScrollWrap: { flexShrink: 0 },
   pillScroll: { flexShrink: 0 },
   pillContent: { paddingHorizontal: SIDE_PAD, paddingBottom: spacing.sm, gap: spacing.sm },
+  pillFade: {
+    position: 'absolute',
+    top: 0,
+    bottom: spacing.sm,
+    width: 24,
+  },
+  pillFadeLeft: { left: 0 },
+  pillFadeRight: { right: 0 },
   pill: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 2,
@@ -1510,6 +1648,9 @@ const styles = StyleSheet.create({
 
   // ── List layout
   list: {
+    flex: 1,
+  },
+  piecesListStage: {
     flex: 1,
   },
   listContent: {
@@ -1539,14 +1680,6 @@ const styles = StyleSheet.create({
   itemRowCheck: {
     flexShrink: 0,
   },
-  itemRowThumb: {
-    width: 60,
-    height: 60,
-    borderRadius: radii.md,
-    overflow: 'hidden',
-    backgroundColor: colors.muted,
-    flexShrink: 0,
-  },
   itemRowInfo: {
     flex: 1,
     gap: 2,
@@ -1558,11 +1691,6 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     overflow: 'hidden',
     backgroundColor: colors.muted,
-  },
-  itemThumbPlaceholder: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   favBadge: {
     position: 'absolute',
@@ -1633,11 +1761,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
-  itemCategory: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-  },
-
   // ── Outfit cards
   outfitCard: {},
   collageWrapper: {
