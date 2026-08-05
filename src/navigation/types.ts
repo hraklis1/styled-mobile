@@ -32,7 +32,7 @@ export type ClosetStackParamList = {
     scanImageUrl?: string;
   };
   ClosetRefresh: undefined;
-  OutfitDetail: { outfitId: number; returnTo?: 'Calendar' };
+  OutfitDetail: { outfitId: number; returnTo?: 'Calendar' | 'Home' };
   BoardDetail: { boardId: number; organize?: boolean; editCover?: boolean };
 };
 

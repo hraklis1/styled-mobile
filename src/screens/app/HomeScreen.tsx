@@ -416,7 +416,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               contentStyle={styles.featuredOutfit}
               onPress={() => navigation.navigate('Closet', {
                 screen: 'OutfitDetail',
-                params: { outfitId: featuredOutfit.id },
+                params: { outfitId: featuredOutfit.id, returnTo: 'Home' },
               })}
               accessibilityRole="button"
               accessibilityLabel={featuredOutfit.name}
@@ -525,7 +525,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               contentStyle={[styles.outfitCard, { width: cardWidth }]}
               onPress={() => navigation.navigate('Closet', {
                 screen: 'OutfitDetail',
-                params: { outfitId: outfit.id },
+                params: { outfitId: outfit.id, returnTo: 'Home' },
               })}
               accessibilityRole="button"
               accessibilityLabel={outfit.name}

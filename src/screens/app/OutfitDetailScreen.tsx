@@ -160,20 +160,22 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   const [tagDraft, setTagDraft] = useState('');
   const [eventPickerVisible, setEventPickerVisible] = useState(false);
   const [saveSheetOpen, setSaveSheetOpen] = useState(false);
-  const [returningToCalendar, setReturningToCalendar] = useState(false);
+  const [returningToTab, setReturningToTab] = useState(false);
 
-  usePreventRemove(returnTo === 'Calendar' && !returningToCalendar, () => {
-    setReturningToCalendar(true);
+  // Opened from another tab (Calendar/Home): swiping or backing out should land on
+  // that tab, not on the Closet tab this screen happens to live in.
+  usePreventRemove(returnTo != null && !returningToTab, () => {
+    setReturningToTab(true);
   });
 
   useEffect(() => {
-    if (!returningToCalendar) return;
+    if (!returningToTab || !returnTo) return;
     const timeout = setTimeout(() => {
       navigation.reset({ index: 0, routes: [{ name: 'ClosetMain' }] });
-      navigation.dispatch(CommonActions.navigate({ name: 'Calendar' }));
+      navigation.dispatch(CommonActions.navigate({ name: returnTo }));
     }, 0);
     return () => clearTimeout(timeout);
-  }, [navigation, returningToCalendar]);
+  }, [navigation, returningToTab, returnTo]);
 
   useEffect(() => {
     if (outfit) {
@@ -271,8 +273,8 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   // goBack() would bubble up to the tab navigator and go to Home — but leave OutfitDetail
   // at the top of the ClosetStack. Reset to ClosetMain first so the Closet tab is clean.
   const handleBack = () => {
-    if (returnTo === 'Calendar') {
-      setReturningToCalendar(true);
+    if (returnTo) {
+      setReturningToTab(true);
       return;
     }
     const { routes } = navigation.getState();
