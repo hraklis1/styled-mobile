@@ -25,6 +25,7 @@ import { useCameraLaunch, useLibraryLaunch } from '../../hooks/useCameraLaunch';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { itemImageContentFit, itemImageUri } from '../../lib/itemImage';
 import { LocationAutocompleteInput } from '../primitives/LocationAutocompleteInput';
+import { PhotoSourceSheet } from '../primitives/PhotoSourceSheet';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { Item } from '../../types/item';
 
@@ -105,6 +106,7 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
   // Scan state
   const [scanResults, setScanResults] = useState<OutfitScanResult[] | null>(null);
   const [scanSel, setScanSel] = useState<Set<number>>(new Set());
+  const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
   const notesRef = useRef<TextInput>(null);
 
@@ -190,12 +192,11 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
     }
   }, [launchCamera, launchLibrary, scanOutfit]);
 
-  const handleScanPress = useCallback(() => {
-    Alert.alert('Scan Worn Outfit', 'Choose a photo source', [
-      { text: 'Camera', onPress: () => runScan('camera') },
-      { text: 'Photo Library', onPress: () => runScan('library') },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+  // Close the chooser before the camera/library picker opens: on iOS a native
+  // picker presented while another modal is still dismissing never appears.
+  const pickSource = useCallback((source: 'camera' | 'library') => {
+    setSourcePickerOpen(false);
+    setTimeout(() => runScan(source), 300);
   }, [runScan]);
 
   const applyScanResults = useCallback(() => {
@@ -229,6 +230,7 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
     setSearch('');
     setScanResults(null);
     setScanSel(new Set());
+    setSourcePickerOpen(false);
   }, []);
 
   const handleClose = () => {
@@ -405,7 +407,7 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
 
                 <TouchableOpacity
                   style={[styles.addItemsBtn, styles.scanBtn]}
-                  onPress={handleScanPress}
+                  onPress={() => setSourcePickerOpen(true)}
                   disabled={scanOutfit.isPending}
                   activeOpacity={0.7}
                 >
@@ -714,6 +716,18 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
 
         </SafeAreaView>
       </KeyboardAvoidingView>
+
+      <PhotoSourceSheet
+        visible={sourcePickerOpen}
+        title="Scan Worn Outfit"
+        subtitle="We'll match what you wore against your wardrobe."
+        cameraHint="Snap the outfit you're wearing"
+        libraryLabel="Photo Library"
+        libraryHint="Pick a photo from your camera roll"
+        onCamera={() => pickSource('camera')}
+        onLibrary={() => pickSource('library')}
+        onCancel={() => setSourcePickerOpen(false)}
+      />
     </Modal>
   );
 }
