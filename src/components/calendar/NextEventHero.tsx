@@ -14,6 +14,7 @@ import {
 import { colors, spacing, typography, radii } from '../../theme';
 import type { Item } from '../../types/item';
 import type { Event } from '../../types/event';
+import type { Outfit } from '../../types/outfit';
 import { presentCalendarEvent } from './calendar-presentation';
 
 const WEATHER_ICONS: Record<WeatherCondition, keyof typeof Ionicons.glyphMap> = {
@@ -32,9 +33,11 @@ export function NextEventHero({
   onPlanOutfit,
   onOpenOutfit,
   isPlanning,
+  outfit,
 }: {
   event: Event;
   allItems: Item[];
+  outfit: Outfit | null;
   weatherFallback: StylingLocationContext | null;
   isPremium: boolean;
   onPress: () => void;
@@ -124,6 +127,7 @@ export function NextEventHero({
               allItems={allItems}
               size={56}
               borderRadius={radii.lg}
+              outfit={outfit}
             />
           </View>
           <View style={s.outfitCopy}>

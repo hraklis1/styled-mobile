@@ -23,6 +23,7 @@ import { OCCASIONS, OCCASION_ICONS, formatDayLabel, formatTime, formatCountdown 
 import { colors, spacing, typography, radii } from '../../theme';
 import type { Item } from '../../types/item';
 import type { Event } from '../../types/event';
+import type { Outfit } from '../../types/outfit';
 import { getEventItemsActionLabel } from './calendarPlanning';
 import { presentCalendarEvent, presentEventNotes } from './calendar-presentation';
 
@@ -49,6 +50,7 @@ export function EventDetailModal({
   onOpenStylist,
   weatherFallback,
   isPremium,
+  outfit,
 }: {
   event: Event | null;
   visible: boolean;
@@ -60,6 +62,7 @@ export function EventDetailModal({
   onOpenOutfit: (ev: Event) => void;
   onChangeLook: (ev: Event) => void;
   allItems: Item[];
+  outfit: Outfit | null;
   onPlanOutfit: (event: Event) => void;
   isPlanning: boolean;
   onOpenStylist: (event: Event) => void;
@@ -269,6 +272,7 @@ export function EventDetailModal({
                     size={lookWidth}
                     height={Math.min(lookWidth * 0.62, 240)}
                     borderRadius={radii.lg}
+                    outfit={outfit}
                   />
                 </View>
                 <View style={s.lookPreviewFooter}>

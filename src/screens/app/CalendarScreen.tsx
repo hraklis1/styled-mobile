@@ -20,6 +20,7 @@ import {
 import {
   useAcceptEventOutfitPlan,
   useGenerateEventOutfitPlan,
+  useOutfits,
   type GenerateOutfitResult,
 } from '../../hooks/useOutfits';
 import { useItems } from '../../hooks/useItems';
@@ -105,6 +106,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
   const { openStylist } = useGlobalAIStylist();
   const { data: events = [], isLoading, refetch, isRefetching, isError } = useEvents();
   const { data: allItems = [] } = useItems();
+  const { data: outfits = [] } = useOutfits();
   const deleteEventMutation = useDeleteEvent();
   const generatePlan = useGenerateEventOutfitPlan();
   const acceptPlan = useAcceptEventOutfitPlan();
@@ -150,6 +152,11 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
       .filter((e) => new Date(e.date).getTime() >= dayStartMs)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
     [events],
+  );
+
+  const outfitsById = useMemo(
+    () => new Map(outfits.map((outfit) => [outfit.id, outfit])),
+    [outfits],
   );
 
   const past = useMemo(
@@ -636,6 +643,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
           <NextEventHero
             event={item.event}
             allItems={allItems}
+            outfit={item.event.outfitId == null ? null : outfitsById.get(item.event.outfitId) ?? null}
             weatherFallback={activeLocation}
             isPremium={isPremium}
             onPress={() => setDetailEvent(item.event)}
@@ -801,6 +809,7 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         onOpenStylist={(event) => openStylistForEvent(event, 'event_detail')}
         weatherFallback={activeLocation}
         isPremium={isPremium}
+        outfit={detailEvent?.outfitId == null ? null : outfitsById.get(detailEvent.outfitId) ?? null}
       />
       <EventFormModal
         visible={formVisible}

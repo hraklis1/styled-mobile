@@ -1,8 +1,10 @@
 import { useMemo } from 'react';
 
+import { OutfitCollage } from '../outfits/OutfitCollage';
 import { ResolvedOutfitCollage } from '../outfits/ResolvedOutfitCollage';
 import { presentEventLook } from './calendar-presentation';
 import type { Item } from '../../types/item';
+import type { Outfit } from '../../types/outfit';
 
 export function EventLookCollage({
   itemIds,
@@ -10,12 +12,14 @@ export function EventLookCollage({
   size,
   height = size,
   borderRadius,
+  outfit,
 }: {
   itemIds: number[];
   allItems: Item[];
   size: number;
   height?: number;
   borderRadius?: number;
+  outfit?: Outfit | null;
 }) {
   const pieces = useMemo(
     () => presentEventLook(itemIds, allItems),
@@ -31,6 +35,17 @@ export function EventLookCollage({
     })),
     [pieces],
   );
+
+  if (outfit?.aiGeneratedImageUrl) {
+    return (
+      <OutfitCollage
+        outfit={outfit}
+        size={size}
+        height={height}
+        borderRadius={borderRadius}
+      />
+    );
+  }
 
   return (
     <ResolvedOutfitCollage
