@@ -1447,7 +1447,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
 const styles = StyleSheet.create({
   boardListHeader: { paddingHorizontal: COL_GAP / 2, paddingBottom: spacing.lg, gap: spacing.md },
   boardSearchWrap: { minHeight: 46, paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.secondary, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  boardSearchInput: { flex: 1, minHeight: 46, color: colors.foreground, fontSize: typography.size.md },
+  boardSearchInput: { flex: 1, minHeight: 46, color: colors.foreground, fontSize: typography.size.md, lineHeight: typography.inputLineHeight(typography.size.md) },
   boardSearchClear: { width: 36, height: 44, alignItems: 'center', justifyContent: 'center' },
   smartBoardHeading: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   smartBoardTitle: { color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
@@ -1576,10 +1576,9 @@ const styles = StyleSheet.create({
   searchIcon: { flexShrink: 0 },
   searchInput: {
     flex: 1,
-    // Explicit height: iOS single-line inputs centre their text in the frame,
-    // whereas an intrinsically-sized one clips descenders and sits low.
     height: 44,
     fontSize: typography.size.sm,
+    lineHeight: typography.inputLineHeight(typography.size.sm),
     color: colors.foreground,
     paddingVertical: 0,
   },

@@ -295,6 +295,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 38,
     fontSize: typography.size.md,
+    lineHeight: typography.inputLineHeight(typography.size.md),
     color: colors.foreground,
   },
   option: {

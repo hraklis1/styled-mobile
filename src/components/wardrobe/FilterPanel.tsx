@@ -773,7 +773,9 @@ const styles = StyleSheet.create({
   },
   brandSearchInput: {
     flex: 1,
+    height: 36,
     fontSize: typography.size.sm,
+    lineHeight: typography.inputLineHeight(typography.size.sm),
     color: colors.foreground,
     paddingVertical: 0,
   },

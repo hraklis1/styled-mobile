@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
   tabText: { color: colors.mutedForeground, fontSize: typography.size.xs, fontWeight: typography.weight.medium },
   tabTextActive: { color: colors.foreground, fontWeight: typography.weight.semibold },
   searchWrap: { minHeight: 46, marginHorizontal: spacing.lg, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radii.full, backgroundColor: colors.secondary },
-  searchInput: { flex: 1, minHeight: 46, color: colors.foreground, fontSize: typography.size.md },
+  searchInput: { flex: 1, minHeight: 46, color: colors.foreground, fontSize: typography.size.md, lineHeight: typography.inputLineHeight(typography.size.md) },
   clearButton: { width: 32, height: 44, alignItems: 'center', justifyContent: 'center' },
   loading: { paddingTop: spacing.xxxl },
   list: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xxxl },

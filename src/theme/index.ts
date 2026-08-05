@@ -58,6 +58,19 @@ export const typography = {
     normal: 1.5,
     loose:  1.75,
   },
+  /**
+   * Line height for a single-line `TextInput`.
+   *
+   * On iOS (RN 0.85) a TextInput draws its *placeholder* using the font's
+   * default line metrics rather than the box it lays out typed text in. The
+   * placeholder ends up ~7pt lower than the caret and hangs out of the bottom
+   * of the field, which reads as a vertically mis-aligned search bar. Setting
+   * an explicit lineHeight pins the placeholder to the same box as typed text.
+   *
+   * Pair it with an explicit `height` so the input still fills — and is
+   * tappable across — the whole search pill.
+   */
+  inputLineHeight: (fontSize: number) => Math.round(fontSize * 1.25),
 } as const;
 
 export const radii = {

@@ -439,11 +439,11 @@ const styles = StyleSheet.create({
   },
   pickerSearchBar: {
     flex: 1,
+    minHeight: 40,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
     backgroundColor: colors.card,
     borderRadius: radii.md,
     borderWidth: 1,
@@ -451,7 +451,9 @@ const styles = StyleSheet.create({
   },
   pickerSearchInput: {
     flex: 1,
+    height: 38,
     fontSize: typography.size.md,
+    lineHeight: typography.inputLineHeight(typography.size.md),
     color: colors.foreground,
     paddingVertical: 0,
   },

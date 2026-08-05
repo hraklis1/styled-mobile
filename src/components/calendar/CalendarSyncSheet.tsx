@@ -908,8 +908,10 @@ const s = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    paddingVertical: spacing.sm,
+    height: 40,
+    paddingVertical: 0,
     fontSize: typography.size.sm,
+    lineHeight: typography.inputLineHeight(typography.size.sm),
     color: colors.foreground,
   },
   filterChipRow: { gap: spacing.sm, paddingHorizontal: spacing.lg },

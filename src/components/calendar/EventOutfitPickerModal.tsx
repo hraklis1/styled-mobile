@@ -160,6 +160,7 @@ const s = StyleSheet.create({
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     fontSize: typography.size.sm,
+    lineHeight: typography.inputLineHeight(typography.size.sm),
     color: colors.foreground,
   },
   loading: { marginTop: spacing.xxxl },

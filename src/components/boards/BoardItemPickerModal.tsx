@@ -236,7 +236,8 @@ const s = StyleSheet.create({
   searchRow: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   searchInput: {
     height: 40, backgroundColor: colors.muted, borderRadius: radii.md,
-    paddingHorizontal: spacing.md, fontSize: typography.size.sm, color: colors.foreground,
+    paddingHorizontal: spacing.md, fontSize: typography.size.sm,
+    lineHeight: typography.inputLineHeight(typography.size.sm), color: colors.foreground,
   },
   catScroll: { flexGrow: 0, flexShrink: 0 },
   catRow: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, gap: spacing.sm },

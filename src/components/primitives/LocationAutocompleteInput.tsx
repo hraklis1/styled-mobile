@@ -247,7 +247,10 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
+    height: 40,
+    paddingVertical: 0,
     fontSize: typography.size.md,
+    lineHeight: typography.inputLineHeight(typography.size.md),
     color: colors.foreground,
   },
   geoBtn: {
