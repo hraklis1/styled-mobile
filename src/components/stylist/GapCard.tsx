@@ -65,7 +65,7 @@ export function GapCard({ item, onPress, ctaLabel = 'Shop', style }: GapCardProp
   return (
     <Container
       style={[styles.card, emphasized && styles.cardEmphasized, style]}
-      {...(onPress ? { onPress, activeOpacity: 0.7 } : {})}
+      {...(onPress ? { onPress, activeOpacity: 0.78, accessibilityRole: 'button' as const } : {})}
     >
       <View style={[styles.iconWrap, emphasized && styles.iconWrapEmphasized]}>
         <Ionicons name={categoryIcon(item.category)} size={18} color={colors.primary} />
@@ -86,11 +86,7 @@ export function GapCard({ item, onPress, ctaLabel = 'Shop', style }: GapCardProp
         {!!item.unlocks?.length && (
           <View style={styles.unlocksRow}>
             <Text style={styles.unlocksLabel}>Unlocks</Text>
-            {item.unlocks.slice(0, 3).map((u) => (
-              <View key={u} style={styles.unlockPill}>
-                <Text style={styles.unlockPillText}>{u}</Text>
-              </View>
-            ))}
+            <Text style={styles.unlocksText} numberOfLines={1}>{item.unlocks.slice(0, 3).join(' · ')}</Text>
           </View>
         )}
       </View>
@@ -107,23 +103,21 @@ export function GapCard({ item, onPress, ctaLabel = 'Shop', style }: GapCardProp
 
 const styles = StyleSheet.create({
   card: {
+    minHeight: 68,
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-    backgroundColor: `${colors.primary}0D`,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: `${colors.primary}22`,
+    padding: spacing.md,
+    backgroundColor: '#FFFFFFB8',
+    borderRadius: radii.lg,
+    borderCurve: 'continuous',
   },
   cardEmphasized: {
-    backgroundColor: `${colors.primary}14`,
-    borderColor: `${colors.primary}3D`,
+    backgroundColor: '#FFFFFFE0',
   },
   iconWrap: {
-    width: 34,
-    height: 34,
+    width: 36,
+    height: 36,
     borderRadius: radii.full,
     backgroundColor: `${colors.primary}1A`,
     alignItems: 'center',
@@ -142,18 +136,16 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     fontSize: typography.size.sm,
     color: colors.foreground,
-    fontWeight: typography.weight.bold,
+    fontWeight: typography.weight.semibold,
   },
   tag: {
-    paddingHorizontal: spacing.xs,
-    paddingVertical: 1,
-    borderRadius: radii.full,
-    backgroundColor: colors.muted,
+    flexShrink: 0,
   },
   tagText: {
     fontSize: 10,
-    color: colors.mutedForeground,
+    color: colors.primary,
     fontWeight: typography.weight.medium,
+    letterSpacing: 0.3,
   },
   context: {
     fontSize: typography.size.xs,
@@ -163,7 +155,6 @@ const styles = StyleSheet.create({
   unlocksRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
     gap: spacing.xs,
     marginTop: 2,
   },
@@ -174,24 +165,19 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.4,
   },
-  unlockPill: {
-    paddingHorizontal: spacing.xs,
-    paddingVertical: 1,
-    borderRadius: radii.full,
-    borderWidth: 1,
-    borderColor: `${colors.primary}33`,
-    backgroundColor: `${colors.primary}0D`,
-  },
-  unlockPillText: {
+  unlocksText: {
+    flex: 1,
     fontSize: 10,
     color: colors.primary,
     fontWeight: typography.weight.medium,
   },
   cta: {
+    minWidth: 44,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
     gap: 2,
-    alignSelf: 'center',
   },
   ctaText: {
     fontSize: typography.size.xs,

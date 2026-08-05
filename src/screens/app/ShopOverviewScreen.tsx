@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { ShopWishlistSummaryCard } from '../../components/outfits/ShopWishlistSummaryCard';
@@ -24,6 +25,7 @@ import type { ShopOverviewScreenProps } from '../../navigation/types';
 import type { StylistMode } from '../../features/stylist/types';
 
 export function ShopOverviewScreen({ navigation }: ShopOverviewScreenProps) {
+  const insets = useSafeAreaInsets();
   const { isPremium } = useEntitlement();
   const { openStylist } = useGlobalAIStylist();
   const { data: items = [], refetch: refetchItems } = useItems();
@@ -248,6 +250,11 @@ export function ShopOverviewScreen({ navigation }: ShopOverviewScreenProps) {
           )}
         </EditorialSection>
       </ScrollView>
+      <View
+        pointerEvents="none"
+        accessibilityElementsHidden
+        style={[styles.safeAreaScrim, { height: insets.top }]}
+      />
     </View>
   );
 }
@@ -271,17 +278,17 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   content: { paddingBottom: spacing.xxxl },
   header: { paddingBottom: spacing.lg },
-  actionRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
-  section: { paddingHorizontal: spacing.lg },
+  actionRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
+  section: { paddingHorizontal: spacing.lg, marginBottom: spacing.xxl },
   primaryAction: { flex: 1, minHeight: 48 },
-  secondaryAction: { flex: 1, minHeight: 48 },
-  briefCard: { gap: spacing.md, padding: spacing.lg, borderRadius: radii.lg, borderCurve: 'continuous', backgroundColor: colors.surfaceElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.hairline },
+  secondaryAction: { flex: 1, minHeight: 48, borderColor: colors.hairline, backgroundColor: '#FFFCF9' },
+  briefCard: { gap: spacing.md, padding: 20, borderRadius: radii.xl, borderCurve: 'continuous', backgroundColor: colors.surfaceSubtle },
   loadingCard: { minHeight: 120, alignItems: 'center', justifyContent: 'center' },
   briefIcon: { width: 38, height: 38, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center', backgroundColor: `${colors.primary}14` },
-  briefTitle: { color: colors.foreground, fontSize: typography.size.lg, fontWeight: typography.weight.semibold },
-  briefText: { color: colors.mutedForeground, fontSize: typography.size.sm, lineHeight: 21 },
+  briefTitle: { color: colors.foreground, fontSize: typography.size.xl, lineHeight: 25, fontWeight: typography.weight.semibold },
+  briefText: { color: colors.mutedForeground, fontSize: typography.size.md, lineHeight: 23 },
   inlineButton: { alignSelf: 'flex-start' },
-  textAction: { minHeight: 36, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: spacing.xs },
+  textAction: { minHeight: 44, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: spacing.xs },
   textActionLabel: { color: colors.primary, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
   horizontalCards: { gap: spacing.md, paddingRight: spacing.lg },
   savedLooks: { gap: spacing.md },
@@ -289,13 +296,14 @@ const styles = StyleSheet.create({
   emptyCopy: { gap: spacing.xs },
   emptyTitle: { color: colors.foreground, fontSize: typography.size.md, fontWeight: typography.weight.semibold },
   emptyText: { color: colors.mutedForeground, fontSize: typography.size.sm, lineHeight: 20 },
-  emptyAction: { alignSelf: 'flex-start', paddingVertical: spacing.xs },
+  emptyAction: { minHeight: 44, alignSelf: 'flex-start', justifyContent: 'center', paddingVertical: spacing.xs },
   emptyActionText: { color: colors.primary, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
-  recentCard: { minHeight: 88, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: radii.lg, borderCurve: 'continuous', backgroundColor: colors.surfaceElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.hairline },
-  recentIcon: { width: 42, height: 42, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center', backgroundColor: `${colors.primary}12` },
+  recentCard: { minHeight: 88, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.hairline },
+  recentIcon: { width: 44, height: 44, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center', backgroundColor: `${colors.primary}10` },
   recentCopy: { flex: 1, minWidth: 0, gap: 2 },
   recentTitle: { color: colors.foreground, fontSize: typography.size.md, fontWeight: typography.weight.semibold },
   recentMeta: { color: colors.mutedForeground, fontSize: typography.size.xs },
   recentSpend: { color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold, fontVariant: ['tabular-nums'] },
   quietText: { color: colors.mutedForeground, fontSize: typography.size.sm, lineHeight: 20 },
+  safeAreaScrim: { position: 'absolute', zIndex: 20, top: 0, left: 0, right: 0, backgroundColor: colors.background },
 });

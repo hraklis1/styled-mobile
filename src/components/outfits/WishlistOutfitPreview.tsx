@@ -26,33 +26,21 @@ const categoryIcon = (category?: string): keyof typeof Ionicons.glyphMap => {
 
 export function WishlistOutfitPreview({ entry, style }: Props) {
   const items = entry.outfit.items.slice(0, 4);
-  const hasImages = items.some((item) => item.imageUrl);
-  const cellStyle = (index: number) => {
-    if (items.length === 1) return styles.cellFull;
-    if (items.length === 2) return styles.cellHalfHorizontal;
-    if (items.length === 3 && index === 0) return styles.cellWide;
-    return styles.cell;
-  };
-  const renderCell = (item: (typeof items)[number], index: number, styleOverride?: StyleProp<ViewStyle>) => (
-    <View key={`${item.brand}-${item.name}-${index}`} style={[styleOverride ?? cellStyle(index)]}>
-      {item.imageUrl ? (
-        <Image
-          source={{ uri: item.imageUrl }}
-          style={StyleSheet.absoluteFill}
-          contentFit={editorial.imageFit.garment}
-          transition={150}
-        />
-      ) : (
-        <View style={styles.fallback}>
-          <Ionicons name={categoryIcon(item.category)} size={16} color={colors.mutedForeground} />
-        </View>
-      )}
+  const imageItems = items.filter((item) => Boolean(item.imageUrl));
+  const renderCell = (item: (typeof items)[number], index: number, cellStyle: StyleProp<ViewStyle>) => (
+    <View key={`${item.brand}-${item.name}-${index}`} style={cellStyle}>
+      <Image
+        source={{ uri: item.imageUrl! }}
+        style={StyleSheet.absoluteFill}
+        contentFit={editorial.imageFit.garment}
+        transition={150}
+      />
     </View>
   );
 
   // With no product imagery there is nothing to tile: a mosaic of category
   // glyphs reads as scattered clip art, so show one calm emblem instead.
-  if (items.length === 0 || !hasImages) {
+  if (items.length === 0 || imageItems.length === 0) {
     return (
       <View style={[styles.preview, style]} accessibilityElementsHidden>
         <View style={styles.empty}>
@@ -68,39 +56,47 @@ export function WishlistOutfitPreview({ entry, style }: Props) {
 
   return (
     <View style={[styles.preview, style]} accessibilityElementsHidden>
-      {items.length >= 4 ? (
+      {imageItems.length === 1 ? (
+        renderCell(imageItems[0], 0, styles.cellFull)
+      ) : imageItems.length === 2 ? (
+        <View style={styles.moodboard}>
+          {renderCell(imageItems[0], 0, styles.heroColumn)}
+          {renderCell(imageItems[1], 1, styles.secondaryColumn)}
+        </View>
+      ) : (
         <View style={styles.moodboard}>
           <View style={styles.heroColumn}>
-            {renderCell(items[0], 0, styles.moodboardCell)}
+            {renderCell(imageItems[0], 0, styles.moodboardCell)}
           </View>
           <View style={styles.sideColumn}>
-            {renderCell(items[1], 1, styles.moodboardCell)}
-            <View style={styles.row}>
-              {renderCell(items[2], 2, styles.moodboardCell)}
-              {renderCell(items[3], 3, styles.moodboardCell)}
-            </View>
+            {renderCell(imageItems[1], 1, styles.moodboardCell)}
+            {imageItems.length === 3 ? (
+              renderCell(imageItems[2], 2, styles.moodboardCell)
+            ) : (
+              <View style={styles.row}>
+                {renderCell(imageItems[2], 2, styles.moodboardCell)}
+                {renderCell(imageItems[3], 3, styles.moodboardCell)}
+              </View>
+            )}
           </View>
         </View>
-      ) : items.map((item, index) => renderCell(item, index))}
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   preview: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     overflow: 'hidden',
     borderRadius: radii.lg,
     borderCurve: 'continuous',
     backgroundColor: colors.surfaceSubtle,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
   },
-  moodboard: { flex: 1, flexDirection: 'row', gap: 1, backgroundColor: colors.hairline },
-  heroColumn: { flex: 1.12 },
-  sideColumn: { flex: 1, gap: 1 },
-  row: { flex: 1, flexDirection: 'row', gap: 1 },
+  moodboard: { flex: 1, flexDirection: 'row', gap: 2, backgroundColor: colors.surfaceSubtle },
+  heroColumn: { flex: 1.18, overflow: 'hidden', backgroundColor: colors.surfaceSubtle },
+  secondaryColumn: { flex: 0.82, overflow: 'hidden', backgroundColor: colors.surfaceSubtle },
+  sideColumn: { flex: 0.9, gap: 2 },
+  row: { flex: 1, flexDirection: 'row', gap: 2 },
   moodboardCell: {
     flex: 1,
     minWidth: 1,
@@ -108,31 +104,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: colors.surfaceSubtle,
   },
-  cell: {
-    width: '50%',
-    height: '50%',
-    overflow: 'hidden',
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-  },
-  cellFull: { width: '100%', height: '100%', overflow: 'hidden' },
-  cellHalfHorizontal: {
-    width: '100%',
-    height: '50%',
-    overflow: 'hidden',
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-  },
-  cellWide: {
-    width: '100%',
-    height: '50%',
-    overflow: 'hidden',
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-  },
-  fallback: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceSubtle },
+  cellFull: { flex: 1, overflow: 'hidden', backgroundColor: colors.surfaceSubtle },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 });

@@ -56,7 +56,7 @@ export function StylistTabButton({
       testID={testID}
     >
       <Animated.View style={[styles.circle, selected && styles.circleSelected, animatedStyle]}>
-        <Ionicons name="sparkles" size={24} color={colors.primaryForeground} />
+        <Ionicons name="sparkles" size={22} color={colors.primaryForeground} />
       </Animated.View>
     </Pressable>
   );
@@ -69,20 +69,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   circle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    marginTop: -18,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    marginTop: -14,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.foreground,
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 6,
+    boxShadow: '0 2px 6px rgba(29, 27, 24, 0.11)',
   },
   circleSelected: {
-    shadowOpacity: 0.22,
+    boxShadow: '0 3px 8px rgba(29, 27, 24, 0.16)',
   },
 });
