@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { Alert } from 'react-native';
+import * as Crypto from 'expo-crypto';
 import { api, isNetworkError } from '../lib/api';
 import { FASHION_BRANDS } from '../lib/fashionBrands';
 import { track } from '../lib/analytics';
@@ -82,9 +83,15 @@ type ScanInput = {
   targetCategory?: string;
 };
 
+type IdempotentScanInput = ScanInput & { idempotencyKey: string };
+
+function idempotencyHeaders(key?: string) {
+  return { 'Idempotency-Key': key ?? Crypto.randomUUID() };
+}
+
 export function useScanItem() {
   return useMutation({
-    mutationFn: ({ uri, brandHint, outfitContext, targetName, targetCategory }: ScanInput) => {
+    mutationFn: ({ uri, brandHint, outfitContext, targetName, targetCategory, idempotencyKey }: IdempotentScanInput) => {
       const formData = new FormData();
       formData.append('image', { uri, type: 'image/jpeg', name: 'scan.jpg' } as unknown as Blob);
       if (brandHint) formData.append('brandHint', brandHint);
@@ -93,7 +100,10 @@ export function useScanItem() {
       if (targetCategory) formData.append('targetCategory', targetCategory);
       return api
         .post<ScanResult>('/api/items/scan', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            ...idempotencyHeaders(idempotencyKey),
+          },
         })
         .then((r) => r.data);
     },
@@ -109,9 +119,11 @@ export async function scanItemDirect(input: {
   outfitContext?: string;
   targetName?: string;
   targetCategory?: string;
+  idempotencyKey?: string;
 }): Promise<ScanResult> {
+  const { idempotencyKey, ...body } = input;
   return api
-    .post<ScanResult>('/api/items/scan', input)
+    .post<ScanResult>('/api/items/scan', body, { headers: idempotencyHeaders(idempotencyKey) })
     .then((r) => r.data);
 }
 
@@ -134,9 +146,11 @@ export function useBrandSuggestions(): string[] {
 
 export function useScanVisionPose() {
   return useMutation({
-    mutationFn: ({ imageBase64 }: { imageBase64: string }) =>
+    mutationFn: ({ imageBase64, idempotencyKey }: { imageBase64: string; idempotencyKey: string }) =>
       api
-        .post<{ items: PoseScanItem[] }>('/api/scan-vision-pose', { imageBase64 })
+        .post<{ items: PoseScanItem[] }>('/api/scan-vision-pose', { imageBase64 }, {
+          headers: idempotencyHeaders(idempotencyKey),
+        })
         .then((r) => r.data),
     retry: (failureCount, error) => isNetworkError(error) && failureCount < 2,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
@@ -146,7 +160,9 @@ export function useScanVisionPose() {
 /** Direct API call for batch processing (no shared mutation state). */
 export async function scanVisionPoseDirect(imageBase64: string): Promise<{ items: PoseScanItem[] }> {
   return api
-    .post<{ items: PoseScanItem[] }>('/api/scan-vision-pose', { imageBase64 })
+    .post<{ items: PoseScanItem[] }>('/api/scan-vision-pose', { imageBase64 }, {
+      headers: idempotencyHeaders(),
+    })
     .then((r) => r.data);
 }
 

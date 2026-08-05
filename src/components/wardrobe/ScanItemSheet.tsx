@@ -26,6 +26,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImageManipulator from 'expo-image-manipulator';
+import * as Crypto from 'expo-crypto';
 import { useCameraLaunch, useLibraryLaunch } from '../../hooks/useCameraLaunch';
 import {
   useScanVisionPose,
@@ -622,7 +623,13 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     const base64 = poseFrame.base64!;
 
     try {
-      const result = await poseScan.mutateAsync({ imageBase64: base64 });
+      const result = await poseScan.mutateAsync({
+        imageBase64: base64,
+        // React Query reuses the mutation variables for network retries, so the
+        // server can return the first successful paid result instead of billing
+        // for the same scan again after a lost response.
+        idempotencyKey: Crypto.randomUUID(),
+      });
       if (sessionRef.current !== session) return;
 
       if (!result.items || result.items.length === 0) {
