@@ -1,11 +1,14 @@
-import { useEffect, useState, useCallback } from 'react';
-import { ActivityIndicator, View, Text, StyleSheet } from 'react-native';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { ActivityIndicator, Easing, View, Text, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SplashScreen from 'expo-splash-screen';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NavigationContainer, LinkingOptions } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import {
+  createBottomTabNavigator,
+  type BottomTabNavigationOptions,
+} from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
@@ -31,7 +34,8 @@ import { ClosetScreen } from '../screens/app/ClosetScreen';
 import { CalendarScreen } from '../screens/app/CalendarScreen';
 import { ProfileScreen } from '../screens/app/ProfileScreen';
 import { SuggestionsScreen } from '../screens/app/SuggestionsScreen';
-import { ShopScreen } from '../screens/app/ShopScreen';
+import { SavedLooksScreen } from '../screens/app/ShopScreen';
+import { ShopOverviewScreen } from '../screens/app/ShopOverviewScreen';
 import { ShoppingCameraScreen } from '../screens/app/ShoppingCameraScreen';
 import { ShoppingGalleryScreen } from '../screens/app/ShoppingGalleryScreen';
 import { StylistScreen } from '../screens/app/StylistScreen';
@@ -66,6 +70,8 @@ const linking: LinkingOptions<RootStackParamList> = {
         screens: {
           Shop: {
             screens: {
+              ShopMain: 'shop',
+              SavedLooks: 'saved-looks',
               ShoppingCamera: 'shopping-camera',
               ShoppingGallery: {
                 path: 'shopping-gallery',
@@ -93,6 +99,37 @@ const TAB_ICONS: Record<string, { default: keyof typeof Ionicons.glyphMap; selec
   Calendar: { default: 'calendar-outline', selected: 'calendar' },
 };
 
+const STYLIST_CARD_TRANSITION: NonNullable<BottomTabNavigationOptions['transitionSpec']> = {
+  animation: 'timing',
+  config: {
+    duration: 150,
+    easing: Easing.out(Easing.cubic),
+  },
+};
+
+const stylistCardInterpolator: NonNullable<BottomTabNavigationOptions['sceneStyleInterpolator']> = ({ current }) => ({
+  sceneStyle: {
+    opacity: current.progress.interpolate({
+      inputRange: [-1, 0, 1],
+      outputRange: [0, 1, 0],
+    }),
+    transform: [
+      {
+        translateY: current.progress.interpolate({
+          inputRange: [-1, 0, 1],
+          outputRange: [16, 0, 16],
+        }),
+      },
+      {
+        scale: current.progress.interpolate({
+          inputRange: [-1, 0, 1],
+          outputRange: [0.98, 1, 0.98],
+        }),
+      },
+    ],
+  },
+});
+
 // ── Navigators ────────────────────────────────────────────────────────────────
 
 function AuthNavigator() {
@@ -118,7 +155,8 @@ function HomeNavigator() {
 function ShopNavigator() {
   return (
     <ShopStack.Navigator screenOptions={{ headerShown: false }}>
-      <ShopStack.Screen name="ShopMain" component={ShopScreen} />
+      <ShopStack.Screen name="ShopMain" component={ShopOverviewScreen} />
+      <ShopStack.Screen name="SavedLooks" component={SavedLooksScreen} />
       <ShopStack.Screen name="ShoppingGallery" component={ShoppingGalleryScreen} />
       <ShopStack.Screen name="ShoppingCamera" component={ShoppingCameraScreen} />
     </ShopStack.Navigator>
@@ -147,6 +185,7 @@ function StylistNavigator() {
 
 function AppTabNavigator() {
   const insets = useSafeAreaInsets();
+  const previousTabRef = useRef<Exclude<keyof AppTabParamList, 'Stylist'>>('Home');
   const [quickMenu, setQuickMenu] = useState<{
     title: string;
     subtitle?: string;
@@ -164,6 +203,7 @@ function AppTabNavigator() {
       <AppTab.Navigator
         screenOptions={({ route }) => ({
           headerShown: false,
+          animation: 'fade',
           tabBarStyle: {
             height: 60 + insets.bottom,
             paddingBottom: insets.bottom,
@@ -247,7 +287,25 @@ function AppTabNavigator() {
             tabBarAccessibilityLabel: 'Stylist',
             tabBarLabel: () => null,
             tabBarButton: (props) => <StylistTabButton {...props} />,
+            transitionSpec: STYLIST_CARD_TRANSITION,
+            sceneStyleInterpolator: stylistCardInterpolator,
           }}
+          listeners={({ navigation }) => ({
+            tabPress: (event) => {
+              if (!navigation.isFocused()) {
+                const state = navigation.getState();
+                const currentTab = state.routes[state.index]?.name;
+
+                if (currentTab && currentTab !== 'Stylist') {
+                  previousTabRef.current = currentTab;
+                }
+                return;
+              }
+
+              event.preventDefault();
+              navigation.navigate(previousTabRef.current);
+            },
+          })}
         />
         <AppTab.Screen
           name="Shop"
@@ -263,14 +321,20 @@ function AppTabNavigator() {
                 subtitle: 'Jump straight to a section',
                 options: [
                   {
-                    key: 'wishlist',
-                    label: 'Wishlist',
-                    icon: 'heart-outline',
+                    key: 'overview',
+                    label: 'Shop Overview',
+                    icon: 'bag-outline',
                     onPress: () => navigation.navigate('Shop', { screen: 'ShopMain' }),
                   },
                   {
-                    key: 'shopping-edit',
-                    label: 'The Shopping Edit',
+                    key: 'saved-looks',
+                    label: 'Saved Looks',
+                    icon: 'heart-outline',
+                    onPress: () => navigation.navigate('Shop', { screen: 'SavedLooks' }),
+                  },
+                  {
+                    key: 'shopping-history',
+                    label: 'Shopping History',
                     icon: 'images-outline',
                     onPress: () => navigation.navigate('Shop', { screen: 'ShoppingGallery' }),
                   },

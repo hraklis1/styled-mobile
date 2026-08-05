@@ -21,7 +21,7 @@ type Props = {
 
 const DEFAULT_REMOVAL_COPY = {
   title: 'Remove saved outfit?',
-  message: 'This outfit will be removed from your Shop Wishlist.',
+  message: 'This outfit will be removed from Saved Looks.',
   confirmLabel: 'Remove',
   accessibilityLabel: 'Remove saved outfit',
 };
@@ -66,7 +66,7 @@ export function ShopWishlistDetailSheet({ entry, onClose, onRemove, removalCopy 
         <View style={styles.titleWrap}>
           <Text style={styles.title}>Saved outfit</Text>
           <Text style={styles.subtitle} numberOfLines={1}>
-            {entry.eventContext?.title ?? entry.outfit.city ?? 'Shop Wishlist'}
+            {entry.eventContext?.title ?? entry.outfit.city ?? 'Saved Look'}
           </Text>
         </View>
         <TouchableOpacity

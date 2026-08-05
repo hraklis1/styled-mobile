@@ -27,6 +27,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ShoppingEditCard } from '../../components/shopping/ShoppingEditCard';
 import { ShoppingSnapDetail } from '../../components/shopping/ShoppingSnapDetail';
 import { useAuth } from '../../contexts/AuthContext';
+import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { SHOPPING_SNAPS_QUERY_KEY, useShoppingSnaps } from '../../hooks/useShoppingSnaps';
 import { queryClient } from '../../lib/queryClient';
 import {
@@ -57,6 +58,8 @@ import {
   type ShoppingReviewReasonKey,
 } from '../../lib/shoppingPresentation';
 import { supabase } from '../../lib/supabase';
+import { track } from '../../lib/analytics';
+import { buildShopStylistLaunch } from '../../lib/shopDecisionWorkspace';
 import type { ShoppingGalleryScreenProps } from '../../navigation/types';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import { colors, radii, spacing, typography } from '../../theme';
@@ -74,7 +77,7 @@ type GallerySection = {
   data: GalleryRow[];
 };
 type StoreFilterOption = { value: string; label: string };
-type ShoppingCatalogFilter = 'all' | 'favorite' | ShoppingFindCatalogStatus;
+type ShoppingCatalogFilter = 'all' | 'active' | 'favorite' | ShoppingFindCatalogStatus;
 
 const DATE_OPTIONS: { value: ShoppingDateFilter; label: string }[] = [
   { value: 'all', label: 'All time' },
@@ -399,12 +402,13 @@ function ShoppingSnapOrganizerModal({
   );
 }
 
-export function ShoppingGalleryScreen({ navigation }: ShoppingGalleryScreenProps) {
+export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScreenProps) {
   const filterSheetRef = useRef<BottomSheetModal>(null);
   const organizerOpenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { user } = useAuth();
+  const { openStylist } = useGlobalAIStylist();
   const { data: remoteSnaps = [], isLoading, isRefetching, isError, refetch } = useShoppingSnaps();
   const pendingUploads = useShoppingSessionStore((state) => state.pendingUploads);
   const removePendingUpload = useShoppingSessionStore((state) => state.removePendingUpload);
@@ -430,6 +434,17 @@ export function ShoppingGalleryScreen({ navigation }: ShoppingGalleryScreenProps
     [pendingUploads, remoteSnaps],
   );
   const allItems = useMemo(() => buildShoppingEditItems(allSnaps), [allSnaps]);
+
+  useEffect(() => {
+    const requestedFilter = route.params?.catalogFilter;
+    if (requestedFilter) setCatalogFilter(requestedFilter);
+    const focusGroupId = route.params?.focusGroupId;
+    if (!focusGroupId) return;
+    const focused = allItems.find((item) => item.captureGroupId === focusGroupId);
+    if (!focused) return;
+    setSelectedSnap(focused.primarySnap);
+    navigation.setParams({ focusGroupId: undefined, catalogFilter: undefined });
+  }, [allItems, navigation, route.params?.catalogFilter, route.params?.focusGroupId]);
   const storeOptions = useMemo<StoreFilterOption[]>(() => {
     const byStore = new Map<string, ShoppingEditItem[]>();
     for (const item of allItems) {
@@ -467,6 +482,9 @@ export function ShoppingGalleryScreen({ navigation }: ShoppingGalleryScreenProps
         ? baseFilteredItems
         : baseFilteredItems.filter((item) => itemHasShoppingReviewReason(item, reviewReasonFilter));
       if (catalogFilter === 'all') return reviewFiltered;
+      if (catalogFilter === 'active') {
+        return reviewFiltered.filter((item) => item.catalogStatus === 'considering' || item.catalogStatus === 'wishlist');
+      }
       if (catalogFilter === 'favorite') return reviewFiltered.filter((item) => item.isFavorite);
       return reviewFiltered.filter((item) => item.catalogStatus === catalogFilter);
     },
@@ -548,7 +566,7 @@ export function ShoppingGalleryScreen({ navigation }: ShoppingGalleryScreenProps
   }, [deleteSnaps]);
 
   const confirmDeleteSnap = useCallback((snap: ShoppingSnap) => {
-    Alert.alert('Delete this photo?', 'This shopping photo will be removed from your edit.', [
+    Alert.alert('Delete this photo?', 'This shopping photo will be removed from your history.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: () => void deleteSnap(snap) },
     ]);
@@ -725,7 +743,7 @@ export function ShoppingGalleryScreen({ navigation }: ShoppingGalleryScreenProps
     const count = selectedBulkSnaps.length;
     Alert.alert(
       `Delete ${itemCount} item${itemCount === 1 ? '' : 's'}?`,
-      `${count} shopping photo${count === 1 ? '' : 's'} will be removed from your edit.`,
+      `${count} shopping photo${count === 1 ? '' : 's'} will be removed from your history.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -750,6 +768,29 @@ export function ShoppingGalleryScreen({ navigation }: ShoppingGalleryScreenProps
       ],
     );
   }, [cancelSelection, deleteSnaps, selectedBulkSnaps, selectedItemIds.size]);
+
+  const askStylistAboutFind = useCallback((snap: ShoppingSnap) => {
+    const item = allItems.find((candidate) => candidate.captureGroupId === snap.captureGroupId);
+    if (!item) return;
+    track('shopping_find_stylist_opened', { status: item.catalogStatus, has_price: item.extractedPrice !== null });
+    setSelectedSnap(null);
+    setTimeout(() => {
+      openStylist({
+        ...buildShopStylistLaunch('Should I buy this? Consider how it fits my wardrobe, whether I own anything similar, and how versatile it would be.'),
+        initialAttachmentUri: item.primarySnap.imageUri,
+        context: {
+          kind: 'shopping_find',
+          captureGroupId: item.captureGroupId,
+          storeName: item.storeName,
+          price: item.extractedPrice,
+          category: item.category,
+          color: item.colorLabel,
+          material: item.materialLabel,
+          notes: item.notes,
+        },
+      });
+    }, 300);
+  }, [allItems, openStylist]);
 
   const renderBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => (
@@ -813,8 +854,8 @@ export function ShoppingGalleryScreen({ navigation }: ShoppingGalleryScreenProps
           </View>
         </View>
 
-        <Text style={styles.eyebrow}>THE SHOPPING EDIT</Text>
-        <Text style={styles.heroTitle}>Your finds, beautifully kept.</Text>
+        <Text style={styles.eyebrow}>SHOPPING HISTORY</Text>
+        <Text style={styles.heroTitle}>Every find, considered.</Text>
         <View style={styles.summaryRow}>
           <Text style={styles.summaryText}>
             {selectionMode
@@ -925,7 +966,7 @@ export function ShoppingGalleryScreen({ navigation }: ShoppingGalleryScreenProps
         ) : (
           <View style={styles.emptyState}>
             <View style={styles.emptyMonogram}><Ionicons name="images-outline" size={34} color={colors.primary} /></View>
-            <Text style={styles.emptyTitle}>{allItems.length ? 'No items match' : 'Your shopping edit starts here'}</Text>
+            <Text style={styles.emptyTitle}>{allItems.length ? 'No items match' : 'Your shopping history starts here'}</Text>
             <Text style={styles.emptyText}>
               {allItems.length ? 'Try clearing a filter to see more finds.' : 'Capture pieces and price tags while you shop, or import them from your camera roll.'}
             </Text>
@@ -1058,6 +1099,12 @@ export function ShoppingGalleryScreen({ navigation }: ShoppingGalleryScreenProps
               <Text style={[styles.optionText, catalogFilter === 'all' && styles.optionTextActive]}>All finds</Text>
             </TouchableOpacity>
             <TouchableOpacity
+              style={[styles.optionButton, catalogFilter === 'active' && styles.optionButtonActive]}
+              onPress={() => setCatalogFilter('active')}
+            >
+              <Text style={[styles.optionText, catalogFilter === 'active' && styles.optionTextActive]}>Active decisions</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={[styles.optionButton, catalogFilter === 'favorite' && styles.optionButtonActive]}
               onPress={() => setCatalogFilter('favorite')}
             >
@@ -1091,6 +1138,7 @@ export function ShoppingGalleryScreen({ navigation }: ShoppingGalleryScreenProps
         onSaveCatalog={saveCatalog}
         isDeleting={selectedSnap ? deletingSnapId === selectedSnap.id : false}
         isSavingCatalog={isSavingCatalog}
+        onAskStylist={askStylistAboutFind}
         onClose={() => setSelectedSnap(null)}
       />
 

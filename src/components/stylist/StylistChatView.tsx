@@ -31,6 +31,7 @@ import { File, Paths, EncodingType } from 'expo-file-system';
 import { api } from '../../lib/api';
 import { track } from '../../lib/analytics';
 import { compressImageToDataUrl } from '../../lib/compressImage';
+import { prepareStylistPhoto } from '../../lib/prepareStylistPhoto';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { itemImageContentFit, itemImageUri } from '../../lib/itemImage';
 import { useStylingWeatherToday, type CurrentWeather } from '../../hooks/useWeather';
@@ -52,6 +53,7 @@ import { GapCard } from './GapCard';
 import { TripPlanCard } from './TripPlanCard';
 import { colors, radii, shadows, spacing, typography } from '../../theme';
 import { useStylistTransport } from '../../features/stylist/hooks/useStylistTransport';
+import { buildInitialStylistSendOptions } from '../../features/stylist/initialPrompt';
 import {
   STYLIST_NEGATIVE_REASON_CHIPS,
   type StylistAskRequest,
@@ -310,6 +312,8 @@ type EventContext = { id: number; title: string };
 
 type Props = {
   initialQuery?: string;
+  initialAttachmentUri?: string;
+  initialMode?: StylistMode;
   initialDestination?: string;
   eventContext?: EventContext;
   entryContext?: StylistEntryContext;
@@ -331,6 +335,8 @@ type Props = {
 
 export function StylistChatView({
   initialQuery,
+  initialAttachmentUri,
+  initialMode,
   initialDestination,
   eventContext,
   entryContext,
@@ -618,7 +624,7 @@ export function StylistChatView({
 
   const sendMessage = useCallback(
     (opts: SendOptions) => {
-      const { text, displayText, photoData, attachment, context } = opts;
+      const { text, displayText, photoData, attachment, context, mode } = opts;
       if (!text && !photoData) return;
       if (isLoading) return;
 
@@ -675,6 +681,7 @@ export function StylistChatView({
         ...(conversationIdRef.current ? { conversationId: conversationIdRef.current } : {}),
         ...(source ? { source } : {}),
         ...(requestContext ? { context: requestContext } : {}),
+        ...(mode ? { mode } : {}),
         history,
       };
 
@@ -848,11 +855,30 @@ export function StylistChatView({
 
   useEffect(() => {
     if (initialQuery && !isLoading && promptRequestId > lastPromptRequestIdRef.current) {
-      lastPromptRequestIdRef.current = promptRequestId;
-      sendMessage({ text: initialQuery });
-      onPromptConsumed?.();
+      let cancelled = false;
+      const sendInitialMessage = async () => {
+        let preparedPhoto: Awaited<ReturnType<typeof prepareStylistPhoto>> | undefined;
+        if (initialAttachmentUri) {
+          try {
+            preparedPhoto = await prepareStylistPhoto(initialAttachmentUri);
+          } catch {
+            // The metadata context and question are still useful without the photo.
+          }
+        }
+        if (cancelled || promptRequestId <= lastPromptRequestIdRef.current) return;
+        lastPromptRequestIdRef.current = promptRequestId;
+        sendMessage(buildInitialStylistSendOptions({
+          text: initialQuery,
+          mode: initialMode,
+          attachmentUri: initialAttachmentUri,
+          photoData: preparedPhoto?.dataUrl,
+        }));
+        onPromptConsumed?.();
+      };
+      void sendInitialMessage();
+      return () => { cancelled = true; };
     }
-  }, [initialQuery, isLoading, onPromptConsumed, promptRequestId, sendMessage]);
+  }, [initialAttachmentUri, initialMode, initialQuery, isLoading, onPromptConsumed, promptRequestId, sendMessage]);
 
   useEffect(() => {
     const timer = setTimeout(() => {

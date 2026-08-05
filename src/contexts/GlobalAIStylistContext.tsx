@@ -5,7 +5,7 @@ import { StylistChatView } from '../components/stylist/StylistChatView';
 import { useEntitlement } from '../hooks/useEntitlement';
 import { track } from '../lib/analytics';
 import { presentPaywall } from '../lib/paywall';
-import type { StylistEntryContext } from '../features/stylist/types';
+import type { StylistEntryContext, StylistMode } from '../features/stylist/types';
 
 // ─── Context ──────────────────────────────────────────────────────────────────
 
@@ -25,6 +25,8 @@ export type StylistEventContext = { id: number; title: string };
 
 type OpenStylistOptions = {
   initialQuery?: string;
+  initialAttachmentUri?: string;
+  initialMode?: StylistMode;
   destination?: string;
   source: StylistOpenSource;
   eventContext?: StylistEventContext;
@@ -58,6 +60,8 @@ function threadModeForSource(source: StylistOpenSource): 'new' | 'resume' {
 export function GlobalAIStylistProvider({ children }: Props) {
   const [visible, setVisible] = useState(false);
   const [initialQuery, setInitialQuery] = useState<string | undefined>(undefined);
+  const [initialAttachmentUri, setInitialAttachmentUri] = useState<string | undefined>(undefined);
+  const [initialMode, setInitialMode] = useState<StylistMode | undefined>(undefined);
   const [initialDestination, setInitialDestination] = useState<string | undefined>(undefined);
   const [eventContext, setEventContext] = useState<StylistEventContext | undefined>(undefined);
   const [entryContext, setEntryContext] = useState<StylistEntryContext | undefined>(undefined);
@@ -67,7 +71,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
   const [threadMode, setThreadMode] = useState<'new' | 'resume'>('resume');
   const { isPremium } = useEntitlement();
 
-  const openStylist = useCallback(async ({ initialQuery: query, destination, source, eventContext: event, context }: OpenStylistOptions) => {
+  const openStylist = useCallback(async ({ initialQuery: query, initialAttachmentUri: attachmentUri, initialMode: mode, destination, source, eventContext: event, context }: OpenStylistOptions) => {
     if (!isPremium) {
       const shouldUpgrade = await new Promise<boolean>((resolve) => {
         Alert.alert(
@@ -87,6 +91,8 @@ export function GlobalAIStylistProvider({ children }: Props) {
     setSource(source);
     setThreadMode(threadModeForSource(source));
     setInitialQuery(query);
+    setInitialAttachmentUri(attachmentUri);
+    setInitialMode(mode);
     setInitialDestination(destination);
     setEventContext(event);
     setEntryContext(context);
@@ -98,6 +104,8 @@ export function GlobalAIStylistProvider({ children }: Props) {
   const closeStylist = useCallback(() => {
     setVisible(false);
     setInitialDestination(undefined);
+    setInitialAttachmentUri(undefined);
+    setInitialMode(undefined);
     setEventContext(undefined);
     setEntryContext(undefined);
   }, []);
@@ -115,6 +123,8 @@ export function GlobalAIStylistProvider({ children }: Props) {
       >
         <StylistChatView
           initialQuery={initialQuery}
+          initialAttachmentUri={initialAttachmentUri}
+          initialMode={initialMode}
           initialDestination={initialDestination}
           eventContext={eventContext}
           entryContext={entryContext}

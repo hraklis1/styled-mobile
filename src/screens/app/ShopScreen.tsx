@@ -14,6 +14,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
+import { buildShopStylistLaunch } from '../../lib/shopDecisionWorkspace';
 import { ShopWishlistSummaryCard } from '../../components/outfits/ShopWishlistSummaryCard';
 import { ShopWishlistDetailSheet } from '../../components/outfits/ShopWishlistDetailSheet';
 import { ShopWishlistFilterSheet } from '../../components/outfits/ShopWishlistFilterSheet';
@@ -33,7 +34,7 @@ import {
   ScreenHeader,
   SegmentedControl,
 } from '../../components/primitives/Editorial';
-import type { ShopScreenProps } from '../../navigation/types';
+import type { SavedLooksScreenProps } from '../../navigation/types';
 
 function toggleValue(values: string[], value: string) {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
@@ -45,7 +46,7 @@ const SCOPES: { value: WishlistScope; label: string }[] = [
   { value: 'general', label: 'General' },
 ];
 
-export function ShopScreen({ navigation }: ShopScreenProps) {
+export function SavedLooksScreen({ navigation, route }: SavedLooksScreenProps) {
   const insets = useSafeAreaInsets();
   const { openStylist } = useGlobalAIStylist();
   const { data: entries = [], isLoading: loading, refetch } = useWishlist();
@@ -64,6 +65,16 @@ export function ShopScreen({ navigation }: ShopScreenProps) {
     useCallback(() => {
       refetch();
     }, [refetch]),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      const selectedId = route.params?.selectedId;
+      if (!selectedId) return;
+      const entry = entries.find((item) => item.id === selectedId);
+      if (entry) setSelectedEntry(entry);
+      navigation.setParams({ selectedId: undefined });
+    }, [entries, navigation, route.params?.selectedId]),
   );
 
   const filterOptions = useMemo(() => getWishlistFilterOptions(entries), [entries]);
@@ -92,7 +103,7 @@ export function ShopScreen({ navigation }: ShopScreenProps) {
   }, [clearFilters]);
 
   const confirmRemove = useCallback((entry: WishlistEntry) => {
-    Alert.alert('Remove saved outfit?', 'This outfit will be removed from your Shop Wishlist.', [
+    Alert.alert('Remove saved outfit?', 'This outfit will be removed from Saved Looks.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: () => removeItem(entry.id) },
     ]);
@@ -110,7 +121,7 @@ export function ShopScreen({ navigation }: ShopScreenProps) {
     <View style={styles.root}>
       <ScreenHeader
         eyebrow="Shop"
-        title="Wishlist"
+        title="Saved looks"
         subtitle={entries.length === 0 ? 'No saved outfits yet' : `${entries.length} saved outfit${entries.length === 1 ? '' : 's'}`}
         primaryAction={{
           label: 'Shopping Mode',
@@ -119,10 +130,10 @@ export function ShopScreen({ navigation }: ShopScreenProps) {
           accessibilityLabel: 'Open Shopping Mode camera',
         }}
         secondaryActions={[{
-          label: 'The Shopping Edit',
+          label: 'Shopping History',
           icon: 'images-outline',
           onPress: () => navigation.navigate('ShoppingGallery'),
-          accessibilityLabel: 'Open The Shopping Edit',
+          accessibilityLabel: 'Open Shopping History',
         }]}
       />
 
@@ -131,15 +142,15 @@ export function ShopScreen({ navigation }: ShopScreenProps) {
           <View style={styles.emptyIconCircle}>
             <Ionicons name="bag-handle-outline" size={36} color={colors.primary} />
           </View>
-          <Text style={styles.emptyTitle}>Your wishlist is empty</Text>
+          <Text style={styles.emptyTitle}>No saved looks yet</Text>
           <Text style={styles.emptySubtitle}>
-            Ask your AI Stylist to shop for a new outfit. When it suggests one, tap “Save” to add it here.
+            Ask your AI Stylist to shop for a new outfit. When it suggests one, tap “Save” to keep it here.
           </Text>
           <ActionButton
             style={styles.emptyButton}
             label="Chat with your Stylist"
             icon="sparkles"
-            onPress={() => openStylist({ initialQuery: 'Shop for a new outfit for me', source: 'shop' })}
+            onPress={() => openStylist(buildShopStylistLaunch('Shop for a new outfit for me', 'shop_new'))}
             accessibilityLabel="Open AI Stylist"
           />
         </View>

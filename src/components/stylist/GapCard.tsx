@@ -53,10 +53,11 @@ function categoryIcon(category: string): IoniconName {
 type GapCardProps = {
   item: GapItem;
   onPress?: () => void;
+  ctaLabel?: string;
   style?: object;
 };
 
-export function GapCard({ item, onPress, style }: GapCardProps) {
+export function GapCard({ item, onPress, ctaLabel = 'Shop', style }: GapCardProps) {
   const emphasized = item.priority === 1;
   const reasonTag = REASON_LABEL[item.reason];
   const Container: typeof TouchableOpacity | typeof View = onPress ? TouchableOpacity : View;
@@ -96,7 +97,7 @@ export function GapCard({ item, onPress, style }: GapCardProps) {
 
       {onPress && (
         <View style={styles.cta}>
-          <Text style={styles.ctaText}>Shop</Text>
+          <Text style={styles.ctaText}>{ctaLabel}</Text>
           <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />
         </View>
       )}

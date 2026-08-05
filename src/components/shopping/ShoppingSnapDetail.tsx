@@ -37,6 +37,7 @@ export function ShoppingSnapDetail({
   onSaveCatalog,
   isDeleting,
   isSavingCatalog,
+  onAskStylist,
   onClose,
 }: {
   snap: ShoppingSnap | null;
@@ -47,6 +48,7 @@ export function ShoppingSnapDetail({
   onSaveCatalog: (captureGroupId: string, patch: ShoppingFindCatalogPatch) => Promise<void>;
   isDeleting: boolean;
   isSavingCatalog: boolean;
+  onAskStylist: (snap: ShoppingSnap) => void;
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
@@ -193,6 +195,20 @@ export function ShoppingSnapDetail({
                 </Text>
               </View>
             </View>
+
+            <TouchableOpacity
+              style={styles.stylistButton}
+              onPress={() => onAskStylist(snap)}
+              accessibilityRole="button"
+              accessibilityLabel="Ask Stylist about this shopping find"
+            >
+              <Ionicons name="sparkles" size={18} color={colors.primaryForeground} />
+              <View style={styles.stylistButtonCopy}>
+                <Text style={styles.stylistButtonTitle}>Ask Stylist about this</Text>
+                <Text style={styles.stylistButtonSubtitle}>Check versatility, overlap, and wardrobe fit</Text>
+              </View>
+              <Ionicons name="arrow-forward" size={17} color={colors.primaryForeground} />
+            </TouchableOpacity>
 
             <View style={styles.actionRow}>
               <TouchableOpacity
@@ -551,6 +567,10 @@ const styles = StyleSheet.create({
   photoDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.58)' },
   photoDotActive: { width: 18, backgroundColor: '#FFFFFF' },
   summaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  stylistButton: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radii.lg, borderCurve: 'continuous', backgroundColor: colors.primary },
+  stylistButtonCopy: { flex: 1, minWidth: 0, gap: 2 },
+  stylistButtonTitle: { color: colors.primaryForeground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+  stylistButtonSubtitle: { color: `${colors.primaryForeground}B8`, fontSize: typography.size.xs },
   priceBlock: { flex: 1 },
   price: { fontFamily: typography.family.display, fontSize: typography.size.xxl, color: colors.foreground, fontVariant: ['tabular-nums'] },
   priceMuted: { fontFamily: typography.family.display, fontSize: typography.size.xl, color: colors.mutedForeground },

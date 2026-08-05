@@ -121,6 +121,16 @@ export type StylistEntryContext =
       boardId: number;
       name?: string;
       itemIds?: number[];
+    }
+  | {
+      kind: 'shopping_find';
+      captureGroupId: string;
+      storeName?: string | null;
+      price?: number | null;
+      category?: string | null;
+      color?: string | null;
+      material?: string | null;
+      notes?: string | null;
     };
 
 export type StylistLocationContext = {
@@ -184,6 +194,7 @@ export type StylistSendOptions = {
   photoData?: string;
   attachment?: StylistComposerAttachment;
   context?: StylistEntryContext;
+  mode?: StylistMode;
 };
 
 export type StylistFeedbackRating = 'up' | 'down';

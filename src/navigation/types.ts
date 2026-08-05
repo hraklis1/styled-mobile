@@ -46,7 +46,8 @@ export type HomeStackParamList = {
 // Shop nested stack (wishlist + shopping tools)
 export type ShopStackParamList = {
   ShopMain: undefined;
-  ShoppingGallery: undefined;
+  SavedLooks: { selectedId?: string } | undefined;
+  ShoppingGallery: { focusGroupId?: string; catalogFilter?: 'active' | 'all' } | undefined;
   ShoppingCamera: undefined;
 };
 
@@ -79,7 +80,11 @@ export type HomeScreenProps = CompositeScreenProps<
   BottomTabScreenProps<AppTabParamList>
 >;
 export type SuggestionsScreenProps = NativeStackScreenProps<HomeStackParamList, 'Suggestions'>;
-export type ShopScreenProps = NativeStackScreenProps<ShopStackParamList, 'ShopMain'>;
+export type ShopOverviewScreenProps = CompositeScreenProps<
+  NativeStackScreenProps<ShopStackParamList, 'ShopMain'>,
+  BottomTabScreenProps<AppTabParamList>
+>;
+export type SavedLooksScreenProps = NativeStackScreenProps<ShopStackParamList, 'SavedLooks'>;
 export type ShoppingCameraScreenProps = NativeStackScreenProps<ShopStackParamList, 'ShoppingCamera'>;
 export type ShoppingGalleryScreenProps = NativeStackScreenProps<ShopStackParamList, 'ShoppingGallery'>;
 export type CalendarScreenProps = BottomTabScreenProps<AppTabParamList, 'Calendar'>;
