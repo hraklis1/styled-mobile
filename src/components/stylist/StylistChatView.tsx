@@ -129,16 +129,53 @@ const CHIPS_TRIP = [
   'What am I missing to pack?',
 ];
 
-const PROMPT_INTENTS: Array<{
+type StylistServicePrompt = {
   title: string;
   subtitle: string;
   icon: keyof typeof Ionicons.glyphMap;
-}> = [
-  { title: 'Style a look', subtitle: 'Dress for today', icon: 'sparkles-outline' },
-  { title: 'Shop the gaps', subtitle: 'Build smarter', icon: 'bag-handle-outline' },
-  { title: 'Pack a trip', subtitle: 'Plan every look', icon: 'briefcase-outline' },
-  { title: 'Style a piece', subtitle: 'Start in your closet', icon: 'shirt-outline' },
-];
+  prompt: string;
+};
+
+const PRIMARY_PROMPT_INTENT = {
+  title: 'Style me today',
+  icon: 'sparkles-outline' as const,
+};
+
+function buildStylistServices(wardrobeCount: number): StylistServicePrompt[] {
+  return [
+    {
+      title: 'Dress for a plan',
+      subtitle: 'Match the occasion, dress code & mood',
+      icon: 'calendar-outline',
+      prompt: 'Help me dress for an upcoming occasion. Ask me about the plan, dress code, and how I want to feel.',
+    },
+    {
+      title: 'Style a piece',
+      subtitle: 'Build around something you own',
+      icon: 'shirt-outline',
+      prompt: 'Help me style a piece from my wardrobe. Ask me which piece I want to build around.',
+    },
+    {
+      title: 'Pack a trip',
+      subtitle: 'Plan a polished travel wardrobe',
+      icon: 'briefcase-outline',
+      prompt: 'Help me pack for an upcoming trip. Ask me about the destination, dates, plans, and luggage.',
+    },
+    wardrobeCount > 0
+      ? {
+          title: 'Edit my closet',
+          subtitle: 'Spot gaps & invest with intention',
+          icon: 'bag-handle-outline',
+          prompt: 'Give my wardrobe a thoughtful edit. Identify what I wear most, what is missing, and where I should invest next.',
+        }
+      : {
+          title: 'Build my wardrobe',
+          subtitle: 'Create a versatile foundation',
+          icon: 'bag-handle-outline',
+          prompt: 'Help me build a versatile wardrobe from the ground up. Ask about my lifestyle, taste, and budget before recommending what to add.',
+        },
+  ];
+}
 
 function useContextualChips(lastMessage: ChatMessage | undefined): string[] {
   return useMemo(() => {
@@ -2110,7 +2147,7 @@ function formatWeatherLead(weather: CurrentWeather, tempUnit: 'C' | 'F'): string
   return descriptor ? `${descriptor} at ${temp}°${tempUnit}` : `${temp}°${tempUnit}`;
 }
 
-function buildEmptyStatePrompts(weather: CurrentWeather | undefined, tempUnit: 'C' | 'F', wardrobeCount: number): string[] {
+function buildEmptyStatePrompts(weather: CurrentWeather | undefined, tempUnit: 'C' | 'F'): string[] {
   const day = new Date().toLocaleDateString('en', { weekday: 'long' });
   const prompts: string[] = [];
 
@@ -2130,18 +2167,6 @@ function buildEmptyStatePrompts(weather: CurrentWeather | undefined, tempUnit: '
     }
   } else {
     prompts.push('What should I wear today?');
-  }
-
-  // Showcase the stylist's range: an audit, a trip plan, and a pairing check —
-  // but only the wardrobe-grounded ones once they actually own pieces.
-  if (wardrobeCount > 0) {
-    prompts.push("What's missing from my closet?"); // [1] advice / audit (cube-outline)
-    prompts.push('Pack me for a weekend trip');      // [2] trip (briefcase-outline)
-    prompts.push('What goes with my blue jeans?');   // [3] advice / pairing (color-palette-outline)
-  } else {
-    prompts.push('What should I buy to start my wardrobe?');
-    prompts.push('Pack me for a weekend trip');
-    prompts.push('Help me dress for a dinner date');
   }
 
   return prompts;
@@ -2164,10 +2189,10 @@ function EmptyState({
   onLocationPress: () => void;
   onPrompt: (q: string) => void;
 }) {
-  const prompts = buildEmptyStatePrompts(weather, tempUnit, wardrobeCount);
+  const prompts = buildEmptyStatePrompts(weather, tempUnit);
   const firstName = displayName?.trim().split(/\s+/)[0];
   const primaryPrompt = prompts[0];
-  const secondaryPrompts = prompts.slice(1);
+  const services = buildStylistServices(wardrobeCount);
 
   // Weather line: temperature in the user's preferred unit (matches the header
   // pill). The city is intentionally omitted — the persistent header already
@@ -2192,6 +2217,7 @@ function EmptyState({
       </View>
 
       <View style={styles.promptList}>
+        <Text style={styles.promptSectionLabel}>TODAY'S EDIT</Text>
         <TouchableOpacity
           style={styles.primaryPromptCard}
           activeOpacity={0.85}
@@ -2201,28 +2227,33 @@ function EmptyState({
           }}
         >
           <View style={styles.primaryPromptIcon}>
-            <Ionicons name={PROMPT_INTENTS[0].icon} size={20} color={colors.primary} />
+            <Ionicons name={PRIMARY_PROMPT_INTENT.icon} size={20} color={colors.primary} />
           </View>
           <View style={styles.primaryPromptCopy}>
-            <Text style={styles.promptTitle} numberOfLines={1}>{PROMPT_INTENTS[0].title}</Text>
+            <Text style={styles.promptTitle} numberOfLines={1}>{PRIMARY_PROMPT_INTENT.title}</Text>
             <Text style={styles.primaryPromptText} numberOfLines={2}>{primaryPrompt}</Text>
           </View>
           <Ionicons name="arrow-forward" size={16} color={colors.primary} />
         </TouchableOpacity>
 
-        <View style={styles.promptPills}>
-          {secondaryPrompts.map((p, index) => (
+        <Text style={styles.promptSectionLabel}>STYLIST SERVICES</Text>
+        <View style={styles.serviceGrid}>
+          {services.map((service) => (
             <TouchableOpacity
-              key={p}
-              style={styles.promptPill}
+              key={service.title}
+              style={styles.serviceCard}
               activeOpacity={0.85}
               onPress={() => {
                 Haptics.selectionAsync().catch(() => {});
-                onPrompt(p);
+                onPrompt(service.prompt);
               }}
+              accessibilityLabel={`${service.title}. ${service.subtitle}`}
             >
-              <Ionicons name={PROMPT_INTENTS[index + 1].icon} size={15} color={colors.primary} />
-              <Text style={styles.promptPillText} numberOfLines={1}>{PROMPT_INTENTS[index + 1].title}</Text>
+              <View style={styles.serviceIcon}>
+                <Ionicons name={service.icon} size={18} color={colors.primary} />
+              </View>
+              <Text style={styles.serviceTitle}>{service.title}</Text>
+              <Text style={styles.serviceSubtitle} numberOfLines={2}>{service.subtitle}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -3391,6 +3422,14 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.semibold,
   },
   promptList: { width: '100%', gap: spacing.sm },
+  promptSectionLabel: {
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.xs,
+    fontSize: 10,
+    fontWeight: typography.weight.bold,
+    color: colors.primary,
+    letterSpacing: 1.1,
+  },
   primaryPromptCard: {
     width: '100%',
     minHeight: 82,
@@ -3421,28 +3460,40 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     lineHeight: typography.size.xs * 1.35,
   },
-  promptPills: {
+  serviceGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
-  promptPill: {
-    minHeight: 38,
-    flexDirection: 'row',
-    alignItems: 'center',
+  serviceCard: {
+    width: '48.5%',
+    minHeight: 112,
+    alignItems: 'flex-start',
     gap: spacing.xs,
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: spacing.xs,
-    borderRadius: radii.full,
-    backgroundColor: 'rgba(255,255,255,0.52)',
+    padding: spacing.md,
+    borderRadius: radii.lg,
+    backgroundColor: 'rgba(255,255,255,0.66)',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
   },
-  promptPillText: {
-    maxWidth: 128,
-    fontSize: typography.size.xs,
-    color: colors.secondaryForeground,
-    fontWeight: typography.weight.medium,
+  serviceIcon: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceSelected,
+  },
+  serviceTitle: {
+    fontSize: typography.size.sm,
+    color: colors.foreground,
+    fontWeight: typography.weight.semibold,
+  },
+  serviceSubtitle: {
+    fontSize: 11,
+    color: colors.mutedForeground,
+    lineHeight: 15,
   },
   // Item detail sheet
   sheetRoot: {
