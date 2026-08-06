@@ -2,6 +2,7 @@
   "expo": {
     "name": "Styled",
     "slug": "Styled-mobile",
+    "owner": "pixelcraft-apps",
     "scheme": "styled",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,12 +12,22 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.ttrypho.Styled-mobile",
       "buildNumber": "1",
+      "usesAppleSignIn": true,
       "config": {
         "usesNonExemptEncryption": false
       },
       "infoPlist": {
         "NSCameraUsageDescription": "Styled needs camera access to photograph your clothing items and add them to your wardrobe.",
-        "NSPhotoLibraryUsageDescription": "Styled needs access to your photo library to import clothing images into your wardrobe."
+        "NSPhotoLibraryUsageDescription": "Styled needs access to your photo library to import clothing images into your wardrobe.",
+        "NSSpeechRecognitionUsageDescription": "Styled uses speech recognition to turn your dictation into text.",
+        "NSMicrophoneUsageDescription": "Styled needs microphone access so you can dictate to your stylist.",
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.68027085249-ihvksfh38gm9j1e8qcmbc4vd846q45m9"
+            ]
+          }
+        ]
       }
     },
     "android": {
@@ -31,7 +42,12 @@
       "predictiveBackGestureEnabled": true,
       "permissions": [
         "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.CAMERA"
       ],
       "blockedPermissions": [
         "android.permission.READ_MEDIA_IMAGES",
@@ -59,7 +75,9 @@
         {
           "microphonePermission": "Styled needs microphone access so you can dictate to your stylist.",
           "speechRecognitionPermission": "Styled uses speech recognition to turn your dictation into text.",
-          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
         }
       ],
       [
@@ -93,6 +111,11 @@
           "minimumDeploymentTarget": "15.0"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "71e136d6-599f-486a-8fbb-15f21cc481db"
+      }
+    }
   }
 }

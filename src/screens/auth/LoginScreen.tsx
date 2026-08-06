@@ -22,6 +22,14 @@ import { colors, spacing, typography, radii } from '../../theme';
 import type { LoginScreenProps } from '../../navigation/types';
 
 const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ?? '';
+const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? '';
+
+// Google rejects custom-scheme redirects for Web client types, so a released iOS
+// build has to use the iOS client and its reversed-client-ID scheme. The matching
+// scheme is registered in app.json under ios.infoPlist.CFBundleURLTypes.
+const IOS_REDIRECT_URI = GOOGLE_IOS_CLIENT_ID
+  ? `com.googleusercontent.apps.${GOOGLE_IOS_CLIENT_ID.replace('.apps.googleusercontent.com', '')}:/oauthredirect`
+  : undefined;
 
 export function LoginScreen({ navigation }: LoginScreenProps) {
   const { loginWithEmail, loginWithGoogleToken, loginWithAppleToken } = useAuth();
@@ -40,7 +48,11 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
 
   const [request, response, promptAsync] = Google.useAuthRequest({
     clientId: GOOGLE_CLIENT_ID,
-    redirectUri: makeRedirectUri({ scheme: 'styled' }),
+    iosClientId: GOOGLE_IOS_CLIENT_ID || undefined,
+    redirectUri:
+      Platform.OS === 'ios' && IOS_REDIRECT_URI
+        ? IOS_REDIRECT_URI
+        : makeRedirectUri({ scheme: 'styled' }),
   });
 
   useEffect(() => {
