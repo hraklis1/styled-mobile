@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { ShopWishlistSummaryCard } from '../../components/outfits/ShopWishlistSummaryCard';
 import { ShoppingEditCard } from '../../components/shopping/ShoppingEditCard';
+import { ShopStylistConsultationSheet } from '../../components/shopping/ShopStylistConsultationSheet';
 import { GapCard } from '../../components/stylist/GapCard';
 import { ActionButton, EditorialSection, ScreenHeader } from '../../components/primitives/Editorial';
 import { useEntitlement } from '../../hooks/useEntitlement';
@@ -15,7 +16,13 @@ import { useShoppingBrief } from '../../hooks/useShoppingBrief';
 import { useShoppingSnaps } from '../../hooks/useShoppingSnaps';
 import { useWishlist } from '../../hooks/useWishlist';
 import { buildShoppingEditItems, mergeShoppingSnaps } from '../../lib/shoppingGallery';
-import { buildShopStylistLaunch, latestShoppingSummary, selectActiveShoppingFinds } from '../../lib/shopDecisionWorkspace';
+import {
+  buildShopConsultationPrompt,
+  buildShopStylistLaunch,
+  latestShoppingSummary,
+  selectActiveShoppingFinds,
+  type ShopConsultationTopic,
+} from '../../lib/shopDecisionWorkspace';
 import { formatShoppingPrice } from '../../lib/shoppingPresentation';
 import { track } from '../../lib/analytics';
 import { presentPaywall } from '../../lib/paywall';
@@ -34,6 +41,7 @@ export function ShopOverviewScreen({ navigation }: ShopOverviewScreenProps) {
   const { data: wishlist = [], refetch: refetchWishlist } = useWishlist();
   const brief = useShoppingBrief(isPremium);
   const [refreshing, setRefreshing] = useState(false);
+  const [consultationVisible, setConsultationVisible] = useState(false);
 
   const shoppingItems = useMemo(
     () => buildShoppingEditItems(mergeShoppingSnaps(remoteSnaps, pendingUploads)),
@@ -79,15 +87,42 @@ export function ShopOverviewScreen({ navigation }: ShopOverviewScreenProps) {
     navigation.navigate('ShoppingCamera');
   }, [navigation]);
 
-  const askStylist = useCallback((query = 'Help me decide what would genuinely improve my wardrobe', mode: StylistMode = 'advice') => {
+  const askStylist = useCallback((query: string, mode: StylistMode = 'advice') => {
     track('shop_action_selected', { action: 'ask_stylist' });
     openStylist(buildShopStylistLaunch(query, mode));
   }, [openStylist]);
+
+  const openConsultation = useCallback(() => {
+    track('shop_action_selected', { action: 'consult_stylist' });
+    setConsultationVisible(true);
+  }, []);
 
   const openHistory = useCallback((params?: { focusGroupId?: string; catalogFilter?: 'active' | 'all' }) => {
     track('shop_section_opened', { section: params?.focusGroupId ? 'candidate' : 'shopping_history' });
     navigation.navigate('ShoppingGallery', params);
   }, [navigation]);
+
+  const selectConsultation = useCallback((topic: ShopConsultationTopic) => {
+    track('shop_consultation_selected', {
+      topic,
+      premium: isPremium,
+      active_find_count: activeFinds.length,
+    });
+
+    if (topic === 'review_find') {
+      if (activeFinds.length > 0) openHistory({ catalogFilter: 'active' });
+      else openShoppingCamera();
+      return;
+    }
+
+    if (topic === 'custom') {
+      openStylist({ source: 'shop' });
+      return;
+    }
+
+    const prompt = buildShopConsultationPrompt(topic, brief.data);
+    if (prompt) openStylist(buildShopStylistLaunch(prompt));
+  }, [activeFinds.length, brief.data, isPremium, openHistory, openShoppingCamera, openStylist]);
 
   return (
     <View style={styles.root}>
@@ -114,10 +149,10 @@ export function ShopOverviewScreen({ navigation }: ShopOverviewScreenProps) {
           />
           <ActionButton
             style={styles.secondaryAction}
-            label="Ask Stylist"
+            label="Consult Stylist"
             icon="sparkles-outline"
             variant="secondary"
-            onPress={() => askStylist()}
+            onPress={openConsultation}
           />
         </View>
 
@@ -250,6 +285,12 @@ export function ShopOverviewScreen({ navigation }: ShopOverviewScreenProps) {
           )}
         </EditorialSection>
       </ScrollView>
+      <ShopStylistConsultationSheet
+        visible={consultationVisible}
+        hasActiveFinds={activeFinds.length > 0}
+        onSelect={selectConsultation}
+        onClose={() => setConsultationVisible(false)}
+      />
       <View
         pointerEvents="none"
         accessibilityElementsHidden
