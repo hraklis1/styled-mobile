@@ -99,7 +99,13 @@ case "$cmd" in
     ;;
   issues)
     need_project
+    # This endpoint accepts only '', 24h, or 14d - anything else is a 400.
     period="${2:-24h}"
+    case "$period" in
+      24h|14d) ;;
+      all|'')  period='' ;;
+      *) echo "error: invalid period '$period'. Use 24h, 14d, or all." >&2; exit 1 ;;
+    esac
     api "/projects/$ORG/$PROJECT/issues/?query=is:unresolved&statsPeriod=$period&limit=25" \
       | fmt -r '.[] | "\(.shortId)\t[\(.count)x, \(.userCount) users]\t\(.title)\n\tlast: \(.lastSeen)\tid: \(.id)"'
     ;;
