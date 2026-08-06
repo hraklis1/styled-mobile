@@ -109,6 +109,14 @@
         {
           "minimumDeploymentTarget": "15.0"
         }
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "organization": "pixelcraft-apps",
+          "project": "react-native"
+        }
       ]
     ],
     "extra": {

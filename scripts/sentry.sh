@@ -24,17 +24,19 @@ read_env() {
   sed -nE "s/^[[:space:]]*(export[[:space:]]+)?$1=[\"']?([^\"']*)[\"']?[[:space:]]*$/\2/p" .env | tail -1
 }
 
-TOKEN="$(read_env SENTRY_AUTH_TOKEN)"
+# Deliberately NOT SENTRY_AUTH_TOKEN: the Sentry Expo config plugin claims that
+# name for source map uploads and needs write scope. This one is read-only.
+TOKEN="$(read_env SENTRY_READ_AUTH_TOKEN)"
 ORG="$(read_env SENTRY_ORG)"
 PROJECT="$(read_env SENTRY_PROJECT)"
 
 if [ -z "$TOKEN" ]; then
   cat >&2 <<'EOF'
-error: SENTRY_AUTH_TOKEN is not set in .env
+error: SENTRY_READ_AUTH_TOKEN is not set in .env
 
 Create one at https://sentry.io/settings/account/api/auth-tokens/
 with scopes: org:read, project:read, event:read
-then add to .env:  SENTRY_AUTH_TOKEN=sntryu_...
+then add to .env:  SENTRY_READ_AUTH_TOKEN=sntryu_...
 EOF
   exit 1
 fi
