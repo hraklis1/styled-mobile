@@ -149,6 +149,38 @@ const LEGACY_OCCASION_ALIASES: Record<string, Occasion> = {
   "black tie": "formal",
 };
 
+/**
+ * The profile questionnaire's occasion vocabulary, mapped onto the formality axis.
+ *
+ * NOT legacy — these are current and user-facing. `users.occasions` is filled by
+ * the onboarding questionnaire, which asks the question in the words a person
+ * actually uses ("date night", "wedding / guest", "interview") rather than in
+ * the formality words `items.occasions` is tagged with. Both columns feed
+ * `normalizeOccasion`, and until this map existed 11 of the 13 questionnaire
+ * answers normalized to null and were silently dropped from the retrieval
+ * re-rank — only `smart_casual` and `night_out` happened to collide with the
+ * canonical set.
+ *
+ * The collapse is deliberately lossy in one direction only: `travel`, `vacation`
+ * and `wedding_guest` carry context beyond formality, but formality is all this
+ * axis models. The full labels still reach the model verbatim as the
+ * "Dresses for:" line, so nothing is lost from the prompt — only from the
+ * numeric boost, which has nowhere finer to put them.
+ */
+const PROFILE_OCCASION_ALIASES: Record<string, Occasion> = {
+  everyday: "casual",
+  casual_weekend: "casual",
+  travel: "casual",
+  vacation: "casual",
+  school: "casual",
+  work_office: "professional",
+  interview: "professional",
+  date_night: "night_out",
+  formal_events: "formal",
+  wedding_guest: "formal",
+  athletic_active: "athleisure",
+};
+
 /** Map any spelling — current, retired, or near-miss — onto the merged axis. */
 export function normalizeOccasion(raw: unknown): Occasion | null {
   if (typeof raw !== "string") return null;
@@ -156,8 +188,21 @@ export function normalizeOccasion(raw: unknown): Occasion | null {
   if (!v) return null;
   const direct = OCCASION_OPTIONS.find((o) => o === v || o.replace(/_/g, " ") === v);
   if (direct) return direct;
-  return LEGACY_OCCASION_ALIASES[v] ?? null;
+  return PROFILE_OCCASION_ALIASES[v] ?? LEGACY_OCCASION_ALIASES[v] ?? null;
 }
+
+/**
+ * Every value the profile questionnaire can produce.
+ *
+ * Exported so `scripts/check-vocab-drift.ts` can assert each one still
+ * normalizes — adding an option to the mobile picker without adding it here is
+ * exactly the drift that made this map necessary in the first place.
+ */
+export const PROFILE_OCCASION_VALUES = [
+  "everyday", "work_office", "casual_weekend", "date_night", "formal_events",
+  "athletic_active", "travel", "smart_casual", "night_out", "vacation",
+  "wedding_guest", "interview", "school",
+] as const;
 
 // ── Condition ───────────────────────────────────────────────────────────────
 

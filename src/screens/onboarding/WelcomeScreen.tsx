@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { StyledWordmark } from '../../components/brand/StyledWordmark';
 import { colors, spacing, typography, radii } from '../../theme';
 
@@ -22,6 +24,8 @@ type Slide = {
   title: string;
   desc: string;
   features?: Feature[];
+  /** Bundled still-life. Sources and licences: assets/onboarding/ATTRIBUTION.md */
+  image: number;
 };
 
 const SLIDES: Slide[] = [
@@ -35,18 +39,21 @@ const SLIDES: Slide[] = [
       { icon: 'layers-outline',   label: 'Outfit builder'   },
       { icon: 'sparkles',         label: 'AI Stylist'       },
     ],
+    image: require('../../../assets/onboarding/welcome-wardrobe.jpg'),
   },
   {
     key: 'wardrobe',
     icon: 'camera-outline',
     title: 'Scan to add items\nin seconds.',
     desc: 'Point your camera at an outfit and Styled identifies each piece — colour, material, category, and more. No manual tagging required.',
+    image: require('../../../assets/onboarding/welcome-scan.jpg'),
   },
   {
     key: 'stylist',
     icon: 'sparkles',
     title: 'Your personal\nAI Stylist.',
     desc: 'Ask what to wear today, build outfits for upcoming events, or discover pieces missing from your wardrobe.',
+    image: require('../../../assets/onboarding/welcome-stylist.jpg'),
   },
 ];
 
@@ -79,8 +86,26 @@ export function WelcomeScreen({ onComplete }: Props) {
 
   const renderSlide = ({ item }: ListRenderItemInfo<Slide>) => (
     <View style={[styles.slide, { width: SCREEN_WIDTH }]}>
-      <View style={styles.iconWrap}>
-        <Ionicons name={item.icon} size={36} color={colors.primary} />
+      {/* The image is decorative — it sets the register, it doesn't carry
+          meaning — so it stays out of the accessibility tree. The glyph badge
+          rides on top of it, keeping the icon language the rest of the app uses. */}
+      <View style={styles.imageFrame} accessible={false} importantForAccessibility="no-hide-descendants">
+        <Image
+          source={item.image}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          contentPosition="center"
+          transition={220}
+          cachePolicy="memory-disk"
+        />
+        <LinearGradient
+          colors={['transparent', 'rgba(251,250,247,0.35)', colors.background]}
+          locations={[0.45, 0.78, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.iconBadge}>
+          <Ionicons name={item.icon} size={20} color={colors.primary} />
+        </View>
       </View>
       <Text style={styles.title}>{item.title}</Text>
       <Text style={styles.desc}>{item.desc}</Text>
@@ -177,24 +202,40 @@ const styles = StyleSheet.create({
   slide: {
     flex: 1,
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xxl,
+    paddingTop: spacing.lg,
     justifyContent: 'center',
   },
-  iconWrap: {
-    width: 68,
-    height: 68,
+  imageFrame: {
+    width: '100%',
+    aspectRatio: 4 / 3,
     borderRadius: radii.xl,
-    backgroundColor: colors.accent,
+    borderCurve: 'continuous',
+    overflow: 'hidden',
+    backgroundColor: colors.card,
+    marginBottom: spacing.xl,
+    justifyContent: 'flex-end',
+    alignItems: 'flex-start',
+  },
+  iconBadge: {
+    width: 42,
+    height: 42,
+    borderRadius: radii.full,
+    backgroundColor: 'rgba(255,252,247,0.94)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.xxl,
+    margin: spacing.md,
   },
+  // Serif display face — this is the first screen anyone sees, and it was the
+  // one place setting the brand in a sans bold.
   title: {
-    fontSize: typography.size.xxxl,
-    fontWeight: typography.weight.bold,
+    fontFamily: typography.family.display,
+    fontSize: 34,
+    lineHeight: 40,
+    letterSpacing: -0.4,
     color: colors.foreground,
-    lineHeight: typography.size.xxxl * 1.2,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   desc: {
     fontSize: typography.size.md,

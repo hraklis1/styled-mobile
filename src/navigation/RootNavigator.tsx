@@ -370,6 +370,22 @@ const WELCOME_SEEN_KEY = 'welcome_seen';
 function AppGate() {
   const { data: profile, isLoading, isError, refetch } = useProfile();
   const [welcomeSeen, setWelcomeSeen] = useState<boolean | null>(null);
+  /**
+   * Whether the questionnaire is on screen — a latch, not a derived value.
+   *
+   * `onboardingComplete` flips to true partway through the flow, at the point
+   * the required steps are done and the optional ones begin. Rendering straight
+   * off the flag would tear the screen down right there and drop the user into
+   * the app mid-questionnaire. So the flag decides when to ENTER, and only the
+   * screen itself decides when to leave. This is also what lets "Retake style
+   * quiz" reopen the flow from inside the app.
+   */
+  const [onboardingActive, setOnboardingActive] = useState(false);
+  const needsOnboarding = !!profile && !profile.onboardingComplete;
+
+  useEffect(() => {
+    if (needsOnboarding) setOnboardingActive(true);
+  }, [needsOnboarding]);
 
   useEffect(() => {
     AsyncStorage.getItem(WELCOME_SEEN_KEY).then((val) => {
@@ -399,8 +415,8 @@ function AppGate() {
     return <WelcomeScreen onComplete={handleWelcomeComplete} />;
   }
 
-  if (!profile?.onboardingComplete) {
-    return <OnboardingScreen />;
+  if (onboardingActive) {
+    return <OnboardingScreen onExit={() => setOnboardingActive(false)} />;
   }
 
   return (

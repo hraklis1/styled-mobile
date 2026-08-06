@@ -32,6 +32,7 @@ import { ProfilePickerModal } from '../../components/profile/ProfilePickerModal'
 import { LocationAutocompleteInput } from '../../components/primitives/LocationAutocompleteInput';
 import { BrandAutocompleteInput } from '../../components/primitives/BrandAutocompleteInput';
 import { ErrorState } from '../../components/primitives/ErrorState';
+import { SelectionGroup } from '../../components/primitives/SelectionGroup';
 import { FASHION_BRANDS } from '../../lib/fashionBrands';
 import {
   BODY_TYPE_OPTIONS,
@@ -57,12 +58,13 @@ import {
   TOP_SIZES,
   optionLabel,
   optionLabels,
+  optionsForCut,
 } from '../../lib/profileOptions';
 import {
   useProfileForm,
   JACKET_LENGTH_OPTIONS,
 } from '../../hooks/useProfileForm';
-import { useProfile } from '../../hooks/useProfile';
+import { useProfile, useUpdateProfile } from '../../hooks/useProfile';
 import { resolveTempUnit } from '../../lib/temperature';
 import type { CategoryBudgetKey, StyleProfileDetails } from '../../types/profile';
 
@@ -122,35 +124,41 @@ function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: stri
   );
 }
 
+/**
+ * Both chip groups are now thin wrappers over the shared `SelectionGroup`.
+ *
+ * They used to be their own implementations, which is how this screen drifted
+ * away from the questionnaire it edits — different selected states, no press
+ * feedback, and `accessibilityRole` on neither. Keeping the wrappers means the
+ * ~20 call sites below did not have to change.
+ *
+ * `caption` is suppressed by default: this screen is dense, and each field
+ * already carries a `FieldLabel` with its own hint. The questionnaire, where
+ * the caption is the whole point, passes it through.
+ */
 function OptionChips({
   options,
   values,
   onChange,
   max,
+  caption = null,
 }: {
   options: { value: string; label: string; description?: string }[];
   values: string[];
   onChange: (values: string[]) => void;
   max?: number;
+  caption?: string | null;
 }) {
   return (
-    <View style={styles.chipWrap}>
-      {options.map((opt) => {
-        const selected = values.includes(opt.value);
-        const disabled = !selected && !!max && values.length >= max;
-        return (
-          <TouchableOpacity
-            key={opt.value}
-            style={[styles.chip, selected && styles.chipSel, disabled && styles.chipDim]}
-            onPress={() => onChange(toggleValue(values, opt.value, max))}
-            disabled={disabled}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.chipText, selected && styles.chipTextSel]}>{opt.label}</Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
+    <SelectionGroup
+      mode="multi"
+      options={options}
+      values={values}
+      onChange={onChange}
+      max={max}
+      layout="pill"
+      caption={caption}
+    />
   );
 }
 
@@ -164,21 +172,14 @@ function SingleChips({
   onChange: (value: string) => void;
 }) {
   return (
-    <View style={styles.chipWrap}>
-      {options.map((opt) => {
-        const selected = value === opt.value;
-        return (
-          <TouchableOpacity
-            key={opt.value}
-            style={[styles.chip, selected && styles.chipSel]}
-            onPress={() => onChange(selected ? '' : opt.value)}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.chipText, selected && styles.chipTextSel]}>{opt.label}</Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
+    <SelectionGroup
+      mode="single"
+      options={options}
+      value={value}
+      onChange={onChange}
+      layout="pill"
+      caption={null}
+    />
   );
 }
 
@@ -457,6 +458,32 @@ export function ProfileScreen(_props: ProfileScreenProps) {
     changePasswordMutation.mutate({ currentPassword, newPassword });
   };
 
+  /**
+   * Reopen the questionnaire.
+   *
+   * Clearing `onboardingComplete` is the whole mechanism: AppGate watches the
+   * flag and remounts the flow over the app. Nothing else resets it, which is
+   * why anyone who once tapped "Skip for now" could never find the questions
+   * again. The flow prefills from the saved profile, so this is an edit pass,
+   * not a fresh start.
+   */
+  const retakeQuiz = useUpdateProfile();
+  const handleRetakeQuiz = () => {
+    Alert.alert(
+      'Retake style quiz',
+      form.isDirty
+        ? 'Your unsaved changes on this screen will be lost. Your saved answers will be filled in for you.'
+        : 'Your saved answers will be filled in for you — change anything you like.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Retake',
+          onPress: () => retakeQuiz.mutate({ onboardingComplete: false }),
+        },
+      ],
+    );
+  };
+
   const handleRestorePurchases = async () => {
     setIsRestoring(true);
     try {
@@ -582,12 +609,12 @@ export function ProfileScreen(_props: ProfileScreenProps) {
           </View>
 
           <View style={styles.field}>
-            <FieldLabel hint="up to 3">Aesthetic</FieldLabel>
+            <FieldLabel hint="up to 4">Aesthetic</FieldLabel>
             <OptionChips
               options={STYLE_OPTIONS}
               values={form.stylePreference}
               onChange={form.setStylePreference}
-              max={3}
+              max={4}
             />
           </View>
 
@@ -738,11 +765,14 @@ export function ProfileScreen(_props: ProfileScreenProps) {
           </View>
 
           <View style={styles.field}>
-            <FieldLabel>Proportions</FieldLabel>
+            {/* Was multi-select chips over a scalar, keeping only the last tap —
+                "petite" plus "long torso" silently became one of them. */}
+            <FieldLabel hint="up to 3">Proportions</FieldLabel>
             <OptionChips
               options={BODY_TYPE_OPTIONS}
-              values={form.bodyType ? [form.bodyType] : []}
-              onChange={(values) => form.setBodyType(values.at(-1) ?? '')}
+              values={form.bodyType}
+              onChange={form.setBodyType}
+              max={3}
             />
           </View>
 
@@ -879,13 +909,24 @@ export function ProfileScreen(_props: ProfileScreenProps) {
 
               <View style={styles.field}>
                 <FieldLabel>Sensitive fit notes</FieldLabel>
+                {/* Narrowed to the cut being shopped, same as the questionnaire.
+                    Already-selected values survive the filter, so changing cut
+                    can never strand a choice on an unrendered chip. */}
                 <OptionChips
-                  options={SENSITIVE_PROPORTION_OPTIONS}
+                  options={optionsForCut(
+                    SENSITIVE_PROPORTION_OPTIONS,
+                    form.fitPreference,
+                    details.sensitiveFit.proportions,
+                  )}
                   values={details.sensitiveFit.proportions}
                   onChange={(values) => updateSensitiveArray('proportions', values)}
                 />
                 <OptionChips
-                  options={COVERAGE_OPTIONS}
+                  options={optionsForCut(
+                    COVERAGE_OPTIONS,
+                    form.fitPreference,
+                    details.sensitiveFit.coverage,
+                  )}
                   values={details.sensitiveFit.coverage}
                   onChange={(values) => updateSensitiveArray('coverage', values)}
                 />
@@ -943,14 +984,14 @@ export function ProfileScreen(_props: ProfileScreenProps) {
           collapsible
           initiallyExpanded={false}
           summary={<SummaryLine values={[
-            form.budgetRange ? optionLabel(BUDGET_OPTIONS, form.budgetRange) : '',
+            optionLabels(BUDGET_OPTIONS, form.budgetRange).join(' · '),
             ...form.retailers.slice(0, 2),
             details.brandAvoids.length ? `${details.brandAvoids.length} avoids` : '',
           ].filter(Boolean)} />}
         >
           <View style={styles.field}>
             <FieldLabel>Budget tier</FieldLabel>
-            <SingleChips options={BUDGET_OPTIONS} value={form.budgetRange} onChange={form.setBudgetRange} />
+            <OptionChips options={BUDGET_OPTIONS} values={form.budgetRange} onChange={form.setBudgetRange} />
           </View>
 
           <View style={styles.field}>
@@ -1107,6 +1148,21 @@ export function ProfileScreen(_props: ProfileScreenProps) {
               </TouchableOpacity>
             </View>
           )}
+
+          <TouchableOpacity
+            style={styles.restoreBtn}
+            onPress={handleRetakeQuiz}
+            disabled={retakeQuiz.isPending}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Retake style quiz"
+            accessibilityState={{ disabled: retakeQuiz.isPending }}
+          >
+            {retakeQuiz.isPending
+              ? <ActivityIndicator size="small" color={colors.mutedForeground} />
+              : <Ionicons name="sparkles-outline" size={18} color={colors.mutedForeground} />}
+            <Text style={styles.restoreBtnText}>Retake style quiz</Text>
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.restoreBtn}

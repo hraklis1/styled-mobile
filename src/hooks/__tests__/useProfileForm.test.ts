@@ -23,8 +23,8 @@ const baseSnapshot: ProfileFormSnapshot = {
   displayName: 'Alex',
   stylePreference: [],
   colorPalette: [],
-  budgetRange: '',
-  bodyType: '',
+  budgetRange: [],
+  bodyType: [],
   fitPreference: '',
   fitSilhouette: '',
   styleProfileDetails: createEmptyStyleProfileDetails(),
@@ -121,13 +121,39 @@ describe('useProfileForm helpers', () => {
       ...baseProfile,
       fitPreference: 'fitted',
       stylePreference: ['trendy'],
-      budgetRange: 'luxury',
+      budgetRange: ['luxury'],
     });
 
     expect(loaded.fitPreference).toBe('');
     expect(loaded.fitSilhouette).toBe('fitted');
     expect(loaded.stylePreference).toEqual(['trend_forward']);
-    expect(loaded.budgetRange).toBe('luxury_high_end');
+    expect(loaded.budgetRange).toEqual(['luxury_high_end']);
+  });
+
+  it('tolerates budgetRange and bodyType arriving as bare strings', () => {
+    // Rows written before migration 0035, and any client that has not caught
+    // up, still send scalars. Reading one must not throw or drop the value.
+    const loaded = parseLoadedProfileForm({
+      ...baseProfile,
+      budgetRange: 'premium' as unknown as string[],
+      bodyType: 'petite' as unknown as string[],
+    });
+
+    expect(loaded.budgetRange).toEqual(['premium']);
+    expect(loaded.bodyType).toEqual(['petite']);
+  });
+
+  it('keeps every selected proportion instead of only the last', () => {
+    // The Profile screen used to render these as multi-select chips over a
+    // scalar and store `values.at(-1)`, so this silently kept "long_torso".
+    const payload = buildProfileUpdatePayload({
+      ...baseSnapshot,
+      bodyType: ['petite', 'long_torso'],
+      budgetRange: ['value_thrift', 'premium'],
+    });
+
+    expect(payload.bodyType).toEqual(['petite', 'long_torso']);
+    expect(payload.budgetRange).toEqual(['value_thrift', 'premium']);
   });
 
   it('normalizes conflicted style details when building the save payload', () => {

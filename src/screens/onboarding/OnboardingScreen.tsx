@@ -1,537 +1,312 @@
-import React, { useState, useRef } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
+  ActivityIndicator,
+  Animated,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
+  ScrollView,
   StyleSheet,
-  Animated,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
-import { useUpdateProfile } from '../../hooks/useProfile';
 import { track } from '../../lib/analytics';
-import { colors, spacing, typography, radii } from '../../theme';
+import { colors, radii, spacing, typography } from '../../theme';
+import { useOnboardingForm, type OnboardingValues } from './useOnboardingForm';
 import {
-  BODY_TYPE_OPTIONS,
-  BUDGET_OPTIONS,
-  FIT_SILHOUETTE_OPTIONS,
-  OCCASION_OPTIONS,
-  PALETTE_OPTIONS,
-  SIZING_REGION_OPTIONS,
-  STYLE_OPTIONS,
-  TOP_SIZES,
-} from '../../lib/profileOptions';
+  StepBodyFit,
+  StepColorBudget,
+  StepIntro,
+  StepLocationSizing,
+  StepOccasions,
+  StepStyle,
+} from './steps/CoreSteps';
+import { StepAvoids, StepShopping, StepSizes } from './steps/DeepDiveSteps';
+import { DeepDiveGate, SummaryStep } from './steps/Interstitials';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+/**
+ * The first-run style questionnaire.
+ *
+ * Shape: six required steps, then a gate, then three optional ones and a
+ * summary. The split exists so the required path can stay short while the
+ * questions that most sharpen recommendations — what you won't wear, how you
+ * shop, your remaining sizes — still get asked of anyone willing.
+ *
+ * Answers checkpoint on every advance (see `useOnboardingForm`), so the flow is
+ * safe to abandon at any point and safe to re-enter.
+ */
 
-function toggle(arr: string[], id: string): string[] {
-  return arr.includes(id) ? arr.filter((v) => v !== id) : [...arr, id];
-}
-
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <Text style={s.sectionLabel}>{children}</Text>;
-}
-
-function SelectPill({
-  label,
-  selected,
-  onPress,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={0.7}
-      style={[s.pill, selected && s.pillSelected]}
-    >
-      {selected && (
-        <Ionicons name="checkmark" size={12} color={colors.primaryForeground} style={{ marginRight: 4 }} />
-      )}
-      <Text style={[s.pillText, selected && s.pillTextSelected]}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
-
-function SelectCard({
-  label,
-  desc,
-  selected,
-  onPress,
-}: {
-  label: string;
+type StepDef = {
+  key: string;
+  eyebrow: string;
+  title: string;
   desc?: string;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={0.7}
-      style={[s.card, selected && s.cardSelected]}
-    >
-      {selected && (
-        <Ionicons name="checkmark-circle" size={16} color={colors.primary} style={{ marginBottom: 4 }} />
-      )}
-      <Text style={[s.cardLabel, selected && s.cardLabelSelected]}>{label}</Text>
-      {desc ? <Text style={s.cardDesc}>{desc}</Text> : null}
-    </TouchableOpacity>
-  );
-}
+  render: (props: {
+    values: OnboardingValues;
+    set: <K extends keyof OnboardingValues>(key: K, value: OnboardingValues[K]) => void;
+  }) => React.ReactNode;
+  /** Undefined means the step can always be advanced. */
+  isValid?: (v: OnboardingValues) => boolean;
+};
 
-// ── Steps ─────────────────────────────────────────────────────────────────────
-
-function StepOccasions({
-  occasions,
-  setOccasions,
-}: {
-  occasions: string[];
-  setOccasions: (v: string[]) => void;
-}) {
-  return (
-    <View style={s.pillWrap}>
-      {OCCASION_OPTIONS.map((opt) => (
-        <SelectPill
-          key={opt.value}
-          label={opt.label}
-          selected={occasions.includes(opt.value)}
-          onPress={() => setOccasions(toggle(occasions, opt.value))}
-        />
-      ))}
-    </View>
-  );
-}
-
-function StepStyle({
-  stylePreferences,
-  setStylePreferences,
-}: {
-  stylePreferences: string[];
-  setStylePreferences: (v: string[]) => void;
-}) {
-  return (
-    <View style={s.twoColGrid}>
-      {STYLE_OPTIONS.map((opt) => (
-        <SelectCard
-          key={opt.value}
-          label={opt.label}
-          desc={opt.description}
-          selected={stylePreferences.includes(opt.value)}
-          onPress={() => setStylePreferences(toggle(stylePreferences, opt.value))}
-        />
-      ))}
-    </View>
-  );
-}
-
-function StepColorBudget({
-  colorPalette,
-  setColorPalette,
-  budgetRange,
-  setBudgetRange,
-}: {
-  colorPalette: string;
-  setColorPalette: (v: string) => void;
-  budgetRange: string;
-  setBudgetRange: (v: string) => void;
-}) {
-  return (
-    <View style={{ gap: spacing.xl }}>
-      <View>
-        <SectionLabel>Color palette</SectionLabel>
-        <View style={s.twoColGrid}>
-          {PALETTE_OPTIONS.map((opt) => (
-            <TouchableOpacity
-              key={opt.value}
-              onPress={() => setColorPalette(opt.value)}
-              activeOpacity={0.7}
-              style={[s.paletteCard, colorPalette === opt.value && s.cardSelected]}
-            >
-              <View style={[s.swatch, { backgroundColor: opt.colors[1] ?? opt.colors[0] }]} />
-              <Text style={[s.cardLabel, colorPalette === opt.value && s.cardLabelSelected]}>
-                {opt.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      <View>
-        <SectionLabel>Budget range</SectionLabel>
-        <View style={s.twoColGrid}>
-          {BUDGET_OPTIONS.map((opt) => (
-            <TouchableOpacity
-              key={opt.value}
-              onPress={() => setBudgetRange(opt.value)}
-              activeOpacity={0.7}
-              style={[s.card, budgetRange === opt.value && s.cardSelected]}
-            >
-              <Text style={[s.cardLabel, budgetRange === opt.value && s.cardLabelSelected]}>
-                {opt.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-    </View>
-  );
-}
-
-function StepBodyFit({
-  bodyType,
-  setBodyType,
-  fitSilhouette,
-  setFitSilhouette,
-}: {
-  bodyType: string;
-  setBodyType: (v: string) => void;
-  fitSilhouette: string;
-  setFitSilhouette: (v: string) => void;
-}) {
-  return (
-    <View style={{ gap: spacing.xl }}>
-      <View>
-        <SectionLabel>Body type</SectionLabel>
-        <View style={s.twoColGrid}>
-          {BODY_TYPE_OPTIONS.map((opt) => (
-            <SelectCard
-              key={opt.value}
-              label={opt.label}
-              desc={opt.description}
-              selected={bodyType === opt.value}
-              onPress={() => setBodyType(opt.value)}
-            />
-          ))}
-        </View>
-      </View>
-
-      <View>
-        <SectionLabel>Fit preference</SectionLabel>
-        <View style={s.threeColGrid}>
-          {FIT_SILHOUETTE_OPTIONS.map((opt) => (
-            <SelectCard
-              key={opt.value}
-              label={opt.label}
-              desc={opt.description}
-              selected={fitSilhouette === opt.value}
-              onPress={() => setFitSilhouette(opt.value)}
-            />
-          ))}
-        </View>
-      </View>
-    </View>
-  );
-}
-
-function StepLocationSizing({
-  location,
-  setLocation,
-  sizingRegion,
-  setSizingRegion,
-  sizeTop,
-  setSizeTop,
-}: {
-  location: string;
-  setLocation: (v: string) => void;
-  sizingRegion: string;
-  setSizingRegion: (v: string) => void;
-  sizeTop: string;
-  setSizeTop: (v: string) => void;
-}) {
-  const [locationPermission, setLocationPermission] = useState<'granted' | 'denied' | 'undetermined'>('undetermined');
-  const [requestingLocation, setRequestingLocation] = useState(false);
-
-  const requestLocation = async () => {
-    setRequestingLocation(true);
-    try {
-      const permission = await Location.requestForegroundPermissionsAsync();
-      setLocationPermission(permission.status);
-    } finally {
-      setRequestingLocation(false);
-    }
-  };
-
-  return (
-    <View style={{ gap: spacing.xl }}>
-      <View>
-        <SectionLabel>Weather-aware styling</SectionLabel>
-        <Text style={s.locationCopy}>
-          Let Styled use your current city while the app is open so outfits match the weather wherever you are.
-        </Text>
-        <TouchableOpacity
-          style={[s.locationPermissionBtn, locationPermission === 'granted' && s.locationPermissionBtnGranted]}
-          onPress={requestLocation}
-          disabled={requestingLocation || locationPermission === 'granted'}
-          activeOpacity={0.75}
-        >
-          {requestingLocation ? (
-            <ActivityIndicator size="small" color={colors.primary} />
-          ) : (
-            <Ionicons
-              name={locationPermission === 'granted' ? 'checkmark-circle' : 'navigate-outline'}
-              size={18}
-              color={colors.primary}
-            />
-          )}
-          <Text style={s.locationPermissionText}>
-            {locationPermission === 'granted' ? 'Current location enabled' : 'Use current location'}
-          </Text>
-        </TouchableOpacity>
-        {locationPermission === 'denied' ? (
-          <Text style={s.hint}>Location is off. You can still use a Home city below.</Text>
-        ) : null}
-      </View>
-
-      <View>
-        <SectionLabel>Home city (optional)</SectionLabel>
-        <TextInput
-          value={location}
-          onChangeText={setLocation}
-          placeholder="e.g. London, UK"
-          placeholderTextColor={colors.mutedForeground}
-          style={s.textInput}
-          returnKeyType="done"
-        />
-        <Text style={s.hint}>Used as a fallback and for local recommendations. We never save GPS coordinates as Home.</Text>
-      </View>
-
-      <View>
-        <SectionLabel>Sizing region</SectionLabel>
-        <View style={s.regionRow}>
-          {SIZING_REGION_OPTIONS.map((opt) => (
-            <TouchableOpacity
-              key={opt.value}
-              onPress={() => setSizingRegion(opt.value)}
-              activeOpacity={0.7}
-              style={[s.regionBtn, sizingRegion === opt.value && s.cardSelected]}
-            >
-              <Text style={[s.regionBtnText, sizingRegion === opt.value && s.cardLabelSelected]}>
-                {opt.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      <View>
-        <SectionLabel>
-          Top size{'  '}
-          <Text style={{ color: colors.mutedForeground, fontWeight: '400' }}>(optional)</Text>
-        </SectionLabel>
-        <View style={s.sizeRow}>
-          {TOP_SIZES.map((size) => (
-            <TouchableOpacity
-              key={size}
-              onPress={() => setSizeTop(sizeTop === size ? '' : size)}
-              activeOpacity={0.7}
-              style={[s.sizeBtn, sizeTop === size && s.cardSelected]}
-            >
-              <Text style={[s.sizeBtnText, sizeTop === size && s.cardLabelSelected]}>{size}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-    </View>
-  );
-}
-
-// ── Main screen ───────────────────────────────────────────────────────────────
-
-const STEPS = [
-  { title: "What do you dress for?",   desc: "Select all that apply — this shapes every outfit we suggest." },
-  { title: "What's your aesthetic?",   desc: "Pick everything that resonates — most people are a mix."     },
-  { title: "Colors & budget",          desc: "Two quick picks."                                             },
-  { title: "Body & fit",               desc: "Helps us nail the silhouette and cut every time."             },
-  { title: "Location & sizing",        desc: "Weather-aware outfits, with a Home city fallback."            },
+const CORE_STEPS: StepDef[] = [
+  {
+    key: 'intro',
+    eyebrow: 'INTRODUCTIONS',
+    title: 'First, the basics.',
+    desc: 'Two answers that shape everything after them.',
+    render: (p) => <StepIntro {...p} />,
+    isValid: (v) => v.displayName.trim().length > 0 && v.fitPreference !== '',
+  },
+  {
+    key: 'occasions',
+    eyebrow: 'YOUR WEEK',
+    title: 'What do you dress for?',
+    desc: 'This decides which outfits we build first.',
+    render: (p) => <StepOccasions {...p} />,
+    isValid: (v) => v.occasions.length > 0,
+  },
+  {
+    key: 'style',
+    eyebrow: 'AESTHETIC',
+    title: "What's your taste?",
+    desc: 'Most people are a mix. Pick the ones you keep coming back to.',
+    render: (p) => <StepStyle {...p} />,
+    isValid: (v) => v.stylePreference.length > 0,
+  },
+  {
+    key: 'color-budget',
+    eyebrow: 'COLOUR & SPEND',
+    title: 'Palette and budget.',
+    render: (p) => <StepColorBudget {...p} />,
+    isValid: (v) => v.colorPalette.length > 0 && v.budgetRange.length > 0,
+  },
+  {
+    key: 'body-fit',
+    eyebrow: 'FIT',
+    title: 'How things sit on you.',
+    desc: 'The difference between a suggestion and one you actually wear.',
+    render: (p) => <StepBodyFit {...p} />,
+    isValid: (v) => v.bodyType.length > 0 && v.fitSilhouette !== '',
+  },
+  {
+    key: 'location-sizing',
+    eyebrow: 'WHERE YOU ARE',
+    title: 'Weather and sizing.',
+    render: (p) => <StepLocationSizing {...p} />,
+    isValid: (v) => v.sizingRegion !== '',
+  },
 ];
 
-export function OnboardingScreen() {
+const DEEP_DIVE_STEPS: StepDef[] = [
+  {
+    key: 'gate',
+    eyebrow: '',
+    title: '',
+    render: () => null,
+  },
+  {
+    key: 'avoids',
+    eyebrow: 'THE NO LIST',
+    title: 'Anything you never wear?',
+    desc: "Knowing what to leave out is worth more than another thing you like.",
+    render: (p) => <StepAvoids {...p} />,
+  },
+  {
+    key: 'shopping',
+    eyebrow: 'HOW YOU SHOP',
+    title: 'When you buy something new.',
+    render: (p) => <StepShopping {...p} />,
+  },
+  {
+    key: 'sizes',
+    eyebrow: 'SIZING',
+    title: 'The rest of your sizes.',
+    desc: 'Private, and only used to keep recommendations wearable.',
+    render: (p) => <StepSizes {...p} />,
+  },
+  {
+    key: 'summary',
+    eyebrow: '',
+    title: '',
+    render: () => null,
+  },
+];
+
+const ALL_STEPS = [...CORE_STEPS, ...DEEP_DIVE_STEPS];
+const GATE_INDEX = CORE_STEPS.length;
+const SUMMARY_INDEX = ALL_STEPS.length - 1;
+
+/** @param onExit Called once the profile has actually saved. See AppGate's latch. */
+export function OnboardingScreen({ onExit }: { onExit: () => void }) {
   const insets = useSafeAreaInsets();
-  const updateProfile = useUpdateProfile();
+  const { values, set, isLoading, isSaving, saveCheckpoint, finish } = useOnboardingForm();
 
   const [step, setStep] = useState(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const scrollRef = useRef<ScrollView>(null);
 
-  const [occasions,        setOccasions]        = useState<string[]>([]);
-  const [stylePreferences, setStylePreferences] = useState<string[]>([]);
-  const [colorPalette,     setColorPalette]     = useState('');
-  const [budgetRange,      setBudgetRange]      = useState('');
-  const [bodyType,         setBodyType]         = useState('');
-  const [fitSilhouette,    setFitSilhouette]    = useState('');
-  const [location,         setLocation]         = useState('');
-  const [sizingRegion,     setSizingRegion]     = useState('');
-  const [sizeTop,          setSizeTop]          = useState('');
+  const current = ALL_STEPS[step];
+  const inCore = step < GATE_INDEX;
+  const isGate = step === GATE_INDEX;
+  const isSummary = step === SUMMARY_INDEX;
+  const canAdvance = current.isValid ? current.isValid(values) : true;
 
-  const isStepValid = (s: number): boolean => {
-    switch (s) {
-      case 0: return occasions.length > 0;
-      case 1: return stylePreferences.length > 0;
-      case 2: return colorPalette !== '' && budgetRange !== '';
-      case 3: return bodyType !== '' && fitSilhouette !== '';
-      case 4: return sizingRegion !== '';
-      default: return true;
-    }
-  };
+  const progress = useMemo(
+    () => (inCore ? { index: step, total: CORE_STEPS.length } : null),
+    [inCore, step],
+  );
 
-  const animateStep = (next: number) => {
+  const go = (next: number) => {
     Animated.sequence([
       Animated.timing(fadeAnim, { toValue: 0, duration: 120, useNativeDriver: true }),
       Animated.timing(fadeAnim, { toValue: 1, duration: 150, useNativeDriver: true }),
     ]).start();
     setStep(next);
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  };
+
+  const handleNext = () => {
+    track('onboarding_step_completed', {
+      step: current.key,
+      index: step,
+      occasions: values.occasions.length,
+      styles: values.stylePreference.length,
+      palettes: values.colorPalette.length,
+      budgets: values.budgetRange.length,
+      proportions: values.bodyType.length,
+    });
+
+    // Crossing the gate is what completes onboarding: everything after it is
+    // optional, so the user must not be held in the flow to reach the app.
+    if (step === GATE_INDEX - 1) {
+      finish();
+    } else {
+      saveCheckpoint();
+    }
+    go(step + 1);
+  };
+
+  const handleDone = () => {
+    track('onboarding_completed', { skipped: false, deepDive: true });
+    finish(onExit);
   };
 
   const handleSkip = () => {
-    updateProfile.mutate(
-      { onboardingComplete: true },
-      { onSuccess: () => track('onboarding_completed', { skipped: true }) },
-    );
+    // Saves whatever has been answered so far. The old flow discarded it.
+    track('onboarding_completed', { skipped: true, atStep: current.key });
+    finish(onExit);
   };
 
-  const handleFinish = () => {
-    updateProfile.mutate(
-      {
-        occasions:       occasions.length > 0        ? occasions        : null,
-        stylePreference: stylePreferences.length > 0 ? stylePreferences : null,
-        colorPalette:    colorPalette                ? [colorPalette]   : null,
-        budgetRange:     budgetRange                 || null,
-        bodyType:        bodyType                    || null,
-        fitSilhouette:   fitSilhouette               || null,
-        location:        location.trim()             || null,
-        sizingRegion:    sizingRegion                || null,
-        sizeTop:         sizeTop                     || null,
-        onboardingComplete: true,
-      },
-      { onSuccess: () => track('onboarding_completed', { skipped: false }) },
+  if (isLoading) {
+    return (
+      <View style={[s.container, s.loading]}>
+        <ActivityIndicator size="small" color={colors.primary} />
+      </View>
     );
-  };
-
-  const isLast    = step === STEPS.length - 1;
-  const isPending = updateProfile.isPending;
+  }
 
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: colors.background }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={[s.container, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.md }]}>
-
-        {/* Header row */}
+      <View
+        style={[
+          s.container,
+          { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.md },
+        ]}
+      >
         <View style={s.headerRow}>
           <View style={s.sparkleWrap}>
-            <Ionicons name="sparkles" size={20} color={colors.primary} />
+            <Ionicons name="sparkles" size={18} color={colors.primary} />
           </View>
-          <TouchableOpacity
-            onPress={handleSkip}
-            disabled={isPending}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            style={s.skipBtn}
-          >
-            <Text style={s.skipText}>{isPending ? 'Saving…' : 'Skip for now'}</Text>
-            <Ionicons name="close" size={14} color={colors.mutedForeground} />
-          </TouchableOpacity>
+          {!isSummary && (
+            <TouchableOpacity
+              onPress={handleSkip}
+              disabled={isSaving}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              style={s.skipBtn}
+              accessibilityRole="button"
+            >
+              <Text style={s.skipText}>
+                {isSaving ? 'Saving…' : isGate || step > GATE_INDEX ? 'Not now' : 'Skip for now'}
+              </Text>
+              <Ionicons name="close" size={14} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          )}
         </View>
 
-        {/* Title + desc */}
-        <Text style={s.title}>{STEPS[step].title}</Text>
-        <Text style={s.desc}>{STEPS[step].desc}</Text>
+        {current.eyebrow ? <Text style={s.eyebrow}>{current.eyebrow}</Text> : null}
+        {current.title ? <Text style={s.title}>{current.title}</Text> : null}
+        {current.desc ? <Text style={s.desc}>{current.desc}</Text> : null}
 
-        {/* Progress bar */}
-        <View style={s.progressRow}>
-          {STEPS.map((_, i) => (
-            <View
-              key={i}
-              style={[s.progressSegment, i <= step && s.progressSegmentActive]}
-            />
-          ))}
-        </View>
+        {progress && (
+          <View style={s.progressRow}>
+            {CORE_STEPS.map((coreStep, i) => (
+              <View
+                key={coreStep.key}
+                style={[s.progressSegment, i <= progress.index && s.progressSegmentActive]}
+              />
+            ))}
+          </View>
+        )}
 
-        {/* Step content */}
         <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
           <ScrollView
+            ref={scrollRef}
             contentContainerStyle={s.scrollContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            {step === 0 && (
-              <StepOccasions occasions={occasions} setOccasions={setOccasions} />
-            )}
-            {step === 1 && (
-              <StepStyle stylePreferences={stylePreferences} setStylePreferences={setStylePreferences} />
-            )}
-            {step === 2 && (
-              <StepColorBudget
-                colorPalette={colorPalette}
-                setColorPalette={setColorPalette}
-                budgetRange={budgetRange}
-                setBudgetRange={setBudgetRange}
-              />
-            )}
-            {step === 3 && (
-              <StepBodyFit
-                bodyType={bodyType}
-                setBodyType={setBodyType}
-                fitSilhouette={fitSilhouette}
-                setFitSilhouette={setFitSilhouette}
-              />
-            )}
-            {step === 4 && (
-              <StepLocationSizing
-                location={location}
-                setLocation={setLocation}
-                sizingRegion={sizingRegion}
-                setSizingRegion={setSizingRegion}
-                sizeTop={sizeTop}
-                setSizeTop={setSizeTop}
-              />
+            {isGate ? (
+              <DeepDiveGate onboardingName={values.displayName.trim()} />
+            ) : isSummary ? (
+              <SummaryStep values={values} />
+            ) : (
+              current.render({ values, set })
             )}
           </ScrollView>
         </Animated.View>
 
-        {/* Footer buttons */}
         <View style={s.footer}>
           <TouchableOpacity
-            onPress={() => animateStep(Math.max(0, step - 1))}
+            onPress={() => go(Math.max(0, step - 1))}
             disabled={step === 0}
-            style={[s.footerBtn, s.footerBtnGhost, step === 0 && { opacity: 0 }]}
+            style={[s.footerBtn, step === 0 && { opacity: 0 }]}
+            accessibilityRole="button"
           >
             <Ionicons name="arrow-back" size={16} color={colors.foreground} />
             <Text style={s.footerBtnGhostText}>Back</Text>
           </TouchableOpacity>
 
-          {!isLast ? (
+          {isSummary ? (
             <TouchableOpacity
-              onPress={() => animateStep(step + 1)}
-              disabled={!isStepValid(step)}
-              style={[s.footerBtn, s.footerBtnPrimary, !isStepValid(step) && s.footerBtnDisabled]}
+              onPress={handleDone}
+              disabled={isSaving}
+              style={[s.footerBtn, s.footerBtnPrimary, isSaving && s.footerBtnDisabled]}
+              accessibilityRole="button"
             >
-              <Text style={s.footerBtnPrimaryText}>Next</Text>
-              <Ionicons name="arrow-forward" size={16} color={colors.primaryForeground} />
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              onPress={handleFinish}
-              disabled={isPending || !isStepValid(step)}
-              style={[s.footerBtn, s.footerBtnPrimary, (isPending || !isStepValid(step)) && s.footerBtnDisabled]}
-            >
-              {isPending ? (
+              {isSaving ? (
                 <ActivityIndicator size="small" color={colors.primaryForeground} />
               ) : (
                 <>
-                  <Text style={s.footerBtnPrimaryText}>Finish</Text>
-                  <Ionicons name="checkmark" size={16} color={colors.primaryForeground} />
+                  <Text style={s.footerBtnPrimaryText}>Start styling</Text>
+                  <Ionicons name="arrow-forward" size={16} color={colors.primaryForeground} />
                 </>
               )}
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              onPress={handleNext}
+              disabled={!canAdvance}
+              style={[s.footerBtn, s.footerBtnPrimary, !canAdvance && s.footerBtnDisabled]}
+              accessibilityRole="button"
+            >
+              <Text style={s.footerBtnPrimaryText}>{isGate ? 'Keep going' : 'Next'}</Text>
+              <Ionicons name="arrow-forward" size={16} color={colors.primaryForeground} />
             </TouchableOpacity>
           )}
         </View>
@@ -540,71 +315,70 @@ export function OnboardingScreen() {
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
-
 const s = StyleSheet.create({
-  container: {
-    flex: 1,
-    paddingHorizontal: spacing.xl,
-  },
+  container: { flex: 1, paddingHorizontal: spacing.xl },
+  loading: { alignItems: 'center', justifyContent: 'center' },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: 40,
     marginBottom: spacing.lg,
   },
   sparkleWrap: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     borderRadius: radii.lg,
+    borderCurve: 'continuous',
     backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  skipBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  skipText: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-  },
-  title: {
-    fontSize: typography.size.xxl,
+  skipBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  skipText: { fontSize: typography.size.xs, color: colors.mutedForeground },
+  eyebrow: {
+    fontSize: 11,
     fontWeight: typography.weight.bold,
+    color: colors.primary,
+    letterSpacing: 1.4,
+    marginBottom: spacing.sm,
+  },
+  // Georgia, not the sans bold this screen used to run — the serif display face
+  // is the app's editorial signature and onboarding was the one place ignoring it.
+  title: {
+    fontFamily: typography.family.display,
+    fontSize: 32,
+    lineHeight: 38,
+    letterSpacing: -0.3,
     color: colors.foreground,
     marginBottom: spacing.xs,
   },
   desc: {
     fontSize: typography.size.sm,
-    color: colors.mutedForeground,
-    marginBottom: spacing.lg,
     lineHeight: typography.size.sm * typography.lineHeight.normal,
+    color: colors.mutedForeground,
+    marginBottom: spacing.xs,
   },
   progressRow: {
     flexDirection: 'row',
     gap: spacing.xs,
+    marginTop: spacing.lg,
     marginBottom: spacing.lg,
   },
   progressSegment: {
     flex: 1,
-    height: 4,
+    height: 3,
     borderRadius: radii.full,
-    backgroundColor: colors.secondary,
+    backgroundColor: colors.hairline,
   },
-  progressSegmentActive: {
-    backgroundColor: colors.primary,
-  },
-  scrollContent: {
-    paddingBottom: spacing.lg,
-  },
+  progressSegmentActive: { backgroundColor: colors.primary },
+  scrollContent: { paddingTop: spacing.md, paddingBottom: spacing.xl },
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: spacing.lg,
-    borderTopWidth: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
   footerBtn: {
@@ -614,204 +388,19 @@ const s = StyleSheet.create({
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     borderRadius: radii.lg,
-    minHeight: 44,
-  },
-  footerBtnGhost: {
-    backgroundColor: 'transparent',
+    borderCurve: 'continuous',
+    minHeight: 46,
   },
   footerBtnGhostText: {
     fontSize: typography.size.md,
-    color: colors.foreground,
     fontWeight: typography.weight.medium,
+    color: colors.foreground,
   },
-  footerBtnPrimary: {
-    backgroundColor: colors.primary,
-  },
+  footerBtnPrimary: { backgroundColor: colors.primary },
   footerBtnPrimaryText: {
     fontSize: typography.size.md,
-    color: colors.primaryForeground,
     fontWeight: typography.weight.semibold,
-  },
-  footerBtnDisabled: {
-    opacity: 0.4,
-  },
-  // Pills
-  pillWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm + 2,
-    borderRadius: radii.full,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.secondary,
-    minHeight: 44,
-  },
-  pillSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primary,
-  },
-  pillText: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.medium,
-    color: colors.foreground,
-  },
-  pillTextSelected: {
     color: colors.primaryForeground,
   },
-  // Cards (2-col grid)
-  twoColGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  threeColGrid: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  card: {
-    width: '48%',
-    padding: spacing.md,
-    borderRadius: radii.xl,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.secondary,
-    minHeight: 80,
-    justifyContent: 'flex-end',
-  },
-  cardSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.accent,
-  },
-  cardLabel: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  cardLabelSelected: {
-    color: colors.primary,
-  },
-  cardDesc: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-    marginTop: 2,
-    lineHeight: typography.size.xs * typography.lineHeight.normal,
-  },
-  // Palette card
-  paletteCard: {
-    width: '48%',
-    padding: spacing.md,
-    borderRadius: radii.xl,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.secondary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    minHeight: 56,
-  },
-  swatch: {
-    width: 28,
-    height: 28,
-    borderRadius: radii.full,
-    borderWidth: 1,
-    borderColor: colors.border,
-    flexShrink: 0,
-  },
-  // Section label
-  sectionLabel: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-    marginBottom: spacing.sm,
-  },
-  // Location
-  textInput: {
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    borderRadius: radii.lg,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    fontSize: typography.size.md,
-    color: colors.foreground,
-    backgroundColor: colors.white,
-    minHeight: 48,
-  },
-  hint: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-    marginTop: spacing.xs,
-  },
-  locationCopy: {
-    fontSize: typography.size.sm,
-    lineHeight: typography.size.sm * 1.5,
-    color: colors.mutedForeground,
-    marginBottom: spacing.md,
-  },
-  locationPermissionBtn: {
-    minHeight: 48,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surfaceSelected,
-  },
-  locationPermissionBtnGranted: {
-    opacity: 0.8,
-  },
-  locationPermissionText: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-    color: colors.primary,
-  },
-  regionRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  regionBtn: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    borderRadius: radii.lg,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.secondary,
-    minHeight: 48,
-    justifyContent: 'center',
-  },
-  regionBtnText: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.medium,
-    color: colors.foreground,
-  },
-  sizeRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-  },
-  sizeBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.lg,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.secondary,
-    minWidth: 48,
-    minHeight: 44,
-  },
-  sizeBtnText: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.medium,
-    color: colors.foreground,
-  },
+  footerBtnDisabled: { opacity: 0.4 },
 });

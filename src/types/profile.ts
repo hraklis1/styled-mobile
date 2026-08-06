@@ -46,8 +46,8 @@ export type Profile = {
   photoUrl: string | null;
   stylePreference: string[] | null;
   colorPalette: string[] | null;
-  budgetRange: string | null;
-  bodyType: string | null;
+  budgetRange: string[] | null;
+  bodyType: string[] | null;
   fitPreference: string | null;
   fitSilhouette: string | null;
   styleProfileDetails: StyleProfileDetails | null;

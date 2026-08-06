@@ -18,8 +18,8 @@ export type ProfileInput = {
   photoUrl?: string | null;
   stylePreference?: string[] | null;
   colorPalette?: string[] | null;
-  budgetRange?: string | null;
-  bodyType?: string | null;
+  budgetRange?: string[] | null;
+  bodyType?: string[] | null;
   fitPreference?: string | null;
   fitSilhouette?: string | null;
   styleProfileDetails?: StyleProfileDetails | null;
@@ -42,8 +42,16 @@ export type ProfileInput = {
   measurementHeight?: string | null;
 };
 
-export function useUpdateProfile() {
+/**
+ * @param options.silent Suppress the failure alert. For background autosaves —
+ *   onboarding checkpoints each step as you advance, and an alert per step on a
+ *   flaky connection would be worse than the dropped write it is reporting. The
+ *   next checkpoint sends the whole accumulated payload again, so a silent
+ *   failure self-heals. Keep it false wherever the user pressed Save.
+ */
+export function useUpdateProfile(options?: { silent?: boolean }) {
   const qc = useQueryClient();
+  const silent = options?.silent ?? false;
   return useMutation({
     mutationFn: (input: ProfileInput) =>
       api.patch<Profile>('/api/profile', input).then((r) => r.data),
@@ -51,7 +59,7 @@ export function useUpdateProfile() {
       qc.setQueryData(PROFILE_QUERY_KEY, data);
     },
     onError: () => {
-      Alert.alert('Error', "Couldn't save profile. Please try again.");
+      if (!silent) Alert.alert('Error', "Couldn't save profile. Please try again.");
     },
   });
 }

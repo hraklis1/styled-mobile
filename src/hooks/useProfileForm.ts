@@ -26,8 +26,8 @@ export type ProfileFormSnapshot = {
   displayName: string;
   stylePreference: string[];
   colorPalette: string[];
-  budgetRange: string;
-  bodyType: string;
+  budgetRange: string[];
+  bodyType: string[];
   fitPreference: string;
   fitSilhouette: string;
   styleProfileDetails: StyleProfileDetails;
@@ -230,8 +230,12 @@ export function buildProfileUpdatePayload(values: ProfileFormSnapshot): ProfileI
       ? normalizeStylePreference(values.stylePreference)
       : null,
     colorPalette: uniqueClean(values.colorPalette).length > 0 ? uniqueClean(values.colorPalette) : null,
-    budgetRange: normalizeBudgetRange(values.budgetRange) || null,
-    bodyType: normalizeBodyType(values.bodyType) || null,
+    budgetRange: normalizeBudgetRange(values.budgetRange).length > 0
+      ? normalizeBudgetRange(values.budgetRange)
+      : null,
+    bodyType: normalizeBodyType(values.bodyType).length > 0
+      ? normalizeBodyType(values.bodyType)
+      : null,
     fitPreference: fitPreference || null,
     fitSilhouette: fitSilhouette || null,
     styleProfileDetails: hasStyleProfileDetailsValue(styleProfileDetails) ? styleProfileDetails : null,
@@ -308,6 +312,11 @@ function snapshotKey(values: ProfileFormSnapshot): Record<string, unknown> {
     ...values,
     stylePreference: JSON.stringify(values.stylePreference),
     colorPalette: JSON.stringify(values.colorPalette),
+    // Arrays have to be compared by value, not identity — a save rebuilds them
+    // through the normalizers, so an identity check would report the form dirty
+    // the instant it finished saving.
+    budgetRange: JSON.stringify(values.budgetRange),
+    bodyType: JSON.stringify(values.bodyType),
     retailers: JSON.stringify(values.retailers),
     occasions: JSON.stringify(values.occasions),
     styleProfileDetails: JSON.stringify(normalizeStyleProfileDetails(values.styleProfileDetails)),
@@ -321,8 +330,8 @@ export function useProfileForm() {
   const [displayName, setDisplayName] = useState('');
   const [stylePreference, setStylePreference] = useState<string[]>([]);
   const [colorPalette, setColorPalette] = useState<string[]>([]);
-  const [budgetRange, setBudgetRange] = useState('');
-  const [bodyType, setBodyType] = useState('');
+  const [budgetRange, setBudgetRange] = useState<string[]>([]);
+  const [bodyType, setBodyType] = useState<string[]>([]);
   const [fitPreference, setFitPreferenceState] = useState('');
   const [fitSilhouette, setFitSilhouette] = useState('');
   const [styleProfileDetails, setStyleProfileDetails] = useState<StyleProfileDetails>(() => createEmptyStyleProfileDetails());
@@ -432,7 +441,7 @@ export function useProfileForm() {
       stylePreference.length > 0,
       colorPalette.length > 0 || details.favoriteColors.length > 0,
       occasions.length > 0,
-      !!budgetRange,
+      budgetRange.length > 0,
       !!sizeTop || !!sizeShoe || !!sizeBottomWaist,
       !!location,
       retailers.length > 0,
@@ -532,8 +541,8 @@ export function useProfileForm() {
             ...currentSnapshot,
             stylePreference: payload.stylePreference ?? [],
             colorPalette: payload.colorPalette ?? [],
-            budgetRange: payload.budgetRange ?? '',
-            bodyType: payload.bodyType ?? '',
+            budgetRange: payload.budgetRange ?? [],
+            bodyType: payload.bodyType ?? [],
             fitPreference: payload.fitPreference ?? '',
             fitSilhouette: payload.fitSilhouette ?? '',
             styleProfileDetails: payload.styleProfileDetails ?? createEmptyStyleProfileDetails(),

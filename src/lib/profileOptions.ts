@@ -1,9 +1,21 @@
 import type { StyleProfileDetails } from '../types/profile';
 
+/** The `fitPreference` values. Drives which options are worth offering. */
+export type Cut = 'masculine_cut' | 'feminine_cut' | 'neutral_fluid';
+
 export type ProfileOption = {
   value: string;
   label: string;
   description?: string;
+  /**
+   * Cuts this option is offered for. Absent means every cut.
+   *
+   * Only for options that are genuinely inapplicable — asking someone who shops
+   * menswear whether they want to avoid heels or bodycon is noise that makes the
+   * whole questionnaire feel untailored. Everything that merely *skews* one way
+   * stays unmarked; over-filtering is its own failure.
+   */
+  cuts?: Cut[];
 };
 
 export type PaletteOption = ProfileOption & {
@@ -88,6 +100,34 @@ export const OCCASION_OPTIONS: ProfileOption[] = [
   { value: 'wedding_guest', label: 'Wedding / guest' },
   { value: 'interview', label: 'Interview' },
   { value: 'school', label: 'School' },
+];
+
+/**
+ * Common "never put me in this" answers, offered as chips so the onboarding
+ * step costs a tap instead of a sentence. Free-text entry stays alongside —
+ * these are a starting point, not the vocabulary.
+ *
+ * Stored in `styleProfileDetails.styleAvoids`, which the stylist prompt renders
+ * verbatim as "Style avoids", so the labels are written to read as instructions
+ * to a person.
+ */
+export const STYLE_AVOID_OPTIONS: ProfileOption[] = [
+  { value: 'skinny jeans', label: 'Skinny jeans' },
+  { value: 'visible logos', label: 'Visible logos' },
+  { value: 'graphic tees', label: 'Graphic tees' },
+  { value: 'bold prints', label: 'Bold prints' },
+  { value: 'neon or fluorescent colors', label: 'Neon' },
+  { value: 'animal print', label: 'Animal print' },
+  { value: 'ripped or distressed denim', label: 'Distressed denim' },
+  { value: 'oversized or boxy shapes', label: 'Boxy shapes' },
+  { value: 'sleeveless tops', label: 'Sleeveless' },
+  { value: 'chunky sneakers', label: 'Chunky sneakers' },
+  { value: 'suits and tailoring', label: 'Suiting' },
+  { value: 'fast fashion', label: 'Fast fashion' },
+  { value: 'crop tops', label: 'Crop tops', cuts: ['feminine_cut'] },
+  { value: 'bodycon or clingy fits', label: 'Bodycon / clingy', cuts: ['feminine_cut'] },
+  { value: 'heels', label: 'Heels', cuts: ['feminine_cut'] },
+  { value: 'short hemlines', label: 'Short hemlines', cuts: ['feminine_cut'] },
 ];
 
 export const COLOR_UNDERTONE_OPTIONS: ProfileOption[] = [
@@ -192,16 +232,16 @@ export const SENSITIVE_PROPORTION_OPTIONS: ProfileOption[] = [
   { value: 'short_waist', label: 'Short waist' },
   { value: 'broad_shoulders', label: 'Broad shoulders' },
   { value: 'narrow_shoulders', label: 'Narrow shoulders' },
-  { value: 'full_bust', label: 'Full bust' },
-  { value: 'curvy_hips', label: 'Curvy hips' },
+  { value: 'full_bust', label: 'Full bust', cuts: ['feminine_cut'] },
+  { value: 'curvy_hips', label: 'Curvy hips', cuts: ['feminine_cut'] },
 ];
 
 export const COVERAGE_OPTIONS: ProfileOption[] = [
   { value: 'higher_necklines', label: 'Higher necklines' },
-  { value: 'lower_necklines', label: 'Lower necklines' },
+  { value: 'lower_necklines', label: 'Lower necklines', cuts: ['feminine_cut'] },
   { value: 'sleeves', label: 'Sleeves' },
-  { value: 'longer_hemlines', label: 'Longer hemlines' },
-  { value: 'waist_definition', label: 'Waist definition' },
+  { value: 'longer_hemlines', label: 'Longer hemlines', cuts: ['feminine_cut'] },
+  { value: 'waist_definition', label: 'Waist definition', cuts: ['feminine_cut'] },
   { value: 'avoid_cling', label: 'Avoid cling' },
 ];
 
@@ -273,12 +313,21 @@ export function normalizeStylePreference(values: readonly string[] | null | unde
   return uniqueClean(uniqueClean(values).map((value) => normalizeOne(value, STYLE_ALIASES)));
 }
 
-export function normalizeBudgetRange(value: string | null | undefined): string {
-  return value ? normalizeOne(value, BUDGET_ALIASES) : '';
+/**
+ * `budgetRange` and `bodyType` became text[] in backend migration 0035.
+ *
+ * Both still accept a bare string, because a profile row written by an older
+ * build — or by the web app before it caught up — comes back as a scalar. The
+ * server coerces on write; this coerces on read.
+ */
+export function normalizeBudgetRange(value: readonly string[] | string | null | undefined): string[] {
+  const values = typeof value === 'string' ? [value] : value;
+  return uniqueClean(uniqueClean(values).map((v) => normalizeOne(v, BUDGET_ALIASES)));
 }
 
-export function normalizeBodyType(value: string | null | undefined): string {
-  return value ? normalizeOne(value, BODY_ALIASES) : '';
+export function normalizeBodyType(value: readonly string[] | string | null | undefined): string[] {
+  const values = typeof value === 'string' ? [value] : value;
+  return uniqueClean(uniqueClean(values).map((v) => normalizeOne(v, BODY_ALIASES)));
 }
 
 export function normalizeOccasions(values: readonly string[] | null | undefined): string[] {
@@ -394,6 +443,28 @@ export function hasStyleProfileDetailsValue(details: StyleProfileDetails): boole
     normalized.sensitiveFit.comfort.length > 0 ||
     !!normalized.sensitiveFit.notes
   );
+}
+
+/**
+ * Narrow an option list to the cuts a person actually shops.
+ *
+ * `selected` is not optional in spirit: an option the user has already chosen is
+ * always kept, even when the cut says otherwise. Without that, changing cut
+ * would strand a saved selection on a chip that is no longer rendered — still in
+ * the payload, still in the stylist prompt, and impossible to remove from the
+ * UI. Same reasoning as the `showDressSize` escape hatch on the Profile screen.
+ *
+ * `neutral_fluid`, and an unanswered cut, see everything. That is the point of
+ * the answer.
+ */
+export function optionsForCut<T extends ProfileOption>(
+  options: readonly T[],
+  cut: string | null | undefined,
+  selected: readonly string[] = [],
+): T[] {
+  if (!cut || cut === 'neutral_fluid') return [...options];
+  const keep = new Set(selected);
+  return options.filter((option) => !option.cuts || option.cuts.includes(cut as Cut) || keep.has(option.value));
 }
 
 export function optionLabel(options: readonly ProfileOption[], value: string | null | undefined): string {
