@@ -2,13 +2,85 @@ import {
   COVERAGE_OPTIONS,
   SENSITIVE_PROPORTION_OPTIONS,
   STYLE_AVOID_OPTIONS,
+  normalizeBodyType,
   normalizeBudgetRange,
   normalizeFitFields,
   normalizeOccasions,
   normalizeStylePreference,
   normalizeStyleProfileDetails,
   optionsForCut,
+  uniqueClean,
 } from '../profileOptions';
+
+describe('uniqueClean', () => {
+  it('cleans, dedupes and preserves order', () => {
+    expect(uniqueClean([' pear ', 'pear', '', 'apple'])).toEqual(['pear', 'apple']);
+  });
+
+  it('survives shapes the API can return but the type forbids', () => {
+    // A profile row that predates migration 0035 comes back scalar.
+    expect(uniqueClean('pear')).toEqual(['pear']);
+    expect(uniqueClean(null)).toEqual([]);
+    expect(uniqueClean(undefined)).toEqual([]);
+    // These previously threw: for...of on a non-iterable calls a missing
+    // Symbol.iterator, which Hermes reports as "undefined is not a function".
+    for (const shape of [{}, { 0: 'pear' }, 42, true]) {
+      expect(uniqueClean(shape as unknown as string[])).toEqual([]);
+    }
+  });
+});
+
+describe('normalizeBodyType', () => {
+  it('accepts both the array and the legacy scalar', () => {
+    expect(normalizeBodyType(['pear'])).toEqual(['pear']);
+    expect(normalizeBodyType('pear')).toEqual(['pear']);
+    expect(normalizeBodyType(null)).toEqual([]);
+  });
+
+  it('does not throw on a malformed value', () => {
+    expect(() => normalizeBodyType({} as unknown as string[])).not.toThrow();
+    expect(normalizeBodyType({} as unknown as string[])).toEqual([]);
+  });
+});
+
+describe('normalizeStyleProfileDetails on hostile input', () => {
+  // style_profile_details is jsonb, so unlike the text[] columns nothing at the
+  // database level constrains its shape. Only the top-level type is checked
+  // before the sub-fields are handed to uniqueClean.
+  it('survives sub-fields that are not arrays', () => {
+    const hostile = {
+      styleAvoids: {},
+      favoriteColors: 42,
+      avoidedColors: 'navy',
+      materialLikes: true,
+      materialAvoids: { 0: 'wool' },
+      patternLikes: null,
+      brandAvoids: undefined,
+      shoppingPriorities: { nested: { deep: true } },
+      careConstraints: [['nested array']],
+      colorAnalysis: 'warm',
+      sensitiveFit: 7,
+      categoryBudgets: 'not-an-object',
+    };
+
+    expect(() => normalizeStyleProfileDetails(hostile)).not.toThrow();
+
+    const out = normalizeStyleProfileDetails(hostile);
+    expect(out.version).toBe(1);
+    expect(out.styleAvoids).toEqual([]);
+    expect(out.favoriteColors).toEqual([]);
+    // A scalar string is still salvaged rather than discarded.
+    expect(out.avoidedColors).toEqual(['navy']);
+    expect(out.colorAnalysis.metalPreference).toEqual([]);
+    expect(out.sensitiveFit.proportions).toEqual([]);
+  });
+
+  it('survives the primitives jsonb can legally hold at the top level', () => {
+    for (const raw of [null, undefined, 'a string', 42, true, []]) {
+      expect(() => normalizeStyleProfileDetails(raw)).not.toThrow();
+    }
+  });
+});
 
 describe('optionsForCut', () => {
   const values = (options: { value: string }[]) => options.map((o) => o.value);

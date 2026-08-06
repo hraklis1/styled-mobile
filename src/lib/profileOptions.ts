@@ -292,10 +292,21 @@ function normalizeOne(value: string, aliases: Record<string, string>): string {
   return aliases[trimmed] ?? trimmed;
 }
 
-export function uniqueClean(values: readonly string[] | null | undefined): string[] {
+/**
+ * Tolerates any input shape, not just the declared one. These values arrive from
+ * an API response, so the type is a promise the runtime does not keep: `?? []`
+ * covers null and undefined, but a bare object or number still reaches `for...of`,
+ * which throws on the missing `Symbol.iterator` — surfacing on Hermes as the
+ * unhelpful "undefined is not a function".
+ *
+ * A scalar string is read as a single value, matching the tolerance the
+ * normalizers below already document. Anything else yields an empty list.
+ */
+export function uniqueClean(values: readonly string[] | string | null | undefined): string[] {
+  const list = Array.isArray(values) ? values : typeof values === 'string' ? [values] : [];
   const out: string[] = [];
   const seen = new Set<string>();
-  for (const value of values ?? []) {
+  for (const value of list) {
     const trimmed = String(value ?? '').trim();
     if (!trimmed || seen.has(trimmed)) continue;
     seen.add(trimmed);
