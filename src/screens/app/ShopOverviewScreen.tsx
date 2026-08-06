@@ -211,6 +211,9 @@ export function ShopOverviewScreen({ navigation }: ShopOverviewScreenProps) {
         </EditorialSection>
 
         <EditorialSection style={styles.section} title="Decisions to make" actionLabel={activeFinds.length ? 'View shortlist' : undefined} onAction={() => openHistory({ catalogFilter: 'active' })}>
+          <Text style={styles.decisionsDescription}>
+            Store finds you’re considering, gathered here to help you decide what’s worth buying.
+          </Text>
           {activeFinds.length > 0 ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalCards}>
               {activeFinds.map((item) => (
@@ -331,6 +334,7 @@ const styles = StyleSheet.create({
   inlineButton: { alignSelf: 'flex-start' },
   textAction: { minHeight: 44, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: spacing.xs },
   textActionLabel: { color: colors.primary, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+  decisionsDescription: { color: colors.mutedForeground, fontSize: typography.size.sm, lineHeight: 20, marginBottom: spacing.md },
   horizontalCards: { gap: spacing.md, paddingRight: spacing.lg },
   savedLooks: { gap: spacing.md },
   emptyCard: { gap: spacing.md, padding: spacing.lg, borderRadius: radii.lg, borderCurve: 'continuous', backgroundColor: colors.surfaceSubtle },
