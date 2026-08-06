@@ -61,15 +61,26 @@ api() {
   esac
 }
 
-need_slugs() {
-  if [ -z "$ORG" ] || [ -z "$PROJECT" ]; then
+need_org() {
+  if [ -z "$ORG" ]; then
     cat >&2 <<'EOF'
-error: SENTRY_ORG and/or SENTRY_PROJECT are not set in .env
+error: SENTRY_ORG is not set in .env
 
-Run:  ./scripts/sentry.sh orgs        then  ./scripts/sentry.sh projects
-and add the slugs to .env:
-  SENTRY_ORG=your-org-slug
-  SENTRY_PROJECT=styled-mobile
+Run:  ./scripts/sentry.sh orgs
+and add the slug to .env:  SENTRY_ORG=your-org-slug
+EOF
+    exit 1
+  fi
+}
+
+need_project() {
+  need_org
+  if [ -z "$PROJECT" ]; then
+    cat >&2 <<'EOF'
+error: SENTRY_PROJECT is not set in .env
+
+Run:  ./scripts/sentry.sh projects
+and add the slug to .env:  SENTRY_PROJECT=styled-mobile
 EOF
     exit 1
   fi
@@ -83,11 +94,11 @@ case "$cmd" in
     api "/organizations/" | fmt -r '.[] | "\(.slug)\t\(.name)"'
     ;;
   projects)
-    need_slugs
+    need_org
     api "/organizations/$ORG/projects/" | fmt -r '.[] | "\(.slug)\t\(.platform // "-")"'
     ;;
   issues)
-    need_slugs
+    need_project
     period="${2:-24h}"
     api "/projects/$ORG/$PROJECT/issues/?query=is:unresolved&statsPeriod=$period&limit=25" \
       | fmt -r '.[] | "\(.shortId)\t[\(.count)x, \(.userCount) users]\t\(.title)\n\tlast: \(.lastSeen)\tid: \(.id)"'
