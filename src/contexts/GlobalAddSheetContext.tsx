@@ -10,6 +10,8 @@ type SheetCallbacks = {
   onFromLibrary?: () => void;
   onBatchImport?: () => void;
   onItemsSaved?: (items: Item[]) => void;
+  onActionStart?: (action: 'camera' | 'library' | 'batch') => void;
+  onDismiss?: () => void;
 };
 
 type GlobalAddSheetContextValue = {
@@ -41,17 +43,25 @@ export function GlobalAddSheetProvider({ children }: Props) {
     setVisible(true);
   }, []);
 
+  const closeAddSheet = useCallback(() => {
+    setVisible(false);
+    const onDismiss = callbacksRef.current.onDismiss;
+    callbacksRef.current = {};
+    onDismiss?.();
+  }, []);
+
   return (
     <GlobalAddSheetContext.Provider value={{ openAddSheet }}>
       <View style={styles.root}>{children}</View>
       {visible && (
         <AddActionSheet
           visible={visible}
-          onClose={() => setVisible(false)}
+          onClose={closeAddSheet}
           onTakePhoto={callbacksRef.current.onTakePhoto}
           onFromLibrary={callbacksRef.current.onFromLibrary}
           onBatchImport={callbacksRef.current.onBatchImport}
           onItemsSaved={callbacksRef.current.onItemsSaved}
+          onActionStart={callbacksRef.current.onActionStart}
         />
       )}
     </GlobalAddSheetContext.Provider>

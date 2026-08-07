@@ -2,13 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Modal,
   ScrollView,
-  SectionList,
   StyleSheet,
   Text,
   TouchableOpacity,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import {
@@ -22,9 +21,10 @@ import { File } from 'expo-file-system';
 import * as Crypto from 'expo-crypto';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
+import { CommonActions, StackActions, usePreventRemove } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ShoppingEditCard } from '../../components/shopping/ShoppingEditCard';
+import { ShoppingSessionBundle } from '../../components/shopping/ShoppingSessionBundle';
 import { ShoppingSnapDetail } from '../../components/shopping/ShoppingSnapDetail';
 import { ShoppingStoreFilterSheet } from '../../components/shopping/ShoppingStoreFilterSheet';
 import { useAuth } from '../../contexts/AuthContext';
@@ -33,7 +33,6 @@ import { SHOPPING_SNAPS_QUERY_KEY, useShoppingSnaps } from '../../hooks/useShopp
 import { queryClient } from '../../lib/queryClient';
 import {
   buildShoppingEditItems,
-  dateGroupLabel,
   filterShoppingEditItems,
   mergeShoppingSnaps,
   summarizeShoppingEditItems,
@@ -47,7 +46,7 @@ import {
   type ShoppingSnapOrganizationStage,
   type ShoppingSnapOrganizationUpdate,
 } from '../../lib/shoppingSnapOrganizer';
-import { formatShoppingPlaceLabel } from '../../lib/shoppingLocations';
+import { buildShoppingSessionGroups } from '../../lib/shoppingSessionGroups';
 import {
   buildShoppingStoreOptions,
   countItemsWithoutStore,
@@ -69,17 +68,6 @@ import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { ShoppingCaptureRole, ShoppingFindCatalogPatch, ShoppingFindCatalogStatus, ShoppingSnap } from '../../types/shoppingSnap';
 
-type GalleryRow = ShoppingEditItem[];
-type GallerySection = {
-  key: string;
-  dateLabel: string;
-  storeName: string;
-  placeLabel: string | null;
-  itemCount: number;
-  photoCount: number;
-  knownSpend: number | null;
-  data: GalleryRow[];
-};
 type ShoppingCatalogFilter = 'all' | 'active' | 'favorite' | ShoppingFindCatalogStatus;
 
 const DATE_OPTIONS: { value: ShoppingDateFilter; label: string }[] = [
@@ -109,43 +97,6 @@ function priceLabel(price: number | null): string | null {
     currency: 'USD',
     maximumFractionDigits: 2,
   }).format(price);
-}
-
-function itemPlaceLabel(item: ShoppingEditItem): string | null {
-  const label = formatShoppingPlaceLabel(item);
-  return label === 'Location not set' ? null : label;
-}
-
-function buildSections(items: ShoppingEditItem[]): GallerySection[] {
-  const grouped = new Map<string, { dateLabel: string; storeName: string; placeLabel: string | null; items: ShoppingEditItem[] }>();
-
-  for (const item of items) {
-    const date = new Date(item.capturedAt);
-    const dateKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
-    const storeName = item.storeName ?? 'Store not set';
-    const placeLabel = itemPlaceLabel(item);
-    const key = `${dateKey}:${storeName}:${placeLabel ?? ''}`;
-    const current = grouped.get(key) ?? { dateLabel: dateGroupLabel(date), storeName, placeLabel, items: [] };
-    current.items.push(item);
-    grouped.set(key, current);
-  }
-
-  return [...grouped.entries()].map(([key, group]) => ({
-    key,
-    dateLabel: group.dateLabel,
-    storeName: group.storeName,
-    placeLabel: group.placeLabel,
-    itemCount: group.items.length,
-    photoCount: group.items.reduce((count, item) => count + item.photoCount, 0),
-    knownSpend: group.items.some((item) => item.extractedPrice !== null)
-      ? group.items.reduce((total, item) => total + (item.extractedPrice ?? 0), 0)
-      : null,
-    data: group.items.reduce<GalleryRow[]>((rows, item, index) => {
-      if (index % 2 === 0) rows.push([item]);
-      else rows[rows.length - 1].push(item);
-      return rows;
-    }, []),
-  }));
 }
 
 function roleLabel(role: ShoppingCaptureRole): string {
@@ -413,7 +364,6 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   const storeChipOffsetsRef = useRef<Record<string, number>>({});
   const organizerOpenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
   const { user } = useAuth();
   const { openStylist } = useGlobalAIStylist();
   const { data: remoteSnaps = [], isLoading, isRefetching, isError, refetch } = useShoppingSnaps();
@@ -434,13 +384,42 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   const [isSavingCatalog, setIsSavingCatalog] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(() => new Set());
+  const [expandedGroupKeys, setExpandedGroupKeys] = useState<Set<string>>(() => new Set());
   const [isDeletingSelection, setIsDeletingSelection] = useState(false);
+  const [returningToTab, setReturningToTab] = useState(false);
 
   const allSnaps = useMemo(
     () => mergeShoppingSnaps(remoteSnaps, pendingUploads),
     [pendingUploads, remoteSnaps],
   );
   const allItems = useMemo(() => buildShoppingEditItems(allSnaps), [allSnaps]);
+
+  // Opened from another tab (Home): backing or swiping out should land there,
+  // not on the Shop tab this screen happens to live in.
+  const returnTo = route.params?.returnTo;
+  usePreventRemove(returnTo != null && !returningToTab, () => {
+    setReturningToTab(true);
+  });
+
+  // Reached from another tab, this screen is the only route on the Shop stack,
+  // so popping it would leave that tab with nothing to render. Put ShopMain in
+  // its place before handing focus back.
+  useEffect(() => {
+    if (!returningToTab || !returnTo) return;
+    const timeout = setTimeout(() => {
+      navigation.dispatch(StackActions.replace('ShopMain'));
+      navigation.dispatch(CommonActions.navigate({ name: returnTo }));
+    }, 0);
+    return () => clearTimeout(timeout);
+  }, [navigation, returningToTab, returnTo]);
+
+  const goBack = useCallback(() => {
+    if (returnTo) {
+      setReturningToTab(true);
+      return;
+    }
+    navigation.goBack();
+  }, [navigation, returnTo]);
 
   useEffect(() => {
     const requestedFilter = route.params?.catalogFilter;
@@ -489,7 +468,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
     },
     [baseFilteredItems, catalogFilter, reviewReasonFilter],
   );
-  const sections = useMemo(() => buildSections(filteredItems), [filteredItems]);
+  const groups = useMemo(() => buildShoppingSessionGroups(filteredItems), [filteredItems]);
   const selectedGroupSnaps = useMemo(() => {
     if (!selectedSnap) return [];
     return allSnaps
@@ -500,7 +479,6 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
     () => allItems.filter((item) => selectedItemIds.has(item.id)).flatMap((item) => item.snaps),
     [allItems, selectedItemIds],
   );
-  const cardWidth = (width - spacing.lg * 2 - spacing.sm) / 2;
   const pendingCount = pendingUploads.length;
   const activeFilterCount = Number(storeFilter !== 'all') + Number(dateFilter !== 'all') + Number(syncFilter !== 'all') + Number(reviewFilter !== 'all') + Number(reviewReasonFilter !== 'all') + Number(catalogFilter !== 'all');
 
@@ -508,6 +486,13 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
     if (organizerOpenTimerRef.current) clearTimeout(organizerOpenTimerRef.current);
     if (storeSheetOpenTimerRef.current) clearTimeout(storeSheetOpenTimerRef.current);
   }, []);
+
+  // A lone trip has nothing to be bundled away from — open it on arrival.
+  useEffect(() => {
+    if (groups.length !== 1) return;
+    const [only] = groups;
+    setExpandedGroupKeys((current) => (current.has(only.key) ? current : new Set(current).add(only.key)));
+  }, [groups]);
 
   // A store picked in the sheet may sit off-screen in the chip rail — bring it into view.
   useEffect(() => {
@@ -824,26 +809,25 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
     [],
   );
 
-  const renderCard = useCallback((item: ShoppingEditItem) => (
-    <ShoppingEditCard
-      key={item.id}
-      item={item}
-      width={cardWidth}
-      isSelected={selectedItemIds.has(item.id)}
-      selectionMode={selectionMode}
-      onPress={(snap) => {
-        if (selectionMode) toggleSelectItem(item.id);
-        else setSelectedSnap(snap);
-      }}
-      onLongPress={() => startSelection(item.id)}
-    />
-  ), [cardWidth, selectedItemIds, selectionMode, startSelection, toggleSelectItem]);
+  const toggleGroup = useCallback((key: string) => {
+    setExpandedGroupKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const pressItem = useCallback((item: ShoppingEditItem, snap: ShoppingSnap) => {
+    if (selectionMode) toggleSelectItem(item.id);
+    else setSelectedSnap(snap);
+  }, [selectionMode, toggleSelectItem]);
 
   const listHeader = (
     <View>
       <View style={[styles.hero, { paddingTop: insets.top + spacing.lg }]}>
         <View style={styles.heroTopRow}>
-          <TouchableOpacity style={styles.headerIcon} onPress={() => navigation.goBack()} accessibilityLabel="Back">
+          <TouchableOpacity style={styles.headerIcon} onPress={goBack} accessibilityLabel="Back">
             <Ionicons name="chevron-back" size={23} color={colors.foreground} />
           </TouchableOpacity>
           <View style={styles.heroActions}>
@@ -985,33 +969,19 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
 
   return (
     <View style={styles.root}>
-      <SectionList
-        sections={sections}
-        keyExtractor={(row) => row.map((item) => item.id).join(':')}
-        renderItem={({ item: row }) => (
-          <View style={styles.photoRow}>
-            {row.map(renderCard)}
-            {row.length === 1 ? <View style={{ width: cardWidth }} /> : null}
-          </View>
-        )}
-        renderSectionHeader={({ section }) => (
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionHeaderCopy}>
-              <Text style={styles.sectionDate}>{section.dateLabel}</Text>
-              <Text style={styles.sectionStore} numberOfLines={1}>{section.storeName}</Text>
-              {section.placeLabel ? (
-                <Text style={styles.sectionLocation} numberOfLines={2}>{section.placeLabel}</Text>
-              ) : null}
-            </View>
-            <View style={styles.sectionStats}>
-              <Text style={styles.sectionStatText}>
-                {section.itemCount} item{section.itemCount === 1 ? '' : 's'} · {section.photoCount} photo{section.photoCount === 1 ? '' : 's'}
-              </Text>
-              {section.knownSpend !== null ? (
-                <Text style={styles.sectionSpend}>{priceLabel(section.knownSpend)}</Text>
-              ) : null}
-            </View>
-          </View>
+      <FlatList
+        data={groups}
+        keyExtractor={(group) => group.key}
+        renderItem={({ item: group }) => (
+          <ShoppingSessionBundle
+            group={group}
+            expanded={selectionMode || expandedGroupKeys.has(group.key)}
+            onToggle={() => toggleGroup(group.key)}
+            selectionMode={selectionMode}
+            selectedItemIds={selectedItemIds}
+            onPressItem={pressItem}
+            onLongPressItem={(item) => startSelection(item.id)}
+          />
         )}
         ListHeaderComponent={listHeader}
         ListEmptyComponent={isLoading ? (
@@ -1033,10 +1003,9 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
         contentContainerStyle={[
           styles.listContent,
           selectionMode && styles.listContentSelecting,
-          sections.length === 0 && styles.listContentEmpty,
+          groups.length === 0 && styles.listContentEmpty,
         ]}
         showsVerticalScrollIndicator={false}
-        stickySectionHeadersEnabled={false}
         refreshing={isRefetching}
         onRefresh={() => void refetch()}
       />
@@ -1277,15 +1246,6 @@ const styles = StyleSheet.create({
   storeFilterTextActive: { fontWeight: typography.weight.semibold, color: colors.primaryForeground },
   remoteError: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, backgroundColor: colors.accent },
   remoteErrorText: { flex: 1, fontSize: typography.size.xs, color: colors.secondaryForeground },
-  sectionHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.sm },
-  sectionHeaderCopy: { flex: 1 },
-  sectionDate: { fontFamily: typography.family.display, fontSize: typography.size.xl, color: colors.foreground },
-  sectionStore: { paddingTop: spacing.xs, fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.primary },
-  sectionLocation: { paddingTop: 1, fontSize: typography.size.xs, lineHeight: 17, color: colors.mutedForeground },
-  sectionStats: { alignItems: 'flex-end', gap: 2, paddingTop: 4 },
-  sectionStatText: { fontSize: 10, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
-  sectionSpend: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.foreground, fontVariant: ['tabular-nums'] },
-  photoRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   emptyState: { flex: 1, minHeight: 420, alignItems: 'center', justifyContent: 'center', gap: spacing.md, paddingHorizontal: spacing.xl },
   emptyMonogram: { width: 76, height: 76, alignItems: 'center', justifyContent: 'center', borderRadius: 38, backgroundColor: colors.accent },
   emptyTitle: { fontFamily: typography.family.display, fontSize: typography.size.xxl, textAlign: 'center', color: colors.foreground },

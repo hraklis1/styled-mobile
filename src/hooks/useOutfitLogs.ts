@@ -16,6 +16,7 @@ export type OutfitScanResult = {
   };
   potential_match_ids: number[];
   bbox: { x: number; y: number; width: number; height: number } | null;
+  crop: string | null;
 };
 
 export type OutfitLog = {

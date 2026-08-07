@@ -19,7 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { track } from '../../lib/analytics';
-import { useItems } from '../../hooks/useItems';
+import { useCreateItem, useItems } from '../../hooks/useItems';
 import { useCreateOutfitLog, useScanOutfitLog, type OutfitScanResult } from '../../hooks/useOutfitLogs';
 import { useCameraLaunch, useLibraryLaunch } from '../../hooks/useCameraLaunch';
 import { resolveImageUri } from '../../lib/resolveImageUri';
@@ -27,7 +27,16 @@ import { itemImageContentFit, itemImageUri } from '../../lib/itemImage';
 import { LocationAutocompleteInput } from '../primitives/LocationAutocompleteInput';
 import { PhotoSourceSheet } from '../primitives/PhotoSourceSheet';
 import { colors, spacing, typography, radii } from '../../theme';
-import type { Item } from '../../types/item';
+import { CATEGORY_LABELS, CATEGORY_ORDER, type Item, type ItemCategory } from '../../types/item';
+import {
+  buildNewClosetItemInput,
+  initialScanSelections,
+  mergeUniqueItemIds,
+  resolvedScanItemIds,
+  scanResolutionCounts,
+  unresolvedScanIndexes,
+  type ScanSelections,
+} from '../../lib/outfit-log-scan';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -66,11 +75,18 @@ function displayLogDate(d: Date): string {
 type DateMode = 'today' | 'yesterday' | 'custom';
 type SheetView = 'form' | 'picker' | 'scan-review';
 
+type NewItemDraft = {
+  name: string;
+  brand: string;
+  category: ItemCategory;
+  color: string;
+};
+
 type Props = {
   visible: boolean;
   onClose: () => void;
   onSaved?: () => void;
-  onAddToWardrobe?: () => void;
+  onAddToWardrobe?: (onItemsSaved: (items: Item[]) => void) => void;
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -79,6 +95,7 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
   const { width: screenWidth } = useWindowDimensions();
   const { data: allItems = [] } = useItems();
   const createLog = useCreateOutfitLog();
+  const createItem = useCreateItem();
   const scanOutfit = useScanOutfitLog();
   const launchCamera = useCameraLaunch();
   const launchLibrary = useLibraryLaunch();
@@ -105,7 +122,15 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
 
   // Scan state
   const [scanResults, setScanResults] = useState<OutfitScanResult[] | null>(null);
-  const [scanSel, setScanSel] = useState<Set<number>>(new Set());
+  const [scanSelections, setScanSelections] = useState<ScanSelections>({});
+  const [scanSkipped, setScanSkipped] = useState<Set<number>>(new Set());
+  const [scanCreated, setScanCreated] = useState<Set<number>>(new Set());
+  const [scanFailed, setScanFailed] = useState<Set<number>>(new Set());
+  const [scanTreatAsNew, setScanTreatAsNew] = useState<Set<number>>(new Set());
+  const [savingNewIndexes, setSavingNewIndexes] = useState<Set<number>>(new Set());
+  const [reviewingNew, setReviewingNew] = useState(false);
+  const [editingMatchIndex, setEditingMatchIndex] = useState<number | null>(null);
+  const [newItemDrafts, setNewItemDrafts] = useState<Record<number, NewItemDraft>>({});
   const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
   const notesRef = useRef<TextInput>(null);
@@ -133,6 +158,25 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
         it.color?.toLowerCase().includes(q)
     );
   }, [allItems, search]);
+
+  const scanCounts = useMemo(
+    () => scanResults
+      ? scanResolutionCounts(scanResults, scanSelections, scanSkipped, scanCreated)
+      : null,
+    [scanCreated, scanResults, scanSelections, scanSkipped],
+  );
+
+  const unresolvedIndexes = useMemo(
+    () => scanResults ? unresolvedScanIndexes(scanResults, scanSelections, scanSkipped) : [],
+    [scanResults, scanSelections, scanSkipped],
+  );
+
+  const newScanIndexes = useMemo(
+    () => unresolvedIndexes.filter((index) => (
+      scanTreatAsNew.has(index) || scanResults?.[index]?.potential_match_ids.length === 0
+    )),
+    [scanResults, scanTreatAsNew, unresolvedIndexes],
+  );
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
@@ -179,14 +223,23 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
 
     try {
       const results = await scanOutfit.mutateAsync(image.dataUrl);
-      const preSelected = new Set(
-        results
-          .filter((r) => r.match_id !== null && r.confidence !== 'Low')
-          .map((r) => r.match_id as number),
-      );
-      setScanSel(preSelected);
+      const selections = initialScanSelections(results);
+      setScanSelections(selections);
+      setScanSkipped(new Set());
+      setScanCreated(new Set());
+      setScanFailed(new Set());
+      setScanTreatAsNew(new Set());
+      setSavingNewIndexes(new Set());
+      setReviewingNew(false);
+      setEditingMatchIndex(null);
+      setNewItemDrafts({});
       setScanResults(results);
       setView('scan-review');
+      track('outfit_scan_completed', {
+        detected_count: results.length,
+        matched_count: Object.keys(selections).length,
+        unresolved_count: results.length - Object.keys(selections).length,
+      });
     } catch {
       Alert.alert('Scan failed', 'Could not analyze the photo. Please try again.');
     }
@@ -199,21 +252,135 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
     setTimeout(() => runScan(source), 300);
   }, [runScan]);
 
-  const applyScanResults = useCallback(() => {
-    setSelectedIds((prev) => Array.from(new Set([...prev, ...scanSel])));
+  const finishScanReview = useCallback((
+    selections: ScanSelections = scanSelections,
+    createdIndexes: Set<number> = scanCreated,
+    failedCount = scanFailed.size,
+  ) => {
+    const counts = scanResults
+      ? scanResolutionCounts(scanResults, selections, scanSkipped, createdIndexes)
+      : { matched: 0, new: 0, skipped: 0, unresolved: 0 };
+    if (counts.unresolved > 0) return;
+    setSelectedIds((prev) => mergeUniqueItemIds(prev, resolvedScanItemIds(selections, scanSkipped)));
+    track('outfit_scan_review_completed', {
+      matched_count: counts.matched,
+      new_count: counts.new,
+      skipped_count: counts.skipped,
+      failed_count: failedCount,
+    });
     setScanResults(null);
-    setScanSel(new Set());
+    setScanSelections({});
+    setScanSkipped(new Set());
+    setScanCreated(new Set());
+    setScanFailed(new Set());
+    setScanTreatAsNew(new Set());
+    setSavingNewIndexes(new Set());
+    setReviewingNew(false);
+    setEditingMatchIndex(null);
+    setNewItemDrafts({});
     setView('form');
-  }, [scanSel]);
+  }, [scanCreated, scanFailed.size, scanResults, scanSelections, scanSkipped]);
 
-  const toggleScanSel = useCallback((id: number) => {
-    setScanSel((prev) => {
+  const chooseScanMatch = useCallback((index: number, itemId: number) => {
+    setScanSelections((prev) => ({ ...prev, [index]: itemId }));
+    setScanSkipped((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      next.delete(index);
+      return next;
+    });
+    setScanFailed((prev) => {
+      const next = new Set(prev);
+      next.delete(index);
+      return next;
+    });
+    setScanTreatAsNew((prev) => {
+      const next = new Set(prev);
+      next.delete(index);
+      return next;
+    });
+    setEditingMatchIndex(null);
+  }, []);
+
+  const skipScanResult = useCallback((index: number) => {
+    setScanSkipped((prev) => new Set(prev).add(index));
+    setScanFailed((prev) => {
+      const next = new Set(prev);
+      next.delete(index);
+      return next;
+    });
+    setEditingMatchIndex(null);
+  }, []);
+
+  const restoreScanResult = useCallback((index: number) => {
+    setScanSkipped((prev) => {
+      const next = new Set(prev);
+      next.delete(index);
       return next;
     });
   }, []);
+
+  const updateNewItemDraft = useCallback((index: number, patch: Partial<NewItemDraft>) => {
+    if (!scanResults) return;
+    const result = scanResults[index];
+    if (!result) return;
+    setNewItemDrafts((prev) => {
+      const current = prev[index] ?? {
+        name: result.suggested_metadata.name || result.detected_type,
+        brand: '',
+        category: buildNewClosetItemInput(result).category ?? 'top',
+        color: result.suggested_metadata.color || '',
+      };
+      return { ...prev, [index]: { ...current, ...patch } };
+    });
+  }, [scanResults]);
+
+  const createNewScanItems = useCallback(async (
+    indexes: number[],
+    useDrafts: boolean,
+    finishWhenComplete: boolean,
+  ) => {
+    if (!scanResults || indexes.length === 0) return;
+    setSavingNewIndexes((prev) => new Set([...prev, ...indexes]));
+    const nextSelections = { ...scanSelections };
+    const nextCreated = new Set(scanCreated);
+    const failures: number[] = [];
+    let addedCount = 0;
+
+    for (const index of indexes) {
+      if (nextSelections[index] !== undefined) continue;
+      const result = scanResults[index];
+      if (!result) continue;
+      const draft = useDrafts ? newItemDrafts[index] : undefined;
+      try {
+        const created = await createItem.mutateAsync(buildNewClosetItemInput(result, draft));
+        nextSelections[index] = created.id;
+        nextCreated.add(index);
+        addedCount += 1;
+      } catch {
+        failures.push(index);
+      }
+    }
+
+    setScanSelections(nextSelections);
+    setScanCreated(nextCreated);
+    setScanFailed((prev) => {
+      const next = new Set(prev);
+      indexes.forEach((index) => next.delete(index));
+      failures.forEach((index) => next.add(index));
+      return next;
+    });
+    setSavingNewIndexes(new Set());
+    track('outfit_scan_new_items_added', {
+      requested_count: indexes.length,
+      added_count: addedCount,
+      failed_count: failures.length,
+    });
+
+    if (finishWhenComplete && failures.length === 0) {
+      const counts = scanResolutionCounts(scanResults, nextSelections, scanSkipped, nextCreated);
+      if (counts.unresolved === 0) finishScanReview(nextSelections, nextCreated, failures.length);
+    }
+  }, [createItem, finishScanReview, newItemDrafts, scanCreated, scanResults, scanSelections, scanSkipped]);
 
   const reset = useCallback(() => {
     setDateMode('today');
@@ -229,7 +396,15 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
     setView('form');
     setSearch('');
     setScanResults(null);
-    setScanSel(new Set());
+    setScanSelections({});
+    setScanSkipped(new Set());
+    setScanCreated(new Set());
+    setScanFailed(new Set());
+    setScanTreatAsNew(new Set());
+    setSavingNewIndexes(new Set());
+    setReviewingNew(false);
+    setEditingMatchIndex(null);
+    setNewItemDrafts({});
     setSourcePickerOpen(false);
   }, []);
 
@@ -261,7 +436,9 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
 
   const handleAddToWardrobe = () => {
     setView('form');
-    onAddToWardrobe?.();
+    onAddToWardrobe?.((items) => {
+      setSelectedIds((prev) => mergeUniqueItemIds(prev, items.map((item) => item.id)));
+    });
   };
 
   // ── Picker grid sizing ────────────────────────────────────────────────────────
@@ -302,7 +479,7 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
                 >
                   <Text style={styles.headerCancel}>Cancel</Text>
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Log Outfit</Text>
+                <Text style={styles.headerTitle}>Record What You Wore</Text>
                 <TouchableOpacity
                   onPress={handleSave}
                   disabled={selectedIds.length === 0 || createLog.isPending}
@@ -391,7 +568,7 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
                 </View>
 
                 {/* ── Items ────────────────────────────────────────────── */}
-                <Text style={[styles.label, styles.itemsLabel]}>What you wore</Text>
+                <Text style={[styles.label, styles.itemsLabel]}>Choose from your closet</Text>
 
                 {selectedItems.length > 0 && (
                   <View style={styles.selectedList}>
@@ -416,9 +593,17 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
                   ) : (
                     <Ionicons name="camera-outline" size={20} color={colors.primary} />
                   )}
-                  <Text style={styles.addItemsBtnText}>
-                    {scanOutfit.isPending ? 'Scanning photo…' : 'Scan worn outfit photo'}
-                  </Text>
+                  <View style={styles.addItemsBtnCopy}>
+                    <Text style={styles.addItemsBtnText}>
+                      {scanOutfit.isPending ? 'Matching photo…' : 'Match from an outfit photo'}
+                    </Text>
+                    {!scanOutfit.isPending && (
+                      <Text style={styles.addItemsBtnSubtext}>
+                        Find saved clothes, or add new pieces
+                      </Text>
+                    )}
+                  </View>
+                  {!scanOutfit.isPending && <Ionicons name="chevron-forward" size={16} color={colors.primary} />}
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -430,9 +615,13 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
                   activeOpacity={0.7}
                 >
                   <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
-                  <Text style={styles.addItemsBtnText}>
-                    {selectedItems.length > 0 ? 'Add more items' : 'Add items from wardrobe'}
-                  </Text>
+                  <View style={styles.addItemsBtnCopy}>
+                    <Text style={styles.addItemsBtnText}>
+                      {selectedItems.length > 0 ? 'Select more clothes' : 'Select clothes manually'}
+                    </Text>
+                    <Text style={styles.addItemsBtnSubtext}>Choose saved pieces from your closet</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.primary} />
                 </TouchableOpacity>
 
                 {/* ── Location ─────────────────────────────────────── */}
@@ -501,7 +690,7 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
                   <Ionicons name="chevron-back-outline" size={20} color={colors.foreground} />
                   <Text style={styles.backText}>Back</Text>
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Select Items</Text>
+                <Text style={styles.headerTitle}>Select from Your Closet</Text>
                 <TouchableOpacity
                   onPress={() => setView('form')}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -524,7 +713,7 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
                   style={styles.searchInput}
                   value={search}
                   onChangeText={setSearch}
-                  placeholder="Search wardrobe…"
+                  placeholder="Search your closet…"
                   placeholderTextColor={colors.mutedForeground}
                   autoCapitalize="none"
                   returnKeyType="search"
@@ -547,7 +736,7 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
                     </Text>
                     {!search.trim() && (
                       <Text style={styles.pickerEmptySubtitle}>
-                        Add items to your wardrobe, then come back to log your outfit.
+                        Add clothes to your closet, then return to this wear record.
                       </Text>
                     )}
                   </View>
@@ -559,7 +748,7 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
                     activeOpacity={0.75}
                   >
                     <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
-                    <Text style={styles.addToWardrobeBtnText}>+ Add a missing item to wardrobe</Text>
+                    <Text style={styles.addToWardrobeBtnText}>Add new clothes to your closet</Text>
                   </TouchableOpacity>
                 }
                 renderItem={({ item }) => {
@@ -613,20 +802,36 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
             <>
               <View style={styles.header}>
                 <TouchableOpacity
-                  onPress={() => { setScanResults(null); setScanSel(new Set()); setView('form'); }}
+                  onPress={() => {
+                    setScanResults(null);
+                    setScanSelections({});
+                    setScanSkipped(new Set());
+                    setScanCreated(new Set());
+                    setScanFailed(new Set());
+                    setScanTreatAsNew(new Set());
+                    setSavingNewIndexes(new Set());
+                    setReviewingNew(false);
+                    setEditingMatchIndex(null);
+                    setNewItemDrafts({});
+                    setView('form');
+                  }}
                   style={styles.backBtn}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
                   <Ionicons name="chevron-back-outline" size={20} color={colors.foreground} />
                   <Text style={styles.backText}>Back</Text>
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Detected Items</Text>
+                <Text style={styles.headerTitle}>Review Your Clothes</Text>
                 <TouchableOpacity
-                  onPress={applyScanResults}
+                  onPress={() => finishScanReview()}
+                  disabled={(scanCounts?.unresolved ?? 0) > 0}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Text style={[styles.headerSave, scanSel.size === 0 && styles.headerSaveDisabled]}>
-                    {scanSel.size > 0 ? `Add ${scanSel.size}` : 'Add'}
+                  <Text style={[
+                    styles.headerSave,
+                    (scanCounts?.unresolved ?? 0) > 0 && styles.headerSaveDisabled,
+                  ]}>
+                    Done
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -646,68 +851,241 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
                   </View>
                 ) : (
                   <>
+                    <View style={styles.scanSummary}>
+                      <Text style={styles.scanSummaryTitle}>We found {scanResults.length} pieces</Text>
+                      <Text style={styles.scanSummaryText}>
+                        {scanCounts?.matched ?? 0} matched · {scanCounts?.new ?? 0} added · {scanCounts?.unresolved ?? 0} need review
+                      </Text>
+                    </View>
                     <Text style={styles.scanHint}>
-                      Select items you wore. High and Medium confidence matches are pre-selected.
+                      Confirm closet matches, add new pieces, or skip anything the AI got wrong.
                     </Text>
                     {scanResults.map((result, idx) => {
-                      const matched = result.match_id !== null
-                        ? allItems.find((it) => it.id === result.match_id) ?? null
+                      const selectedId = scanSelections[idx];
+                      const matched = selectedId !== undefined
+                        ? allItems.find((it) => it.id === selectedId) ?? null
                         : null;
-                      const isSelected = result.match_id !== null && scanSel.has(result.match_id);
-                      const isMatchable = result.match_id !== null;
-                      const imgUri = matched ? itemImageUri(matched) : null;
+                      const isSkipped = scanSkipped.has(idx);
+                      const isCreated = scanCreated.has(idx);
+                      const isFailed = scanFailed.has(idx);
+                      const isSaving = savingNewIndexes.has(idx);
+                      const isEditingMatch = editingMatchIndex === idx;
+                      const imgUri = matched ? itemImageUri(matched) : result.crop;
+                      const candidateIds = result.potential_match_ids.length > 0
+                        ? result.potential_match_ids
+                        : allItems
+                          .filter((item) => item.category === result.suggested_metadata.category && item.id !== selectedId)
+                          .slice(0, 5)
+                          .map((item) => item.id);
+                      const treatAsNew = scanTreatAsNew.has(idx);
+                      const showCandidates = !treatAsNew && !isSkipped && (selectedId === undefined || isEditingMatch) && candidateIds.length > 0;
+                      const isNewPiece = (treatAsNew || candidateIds.length === 0) && selectedId === undefined && !isSkipped;
+                      const draft = newItemDrafts[idx] ?? {
+                        name: result.suggested_metadata.name || result.detected_type,
+                        brand: '',
+                        category: buildNewClosetItemInput(result).category ?? 'top',
+                        color: result.suggested_metadata.color || '',
+                      };
 
                       return (
-                        <TouchableOpacity
+                        <View
                           key={idx}
-                          style={[styles.scanRow, !isMatchable && styles.scanRowDim]}
-                          onPress={() => isMatchable && toggleScanSel(result.match_id!)}
-                          activeOpacity={isMatchable ? 0.7 : 1}
+                          style={[styles.scanCard, isSkipped && styles.scanCardSkipped]}
                         >
-                          <View style={styles.scanThumb}>
-                            {imgUri ? (
-                              <Image
-                                source={{ uri: imgUri }}
-                                style={StyleSheet.absoluteFill}
-                                resizeMode={itemImageContentFit(matched)}
-                              />
-                            ) : (
-                              <Ionicons name="shirt-outline" size={20} color={colors.mutedForeground} />
-                            )}
-                          </View>
-
-                          <View style={styles.scanInfo}>
-                            <Text style={styles.scanItemName} numberOfLines={1}>
-                              {matched ? matched.name : result.detected_type}
-                            </Text>
-                            <View style={styles.scanBadgeRow}>
-                              {matched ? (
-                                <Text style={styles.scanCategory}>{matched.category}</Text>
+                          <View style={styles.scanCardHeader}>
+                            <View style={styles.scanThumb}>
+                              {imgUri ? (
+                                <Image
+                                  source={{ uri: imgUri }}
+                                  style={StyleSheet.absoluteFill}
+                                  resizeMode={matched ? itemImageContentFit(matched) : 'contain'}
+                                />
                               ) : (
-                                <Text style={styles.scanNotInWardrobe}>Not in wardrobe</Text>
+                                <Ionicons name="shirt-outline" size={22} color={colors.mutedForeground} />
                               )}
-                              <View style={[
-                                styles.scanConfBadge,
-                                result.confidence === 'High' && styles.scanConfHigh,
-                                result.confidence === 'Medium' && styles.scanConfMed,
-                                result.confidence === 'Low' && styles.scanConfLow,
-                              ]}>
-                                <Text style={styles.scanConfText}>{result.confidence}</Text>
+                            </View>
+
+                            <View style={styles.scanInfo}>
+                              <Text style={styles.scanItemName} numberOfLines={2}>
+                                {matched ? matched.name : result.suggested_metadata.name || result.detected_type}
+                              </Text>
+                              <Text style={styles.scanDetectedLabel} numberOfLines={1}>
+                                AI detected {result.detected_type}
+                              </Text>
+                              <View style={styles.scanBadgeRow}>
+                                <View style={[
+                                  styles.scanStatusBadge,
+                                  isCreated && styles.scanStatusAdded,
+                                  isSkipped && styles.scanStatusSkipped,
+                                ]}>
+                                  <Text style={styles.scanStatusText}>
+                                    {isSkipped
+                                      ? 'Skipped'
+                                      : isCreated
+                                        ? 'Added to closet'
+                                        : matched
+                                          ? 'Matched from closet'
+                                          : candidateIds.length > 0
+                                            ? 'Choose a closet match'
+                                            : 'New to your closet'}
+                                  </Text>
+                                </View>
                               </View>
                             </View>
                           </View>
 
-                          {isMatchable && (
-                            <View style={[styles.scanCheck, isSelected && styles.scanCheckActive]}>
-                              {isSelected && (
-                                <Ionicons name="checkmark" size={14} color={colors.primaryForeground} />
-                              )}
+                          {showCandidates && (
+                            <View style={styles.scanCandidates}>
+                              <Text style={styles.scanCandidatesLabel}>Which closet piece is this?</Text>
+                              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scanCandidateRow}>
+                                {candidateIds.map((id) => {
+                                  const candidate = allItems.find((item) => item.id === id);
+                                  if (!candidate) return null;
+                                  const candidateUri = itemImageUri(candidate);
+                                  return (
+                                    <TouchableOpacity
+                                      key={candidate.id}
+                                      style={styles.scanCandidate}
+                                      onPress={() => chooseScanMatch(idx, candidate.id)}
+                                      activeOpacity={0.75}
+                                      accessibilityRole="button"
+                                      accessibilityLabel={`Use ${candidate.name} from your closet`}
+                                    >
+                                      <View style={styles.scanCandidateImage}>
+                                        {candidateUri ? (
+                                          <Image source={{ uri: candidateUri }} style={StyleSheet.absoluteFill} resizeMode={itemImageContentFit(candidate)} />
+                                        ) : (
+                                          <Ionicons name="shirt-outline" size={18} color={colors.mutedForeground} />
+                                        )}
+                                      </View>
+                                      <Text style={styles.scanCandidateName} numberOfLines={2}>{candidate.name}</Text>
+                                      <Text style={styles.scanCandidateUse}>Use this piece</Text>
+                                    </TouchableOpacity>
+                                  );
+                                })}
+                              </ScrollView>
+                              <TouchableOpacity
+                                style={styles.scanGhostButton}
+                                onPress={() => {
+                                  setScanTreatAsNew((prev) => new Set(prev).add(idx));
+                                  setReviewingNew(true);
+                                  setEditingMatchIndex(null);
+                                }}
+                              >
+                                <Text style={styles.scanGhostButtonText}>None of these—add as a new piece</Text>
+                              </TouchableOpacity>
                             </View>
                           )}
-                        </TouchableOpacity>
+
+                          {isNewPiece && reviewingNew && (
+                            <View style={styles.newItemEditor}>
+                              <Text style={styles.newItemEditorTitle}>Review new piece</Text>
+                              <TextInput
+                                style={styles.newItemInput}
+                                value={draft.name}
+                                onChangeText={(name) => updateNewItemDraft(idx, { name })}
+                                placeholder="Piece name"
+                                placeholderTextColor={colors.mutedForeground}
+                              />
+                              <View style={styles.newItemInputRow}>
+                                <TextInput
+                                  style={[styles.newItemInput, styles.newItemInputHalf]}
+                                  value={draft.color}
+                                  onChangeText={(color) => updateNewItemDraft(idx, { color })}
+                                  placeholder="Colour"
+                                  placeholderTextColor={colors.mutedForeground}
+                                />
+                                <TextInput
+                                  style={[styles.newItemInput, styles.newItemInputHalf]}
+                                  value={draft.brand}
+                                  onChangeText={(brand) => updateNewItemDraft(idx, { brand })}
+                                  placeholder="Brand (optional)"
+                                  placeholderTextColor={colors.mutedForeground}
+                                />
+                              </View>
+                              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.newItemCategoryRow}>
+                                {CATEGORY_ORDER.map((category) => (
+                                  <TouchableOpacity
+                                    key={category}
+                                    style={[styles.newItemCategory, draft.category === category && styles.newItemCategoryActive]}
+                                    onPress={() => updateNewItemDraft(idx, { category })}
+                                  >
+                                    <Text style={[styles.newItemCategoryText, draft.category === category && styles.newItemCategoryTextActive]}>
+                                      {CATEGORY_LABELS[category]}
+                                    </Text>
+                                  </TouchableOpacity>
+                                ))}
+                              </ScrollView>
+                              <TouchableOpacity
+                                style={styles.scanPrimaryButton}
+                                onPress={() => createNewScanItems([idx], true, false)}
+                                disabled={isSaving || !draft.name.trim()}
+                              >
+                                {isSaving && <ActivityIndicator size="small" color={colors.primaryForeground} />}
+                                <Text style={styles.scanPrimaryButtonText}>
+                                  {isFailed ? 'Try adding again' : 'Add to closet & select'}
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          )}
+
+                          {isFailed && !reviewingNew && (
+                            <Text style={styles.scanFailureText}>This piece wasn’t added. Review it or try again.</Text>
+                          )}
+
+                          <View style={styles.scanCardActions}>
+                            {matched && !isCreated && !isSkipped && (
+                              <TouchableOpacity
+                                style={styles.scanSecondaryButton}
+                                onPress={() => {
+                                  setScanSelections((prev) => {
+                                    const next = { ...prev };
+                                    delete next[idx];
+                                    return next;
+                                  });
+                                  setEditingMatchIndex(idx);
+                                }}
+                              >
+                                <Text style={styles.scanSecondaryButtonText}>Change match</Text>
+                              </TouchableOpacity>
+                            )}
+                            {isSkipped ? (
+                              <TouchableOpacity style={styles.scanSecondaryButton} onPress={() => restoreScanResult(idx)}>
+                                <Text style={styles.scanSecondaryButtonText}>Restore</Text>
+                              </TouchableOpacity>
+                            ) : (
+                              <TouchableOpacity style={styles.scanGhostButton} onPress={() => skipScanResult(idx)}>
+                                <Text style={styles.scanGhostButtonText}>Skip—AI got this wrong</Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        </View>
                       );
                     })}
-                    <View style={{ height: 32 }} />
+
+                    {newScanIndexes.length > 0 && (
+                      <View style={styles.scanFooterActions}>
+                        <TouchableOpacity
+                          style={styles.scanPrimaryButton}
+                          onPress={() => createNewScanItems(newScanIndexes, false, true)}
+                          disabled={savingNewIndexes.size > 0}
+                        >
+                          {savingNewIndexes.size > 0 && <ActivityIndicator size="small" color={colors.primaryForeground} />}
+                          <Text style={styles.scanPrimaryButtonText}>
+                            Add {newScanIndexes.length} new {newScanIndexes.length === 1 ? 'piece' : 'pieces'} to closet & select
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.scanSecondaryButton} onPress={() => setReviewingNew(true)}>
+                          <Text style={styles.scanSecondaryButtonText}>Review new pieces</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+
+                    {unresolvedIndexes.length === 0 && (
+                      <TouchableOpacity style={[styles.scanPrimaryButton, styles.scanDoneButton]} onPress={() => finishScanReview()}>
+                        <Text style={styles.scanPrimaryButtonText}>Use these clothes</Text>
+                      </TouchableOpacity>
+                    )}
                   </>
                 )}
               </ScrollView>
@@ -719,8 +1097,8 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
 
       <PhotoSourceSheet
         visible={sourcePickerOpen}
-        title="Scan Worn Outfit"
-        subtitle="We'll match what you wore against your wardrobe."
+        title="Match an Outfit Photo"
+        subtitle="We'll match visible clothes to your closet. New pieces can be added during review."
         cameraHint="Snap the outfit you're wearing"
         libraryLabel="Photo Library"
         libraryHint="Pick a photo from your camera roll"
@@ -959,8 +1337,17 @@ const styles = StyleSheet.create({
   },
   addItemsBtnText: {
     fontSize: typography.size.sm,
-    fontWeight: typography.weight.medium,
+    fontWeight: typography.weight.semibold,
     color: colors.primary,
+  },
+  addItemsBtnCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  addItemsBtnSubtext: {
+    fontSize: typography.size.xs,
+    lineHeight: 17,
+    color: colors.mutedForeground,
   },
 
   // ── Picker
@@ -1062,6 +1449,24 @@ const styles = StyleSheet.create({
   scanReviewContent: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
+    paddingBottom: spacing.xxxl,
+  },
+  scanSummary: {
+    backgroundColor: colors.surfaceSelected,
+    borderRadius: radii.lg,
+    borderCurve: 'continuous',
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  scanSummaryTitle: {
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.semibold,
+    color: colors.foreground,
+  },
+  scanSummaryText: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+    marginTop: 2,
   },
   scanHint: {
     fontSize: typography.size.xs,
@@ -1069,26 +1474,29 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     lineHeight: typography.size.xs * 1.5,
   },
-  scanRow: {
+  scanCard: {
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radii.lg,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.md,
+  },
+  scanCardSkipped: {
+    backgroundColor: colors.surfaceSubtle,
+  },
+  scanCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: colors.card,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.sm,
-    minHeight: 60,
-  },
-  scanRowDim: {
-    opacity: 0.5,
   },
   scanThumb: {
-    width: 44,
-    height: 52,
-    borderRadius: radii.sm,
+    width: 64,
+    height: 76,
+    borderRadius: radii.md,
+    borderCurve: 'continuous',
     overflow: 'hidden',
     backgroundColor: colors.muted,
     alignItems: 'center',
@@ -1099,9 +1507,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scanItemName: {
-    fontSize: typography.size.sm,
+    fontSize: typography.size.md,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
+  },
+  scanDetectedLabel: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+    marginTop: 2,
+    textTransform: 'capitalize',
   },
   scanBadgeRow: {
     flexDirection: 'row',
@@ -1109,48 +1523,176 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginTop: 2,
   },
-  scanCategory: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-    textTransform: 'capitalize',
-  },
-  scanNotInWardrobe: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-    fontStyle: 'italic',
-  },
-  scanConfBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+  scanStatusBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
     borderRadius: radii.full,
+    backgroundColor: colors.surfaceSelected,
   },
-  scanConfHigh: {
-    backgroundColor: '#dcfce7',
+  scanStatusAdded: {
+    backgroundColor: '#E3EFE6',
   },
-  scanConfMed: {
-    backgroundColor: '#fef9c3',
+  scanStatusSkipped: {
+    backgroundColor: colors.muted,
   },
-  scanConfLow: {
-    backgroundColor: '#fee2e2',
-  },
-  scanConfText: {
+  scanStatusText: {
     fontSize: 10,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
+  },
+  scanCandidates: {
+    gap: spacing.sm,
+  },
+  scanCandidatesLabel: {
+    fontSize: typography.size.xs,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
-  scanCheck: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
+  scanCandidateRow: {
+    gap: spacing.sm,
+  },
+  scanCandidate: {
+    width: 112,
+    borderRadius: radii.md,
+    borderCurve: 'continuous',
+    borderWidth: 1,
     borderColor: colors.border,
+    backgroundColor: colors.card,
+    padding: spacing.sm,
+  },
+  scanCandidateImage: {
+    height: 82,
+    borderRadius: radii.sm,
+    overflow: 'hidden',
+    backgroundColor: colors.muted,
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0,
   },
-  scanCheckActive: {
+  scanCandidateName: {
+    minHeight: 32,
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.medium,
+    color: colors.foreground,
+    marginTop: spacing.xs,
+  },
+  scanCandidateUse: {
+    fontSize: 10,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
+    marginTop: 2,
+  },
+  scanCardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  scanPrimaryButton: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
     backgroundColor: colors.primary,
+    borderRadius: radii.md,
+    borderCurve: 'continuous',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  scanPrimaryButtonText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.primaryForeground,
+    textAlign: 'center',
+  },
+  scanSecondaryButton: {
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    borderCurve: 'continuous',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  scanSecondaryButtonText: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
+  },
+  scanGhostButton: {
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  scanGhostButtonText: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+  },
+  scanFailureText: {
+    fontSize: typography.size.xs,
+    color: colors.error,
+  },
+  scanFooterActions: {
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  scanDoneButton: {
+    marginTop: spacing.sm,
+  },
+  newItemEditor: {
+    gap: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  newItemEditorTitle: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.foreground,
+  },
+  newItemInput: {
+    minHeight: 44,
+    borderRadius: radii.md,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    paddingHorizontal: spacing.md,
+    fontSize: typography.size.sm,
+    color: colors.foreground,
+  },
+  newItemInputRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  newItemInputHalf: {
+    flex: 1,
+  },
+  newItemCategoryRow: {
+    gap: spacing.sm,
+  },
+  newItemCategory: {
+    borderRadius: radii.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  newItemCategoryActive: {
     borderColor: colors.primary,
+    backgroundColor: colors.primary,
+  },
+  newItemCategoryText: {
+    fontSize: typography.size.xs,
+    color: colors.foreground,
+  },
+  newItemCategoryTextActive: {
+    color: colors.primaryForeground,
   },
   scanEmpty: {
     alignItems: 'center',

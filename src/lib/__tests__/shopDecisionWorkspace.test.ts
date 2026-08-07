@@ -1,7 +1,6 @@
 import {
   buildShopConsultationPrompt,
   buildShopStylistLaunch,
-  latestShoppingSummary,
   parseShoppingBrief,
   selectActiveShoppingFinds,
   type ShoppingBrief,
@@ -73,15 +72,6 @@ describe('shop decision workspace', () => {
       item('favorite', { isFavorite: true }),
     ]);
     expect(result.map((entry) => entry.id)).toEqual(['favorite', 'wish', 'new']);
-  });
-
-  it('summarizes the latest session and known spend', () => {
-    const summary = latestShoppingSummary([item('one'), item('two', { extractedPrice: 60 })]);
-    expect(summary).toMatchObject({ storeName: 'COS', itemCount: 2, knownSpend: 160 });
-  });
-
-  it('returns null without shopping history', () => {
-    expect(latestShoppingSummary([])).toBeNull();
   });
 
   it('rejects a malformed brief instead of exposing missing fields to the screen', () => {

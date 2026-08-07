@@ -29,6 +29,7 @@ export function ShoppingEditCard({
   width,
   isSelected,
   selectionMode,
+  showStore = true,
   onPress,
   onLongPress,
 }: {
@@ -36,6 +37,8 @@ export function ShoppingEditCard({
   width: number;
   isSelected: boolean;
   selectionMode: boolean;
+  /** Off inside a trip bundle, whose header already names the store. */
+  showStore?: boolean;
   onPress: (snap: ShoppingSnap) => void;
   onLongPress: () => void;
 }) {
@@ -43,7 +46,8 @@ export function ShoppingEditCard({
   const [imageFailed, setImageFailed] = useState(false);
   const price = formatShoppingPrice(item.extractedPrice);
   const badges = shoppingItemBadges(item);
-  const catalogChips = shoppingCatalogChips(item);
+  const title = showStore ? item.storeName ?? 'Store not set' : item.category;
+  const catalogChips = shoppingCatalogChips(showStore ? item : { ...item, category: null });
   const accessibilityStateLabel = item.needsReview
     ? ', needs review'
     : item.syncStatus === 'pending'
@@ -120,12 +124,14 @@ export function ShoppingEditCard({
       </View>
 
       <View style={styles.copy}>
-        <View style={styles.copyTopRow}>
-          <Text style={styles.storeText} numberOfLines={1}>{item.storeName ?? 'Store not set'}</Text>
-          {item.syncStatus === 'pending' ? (
-            <Ionicons name="cloud-upload-outline" size={14} color={colors.primary} />
-          ) : null}
-        </View>
+        {title ? (
+          <View style={styles.copyTopRow}>
+            <Text style={styles.storeText} numberOfLines={1}>{title}</Text>
+            {item.syncStatus === 'pending' ? (
+              <Ionicons name="cloud-upload-outline" size={14} color={colors.primary} />
+            ) : null}
+          </View>
+        ) : null}
         <View style={styles.detailRow}>
           <Text style={styles.roleText} numberOfLines={1}>{itemRoleSummary(item)}</Text>
           {price ? <Text style={styles.priceText} numberOfLines={1}>{price}</Text> : null}

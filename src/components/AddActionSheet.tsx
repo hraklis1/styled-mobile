@@ -44,6 +44,7 @@ export interface AddActionSheetProps {
   onTakePhoto?: () => void;
   onFromLibrary?: () => void;
   onBatchImport?: () => void;
+  onActionStart?: (action: 'camera' | 'library' | 'batch') => void;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -55,6 +56,7 @@ export function AddActionSheet({
   onTakePhoto: onTakePhotoProp,
   onFromLibrary: onFromLibraryProp,
   onBatchImport: onBatchImportProp,
+  onActionStart,
 }: AddActionSheetProps) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
@@ -143,19 +145,22 @@ export function AddActionSheet({
   }, [view]);
 
   const handleTakePhoto = useCallback(() => {
+    onActionStart?.('camera');
     bottomSheetRef.current?.dismiss();
     setTimeout(() => onTakePhotoProp?.(), 300);
-  }, [onTakePhotoProp]);
+  }, [onActionStart, onTakePhotoProp]);
 
   const handleFromLibrary = useCallback(() => {
+    onActionStart?.('library');
     bottomSheetRef.current?.dismiss();
     setTimeout(() => onFromLibraryProp?.(), 300);
-  }, [onFromLibraryProp]);
+  }, [onActionStart, onFromLibraryProp]);
 
   const handleBatchImport = useCallback(() => {
+    onActionStart?.('batch');
     bottomSheetRef.current?.dismiss();
     setTimeout(() => onBatchImportProp?.(), 300);
-  }, [onBatchImportProp]);
+  }, [onActionStart, onBatchImportProp]);
 
   const handleSaveManual = useCallback(async () => {
     if (!manualName.trim()) return;
@@ -220,8 +225,8 @@ export function AddActionSheet({
 
   const headerTitle =
     view === 'manual' ? 'Add Manually'
-      : view === 'saving' ? 'Adding to wardrobe…'
-        : 'Add to Closet';
+      : view === 'saving' ? 'Adding to closet…'
+        : 'Add New Clothes';
 
   const renderBackdrop = useCallback(
     (props: any) => (
@@ -255,7 +260,7 @@ export function AddActionSheet({
       {view === 'menu' && (
         <BottomSheetView style={styles.sheetContent}>
           <View style={styles.header}>
-            <Text style={styles.headerTitle}>Add to Closet</Text>
+            <Text style={styles.headerTitle}>Add New Clothes</Text>
             <TouchableOpacity
               onPress={handleClose}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -351,7 +356,7 @@ export function AddActionSheet({
                 <Ionicons name="checkmark" size={20} color={colors.primaryForeground} />
               )}
               <Text style={styles.saveBtnText}>
-                {view === 'saving' ? 'Adding to wardrobe…' : 'Add to wardrobe'}
+                {view === 'saving' ? 'Adding to closet…' : 'Add to closet'}
               </Text>
             </TouchableOpacity>
           </View>

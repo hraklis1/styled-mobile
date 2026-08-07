@@ -47,7 +47,11 @@ export type HomeStackParamList = {
 export type ShopStackParamList = {
   ShopMain: undefined;
   SavedLooks: { selectedId?: string } | undefined;
-  ShoppingGallery: { focusGroupId?: string; catalogFilter?: 'active' | 'all' } | undefined;
+  ShoppingGallery: {
+    focusGroupId?: string;
+    catalogFilter?: 'active' | 'all';
+    returnTo?: 'Home';
+  } | undefined;
   ShoppingCamera: undefined;
 };
 

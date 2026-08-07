@@ -15,6 +15,10 @@ export const colors = {
   muted:               '#EEECE6',
   mutedForeground:     '#746E66',
   accent:              '#E8DED1',
+  // Muted terracotta, reserved for interactive *text* (links, inline actions) so
+  // a tappable phrase is distinguishable from the taupe used for brand
+  // structure and status. Not for filled buttons — those stay `primary`.
+  action:              '#9A5B42',
   border:              '#E1DCD3',
   hairline:            '#EEEAE3',
   inkSubtle:           '#4E4841',

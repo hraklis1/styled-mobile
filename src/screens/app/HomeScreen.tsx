@@ -19,6 +19,11 @@ import { ErrorState } from '../../components/primitives/ErrorState';
 import { useOutfits } from '../../hooks/useOutfits';
 import { useEvents } from '../../hooks/useEvents';
 import { useOutfitLogs, useDeleteOutfitLog } from '../../hooks/useOutfitLogs';
+import { useShoppingSnaps } from '../../hooks/useShoppingSnaps';
+import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
+import { ShortlistDecisionCard } from '../../components/shopping/ShortlistDecisionCard';
+import { buildShoppingEditItems, mergeShoppingSnaps } from '../../lib/shoppingGallery';
+import { buildShortlistSpotlight } from '../../lib/shortlistSpotlight';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
 import { useGlobalOutfitLogger } from '../../contexts/GlobalOutfitLoggerContext';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
@@ -31,6 +36,7 @@ import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
 import { useProfile } from '../../hooks/useProfile';
 import { StylingLocationSheet } from '../../components/home/StylingLocationSheet';
 import { resolveImageUri } from '../../lib/resolveImageUri';
+import { track } from '../../lib/analytics';
 import { itemCoverPresentation } from '../../lib/itemImage';
 import { formatTemp, resolveTempUnit } from '../../lib/temperature';
 import {
@@ -115,6 +121,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const { data: outfits = [], isLoading: outfitsLoading, isError: outfitsError, refetch: refetchOutfits } = useOutfits();
   const { data: events  = [] } = useEvents();
   const { data: logs    = [] } = useOutfitLogs();
+  const { data: shoppingSnaps = [] } = useShoppingSnaps();
+  const pendingShoppingUploads = useShoppingSessionStore((state) => state.pendingUploads);
   const deleteLog = useDeleteOutfitLog();
   const stylingLocation = useActiveStylingLocation();
   const weather = useStylingWeatherToday(stylingLocation.activeLocation);
@@ -132,6 +140,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [dailyPickDate, setDailyPickDate] = useState(() => toLocalDateKey(new Date()));
   const [dailyPickHistory, setDailyPickHistory] = useState<DailyPickHistoryEntry[]>([]);
   const [dailyPickHistoryLoaded, setDailyPickHistoryLoaded] = useState(false);
+  const shortlist = useMemo(
+    () => buildShortlistSpotlight(buildShoppingEditItems(mergeShoppingSnaps(shoppingSnaps, pendingShoppingUploads))),
+    [pendingShoppingUploads, shoppingSnaps],
+  );
 
   useFocusEffect(useCallback(() => {
     fabIsCollapsed.current = false;
@@ -179,12 +191,18 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const heroHeight = Math.round(heroWidth * 0.78);
 
   const handleAddToCloset = useCallback(() => {
+    track('home_wardrobe_action_tapped', { action: 'add_clothes' });
     openAddSheet({
       onTakePhoto: () => openScanItem('camera'),
       onFromLibrary: () => openScanItem('library'),
       onBatchImport: openBatchScan,
     });
   }, [openAddSheet, openBatchScan, openScanItem]);
+
+  const handleRecordWear = useCallback(() => {
+    track('home_wardrobe_action_tapped', { action: 'record_wear' });
+    openLogger();
+  }, [openLogger]);
 
   // Derived data
   const upcomingEvents = useMemo(() => {
@@ -345,35 +363,65 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         <Ionicons name="arrow-forward" size={16} color="#C2A68D" />
       </TouchableOpacity>
 
-      {/* ── Quick creation actions ─────────────────────────────── */}
-      <View style={styles.quickActions}>
-        <View style={styles.quickActionsRow}>
-          <PressableScale
-            style={styles.quickActionPressable}
-            contentStyle={styles.quickAction}
-            onPress={handleAddToCloset}
-            accessibilityRole="button"
-            accessibilityLabel="Add to closet"
-          >
-            <View style={styles.quickActionIcon}>
-              <Ionicons name="add" size={18} color={colors.primary} />
+      {/* ── Permanent wardrobe actions ─────────────────────────── */}
+      <View style={styles.wardrobeActions}>
+        <Text style={styles.wardrobeActionsEyebrow}>Your closet</Text>
+        <PressableScale
+          contentStyle={styles.wardrobeAction}
+          onPress={handleAddToCloset}
+          accessibilityRole="button"
+          accessibilityLabel="Add new clothes. Photograph or import pieces into your closet"
+        >
+          <View style={styles.wardrobeActionVisual}>
+            <Ionicons name="shirt-outline" size={23} color={colors.primary} />
+            <View style={styles.wardrobeActionBadge}>
+              <Ionicons name="add" size={11} color={colors.primaryForeground} />
             </View>
-            <Text style={styles.quickActionText}>Add to closet</Text>
-          </PressableScale>
-          <PressableScale
-            style={styles.quickActionPressable}
-            contentStyle={styles.quickAction}
-            onPress={openLogger}
-            accessibilityRole="button"
-            accessibilityLabel="Log today's look"
-          >
-            <View style={styles.quickActionIcon}>
-              <Ionicons name="journal-outline" size={17} color={colors.primary} />
+          </View>
+          <View style={styles.wardrobeActionCopy}>
+            <Text style={styles.wardrobeActionTitle}>Add new clothes</Text>
+            <Text style={styles.wardrobeActionSubtitle}>
+              Photograph or import pieces into your closet
+            </Text>
+          </View>
+          <Ionicons name="arrow-forward" size={17} color={colors.primary} />
+        </PressableScale>
+        <View style={styles.wardrobeActionDivider} />
+        <PressableScale
+          contentStyle={styles.wardrobeAction}
+          onPress={handleRecordWear}
+          accessibilityRole="button"
+          accessibilityLabel="Record what you wore. Match a photo or select clothes already in your closet"
+        >
+          <View style={[styles.wardrobeActionVisual, styles.wardrobeActionVisualWear]}>
+            <Ionicons name="camera-outline" size={22} color={colors.primary} />
+            <View style={styles.wardrobeActionBadge}>
+              <Ionicons name="checkmark" size={10} color={colors.primaryForeground} />
             </View>
-            <Text style={styles.quickActionText}>Log today's look</Text>
-          </PressableScale>
-        </View>
+          </View>
+          <View style={styles.wardrobeActionCopy}>
+            <Text style={styles.wardrobeActionTitle}>Record what you wore</Text>
+            <Text style={styles.wardrobeActionSubtitle}>
+              Match a photo or select clothes already in your closet
+            </Text>
+          </View>
+          <Ionicons name="arrow-forward" size={17} color={colors.primary} />
+        </PressableScale>
       </View>
+
+      {/* ── Shortlist decisions ────────────────────────────────────── */}
+      <ShortlistDecisionCard
+        items={shortlist.awaitingDecision}
+        storeNames={shortlist.decisionStores}
+        style={styles.shortlistCard}
+        onPress={() => {
+          track('shop_section_opened', { section: 'home_shortlist' });
+          navigation.navigate('Shop', {
+            screen: 'ShoppingGallery',
+            params: { catalogFilter: 'active', returnTo: 'Home' },
+          });
+        }}
+      />
 
       {/* ── Empty wardrobe nudge ───────────────────────────────────── */}
       {items.length === 0 && (
@@ -381,14 +429,14 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           contentStyle={styles.nudgeCard}
           onPress={handleAddToCloset}
           accessibilityRole="button"
-          accessibilityLabel="Your wardrobe is empty. Tap to add items"
+          accessibilityLabel="Your closet is empty. Tap to add clothes"
         >
           <View style={styles.nudgeIcon}>
             <Ionicons name="shirt-outline" size={18} color={colors.primary} />
           </View>
           <View style={styles.nudgeText}>
-            <Text style={styles.nudgeTitle}>Your wardrobe is empty</Text>
-            <Text style={styles.nudgeSub}>Add items to unlock outfit suggestions</Text>
+            <Text style={styles.nudgeTitle}>Your closet is empty</Text>
+            <Text style={styles.nudgeSub}>Add clothes to unlock outfit suggestions</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.primary} />
         </PressableScale>
@@ -446,7 +494,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             </View>
             <Text style={styles.emptyOutfitTitle}>No saved outfits yet</Text>
             <Text style={styles.emptyOutfitSub}>
-              Build an outfit from your wardrobe to see it here
+              Build an outfit from your closet to see it here
             </Text>
           </View>
         )}
@@ -642,6 +690,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SIDE_PAD,
     paddingBottom: spacing.xxxl * 2,
   },
+  shortlistCard: { marginBottom: spacing.xl },
 
   // Greeting
   headerRow: {
@@ -704,40 +753,79 @@ const styles = StyleSheet.create({
     fontSize: typography.size.md,
     color: colors.mutedForeground,
   },
-  quickActions: {
-    flexDirection: 'column',
-    gap: COL_GAP,
+  wardrobeActions: {
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radii.xl,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderColor: colors.border,
     marginBottom: spacing.xl,
+    overflow: 'hidden',
+    ...shadows.sm,
   },
-  quickActionsRow: {
-    flexDirection: 'row',
-    gap: COL_GAP,
+  wardrobeActionsEyebrow: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xs,
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 1.1,
   },
-  quickActionPressable: {
-    flex: 1,
-  },
-  quickAction: {
-    minHeight: 42,
+  wardrobeAction: {
+    minHeight: 78,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radii.md,
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
-  quickActionIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: radii.full,
-    backgroundColor: `${colors.primary}15`,
+  wardrobeActionVisual: {
+    width: 50,
+    height: 50,
+    borderRadius: radii.lg,
+    borderCurve: 'continuous',
+    backgroundColor: colors.surfaceSelected,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+    position: 'relative',
   },
-  quickActionText: {
-    fontSize: typography.size.sm,
+  wardrobeActionVisualWear: {
+    backgroundColor: colors.accent,
+  },
+  wardrobeActionBadge: {
+    position: 'absolute',
+    right: 5,
+    bottom: 5,
+    width: 17,
+    height: 17,
+    borderRadius: radii.full,
+    backgroundColor: colors.primary,
+    borderWidth: 2,
+    borderColor: colors.surfaceElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  wardrobeActionCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  wardrobeActionTitle: {
+    fontSize: typography.size.md,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
+  },
+  wardrobeActionSubtitle: {
+    fontSize: typography.size.xs,
+    lineHeight: 17,
+    color: colors.mutedForeground,
+  },
+  wardrobeActionDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: spacing.lg + 50 + spacing.md,
+    backgroundColor: colors.border,
   },
 
   // Empty wardrobe nudge

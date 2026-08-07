@@ -20,7 +20,7 @@ export function MenuContent({
 }: MenuContentProps) {
   return (
     <View style={[styles.container, { paddingBottom: Math.max(bottomInset, spacing.xl) }]}>
-      <Text style={styles.sectionLabel}>Add to Wardrobe</Text>
+      <Text style={styles.sectionLabel}>Choose how to add</Text>
 
       <TouchableOpacity style={styles.option} onPress={onTakePhoto} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Take photo to add item">
         <View style={[styles.iconBox, { backgroundColor: `${colors.primary}18` }]}>
@@ -38,8 +38,8 @@ export function MenuContent({
           <Ionicons name="image-outline" size={22} color={colors.primary} />
         </View>
         <View style={styles.optionText}>
-          <Text style={styles.optionTitle}>From Library</Text>
-          <Text style={styles.optionSub}>Pick from your camera roll</Text>
+          <Text style={styles.optionTitle}>Choose from Photos</Text>
+          <Text style={styles.optionSub}>Pick a photo from your camera roll</Text>
         </View>
         <Ionicons name="chevron-forward" size={16} color={colors.border} />
       </TouchableOpacity>

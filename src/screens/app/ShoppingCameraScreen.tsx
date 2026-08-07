@@ -96,7 +96,6 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
   const cameraRef = useRef<CameraView>(null);
   const storeSheetRef = useRef<BottomSheetModal>(null);
   const locationResolutionRef = useRef(new Set<string>());
-  const gallerySessionAfterSheetRef = useRef<ShoppingSessionContext | 'waiting' | null>(null);
   const galleryPickerInFlightRef = useRef(false);
   const galleryImportQueueRef = useRef<Promise<void>>(Promise.resolve());
   const ocrQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -245,20 +244,16 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
     };
     setShoppingSession(session);
     if (!hasResolvedSuggestion) resolveSessionLocation(session.id);
-    if (gallerySessionAfterSheetRef.current === 'waiting') {
-      gallerySessionAfterSheetRef.current = session;
-    }
     closeStoreSheet();
   }, [closeStoreSheet, resolveSessionLocation, setShoppingSession]);
 
   const clearStore = useCallback(() => {
-    gallerySessionAfterSheetRef.current = null;
     clearStoreName();
     closeStoreSheet();
   }, [clearStoreName, closeStoreSheet]);
 
   const importGalleryAssets = useCallback(async (
-    session: ShoppingSessionContext,
+    session: ShoppingSessionContext | null,
     assets: ImagePicker.ImagePickerAsset[],
   ) => {
     let importedCount = 0;
@@ -267,7 +262,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
     try {
       const importSessionId = assets.some((asset) => asset.exif && extractGpsCoords(asset.exif))
         ? Crypto.randomUUID()
-        : session.id;
+        : session?.id ?? null;
       for (const asset of assets) {
         try {
           const id = Crypto.randomUUID();
@@ -283,22 +278,22 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
           addPendingUpload({
             id,
             localFileUri,
-            storeName: session.storeName,
-            storeLocationId: coordinates ? null : session.storeLocationId,
+            storeName: session?.storeName ?? null,
+            storeLocationId: coordinates ? null : session?.storeLocationId ?? null,
             // An EXIF-tagged library photo gets its own location session so
             // imports from different cities never overwrite one another.
             shoppingSessionId: importSessionId,
-            sessionStartedAt: coordinates ? Date.now() : session.startedAt,
+            sessionStartedAt: coordinates ? Date.now() : session?.startedAt ?? null,
             latitude: coordinates?.latitude ?? null,
             longitude: coordinates?.longitude ?? null,
-            locationAccuracyMeters: coordinates ? null : session.locationAccuracyMeters,
-            locality: coordinates ? null : session.locality,
-            region: coordinates ? null : session.region,
-            countryCode: coordinates ? null : session.countryCode,
-            branchLabel: coordinates ? null : session.branchLabel,
-            locationSource: coordinates ? 'photo_exif' : session.locationSource,
-            locationStatus: coordinates ? 'resolved' : session.locationStatus,
-            locationCapturedAt: coordinates ? Date.now() : session.locationCapturedAt,
+            locationAccuracyMeters: coordinates ? null : session?.locationAccuracyMeters ?? null,
+            locality: coordinates ? null : session?.locality ?? null,
+            region: coordinates ? null : session?.region ?? null,
+            countryCode: coordinates ? null : session?.countryCode ?? null,
+            branchLabel: coordinates ? null : session?.branchLabel ?? null,
+            locationSource: coordinates ? 'photo_exif' : session?.locationSource ?? 'unavailable',
+            locationStatus: coordinates ? 'resolved' : session?.locationStatus ?? 'unavailable',
+            locationCapturedAt: coordinates ? Date.now() : session?.locationCapturedAt ?? null,
             captureGroupId: captureGroup.groupId,
             captureGroupStartedAt: captureGroup.groupStartedAt,
             captureSequence: captureGroup.sequence,
@@ -334,7 +329,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
   }, [addPendingUpload, assignCaptureGroup, startBackgroundOCR]);
 
   const enqueueGalleryImport = useCallback((
-    session: ShoppingSessionContext,
+    session: ShoppingSessionContext | null,
     assets: ImagePicker.ImagePickerAsset[],
   ) => {
     galleryImportQueueRef.current = galleryImportQueueRef.current
@@ -362,7 +357,6 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
   const closeCamera = useCallback(() => {
     setIsClosing(true);
     setCameraReady(false);
-    gallerySessionAfterSheetRef.current = null;
     storeSheetRef.current?.dismiss();
     void cameraRef.current?.pausePreview().catch(() => undefined);
     requestAnimationFrame(() => {
@@ -370,7 +364,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
     });
   }, [navigation]);
 
-  const importFromGallery = useCallback(async (session: ShoppingSessionContext) => {
+  const importFromGallery = useCallback(async (session: ShoppingSessionContext | null) => {
     if (galleryPickerInFlightRef.current) return;
     galleryPickerInFlightRef.current = true;
     setIsImporting(true);
@@ -412,23 +406,12 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
     }
   }, [enqueueGalleryImport, resumeCameraPreview]);
 
+  // The library button always opens the system picker. A store is optional
+  // here, exactly as it is for a shutter capture — the pill above stays the
+  // one place to attach one.
   const openGallery = useCallback(() => {
-    if (currentSession) {
-      void importFromGallery(currentSession);
-      return;
-    }
-
-    // A sentinel indicates that choosing a store should continue directly to
-    // the system library after the sheet has finished dismissing.
-    gallerySessionAfterSheetRef.current = 'waiting';
-    openStoreSheet();
-  }, [currentSession, importFromGallery, openStoreSheet]);
-
-  const handleStoreSheetDismiss = useCallback(() => {
-    const session = gallerySessionAfterSheetRef.current;
-    gallerySessionAfterSheetRef.current = null;
-    if (session && session !== 'waiting') void importFromGallery(session);
-  }, [importFromGallery]);
+    void importFromGallery(currentSession);
+  }, [currentSession, importFromGallery]);
 
   const takePhoto = useCallback(async () => {
     if (!cameraRef.current || !cameraReady || isCapturing) return;
@@ -566,13 +549,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
           ) : null}
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.roundButton}
-          onPress={() => navigation.navigate('ShoppingGallery')}
-          accessibilityLabel="Open shortlist"
-        >
-          <Ionicons name="images-outline" size={22} color="#FFFFFF" />
-        </TouchableOpacity>
+        <View style={styles.roundButtonPlaceholder} />
       </View>
 
       {galleryImportProgress ? (
@@ -598,8 +575,8 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
             onPress={openGallery}
             disabled={isImporting || isCapturing}
             accessibilityLabel={currentStoreName
-              ? `Import photos for ${currentStoreName}`
-              : 'Choose a store, then import photos'}
+              ? `Import photos from your library for ${currentStoreName}`
+              : 'Import photos from your library'}
           >
             {isImporting ? (
               <ActivityIndicator color="#FFFFFF" />
@@ -645,7 +622,6 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
         keyboardBlurBehavior="restore"
         backgroundStyle={styles.sheetBackground}
         handleIndicatorStyle={styles.sheetHandle}
-        onDismiss={handleStoreSheetDismiss}
       >
         <BottomSheetView style={styles.sheetContent}>
           <Text style={styles.sheetTitle}>Where are you shopping?</Text>

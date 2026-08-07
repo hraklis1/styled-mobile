@@ -296,14 +296,14 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
   const canClose = phase === 'idle' || phase === 'review' || phase === 'pre-extract';
 
   const headerTitle =
-    phase === 'idle' ? 'Add to Wardrobe'
+    phase === 'idle' ? 'Add New Clothes'
     : phase === 'scanning' ? 'Scanning outfit…'
     : phase === 'pre-extract'
       ? preExtractItems.length === 1
         ? 'Verify & add details'
         : `${preExtractItems.length} items — verify & add details`
     : phase === 'extracting' ? 'Extracting details…'
-    : phase === 'saving' ? 'Adding to wardrobe…'
+    : phase === 'saving' ? 'Adding to closet…'
     : detectedItems.length === 1 ? '1 item detected'
     : `${detectedItems.length} items detected`;
 
@@ -574,10 +574,10 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
               )}
               <Text style={styles.saveBtnText}>
                 {phase === 'saving'
-                  ? 'Adding to wardrobe…'
+                  ? 'Adding to closet…'
                   : detectedItems.length === 1
-                  ? 'Add to wardrobe'
-                  : `Add all ${detectedItems.length} to wardrobe`}
+                  ? 'Add to closet'
+                  : `Add all ${detectedItems.length} to closet`}
               </Text>
             </TouchableOpacity>
           </View>

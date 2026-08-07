@@ -66,12 +66,15 @@ export function ScreenHeader({
 
 export function EditorialSection({
   title,
+  description,
   actionLabel,
   onAction,
   children,
   style,
 }: {
   title: string;
+  /** One line on what the section holds, for sections whose contents aren't self-evident. */
+  description?: string;
   actionLabel?: string;
   onAction?: () => void;
   children: ReactNode;
@@ -79,7 +82,7 @@ export function EditorialSection({
 }) {
   return (
     <View style={[styles.section, style]}>
-      <View style={styles.sectionHeader}>
+      <View style={[styles.sectionHeader, description ? styles.sectionHeaderTight : null]}>
         <Text style={styles.sectionTitle}>{title}</Text>
         {actionLabel && onAction ? (
           <PressableScale
@@ -93,6 +96,7 @@ export function EditorialSection({
           </PressableScale>
         ) : null}
       </View>
+      {description ? <Text style={styles.sectionDescription}>{description}</Text> : null}
       {children}
     </View>
   );
@@ -358,10 +362,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.md,
   },
+  // A description carries its own gap to the content below it.
+  sectionHeaderTight: { marginBottom: spacing.xs },
   sectionTitle: {
     fontSize: typography.size.md,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
+  },
+  sectionDescription: {
+    maxWidth: 330,
+    marginBottom: spacing.md,
+    fontSize: typography.size.sm,
+    lineHeight: 20,
+    color: colors.mutedForeground,
   },
   sectionAction: { paddingVertical: spacing.xs, paddingLeft: spacing.md },
   sectionActionText: {

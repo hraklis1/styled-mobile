@@ -82,39 +82,3 @@ export function selectActiveShoppingFinds(items: ShoppingEditItem[], limit = 4):
     .slice(0, limit);
 }
 
-export type RecentShoppingSummary = {
-  sessionKey: string;
-  storeName: string;
-  placeLabel: string | null;
-  capturedAt: string;
-  itemCount: number;
-  knownSpend: number | null;
-};
-
-export function latestShoppingSummary(items: ShoppingEditItem[]): RecentShoppingSummary | null {
-  if (items.length === 0) return null;
-  const newest = [...items].sort((a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime())[0];
-  const day = newest.capturedAt.slice(0, 10);
-  const sessionKey = newest.primarySnap.shoppingSessionId
-    ?? `${newest.storeName ?? 'unknown'}:${day}`;
-  const sessionItems = items.filter((item) => {
-    if (newest.primarySnap.shoppingSessionId) {
-      return item.primarySnap.shoppingSessionId === newest.primarySnap.shoppingSessionId;
-    }
-    return item.capturedAt.slice(0, 10) === day && item.storeName === newest.storeName;
-  });
-  const priced = sessionItems.map((item) => item.extractedPrice).filter((price): price is number => price !== null);
-  const placeLabel = [newest.locality, newest.branchLabel ?? newest.region]
-    .filter(Boolean)
-    .filter((value, index, values) => values.indexOf(value) === index)
-    .join(' · ') || null;
-
-  return {
-    sessionKey,
-    storeName: newest.storeName ?? 'Shopping session',
-    placeLabel,
-    capturedAt: newest.capturedAt,
-    itemCount: sessionItems.length,
-    knownSpend: priced.length > 0 ? priced.reduce((sum, price) => sum + price, 0) : null,
-  };
-}

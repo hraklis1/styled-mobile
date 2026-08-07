@@ -27,7 +27,8 @@ const REASON_LABEL: Record<string, string> = {
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
-function categoryIcon(category: string): IoniconName {
+/** Shared with the Shop brief card so a priority wears the same mark everywhere. */
+export function categoryIcon(category: string): IoniconName {
   switch (category?.toLowerCase()) {
     case 'top':
     case 'tops':

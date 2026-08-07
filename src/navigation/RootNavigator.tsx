@@ -420,15 +420,15 @@ function AppGate() {
   }
 
   return (
-    <GlobalOutfitLoggerProvider>
-      <GlobalAIStylistProvider>
-        <GlobalScanProvider>
+    <GlobalScanProvider>
+      <GlobalOutfitLoggerProvider>
+        <GlobalAIStylistProvider>
           <FabScrollProvider>
             <AppTabNavigator />
           </FabScrollProvider>
-        </GlobalScanProvider>
-      </GlobalAIStylistProvider>
-    </GlobalOutfitLoggerProvider>
+        </GlobalAIStylistProvider>
+      </GlobalOutfitLoggerProvider>
+    </GlobalScanProvider>
   );
 }
 

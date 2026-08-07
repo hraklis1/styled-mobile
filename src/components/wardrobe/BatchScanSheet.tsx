@@ -751,10 +751,10 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
               )}
               <Text style={styles.saveBtnText}>
                 {phase === 'saving'
-                  ? 'Adding to wardrobe…'
+                  ? 'Adding to closet…'
                   : allItems.length === 1
-                  ? 'Add to wardrobe'
-                  : `Add all ${allItems.length} to wardrobe`}
+                  ? 'Add to closet'
+                  : `Add all ${allItems.length} to closet`}
               </Text>
             </TouchableOpacity>
           </View>
@@ -776,7 +776,7 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
         ? 'Verify & add details'
         : `${preExtractItems.length} items — verify & add details`
     : phase === 'extracting' ? 'Extracting details…'
-    : phase === 'saving' ? 'Adding to wardrobe…'
+    : phase === 'saving' ? 'Adding to closet…'
     : allItems.length === 1 ? '1 item detected'
     : `${allItems.length} items detected`;
 
