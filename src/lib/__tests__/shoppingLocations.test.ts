@@ -4,6 +4,7 @@ import {
   formatShoppingPlaceLabel,
   shoppingFilterKey,
 } from '../shoppingLocations';
+import { buildShoppingLocationHint } from '../photoLocation';
 import type { ShoppingSessionContext } from '../../stores/useShoppingSessionStore';
 
 const torontoLululemon: ShoppingSessionContext = {
@@ -17,13 +18,27 @@ const torontoLululemon: ShoppingSessionContext = {
   locality: 'Toronto',
   region: 'ON',
   countryCode: 'CA',
+  locationHint: 'Near Yorkdale · Toronto',
   locationSource: 'device',
   locationStatus: 'resolved',
   locationCapturedAt: Date.parse('2026-06-22T12:00:00.000Z'),
   startedAt: Date.parse('2026-06-22T12:00:00.000Z'),
+  lastActivityAt: Date.parse('2026-06-22T12:00:00.000Z'),
+  pausedAt: null,
+  endedAt: null,
+  lifecycleStatus: 'active',
 };
 
 describe('shoppingLocations', () => {
+  it('builds coarse location hints without house numbers or repeated parts', () => {
+    expect(buildShoppingLocationHint({
+      street: '123 Queen Street West',
+      district: 'Downtown',
+      city: 'Toronto',
+    })).toBe('Near Queen Street West · Downtown');
+    expect(buildShoppingLocationHint({ street: 'Main Street', city: 'Main Street' }))
+      .toBe('Near Main Street');
+  });
   it('formats repeated stores with distinct city and branch labels', () => {
     const vancouverLululemon = {
       ...torontoLululemon,

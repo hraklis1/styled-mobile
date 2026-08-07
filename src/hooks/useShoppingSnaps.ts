@@ -34,6 +34,7 @@ function mapRemoteSnap(row: RemoteShoppingSnapRow): ShoppingSnap {
     locality: session?.locality ?? null,
     region: session?.region ?? null,
     countryCode: session?.country_code ?? null,
+    locationHint: session?.location_hint ?? null,
     locationSource: session?.location_source ?? null,
     extractedPrice: parsedPrice !== null && Number.isFinite(parsedPrice) ? parsedPrice : null,
     rawOcrText: row.raw_ocr_text ?? '',
@@ -54,16 +55,16 @@ function isShoppingFindCatalogStatus(value: string): value is ShoppingFindCatalo
 }
 
 function mapRemoteSnapFallback(row: Omit<RemoteShoppingSnapRow, 'shopping_sessions' | 'shopping_capture_groups'> & {
-  shopping_sessions: Omit<Exclude<RemoteShoppingSnapRow['shopping_sessions'], null>, 'store_location_id'> | null;
+  shopping_sessions: Omit<Exclude<RemoteShoppingSnapRow['shopping_sessions'], null>, 'store_location_id' | 'location_hint'> | null;
   shopping_capture_groups?: null;
 }): ShoppingSnap {
   return mapRemoteSnap({
     ...row,
     shopping_capture_groups: null,
     shopping_sessions: Array.isArray(row.shopping_sessions)
-      ? row.shopping_sessions.map((session) => ({ ...session, store_location_id: null }))
+      ? row.shopping_sessions.map((session) => ({ ...session, store_location_id: null, location_hint: null }))
       : row.shopping_sessions
-        ? { ...row.shopping_sessions, store_location_id: null }
+        ? { ...row.shopping_sessions, store_location_id: null, location_hint: null }
         : null,
   } as RemoteShoppingSnapRow);
 }
@@ -87,7 +88,7 @@ export function useShoppingSnaps() {
             category,size_label,color_label,material_label,notes,is_favorite,catalog_status
           ),
           shopping_sessions(
-            store_location_id,branch_label,location_accuracy_meters,locality,region,country_code,location_source
+            store_location_id,branch_label,location_accuracy_meters,locality,region,country_code,location_hint,location_source
           )
         `)
         .eq('user_id', user.id)

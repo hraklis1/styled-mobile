@@ -55,6 +55,17 @@ describe('shoppingSessionGroups', () => {
     ]);
   });
 
+  it('keeps two visit ids separate at the same store on the same day', () => {
+    const items = buildShoppingEditItems([
+      { ...snap, id: 'visit-a', shoppingSessionId: 'session-a', captureGroupId: 'group-a' },
+      { ...snap, id: 'visit-b', shoppingSessionId: 'session-b', captureGroupId: 'group-b' },
+    ]);
+
+    const groups = buildShoppingSessionGroups(items, now);
+    expect(groups).toHaveLength(2);
+    expect(groups.map((group) => group.shoppingSessionId).sort()).toEqual(['session-a', 'session-b']);
+  });
+
   it('leaves spend unknown when no item in the trip has a price', () => {
     const items = buildShoppingEditItems([
       { ...snap, extractedPrice: null, rawOcrText: '' },

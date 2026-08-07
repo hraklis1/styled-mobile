@@ -12,12 +12,20 @@ import { describeSyncError, isSupabaseSchemaMissing } from '../lib/supabaseError
 import {
   useShoppingSessionStore,
   type PendingShoppingUpload,
+  type ShoppingSessionContext,
 } from '../stores/useShoppingSessionStore';
 
 const SHOPPING_BUCKET = 'shopping-snaps';
 
 let activeSync: Promise<void> | null = null;
 let syncAgain = false;
+
+function legacyShoppingSessionPayload<T extends Record<string, unknown>>(payload: T): T {
+  const legacyPayload = { ...payload };
+  Reflect.deleteProperty(legacyPayload, 'location_hint');
+  Reflect.deleteProperty(legacyPayload, 'store_location_id');
+  return legacyPayload;
+}
 
 function contentTypeFor(file: File): string {
   switch (file.extension.toLowerCase()) {
@@ -28,9 +36,16 @@ function contentTypeFor(file: File): string {
   }
 }
 
+type StoreLocationSyncSource = Pick<
+  PendingShoppingUpload,
+  | 'storeName' | 'shoppingSessionId' | 'sessionStartedAt' | 'timestamp'
+  | 'branchLabel' | 'latitude' | 'longitude' | 'locationAccuracyMeters'
+  | 'locality' | 'region' | 'countryCode' | 'locationSource'
+>;
+
 async function upsertShoppingStoreLocation(
   userId: string,
-  upload: PendingShoppingUpload,
+  upload: StoreLocationSyncSource,
 ): Promise<string | null> {
   if (!upload.storeName) return null;
 
@@ -119,8 +134,8 @@ async function upsertShoppingSession(
   userId: string,
   upload: PendingShoppingUpload,
   storeLocationId: string | null,
-): Promise<void> {
-  if (!upload.shoppingSessionId || !upload.storeName) return;
+): Promise<boolean> {
+  if (!upload.shoppingSessionId) return true;
 
   const sessionPayload = {
     id: upload.shoppingSessionId,
@@ -133,6 +148,7 @@ async function upsertShoppingSession(
     locality: upload.locality ?? null,
     region: upload.region ?? null,
     country_code: upload.countryCode ?? null,
+    location_hint: upload.locationHint ?? null,
     location_source: upload.locationSource ?? 'unavailable',
     location_captured_at: upload.locationCapturedAt
       ? new Date(upload.locationCapturedAt).toISOString()
@@ -140,32 +156,44 @@ async function upsertShoppingSession(
     started_at: new Date(upload.sessionStartedAt ?? upload.timestamp).toISOString(),
   };
 
-  const { error: sessionError } = await supabase.from('shopping_sessions').upsert({
+  const fullSessionPayload = {
     ...sessionPayload,
     store_location_id: storeLocationId,
-  }, { onConflict: 'id' });
-  if (!sessionError) return;
+  };
+  const { error: sessionError } = await supabase.from('shopping_sessions').upsert(
+    fullSessionPayload,
+    { onConflict: 'id' },
+  );
+  if (!sessionError) return true;
   if (!isSupabaseSchemaMissing(sessionError)) throw sessionError;
+
+  // Before the visit-lifecycle migration, sessions require a store name and
+  // do not have location_hint. Keep storeless work local until that schema is
+  // available instead of uploading a snap without its visit relationship.
+  if (!upload.storeName) return false;
 
   const { error: fallbackSessionError } = await supabase
     .from('shopping_sessions')
-    .upsert(sessionPayload, { onConflict: 'id' });
+    .upsert(legacyShoppingSessionPayload(fullSessionPayload), { onConflict: 'id' });
   if (fallbackSessionError) throw fallbackSessionError;
+  return true;
 }
 
-async function uploadShoppingSnap(userId: string, upload: PendingShoppingUpload): Promise<void> {
+async function uploadShoppingSnap(userId: string, upload: PendingShoppingUpload): Promise<boolean> {
+  if (useShoppingSessionStore.getState().deletedCaptureIds.includes(upload.id)) return false;
   const localFile = new File(upload.localFileUri);
   if (!localFile.exists) {
     // A persisted queue record can outlive its sandbox file after reinstalling
     // a development build. There is nothing left to upload, so retire the
     // orphan instead of retrying and surfacing the same warning forever.
     useShoppingSessionStore.getState().removePendingUpload(upload.id);
-    return;
+    return false;
   }
   const captureGroupId = upload.captureGroupId ?? upload.id;
   const storeLocationId = upload.storeLocationId ?? await upsertShoppingStoreLocation(userId, upload);
 
-  await upsertShoppingSession(userId, upload, storeLocationId);
+  const sessionReady = await upsertShoppingSession(userId, upload, storeLocationId);
+  if (!sessionReady) return false;
 
   const groupPayload = {
     id: captureGroupId,
@@ -196,6 +224,7 @@ async function uploadShoppingSnap(userId: string, upload: PendingShoppingUpload)
   const extension = localFile.extension.toLowerCase().replace('.', '') || 'jpg';
   const storagePath = `${userId}/${upload.id}.${extension}`;
   const fileBytes = await localFile.arrayBuffer();
+  if (useShoppingSessionStore.getState().deletedCaptureIds.includes(upload.id)) return false;
   const { error: storageError } = await supabase.storage
     .from(SHOPPING_BUCKET)
     .upload(storagePath, fileBytes, {
@@ -203,6 +232,11 @@ async function uploadShoppingSnap(userId: string, upload: PendingShoppingUpload)
       upsert: true,
     });
   if (storageError) throw storageError;
+
+  if (useShoppingSessionStore.getState().deletedCaptureIds.includes(upload.id)) {
+    await supabase.storage.from(SHOPPING_BUCKET).remove([storagePath]);
+    return false;
+  }
 
   const { data: publicUrlData } = supabase.storage.from(SHOPPING_BUCKET).getPublicUrl(storagePath);
   const { error: rowError } = await supabase.from('shopping_snaps').upsert({
@@ -223,21 +257,111 @@ async function uploadShoppingSnap(userId: string, upload: PendingShoppingUpload)
   }, { onConflict: 'id' });
   if (rowError) throw rowError;
 
+  if (useShoppingSessionStore.getState().deletedCaptureIds.includes(upload.id)) {
+    await supabase.from('shopping_snaps').delete().eq('user_id', userId).eq('id', upload.id);
+    await supabase.storage.from(SHOPPING_BUCKET).remove([storagePath]);
+    return false;
+  }
+
   // The database is durable at this point. Remove the queue record first so a
   // process interruption cannot leave an undeclared local-only photo.
   useShoppingSessionStore.getState().removePendingUpload(upload.id);
+  useShoppingSessionStore.getState().updateVisitPreview(upload.id, {
+    syncStatus: 'synced',
+    storagePath,
+  });
   try {
-    localFile.delete();
+    const preview = useShoppingSessionStore.getState().visitPreviews.find((item) => item.id === upload.id);
+    if (preview?.previewUri || upload.previewUri) localFile.delete();
   } catch (fileError) {
     console.warn('Synced shopping photo could not be removed locally', fileError);
   }
+  return true;
+}
+
+async function syncVisitMetadata(userId: string, visit: ShoppingSessionContext): Promise<boolean> {
+  const source: StoreLocationSyncSource = {
+    storeName: visit.storeName,
+    shoppingSessionId: visit.id,
+    sessionStartedAt: visit.startedAt,
+    timestamp: visit.lastActivityAt,
+    branchLabel: visit.branchLabel,
+    latitude: visit.latitude,
+    longitude: visit.longitude,
+    locationAccuracyMeters: visit.locationAccuracyMeters,
+    locality: visit.locality,
+    region: visit.region,
+    countryCode: visit.countryCode,
+    locationSource: visit.locationSource,
+  };
+  const storeLocationId = visit.storeName
+    ? visit.storeLocationId ?? await upsertShoppingStoreLocation(userId, source)
+    : null;
+  const payload = {
+    id: visit.id,
+    user_id: userId,
+    store_name: visit.storeName,
+    store_location_id: storeLocationId,
+    branch_label: visit.branchLabel,
+    latitude: visit.latitude,
+    longitude: visit.longitude,
+    location_accuracy_meters: visit.locationAccuracyMeters,
+    locality: visit.locality,
+    region: visit.region,
+    country_code: visit.countryCode,
+    location_hint: visit.locationHint,
+    location_source: visit.locationSource,
+    location_captured_at: visit.locationCapturedAt
+      ? new Date(visit.locationCapturedAt).toISOString()
+      : null,
+    started_at: new Date(visit.startedAt).toISOString(),
+    ended_at: visit.endedAt ? new Date(visit.endedAt).toISOString() : null,
+  };
+  const { error } = await supabase.from('shopping_sessions').upsert(payload, { onConflict: 'id' });
+  if (error) {
+    if (!isSupabaseSchemaMissing(error)) throw error;
+    if (!visit.storeName) return false;
+
+    const { error: fallbackError } = await supabase
+      .from('shopping_sessions')
+      .upsert(legacyShoppingSessionPayload(payload), { onConflict: 'id' });
+    if (fallbackError) throw fallbackError;
+  }
+
+  // Narrow photo updates intentionally exclude OCR, role, grouping, and catalog data.
+  const { error: snapsError } = await supabase
+    .from('shopping_snaps')
+    .update({
+      store_name: visit.storeName,
+      latitude: visit.latitude,
+      longitude: visit.longitude,
+    })
+    .eq('user_id', userId)
+    .eq('shopping_session_id', visit.id);
+  if (snapsError) throw snapsError;
+  useShoppingSessionStore.getState().clearPendingVisitMetadata(visit.id);
+  return true;
 }
 
 async function syncReadyUploads(userId: string): Promise<void> {
+  const metadata = useShoppingSessionStore.getState().pendingVisitMetadata;
   const uploads = useShoppingSessionStore.getState().pendingUploads;
   let syncedAny = false;
 
+  for (const visit of metadata) {
+    const networkState = await Network.getNetworkStateAsync();
+    if (networkState.isConnected !== true || networkState.isInternetReachable !== true) return;
+    try {
+      const didSync = await syncVisitMetadata(userId, visit);
+      syncedAny = didSync || syncedAny;
+    } catch (error) {
+      console.warn(`Shopping visit ${visit.id} metadata is still pending: ${describeSyncError(error)}`);
+      break;
+    }
+  }
+
   for (const upload of uploads) {
+    if (useShoppingSessionStore.getState().deletedCaptureIds.includes(upload.id)) continue;
     if (upload.ocrStatus === 'processing') continue;
     if (upload.locationStatus === 'resolving') {
       if (Date.now() - upload.timestamp < 15_000) continue;
@@ -249,8 +373,8 @@ async function syncReadyUploads(userId: string): Promise<void> {
     if (networkState.isConnected !== true || networkState.isInternetReachable !== true) break;
 
     try {
-      await uploadShoppingSnap(userId, upload);
-      syncedAny = true;
+      const didSync = await uploadShoppingSnap(userId, upload);
+      syncedAny = didSync || syncedAny;
     } catch (error) {
       // Keep the item locally. A later connectivity/store change retries it.
       console.warn(`Shopping snap ${upload.id} is still pending: ${describeSyncError(error)}`);
@@ -294,7 +418,10 @@ export function useShoppingSyncManager(): void {
       if (state.isConnected === true && state.isInternetReachable === true) attemptSync();
     });
     const storeSubscription = useShoppingSessionStore.subscribe((state, previousState) => {
-      if (state.pendingUploads !== previousState.pendingUploads) attemptSync();
+      if (
+        state.pendingUploads !== previousState.pendingUploads
+        || state.pendingVisitMetadata !== previousState.pendingVisitMetadata
+      ) attemptSync();
     });
 
     attemptSync();

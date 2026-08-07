@@ -49,8 +49,28 @@ export type CapturedLocation = {
   locality?: string | null;
   region?: string | null;
   countryCode?: string | null;
+  locationHint?: string | null;
   capturedAt?: number;
 };
+
+export function buildShoppingLocationHint(value: {
+  name?: string | null;
+  street?: string | null;
+  district?: string | null;
+  city?: string | null;
+}): string | null {
+  const clean = (part: string | null | undefined) => part
+    ?.replace(/^\s*\d+[A-Za-z-]*\s+/, '')
+    .trim() || null;
+  const parts = [clean(value.street), clean(value.district), clean(value.city)]
+    .filter((part): part is string => Boolean(part))
+    .filter((part, index, values) => (
+      values.findIndex((candidate) => candidate.toLocaleLowerCase() === part.toLocaleLowerCase()) === index
+    ));
+  const fallback = clean(value.name);
+  const label = parts.slice(0, 2).join(' · ') || fallback;
+  return label ? `Near ${label}` : null;
+}
 
 async function reverseGeocode(
   coords: { latitude: number; longitude: number },
@@ -68,6 +88,7 @@ async function reverseGeocode(
         locality: null,
         region: null,
         countryCode: null,
+        locationHint: null,
         address: null,
         capturedAt,
       };
@@ -84,6 +105,7 @@ async function reverseGeocode(
       locality: r.city || r.district || r.subregion || null,
       region: r.region || null,
       countryCode: r.isoCountryCode || null,
+      locationHint: buildShoppingLocationHint(r),
       address,
       capturedAt,
     };
@@ -96,6 +118,7 @@ async function reverseGeocode(
       locality: null,
       region: null,
       countryCode: null,
+      locationHint: null,
       address: null,
       capturedAt,
     };
@@ -116,10 +139,12 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
  * A recent, reasonably accurate cached fix is preferred for instant indoor use;
  * otherwise a fresh high-accuracy fix gets a short window to resolve.
  */
-export async function resolveShoppingSessionLocation(): Promise<CapturedLocation | null> {
+export async function resolveShoppingSessionLocation(
+  options: { requestPermission?: boolean } = {},
+): Promise<CapturedLocation | null> {
   try {
     let permission = await Location.getForegroundPermissionsAsync();
-    if (permission.status === Location.PermissionStatus.UNDETERMINED) {
+    if (!permission.granted && permission.canAskAgain && options.requestPermission) {
       permission = await Location.requestForegroundPermissionsAsync();
     }
     if (!permission.granted) return null;

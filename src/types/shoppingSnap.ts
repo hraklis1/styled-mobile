@@ -31,6 +31,7 @@ export type ShoppingSnap = {
   locality: string | null;
   region: string | null;
   countryCode: string | null;
+  locationHint?: string | null;
   locationSource: string | null;
   extractedPrice: number | null;
   rawOcrText: string;
@@ -83,6 +84,7 @@ export type RemoteShoppingSnapRow = {
     locality: string | null;
     region: string | null;
     country_code: string | null;
+    location_hint: string | null;
     location_source: string | null;
   } | {
     store_location_id: string | null;
@@ -91,6 +93,7 @@ export type RemoteShoppingSnapRow = {
     locality: string | null;
     region: string | null;
     country_code: string | null;
+    location_hint: string | null;
     location_source: string | null;
   }[] | null;
 };

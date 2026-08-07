@@ -186,6 +186,7 @@ export function buildShoppingStoreSuggestions({
   }
 
   for (const session of recentSessions) {
+    if (!session.storeName) continue;
     const score = 200 + queryScore(session.storeName, trimmedQuery);
     if (!Number.isFinite(score)) continue;
     const distance = currentLocation ? distanceMeters(session, currentLocation) : null;

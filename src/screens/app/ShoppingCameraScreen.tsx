@@ -2,11 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
+  FlatList,
   Keyboard,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
@@ -23,6 +27,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Crypto from 'expo-crypto';
 import * as Haptics from 'expo-haptics';
 import { StatusBar } from 'expo-status-bar';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -32,6 +37,11 @@ import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import { processLocalOCR } from '../../lib/processLocalOCR';
 import { classifyShoppingCapture } from '../../lib/classifyShoppingCapture';
 import { extractGpsCoords, resolveShoppingSessionLocation } from '../../lib/photoLocation';
+import { createShoppingPreview, deleteShoppingPreview } from '../../lib/shoppingPreviews';
+import { evaluateShoppingVisitResume } from '../../lib/shoppingVisit';
+import { deleteShoppingSnaps } from '../../lib/deleteShoppingSnaps';
+import { useAuth } from '../../contexts/AuthContext';
+import type { ShoppingSnap } from '../../types/shoppingSnap';
 import {
   buildShoppingStoreSuggestions,
   formatShoppingPlaceLabel,
@@ -57,10 +67,35 @@ function sessionPlaceLabel(session: ShoppingSessionContext | null): string | nul
   if (!session) return null;
   if (session.locationStatus === 'resolving') return 'Locating nearby branch…';
   if (session.locationStatus === 'unavailable') return 'Location unavailable — tap to retry';
+  if (!session.storeName && session.locationHint) return session.locationHint;
   return [session.branchLabel, session.locality, session.region]
     .filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index)
     .slice(0, 2)
     .join(' · ') || 'Location attached';
+}
+
+function createVisit(now = Date.now()): ShoppingSessionContext {
+  return {
+    id: Crypto.randomUUID(),
+    storeLocationId: null,
+    storeName: null,
+    branchLabel: null,
+    latitude: null,
+    longitude: null,
+    locationAccuracyMeters: null,
+    locality: null,
+    region: null,
+    countryCode: null,
+    locationHint: null,
+    locationSource: 'unavailable',
+    locationStatus: 'resolving',
+    locationCapturedAt: null,
+    startedAt: now,
+    lastActivityAt: now,
+    pausedAt: null,
+    endedAt: null,
+    lifecycleStatus: 'active',
+  };
 }
 
 function imageExtension(
@@ -99,6 +134,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
   const galleryPickerInFlightRef = useRef(false);
   const galleryImportQueueRef = useRef<Promise<void>>(Promise.resolve());
   const ocrQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const previewRailRef = useRef<ScrollView>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraReady, setCameraReady] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -110,24 +146,43 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
   } | null>(null);
   const [storeDraft, setStoreDraft] = useState('');
   const [captureCount, setCaptureCount] = useState(0);
+  const [resumePromptVisible, setResumePromptVisible] = useState(false);
+  const [selectedPreviewId, setSelectedPreviewId] = useState<string | null>(null);
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const { user } = useAuth();
   const { data: visitedStoreLocations = [] } = useShoppingStoreLocations();
 
   const currentStoreName = useShoppingSessionStore((state) => state.currentStoreName);
   const currentSession = useShoppingSessionStore((state) => state.currentSession);
   const recentStores = useShoppingSessionStore((state) => state.recentStores);
   const recentSessions = useShoppingSessionStore((state) => state.recentSessions);
-  const setShoppingSession = useShoppingSessionStore((state) => state.setShoppingSession);
+  const resumeVisit = useShoppingSessionStore((state) => state.resumeVisit);
+  const pauseVisit = useShoppingSessionStore((state) => state.pauseVisit);
+  const endVisit = useShoppingSessionStore((state) => state.endVisit);
+  const assignVisitStore = useShoppingSessionStore((state) => state.assignVisitStore);
   const updateShoppingSessionLocation = useShoppingSessionStore(
     (state) => state.updateShoppingSessionLocation,
   );
-  const clearStoreName = useShoppingSessionStore((state) => state.clearStoreName);
   const addPendingUpload = useShoppingSessionStore((state) => state.addPendingUpload);
+  const pendingUploads = useShoppingSessionStore((state) => state.pendingUploads);
+  const allVisitPreviews = useShoppingSessionStore((state) => state.visitPreviews);
+  const recordVisitPreview = useShoppingSessionStore((state) => state.recordVisitPreview);
+  const updateVisitPreview = useShoppingSessionStore((state) => state.updateVisitPreview);
+  const removeVisitPreview = useShoppingSessionStore((state) => state.removeVisitPreview);
   const assignCaptureGroup = useShoppingSessionStore((state) => state.assignCaptureGroup);
   const startNextCaptureGroup = useShoppingSessionStore((state) => state.startNextCaptureGroup);
+  const activeCaptureGroupId = useShoppingSessionStore((state) => state.activeCaptureGroupId);
   const activeCapturePhotoCount = useShoppingSessionStore((state) => state.activeCapturePhotoCount);
   const activeCaptureTagCount = useShoppingSessionStore((state) => state.activeCaptureTagCount);
+  const visitPreviews = useMemo(
+    () => allVisitPreviews
+      .filter((preview) => preview.shoppingSessionId === currentSession?.id)
+      .sort((a, b) => a.captureSequence - b.captureSequence),
+    [allVisitPreviews, currentSession?.id],
+  );
+  const selectedPreview = visitPreviews.find((preview) => preview.id === selectedPreviewId) ?? null;
   const snapPoints = useMemo(() => ['62%'], []);
   const storeSuggestions = useMemo(
     () => buildShoppingStoreSuggestions({
@@ -139,6 +194,11 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
     }),
     [currentSession, recentSessions, recentStores, storeDraft, visitedStoreLocations],
   );
+
+  useEffect(() => {
+    if (visitPreviews.length === 0) return;
+    requestAnimationFrame(() => previewRailRef.current?.scrollToEnd({ animated: true }));
+  }, [visitPreviews.length]);
 
   const startBackgroundOCR = useCallback((id: string, localFileUri: string) => {
     // Apple Vision/CoreML can be unstable when many large library photos are
@@ -170,6 +230,51 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
     }
   }, [permission, requestPermission]);
 
+  const reconcileVisit = useCallback((now = Date.now()) => {
+    const state = useShoppingSessionStore.getState();
+    if (!state.currentSession) {
+      state.ensureActiveVisit(createVisit(now));
+      setResumePromptVisible(false);
+      return;
+    }
+    const count = state.visitPreviews.filter(
+      (preview) => preview.shoppingSessionId === state.currentSession?.id,
+    ).length;
+    const decision = evaluateShoppingVisitResume(state.currentSession, count, now);
+    if (decision === 'expire') {
+      state.visitPreviews.forEach((preview) => deleteShoppingPreview(preview.previewUri));
+      state.endVisit(now);
+      useShoppingSessionStore.getState().ensureActiveVisit(createVisit(now));
+      setResumePromptVisible(false);
+    } else if (decision === 'resume') {
+      state.resumeVisit(now);
+      setResumePromptVisible(false);
+    } else {
+      setResumePromptVisible(decision === 'prompt');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isFocused) reconcileVisit();
+  }, [isFocused, reconcileVisit]);
+
+  useEffect(() => {
+    const tabNavigation = navigation.getParent();
+    tabNavigation?.setOptions({ tabBarStyle: { display: 'none' } });
+    return () => tabNavigation?.setOptions({ tabBarStyle: undefined });
+  }, [navigation]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active') {
+        setResumePromptVisible(false);
+        return;
+      }
+      if (isFocused) reconcileVisit();
+    });
+    return () => subscription.remove();
+  }, [isFocused, reconcileVisit]);
+
   const renderBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => (
       <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />
@@ -187,10 +292,10 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
     storeSheetRef.current?.dismiss();
   }, []);
 
-  const resolveSessionLocation = useCallback((sessionId: string) => {
+  const resolveSessionLocation = useCallback((sessionId: string, requestPermissionForLocation = false) => {
     if (locationResolutionRef.current.has(sessionId)) return;
     locationResolutionRef.current.add(sessionId);
-    void resolveShoppingSessionLocation().then((location) => {
+    void resolveShoppingSessionLocation({ requestPermission: requestPermissionForLocation }).then((location) => {
       if (!location) {
         updateShoppingSessionLocation(sessionId, {
           locationStatus: 'unavailable',
@@ -206,6 +311,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
         locality: location.locality ?? null,
         region: location.region ?? null,
         countryCode: location.countryCode ?? null,
+        locationHint: location.locationHint ?? null,
         locationCapturedAt: location.capturedAt ?? Date.now(),
         locationSource: 'device',
         locationStatus: 'resolved',
@@ -223,34 +329,33 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
 
   const chooseStore = useCallback((name: string, suggestion?: ShoppingStoreSuggestion) => {
     const trimmedName = name.trim();
-    if (!trimmedName) return;
+    if (!trimmedName || !currentSession) return;
     const hasResolvedSuggestion = suggestion?.source === 'recent'
       && Boolean(suggestion.locality || suggestion.branchLabel || suggestion.latitude !== null);
-    const session: ShoppingSessionContext = {
-      id: Crypto.randomUUID(),
-      storeLocationId: null,
-      storeName: trimmedName,
-      branchLabel: hasResolvedSuggestion ? suggestion?.branchLabel ?? null : null,
-      latitude: hasResolvedSuggestion ? suggestion?.latitude ?? null : null,
-      longitude: hasResolvedSuggestion ? suggestion?.longitude ?? null : null,
-      locationAccuracyMeters: null,
-      locality: hasResolvedSuggestion ? suggestion?.locality ?? null : null,
-      region: hasResolvedSuggestion ? suggestion?.region ?? null : null,
-      countryCode: hasResolvedSuggestion ? suggestion?.countryCode ?? null : null,
-      locationSource: hasResolvedSuggestion ? 'recent' : 'device',
-      locationStatus: hasResolvedSuggestion ? 'resolved' : 'resolving',
-      locationCapturedAt: hasResolvedSuggestion ? Date.now() : null,
-      startedAt: Date.now(),
-    };
-    setShoppingSession(session);
-    if (!hasResolvedSuggestion) resolveSessionLocation(session.id);
+    assignVisitStore(currentSession.id, trimmedName, {
+      branchLabel: hasResolvedSuggestion ? suggestion?.branchLabel ?? null : currentSession.branchLabel,
+      latitude: hasResolvedSuggestion ? suggestion?.latitude ?? null : currentSession.latitude,
+      longitude: hasResolvedSuggestion ? suggestion?.longitude ?? null : currentSession.longitude,
+      locationAccuracyMeters: hasResolvedSuggestion ? null : currentSession.locationAccuracyMeters,
+      locality: hasResolvedSuggestion ? suggestion?.locality ?? null : currentSession.locality,
+      region: hasResolvedSuggestion ? suggestion?.region ?? null : currentSession.region,
+      countryCode: hasResolvedSuggestion ? suggestion?.countryCode ?? null : currentSession.countryCode,
+      locationHint: hasResolvedSuggestion
+        ? formatShoppingPlaceLabel(suggestion, { fallback: currentSession.locationHint ?? 'Location captured' })
+        : currentSession.locationHint,
+      locationSource: hasResolvedSuggestion ? 'recent' : currentSession.locationSource,
+      locationStatus: hasResolvedSuggestion ? 'resolved' : currentSession.locationStatus,
+      locationCapturedAt: hasResolvedSuggestion ? Date.now() : currentSession.locationCapturedAt,
+    });
+    if (!hasResolvedSuggestion && currentSession.locationStatus !== 'resolved') {
+      resolveSessionLocation(currentSession.id, true);
+    }
     closeStoreSheet();
-  }, [closeStoreSheet, resolveSessionLocation, setShoppingSession]);
+  }, [assignVisitStore, closeStoreSheet, currentSession, resolveSessionLocation]);
 
   const clearStore = useCallback(() => {
-    clearStoreName();
     closeStoreSheet();
-  }, [clearStoreName, closeStoreSheet]);
+  }, [closeStoreSheet]);
 
   const importGalleryAssets = useCallback(async (
     session: ShoppingSessionContext | null,
@@ -260,9 +365,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
     setGalleryImportProgress({ imported: 0, total: assets.length });
 
     try {
-      const importSessionId = assets.some((asset) => asset.exif && extractGpsCoords(asset.exif))
-        ? Crypto.randomUUID()
-        : session?.id ?? null;
+      const importSessionId = session?.id ?? null;
       for (const asset of assets) {
         try {
           const id = Crypto.randomUUID();
@@ -278,6 +381,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
           addPendingUpload({
             id,
             localFileUri,
+            previewUri: null,
             storeName: session?.storeName ?? null,
             storeLocationId: coordinates ? null : session?.storeLocationId ?? null,
             // An EXIF-tagged library photo gets its own location session so
@@ -291,6 +395,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
             region: coordinates ? null : session?.region ?? null,
             countryCode: coordinates ? null : session?.countryCode ?? null,
             branchLabel: coordinates ? null : session?.branchLabel ?? null,
+            locationHint: coordinates ? null : session?.locationHint ?? null,
             locationSource: coordinates ? 'photo_exif' : session?.locationSource ?? 'unavailable',
             locationStatus: coordinates ? 'resolved' : session?.locationStatus ?? 'unavailable',
             locationCapturedAt: coordinates ? Date.now() : session?.locationCapturedAt ?? null,
@@ -303,6 +408,24 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
             ocrStatus: 'processing',
             timestamp,
           });
+          if (session) {
+            recordVisitPreview({
+              id,
+              shoppingSessionId: session.id,
+              captureGroupId: captureGroup.groupId,
+              captureSequence: captureGroup.sequence,
+              localFileUri,
+              previewUri: null,
+              captureRole: 'unknown',
+              ocrStatus: 'processing',
+              syncStatus: 'pending',
+              storagePath: null,
+              timestamp,
+            });
+            void createShoppingPreview(localFileUri, id)
+              .then((previewUri) => updateVisitPreview(id, { previewUri }))
+              .catch(() => undefined);
+          }
           startBackgroundOCR(id, localFileUri);
           importedCount += 1;
           setGalleryImportProgress({ imported: importedCount, total: assets.length });
@@ -326,7 +449,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
         setGalleryImportProgress(null);
       }, importedCount > 0 ? 900 : 0);
     }
-  }, [addPendingUpload, assignCaptureGroup, startBackgroundOCR]);
+  }, [addPendingUpload, assignCaptureGroup, recordVisitPreview, startBackgroundOCR, updateVisitPreview]);
 
   const enqueueGalleryImport = useCallback((
     session: ShoppingSessionContext | null,
@@ -355,6 +478,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
   }, [isClosing, isFocused]);
 
   const closeCamera = useCallback(() => {
+    pauseVisit();
     setIsClosing(true);
     setCameraReady(false);
     storeSheetRef.current?.dismiss();
@@ -362,7 +486,30 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
     requestAnimationFrame(() => {
       navigation.goBack();
     });
-  }, [navigation]);
+  }, [navigation, pauseVisit]);
+
+  const finishShopping = useCallback(() => {
+    visitPreviews.forEach((preview) => deleteShoppingPreview(preview.previewUri));
+    endVisit();
+    setIsClosing(true);
+    setCameraReady(false);
+    storeSheetRef.current?.dismiss();
+    void cameraRef.current?.pausePreview().catch(() => undefined);
+    requestAnimationFrame(() => navigation.navigate('ShopMain'));
+  }, [endVisit, navigation, visitPreviews]);
+
+  const confirmResumeVisit = useCallback(() => {
+    resumeVisit();
+    setResumePromptVisible(false);
+  }, [resumeVisit]);
+
+  const startFreshVisit = useCallback(() => {
+    const state = useShoppingSessionStore.getState();
+    state.visitPreviews.forEach((preview) => deleteShoppingPreview(preview.previewUri));
+    state.endVisit();
+    useShoppingSessionStore.getState().ensureActiveVisit(createVisit());
+    setResumePromptVisible(false);
+  }, []);
 
   const importFromGallery = useCallback(async (session: ShoppingSessionContext | null) => {
     if (galleryPickerInFlightRef.current) return;
@@ -439,6 +586,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
       addPendingUpload({
         id,
         localFileUri,
+        previewUri: null,
             storeName: capturedSession?.storeName ?? null,
             storeLocationId: capturedSession?.storeLocationId ?? null,
         shoppingSessionId: capturedSession?.id ?? null,
@@ -450,6 +598,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
         region: capturedSession?.region ?? null,
         countryCode: capturedSession?.countryCode ?? null,
         branchLabel: capturedSession?.branchLabel ?? null,
+        locationHint: capturedSession?.locationHint ?? null,
         locationSource: capturedSession?.locationSource ?? 'unavailable',
         locationStatus: capturedSession?.locationStatus ?? 'unavailable',
         locationCapturedAt: capturedSession?.locationCapturedAt ?? null,
@@ -462,6 +611,24 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
         ocrStatus: 'processing',
         timestamp,
       });
+      if (capturedSession) {
+        recordVisitPreview({
+          id,
+          shoppingSessionId: capturedSession.id,
+          captureGroupId: captureGroup.groupId,
+          captureSequence: captureGroup.sequence,
+          localFileUri,
+          previewUri: null,
+          captureRole: 'unknown',
+          ocrStatus: 'processing',
+          syncStatus: 'pending',
+          storagePath: null,
+          timestamp,
+        });
+        void createShoppingPreview(localFileUri, id)
+          .then((previewUri) => updateVisitPreview(id, { previewUri }))
+          .catch(() => undefined);
+      }
       setCaptureCount((count) => count + 1);
 
       // Do not await OCR: the camera is released as soon as the durable local
@@ -475,13 +642,75 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
     } finally {
       setIsCapturing(false);
     }
-  }, [addPendingUpload, assignCaptureGroup, cameraReady, currentSession, isCapturing, startBackgroundOCR]);
+  }, [addPendingUpload, assignCaptureGroup, cameraReady, currentSession, isCapturing, recordVisitPreview, startBackgroundOCR, updateVisitPreview]);
 
   const handleNextItem = useCallback(() => {
     if (activeCapturePhotoCount === 0) return;
     startNextCaptureGroup();
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   }, [activeCapturePhotoCount, startNextCaptureGroup]);
+
+  const previewToSnap = useCallback((preview: (typeof visitPreviews)[number]): ShoppingSnap => {
+    const upload = pendingUploads.find((item) => item.id === preview.id);
+    return {
+      id: preview.id,
+      imageUri: preview.syncStatus === 'pending'
+        ? preview.localFileUri
+        : preview.previewUri ?? preview.localFileUri,
+      storagePath: preview.storagePath,
+      storeName: currentSession?.storeName ?? upload?.storeName ?? null,
+      storeLocationId: currentSession?.storeLocationId ?? upload?.storeLocationId ?? null,
+      shoppingSessionId: preview.shoppingSessionId,
+      captureGroupId: preview.captureGroupId,
+      captureRole: preview.captureRole,
+      captureSequence: preview.captureSequence,
+      branchLabel: currentSession?.branchLabel ?? upload?.branchLabel ?? null,
+      latitude: currentSession?.latitude ?? upload?.latitude ?? null,
+      longitude: currentSession?.longitude ?? upload?.longitude ?? null,
+      locationAccuracyMeters: currentSession?.locationAccuracyMeters ?? upload?.locationAccuracyMeters ?? null,
+      locality: currentSession?.locality ?? upload?.locality ?? null,
+      region: currentSession?.region ?? upload?.region ?? null,
+      countryCode: currentSession?.countryCode ?? upload?.countryCode ?? null,
+      locationHint: currentSession?.locationHint ?? upload?.locationHint ?? null,
+      locationSource: currentSession?.locationSource ?? upload?.locationSource ?? null,
+      extractedPrice: upload?.extractedPrice ?? null,
+      rawOcrText: upload?.rawOcrText ?? '',
+      capturedAt: new Date(preview.timestamp).toISOString(),
+      syncStatus: preview.syncStatus,
+      category: upload?.category ?? null,
+      sizeLabel: upload?.sizeLabel ?? null,
+      colorLabel: upload?.colorLabel ?? null,
+      materialLabel: upload?.materialLabel ?? null,
+      notes: upload?.notes ?? null,
+      isFavorite: upload?.isFavorite ?? false,
+      catalogStatus: upload?.catalogStatus ?? 'considering',
+    };
+  }, [currentSession, pendingUploads, visitPreviews]);
+
+  const confirmDeletePreview = useCallback((previewId: string) => {
+    const preview = visitPreviews.find((candidate) => candidate.id === previewId);
+    if (!preview) return;
+    Alert.alert('Delete this photo?', 'This shopping photo will be removed from your visit.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          const snap = previewToSnap(preview);
+          void deleteShoppingSnaps([snap], user?.id ?? null)
+            .then(() => {
+              deleteShoppingPreview(preview.previewUri);
+              removeVisitPreview(preview.id);
+              setSelectedPreviewId(null);
+            })
+            .catch((error) => Alert.alert(
+              'Could not delete photo',
+              error instanceof Error ? error.message : 'Please try again.',
+            ));
+        },
+      },
+    ]);
+  }, [previewToSnap, removeVisitPreview, user?.id, visitPreviews]);
 
   if (!permission) {
     return <View style={styles.root} />;
@@ -514,7 +743,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
       <CameraView
         ref={cameraRef}
         style={StyleSheet.absoluteFill}
-        active={isFocused && !isImporting && !isClosing}
+        active={isFocused && !isImporting && !isClosing && !resumePromptVisible && !selectedPreview}
         facing="back"
         mode="picture"
         onCameraReady={() => setCameraReady(true)}
@@ -549,7 +778,14 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
           ) : null}
         </TouchableOpacity>
 
-        <View style={styles.roundButtonPlaceholder} />
+        <TouchableOpacity
+          style={styles.doneButton}
+          onPress={finishShopping}
+          disabled={isClosing}
+          accessibilityLabel="Done shopping and end this visit"
+        >
+          <Text style={styles.doneButtonText}>Done</Text>
+        </TouchableOpacity>
       </View>
 
       {galleryImportProgress ? (
@@ -562,6 +798,50 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
       ) : null}
 
       <View style={[styles.bottomControls, { paddingBottom: insets.bottom + spacing.lg }]}>
+        {visitPreviews.length > 0 ? (
+          <ScrollView
+            ref={previewRailRef}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.previewRail}
+            accessibilityLabel={`${visitPreviews.length} photos in this shopping visit`}
+          >
+            {visitPreviews.map((preview, index) => {
+              const beginsGroup = index === 0
+                || visitPreviews[index - 1].captureGroupId !== preview.captureGroupId;
+              const isActiveGroup = preview.captureGroupId === activeCaptureGroupId;
+              return (
+                <View key={preview.id} style={styles.previewRailItemWrap}>
+                  {beginsGroup && index > 0 ? <View style={styles.previewGroupDivider} /> : null}
+                  <TouchableOpacity
+                    style={[styles.previewThumb, isActiveGroup && styles.previewThumbActive]}
+                    onPress={() => setSelectedPreviewId(preview.id)}
+                    accessibilityLabel={`Open ${preview.captureRole === 'tag' ? 'tag' : 'item'} photo ${index + 1}`}
+                  >
+                    <Image
+                      source={{ uri: preview.previewUri ?? preview.localFileUri }}
+                      style={StyleSheet.absoluteFill}
+                      contentFit="cover"
+                      recyclingKey={preview.id}
+                    />
+                    <View style={styles.previewBadge}>
+                      {preview.ocrStatus === 'processing' ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <Ionicons
+                          name={preview.captureRole === 'tag' ? 'pricetag' : 'shirt-outline'}
+                          size={11}
+                          color="#FFFFFF"
+                        />
+                      )}
+                    </View>
+                    {preview.syncStatus === 'pending' ? <View style={styles.pendingDot} /> : null}
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </ScrollView>
+        ) : null}
         <Text style={styles.captureHint}>
           {activeCapturePhotoCount > 0
             ? `${activeCapturePhotoCount} in this item${activeCaptureTagCount > 0 ? ` · ${activeCaptureTagCount} tag${activeCaptureTagCount === 1 ? '' : 's'}` : ''}`
@@ -676,11 +956,88 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
               <View style={styles.storeSuggestionIcon}>
                 <Ionicons name="close-circle-outline" size={16} color={colors.destructive} />
               </View>
-              <Text style={styles.clearChipText}>Clear Store</Text>
+              <Text style={styles.clearChipText}>{currentStoreName ? 'Cancel' : 'Keep store unset'}</Text>
             </TouchableOpacity>
           </ScrollView>
         </BottomSheetView>
       </BottomSheetModal>
+
+      <Modal visible={resumePromptVisible} transparent animationType="fade" onRequestClose={closeCamera}>
+        <View style={styles.resumeBackdrop}>
+          <View style={styles.resumeCard}>
+            <View style={styles.resumeIcon}>
+              <Ionicons name="bag-handle-outline" size={24} color={colors.primary} />
+            </View>
+            <Text style={styles.resumeTitle}>
+              {currentStoreName ? `Resume at ${currentStoreName}?` : 'Resume previous visit?'}
+            </Text>
+            <Text style={styles.resumeText}>
+              Your earlier photos are safe. Resume to keep this visit together, or start fresh.
+            </Text>
+            <TouchableOpacity style={styles.resumePrimary} onPress={confirmResumeVisit}>
+              <Text style={styles.resumePrimaryText}>Resume visit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.resumeSecondary} onPress={startFreshVisit}>
+              <Text style={styles.resumeSecondaryText}>Start new visit</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={Boolean(selectedPreview)}
+        animationType="fade"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setSelectedPreviewId(null)}
+      >
+        <View style={styles.previewViewer}>
+          <StatusBar style="light" />
+          <View style={[styles.viewerHeader, { paddingTop: insets.top + spacing.sm }]}>
+            <TouchableOpacity
+              style={styles.roundButton}
+              onPress={() => setSelectedPreviewId(null)}
+              accessibilityLabel="Close photo preview"
+            >
+              <Ionicons name="close" size={25} color="#FFFFFF" />
+            </TouchableOpacity>
+            <Text style={styles.viewerCount}>
+              {Math.max(1, visitPreviews.findIndex((preview) => preview.id === selectedPreviewId) + 1)} / {visitPreviews.length}
+            </Text>
+            <TouchableOpacity
+              style={styles.roundButton}
+              onPress={() => selectedPreviewId && confirmDeletePreview(selectedPreviewId)}
+              accessibilityLabel="Delete this photo"
+            >
+              <Ionicons name="trash-outline" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+          {selectedPreview ? (
+            <FlatList
+              key={selectedPreview.id}
+              data={visitPreviews}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              initialScrollIndex={Math.max(0, visitPreviews.findIndex((preview) => preview.id === selectedPreview.id))}
+              getItemLayout={(_, index) => ({ length: windowWidth, offset: windowWidth * index, index })}
+              onMomentumScrollEnd={(event) => {
+                const index = Math.round(event.nativeEvent.contentOffset.x / windowWidth);
+                setSelectedPreviewId(visitPreviews[index]?.id ?? null);
+              }}
+              renderItem={({ item }) => (
+                <View style={[styles.viewerPage, { width: windowWidth }]}>
+                  <Image
+                    source={{ uri: item.previewUri ?? item.localFileUri }}
+                    style={styles.viewerImage}
+                    contentFit="contain"
+                    recyclingKey={item.id}
+                  />
+                </View>
+              )}
+            />
+          ) : null}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -738,7 +1095,16 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     backgroundColor: 'rgba(0, 0, 0, 0.48)',
   },
-  roundButtonPlaceholder: { width: 44, height: 44 },
+  doneButton: {
+    minWidth: 54,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.full,
+    backgroundColor: 'rgba(0, 0, 0, 0.58)',
+  },
+  doneButtonText: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: '#FFFFFF' },
   contextPill: {
     maxWidth: '72%',
     minHeight: 46,
@@ -783,6 +1149,40 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingTop: spacing.xl,
     backgroundColor: 'rgba(0, 0, 0, 0.28)',
+  },
+  previewRail: { alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
+  previewRailItemWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  previewGroupDivider: { width: 2, height: 42, borderRadius: 1, backgroundColor: 'rgba(255,255,255,0.58)' },
+  previewThumb: {
+    width: 54,
+    height: 54,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.4)',
+    borderRadius: 10,
+    borderCurve: 'continuous',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  previewThumbActive: { borderColor: '#FFFFFF', transform: [{ scale: 1.05 }] },
+  previewBadge: {
+    position: 'absolute',
+    left: 3,
+    bottom: 3,
+    minWidth: 20,
+    minHeight: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.66)',
+  },
+  pendingDot: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#FFD166',
   },
   captureHint: {
     fontSize: typography.size.sm,
@@ -894,4 +1294,57 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.medium,
     color: colors.destructive,
   },
+  resumeBackdrop: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+    backgroundColor: 'rgba(0,0,0,0.64)',
+  },
+  resumeCard: {
+    width: '100%',
+    maxWidth: 380,
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.xl,
+    borderRadius: radii.lg,
+    borderCurve: 'continuous',
+    backgroundColor: colors.background,
+  },
+  resumeIcon: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 24,
+    backgroundColor: colors.accent,
+  },
+  resumeTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.foreground, textAlign: 'center' },
+  resumeText: { fontSize: typography.size.sm, lineHeight: 20, color: colors.mutedForeground, textAlign: 'center' },
+  resumePrimary: {
+    width: '100%',
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.full,
+    backgroundColor: colors.primary,
+  },
+  resumePrimaryText: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.primaryForeground },
+  resumeSecondary: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.lg },
+  resumeSecondaryText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.foreground },
+  previewViewer: { flex: 1, backgroundColor: '#000000' },
+  viewerHeader: {
+    position: 'absolute',
+    zIndex: 2,
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+  },
+  viewerCount: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
+  viewerPage: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  viewerImage: { width: '100%', height: '100%' },
 });

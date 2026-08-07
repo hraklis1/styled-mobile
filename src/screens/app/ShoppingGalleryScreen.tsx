@@ -17,7 +17,6 @@ import {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 import { Image } from 'expo-image';
-import { File } from 'expo-file-system';
 import * as Crypto from 'expo-crypto';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,6 +26,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ShoppingSessionBundle } from '../../components/shopping/ShoppingSessionBundle';
 import { ShoppingSnapDetail } from '../../components/shopping/ShoppingSnapDetail';
 import { ShoppingStoreFilterSheet } from '../../components/shopping/ShoppingStoreFilterSheet';
+import { ShoppingStoreAssignmentSheet } from '../../components/shopping/ShoppingStoreAssignmentSheet';
 import { useAuth } from '../../contexts/AuthContext';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { SHOPPING_SNAPS_QUERY_KEY, useShoppingSnaps } from '../../hooks/useShoppingSnaps';
@@ -46,7 +46,7 @@ import {
   type ShoppingSnapOrganizationStage,
   type ShoppingSnapOrganizationUpdate,
 } from '../../lib/shoppingSnapOrganizer';
-import { buildShoppingSessionGroups } from '../../lib/shoppingSessionGroups';
+import { buildShoppingSessionGroups, type ShoppingSessionGroup } from '../../lib/shoppingSessionGroups';
 import {
   buildShoppingStoreOptions,
   countItemsWithoutStore,
@@ -63,6 +63,7 @@ import {
 import { supabase } from '../../lib/supabase';
 import { track } from '../../lib/analytics';
 import { buildShopStylistLaunch } from '../../lib/shopDecisionWorkspace';
+import { deleteShoppingSnaps as deleteShoppingSnapsService } from '../../lib/deleteShoppingSnaps';
 import type { ShoppingGalleryScreenProps } from '../../navigation/types';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import { colors, radii, spacing, typography } from '../../theme';
@@ -88,7 +89,6 @@ const REVIEW_OPTIONS: { value: ShoppingReviewFilter; label: string }[] = [
   { value: 'needs-review', label: 'Needs review' },
 ];
 
-const SHOPPING_BUCKET = 'shopping-snaps';
 
 function priceLabel(price: number | null): string | null {
   if (price === null) return null;
@@ -359,6 +359,7 @@ function ShoppingSnapOrganizerModal({
 export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScreenProps) {
   const filterSheetRef = useRef<BottomSheetModal>(null);
   const storeSheetRef = useRef<BottomSheetModal>(null);
+  const assignStoreSheetRef = useRef<BottomSheetModal>(null);
   const storeSheetOpenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const storeChipScrollRef = useRef<ScrollView>(null);
   const storeChipOffsetsRef = useRef<Record<string, number>>({});
@@ -368,9 +369,10 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   const { openStylist } = useGlobalAIStylist();
   const { data: remoteSnaps = [], isLoading, isRefetching, isError, refetch } = useShoppingSnaps();
   const pendingUploads = useShoppingSessionStore((state) => state.pendingUploads);
-  const removePendingUpload = useShoppingSessionStore((state) => state.removePendingUpload);
   const regroupPendingUploads = useShoppingSessionStore((state) => state.regroupPendingUploads);
   const updatePendingGroupCatalog = useShoppingSessionStore((state) => state.updatePendingGroupCatalog);
+  const assignVisitStore = useShoppingSessionStore((state) => state.assignVisitStore);
+  const assignCaptureStore = useShoppingSessionStore((state) => state.assignCaptureStore);
   const [storeFilter, setStoreFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState<ShoppingDateFilter>('all');
   const [syncFilter, setSyncFilter] = useState<ShoppingSyncFilter>('all');
@@ -387,6 +389,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   const [expandedGroupKeys, setExpandedGroupKeys] = useState<Set<string>>(() => new Set());
   const [isDeletingSelection, setIsDeletingSelection] = useState(false);
   const [returningToTab, setReturningToTab] = useState(false);
+  const [storeAssignmentGroup, setStoreAssignmentGroup] = useState<ShoppingSessionGroup | null>(null);
 
   const allSnaps = useMemo(
     () => mergeShoppingSnaps(remoteSnaps, pendingUploads),
@@ -506,45 +509,8 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   }, [activeQuickStoreValue]);
 
   const deleteSnaps = useCallback(async (snaps: ShoppingSnap[]) => {
-    if (snaps.length === 0) return;
-    const syncedSnaps = snaps.filter((snap) => snap.syncStatus === 'synced');
-    if (syncedSnaps.length > 0 && !user) {
-      throw new Error('You need to be signed in to delete synced photos.');
-    }
-
-    if (syncedSnaps.length > 0 && user) {
-      const { error: rowError } = await supabase
-        .from('shopping_snaps')
-        .delete()
-        .eq('user_id', user.id)
-        .in('id', syncedSnaps.map((snap) => snap.id));
-      if (rowError) throw rowError;
-
-      const storagePaths = syncedSnaps
-        .map((snap) => snap.storagePath)
-        .filter((path): path is string => Boolean(path));
-      if (storagePaths.length > 0) {
-        const { error: storageError } = await supabase.storage
-          .from(SHOPPING_BUCKET)
-          .remove(storagePaths);
-        if (storageError) {
-          console.warn('Deleted shopping photo rows but could not remove every storage object', storageError);
-        }
-      }
-
-      await queryClient.invalidateQueries({ queryKey: SHOPPING_SNAPS_QUERY_KEY });
-    }
-
-    for (const snap of snaps.filter((item) => item.syncStatus === 'pending')) {
-      removePendingUpload(snap.id);
-      try {
-        const file = new File(snap.imageUri);
-        if (file.exists) file.delete();
-      } catch (fileError) {
-        console.warn('Deleted pending shopping photo but could not remove local file', fileError);
-      }
-    }
-  }, [removePendingUpload, user]);
+    await deleteShoppingSnapsService(snaps, user?.id ?? null);
+  }, [user?.id]);
 
   const deleteSnap = useCallback(async (snap: ShoppingSnap) => {
     setDeletingSnapId(snap.id);
@@ -721,6 +687,46 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
     void Haptics.selectionAsync();
     storeSheetRef.current?.present();
   }, []);
+
+  const openStoreAssignment = useCallback((group: ShoppingSessionGroup) => {
+    setStoreAssignmentGroup(group);
+    requestAnimationFrame(() => assignStoreSheetRef.current?.present());
+  }, []);
+
+  const saveStoreAssignment = useCallback(async (storeName: string) => {
+    const group = storeAssignmentGroup;
+    if (!group) return;
+    const snaps = group.items.flatMap((item) => item.snaps);
+    const ids = snaps.map((snap) => snap.id);
+    const syncedIds = snaps.filter((snap) => snap.syncStatus === 'synced').map((snap) => snap.id);
+
+    assignCaptureStore(ids, storeName);
+    if (group.shoppingSessionId) assignVisitStore(group.shoppingSessionId, storeName);
+    try {
+      if (syncedIds.length > 0) {
+        if (!user) throw new Error('You need to be signed in to update synced photos.');
+        if (group.shoppingSessionId) {
+          const { error: sessionError } = await supabase
+            .from('shopping_sessions')
+            .update({ store_name: storeName })
+            .eq('id', group.shoppingSessionId)
+            .eq('user_id', user.id);
+          if (sessionError) throw sessionError;
+        }
+        const { error: snapsError } = await supabase
+          .from('shopping_snaps')
+          .update({ store_name: storeName })
+          .eq('user_id', user.id)
+          .in('id', syncedIds);
+        if (snapsError) throw snapsError;
+        await queryClient.invalidateQueries({ queryKey: SHOPPING_SNAPS_QUERY_KEY });
+      }
+      setStoreAssignmentGroup(null);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      Alert.alert('Could not add store', error instanceof Error ? error.message : 'Please try again.');
+    }
+  }, [assignCaptureStore, assignVisitStore, storeAssignmentGroup, user]);
 
   // Two modals can't hand over instantly — dismiss the refine sheet, then present.
   const openStorePickerFromFilters = useCallback(() => {
@@ -981,6 +987,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
             selectedItemIds={selectedItemIds}
             onPressItem={pressItem}
             onLongPressItem={(item) => startSelection(item.id)}
+            onAddStore={!group.storeName ? () => openStoreAssignment(group) : undefined}
           />
         )}
         ListHeaderComponent={listHeader}
@@ -1169,6 +1176,12 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
         unassignedCount={unassignedStoreCount}
         storeFilter={storeFilter}
         onSelect={setStoreFilter}
+      />
+
+      <ShoppingStoreAssignmentSheet
+        sheetRef={assignStoreSheetRef}
+        options={storeOptions}
+        onSelect={(storeName) => void saveStoreAssignment(storeName)}
       />
 
       <ShoppingSnapDetail

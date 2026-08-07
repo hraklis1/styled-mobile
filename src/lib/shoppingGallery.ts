@@ -18,6 +18,7 @@ export type ShoppingEditItem = {
   branchLabel: string | null;
   locality: string | null;
   region: string | null;
+  locationHint?: string | null;
   extractedPrice: number | null;
   capturedAt: string;
   syncStatus: 'pending' | 'synced';
@@ -113,6 +114,7 @@ export function buildShoppingEditItems(snaps: ShoppingSnap[]): ShoppingEditItem[
         branchLabel: locationSnap.branchLabel,
         locality: locationSnap.locality,
         region: locationSnap.region,
+        locationHint: locationSnap.locationHint ?? null,
         extractedPrice,
         capturedAt: newestSnap.capturedAt,
         syncStatus,
@@ -175,6 +177,7 @@ export function mergeShoppingSnaps(
       locality: upload.locality ?? null,
       region: upload.region ?? null,
       countryCode: upload.countryCode ?? null,
+      locationHint: upload.locationHint ?? null,
       locationSource: upload.locationSource ?? null,
       extractedPrice: upload.extractedPrice,
       rawOcrText: upload.rawOcrText,

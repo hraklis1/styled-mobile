@@ -96,6 +96,7 @@ export function ShoppingSessionBundle({
   style,
   onPressItem,
   onLongPressItem,
+  onAddStore,
 }: {
   group: ShoppingSessionGroup;
   expanded: boolean;
@@ -107,6 +108,7 @@ export function ShoppingSessionBundle({
   style?: StyleProp<ViewStyle>;
   onPressItem: (item: ShoppingEditItem, snap: ShoppingSnap) => void;
   onLongPressItem: (item: ShoppingEditItem) => void;
+  onAddStore?: () => void;
 }) {
   const { width } = useWindowDimensions();
   // Every host insets the bundle by a page margin and the card pads its own
@@ -142,31 +144,54 @@ export function ShoppingSessionBundle({
       ) : null}
 
       <Animated.View layout={LinearTransition.duration(240)} style={styles.card}>
-        <TouchableOpacity
-          style={styles.header}
-          activeOpacity={0.75}
-          onPress={toggle}
-          accessibilityRole="button"
-          accessibilityState={previewOnly ? undefined : { expanded: isOpen }}
-          accessibilityLabel={`${group.storeName}, ${group.dateLabel}, ${group.itemCount} item${group.itemCount === 1 ? '' : 's'}`}
-          accessibilityHint={previewOnly
-            ? 'Opens your shortlist'
-            : isOpen ? 'Collapses this shopping trip' : 'Expands this shopping trip'}
-        >
+        <View style={styles.header}>
+          {!group.storeName ? (
+            <Image
+              source={{ uri: group.coverSnap.imageUri }}
+              style={styles.visitCover}
+              contentFit="cover"
+              recyclingKey={`visit-cover:${group.coverSnap.id}`}
+            />
+          ) : null}
           <View style={styles.headerCopy}>
             <Text style={styles.headerDate}>{group.dateLabel}</Text>
-            <Text style={styles.headerStore} numberOfLines={1}>{group.storeName}</Text>
+            {group.storeName ? (
+              <TouchableOpacity onPress={toggle} activeOpacity={0.7}>
+                <Text style={styles.headerStore} numberOfLines={1}>{group.storeName}</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.addStoreButton}
+                onPress={onAddStore}
+                disabled={!onAddStore}
+                accessibilityRole="button"
+                accessibilityLabel="Add Store Location"
+              >
+                <Ionicons name="add" size={17} color={colors.primaryForeground} />
+                <Text style={styles.addStoreText}>Add Store Location</Text>
+              </TouchableOpacity>
+            )}
+            {!group.storeName && group.locationHint ? (
+              <Text style={styles.headerPlace} numberOfLines={2}>{group.locationHint}</Text>
+            ) : null}
             {group.placeLabel ? (
               <Text style={styles.headerPlace} numberOfLines={2}>{group.placeLabel}</Text>
             ) : null}
           </View>
-          <View style={styles.headerStats}>
+          <TouchableOpacity
+            style={styles.headerStats}
+            onPress={toggle}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityState={previewOnly ? undefined : { expanded: isOpen }}
+            accessibilityLabel={`${group.storeName ?? 'Store not set'}, ${group.dateLabel}, ${group.itemCount} item${group.itemCount === 1 ? '' : 's'}`}
+          >
             <Text style={styles.headerCount}>
               {group.itemCount} item{group.itemCount === 1 ? '' : 's'} · {group.photoCount} photo{group.photoCount === 1 ? '' : 's'}
             </Text>
             {spend ? <Text style={styles.headerSpend}>{spend}</Text> : null}
-          </View>
-        </TouchableOpacity>
+          </TouchableOpacity>
+        </View>
 
         {isOpen ? (
           <Animated.View entering={FadeIn.duration(180)} style={styles.grid}>
@@ -263,8 +288,21 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
   },
   headerCopy: { flex: 1 },
+  visitCover: { width: 62, height: 76, borderRadius: radii.md, borderCurve: 'continuous', backgroundColor: colors.surfaceSubtle },
   headerDate: { fontFamily: typography.family.display, fontSize: typography.size.xl, color: colors.foreground },
   headerStore: { paddingTop: spacing.xs, fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.primary },
+  addStoreButton: {
+    minHeight: 44,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.full,
+    backgroundColor: colors.primary,
+  },
+  addStoreText: { fontSize: typography.size.xs, fontWeight: typography.weight.bold, color: colors.primaryForeground },
   headerPlace: { paddingTop: 1, fontSize: typography.size.xs, lineHeight: 17, color: colors.mutedForeground },
   headerStats: { alignItems: 'flex-end', gap: 2, paddingTop: 4 },
   headerCount: { fontSize: 10, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },

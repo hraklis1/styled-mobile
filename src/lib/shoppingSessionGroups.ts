@@ -8,9 +8,12 @@ import { formatShoppingPlaceLabel } from './shoppingLocations';
  */
 export type ShoppingSessionGroup = {
   key: string;
+  shoppingSessionId: string | null;
   dateLabel: string;
-  storeName: string;
+  storeName: string | null;
   placeLabel: string | null;
+  locationHint: string | null;
+  coverSnap: ShoppingEditItem['primarySnap'];
   items: ShoppingEditItem[];
   itemCount: number;
   photoCount: number;
@@ -37,7 +40,10 @@ export function buildShoppingSessionGroups(
     const date = new Date(item.capturedAt);
     const dateKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
     const placeLabel = itemPlaceLabel(item);
-    const key = `${dateKey}:${item.storeName ?? 'Store not set'}:${placeLabel ?? ''}`;
+    const sessionId = item.snaps.find((snap) => snap.shoppingSessionId)?.shoppingSessionId ?? null;
+    const key = sessionId
+      ? `session:${sessionId}`
+      : `${dateKey}:${item.storeName ?? 'Store not set'}:${placeLabel ?? ''}`;
     grouped.set(key, [...(grouped.get(key) ?? []), item]);
   }
 
@@ -47,12 +53,21 @@ export function buildShoppingSessionGroups(
         (a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime(),
       );
       const pricedItems = sorted.filter((item) => item.extractedPrice !== null);
+      const earliest = [...sorted].sort(
+        (a, b) => new Date(a.capturedAt).getTime() - new Date(b.capturedAt).getTime(),
+      );
+      const coverItem = earliest.find((item) => item.primarySnap.captureRole === 'garment') ?? earliest[0];
+      const shoppingSessionId = sorted.flatMap((item) => item.snaps)
+        .find((snap) => snap.shoppingSessionId)?.shoppingSessionId ?? null;
 
       return {
         key,
+        shoppingSessionId,
         dateLabel: dateGroupLabel(new Date(sorted[0].capturedAt), now),
-        storeName: sorted[0].storeName ?? 'Store not set',
-        placeLabel: itemPlaceLabel(sorted[0]),
+        storeName: sorted.find((item) => item.storeName)?.storeName ?? null,
+        placeLabel: sorted.some((item) => item.storeName) ? itemPlaceLabel(sorted[0]) : null,
+        locationHint: sorted.find((item) => item.locationHint)?.locationHint ?? null,
+        coverSnap: coverItem.primarySnap,
         items: sorted,
         itemCount: sorted.length,
         photoCount: sorted.reduce((count, item) => count + item.photoCount, 0),
@@ -76,6 +91,7 @@ export function buildShoppingSessionGroups(
 export function shoppingSessionHighlights(group: ShoppingSessionGroup): string[] {
   const highlights: string[] = [];
 
+  if (!group.storeName) highlights.push('Add store location');
   if (group.pendingCount > 0) highlights.push(`${group.pendingCount} saved locally`);
   if (group.needsPriceCount > 0) highlights.push(`${group.needsPriceCount} needs price`);
   if (group.unsortedCount > 0) highlights.push(`${group.unsortedCount} to sort`);
