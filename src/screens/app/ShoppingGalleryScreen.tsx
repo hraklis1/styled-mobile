@@ -409,10 +409,20 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   // its place before handing focus back.
   useEffect(() => {
     if (!returningToTab || !returnTo) return;
+
+    // Switch tabs first to return focus to the source tab immediately.
+    navigation.dispatch(CommonActions.navigate({ name: returnTo }));
+
+    // Reset the stack of the Shop tab to ShopMain silently in the background
+    // after the tab switch has initiated, avoiding animation transition races.
     const timeout = setTimeout(() => {
-      navigation.dispatch(StackActions.replace('ShopMain'));
-      navigation.dispatch(CommonActions.navigate({ name: returnTo }));
-    }, 0);
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: 'ShopMain' }],
+        })
+      );
+    }, 100);
     return () => clearTimeout(timeout);
   }, [navigation, returningToTab, returnTo]);
 
