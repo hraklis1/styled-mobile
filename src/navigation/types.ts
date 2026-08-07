@@ -52,6 +52,7 @@ export type ShopStackParamList = {
     catalogFilter?: 'active' | 'all';
     returnTo?: 'Home';
   } | undefined;
+  ShoppingHaulDetail: { groupKey: string };
   ShoppingCamera: undefined;
 };
 
@@ -91,6 +92,7 @@ export type ShopOverviewScreenProps = CompositeScreenProps<
 export type SavedLooksScreenProps = NativeStackScreenProps<ShopStackParamList, 'SavedLooks'>;
 export type ShoppingCameraScreenProps = NativeStackScreenProps<ShopStackParamList, 'ShoppingCamera'>;
 export type ShoppingGalleryScreenProps = NativeStackScreenProps<ShopStackParamList, 'ShoppingGallery'>;
+export type ShoppingHaulDetailScreenProps = NativeStackScreenProps<ShopStackParamList, 'ShoppingHaulDetail'>;
 export type CalendarScreenProps = BottomTabScreenProps<AppTabParamList, 'Calendar'>;
 export type ProfileScreenProps = NativeStackScreenProps<HomeStackParamList, 'Profile'>;
 

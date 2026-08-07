@@ -137,3 +137,58 @@ export function shoppingCatalogChips(value: ShoppingFindCatalog): string[] {
 export function garmentFriendlyContentFit(snap: ShoppingSnap): 'cover' | 'contain' {
   return snap.captureRole === 'garment' ? 'contain' : 'cover';
 }
+
+export type ShoppingTagField = { label: string; value: string };
+
+const TAG_CURRENCY_NAMES: Record<string, string> = { $: 'USD', '£': 'GBP', '€': 'EUR' };
+const TAG_SIZE_WORDS = /^(XX-SMALL|X-SMALL|SMALL|MEDIUM|LARGE|X-LARGE|XX-LARGE)$/;
+
+function normalizeTagLine(line: string): string {
+  return line.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Price tags often carry more than the one price OCR already extracts —
+ * multi-currency conversions, a size word, a style number. Pull out the
+ * recognizable bits so the rest (marketing copy, barcodes) can stay
+ * collapsed instead of dumping the whole scan on screen.
+ */
+export function parseShoppingTagOcr(rawText: string): { fields: ShoppingTagField[]; leftover: string } {
+  const fields: ShoppingTagField[] = [];
+  const seenLabels = new Set<string>();
+  const leftoverLines: string[] = [];
+
+  for (const rawLine of rawText.split(/\n+/)) {
+    const line = normalizeTagLine(rawLine);
+    if (!line) continue;
+
+    const priceMatch = line.match(/^([A-Z]{2,3})?\s*([$£€])\s*([\d,]+(?:\.\d{1,2})?)$/);
+    if (priceMatch) {
+      const [, code, symbol, amount] = priceMatch;
+      const label = code || TAG_CURRENCY_NAMES[symbol] || symbol;
+      if (!seenLabels.has(label)) {
+        seenLabels.add(label);
+        fields.push({ label, value: `${symbol}${amount}` });
+      }
+      continue;
+    }
+
+    const sizeLine = line.toUpperCase().replace(/^X\s+(SMALL|LARGE)$/, 'X-$1');
+    if (TAG_SIZE_WORDS.test(sizeLine) && !seenLabels.has('Size')) {
+      seenLabels.add('Size');
+      fields.push({ label: 'Size', value: sizeLine.charAt(0) + sizeLine.slice(1).toLowerCase() });
+      continue;
+    }
+
+    const styleMatch = line.match(/^\d{2,4}(?:-\d{2,4}){2,}$/);
+    if (styleMatch && !seenLabels.has('Style')) {
+      seenLabels.add('Style');
+      fields.push({ label: 'Style', value: styleMatch[0] });
+      continue;
+    }
+
+    leftoverLines.push(line);
+  }
+
+  return { fields, leftover: leftoverLines.join('\n') };
+}

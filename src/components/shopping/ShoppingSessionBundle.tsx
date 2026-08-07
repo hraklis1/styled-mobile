@@ -28,11 +28,15 @@ const STRIP_LIMIT = 8;
 function ShoppingSessionTile({
   item,
   width,
+  selectionMode,
+  isSelected,
   onPress,
   onLongPress,
 }: {
   item: ShoppingEditItem;
   width: number;
+  selectionMode: boolean;
+  isSelected: boolean;
   onPress: () => void;
   onLongPress: () => void;
 }) {
@@ -78,6 +82,7 @@ function ShoppingSessionTile({
       <Text style={[styles.tilePrice, !price && styles.tilePriceMuted]} numberOfLines={1}>
         {price ?? 'Needs price'}
       </Text>
+      {selectionMode && isSelected ? <View pointerEvents="none" style={styles.tileSelectionRing} /> : null}
     </TouchableOpacity>
   );
 }
@@ -89,25 +94,33 @@ function ShoppingSessionTile({
 export function ShoppingSessionBundle({
   group,
   expanded,
-  onToggle,
+  onOpenDetail,
   selectionMode,
-  selectedItemIds,
+  isSelected,
   previewOnly = false,
   style,
   onPressItem,
-  onLongPressItem,
+  onSelectCard,
+  onLongPressCard,
   onAddStore,
 }: {
   group: ShoppingSessionGroup;
+  /** Forced open (full grid) while selection mode is picking items across the whole card. */
   expanded: boolean;
-  onToggle: () => void;
+  /** Tapping the card outside selection mode opens the full-screen haul gallery. */
+  onOpenDetail: () => void;
   selectionMode: boolean;
-  selectedItemIds: Set<string>;
+  /** Whether every item in this card is part of the current selection. */
+  isSelected: boolean;
   /** On another screen the bundle advertises the shortlist rather than opening in place. */
   previewOnly?: boolean;
   style?: StyleProp<ViewStyle>;
+  /** Only reached outside selection mode — opens the tapped item's detail view. */
   onPressItem: (item: ShoppingEditItem, snap: ShoppingSnap) => void;
-  onLongPressItem: (item: ShoppingEditItem) => void;
+  /** Toggles selection for every item this card contains, as one unit. */
+  onSelectCard: () => void;
+  /** Enters selection mode with this whole card selected. */
+  onLongPressCard: () => void;
   onAddStore?: () => void;
 }) {
   const { width } = useWindowDimensions();
@@ -129,9 +142,42 @@ export function ShoppingSessionBundle({
     return accumulated;
   }, []);
 
-  const toggle = () => {
+  // Selection is all-or-nothing per card — every touch target below routes
+  // through these so tapping/long-pressing anywhere on the card (its chrome
+  // or any photo inside it) selects the whole card, never a single item.
+  const handleChromePress = () => {
+    if (selectionMode) {
+      onSelectCard();
+      return;
+    }
     void Haptics.selectionAsync();
-    onToggle();
+    onOpenDetail();
+  };
+
+  const handleChromeLongPress = () => {
+    if (selectionMode) {
+      onSelectCard();
+      return;
+    }
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onLongPressCard();
+  };
+
+  const handleItemPress = (item: ShoppingEditItem, snap: ShoppingSnap) => {
+    if (selectionMode) {
+      onSelectCard();
+      return;
+    }
+    onPressItem(item, snap);
+  };
+
+  const handleItemLongPress = () => {
+    if (selectionMode) {
+      onSelectCard();
+      return;
+    }
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onLongPressCard();
   };
 
   return (
@@ -143,7 +189,16 @@ export function ShoppingSessionBundle({
         </>
       ) : null}
 
-      <Animated.View layout={LinearTransition.duration(240)} style={styles.card}>
+      <Animated.View
+        layout={LinearTransition.duration(240)}
+        sharedTransitionTag={`haul-card-${group.key}`}
+        style={[styles.card, isSelected && styles.cardSelected]}
+      >
+        {selectionMode ? (
+          <View pointerEvents="none" style={[styles.cardSelectionBadge, isSelected && styles.cardSelectionBadgeActive]}>
+            {isSelected ? <Ionicons name="checkmark" size={16} color={colors.primaryForeground} /> : null}
+          </View>
+        ) : null}
         <View style={styles.header}>
           {!group.storeName ? (
             <Image
@@ -156,7 +211,7 @@ export function ShoppingSessionBundle({
           <View style={styles.headerCopy}>
             <Text style={styles.headerDate}>{group.dateLabel}</Text>
             {group.storeName ? (
-              <TouchableOpacity onPress={toggle} activeOpacity={0.7}>
+              <TouchableOpacity onPress={handleChromePress} onLongPress={handleChromeLongPress} activeOpacity={0.7}>
                 <Text style={styles.headerStore} numberOfLines={1}>{group.storeName}</Text>
               </TouchableOpacity>
             ) : (
@@ -180,7 +235,8 @@ export function ShoppingSessionBundle({
           </View>
           <TouchableOpacity
             style={styles.headerStats}
-            onPress={toggle}
+            onPress={handleChromePress}
+            onLongPress={handleChromeLongPress}
             activeOpacity={0.7}
             accessibilityRole="button"
             accessibilityState={previewOnly ? undefined : { expanded: isOpen }}
@@ -202,11 +258,11 @@ export function ShoppingSessionBundle({
                     key={item.id}
                     item={item}
                     width={cardWidth}
-                    isSelected={selectedItemIds.has(item.id)}
+                    isSelected={isSelected}
                     selectionMode={selectionMode}
                     showStore={false}
-                    onPress={(snap) => onPressItem(item, snap)}
-                    onLongPress={() => onLongPressItem(item)}
+                    onPress={(snap) => handleItemPress(item, snap)}
+                    onLongPress={handleItemLongPress}
                   />
                 ))}
                 {row.length === 1 ? <View style={{ width: cardWidth }} /> : null}
@@ -225,12 +281,14 @@ export function ShoppingSessionBundle({
                 key={item.id}
                 item={item}
                 width={tileWidth}
-                onPress={() => onPressItem(item, item.primarySnap)}
-                onLongPress={() => onLongPressItem(item)}
+                selectionMode={selectionMode}
+                isSelected={isSelected}
+                onPress={() => handleItemPress(item, item.primarySnap)}
+                onLongPress={handleItemLongPress}
               />
             ))}
             {overflowCount > 0 ? (
-              <TouchableOpacity style={styles.overflowTile} onPress={toggle} accessibilityLabel={`Show ${overflowCount} more items`}>
+              <TouchableOpacity style={styles.overflowTile} onPress={handleChromePress} onLongPress={handleChromeLongPress} accessibilityLabel={`Show ${overflowCount} more items`}>
                 <Text style={styles.overflowCount}>+{overflowCount}</Text>
                 <Text style={styles.overflowLabel}>more</Text>
               </TouchableOpacity>
@@ -238,7 +296,7 @@ export function ShoppingSessionBundle({
           </ScrollView>
         )}
 
-        <TouchableOpacity style={styles.footer} activeOpacity={0.75} onPress={toggle}>
+        <TouchableOpacity style={styles.footer} activeOpacity={0.75} onPress={handleChromePress} onLongPress={handleChromeLongPress}>
           <Text style={styles.footerHighlights} numberOfLines={1}>{highlights.join(' · ')}</Text>
           <View style={styles.footerAction}>
             <Text style={styles.footerActionText}>
@@ -275,9 +333,27 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderRadius: radii.lg,
     borderCurve: 'continuous',
+    borderWidth: 2,
+    borderColor: 'transparent',
     backgroundColor: colors.surfaceElevated,
     boxShadow: '0 2px 10px rgba(40, 35, 31, 0.07)',
   },
+  cardSelected: { borderColor: colors.primary },
+  cardSelectionBadge: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    zIndex: 20,
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    borderRadius: 16,
+    backgroundColor: 'rgba(24, 20, 18, 0.42)',
+  },
+  cardSelectionBadgeActive: { borderColor: colors.primary, backgroundColor: colors.primary },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -353,6 +429,17 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   tilePriceMuted: { fontWeight: typography.weight.medium, color: 'rgba(255, 255, 255, 0.82)' },
+  tileSelectionRing: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    borderWidth: 3,
+    borderColor: colors.primary,
+    borderRadius: radii.md,
+    borderCurve: 'continuous',
+  },
   overflowTile: {
     width: 72,
     aspectRatio: 4 / 5,

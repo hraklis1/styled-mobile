@@ -386,7 +386,6 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   const [isSavingCatalog, setIsSavingCatalog] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(() => new Set());
-  const [expandedGroupKeys, setExpandedGroupKeys] = useState<Set<string>>(() => new Set());
   const [isDeletingSelection, setIsDeletingSelection] = useState(false);
   const [returningToTab, setReturningToTab] = useState(false);
   const [storeAssignmentGroup, setStoreAssignmentGroup] = useState<ShoppingSessionGroup | null>(null);
@@ -499,13 +498,6 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
     if (organizerOpenTimerRef.current) clearTimeout(organizerOpenTimerRef.current);
     if (storeSheetOpenTimerRef.current) clearTimeout(storeSheetOpenTimerRef.current);
   }, []);
-
-  // A lone trip has nothing to be bundled away from — open it on arrival.
-  useEffect(() => {
-    if (groups.length !== 1) return;
-    const [only] = groups;
-    setExpandedGroupKeys((current) => (current.has(only.key) ? current : new Set(current).add(only.key)));
-  }, [groups]);
 
   // A store picked in the sheet may sit off-screen in the chip rail — bring it into view.
   useEffect(() => {
@@ -656,23 +648,26 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
     }
   }, [allSnaps, updatePendingGroupCatalog, user]);
 
-  const toggleSelectItem = useCallback((itemId: string) => {
+  // Selection operates on a whole card (session group) at a time — toggling
+  // adds or removes every item it contains together, never one at a time.
+  const toggleSelectGroup = useCallback((group: ShoppingSessionGroup) => {
     void Haptics.selectionAsync();
     setSelectedItemIds((current) => {
+      const groupItemIds = group.items.map((item) => item.id);
+      const isFullySelected = groupItemIds.every((id) => current.has(id));
       const next = new Set(current);
-      if (next.has(itemId)) next.delete(itemId);
-      else next.add(itemId);
+      groupItemIds.forEach((id) => (isFullySelected ? next.delete(id) : next.add(id)));
       return next;
     });
   }, []);
 
-  const startSelection = useCallback((itemId?: string) => {
+  const startSelection = useCallback((group?: ShoppingSessionGroup) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSelectionMode(true);
-    if (itemId) {
+    if (group) {
       setSelectedItemIds((current) => {
         const next = new Set(current);
-        next.add(itemId);
+        group.items.forEach((item) => next.add(item.id));
         return next;
       });
     }
@@ -825,19 +820,11 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
     [],
   );
 
-  const toggleGroup = useCallback((key: string) => {
-    setExpandedGroupKeys((current) => {
-      const next = new Set(current);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+  // Only reached outside selection mode — the bundle itself routes taps to
+  // card selection while selectionMode is on, so this always opens detail.
+  const pressItem = useCallback((_item: ShoppingEditItem, snap: ShoppingSnap) => {
+    setSelectedSnap(snap);
   }, []);
-
-  const pressItem = useCallback((item: ShoppingEditItem, snap: ShoppingSnap) => {
-    if (selectionMode) toggleSelectItem(item.id);
-    else setSelectedSnap(snap);
-  }, [selectionMode, toggleSelectItem]);
 
   const listHeader = (
     <View>
@@ -991,12 +978,13 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
         renderItem={({ item: group }) => (
           <ShoppingSessionBundle
             group={group}
-            expanded={selectionMode || expandedGroupKeys.has(group.key)}
-            onToggle={() => toggleGroup(group.key)}
+            expanded={selectionMode}
+            onOpenDetail={() => navigation.navigate('ShoppingHaulDetail', { groupKey: group.key })}
             selectionMode={selectionMode}
-            selectedItemIds={selectedItemIds}
+            isSelected={group.items.length > 0 && group.items.every((item) => selectedItemIds.has(item.id))}
             onPressItem={pressItem}
-            onLongPressItem={(item) => startSelection(item.id)}
+            onSelectCard={() => toggleSelectGroup(group)}
+            onLongPressCard={() => startSelection(group)}
             onAddStore={!group.storeName ? () => openStoreAssignment(group) : undefined}
           />
         )}
