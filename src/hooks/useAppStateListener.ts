@@ -4,8 +4,20 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { useShoppingSessionStore } from '../stores/useShoppingSessionStore';
 import { scheduleImageCacheMaintenance } from '../lib/imageCacheMaintenance';
 import { maintainShoppingPreviews } from '../lib/shoppingPreviews';
+import { supabase } from '../lib/supabase';
 
 function handleAppStateChange(nextState: AppStateStatus, now = Date.now()): void {
+  // Supabase's autoRefreshToken timer relies on JS timers that iOS/Android
+  // suspend in the background, so it can't be trusted to keep the access
+  // token alive on its own in React Native — it must be driven from AppState
+  // (per Supabase's RN guidance), or the token silently expires and every
+  // api.ts request 401s until the app is force-quit and relaunched.
+  if (nextState === 'active') {
+    void supabase.auth.startAutoRefresh();
+  } else {
+    void supabase.auth.stopAutoRefresh();
+  }
+
   const {
     lastBackgroundTimestamp,
     currentSession,
