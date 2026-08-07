@@ -569,7 +569,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
         <TouchableOpacity
           style={styles.roundButton}
           onPress={() => navigation.navigate('ShoppingGallery')}
-          accessibilityLabel="Open Shopping History"
+          accessibilityLabel="Open shortlist"
         >
           <Ionicons name="images-outline" size={22} color="#FFFFFF" />
         </TouchableOpacity>

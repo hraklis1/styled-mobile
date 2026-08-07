@@ -130,10 +130,10 @@ export function SavedLooksScreen({ navigation, route }: SavedLooksScreenProps) {
           accessibilityLabel: 'Open Shopping Mode camera',
         }}
         secondaryActions={[{
-          label: 'Shopping History',
+          label: 'Shortlist',
           icon: 'images-outline',
           onPress: () => navigation.navigate('ShoppingGallery'),
-          accessibilityLabel: 'Open Shopping History',
+          accessibilityLabel: 'Open shortlist',
         }]}
       />
 

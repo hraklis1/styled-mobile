@@ -26,6 +26,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ShoppingEditCard } from '../../components/shopping/ShoppingEditCard';
 import { ShoppingSnapDetail } from '../../components/shopping/ShoppingSnapDetail';
+import { ShoppingStoreFilterSheet } from '../../components/shopping/ShoppingStoreFilterSheet';
 import { useAuth } from '../../contexts/AuthContext';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { SHOPPING_SNAPS_QUERY_KEY, useShoppingSnaps } from '../../hooks/useShoppingSnaps';
@@ -46,11 +47,14 @@ import {
   type ShoppingSnapOrganizationStage,
   type ShoppingSnapOrganizationUpdate,
 } from '../../lib/shoppingSnapOrganizer';
+import { formatShoppingPlaceLabel } from '../../lib/shoppingLocations';
 import {
-  formatShoppingPlaceLabel,
-  normalizeStoreName,
-  shoppingFilterKey,
-} from '../../lib/shoppingLocations';
+  buildShoppingStoreOptions,
+  countItemsWithoutStore,
+  quickShoppingStoreOptions,
+  shoppingStoreFilterLabel,
+  STORE_FILTER_ALL,
+} from '../../lib/shoppingStoreFilters';
 import {
   buildShoppingReviewReasonOptions,
   itemHasShoppingReviewReason,
@@ -76,7 +80,6 @@ type GallerySection = {
   knownSpend: number | null;
   data: GalleryRow[];
 };
-type StoreFilterOption = { value: string; label: string };
 type ShoppingCatalogFilter = 'all' | 'active' | 'favorite' | ShoppingFindCatalogStatus;
 
 const DATE_OPTIONS: { value: ShoppingDateFilter; label: string }[] = [
@@ -404,6 +407,10 @@ function ShoppingSnapOrganizerModal({
 
 export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScreenProps) {
   const filterSheetRef = useRef<BottomSheetModal>(null);
+  const storeSheetRef = useRef<BottomSheetModal>(null);
+  const storeSheetOpenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const storeChipScrollRef = useRef<ScrollView>(null);
+  const storeChipOffsetsRef = useRef<Record<string, number>>({});
   const organizerOpenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -445,31 +452,23 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
     setSelectedSnap(focused.primarySnap);
     navigation.setParams({ focusGroupId: undefined, catalogFilter: undefined });
   }, [allItems, navigation, route.params?.catalogFilter, route.params?.focusGroupId]);
-  const storeOptions = useMemo<StoreFilterOption[]>(() => {
-    const byStore = new Map<string, ShoppingEditItem[]>();
-    for (const item of allItems) {
-      if (!item.storeName) continue;
-      const key = normalizeStoreName(item.storeName);
-      byStore.set(key, [...(byStore.get(key) ?? []), item]);
-    }
-
-    return [...byStore.entries()]
-      .flatMap(([normalizedStore, items]) => {
-        const firstStoreName = items[0].storeName ?? normalizedStore;
-        const locationKeys = new Map<string, ShoppingEditItem>();
-        for (const item of items) {
-          locationKeys.set(shoppingFilterKey(item), item);
-        }
-        if (locationKeys.size <= 1) {
-          return [{ value: `store:${normalizedStore}`, label: firstStoreName }];
-        }
-        return [...locationKeys.values()].map((item) => ({
-          value: shoppingFilterKey(item),
-          label: `${item.storeName ?? firstStoreName} · ${itemPlaceLabel(item) ?? 'Location not set'}`,
-        }));
-      })
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [allItems]);
+  const storeOptions = useMemo(() => buildShoppingStoreOptions(allItems), [allItems]);
+  const unassignedStoreCount = useMemo(() => countItemsWithoutStore(allItems), [allItems]);
+  const quickStoreOptions = useMemo(
+    () => quickShoppingStoreOptions(storeOptions, storeFilter),
+    [storeFilter, storeOptions],
+  );
+  const storeFilterLabel = useMemo(
+    () => shoppingStoreFilterLabel(storeOptions, storeFilter),
+    [storeFilter, storeOptions],
+  );
+  const activeQuickStoreValue = useMemo(
+    () => quickStoreOptions.find(
+      (store) => store.value === storeFilter
+        || store.locations.some((location) => location.value === storeFilter),
+    )?.value ?? null,
+    [quickStoreOptions, storeFilter],
+  );
   const summary = useMemo(() => summarizeShoppingEditItems(allItems), [allItems]);
   const reviewReasonOptions = useMemo(() => buildShoppingReviewReasonOptions(allItems), [allItems]);
   const baseFilteredItems = useMemo(
@@ -507,7 +506,19 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
 
   useEffect(() => () => {
     if (organizerOpenTimerRef.current) clearTimeout(organizerOpenTimerRef.current);
+    if (storeSheetOpenTimerRef.current) clearTimeout(storeSheetOpenTimerRef.current);
   }, []);
+
+  // A store picked in the sheet may sit off-screen in the chip rail — bring it into view.
+  useEffect(() => {
+    if (!activeQuickStoreValue) {
+      storeChipScrollRef.current?.scrollTo({ x: 0, animated: true });
+      return;
+    }
+    const offset = storeChipOffsetsRef.current[activeQuickStoreValue];
+    if (offset === undefined) return;
+    storeChipScrollRef.current?.scrollTo({ x: Math.max(0, offset - spacing.lg), animated: true });
+  }, [activeQuickStoreValue]);
 
   const deleteSnaps = useCallback(async (snaps: ShoppingSnap[]) => {
     if (snaps.length === 0) return;
@@ -713,6 +724,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
 
   const clearItemFilters = useCallback(() => {
     void Haptics.selectionAsync();
+    setStoreFilter(STORE_FILTER_ALL);
     setDateFilter('all');
     setSyncFilter('all');
     setReviewFilter('all');
@@ -720,9 +732,22 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
     setCatalogFilter('all');
   }, []);
 
-  const focusStoreFilters = useCallback(() => {
+  const openStorePicker = useCallback(() => {
     void Haptics.selectionAsync();
-    filterSheetRef.current?.present();
+    storeSheetRef.current?.present();
+  }, []);
+
+  // Two modals can't hand over instantly — dismiss the refine sheet, then present.
+  const openStorePickerFromFilters = useCallback(() => {
+    void Haptics.selectionAsync();
+    filterSheetRef.current?.dismiss();
+    if (storeSheetOpenTimerRef.current) clearTimeout(storeSheetOpenTimerRef.current);
+    storeSheetOpenTimerRef.current = setTimeout(() => storeSheetRef.current?.present(), 320);
+  }, []);
+
+  const toggleStoreChip = useCallback((value: string) => {
+    void Haptics.selectionAsync();
+    setStoreFilter((current) => (current === value ? STORE_FILTER_ALL : value));
   }, []);
 
   const showMissingPriceItems = useCallback(() => {
@@ -854,8 +879,9 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
           </View>
         </View>
 
-        <Text style={styles.eyebrow}>SHOPPING HISTORY</Text>
-        <Text style={styles.heroTitle}>Every find, considered.</Text>
+        <Text style={styles.eyebrow}>THE SHORTLIST</Text>
+        <Text style={styles.heroTitle}>Found, not yet yours.</Text>
+        <Text style={styles.heroDeck}>Pieces you photographed while shopping, kept here while you decide.</Text>
         <View style={styles.summaryRow}>
           <Text style={styles.summaryText}>
             {selectionMode
@@ -874,7 +900,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
             <Text style={styles.metricValue}>{summary.itemCount}</Text>
             <Text style={styles.metricLabel}>Items</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.metricCell} onPress={focusStoreFilters} accessibilityLabel="Refine by store">
+          <TouchableOpacity style={styles.metricCell} onPress={openStorePicker} accessibilityLabel="Filter by store">
             <Text style={styles.metricValue}>{summary.storeCount}</Text>
             <Text style={styles.metricLabel}>Stores</Text>
           </TouchableOpacity>
@@ -894,31 +920,58 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
       </View>
 
       <View style={styles.storeFilterBlock}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storeChipRow}>
+        <ScrollView
+          ref={storeChipScrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.storeChipRow}
+          style={styles.storeChipScroll}
+        >
           <TouchableOpacity
-            style={[styles.storeFilterChip, storeFilter === 'all' && styles.storeFilterChipActive]}
-            onPress={() => setStoreFilter('all')}
+            style={[styles.storeFilterChip, storeFilter === STORE_FILTER_ALL && styles.storeFilterChipActive]}
+            onPress={() => setStoreFilter(STORE_FILTER_ALL)}
           >
-            <Text style={[styles.storeFilterText, storeFilter === 'all' && styles.storeFilterTextActive]}>All stores</Text>
+            <Text style={[styles.storeFilterText, storeFilter === STORE_FILTER_ALL && styles.storeFilterTextActive]}>All stores</Text>
           </TouchableOpacity>
-          {storeOptions.map((store) => (
+          {quickStoreOptions.map((store) => {
+            const isActive = storeFilter === store.value
+              || store.locations.some((location) => location.value === storeFilter);
+            return (
+              <TouchableOpacity
+                key={store.value}
+                style={[styles.storeFilterChip, isActive && styles.storeFilterChipActive]}
+                onLayout={(event) => {
+                  storeChipOffsetsRef.current[store.value] = event.nativeEvent.layout.x;
+                }}
+                onPress={() => toggleStoreChip(store.value)}
+                onLongPress={store.locations.length > 0 ? openStorePicker : undefined}
+              >
+                <Text style={[styles.storeFilterText, isActive && styles.storeFilterTextActive]} numberOfLines={1}>
+                  {isActive ? storeFilterLabel : store.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+          {storeFilter === 'none' ? (
             <TouchableOpacity
-              key={store.value}
-              style={[styles.storeFilterChip, storeFilter === store.value && styles.storeFilterChipActive]}
-              onPress={() => setStoreFilter(store.value)}
+              style={[styles.storeFilterChip, styles.storeFilterChipActive]}
+              onPress={() => setStoreFilter(STORE_FILTER_ALL)}
             >
-              <Text style={[styles.storeFilterText, storeFilter === store.value && styles.storeFilterTextActive]}>{store.label}</Text>
-            </TouchableOpacity>
-          ))}
-          {allSnaps.some((snap) => !snap.storeName) ? (
-            <TouchableOpacity
-              style={[styles.storeFilterChip, storeFilter === 'none' && styles.storeFilterChipActive]}
-              onPress={() => setStoreFilter('none')}
-            >
-              <Text style={[styles.storeFilterText, storeFilter === 'none' && styles.storeFilterTextActive]}>Store not set</Text>
+              <Text style={[styles.storeFilterText, styles.storeFilterTextActive]}>Store not set</Text>
             </TouchableOpacity>
           ) : null}
         </ScrollView>
+        <TouchableOpacity
+          style={styles.storePickerButton}
+          onPress={openStorePicker}
+          accessibilityLabel="Browse all stores"
+        >
+          <Ionicons name="storefront-outline" size={15} color={colors.foreground} />
+          <Text style={styles.storePickerText} numberOfLines={1}>
+            {summary.storeCount} store{summary.storeCount === 1 ? '' : 's'}
+          </Text>
+          <Ionicons name="chevron-down" size={13} color={colors.mutedForeground} />
+        </TouchableOpacity>
       </View>
 
       {isError ? (
@@ -966,9 +1019,9 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
         ) : (
           <View style={styles.emptyState}>
             <View style={styles.emptyMonogram}><Ionicons name="images-outline" size={34} color={colors.primary} /></View>
-            <Text style={styles.emptyTitle}>{allItems.length ? 'No items match' : 'Your shopping history starts here'}</Text>
+            <Text style={styles.emptyTitle}>{allItems.length ? 'No items match' : 'Your shortlist starts here'}</Text>
             <Text style={styles.emptyText}>
-              {allItems.length ? 'Try clearing a filter to see more finds.' : 'Capture pieces and price tags while you shop, or import them from your camera roll.'}
+              {allItems.length ? 'Try clearing a filter to see more finds.' : 'Photograph pieces and price tags while you shop, or import them from your camera roll, and keep them here until you decide.'}
             </Text>
             <TouchableOpacity style={styles.emptyButton} onPress={() => navigation.navigate('ShoppingCamera')}>
               <Ionicons name="camera-outline" size={18} color={colors.primaryForeground} />
@@ -1024,6 +1077,17 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
       >
         <BottomSheetView style={styles.filterSheetContent}>
           <Text style={styles.filterSheetTitle}>Refine your edit</Text>
+          <Text style={styles.filterGroupLabel}>STORE</Text>
+          <TouchableOpacity style={styles.storeFilterRow} onPress={openStorePickerFromFilters}>
+            <Ionicons name="storefront-outline" size={17} color={colors.foreground} />
+            <Text
+              style={[styles.storeFilterRowText, storeFilter !== STORE_FILTER_ALL && styles.storeFilterRowTextActive]}
+              numberOfLines={1}
+            >
+              {storeFilterLabel}
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
+          </TouchableOpacity>
           <Text style={styles.filterGroupLabel}>DATE</Text>
           <View style={styles.optionGrid}>
             {DATE_OPTIONS.map((option) => (
@@ -1129,6 +1193,15 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
         </BottomSheetView>
       </BottomSheetModal>
 
+      <ShoppingStoreFilterSheet
+        sheetRef={storeSheetRef}
+        options={storeOptions}
+        totalItemCount={allItems.length}
+        unassignedCount={unassignedStoreCount}
+        storeFilter={storeFilter}
+        onSelect={setStoreFilter}
+      />
+
       <ShoppingSnapDetail
         snap={selectedSnap}
         relatedSnaps={selectedGroupSnaps}
@@ -1171,6 +1244,7 @@ const styles = StyleSheet.create({
   cameraButtonText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.primaryForeground },
   eyebrow: { fontSize: 11, fontWeight: typography.weight.bold, letterSpacing: 2.1, color: colors.primary },
   heroTitle: { maxWidth: 330, paddingTop: spacing.sm, fontFamily: typography.family.display, fontSize: 34, lineHeight: 39, color: colors.foreground },
+  heroDeck: { maxWidth: 330, paddingTop: spacing.sm, fontSize: typography.size.sm, lineHeight: 20, color: colors.mutedForeground },
   summaryRow: { minHeight: 24, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingTop: spacing.md },
   summaryText: { fontSize: typography.size.sm, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
   localSummary: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -1181,9 +1255,23 @@ const styles = StyleSheet.create({
   metricValue: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.foreground, fontVariant: ['tabular-nums'] },
   metricValueWarn: { color: colors.primary },
   metricLabel: { fontSize: 10, fontWeight: typography.weight.semibold, letterSpacing: 0.5, textTransform: 'uppercase', color: colors.mutedForeground },
-  storeFilterBlock: { paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  storeChipRow: { gap: spacing.sm, paddingHorizontal: spacing.lg },
-  storeFilterChip: { height: 36, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radii.full, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background },
+  storeFilterBlock: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  storeChipScroll: { flex: 1 },
+  storeChipRow: { gap: spacing.sm, paddingLeft: spacing.lg, paddingRight: spacing.sm },
+  storeFilterChip: { maxWidth: 168, height: 36, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radii.full, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background },
+  storePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 36,
+    marginRight: spacing.lg,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  storePickerText: { fontSize: typography.size.sm, fontWeight: typography.weight.medium, color: colors.foreground, fontVariant: ['tabular-nums'] },
   storeFilterChipActive: { borderColor: colors.foreground, backgroundColor: colors.foreground },
   storeFilterText: { fontSize: typography.size.sm, color: colors.secondaryForeground },
   storeFilterTextActive: { fontWeight: typography.weight.semibold, color: colors.primaryForeground },
@@ -1209,6 +1297,17 @@ const styles = StyleSheet.create({
   filterSheetContent: { gap: spacing.md, paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
   filterSheetTitle: { fontFamily: typography.family.display, fontSize: typography.size.xxl, color: colors.foreground },
   filterGroupLabel: { paddingTop: spacing.sm, fontSize: 11, fontWeight: typography.weight.bold, letterSpacing: 1.5, color: colors.mutedForeground },
+  storeFilterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  storeFilterRowText: { flex: 1, fontSize: typography.size.md, color: colors.secondaryForeground },
+  storeFilterRowTextActive: { fontWeight: typography.weight.semibold, color: colors.foreground },
   optionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   optionButton: { minHeight: 38, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.surfaceSubtle },
   optionButtonActive: { backgroundColor: colors.foreground },

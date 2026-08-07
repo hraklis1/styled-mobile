@@ -329,7 +329,7 @@ function AppTabNavigator() {
                   },
                   {
                     key: 'shopping-history',
-                    label: 'Shopping History',
+                    label: 'Shortlist',
                     icon: 'images-outline',
                     onPress: () => navigation.navigate('Shop', { screen: 'ShoppingGallery' }),
                   },
