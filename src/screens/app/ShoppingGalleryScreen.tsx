@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,19 +15,16 @@ import {
   BottomSheetView,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
-import { Image } from 'expo-image';
-import * as Crypto from 'expo-crypto';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
-import { CommonActions, StackActions, usePreventRemove } from '@react-navigation/native';
+import { CommonActions, usePreventRemove } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ShoppingSessionBundle } from '../../components/shopping/ShoppingSessionBundle';
-import { ShoppingSnapDetail } from '../../components/shopping/ShoppingSnapDetail';
+import { ShoppingItemLightbox } from '../../components/shopping/ShoppingItemLightbox';
 import { ShoppingStoreFilterSheet } from '../../components/shopping/ShoppingStoreFilterSheet';
 import { ShoppingStoreAssignmentSheet } from '../../components/shopping/ShoppingStoreAssignmentSheet';
 import { useAuth } from '../../contexts/AuthContext';
-import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { SHOPPING_SNAPS_QUERY_KEY, useShoppingSnaps } from '../../hooks/useShoppingSnaps';
 import { queryClient } from '../../lib/queryClient';
 import {
@@ -41,11 +37,6 @@ import {
   type ShoppingReviewFilter,
   type ShoppingSyncFilter,
 } from '../../lib/shoppingGallery';
-import {
-  buildShoppingSnapOrganizationUpdates,
-  type ShoppingSnapOrganizationStage,
-  type ShoppingSnapOrganizationUpdate,
-} from '../../lib/shoppingSnapOrganizer';
 import { buildShoppingSessionGroups, type ShoppingSessionGroup } from '../../lib/shoppingSessionGroups';
 import {
   buildShoppingStoreOptions,
@@ -61,13 +52,11 @@ import {
   type ShoppingReviewReasonKey,
 } from '../../lib/shoppingPresentation';
 import { supabase } from '../../lib/supabase';
-import { track } from '../../lib/analytics';
-import { buildShopStylistLaunch } from '../../lib/shopDecisionWorkspace';
 import { deleteShoppingSnaps as deleteShoppingSnapsService } from '../../lib/deleteShoppingSnaps';
 import type { ShoppingGalleryScreenProps } from '../../navigation/types';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import { colors, radii, spacing, typography } from '../../theme';
-import type { ShoppingCaptureRole, ShoppingFindCatalogPatch, ShoppingFindCatalogStatus, ShoppingSnap } from '../../types/shoppingSnap';
+import type { ShoppingFindCatalogStatus, ShoppingSnap } from '../../types/shoppingSnap';
 
 type ShoppingCatalogFilter = 'all' | 'active' | 'favorite' | ShoppingFindCatalogStatus;
 
@@ -89,273 +78,6 @@ const REVIEW_OPTIONS: { value: ShoppingReviewFilter; label: string }[] = [
   { value: 'needs-review', label: 'Needs review' },
 ];
 
-
-function priceLabel(price: number | null): string | null {
-  if (price === null) return null;
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 2,
-  }).format(price);
-}
-
-function roleLabel(role: ShoppingCaptureRole): string {
-  if (role === 'tag') return 'Tag';
-  if (role === 'garment') return 'Garment';
-  return 'Unsorted';
-}
-
-function nextRole(role: ShoppingCaptureRole): ShoppingCaptureRole {
-  if (role === 'unknown') return 'garment';
-  if (role === 'garment') return 'tag';
-  return 'unknown';
-}
-
-function stagePrice(snaps: ShoppingSnap[], snapIds: string[]): string | null {
-  const snapSet = new Set(snapIds);
-  const price = snaps.find((snap) => snapSet.has(snap.id) && snap.captureRole === 'tag' && snap.extractedPrice !== null)?.extractedPrice
-    ?? snaps.find((snap) => snapSet.has(snap.id) && snap.extractedPrice !== null)?.extractedPrice
-    ?? null;
-  return priceLabel(price);
-}
-
-function applyCatalogPatchToSnap(snap: ShoppingSnap, patch: ShoppingFindCatalogPatch): ShoppingSnap {
-  return {
-    ...snap,
-    category: Object.prototype.hasOwnProperty.call(patch, 'category') ? patch.category ?? null : snap.category,
-    sizeLabel: Object.prototype.hasOwnProperty.call(patch, 'sizeLabel') ? patch.sizeLabel ?? null : snap.sizeLabel,
-    colorLabel: Object.prototype.hasOwnProperty.call(patch, 'colorLabel') ? patch.colorLabel ?? null : snap.colorLabel,
-    materialLabel: Object.prototype.hasOwnProperty.call(patch, 'materialLabel') ? patch.materialLabel ?? null : snap.materialLabel,
-    notes: Object.prototype.hasOwnProperty.call(patch, 'notes') ? patch.notes ?? null : snap.notes,
-    isFavorite: Object.prototype.hasOwnProperty.call(patch, 'isFavorite') ? patch.isFavorite ?? false : snap.isFavorite,
-    catalogStatus: Object.prototype.hasOwnProperty.call(patch, 'catalogStatus') ? patch.catalogStatus ?? 'considering' : snap.catalogStatus,
-  };
-}
-
-function catalogPatchPayload(patch: ShoppingFindCatalogPatch) {
-  return {
-    category: patch.category ?? null,
-    size_label: patch.sizeLabel ?? null,
-    color_label: patch.colorLabel ?? null,
-    material_label: patch.materialLabel ?? null,
-    notes: patch.notes ?? null,
-    is_favorite: patch.isFavorite ?? false,
-    catalog_status: patch.catalogStatus ?? 'considering',
-    updated_at: new Date().toISOString(),
-  };
-}
-
-function ShoppingSnapOrganizerModal({
-  visible,
-  snaps,
-  onClose,
-  onSave,
-  isSaving,
-}: {
-  visible: boolean;
-  snaps: ShoppingSnap[];
-  onClose: () => void;
-  onSave: (updates: ShoppingSnapOrganizationUpdate[]) => Promise<void>;
-  isSaving: boolean;
-}) {
-  const insets = useSafeAreaInsets();
-  const [unassignedIds, setUnassignedIds] = useState<string[]>([]);
-  const [stages, setStages] = useState<ShoppingSnapOrganizationStage[]>([]);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
-  const [rolesBySnapId, setRolesBySnapId] = useState<Record<string, ShoppingCaptureRole>>({});
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const snapById = useMemo(() => new Map(snaps.map((snap) => [snap.id, snap])), [snaps]);
-  const snapsWithStagedRoles = useMemo(
-    () => snaps.map((snap) => ({ ...snap, captureRole: rolesBySnapId[snap.id] ?? snap.captureRole })),
-    [rolesBySnapId, snaps],
-  );
-  const originalCaptureGroupId = snaps[0]?.captureGroupId ?? '';
-  const hasRoleChanges = snaps.some((snap) => rolesBySnapId[snap.id] && rolesBySnapId[snap.id] !== snap.captureRole);
-  const hasGroupChanges = stages.length > 0;
-  const canSave = (hasRoleChanges || hasGroupChanges) && snaps.length > 0 && !isSaving;
-
-  const orderIds = useCallback((ids: string[]) => {
-    const order = new Map(snaps.map((snap, index) => [snap.id, index]));
-    return [...ids].sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
-  }, [snaps]);
-
-  useEffect(() => {
-    if (!visible) return;
-    setUnassignedIds(snaps.map((snap) => snap.id));
-    setStages([]);
-    setSelectedIds(new Set());
-    setRolesBySnapId(Object.fromEntries(snaps.map((snap) => [snap.id, snap.captureRole])));
-    setSaveError(null);
-  }, [snaps, visible]);
-
-  const toggleSelected = useCallback((snapId: string) => {
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      if (next.has(snapId)) next.delete(snapId);
-      else next.add(snapId);
-      return next;
-    });
-  }, []);
-
-  const cycleRole = useCallback((snapId: string) => {
-    setRolesBySnapId((current) => {
-      const snap = snapById.get(snapId);
-      const currentRole = current[snapId] ?? snap?.captureRole ?? 'unknown';
-      return { ...current, [snapId]: nextRole(currentRole) };
-    });
-  }, [snapById]);
-
-  const makeItem = useCallback(() => {
-    const selected = unassignedIds.filter((snapId) => selectedIds.has(snapId));
-    if (selected.length === 0) return;
-    setStages((current) => [...current, { id: Crypto.randomUUID(), snapIds: selected }]);
-    setUnassignedIds((current) => current.filter((snapId) => !selectedIds.has(snapId)));
-    setSelectedIds(new Set());
-    setSaveError(null);
-    void Haptics.selectionAsync();
-  }, [selectedIds, unassignedIds]);
-
-  const undoStage = useCallback((stageId: string) => {
-    const stage = stages.find((item) => item.id === stageId);
-    if (!stage) return;
-    setStages((current) => current.filter((item) => item.id !== stageId));
-    setUnassignedIds((current) => orderIds([...current, ...stage.snapIds]));
-    setSelectedIds(new Set());
-  }, [orderIds, stages]);
-
-  const save = useCallback(() => {
-    const stagedItems = [
-      ...stages,
-      { id: 'unassigned', snapIds: unassignedIds },
-    ].filter((stage) => stage.snapIds.length > 0);
-    const updates = buildShoppingSnapOrganizationUpdates(snaps, stagedItems, rolesBySnapId, {
-      originalCaptureGroupId,
-      createGroupId: () => Crypto.randomUUID(),
-    });
-    setSaveError(null);
-    void onSave(updates).catch((error) => {
-      setSaveError(error instanceof Error ? error.message : 'Please try again.');
-    });
-  }, [onSave, originalCaptureGroupId, rolesBySnapId, snaps, stages, unassignedIds]);
-
-  const renderPhoto = useCallback((snapId: string, selectable: boolean) => {
-    const snap = snapById.get(snapId);
-    if (!snap) return null;
-    const role = rolesBySnapId[snapId] ?? snap.captureRole;
-    const selected = selectedIds.has(snapId);
-    return (
-      <View key={snapId} style={styles.organizerPhotoWrap}>
-        <TouchableOpacity
-          style={[styles.organizerPhoto, selected && styles.organizerPhotoSelected]}
-          onPress={() => selectable && toggleSelected(snapId)}
-          disabled={!selectable || isSaving}
-          activeOpacity={0.85}
-          accessibilityLabel={`${roleLabel(role)} photo${selectable ? ', tap to select' : ''}`}
-          accessibilityState={{ selected }}
-        >
-          <Image source={{ uri: snap.imageUri }} style={StyleSheet.absoluteFill} contentFit="cover" />
-          {selected ? (
-            <View style={styles.organizerCheck}>
-              <Ionicons name="checkmark" size={15} color={colors.primaryForeground} />
-            </View>
-          ) : null}
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.organizerRoleChip}
-          onPress={() => cycleRole(snapId)}
-          disabled={isSaving}
-          accessibilityLabel={`Change photo role from ${roleLabel(role)}`}
-        >
-          <Text style={styles.organizerRoleText}>{roleLabel(role)}</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }, [cycleRole, isSaving, rolesBySnapId, selectedIds, snapById, toggleSelected]);
-
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={[styles.organizerRoot, { paddingTop: insets.top }]}>
-        <View style={styles.organizerHeader}>
-          <View style={styles.organizerHeaderCopy}>
-            <Text style={styles.organizerEyebrow}>ORGANIZE</Text>
-            <Text style={styles.organizerTitle}>Group photos</Text>
-            <Text style={styles.organizerSubtitle}>Group related photos into items, then save.</Text>
-          </View>
-          <TouchableOpacity style={styles.organizerIconButton} onPress={onClose} disabled={isSaving} accessibilityLabel="Close organizer">
-            <Ionicons name="close" size={22} color={colors.foreground} />
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView contentContainerStyle={[styles.organizerContent, { paddingBottom: insets.bottom + 96 }]}>
-          <View style={styles.organizerPool}>
-            <View style={styles.organizerSectionHeader}>
-              <View>
-                <Text style={styles.organizerSectionTitle}>Unassigned</Text>
-                <Text style={styles.organizerSectionMeta}>{unassignedIds.length} photo{unassignedIds.length === 1 ? '' : 's'}</Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.organizerMakeButton, selectedIds.size === 0 && styles.organizerMakeButtonDisabled]}
-                onPress={makeItem}
-                disabled={selectedIds.size === 0 || isSaving}
-              >
-                <Ionicons name="albums-outline" size={16} color={colors.primaryForeground} />
-                <Text style={styles.organizerMakeText}>Create item</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.organizerGrid}>
-              {unassignedIds.map((snapId) => renderPhoto(snapId, true))}
-            </View>
-          </View>
-
-          {stages.map((stage, index) => (
-            <View key={stage.id} style={styles.organizerPool}>
-              <View style={styles.organizerSectionHeader}>
-                <View>
-                  <Text style={styles.organizerSectionTitle}>Item {index + 1}</Text>
-                  <Text style={styles.organizerSectionMeta}>
-                    {stage.snapIds.length} photo{stage.snapIds.length === 1 ? '' : 's'}
-                    {stagePrice(snapsWithStagedRoles, stage.snapIds)
-                      ? ` · ${stagePrice(snapsWithStagedRoles, stage.snapIds)}`
-                      : ''}
-                  </Text>
-                </View>
-                <TouchableOpacity style={styles.organizerUndoButton} onPress={() => undoStage(stage.id)} disabled={isSaving}>
-                  <Ionicons name="return-up-back-outline" size={17} color={colors.primary} />
-                  <Text style={styles.organizerUndoText}>Undo</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.organizerGrid}>
-                {stage.snapIds.map((snapId) => renderPhoto(snapId, false))}
-              </View>
-            </View>
-          ))}
-
-          {saveError ? (
-            <View style={styles.organizerError}>
-              <Ionicons name="alert-circle-outline" size={17} color={colors.error} />
-              <Text selectable style={styles.organizerErrorText}>{saveError}</Text>
-            </View>
-          ) : null}
-        </ScrollView>
-
-        <View style={[styles.organizerSaveBar, { paddingBottom: insets.bottom + spacing.md }]}>
-          <TouchableOpacity style={styles.organizerCancelButton} onPress={onClose} disabled={isSaving}>
-            <Text style={styles.organizerCancelText}>Cancel</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.organizerSaveButton, !canSave && styles.organizerSaveButtonDisabled]}
-            onPress={save}
-            disabled={!canSave}
-          >
-            {isSaving ? <ActivityIndicator color={colors.primaryForeground} /> : <Ionicons name="checkmark" size={18} color={colors.primaryForeground} />}
-            <Text style={styles.organizerSaveText}>Save</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
 export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScreenProps) {
   const filterSheetRef = useRef<BottomSheetModal>(null);
   const storeSheetRef = useRef<BottomSheetModal>(null);
@@ -363,14 +85,10 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   const storeSheetOpenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const storeChipScrollRef = useRef<ScrollView>(null);
   const storeChipOffsetsRef = useRef<Record<string, number>>({});
-  const organizerOpenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { openStylist } = useGlobalAIStylist();
   const { data: remoteSnaps = [], isLoading, isRefetching, isError, refetch } = useShoppingSnaps();
   const pendingUploads = useShoppingSessionStore((state) => state.pendingUploads);
-  const regroupPendingUploads = useShoppingSessionStore((state) => state.regroupPendingUploads);
-  const updatePendingGroupCatalog = useShoppingSessionStore((state) => state.updatePendingGroupCatalog);
   const assignVisitStore = useShoppingSessionStore((state) => state.assignVisitStore);
   const assignCaptureStore = useShoppingSessionStore((state) => state.assignCaptureStore);
   const [storeFilter, setStoreFilter] = useState('all');
@@ -379,11 +97,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   const [reviewFilter, setReviewFilter] = useState<ShoppingReviewFilter>('all');
   const [reviewReasonFilter, setReviewReasonFilter] = useState<ShoppingReviewReasonKey | 'all'>('all');
   const [catalogFilter, setCatalogFilter] = useState<ShoppingCatalogFilter>('all');
-  const [selectedSnap, setSelectedSnap] = useState<ShoppingSnap | null>(null);
-  const [organizerSnaps, setOrganizerSnaps] = useState<ShoppingSnap[] | null>(null);
-  const [deletingSnapId, setDeletingSnapId] = useState<string | null>(null);
-  const [isSavingOrganization, setIsSavingOrganization] = useState(false);
-  const [isSavingCatalog, setIsSavingCatalog] = useState(false);
+  const [lightboxItem, setLightboxItem] = useState<ShoppingEditItem | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(() => new Set());
   const [isDeletingSelection, setIsDeletingSelection] = useState(false);
@@ -437,11 +151,13 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
     const requestedFilter = route.params?.catalogFilter;
     if (requestedFilter) setCatalogFilter(requestedFilter);
     const focusGroupId = route.params?.focusGroupId;
-    if (!focusGroupId) return;
-    const focused = allItems.find((item) => item.captureGroupId === focusGroupId);
-    if (!focused) return;
-    setSelectedSnap(focused.primarySnap);
-    navigation.setParams({ focusGroupId: undefined, catalogFilter: undefined });
+    if (focusGroupId) {
+      const focused = allItems.find((item) => item.captureGroupId === focusGroupId);
+      if (focused) setLightboxItem(focused);
+    }
+    if (focusGroupId || requestedFilter) {
+      navigation.setParams({ focusGroupId: undefined, catalogFilter: undefined });
+    }
   }, [allItems, navigation, route.params?.catalogFilter, route.params?.focusGroupId]);
   const storeOptions = useMemo(() => buildShoppingStoreOptions(allItems), [allItems]);
   const unassignedStoreCount = useMemo(() => countItemsWithoutStore(allItems), [allItems]);
@@ -481,12 +197,6 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
     [baseFilteredItems, catalogFilter, reviewReasonFilter],
   );
   const groups = useMemo(() => buildShoppingSessionGroups(filteredItems), [filteredItems]);
-  const selectedGroupSnaps = useMemo(() => {
-    if (!selectedSnap) return [];
-    return allSnaps
-      .filter((snap) => snap.captureGroupId === selectedSnap.captureGroupId)
-      .sort((a, b) => a.captureSequence - b.captureSequence);
-  }, [allSnaps, selectedSnap]);
   const selectedBulkSnaps = useMemo(
     () => allItems.filter((item) => selectedItemIds.has(item.id)).flatMap((item) => item.snaps),
     [allItems, selectedItemIds],
@@ -495,7 +205,6 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   const activeFilterCount = Number(storeFilter !== 'all') + Number(dateFilter !== 'all') + Number(syncFilter !== 'all') + Number(reviewFilter !== 'all') + Number(reviewReasonFilter !== 'all') + Number(catalogFilter !== 'all');
 
   useEffect(() => () => {
-    if (organizerOpenTimerRef.current) clearTimeout(organizerOpenTimerRef.current);
     if (storeSheetOpenTimerRef.current) clearTimeout(storeSheetOpenTimerRef.current);
   }, []);
 
@@ -513,140 +222,6 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   const deleteSnaps = useCallback(async (snaps: ShoppingSnap[]) => {
     await deleteShoppingSnapsService(snaps, user?.id ?? null);
   }, [user?.id]);
-
-  const deleteSnap = useCallback(async (snap: ShoppingSnap) => {
-    setDeletingSnapId(snap.id);
-    try {
-      await deleteSnaps([snap]);
-      setSelectedSnap(null);
-    } catch (error) {
-      Alert.alert(
-        'Could not delete photo',
-        error instanceof Error ? error.message : 'Please try again.',
-      );
-    } finally {
-      setDeletingSnapId(null);
-    }
-  }, [deleteSnaps]);
-
-  const confirmDeleteSnap = useCallback((snap: ShoppingSnap) => {
-    Alert.alert('Delete this photo?', 'This shopping photo will be removed from your history.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => void deleteSnap(snap) },
-    ]);
-  }, [deleteSnap]);
-
-  const openOrganizer = useCallback(() => {
-    const snapsToOrganize = selectedGroupSnaps;
-    if (snapsToOrganize.length === 0) return;
-    setSelectedSnap(null);
-    if (organizerOpenTimerRef.current) clearTimeout(organizerOpenTimerRef.current);
-    organizerOpenTimerRef.current = setTimeout(() => {
-      setOrganizerSnaps(snapsToOrganize);
-      organizerOpenTimerRef.current = null;
-    }, 450);
-  }, [selectedGroupSnaps]);
-
-  const saveOrganization = useCallback(async (updates: ShoppingSnapOrganizationUpdate[]) => {
-    if (updates.length === 0) return;
-    const snapById = new Map(allSnaps.map((snap) => [snap.id, snap]));
-    const syncedUpdates = updates.filter((update) => snapById.get(update.snapId)?.syncStatus === 'synced');
-    const pendingUpdates = updates.filter((update) => snapById.get(update.snapId)?.syncStatus === 'pending');
-
-    setIsSavingOrganization(true);
-    try {
-      if (syncedUpdates.length > 0) {
-        if (!user) throw new Error('You need to be signed in to organize synced photos.');
-
-        const groupPayloads = [...new Map(syncedUpdates.map((update) => {
-          const snap = snapById.get(update.snapId);
-          return [update.captureGroupId, {
-            id: update.captureGroupId,
-            user_id: user.id,
-            shopping_session_id: snap?.shoppingSessionId ?? null,
-            started_at: new Date(update.captureGroupStartedAt).toISOString(),
-          }];
-        })).values()];
-        const { error: groupError } = await supabase
-          .from('shopping_capture_groups')
-          .upsert(groupPayloads, { onConflict: 'id' });
-        if (groupError) throw groupError;
-
-        for (const update of syncedUpdates) {
-          const { error: rowError } = await supabase
-            .from('shopping_snaps')
-            .update({
-              capture_group_id: update.captureGroupId,
-              capture_role: update.captureRole,
-              capture_sequence: update.captureSequence,
-            })
-            .eq('user_id', user.id)
-            .eq('id', update.snapId);
-          if (rowError) throw rowError;
-        }
-      }
-
-      if (pendingUpdates.length > 0) {
-        regroupPendingUploads(pendingUpdates);
-      }
-      if (syncedUpdates.length > 0) {
-        await queryClient.invalidateQueries({ queryKey: SHOPPING_SNAPS_QUERY_KEY });
-      }
-      setOrganizerSnaps(null);
-      setSelectedSnap(null);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } finally {
-      setIsSavingOrganization(false);
-    }
-  }, [allSnaps, regroupPendingUploads, user]);
-
-  const saveCatalog = useCallback(async (captureGroupId: string, patch: ShoppingFindCatalogPatch) => {
-    const groupSnaps = allSnaps.filter((snap) => snap.captureGroupId === captureGroupId);
-    if (groupSnaps.length === 0) return;
-    const syncedSnaps = groupSnaps.filter((snap) => snap.syncStatus === 'synced');
-    const pendingSnaps = groupSnaps.filter((snap) => snap.syncStatus === 'pending');
-
-    setIsSavingCatalog(true);
-    try {
-      if (syncedSnaps.length > 0) {
-        if (!user) throw new Error('You need to be signed in to save catalog details.');
-        const firstSnap = [...syncedSnaps].sort((a, b) => (
-          a.captureSequence - b.captureSequence
-          || new Date(a.capturedAt).getTime() - new Date(b.capturedAt).getTime()
-        ))[0];
-        const { error } = await supabase
-          .from('shopping_capture_groups')
-          .upsert({
-            id: captureGroupId,
-            user_id: user.id,
-            shopping_session_id: firstSnap.shoppingSessionId ?? null,
-            started_at: new Date(firstSnap.capturedAt).toISOString(),
-            ...catalogPatchPayload(patch),
-          }, { onConflict: 'id' });
-        if (error) throw error;
-      }
-
-      if (pendingSnaps.length > 0) {
-        updatePendingGroupCatalog(captureGroupId, patch);
-      }
-
-      setSelectedSnap((current) => current && current.captureGroupId === captureGroupId
-        ? applyCatalogPatchToSnap(current, patch)
-        : current);
-
-      if (syncedSnaps.length > 0 && user) {
-        queryClient.setQueryData<ShoppingSnap[]>(
-          [...SHOPPING_SNAPS_QUERY_KEY, user.id],
-          (current) => current?.map((snap) => snap.captureGroupId === captureGroupId
-            ? applyCatalogPatchToSnap(snap, patch)
-            : snap),
-        );
-        await queryClient.invalidateQueries({ queryKey: SHOPPING_SNAPS_QUERY_KEY });
-      }
-    } finally {
-      setIsSavingCatalog(false);
-    }
-  }, [allSnaps, updatePendingGroupCatalog, user]);
 
   // Selection operates on a whole card (session group) at a time — toggling
   // adds or removes every item it contains together, never one at a time.
@@ -775,7 +350,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
             void deleteSnaps(selectedBulkSnaps)
               .then(() => {
                 cancelSelection();
-                setSelectedSnap(null);
+                setLightboxItem(null);
               })
               .catch((error) => {
                 Alert.alert(
@@ -790,29 +365,6 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
     );
   }, [cancelSelection, deleteSnaps, selectedBulkSnaps, selectedItemIds.size]);
 
-  const askStylistAboutFind = useCallback((snap: ShoppingSnap) => {
-    const item = allItems.find((candidate) => candidate.captureGroupId === snap.captureGroupId);
-    if (!item) return;
-    track('shopping_find_stylist_opened', { status: item.catalogStatus, has_price: item.extractedPrice !== null });
-    setSelectedSnap(null);
-    setTimeout(() => {
-      openStylist({
-        ...buildShopStylistLaunch('Should I buy this? Consider how it fits my wardrobe, whether I own anything similar, and how versatile it would be.'),
-        initialAttachmentUri: item.primarySnap.imageUri,
-        context: {
-          kind: 'shopping_find',
-          captureGroupId: item.captureGroupId,
-          storeName: item.storeName,
-          price: item.extractedPrice,
-          category: item.category,
-          color: item.colorLabel,
-          material: item.materialLabel,
-          notes: item.notes,
-        },
-      });
-    }, 300);
-  }, [allItems, openStylist]);
-
   const renderBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => (
       <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />
@@ -822,8 +374,8 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
 
   // Only reached outside selection mode — the bundle itself routes taps to
   // card selection while selectionMode is on, so this always opens detail.
-  const pressItem = useCallback((_item: ShoppingEditItem, snap: ShoppingSnap) => {
-    setSelectedSnap(snap);
+  const pressItem = useCallback((item: ShoppingEditItem, _snap: ShoppingSnap) => {
+    setLightboxItem(item);
   }, []);
 
   const listHeader = (
@@ -1182,28 +734,9 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
         onSelect={(storeName) => void saveStoreAssignment(storeName)}
       />
 
-      <ShoppingSnapDetail
-        snap={selectedSnap}
-        relatedSnaps={selectedGroupSnaps}
-        onSelect={setSelectedSnap}
-        onDelete={confirmDeleteSnap}
-        onOrganize={openOrganizer}
-        onSaveCatalog={saveCatalog}
-        isDeleting={selectedSnap ? deletingSnapId === selectedSnap.id : false}
-        isSavingCatalog={isSavingCatalog}
-        onAskStylist={askStylistAboutFind}
-        onClose={() => setSelectedSnap(null)}
-      />
-
-      <ShoppingSnapOrganizerModal
-        visible={organizerSnaps !== null}
-        snaps={organizerSnaps ?? []}
-        onClose={() => {
-          if (!isSavingOrganization) setOrganizerSnaps(null);
-        }}
-        onSave={saveOrganization}
-        isSaving={isSavingOrganization}
-      />
+      {lightboxItem ? (
+        <ShoppingItemLightbox item={lightboxItem} onClose={() => setLightboxItem(null)} />
+      ) : null}
     </View>
   );
 }
@@ -1292,36 +825,4 @@ const styles = StyleSheet.create({
   selectionDeleteButton: { flex: 1, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radii.md, backgroundColor: colors.error },
   selectionDeleteButtonDisabled: { opacity: 0.5 },
   selectionDeleteText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.primaryForeground, fontVariant: ['tabular-nums'] },
-  organizerRoot: { flex: 1, backgroundColor: colors.background },
-  organizerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  organizerHeaderCopy: { flex: 1 },
-  organizerEyebrow: { fontSize: 10, fontWeight: typography.weight.bold, letterSpacing: 1.5, color: colors.primary },
-  organizerTitle: { paddingTop: 2, fontFamily: typography.family.display, fontSize: typography.size.xxl, color: colors.foreground },
-  organizerSubtitle: { paddingTop: 2, fontSize: typography.size.sm, color: colors.mutedForeground },
-  organizerIconButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: colors.surfaceSubtle },
-  organizerContent: { gap: spacing.md, padding: spacing.lg },
-  organizerPool: { gap: spacing.md, padding: spacing.md, borderRadius: radii.lg, backgroundColor: colors.card },
-  organizerSectionHeader: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
-  organizerSectionTitle: { fontSize: typography.size.md, fontWeight: typography.weight.bold, color: colors.foreground },
-  organizerSectionMeta: { paddingTop: 2, fontSize: typography.size.xs, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
-  organizerMakeButton: { minHeight: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radii.md, backgroundColor: colors.primary },
-  organizerMakeButtonDisabled: { opacity: 0.45 },
-  organizerMakeText: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.primaryForeground },
-  organizerUndoButton: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm, borderRadius: radii.md, backgroundColor: colors.accent },
-  organizerUndoText: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.primary },
-  organizerGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  organizerPhotoWrap: { width: 92, gap: spacing.xs },
-  organizerPhoto: { width: 92, height: 112, overflow: 'hidden', borderWidth: 2, borderColor: 'transparent', borderRadius: radii.md, backgroundColor: colors.surfaceSubtle },
-  organizerPhotoSelected: { borderColor: colors.primary },
-  organizerCheck: { position: 'absolute', top: 6, right: 6, width: 24, height: 24, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: colors.primary },
-  organizerRoleChip: { minHeight: 28, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xs, borderRadius: radii.full, backgroundColor: colors.surfaceElevated },
-  organizerRoleText: { fontSize: 10, fontWeight: typography.weight.semibold, color: colors.secondaryForeground },
-  organizerError: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, padding: spacing.md, borderRadius: radii.md, backgroundColor: '#FBEDEA' },
-  organizerErrorText: { flex: 1, fontSize: typography.size.sm, lineHeight: 20, color: colors.error },
-  organizerSaveBar: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.background },
-  organizerCancelButton: { minHeight: 48, justifyContent: 'center', paddingHorizontal: spacing.md },
-  organizerCancelText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.secondaryForeground },
-  organizerSaveButton: { flex: 1, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radii.md, backgroundColor: colors.primary },
-  organizerSaveButtonDisabled: { opacity: 0.45 },
-  organizerSaveText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.primaryForeground },
 });

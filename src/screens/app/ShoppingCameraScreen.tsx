@@ -259,12 +259,6 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
   }, [isFocused, reconcileVisit]);
 
   useEffect(() => {
-    const tabNavigation = navigation.getParent();
-    tabNavigation?.setOptions({ tabBarStyle: { display: 'none' } });
-    return () => tabNavigation?.setOptions({ tabBarStyle: undefined });
-  }, [navigation]);
-
-  useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState !== 'active') {
         setResumePromptVisible(false);

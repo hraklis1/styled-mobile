@@ -139,30 +139,41 @@ export function garmentFriendlyContentFit(snap: ShoppingSnap): 'cover' | 'contai
 }
 
 export type ShoppingTagField = { label: string; value: string };
+export type ShoppingTagSection = { type: 'header' | 'item' | 'text'; text: string };
 
 const TAG_CURRENCY_NAMES: Record<string, string> = { $: 'USD', '£': 'GBP', '€': 'EUR' };
 const TAG_SIZE_WORDS = /^(XX-SMALL|X-SMALL|SMALL|MEDIUM|LARGE|X-LARGE|XX-LARGE)$/;
+const TAG_SKU_CODE = /^([A-Z0-9]{5,12})(?:\s+([A-Z]{2,4}))?$/;
+const TAG_BARCODE_LINE = /^[\d\s-]{8,}$/;
+const TAG_LIST_MARKER = /^(\d{1,2})\.\s*(.*)$/;
 
 function normalizeTagLine(line: string): string {
   return line.replace(/\s+/g, ' ').trim();
 }
 
+function isShoutingHeader(line: string): boolean {
+  return /[A-Z]/.test(line) && !/[a-z]/.test(line) && line.replace(/[^A-Z]/g, '').length >= 4;
+}
+
 /**
  * Price tags often carry more than the one price OCR already extracts —
- * multi-currency conversions, a size word, a style number. Pull out the
- * recognizable bits so the rest (marketing copy, barcodes) can stay
- * collapsed instead of dumping the whole scan on screen.
+ * multi-currency conversions, a size word, a style number, a barcode. Pull
+ * out the recognizable bits, drop the barcode digits (never worth reading),
+ * and reassemble the numbered feature list: OCR frequently splits a list
+ * item's "N." marker from its body onto its own line, or loses a marker
+ * altogether, so orphan lines get folded onto the item above them instead
+ * of floating as disconnected fragments.
  */
-export function parseShoppingTagOcr(rawText: string): { fields: ShoppingTagField[]; leftover: string } {
+export function parseShoppingTagOcr(rawText: string): { fields: ShoppingTagField[]; sections: ShoppingTagSection[] } {
   const fields: ShoppingTagField[] = [];
   const seenLabels = new Set<string>();
-  const leftoverLines: string[] = [];
+  const sections: ShoppingTagSection[] = [];
 
   for (const rawLine of rawText.split(/\n+/)) {
     const line = normalizeTagLine(rawLine);
     if (!line) continue;
 
-    const priceMatch = line.match(/^([A-Z]{2,3})?\s*([$£€])\s*([\d,]+(?:\.\d{1,2})?)$/);
+    const priceMatch = line.match(/^([A-Z]{2,3})?\s*([$£€])\s*([\d,]+(?:\.\d{1,2})?)\.?$/);
     if (priceMatch) {
       const [, code, symbol, amount] = priceMatch;
       const label = code || TAG_CURRENCY_NAMES[symbol] || symbol;
@@ -187,8 +198,35 @@ export function parseShoppingTagOcr(rawText: string): { fields: ShoppingTagField
       continue;
     }
 
-    leftoverLines.push(line);
+    const skuMatch = line.match(TAG_SKU_CODE);
+    if (skuMatch && /\d/.test(skuMatch[1]) && !seenLabels.has('Style')) {
+      seenLabels.add('Style');
+      fields.push({ label: 'Style', value: skuMatch[2] ? `${skuMatch[1]} · ${skuMatch[2]}` : skuMatch[1] });
+      continue;
+    }
+
+    if (TAG_BARCODE_LINE.test(line) && line.replace(/[\s-]/g, '').length >= 8) {
+      continue;
+    }
+
+    const listMatch = line.match(TAG_LIST_MARKER);
+    if (listMatch) {
+      sections.push({ type: 'item', text: listMatch[2] });
+      continue;
+    }
+
+    if (isShoutingHeader(line)) {
+      sections.push({ type: 'header', text: line });
+      continue;
+    }
+
+    const last = sections[sections.length - 1];
+    if (last && last.type !== 'header') {
+      last.text = `${last.text} ${line}`.trim();
+    } else {
+      sections.push({ type: 'text', text: line });
+    }
   }
 
-  return { fields, leftover: leftoverLines.join('\n') };
+  return { fields, sections: sections.filter((section) => section.text.length > 0) };
 }

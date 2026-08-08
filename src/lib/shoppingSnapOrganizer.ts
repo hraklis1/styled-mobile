@@ -50,13 +50,11 @@ export function buildShoppingSnapOrganizationUpdates(
   ));
 
   return normalizedStages.flatMap((stage, stageIndex) => {
+    // Preserves the caller's snapIds order (rather than re-deriving it from
+    // capture time) so a user's manual drag reorder in the organizer sticks.
     const stageSnaps = stage.snapIds
       .map((snapId) => snapById.get(snapId))
-      .filter((snap): snap is ShoppingSnap => Boolean(snap))
-      .sort((a, b) => (
-        a.captureSequence - b.captureSequence
-        || new Date(a.capturedAt).getTime() - new Date(b.capturedAt).getTime()
-      ));
+      .filter((snap): snap is ShoppingSnap => Boolean(snap));
     const groupStartedAt = Math.min(
       ...stageSnaps.map((snap) => new Date(snap.capturedAt).getTime()),
     );

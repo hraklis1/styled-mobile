@@ -1,4 +1,5 @@
 import { resolveImageUri } from './resolveImageUri';
+import { itemImageUri } from './itemImage';
 import { CATEGORY_LABELS } from '../types/item';
 import type { Board, BoardFeedItem } from '../types/board';
 import type { Item } from '../types/item';
@@ -26,7 +27,7 @@ export function getBoardCoverUris(
   // resilient client-side fallback only while no cover has been generated yet.
   add(board.coverImageUrl);
   if (uris.length > 0) return uris;
-  board.itemIds.forEach((id) => add(itemMap.get(id)?.imageUrl));
+  board.itemIds.forEach((id) => add(itemImageUri(itemMap.get(id))));
   board.outfitIds.forEach((id) => add(outfitMap.get(id)?.aiGeneratedImageUrl));
   (board.storeFinds ?? []).forEach((find) => add(find.imageUrls?.[0] ?? find.imageUrl));
   return uris.slice(0, 4);
