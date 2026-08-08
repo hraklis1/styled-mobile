@@ -3,7 +3,11 @@ import { ActivityIndicator, Easing, View, Text, StyleSheet } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SplashScreen from 'expo-splash-screen';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { NavigationContainer, LinkingOptions } from '@react-navigation/native';
+import {
+  NavigationContainer,
+  LinkingOptions,
+  getFocusedRouteNameFromRoute,
+} from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import {
   createBottomTabNavigator,
@@ -204,19 +208,22 @@ function AppTabNavigator() {
     void syncLocalWishlistToServer();
   }, []);
 
+  const baseTabBarStyle = {
+    height: 60 + insets.bottom,
+    paddingBottom: insets.bottom,
+    backgroundColor: colors.background,
+    borderTopColor: colors.hairline,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    boxShadow: '0 -3px 10px rgba(29, 27, 24, 0.07)',
+  };
+
   return (
     <View style={{ flex: 1 }}>
       <AppTab.Navigator
         screenOptions={({ route }) => ({
           headerShown: false,
           animation: 'fade',
-          tabBarStyle: {
-            height: 60 + insets.bottom,
-            paddingBottom: insets.bottom,
-            backgroundColor: colors.background,
-            borderTopColor: colors.hairline,
-            borderTopWidth: StyleSheet.hairlineWidth,
-          },
+          tabBarStyle: baseTabBarStyle,
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.mutedForeground,
           tabBarIcon: ({ color, focused, size }) => (
@@ -311,9 +318,13 @@ function AppTabNavigator() {
         <AppTab.Screen
           name="Shop"
           component={ShopNavigator}
-          options={{
+          options={({ route }) => ({
             tabBarButton: (props) => <QuickMenuTabButton {...props} />,
-          }}
+            tabBarStyle:
+              getFocusedRouteNameFromRoute(route) === 'ShoppingCamera'
+                ? { ...baseTabBarStyle, display: 'none' }
+                : baseTabBarStyle,
+          })}
           listeners={({ navigation }) => ({
             tabLongPress: () => {
               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);

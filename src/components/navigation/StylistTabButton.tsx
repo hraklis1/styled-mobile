@@ -76,9 +76,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: '0 2px 6px rgba(29, 27, 24, 0.11)',
+    boxShadow: '0 2px 6px rgba(149, 109, 81, 0.28)',
   },
   circleSelected: {
-    boxShadow: '0 3px 8px rgba(29, 27, 24, 0.16)',
+    boxShadow: '0 3px 10px rgba(149, 109, 81, 0.38)',
   },
 });

@@ -1193,7 +1193,7 @@ export function StylistChatView({
       <BlurView
         intensity={42}
         tint="systemThinMaterialLight"
-        style={[styles.bottomDock, { paddingBottom: insets.bottom + spacing.sm }]}
+        style={[styles.bottomDock, { paddingBottom: embedded ? spacing.sm : insets.bottom + spacing.sm }]}
         {...(Platform.OS === 'android' && { blurMethod: 'dimezisBlurViewSdk31Plus' })}
       >
         {/* Follow-up chips */}
