@@ -43,14 +43,22 @@ export type HomeStackParamList = {
   Profile: undefined;
 };
 
+export type ShopSection = 'brief' | 'shortlist' | 'saved-looks';
+
 // Shop nested stack (wishlist + shopping tools)
 export type ShopStackParamList = {
-  ShopMain: undefined;
+  ShopMain: {
+    section?: ShopSection;
+    focusGroupId?: string;
+    catalogFilter?: 'active' | 'all';
+    selectedId?: string;
+    returnTo?: 'Home' | 'Closet';
+  } | undefined;
   SavedLooks: { selectedId?: string } | undefined;
   ShoppingGallery: {
     focusGroupId?: string;
     catalogFilter?: 'active' | 'all';
-    returnTo?: 'Home';
+    returnTo?: 'Home' | 'Closet';
   } | undefined;
   ShoppingHaulDetail: { groupKey: string };
   ShoppingCamera: undefined;

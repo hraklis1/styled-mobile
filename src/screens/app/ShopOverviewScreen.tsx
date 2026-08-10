@@ -6,20 +6,19 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
-import { ShopStylistConsultationSheet } from '../../components/shopping/ShopStylistConsultationSheet';
 import { ShoppingBriefCard } from '../../components/shopping/ShoppingBriefCard';
 import { ShortlistCarousel } from '../../components/shopping/ShortlistCarousel';
+import { ShopDestinationRow } from '../../components/shopping/ShopDestinationRow';
 import { EditorialSection } from '../../components/primitives/Editorial';
 import { PressableScale } from '../../components/primitives/PressableScale';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useItems } from '../../hooks/useItems';
 import { useShoppingBrief } from '../../hooks/useShoppingBrief';
 import { useShoppingSnaps } from '../../hooks/useShoppingSnaps';
+import { useWishlist } from '../../hooks/useWishlist';
 import { buildShoppingEditItems, mergeShoppingSnaps, type ShoppingEditItem } from '../../lib/shoppingGallery';
 import {
-  buildShopConsultationPrompt,
   buildShopStylistLaunch,
-  type ShopConsultationTopic,
 } from '../../lib/shopDecisionWorkspace';
 import { buildShortlistSpotlight } from '../../lib/shortlistSpotlight';
 import { track } from '../../lib/analytics';
@@ -36,16 +35,29 @@ import type { StylistMode } from '../../features/stylist/types';
  * strip, because saving a find is what the user is doing while standing in a
  * shop — everything below it is for planning.
  */
-export function ShopOverviewScreen({ navigation }: ShopOverviewScreenProps) {
+export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProps) {
   const insets = useSafeAreaInsets();
   const { isPremium } = useEntitlement();
   const { openStylist } = useGlobalAIStylist();
   const { refetch: refetchItems } = useItems();
   const { data: remoteSnaps = [], refetch: refetchSnaps } = useShoppingSnaps();
+  const { data: savedLooks = [] } = useWishlist();
   const pendingUploads = useShoppingSessionStore((state) => state.pendingUploads);
   const brief = useShoppingBrief(isPremium);
   const [refreshing, setRefreshing] = useState(false);
-  const [consultationVisible, setConsultationVisible] = useState(false);
+  const requestedSection = route.params?.section ?? 'brief';
+
+  useEffect(() => {
+    if (requestedSection === 'shortlist') {
+      navigation.replace('ShoppingGallery', {
+        catalogFilter: route.params?.catalogFilter,
+        focusGroupId: route.params?.focusGroupId,
+        returnTo: route.params?.returnTo,
+      });
+    } else if (requestedSection === 'saved-looks') {
+      navigation.replace('SavedLooks', { selectedId: route.params?.selectedId });
+    }
+  }, [navigation, requestedSection, route.params?.catalogFilter, route.params?.focusGroupId, route.params?.returnTo, route.params?.selectedId]);
 
   const shoppingItems = useMemo(
     () => buildShoppingEditItems(mergeShoppingSnaps(remoteSnaps, pendingUploads)),
@@ -91,11 +103,6 @@ export function ShopOverviewScreen({ navigation }: ShopOverviewScreenProps) {
     openStylist(buildShopStylistLaunch(query, mode));
   }, [openStylist]);
 
-  const startShopping = useCallback(() => {
-    track('shop_action_selected', { action: 'start_shopping' });
-    setConsultationVisible(true);
-  }, []);
-
   const openHistory = useCallback((params?: { focusGroupId?: string; catalogFilter?: 'active' | 'all' }) => {
     track('shop_section_opened', { section: params?.focusGroupId ? 'candidate' : 'shopping_history' });
     navigation.navigate('ShoppingGallery', params);
@@ -105,28 +112,6 @@ export function ShopOverviewScreen({ navigation }: ShopOverviewScreenProps) {
     track('shop_section_opened', { section: 'shortlist' });
     navigation.navigate('ShoppingGallery', { focusGroupId: item.captureGroupId });
   }, [navigation]);
-
-  const selectConsultation = useCallback((topic: ShopConsultationTopic) => {
-    track('shop_consultation_selected', {
-      topic,
-      premium: isPremium,
-      active_find_count: activeFinds.length,
-    });
-
-    if (topic === 'review_find') {
-      if (activeFinds.length > 0) openHistory({ catalogFilter: 'active' });
-      else openShoppingCamera();
-      return;
-    }
-
-    if (topic === 'custom') {
-      openStylist({ source: 'shop' });
-      return;
-    }
-
-    const prompt = buildShopConsultationPrompt(topic, brief.data);
-    if (prompt) openStylist(buildShopStylistLaunch(prompt));
-  }, [activeFinds.length, brief.data, isPremium, openHistory, openShoppingCamera, openStylist]);
 
   return (
     <View style={styles.root}>
@@ -144,6 +129,37 @@ export function ShopOverviewScreen({ navigation }: ShopOverviewScreenProps) {
 
         <SaveFindCard onPress={openShoppingCamera} />
 
+        <EditorialSection
+          style={styles.exploreSection}
+          title="Explore Shop"
+          description="Keep an eye on the pieces and looks you want to return to."
+        >
+          <View style={styles.exploreList}>
+            <ShopDestinationRow
+              icon="images-outline"
+              title="Shortlist"
+              description="Pieces you photographed while shopping, kept here while you decide."
+              meta={spotlight.itemCount > 0 ? `${spotlight.itemCount} piece${spotlight.itemCount === 1 ? '' : 's'}` : 'Nothing saved yet'}
+              onPress={() => {
+                track('shop_destination_opened', { destination: 'shortlist' });
+                navigation.navigate('ShoppingGallery');
+              }}
+              accessibilityLabel="Open Shortlist"
+            />
+            <ShopDestinationRow
+              icon="heart-outline"
+              title="Saved Looks"
+              description="Outfits your Stylist helped you keep for later."
+              meta={savedLooks.length > 0 ? `${savedLooks.length} saved look${savedLooks.length === 1 ? '' : 's'}` : 'Nothing saved yet'}
+              onPress={() => {
+                track('shop_destination_opened', { destination: 'saved-looks' });
+                navigation.navigate('SavedLooks');
+              }}
+              accessibilityLabel="Open Saved Looks"
+            />
+          </View>
+        </EditorialSection>
+
         <ShoppingBriefCard
           style={styles.brief}
           isPremium={isPremium}
@@ -153,7 +169,7 @@ export function ShopOverviewScreen({ navigation }: ShopOverviewScreenProps) {
           onSelectPriority={(priority) => (
             askStylist(`Help me shop thoughtfully for ${priority.label}. ${priority.context}`)
           )}
-          onStartShopping={startShopping}
+          onStartShopping={() => askStylist('Help me choose my next best purchase.', 'shop_new')}
           onUpgrade={() => {
             track('shop_brief_upgrade_tapped');
             void presentPaywall();
@@ -163,6 +179,33 @@ export function ShopOverviewScreen({ navigation }: ShopOverviewScreenProps) {
           )}
           onRetry={() => void brief.refetch()}
         />
+
+        <EditorialSection
+          style={styles.consultationSection}
+          title="Shop with your Stylist"
+          description="Choose a focused question before you buy."
+        >
+          <View style={styles.consultationList}>
+            <StylistActionRow
+              icon="sparkles-outline"
+              title="Choose my next best purchase"
+              description="Find the one addition with the greatest wardrobe impact."
+              onPress={() => askStylist('Help me choose my next best purchase.', 'shop_new')}
+            />
+            <StylistActionRow
+              icon="list-outline"
+              title="Build a focused shopping list"
+              description="Create a short, versatile list without duplicates."
+              onPress={() => askStylist('Build me a focused shopping list.', 'shop_new')}
+            />
+            <StylistActionRow
+              icon="chatbubble-outline"
+              title="Ask my own question"
+              description="Start a blank shopping conversation."
+              onPress={() => openStylist({ source: 'shop' })}
+            />
+          </View>
+        </EditorialSection>
 
         <EditorialSection
           style={styles.section}
@@ -189,18 +232,42 @@ export function ShopOverviewScreen({ navigation }: ShopOverviewScreenProps) {
         </EditorialSection>
 
       </ScrollView>
-      <ShopStylistConsultationSheet
-        visible={consultationVisible}
-        hasActiveFinds={activeFinds.length > 0}
-        onSelect={selectConsultation}
-        onClose={() => setConsultationVisible(false)}
-      />
       <View
         pointerEvents="none"
         accessibilityElementsHidden
         style={[styles.safeAreaScrim, { height: insets.top }]}
       />
     </View>
+  );
+}
+
+function StylistActionRow({
+  icon,
+  title,
+  description,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  description: string;
+  onPress: () => void;
+}) {
+  return (
+    <PressableScale
+      contentStyle={styles.consultationRow}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}. ${description}`}
+    >
+      <View style={styles.consultationIcon}>
+        <Ionicons name={icon} size={18} color={colors.primary} />
+      </View>
+      <View style={styles.consultationCopy}>
+        <Text style={styles.consultationTitle}>{title}</Text>
+        <Text style={styles.consultationDescription}>{description}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
+    </PressableScale>
   );
 }
 
@@ -341,8 +408,36 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.primary,
   },
+  exploreSection: { paddingHorizontal: spacing.lg, marginBottom: spacing.xxl },
+  exploreList: { gap: spacing.sm },
   brief: { marginHorizontal: spacing.lg, marginBottom: spacing.xxl },
   section: { paddingHorizontal: spacing.lg, marginBottom: spacing.xxl },
+  consultationSection: {
+    marginBottom: spacing.xxl,
+    paddingHorizontal: spacing.lg,
+  },
+  consultationList: { gap: spacing.xs },
+  consultationRow: {
+    minHeight: 68,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.hairline,
+  },
+  consultationIcon: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.md,
+    borderCurve: 'continuous',
+    backgroundColor: `${colors.primary}12`,
+  },
+  consultationCopy: { flex: 1, gap: 2 },
+  consultationTitle: { color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+  consultationDescription: { color: colors.mutedForeground, fontSize: typography.size.xs, lineHeight: 17 },
   emptyRow: {
     minHeight: 72,
     flexDirection: 'row',

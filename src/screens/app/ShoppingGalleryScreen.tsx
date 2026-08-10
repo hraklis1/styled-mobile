@@ -24,6 +24,7 @@ import { ShoppingSessionBundle } from '../../components/shopping/ShoppingSession
 import { ShoppingItemLightbox } from '../../components/shopping/ShoppingItemLightbox';
 import { ShoppingStoreFilterSheet } from '../../components/shopping/ShoppingStoreFilterSheet';
 import { ShoppingStoreAssignmentSheet } from '../../components/shopping/ShoppingStoreAssignmentSheet';
+import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
 import { useAuth } from '../../contexts/AuthContext';
 import { SHOPPING_SNAPS_QUERY_KEY, useShoppingSnaps } from '../../hooks/useShoppingSnaps';
 import { queryClient } from '../../lib/queryClient';
@@ -144,7 +145,8 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
       setReturningToTab(true);
       return;
     }
-    navigation.goBack();
+    if (navigation.canGoBack()) navigation.goBack();
+    else navigation.replace('ShopMain', { section: 'brief' });
   }, [navigation, returnTo]);
 
   useEffect(() => {
@@ -380,11 +382,12 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
 
   const listHeader = (
     <View>
-      <View style={[styles.hero, { paddingTop: insets.top + spacing.lg }]}>
-        <View style={styles.heroTopRow}>
-          <TouchableOpacity style={styles.headerIcon} onPress={goBack} accessibilityLabel="Back">
-            <Ionicons name="chevron-back" size={23} color={colors.foreground} />
-          </TouchableOpacity>
+      <ShopSubpageHeader
+        title="Found, not yet yours."
+        subtitle="Pieces you photographed while shopping, kept here while you decide."
+        eyebrow="THE SHORTLIST"
+        onBack={goBack}
+        actions={(
           <View style={styles.heroActions}>
             {selectionMode ? (
               <TouchableOpacity style={styles.headerTextButton} onPress={cancelSelection}>
@@ -416,11 +419,9 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
               </>
             )}
           </View>
-        </View>
-
-        <Text style={styles.eyebrow}>THE SHORTLIST</Text>
-        <Text style={styles.heroTitle}>Found, not yet yours.</Text>
-        <Text style={styles.heroDeck}>Pieces you photographed while shopping, kept here while you decide.</Text>
+        )}
+      />
+      <View style={styles.summaryBlock}>
         <View style={styles.summaryRow}>
           <Text style={styles.summaryText}>
             {selectionMode
@@ -457,7 +458,6 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
           </TouchableOpacity>
         </View>
       </View>
-
       <View style={styles.storeFilterBlock}>
         <ScrollView
           ref={storeChipScrollRef}
@@ -746,8 +746,7 @@ const styles = StyleSheet.create({
   listContent: { paddingBottom: spacing.xxxl },
   listContentSelecting: { paddingBottom: 112 },
   listContentEmpty: { flexGrow: 1 },
-  hero: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, backgroundColor: colors.card },
-  heroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: spacing.xl },
+  summaryBlock: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, backgroundColor: colors.card },
   heroActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   headerIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: colors.surfaceElevated },
   headerTextButton: { minHeight: 42, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.surfaceElevated },

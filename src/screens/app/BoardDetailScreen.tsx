@@ -121,7 +121,10 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
 
   useEffect(() => {
     if (!isDailyFinds) return;
-    navigation.getParent()?.navigate('Shop', { screen: 'ShoppingGallery' });
+    navigation.getParent()?.navigate('Shop', {
+      screen: 'ShoppingGallery',
+      params: { returnTo: 'Closet' },
+    });
   }, [isDailyFinds, navigation]);
 
   useEffect(() => {

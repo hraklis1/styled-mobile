@@ -706,6 +706,7 @@ export function StylistChatView({
       const request: StylistAskRequest = {
         ...(text ? { text } : {}),
         ...(photoData ? { photoData } : {}),
+        tempUnit,
         ...(weatherSummary ? { weatherSummary } : {}),
         ...((activeLocation.label || activeLocation.coords) ? {
           locationContext: {

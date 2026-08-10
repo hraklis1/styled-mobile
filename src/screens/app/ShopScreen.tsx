@@ -18,6 +18,7 @@ import { buildShopStylistLaunch } from '../../lib/shopDecisionWorkspace';
 import { ShopWishlistSummaryCard } from '../../components/outfits/ShopWishlistSummaryCard';
 import { ShopWishlistDetailSheet } from '../../components/outfits/ShopWishlistDetailSheet';
 import { ShopWishlistFilterSheet } from '../../components/outfits/ShopWishlistFilterSheet';
+import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
 import { useWishlist, useRemoveFromWishlist } from '../../hooks/useWishlist';
 import {
   countWishlistFilters,
@@ -31,7 +32,6 @@ import { colors, spacing, typography, radii } from '../../theme';
 import {
   ActionButton,
   FilterControl,
-  ScreenHeader,
   SegmentedControl,
 } from '../../components/primitives/Editorial';
 import type { SavedLooksScreenProps } from '../../navigation/types';
@@ -119,22 +119,28 @@ export function SavedLooksScreen({ navigation, route }: SavedLooksScreenProps) {
 
   return (
     <View style={styles.root}>
-      <ScreenHeader
+      <ShopSubpageHeader
         eyebrow="Shop"
         title="Saved looks"
         subtitle={entries.length === 0 ? 'No saved outfits yet' : `${entries.length} saved outfit${entries.length === 1 ? '' : 's'}`}
-        primaryAction={{
-          label: 'Shopping Mode',
-          icon: 'camera',
-          onPress: () => navigation.navigate('ShoppingCamera'),
-          accessibilityLabel: 'Open Shopping Mode camera',
-        }}
-        secondaryActions={[{
-          label: 'Shortlist',
-          icon: 'images-outline',
-          onPress: () => navigation.navigate('ShoppingGallery'),
-          accessibilityLabel: 'Open shortlist',
-        }]}
+        onBack={() => (navigation.canGoBack() ? navigation.goBack() : navigation.replace('ShopMain'))}
+        actions={(
+          <>
+            <TouchableOpacity
+              style={styles.headerIcon}
+              onPress={() => navigation.navigate('ShoppingGallery')}
+              accessibilityLabel="Open Shortlist"
+            >
+              <Ionicons name="images-outline" size={21} color={colors.foreground} />
+            </TouchableOpacity>
+            <ActionButton
+              label="Shopping Mode"
+              icon="camera"
+              onPress={() => navigation.navigate('ShoppingCamera')}
+              accessibilityLabel="Open Shopping Mode camera"
+            />
+          </>
+        )}
       />
 
       {entries.length === 0 ? (
@@ -250,6 +256,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  headerIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: colors.surfaceElevated },
   searchBox: {
     flex: 1,
     minHeight: 42,

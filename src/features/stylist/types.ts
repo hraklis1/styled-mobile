@@ -153,6 +153,8 @@ export type StylistAskRequest = {
   text?: string;
   history?: StylistHistoryMessage[];
   mode?: StylistMode;
+  /** Resolved display unit so server-generated Shop copy matches the app. */
+  tempUnit?: 'C' | 'F';
   locationContext?: StylistLocationContext;
   currentLocation?: string;
   liveLocation?: {

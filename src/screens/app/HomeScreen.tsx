@@ -186,7 +186,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     }
   }, [fabCollapsed]);
   const { width } = useWindowDimensions();
-  const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / 2;
   const heroWidth = width - SIDE_PAD * 2;
   const heroHeight = Math.round(heroWidth * 0.78);
 
@@ -212,6 +211,11 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .slice(0, 10);
   }, [events]);
+
+  const nextUpEvent = useMemo(
+    () => upcomingEvents.find((event) => !event.outfitId && (event.itemIds?.length ?? 0) === 0) ?? upcomingEvents[0],
+    [upcomingEvents],
+  );
 
   const recentOutfits = useMemo(
     () => [...outfits]
@@ -259,7 +263,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   );
   const featuredOutfit = dailyPick?.outfit ?? recentOutfits[0];
   const featuredReason = dailyPick?.reason ?? "Today’s edit";
-  const remainingOutfits = recentOutfits.filter((outfit) => outfit.id !== featuredOutfit?.id).slice(0, 5);
 
   useEffect(() => {
     if (!dailyPickHistoryLoaded || !user?.id || !dailyPick?.outfit) return;
@@ -409,43 +412,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         </PressableScale>
       </View>
 
-      {/* ── Shortlist decisions ────────────────────────────────────── */}
-      <ShortlistDecisionCard
-        items={shortlist.awaitingDecision}
-        storeNames={shortlist.decisionStores}
-        style={styles.shortlistCard}
-        onPress={() => {
-          track('shop_section_opened', { section: 'home_shortlist' });
-          navigation.navigate('Shop', {
-            screen: 'ShoppingGallery',
-            params: { catalogFilter: 'active', returnTo: 'Home' },
-          });
-        }}
-      />
-
-      {/* ── Empty wardrobe nudge ───────────────────────────────────── */}
-      {items.length === 0 && (
-        <PressableScale
-          contentStyle={styles.nudgeCard}
-          onPress={handleAddToCloset}
-          accessibilityRole="button"
-          accessibilityLabel="Your closet is empty. Tap to add clothes"
-        >
-          <View style={styles.nudgeIcon}>
-            <Ionicons name="shirt-outline" size={18} color={colors.primary} />
-          </View>
-          <View style={styles.nudgeText}>
-            <Text style={styles.nudgeTitle}>Your closet is empty</Text>
-            <Text style={styles.nudgeSub}>Add clothes to unlock outfit suggestions</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={16} color={colors.primary} />
-        </PressableScale>
-      )}
-
       {/* ── Featured outfit ────────────────────────────────────── */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Stylist Picks for Today</Text>
+          <Text style={styles.sectionTitle}>Today’s Look</Text>
           <TouchableOpacity
             onPress={() => navigation.navigate('Closet', {
               screen: 'ClosetMain',
@@ -492,13 +462,59 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             <View style={[styles.emptyOutfitIcon, { backgroundColor: `${colors.primary}18` }]}>
               <Ionicons name="layers-outline" size={28} color={colors.primary} />
             </View>
-            <Text style={styles.emptyOutfitTitle}>No saved outfits yet</Text>
+            <Text style={styles.emptyOutfitTitle}>{items.length === 0 ? 'Your closet is ready for its first look' : 'No saved outfits yet'}</Text>
             <Text style={styles.emptyOutfitSub}>
-              Build an outfit from your closet to see it here
+              {items.length === 0 ? 'Add a few pieces to unlock personalized outfit suggestions.' : 'Build an outfit from your closet to see it here'}
             </Text>
+            {items.length === 0 && (
+              <PressableScale
+                contentStyle={styles.emptyOutfitButton}
+                onPress={handleAddToCloset}
+                accessibilityRole="button"
+                accessibilityLabel="Add clothes to unlock outfit suggestions"
+              >
+                <Ionicons name="add" size={16} color={colors.primaryForeground} />
+                <Text style={styles.emptyOutfitButtonText}>Add clothes</Text>
+              </PressableScale>
+            )}
           </View>
         )}
       </View>
+
+      {/* ── Next up ─────────────────────────────────────────────── */}
+      {shortlist.awaitingDecision.length > 0 ? (
+        <ShortlistDecisionCard
+          items={shortlist.awaitingDecision}
+          storeNames={shortlist.decisionStores}
+          style={styles.shortlistCard}
+          onPress={() => {
+            track('shop_section_opened', { section: 'home_shortlist' });
+            navigation.navigate('Shop', {
+              screen: 'ShoppingGallery',
+              params: { catalogFilter: 'active', returnTo: 'Home' },
+            });
+          }}
+        />
+      ) : nextUpEvent ? (
+        <PressableScale
+          contentStyle={styles.nextUpCard}
+          onPress={() => navigation.navigate('Calendar')}
+          accessibilityRole="button"
+          accessibilityLabel={`${nextUpEvent.title}, ${formatEventDate(nextUpEvent.date)}. Open Calendar`}
+        >
+          <View style={styles.nextUpIcon}>
+            <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+          </View>
+          <View style={styles.nextUpCopy}>
+            <Text style={styles.nextUpEyebrow}>Next up</Text>
+            <Text style={styles.nextUpTitle} numberOfLines={1}>{nextUpEvent.title}</Text>
+            <Text style={styles.nextUpSubtitle}>
+              {nextUpEvent.outfitId || (nextUpEvent.itemIds?.length ?? 0) > 0 ? 'Your look is planned' : 'Plan a look for your next occasion'} · {formatEventDate(nextUpEvent.date)}
+            </Text>
+          </View>
+          <Ionicons name="arrow-forward" size={17} color={colors.primary} />
+        </PressableScale>
+      ) : null}
 
       {/* ── Upcoming Events ───────────────────────────────────────── */}
       <View style={styles.section}>
@@ -564,36 +580,11 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         )}
       </View>
 
-      {/* ── Recent outfits ─────────────────────────────────────── */}
-      {remainingOutfits.length > 0 && (
-        <View style={[styles.outfitGrid, styles.secondaryOutfitGrid]}>
-          {remainingOutfits.map((outfit) => (
-            <PressableScale
-              key={outfit.id}
-              contentStyle={[styles.outfitCard, { width: cardWidth }]}
-              onPress={() => navigation.navigate('Closet', {
-                screen: 'OutfitDetail',
-                params: { outfitId: outfit.id, returnTo: 'Home' },
-              })}
-              accessibilityRole="button"
-              accessibilityLabel={outfit.name}
-            >
-              <View style={styles.collageWrapper}>
-                <OutfitCollage outfit={outfit} size={cardWidth} />
-              </View>
-              <View style={styles.outfitInfo}>
-                <Text style={styles.outfitName} numberOfLines={1}>{outfit.name}</Text>
-              </View>
-            </PressableScale>
-          ))}
-        </View>
-      )}
-
       {/* ── Outfit Log History ───────────────────────────────────── */}
       {logs.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Outfit Log</Text>
+            <Text style={styles.sectionTitle}>Recently worn</Text>
           </View>
 
           <View style={styles.logList}>
@@ -691,6 +682,28 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxxl * 2,
   },
   shortlistCard: { marginBottom: spacing.xl },
+  nextUpCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.xl,
+    padding: spacing.md,
+    borderRadius: radii.xl,
+    borderCurve: 'continuous',
+    backgroundColor: colors.surfaceSubtle,
+  },
+  nextUpIcon: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.md,
+    backgroundColor: `${colors.primary}15`,
+  },
+  nextUpCopy: { flex: 1, gap: 2 },
+  nextUpEyebrow: { fontSize: 10, fontWeight: typography.weight.bold, letterSpacing: 1.1, textTransform: 'uppercase', color: colors.primary },
+  nextUpTitle: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.foreground },
+  nextUpSubtitle: { fontSize: typography.size.xs, lineHeight: 17, color: colors.mutedForeground },
 
   // Greeting
   headerRow: {
@@ -1049,6 +1062,16 @@ const styles = StyleSheet.create({
     maxWidth: 220,
     lineHeight: typography.size.xs * 1.5,
   },
+  emptyOutfitButton: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.full,
+    backgroundColor: colors.primary,
+  },
+  emptyOutfitButtonText: { color: colors.primaryForeground, fontSize: typography.size.xs, fontWeight: typography.weight.semibold },
 
   // Outfit log history
   logList: {

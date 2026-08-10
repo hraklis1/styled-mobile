@@ -20,6 +20,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useProfile } from '../hooks/useProfile';
 import { useShoppingSyncManager } from '../hooks/useShoppingSyncManager';
 import { syncLocalWishlistToServer } from '../lib/wishlistSync';
+import { track } from '../lib/analytics';
 import { GlobalOutfitLoggerProvider } from '../contexts/GlobalOutfitLoggerContext';
 import { GlobalAIStylistProvider } from '../contexts/GlobalAIStylistContext';
 import { GlobalScanProvider } from '../contexts/GlobalScanContext';
@@ -48,6 +49,8 @@ import { ErrorState } from '../components/primitives/ErrorState';
 import { QuickMenuTabButton } from '../components/navigation/QuickMenuTabButton';
 import { StylistTabButton } from '../components/navigation/StylistTabButton';
 import { TabQuickMenuSheet, type TabQuickMenuOption } from '../components/navigation/TabQuickMenuSheet';
+import { ShortcutCoachSheet } from '../components/navigation/ShortcutCoachSheet';
+import { hasSeenShortcutCoach, markShortcutCoachSeen } from '../lib/shortcutCoach';
 import { colors, spacing, typography } from '../theme';
 
 import type {
@@ -194,6 +197,8 @@ function StylistNavigator() {
 }
 
 function AppTabNavigator() {
+  const { user } = useAuth();
+  const userId = user?.id;
   const insets = useSafeAreaInsets();
   const previousTabRef = useRef<Exclude<keyof AppTabParamList, 'Stylist'>>('Home');
   const [quickMenu, setQuickMenu] = useState<{
@@ -201,7 +206,46 @@ function AppTabNavigator() {
     subtitle?: string;
     options: TabQuickMenuOption[];
   } | null>(null);
+  const [shortcutCoachVisible, setShortcutCoachVisible] = useState(false);
+  const [shortcutCoachPulse, setShortcutCoachPulse] = useState(0);
   const closeQuickMenu = useCallback(() => setQuickMenu(null), []);
+
+  useEffect(() => {
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    setShortcutCoachVisible(false);
+    if (!userId) return () => { active = false; };
+
+    hasSeenShortcutCoach(userId).then((seen) => {
+      if (!active || seen) return;
+      timer = setTimeout(() => {
+        if (active) {
+          track('tab_shortcut_coach_shown');
+          setShortcutCoachVisible(true);
+        }
+      }, 700);
+    }).catch(() => undefined);
+
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [userId]);
+
+  const finishShortcutCoach = useCallback((reason: 'got_it' | 'dismissed') => {
+    if (!userId) return;
+    setShortcutCoachVisible(false);
+    track('tab_shortcut_coach_dismissed', { reason });
+    void markShortcutCoachSeen(userId);
+  }, [userId]);
+
+  const tryShortcut = useCallback(() => {
+    if (!userId) return;
+    setShortcutCoachVisible(false);
+    setShortcutCoachPulse((value) => value + 1);
+    track('tab_shortcut_coach_try_tapped');
+    void markShortcutCoachSeen(userId);
+  }, [userId]);
 
   // Once per signed-in session, migrate any legacy on-device wishlist to the server.
   useEffect(() => {
@@ -250,7 +294,8 @@ function AppTabNavigator() {
           name="Closet"
           component={ClosetNavigator}
           options={{
-            tabBarButton: (props) => <QuickMenuTabButton {...props} />,
+            tabBarAccessibilityLabel: 'Closet. Press and hold for shortcuts.',
+            tabBarButton: (props) => <QuickMenuTabButton {...props} pulseToken={shortcutCoachPulse} />,
           }}
           listeners={({ navigation }) => ({
             tabLongPress: () => {
@@ -319,7 +364,8 @@ function AppTabNavigator() {
           name="Shop"
           component={ShopNavigator}
           options={({ route }) => ({
-            tabBarButton: (props) => <QuickMenuTabButton {...props} />,
+            tabBarAccessibilityLabel: 'Shop. Press and hold for shortcuts.',
+            tabBarButton: (props) => <QuickMenuTabButton {...props} pulseToken={shortcutCoachPulse} />,
             tabBarStyle:
               getFocusedRouteNameFromRoute(route) === 'ShoppingCamera'
                 ? { ...baseTabBarStyle, display: 'none' }
@@ -334,7 +380,7 @@ function AppTabNavigator() {
                 options: [
                   {
                     key: 'overview',
-                    label: 'Shop Overview',
+                    label: 'Shopping Brief',
                     icon: 'bag-outline',
                     onPress: () => navigation.navigate('Shop', { screen: 'ShopMain' }),
                   },
@@ -352,7 +398,7 @@ function AppTabNavigator() {
                   },
                   {
                     key: 'shopping-camera',
-                    label: 'Shopping Camera',
+                    label: 'Shopping Mode',
                     icon: 'camera-outline',
                     onPress: () => navigation.navigate('Shop', { screen: 'ShoppingCamera' }),
                   },
@@ -369,6 +415,11 @@ function AppTabNavigator() {
         subtitle={quickMenu?.subtitle}
         options={quickMenu?.options ?? []}
         onClose={closeQuickMenu}
+      />
+      <ShortcutCoachSheet
+        visible={shortcutCoachVisible}
+        onClose={finishShortcutCoach}
+        onTry={tryShortcut}
       />
     </View>
   );
