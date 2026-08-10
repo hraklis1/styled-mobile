@@ -20,7 +20,12 @@ export type AppTabParamList = {
   Closet: NavigatorScreenParams<ClosetStackParamList> | undefined;
   Stylist: undefined;
   Shop: NavigatorScreenParams<ShopStackParamList> | undefined;
-  Calendar: undefined;
+  Calendar: {
+    /** Open this event's detail sheet on arrival, and filter to its day. */
+    eventId?: number;
+    /** ISO `yyyy-mm-dd` to select on arrival. Implied by `eventId`. */
+    date?: string;
+  } | undefined;
 };
 
 // Unified closet stack (items + outfits + boards + their detail screens)

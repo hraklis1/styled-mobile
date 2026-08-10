@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   Modal,
   View,
@@ -84,6 +84,10 @@ type NewItemDraft = {
 
 type Props = {
   visible: boolean;
+  /** ISO `yyyy-mm-dd` to pre-select, e.g. when logging from a calendar day. */
+  initialDate?: string;
+  /** Bumped by the opener each time it requests a date. See the seeding effect. */
+  initialDateRequestId?: number;
   onClose: () => void;
   onSaved?: () => void;
   onAddToWardrobe?: (onItemsSaved: (items: Item[]) => void) => void;
@@ -91,7 +95,14 @@ type Props = {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: Props) {
+export function LogOutfitSheet({
+  visible,
+  initialDate,
+  initialDateRequestId = 0,
+  onClose,
+  onSaved,
+  onAddToWardrobe,
+}: Props) {
   const { width: screenWidth } = useWindowDimensions();
   const { data: allItems = [] } = useItems();
   const createLog = useCreateOutfitLog();
@@ -177,6 +188,23 @@ export function LogOutfitSheet({ visible, onClose, onSaved, onAddToWardrobe }: P
     )),
     [scanResults, scanTreatAsNew, unresolvedIndexes],
   );
+
+  // Seed the date when the sheet is opened for a specific day. Keyed on the
+  // request id rather than `visible` so returning from the add-clothes detour
+  // (which re-shows the sheet) doesn't clobber a date the user has since changed.
+  useEffect(() => {
+    if (!initialDateRequestId || !initialDate) return;
+    const target = toNoon(new Date(`${initialDate}T12:00:00`));
+    if (Number.isNaN(target.getTime())) return;
+
+    const today = todayNoon();
+    const yesterday = yesterdayNoon();
+    if (target.getTime() >= today.getTime()) { setDateMode('today'); return; }
+    if (target.getTime() === yesterday.getTime()) { setDateMode('yesterday'); return; }
+    setCustomDate(target);
+    setDateMode('custom');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialDateRequestId]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 

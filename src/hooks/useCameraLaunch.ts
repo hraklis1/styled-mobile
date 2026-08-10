@@ -70,6 +70,9 @@ export function useCameraLaunch() {
           exif: captureExif ? (asset.exif as Record<string, unknown> | null) : undefined,
         };
       } catch {
+        // Callers can't tell this null from a cancel, so say something here —
+        // otherwise the shot the user just took disappears without a word.
+        showCaptureFailedAlert('camera');
         return null;
       }
     },
@@ -123,6 +126,7 @@ export function useLibraryLaunch() {
           exif: captureExif ? (asset.exif as Record<string, unknown> | null) : undefined,
         };
       } catch {
+        showCaptureFailedAlert('library');
         return null;
       }
     },
@@ -151,6 +155,16 @@ function showDeniedAlert() {
         },
       },
     ],
+  );
+}
+
+function showCaptureFailedAlert(source: 'camera' | 'library') {
+  Alert.alert(
+    "Couldn't use that photo",
+    source === 'camera'
+      ? 'Something went wrong preparing your photo. Please try taking it again.'
+      : 'Something went wrong preparing that photo. Please try picking it again.',
+    [{ text: 'OK' }],
   );
 }
 

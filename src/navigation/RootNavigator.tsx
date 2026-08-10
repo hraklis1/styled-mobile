@@ -21,9 +21,10 @@ import { useProfile } from '../hooks/useProfile';
 import { useShoppingSyncManager } from '../hooks/useShoppingSyncManager';
 import { syncLocalWishlistToServer } from '../lib/wishlistSync';
 import { track } from '../lib/analytics';
-import { GlobalOutfitLoggerProvider } from '../contexts/GlobalOutfitLoggerContext';
+import { GlobalOutfitLoggerProvider, useGlobalOutfitLogger } from '../contexts/GlobalOutfitLoggerContext';
 import { GlobalAIStylistProvider } from '../contexts/GlobalAIStylistContext';
-import { GlobalScanProvider } from '../contexts/GlobalScanContext';
+import { GlobalScanProvider, useGlobalScan } from '../contexts/GlobalScanContext';
+import { useGlobalAddSheet } from '../contexts/GlobalAddSheetContext';
 import { FabScrollProvider } from '../contexts/FabScrollContext';
 import { OnboardingScreen } from '../screens/onboarding/OnboardingScreen';
 import { WelcomeScreen } from '../screens/onboarding/WelcomeScreen';
@@ -210,6 +211,32 @@ function AppTabNavigator() {
   const [shortcutCoachPulse, setShortcutCoachPulse] = useState(0);
   const closeQuickMenu = useCallback(() => setQuickMenu(null), []);
 
+  const { openAddSheet } = useGlobalAddSheet();
+  const { openScanItem, openBatchScan } = useGlobalScan();
+  const { openLogger } = useGlobalOutfitLogger();
+
+  // Capture is the app's core loop, so it lives one long-press from every screen
+  // rather than only on Home. Straight to the camera — the full menu of import
+  // routes stays available on Home.
+  const quickAddPiece = useCallback(() => {
+    track('closet_quick_action_tapped', { action: 'add_clothes' });
+    openScanItem('camera');
+  }, [openScanItem]);
+
+  const quickImportPieces = useCallback(() => {
+    track('closet_quick_action_tapped', { action: 'import_clothes' });
+    openAddSheet({
+      onTakePhoto: () => openScanItem('camera'),
+      onFromLibrary: () => openScanItem('library'),
+      onBatchImport: openBatchScan,
+    });
+  }, [openAddSheet, openBatchScan, openScanItem]);
+
+  const quickLogWear = useCallback(() => {
+    track('closet_quick_action_tapped', { action: 'record_wear' });
+    openLogger();
+  }, [openLogger]);
+
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -302,12 +329,37 @@ function AppTabNavigator() {
               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               setQuickMenu({
                 title: 'Closet',
-                subtitle: 'Jump straight to a section',
+                subtitle: 'Capture a piece, or jump to a section',
                 options: [
+                  {
+                    key: 'add-piece',
+                    label: 'Photograph a piece',
+                    icon: 'camera',
+                    iconColor: colors.primaryForeground,
+                    iconBg: colors.primary,
+                    onPress: quickAddPiece,
+                  },
+                  {
+                    key: 'import-pieces',
+                    label: 'Import pieces',
+                    icon: 'images',
+                    iconColor: colors.primaryForeground,
+                    iconBg: colors.primary,
+                    onPress: quickImportPieces,
+                  },
+                  {
+                    key: 'log-wear',
+                    label: 'Record what you wore',
+                    icon: 'checkmark-done',
+                    iconColor: colors.primaryForeground,
+                    iconBg: colors.primary,
+                    onPress: quickLogWear,
+                  },
                   {
                     key: 'pieces',
                     label: 'Pieces',
                     icon: 'shirt-outline',
+                    dividerAbove: true,
                     onPress: () => navigation.navigate('Closet', { screen: 'ClosetMain', params: { segment: 'pieces' } }),
                   },
                   {

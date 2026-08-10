@@ -189,8 +189,17 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const heroWidth = width - SIDE_PAD * 2;
   const heroHeight = Math.round(heroWidth * 0.78);
 
+  // Tapping the row goes straight to the camera: photographing a piece is the
+  // overwhelmingly common intent, and the old menu made every capture cost an
+  // extra tap to answer a question it already knew. The other import routes stay
+  // one press away on the row's ⋯ control (or a long-press).
+  const handleQuickAddPhoto = useCallback(() => {
+    track('home_wardrobe_action_tapped', { action: 'add_clothes_camera' });
+    openScanItem('camera');
+  }, [openScanItem]);
+
   const handleAddToCloset = useCallback(() => {
-    track('home_wardrobe_action_tapped', { action: 'add_clothes' });
+    track('home_wardrobe_action_tapped', { action: 'add_clothes_menu' });
     openAddSheet({
       onTakePhoto: () => openScanItem('camera'),
       onFromLibrary: () => openScanItem('library'),
@@ -371,9 +380,11 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         <Text style={styles.wardrobeActionsEyebrow}>Your closet</Text>
         <PressableScale
           contentStyle={styles.wardrobeAction}
-          onPress={handleAddToCloset}
+          onPress={handleQuickAddPhoto}
+          onLongPress={handleAddToCloset}
           accessibilityRole="button"
-          accessibilityLabel="Add new clothes. Photograph or import pieces into your closet"
+          accessibilityLabel="Add new clothes. Opens the camera to photograph a piece"
+          accessibilityHint="Long press for other ways to add clothes"
         >
           <View style={styles.wardrobeActionVisual}>
             <Ionicons name="shirt-outline" size={23} color={colors.primary} />
@@ -384,10 +395,18 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           <View style={styles.wardrobeActionCopy}>
             <Text style={styles.wardrobeActionTitle}>Add new clothes</Text>
             <Text style={styles.wardrobeActionSubtitle}>
-              Photograph or import pieces into your closet
+              Photograph a piece, or tap ⋯ to import
             </Text>
           </View>
-          <Ionicons name="arrow-forward" size={17} color={colors.primary} />
+          <TouchableOpacity
+            onPress={handleAddToCloset}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            style={styles.wardrobeActionMore}
+            accessibilityRole="button"
+            accessibilityLabel="More ways to add clothes"
+          >
+            <Ionicons name="ellipsis-horizontal" size={17} color={colors.primary} />
+          </TouchableOpacity>
         </PressableScale>
         <View style={styles.wardrobeActionDivider} />
         <PressableScale
@@ -498,9 +517,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       ) : nextUpEvent ? (
         <PressableScale
           contentStyle={styles.nextUpCard}
-          onPress={() => navigation.navigate('Calendar')}
+          onPress={() => navigation.navigate('Calendar', { eventId: nextUpEvent.id })}
           accessibilityRole="button"
-          accessibilityLabel={`${nextUpEvent.title}, ${formatEventDate(nextUpEvent.date)}. Open Calendar`}
+          accessibilityLabel={`${nextUpEvent.title}, ${formatEventDate(nextUpEvent.date)}. Open in Calendar`}
         >
           <View style={styles.nextUpIcon}>
             <Ionicons name="calendar-outline" size={18} color={colors.primary} />
@@ -555,7 +574,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                 <PressableScale
                   key={event.id}
                   contentStyle={[styles.eventCard, isToday && styles.eventCardToday]}
-                  onPress={() => navigation.navigate('Calendar')}
+                  onPress={() => navigation.navigate('Calendar', { eventId: event.id })}
                   accessibilityRole="button"
                   accessibilityLabel={`${event.title}, ${formatEventDate(event.date)}`}
                 >
@@ -824,6 +843,14 @@ const styles = StyleSheet.create({
   wardrobeActionCopy: {
     flex: 1,
     gap: 2,
+  },
+  wardrobeActionMore: {
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.full,
+    backgroundColor: `${colors.primary}0F`,
   },
   wardrobeActionTitle: {
     fontSize: typography.size.md,

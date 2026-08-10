@@ -8,8 +8,13 @@ import type { Item } from '../types/item';
 
 // ─── Context ──────────────────────────────────────────────────────────────────
 
+export type OpenLoggerOptions = {
+  /** ISO `yyyy-mm-dd` the log should default to. Omit for today. */
+  date?: string;
+};
+
 type GlobalOutfitLoggerContextValue = {
-  openLogger: () => void;
+  openLogger: (options?: OpenLoggerOptions) => void;
 };
 
 const GlobalOutfitLoggerContext = createContext<GlobalOutfitLoggerContextValue>({
@@ -28,11 +33,15 @@ type Props = {
 
 export function GlobalOutfitLoggerProvider({ children }: Props) {
   const [visible, setVisible] = useState(false);
+  const [dateRequest, setDateRequest] = useState<{ id: number; date?: string }>({ id: 0 });
   const { openAddSheet } = useGlobalAddSheet();
   const { openScanItem, openBatchScan } = useGlobalScan();
   const detourPhase = useRef<'idle' | 'add' | 'scan'>('idle');
 
-  const openLogger = useCallback(() => setVisible(true), []);
+  const openLogger = useCallback((options?: OpenLoggerOptions) => {
+    setDateRequest((prev) => ({ id: prev.id + 1, date: options?.date }));
+    setVisible(true);
+  }, []);
   const closeLogger = useCallback(() => setVisible(false), []);
   const resumeLogger = useCallback(() => {
     detourPhase.current = 'idle';
@@ -69,6 +78,8 @@ export function GlobalOutfitLoggerProvider({ children }: Props) {
       </View>
       <LogOutfitSheet
         visible={visible}
+        initialDate={dateRequest.date}
+        initialDateRequestId={dateRequest.id}
         onClose={closeLogger}
         onAddToWardrobe={openAddClothesDetour}
       />

@@ -10,7 +10,7 @@ import {
 import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useEvents,
@@ -51,18 +51,34 @@ import { useEntitlement } from '../../hooks/useEntitlement';
 import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
 import { presentPaywall } from '../../lib/paywall';
 import { useGlobalAIStylist, type StylistOpenSource } from '../../contexts/GlobalAIStylistContext';
+import { useGlobalOutfitLogger } from '../../contexts/GlobalOutfitLoggerContext';
+import { track } from '../../lib/analytics';
 import type { CalendarScreenProps } from '../../navigation/types';
 import type { Event } from '../../types/event';
 import { presentCalendarEvent } from '../../components/calendar/calendar-presentation';
 
 const FREE_EVENT_LIMIT = 5;
 
+/** Whole weeks between the Monday of `date`'s week and the Monday of this week. */
+function weekOffsetFor(date: Date): number {
+  const mondayOf = (d: Date) => {
+    const copy = new Date(d);
+    copy.setHours(0, 0, 0, 0);
+    const dow = copy.getDay();
+    copy.setDate(copy.getDate() - (dow === 0 ? 6 : dow - 1));
+    return copy;
+  };
+  const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+  // Rounded because DST makes some weeks 23 or 25 hours short of a clean multiple.
+  return Math.round((mondayOf(date).getTime() - mondayOf(new Date()).getTime()) / msPerWeek);
+}
+
 type CalendarTimelineItem =
   | { kind: 'loading'; key: string }
   | { kind: 'error'; key: string }
   | { kind: 'empty'; key: string }
   | { kind: 'selected-heading'; key: string; label: string }
-  | { kind: 'selected-empty'; key: string }
+  | { kind: 'selected-empty'; key: string; date: string; isPast: boolean }
   | { kind: 'hero'; key: string; event: Event }
   | { kind: 'section-heading'; key: string; label: string; count?: number; muted?: boolean }
   | { kind: 'day-heading'; key: string; dateStr: string }
@@ -99,11 +115,12 @@ function CalendarLoadingSkeleton() {
   );
 }
 
-export function CalendarScreen({ navigation }: CalendarScreenProps) {
+export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   const insets = useSafeAreaInsets();
   const { isPremium } = useEntitlement();
   const { activeLocation } = useActiveStylingLocation();
   const { openStylist } = useGlobalAIStylist();
+  const { openLogger } = useGlobalOutfitLogger();
   const { data: events = [], isLoading, refetch, isRefetching, isError } = useEvents();
   const { data: allItems = [] } = useItems();
   const { data: outfits = [] } = useOutfits();
@@ -211,7 +228,16 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
         key: `selected-${selectedDate}`,
         label: formatDayLabel(new Date(`${selectedDate}T00:00:00`)),
       }];
-      if (dayEvents.length === 0) selected.push({ kind: 'selected-empty', key: 'selected-empty' });
+      if (dayEvents.length === 0) {
+        selected.push({
+          kind: 'selected-empty',
+          key: 'selected-empty',
+          date: selectedDate,
+          // ISO yyyy-mm-dd compares correctly as a string, which keeps the
+          // per-render `dayStartMs` out of this memo's dependencies.
+          isPast: selectedDate < toDateStr(new Date()),
+        });
+      }
       else dayEvents.forEach((event) => selected.push({ kind: 'event', key: `event-${event.id}`, event }));
       return selected;
     }
@@ -516,6 +542,42 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
     setSelectedDate((prev) => (prev === s ? null : s));
   };
 
+  // Arriving from a deep link (e.g. an event card on Home): focus that event's
+  // day, scroll the week strip to it, and open its detail — rather than dumping
+  // the user on an unfiltered calendar having lost what they tapped.
+  const paramEventId = route.params?.eventId;
+  const paramDate = route.params?.date;
+  useEffect(() => {
+    if (paramEventId == null && !paramDate) return;
+
+    const clearParams = () => navigation.setParams({ eventId: undefined, date: undefined });
+
+    if (paramEventId != null) {
+      const target = events.find((event) => event.id === paramEventId);
+      if (!target) {
+        // Events may still be in flight — hold the request rather than drop it.
+        if (isLoading) return;
+        clearParams();
+        return;
+      }
+      const eventDate = new Date(target.date);
+      setSelectedDate(toDateStr(eventDate));
+      setWeekOffset(weekOffsetFor(eventDate));
+      setDetailEvent(target);
+    } else if (paramDate) {
+      setSelectedDate(paramDate);
+      setWeekOffset(weekOffsetFor(new Date(`${paramDate}T00:00:00`)));
+    }
+    clearParams();
+  }, [paramEventId, paramDate, events, isLoading, navigation]);
+
+  // A wear log is a date-stamped record, so the calendar is its natural home.
+  // Logging from a selected day pre-fills that date; the header logs today.
+  const handleLogWear = useCallback((date?: string) => {
+    track('outfit_log_opened', { source: date ? 'calendar_day' : 'calendar_header' });
+    openLogger(date ? { date } : undefined);
+  }, [openLogger]);
+
   const renderEventCard = (event: Event) => {
     const iconName = (OCCASION_ICONS[event.occasion] ?? 'calendar-outline') as keyof typeof Ionicons.glyphMap;
     const occasion = OCCASIONS.find((option) => option.id === event.occasion)?.label ?? event.occasion;
@@ -625,17 +687,33 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
               <Ionicons name="sunny-outline" size={19} color={colors.primary} />
             </View>
             <Text style={styles.dayEmptyTitle}>Nothing planned</Text>
-            <Text style={styles.dayEmptyText}>Keep the day open or add an occasion.</Text>
-            <TouchableOpacity
-              style={styles.dayEmptyBtn}
-              onPress={handleAddEvent}
-              activeOpacity={0.8}
-              accessibilityRole="button"
-              accessibilityLabel="Add event on this day"
-            >
-              <Ionicons name="add" size={14} color={colors.primary} />
-              <Text style={styles.dayEmptyBtnText}>Add event</Text>
-            </TouchableOpacity>
+            <Text style={styles.dayEmptyText}>
+              {item.isPast
+                ? 'Record what you wore, or add the occasion.'
+                : 'Keep the day open or add an occasion.'}
+            </Text>
+            <View style={styles.dayEmptyActions}>
+              <TouchableOpacity
+                style={styles.dayEmptyBtn}
+                onPress={handleAddEvent}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Add event on this day"
+              >
+                <Ionicons name="add" size={14} color={colors.primary} />
+                <Text style={styles.dayEmptyBtnText}>Add event</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.dayEmptyBtn}
+                onPress={() => handleLogWear(item.date)}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Record what you wore on this day"
+              >
+                <Ionicons name="checkmark-done-outline" size={14} color={colors.primary} />
+                <Text style={styles.dayEmptyBtnText}>Log wear</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         );
       case 'hero':
@@ -767,13 +845,22 @@ export function CalendarScreen({ navigation }: CalendarScreenProps) {
               safeTop={false}
               style={styles.header}
               primaryAction={{ label: 'Add event', icon: 'add', onPress: handleAddEvent }}
-              secondaryActions={[{
-                label: 'Calendars',
-                accessibilityLabel: 'Calendars and syncing',
-                icon: 'calendar-outline',
-                variant: 'ghost',
-                onPress: () => setSyncVisible(true),
-              }]}
+              secondaryActions={[
+                {
+                  label: 'Log wear',
+                  accessibilityLabel: 'Record what you wore',
+                  icon: 'checkmark-done-outline',
+                  variant: 'ghost',
+                  onPress: () => handleLogWear(selectedDate ?? undefined),
+                },
+                {
+                  label: 'Calendars',
+                  accessibilityLabel: 'Calendars and syncing',
+                  icon: 'calendar-outline',
+                  variant: 'ghost',
+                  onPress: () => setSyncVisible(true),
+                },
+              ]}
             />
             <WeekStrip
               weekDays={weekDays}
@@ -920,6 +1007,10 @@ const styles = StyleSheet.create({
   },
   dayEmptyTitle: { fontSize: typography.size.md, color: colors.foreground, fontWeight: typography.weight.semibold },
   dayEmptyText: { fontSize: typography.size.sm, color: colors.mutedForeground, textAlign: 'center' },
+  dayEmptyActions: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    flexWrap: 'wrap', gap: spacing.sm,
+  },
   dayEmptyBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     minHeight: 40,

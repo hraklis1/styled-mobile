@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from 'react';
+import { Fragment, useRef, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { BottomSheetModal, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +12,8 @@ export type TabQuickMenuOption = {
   iconColor?: string;
   iconBg?: string;
   tone?: 'default' | 'destructive';
+  /** Draw a hairline above this row. Used to separate capture actions from destinations. */
+  dividerAbove?: boolean;
   onPress: () => void;
 };
 
@@ -75,8 +77,9 @@ export function TabQuickMenuSheet({ visible, title, subtitle, options, onClose }
             const optionBackground = option.iconBg ?? (destructive ? `${colors.error}12` : `${colors.primary}15`);
 
             return (
+              <Fragment key={option.key}>
+              {option.dividerAbove && <View style={styles.optionDivider} />}
               <TouchableOpacity
-                key={option.key}
                 style={styles.optionRow}
                 activeOpacity={0.7}
                 accessibilityRole="button"
@@ -98,6 +101,7 @@ export function TabQuickMenuSheet({ visible, title, subtitle, options, onClose }
                   color={destructive ? colors.error : colors.mutedForeground}
                 />
               </TouchableOpacity>
+              </Fragment>
             );
           })}
         </View>
@@ -135,6 +139,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
     minHeight: 58,
+  },
+  optionDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginVertical: spacing.xs,
+    backgroundColor: colors.border,
   },
   iconBox: {
     width: 44,
