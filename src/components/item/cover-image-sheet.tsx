@@ -19,10 +19,8 @@ type Props = {
   item: Item;
   visible: boolean;
   isUpdating: boolean;
-  isPolishing: boolean;
   onClose: () => void;
   onSelect: (variant: CoverImageVariant) => void;
-  onPolish: () => void;
 };
 
 type CoverOption = {
@@ -35,10 +33,8 @@ export function CoverImageSheet({
   item,
   visible,
   isUpdating,
-  isPolishing,
   onClose,
   onSelect,
-  onPolish,
 }: Props) {
   const insets = useSafeAreaInsets();
   const ref = useRef<BottomSheetModal>(null);
@@ -175,29 +171,6 @@ export function CoverImageSheet({
           })}
         </View>
 
-        {!item.polishedUrl && (
-          <TouchableOpacity
-            style={[styles.polishAction, isPolishing && styles.actionDisabled]}
-            activeOpacity={0.75}
-            disabled={isPolishing}
-            accessibilityRole="button"
-            accessibilityLabel="Polish with AI. Create a catalog-style cover using a Polish credit."
-            onPress={onPolish}
-          >
-            <View style={styles.polishIcon}>
-              {isPolishing ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Ionicons name="sparkles" size={19} color={colors.primary} />
-              )}
-            </View>
-            <View style={styles.optionCopy}>
-              <Text style={styles.optionTitle}>Polish with AI</Text>
-              <Text style={styles.optionDescription}>Create a catalog-style cover · Uses a Polish credit</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
-          </TouchableOpacity>
-        )}
       </BottomSheetView>
     </BottomSheetModal>
   );
@@ -275,24 +248,4 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: typography.weight.bold,
   },
-  polishAction: {
-    minHeight: 62,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radii.lg,
-    borderCurve: 'continuous',
-    backgroundColor: colors.card,
-  },
-  polishIcon: {
-    width: 42,
-    height: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.md,
-    borderCurve: 'continuous',
-    backgroundColor: colors.accent,
-  },
-  actionDisabled: { opacity: 0.55 },
 });

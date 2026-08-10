@@ -545,13 +545,13 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
       iconBg: colors.secondary,
       onPress: () => { void handleCreateCutout(); },
     },
-    {
+    ...(viewIsPolished ? [{
       key: 'polish',
-      label: viewIsPolished ? 'Regenerate AI Polish' : 'Polish Photo',
-      icon: 'sparkles-outline',
+      label: 'Regenerate catalog cover',
+      icon: 'sparkles-outline' as const,
       iconBg: colors.accent,
       onPress: handlePolish,
-    },
+    }] : []),
   ];
 
   return (
@@ -659,6 +659,39 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
             <Ionicons name="ellipsis-horizontal" size={20} color={colors.foreground} />
           </TouchableOpacity>
         </View>
+
+        {!viewIsPolished && viewItem.imageUrl && (
+          <TouchableOpacity
+            style={[styles.coverEnhancement, polishItem.isPending && styles.actionDisabled]}
+            onPress={handlePolish}
+            disabled={isBusy}
+            activeOpacity={0.78}
+            accessibilityRole="button"
+            accessibilityLabel="Create a catalog cover with AI using a Polish credit"
+            accessibilityState={{ disabled: isBusy, busy: polishItem.isPending }}
+          >
+            <View style={styles.coverEnhancementIcon}>
+              {polishItem.isPending ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Ionicons name="sparkles-outline" size={17} color={colors.primary} />
+              )}
+            </View>
+            <View style={styles.coverEnhancementCopy}>
+              <Text style={styles.coverEnhancementTitle}>
+                {polishItem.isPending ? 'Creating catalog cover' : 'Create a catalog cover'}
+              </Text>
+              <Text style={styles.coverEnhancementText}>
+                {polishItem.isPending
+                  ? 'A clean studio-style image is on its way.'
+                  : 'A clean studio-style image for your closet'}
+              </Text>
+            </View>
+            {!polishItem.isPending && (
+              <Ionicons name="chevron-forward" size={17} color={colors.mutedForeground} />
+            )}
+          </TouchableOpacity>
+        )}
 
         {/* Header */}
         <View style={styles.header}>
@@ -994,7 +1027,6 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         item={viewItem}
         visible={coverSheetOpen}
         isUpdating={updateItem.isPending}
-        isPolishing={polishItem.isPending}
         onClose={() => setCoverSheetOpen(false)}
         onSelect={(variant: CoverImageVariant) => {
           updateItem.mutate(
@@ -1002,7 +1034,6 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
             { onSuccess: () => setCoverSheetOpen(false) },
           );
         }}
-        onPolish={handlePolish}
       />
     </View>
   );
@@ -1070,6 +1101,39 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.semibold,
   },
   polishStatusText: {
+    color: colors.mutedForeground,
+    fontSize: typography.size.xs,
+    lineHeight: 17,
+  },
+  coverEnhancement: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: 66,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.lg,
+    borderCurve: 'continuous',
+    backgroundColor: colors.card,
+  },
+  coverEnhancementIcon: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.md,
+    borderCurve: 'continuous',
+    backgroundColor: colors.accent,
+  },
+  coverEnhancementCopy: { flex: 1, gap: 2 },
+  coverEnhancementTitle: {
+    color: colors.foreground,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+  },
+  coverEnhancementText: {
     color: colors.mutedForeground,
     fontSize: typography.size.xs,
     lineHeight: 17,
