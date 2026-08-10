@@ -291,6 +291,24 @@ function AppTabNavigator() {
   return (
     <View style={{ flex: 1 }}>
       <AppTab.Navigator
+        /**
+         * Keep inactive tab screens attached to the native view hierarchy.
+         *
+         * With detaching on, the tab's `activityState` on the underlying
+         * react-native-screens Screen is driven by the same Animated value as
+         * our fade, and on the new architecture the two race: a tab whose fade
+         * is interrupted mid-flight (any re-render of this navigator restarts
+         * it) can settle detached while focused, so the screen comes up blank
+         * until you leave and come back. It hits the heaviest screens hardest,
+         * which is why Shop and Calendar showed it most.
+         *
+         * Attaching unconditionally is the upstream-endorsed workaround; the
+         * cost is that visited tabs keep their native views around. See
+         * https://github.com/react-navigation/react-navigation/issues/12755
+         * and https://github.com/software-mansion/react-native-screens/issues/3550
+         * — remove this once react-native-screens fixes the race.
+         */
+        detachInactiveScreens={false}
         screenOptions={({ route }) => ({
           headerShown: false,
           animation: 'fade',
