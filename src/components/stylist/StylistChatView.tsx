@@ -40,7 +40,13 @@ import { useProfile } from '../../hooks/useProfile';
 import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
 import { conversationLocation, type StylingLocationContext } from '../../lib/stylingLocation';
 import { resolveTempUnit } from '../../lib/temperature';
-import { useCreateOutfit, type CreateOutfitInput } from '../../hooks/useOutfits';
+import {
+  useAcceptEventOutfitPlan,
+  useCreateOutfit,
+  useDeleteOutfit,
+  useGenerateEventOutfitPlan,
+  type CreateOutfitInput,
+} from '../../hooks/useOutfits';
 import { useAssignEventItems } from '../../hooks/useEvents';
 import { addOutfitToWishlist } from '../../hooks/useWishlist';
 import { StylistComposer } from './composer/StylistComposer';
@@ -59,6 +65,7 @@ import {
   type StylistAskRequest,
   type StylistComposerAttachment,
   type StylistEntryContext,
+  type StylistEventPlanData,
   type StylistFeedbackMetadata,
   type StylistMessage,
   type StylistMissingEssential,
@@ -205,6 +212,7 @@ const threadKey = (id: number) => `stylist_thread_${id}`;
 type ServerMessagePayload = {
   mode?: StylistMode;
   itemIds?: number[];
+  eventPlan?: StylistEventPlanData | null;
   lookName?: string;
   missingEssentials?: MissingEssential[];
   shopOutfit?: ShopOutfit;
@@ -217,7 +225,7 @@ function renderTypeForAssistantPayload(payload?: ServerMessagePayload | null): S
   if (payload?.tripPlan) return 'trip_plan';
   if (payload?.shopOutfit) return 'shopping_outfit';
   if (payload?.mode === 'advice') return 'advice';
-  if (payload?.itemIds?.length) return 'closet_outfit';
+  if (payload?.itemIds?.length || payload?.eventPlan) return 'closet_outfit';
   return 'text';
 }
 
@@ -288,6 +296,7 @@ function mapServerMessages(rows: ServerMessage[]): ChatMessage[] {
       ...(typeof m.recId === 'number' ? { recId: m.recId } : {}),
       ...(p?.mode ? { mode: p.mode } : {}),
       ...(p?.itemIds?.length ? { suggestedItemIds: p.itemIds } : {}),
+      ...(p?.eventPlan ? { eventPlan: p.eventPlan } : {}),
       ...(p?.lookName ? { lookName: p.lookName } : {}),
       ...(p?.missingEssentials?.length ? { missingEssentials: p.missingEssentials } : {}),
       ...(p?.shopOutfit ? { shopOutfit: p.shopOutfit } : {}),
@@ -368,6 +377,7 @@ type Props = {
   /** True when rendered as the permanent Stylist tab rather than a contextual modal. */
   embedded?: boolean;
   onNavigateToShop?: () => void;
+  onNavigateToCloset?: (outfitId: number) => void;
 };
 
 export function StylistChatView({
@@ -385,6 +395,7 @@ export function StylistChatView({
   onClose,
   embedded = false,
   onNavigateToShop,
+  onNavigateToCloset,
 }: Props) {
   const insets = useSafeAreaInsets();
   const { data: allItems = [] } = useItems();
@@ -399,14 +410,34 @@ export function StylistChatView({
   const weather = useStylingWeatherToday(activeLocation);
   const createOutfit = useCreateOutfit();
   const assignEventItems = useAssignEventItems();
+  const acceptEventPlan = useAcceptEventOutfitPlan();
   // When the chat was launched from a calendar event, suggested looks can be
   // assigned straight back onto that event (in addition to "Save this look").
   const onAddToEvent = useMemo(
     () =>
       eventContext
-        ? (itemIds: number[]) => assignEventItems.mutateAsync({ id: eventContext.id, itemIds })
+        ? async (itemIds: number[], eventPlan?: StylistEventPlanData | null) => {
+            if (eventPlan?.candidateId) {
+              const result = await acceptEventPlan.mutateAsync({
+                eventId: eventContext.id,
+                candidateId: eventPlan.candidateId,
+              });
+              return { outfitId: result.outfit.id };
+            }
+            const outfit = await createOutfit.mutateAsync({
+              name: `${eventContext.title} Look`,
+              description: null,
+              event: eventContext.title,
+              itemIds: itemIds
+                .map((id) => allItems.find((item) => item.id === id))
+                .filter((item): item is Item => !!item)
+                .map((item) => ({ id: item.id, category: item.category ?? 'other' })),
+            });
+            await assignEventItems.mutateAsync({ id: eventContext.id, itemIds, outfitId: outfit.id });
+            return { outfitId: outfit.id };
+          }
         : undefined,
-    [eventContext, assignEventItems],
+    [acceptEventPlan, allItems, assignEventItems, createOutfit, eventContext],
   );
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -566,6 +597,7 @@ export function StylistChatView({
         responseText,
         itemIds,
         lookName,
+        eventPlan,
         missingEssentials: mes,
         missingEssential: legacyMe,
         shopOutfit,
@@ -593,6 +625,8 @@ export function StylistChatView({
         kind: 'assistant',
         renderType: tripPlan
           ? 'trip_plan'
+          : eventPlan
+            ? 'closet_outfit'
           : shopOutfit
             ? 'shopping_outfit'
             : respMode === 'advice'
@@ -605,6 +639,7 @@ export function StylistChatView({
         ...(respMode ? { mode: respMode } : {}),
         ...(shopOutfit ? { shopOutfit } : {}),
         ...(tripPlan ? { tripPlan: { ...tripPlan, pending: false } } : {}),
+        ...(eventPlan ? { eventPlan } : {}),
         ...(itemIds?.length ? { suggestedItemIds: itemIds } : {}),
         ...(lookName ? { lookName } : {}),
         ...(hydratedEssentials.length ? { missingEssentials: hydratedEssentials } : {}),
@@ -1145,6 +1180,7 @@ export function StylistChatView({
                   eventContext={eventContext}
                   onAddToEvent={onAddToEvent}
                   onNavigateToShop={onNavigateToShop}
+                  onNavigateToCloset={onNavigateToCloset}
                   onToggleAudio={
                     msg.role === 'assistant' && !msg.isStreaming
                       ? () =>
@@ -1371,12 +1407,13 @@ type BubbleProps = {
   isPlaying: boolean;
   createOutfit: ReturnType<typeof useCreateOutfit>;
   eventContext?: EventContext;
-  onAddToEvent?: (itemIds: number[]) => Promise<unknown>;
+  onAddToEvent?: (itemIds: number[], eventPlan?: StylistEventPlanData | null) => Promise<unknown>;
   onToggleAudio?: () => void;
   onNavigateToShop?: () => void;
+  onNavigateToCloset?: (outfitId: number) => void;
 };
 
-function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContext, onAddToEvent, onToggleAudio, onNavigateToShop }: BubbleProps) {
+function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContext, onAddToEvent, onToggleAudio, onNavigateToShop, onNavigateToCloset }: BubbleProps) {
   const isUser = message.role === 'user';
   const [detailItem, setDetailItem] = useState<Item | null>(null);
 
@@ -1473,9 +1510,11 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
             createOutfit={createOutfit}
             eventContext={eventContext}
             onAddToEvent={onAddToEvent}
+            eventPlan={message.eventPlan}
             recId={message.recId}
             isPlaying={isPlaying}
             onToggleAudio={onToggleAudio}
+            onNavigateToCloset={onNavigateToCloset}
           />
         </View>
       </EditorialEntrance>
@@ -1492,7 +1531,7 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
           </View>
           <ShopOutfitCard
             outfit={message.shopOutfit}
-            saveLabel={eventContext ? `Save for ${eventContext.title}` : undefined}
+            saveLabel={eventContext ? `Save ${message.shopOutfit.recommendationType === 'piece' ? 'piece' : message.shopOutfit.recommendationType === 'list' ? 'list' : 'look'} for ${eventContext.title}` : undefined}
             onSave={async () => {
               await addOutfitToWishlist(message.shopOutfit!, eventContext);
               track('outfit_saved_to_wishlist', { forEvent: !!eventContext });
@@ -1684,10 +1723,12 @@ type OutfitSuggestionCardProps = {
   allItems: Item[];
   createOutfit: ReturnType<typeof useCreateOutfit>;
   eventContext?: EventContext;
-  onAddToEvent?: (itemIds: number[]) => Promise<unknown>;
+  eventPlan?: StylistEventPlanData | null;
+  onAddToEvent?: (itemIds: number[], eventPlan?: StylistEventPlanData | null) => Promise<unknown>;
   recId?: number;
   isPlaying?: boolean;
   onToggleAudio?: () => void;
+  onNavigateToCloset?: (outfitId: number) => void;
 };
 
 function OutfitSuggestionCard({
@@ -1697,15 +1738,20 @@ function OutfitSuggestionCard({
   allItems,
   createOutfit,
   eventContext,
+  eventPlan,
   onAddToEvent,
   recId,
   isPlaying,
   onToggleAudio,
+  onNavigateToCloset,
 }: OutfitSuggestionCardProps) {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [unsaving, setUnsaving] = useState(false);
   const [added, setAdded] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [savedOutfitId, setSavedOutfitId] = useState<number | null>(null);
+  const [activeEventPlan, setActiveEventPlan] = useState<StylistEventPlanData | null>(eventPlan ?? null);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
   // When the user taps 👎 we reveal reason chips before finalizing — a labeled
@@ -1719,17 +1765,22 @@ function OutfitSuggestionCard({
   const itemIdsKey = itemIds.join(',');
   useEffect(() => {
     setEditedIds(itemIds);
+    setActiveEventPlan(eventPlan ?? null);
     setAdded(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itemIdsKey]);
+  }, [itemIdsKey, eventPlan]);
 
   const [picker, setPicker] = useState<'add' | { swapId: number } | null>(null);
+  const generateEventPlan = useGenerateEventOutfitPlan();
+  const deleteOutfit = useDeleteOutfit();
+  const currentMessageText = activeEventPlan?.stylistNotes ?? messageText;
+  const currentLookName = activeEventPlan?.outfitName ?? lookName;
 
   const matchedItems = useMemo(
     () => editedIds.map((id) => allItems.find((i) => i.id === id)).filter((i): i is Item => !!i),
     [editedIds, allItems],
   );
-  const lookTitle = lookName?.trim() || outfitNameFromItems(matchedItems);
+  const lookTitle = currentLookName?.trim() || outfitNameFromItems(matchedItems);
 
   // Hero collage: card spans the list width, so derive the collage size from the
   // window minus the list and card padding. At that size the collage renders in
@@ -1750,8 +1801,8 @@ function OutfitSuggestionCard({
         })),
     [matchedItems],
   );
-  // When an event is in context, "Add to [event]" is the primary action, so the
-  // save button steps down to a secondary (outline) style — one filled CTA only.
+  // Event planning keeps one filled decision CTA; regeneration and saving for
+  // later share the quiet utility row beneath it.
   const hasEventCta = !!(onAddToEvent && eventContext);
 
   // ── Edit handlers (clear the saved/added flags so the refined look can be re-saved) ──
@@ -1804,11 +1855,12 @@ function OutfitSuggestionCard({
     setSaving(true);
     try {
       const input: CreateOutfitInput = {
-        name: lookName?.trim() || outfitNameFromItems(matchedItems),
-        description: messageText.slice(0, 200) || null,
+        name: currentLookName?.trim() || outfitNameFromItems(matchedItems),
+        description: currentMessageText.slice(0, 200) || null,
         itemIds: matchedItems.map((i) => ({ id: i.id, category: i.category as string })),
       };
-      await createOutfit.mutateAsync(input);
+      const outfit = await createOutfit.mutateAsync(input);
+      setSavedOutfitId(outfit.id);
       setSaved(true);
       recordStylistFeedback({ rating: 'up', signal: 'saved' });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
@@ -1819,12 +1871,40 @@ function OutfitSuggestionCard({
     }
   }
 
+  async function handleSaveToggle() {
+    if (!saved) {
+      await handleSave();
+      return;
+    }
+    if (unsaving || savedOutfitId == null) return;
+
+    setUnsaving(true);
+    try {
+      await deleteOutfit.mutateAsync(savedOutfitId);
+      setSaved(false);
+      setSavedOutfitId(null);
+      Haptics.selectionAsync().catch(() => {});
+    } catch {
+      // Error alert and optimistic cache rollback are handled by the mutation.
+    } finally {
+      setUnsaving(false);
+    }
+  }
+
   async function handleAddToEvent() {
     if (!onAddToEvent || added || adding || matchedItems.length === 0) return;
     setAdding(true);
     try {
       // Persist the refined set (editedIds), matching what feedback/save use.
-      await onAddToEvent(matchedItems.map((i) => i.id));
+      const ids = matchedItems.map((i) => i.id);
+      const planIsUnedited = !!activeEventPlan
+        && ids.length === activeEventPlan.itemIds.length
+        && ids.every((id, index) => id === activeEventPlan.itemIds[index]);
+      const result = await onAddToEvent(ids, planIsUnedited ? activeEventPlan : null);
+      if (typeof result === 'object' && result !== null && 'outfitId' in result) {
+        const outfitId = (result as { outfitId?: unknown }).outfitId;
+        if (typeof outfitId === 'number') setSavedOutfitId(outfitId);
+      }
       setAdded(true);
       recordStylistFeedback({ rating: 'up', signal: 'accepted_for_event' });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
@@ -1832,6 +1912,24 @@ function OutfitSuggestionCard({
       // Error alert handled by the mutation
     } finally {
       setAdding(false);
+    }
+  }
+
+  async function handleTryAnother() {
+    if (!eventContext || generateEventPlan.isPending) return;
+    try {
+      const next = await generateEventPlan.mutateAsync({
+        eventId: eventContext.id,
+        ...(activeEventPlan?.candidateId ? { previousCandidateId: activeEventPlan.candidateId } : {}),
+      });
+      setActiveEventPlan(next);
+      setEditedIds(next.itemIds);
+      setSaved(false);
+      setSavedOutfitId(null);
+      setAdded(false);
+      Haptics.selectionAsync().catch(() => {});
+    } catch {
+      // The mutation presents its own error alert.
     }
   }
 
@@ -1865,6 +1963,54 @@ function OutfitSuggestionCard({
             <Ionicons name="sparkles" size={13} color={colors.primary} />
             <Text style={styles.sectionEyebrowText}>Styled for you</Text>
           </View>
+          <View style={styles.headerCardActions}>
+            {onToggleAudio ? (
+              <TouchableOpacity
+                style={[styles.headerIconBtn, isPlaying && styles.headerIconBtnActive]}
+                onPress={onToggleAudio}
+                accessibilityRole="button"
+                accessibilityLabel="Read styling notes aloud"
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={isPlaying ? 'pause-circle-outline' : 'volume-medium-outline'}
+                  size={17}
+                  color={isPlaying ? colors.primary : colors.mutedForeground}
+                />
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity
+              style={[styles.headerIconBtn, feedback === 'up' && styles.headerIconBtnActive]}
+              onPress={() => handleFeedback('up')}
+              disabled={!!feedback}
+              accessibilityRole="button"
+              accessibilityLabel="This outfit works for me"
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name="thumbs-up-outline"
+                size={15}
+                color={feedback === 'up' ? colors.primary : colors.mutedForeground}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.headerIconBtn,
+                (feedback === 'down' || choosingReason) && styles.headerIconBtnActive,
+              ]}
+              onPress={() => handleFeedback('down')}
+              disabled={!!feedback}
+              accessibilityRole="button"
+              accessibilityLabel="This outfit doesn't work for me"
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name="thumbs-down-outline"
+                size={15}
+                color={feedback === 'down' || choosingReason ? colors.primary : colors.mutedForeground}
+              />
+            </TouchableOpacity>
+          </View>
         </View>
         <Text style={styles.lookTitle} numberOfLines={2}>{lookTitle}</Text>
         <Text style={styles.lookMeta}>{matchedItems.length} pieces from your wardrobe</Text>
@@ -1881,7 +2027,7 @@ function OutfitSuggestionCard({
 
       <View style={styles.stylistNoteBlock}>
         <Text style={styles.rationaleLabel}>Stylist's note</Text>
-        <Text style={styles.outfitCardText}>{messageText}</Text>
+        <Text style={styles.outfitCardText}>{currentMessageText}</Text>
       </View>
 
       {matchedItems.length > 0 && (
@@ -1894,92 +2040,112 @@ function OutfitSuggestionCard({
       )}
 
       {onAddToEvent && eventContext && (
-        <TouchableOpacity
-          style={[
-            styles.addEventBtn,
-            added && styles.addEventBtnDone,
-            matchedItems.length === 0 && styles.saveBtnDisabled,
-          ]}
-          onPress={handleAddToEvent}
-          disabled={added || adding || matchedItems.length === 0}
-          activeOpacity={0.85}
-          accessibilityRole="button"
-          accessibilityLabel={`Add this outfit to ${eventContext.title}`}
-        >
-          <Ionicons
-            name={added ? 'checkmark-circle' : 'calendar-outline'}
-            size={16}
-            color={colors.primaryForeground}
-          />
-          <Text style={styles.addEventBtnText} numberOfLines={1}>
-            {adding ? 'Adding…' : added ? `Added to ${eventContext.title}` : `Add to ${eventContext.title}`}
+        <View style={styles.eventActionGroup}>
+          <TouchableOpacity
+            style={[
+              styles.addEventBtn,
+              added && styles.addEventBtnDone,
+              matchedItems.length === 0 && styles.saveBtnDisabled,
+            ]}
+            onPress={handleAddToEvent}
+            disabled={added || adding || matchedItems.length === 0}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={`Add this outfit to ${eventContext.title}`}
+          >
+            <Ionicons
+              name={added ? 'checkmark-circle' : 'calendar-outline'}
+              size={16}
+              color={colors.primaryForeground}
+            />
+            <Text style={styles.addEventBtnText} numberOfLines={1}>
+              {adding ? 'Adding look…' : added ? 'Look added' : 'Use this look'}
+            </Text>
+          </TouchableOpacity>
+          <Text style={styles.eventActionMeta} numberOfLines={1}>
+            {added ? 'On this event · Saved to Closet' : 'Assigns to this event · Saves to Closet'}
           </Text>
-        </TouchableOpacity>
+        </View>
       )}
 
-      <View style={styles.outfitCardActions}>
-        <TouchableOpacity
-          style={[
-            styles.saveBtn,
-            hasEventCta && !saved && styles.saveBtnSecondary,
-            (saved || saving) && styles.saveBtnDone,
-            matchedItems.length === 0 && styles.saveBtnDisabled,
-          ]}
-          onPress={handleSave}
-          disabled={saved || saving || matchedItems.length === 0}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name={saved ? 'checkmark-circle' : 'bookmark-outline'}
-            size={15}
-            color={saved ? colors.white : hasEventCta ? colors.primary : colors.white}
-          />
-          <Text style={[styles.saveBtnText, hasEventCta && !saved && styles.saveBtnTextSecondary]} numberOfLines={1}>
-            {saving ? 'Saving…' : saved ? 'Saved to outfits' : 'Save this look'}
-          </Text>
-        </TouchableOpacity>
-
-        <View style={styles.explicitCardActions}>
-          {onToggleAudio ? (
-            <TouchableOpacity
-              style={styles.cardIconBtn}
-              onPress={onToggleAudio}
-              accessibilityLabel="Read styling notes aloud"
-              activeOpacity={0.75}
-            >
-              <Ionicons
-                name={isPlaying ? 'pause-circle-outline' : 'volume-medium-outline'}
-                size={18}
-                color={isPlaying ? colors.primary : colors.mutedForeground}
-              />
-            </TouchableOpacity>
-          ) : null}
+      {hasEventCta && eventContext ? (
+        <View style={styles.eventUtilityActions}>
           <TouchableOpacity
-            style={[styles.cardIconBtn, feedback === 'up' && styles.cardIconBtnActive]}
-            onPress={() => handleFeedback('up')}
-            disabled={!!feedback}
-            accessibilityLabel="This outfit works for me"
+            style={styles.eventUtilityBtn}
+            onPress={handleTryAnother}
+            disabled={generateEventPlan.isPending || adding}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={`Try another outfit for ${eventContext.title}`}
           >
-            <Ionicons
-              name="thumbs-up-outline"
-              size={16}
-              color={feedback === 'up' ? colors.primary : colors.mutedForeground}
-            />
+            <Ionicons name="sparkles-outline" size={15} color={colors.primary} />
+            <Text style={styles.eventUtilityText} numberOfLines={1}>
+              {generateEventPlan.isPending ? 'Styling…' : 'Another look'}
+            </Text>
           </TouchableOpacity>
+
+          <View style={styles.eventUtilityDivider} />
+
           <TouchableOpacity
-            style={[styles.cardIconBtn, (feedback === 'down' || choosingReason) && styles.cardIconBtnActive]}
-            onPress={() => handleFeedback('down')}
-            disabled={!!feedback}
-            accessibilityLabel="This outfit doesn't work for me"
+            style={styles.eventUtilityBtn}
+            onPress={handleSaveToggle}
+            disabled={added || saving || unsaving || matchedItems.length === 0}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={saved
+              ? 'Remove this saved look from Closet'
+              : 'Save this look to Closet without adding it to the event'}
+            accessibilityState={{ selected: saved, busy: saving || unsaving }}
           >
             <Ionicons
-              name="thumbs-down-outline"
-              size={16}
-              color={feedback === 'down' || choosingReason ? colors.primary : colors.mutedForeground}
+              name={saved || added ? 'checkmark-circle' : 'bookmark-outline'}
+              size={15}
+              color={colors.primary}
             />
+            <Text style={styles.eventUtilityText} numberOfLines={1}>
+              {saving ? 'Saving…' : unsaving ? 'Removing…' : saved || added ? 'Saved' : 'Save for later'}
+            </Text>
           </TouchableOpacity>
         </View>
-      </View>
+      ) : (
+        <View style={styles.outfitCardActions}>
+          <TouchableOpacity
+            style={[
+              styles.saveBtn,
+              (saved || saving) && styles.saveBtnDone,
+              matchedItems.length === 0 && styles.saveBtnDisabled,
+            ]}
+            onPress={handleSaveToggle}
+            disabled={saving || unsaving || matchedItems.length === 0}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={saved ? 'Remove this saved outfit from Closet' : 'Save this outfit to Closet'}
+            accessibilityState={{ selected: saved, busy: saving || unsaving }}
+          >
+            <Ionicons
+              name={saved ? 'checkmark-circle' : 'bookmark-outline'}
+              size={15}
+              color={colors.white}
+            />
+            <Text style={styles.saveBtnText} numberOfLines={1}>
+              {saving ? 'Saving…' : unsaving ? 'Removing…' : saved ? 'Saved to Closet → Outfits' : 'Save to Closet'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {savedOutfitId != null ? (
+        <TouchableOpacity
+          style={styles.viewClosetBtn}
+          onPress={() => onNavigateToCloset?.(savedOutfitId)}
+          activeOpacity={0.75}
+          accessibilityRole="button"
+          accessibilityLabel="View saved outfit in Closet"
+        >
+          <Text style={styles.viewClosetText}>View saved outfit</Text>
+          <Ionicons name="arrow-forward-outline" size={15} color={colors.primary} />
+        </TouchableOpacity>
+      ) : null}
 
       {choosingReason && !feedback && (
         <View style={styles.reasonChips}>
@@ -3073,6 +3239,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.md,
   },
+  headerCardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  headerIconBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: radii.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerIconBtnActive: {
+    backgroundColor: colors.surfaceSelected,
+  },
   lookTitle: {
     fontFamily: typography.family.display,
     fontSize: 26,
@@ -3175,6 +3356,40 @@ const styles = StyleSheet.create({
     color: colors.white,
     flexShrink: 1,
   },
+  eventActionGroup: {
+    gap: spacing.xs,
+  },
+  eventActionMeta: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+    lineHeight: typography.size.xs * 1.45,
+    textAlign: 'center',
+  },
+  eventUtilityActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  eventUtilityBtn: {
+    flex: 1,
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  eventUtilityDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 18,
+    backgroundColor: colors.hairline,
+  },
+  eventUtilityText: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
+  },
   saveBtn: {
     flex: 1,
     minHeight: 44,
@@ -3186,14 +3401,6 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     paddingVertical: spacing.sm + 2,
     paddingHorizontal: spacing.lg,
-  },
-  saveBtnSecondary: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.primary,
-  },
-  saveBtnTextSecondary: {
-    color: colors.primary,
   },
   saveBtnDone: {
     backgroundColor: colors.primary,
@@ -3208,32 +3415,24 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.semibold,
     color: colors.white,
   },
-  saveBtnTextDone: {
-    color: colors.white,
+  viewClosetBtn: {
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  viewClosetText: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
   },
   outfitCardActions: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.sm,
-  },
-  explicitCardActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  cardIconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: radii.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.background,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-  },
-  cardIconBtnActive: {
-    backgroundColor: colors.surfaceSelected,
   },
   reasonChips: {
     flexDirection: 'row',

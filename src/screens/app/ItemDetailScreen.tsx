@@ -710,6 +710,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           onPress={() => openStylist({
             initialQuery: `How should I style my "${viewItem.name}"?`,
             source: 'item_detail',
+            onNavigateToCloset: (outfitId) => navigation.navigate('OutfitDetail', { outfitId }),
             context: {
               kind: 'item',
               itemId: viewItem.id,

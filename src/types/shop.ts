@@ -12,7 +12,11 @@ export type ShopOutfitItem = {
   retailerUrl?: string;
 };
 
+export type ShopRecommendationType = 'look' | 'piece' | 'list';
+
 export type ShopOutfit = {
+  /** Server-assigned semantic type: coordinated look, single piece, or shopping list. */
+  recommendationType?: ShopRecommendationType;
   intro: string;
   city: string;
   items: ShopOutfitItem[];

@@ -27,4 +27,14 @@ describe('buildInitialStylistSendOptions', () => {
       text: 'What should I wear?',
     });
   });
+
+  it('preserves the event-plan mode for calendar launches', () => {
+    expect(buildInitialStylistSendOptions({
+      text: 'Plan my look for SOMBR',
+      mode: 'event_plan',
+    })).toEqual({
+      text: 'Plan my look for SOMBR',
+      mode: 'event_plan',
+    });
+  });
 });

@@ -253,6 +253,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
       source: 'board_detail',
       destination: board.name,
       initialQuery: buildBoardStylistPrompt(board.name, items, intent),
+      onNavigateToCloset: (outfitId) => navigation.navigate('OutfitDetail', { outfitId }),
       context: {
         kind: 'board',
         boardId: board.id,
@@ -260,7 +261,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
         itemIds: items.flatMap((entry) => entry.kind === 'item' ? [entry.item.id] : []),
       },
     });
-  }, [board, items, openStylist]);
+  }, [board, items, navigation, openStylist]);
 
   const handleDelete = useCallback(() => {
     Alert.alert('Delete board', `Delete "${board?.name ?? 'this board'}"? Saved items stay in your closet.`, [

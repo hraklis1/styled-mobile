@@ -363,7 +363,13 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       {/* ── AI Stylist fake input ─────────────────────────────── */}
       <TouchableOpacity
         style={styles.stylistPill}
-        onPress={() => openStylist({ source: 'home_prompt' })}
+        onPress={() => openStylist({
+          source: 'home_prompt',
+          onNavigateToCloset: (outfitId) => navigation.navigate('Closet', {
+            screen: 'OutfitDetail',
+            params: { outfitId, returnTo: 'Home' },
+          }),
+        })}
         activeOpacity={0.7}
         accessibilityRole="button"
         accessibilityLabel="Open AI Stylist"

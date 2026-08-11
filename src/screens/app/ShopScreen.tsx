@@ -28,25 +28,59 @@ import {
   type WishlistSortOrder,
 } from '../../lib/shopWishlistFilters';
 import type { WishlistEntry } from '../../lib/wishlist';
+import { getWishlistRecommendationType } from '../../lib/wishlistType';
 import { colors, spacing, typography, radii } from '../../theme';
 import {
   ActionButton,
   FilterControl,
   SegmentedControl,
 } from '../../components/primitives/Editorial';
-import type { SavedLooksScreenProps } from '../../navigation/types';
+import type { SavedLooksScreenProps, SavedShoppingScreenProps, SavedShoppingTab } from '../../navigation/types';
 
 function toggleValue(values: string[], value: string) {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
 }
 
-const SCOPES: { value: WishlistScope; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'event', label: 'For events' },
-  { value: 'general', label: 'General' },
+const TABS: { value: SavedShoppingTab; label: string; kind: 'look' | 'piece' | 'list' }[] = [
+  { value: 'looks', label: 'Looks', kind: 'look' },
+  { value: 'pieces', label: 'Pieces', kind: 'piece' },
+  { value: 'lists', label: 'Lists', kind: 'list' },
 ];
 
-export function SavedLooksScreen({ navigation, route }: SavedLooksScreenProps) {
+function tabCopy(tab: SavedShoppingTab) {
+  if (tab === 'pieces') return {
+    title: 'Saved pieces',
+    emptyTitle: 'No saved pieces yet',
+    emptySubtitle: 'When your Stylist recommends one standout item, tap “Save this piece” to keep it here.',
+    searchPlaceholder: 'Search pieces, brands, cities…',
+    searchLabel: 'Search saved pieces',
+    noResultsTitle: 'No matching pieces',
+  };
+  if (tab === 'lists') return {
+    title: 'Saved lists',
+    emptyTitle: 'No saved lists yet',
+    emptySubtitle: 'Ask your Stylist for a focused list of options, then save it here for later.',
+    searchPlaceholder: 'Search lists, brands, cities…',
+    searchLabel: 'Search saved lists',
+    noResultsTitle: 'No matching lists',
+  };
+  return {
+    title: 'Saved looks',
+    emptyTitle: 'No saved looks yet',
+    emptySubtitle: 'Ask your AI Stylist to shop for a complete outfit. When it suggests one, tap “Save this look” to keep it here.',
+    searchPlaceholder: 'Search looks, brands, cities…',
+    searchLabel: 'Search saved looks',
+    noResultsTitle: 'No matching looks',
+  };
+}
+
+type SavedShoppingContentProps = {
+  navigation: SavedShoppingScreenProps['navigation'];
+  initialTab: SavedShoppingTab;
+  selectedId?: string;
+};
+
+function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShoppingContentProps) {
   const insets = useSafeAreaInsets();
   const { openStylist } = useGlobalAIStylist();
   const { data: entries = [], isLoading: loading, refetch } = useWishlist();
@@ -59,6 +93,7 @@ export function SavedLooksScreen({ navigation, route }: SavedLooksScreenProps) {
   const [brands, setBrands] = useState<string[]>([]);
   const [sortOrder, setSortOrder] = useState<WishlistSortOrder>('newest');
   const [filtersVisible, setFiltersVisible] = useState(false);
+  const [activeTab, setActiveTab] = useState<SavedShoppingTab>(initialTab);
   const [selectedEntry, setSelectedEntry] = useState<WishlistEntry | null>(null);
 
   useFocusEffect(
@@ -69,15 +104,24 @@ export function SavedLooksScreen({ navigation, route }: SavedLooksScreenProps) {
 
   useFocusEffect(
     useCallback(() => {
-      const selectedId = route.params?.selectedId;
       if (!selectedId) return;
       const entry = entries.find((item) => item.id === selectedId);
-      if (entry) setSelectedEntry(entry);
-      navigation.setParams({ selectedId: undefined });
-    }, [entries, navigation, route.params?.selectedId]),
+      if (entry) {
+        const kind = getWishlistRecommendationType(entry);
+        setActiveTab(kind === 'piece' ? 'pieces' : kind === 'list' ? 'lists' : 'looks');
+        setSelectedEntry(entry);
+        navigation.setParams({ selectedId: undefined });
+      }
+    }, [entries, navigation, selectedId]),
   );
 
-  const filterOptions = useMemo(() => getWishlistFilterOptions(entries), [entries]);
+  const selectedTab = TABS.find((tab) => tab.value === activeTab) ?? TABS[0];
+  const copy = tabCopy(activeTab);
+  const tabEntries = useMemo(
+    () => entries.filter((entry) => getWishlistRecommendationType(entry) === selectedTab.kind),
+    [entries, selectedTab.kind],
+  );
+  const filterOptions = useMemo(() => getWishlistFilterOptions(tabEntries), [tabEntries]);
   const filters = useMemo(() => ({
     query,
     scope,
@@ -86,7 +130,7 @@ export function SavedLooksScreen({ navigation, route }: SavedLooksScreenProps) {
     brands,
     sortOrder,
   }), [query, scope, categories, cities, brands, sortOrder]);
-  const filteredEntries = useMemo(() => filterWishlist(entries, filters), [entries, filters]);
+  const filteredEntries = useMemo(() => filterWishlist(tabEntries, filters), [filters, tabEntries]);
   const activeFilterCount = countWishlistFilters(filters);
 
   const clearFilters = useCallback(() => {
@@ -96,14 +140,28 @@ export function SavedLooksScreen({ navigation, route }: SavedLooksScreenProps) {
     setSortOrder('newest');
   }, []);
 
+  const clearFiltersAndScope = useCallback(() => {
+    setScope('all');
+    clearFilters();
+  }, [clearFilters]);
+
   const clearAllSearchAndFilters = useCallback(() => {
     setQuery('');
     setScope('all');
     clearFilters();
   }, [clearFilters]);
 
+  const savedCounts = useMemo(() => ({
+    looks: entries.filter((entry) => getWishlistRecommendationType(entry) === 'look').length,
+    pieces: entries.filter((entry) => getWishlistRecommendationType(entry) === 'piece').length,
+    lists: entries.filter((entry) => getWishlistRecommendationType(entry) === 'list').length,
+  }), [entries]);
+  const resultNoun = activeTab === 'looks' ? 'look' : activeTab === 'pieces' ? 'piece' : 'list';
+
   const confirmRemove = useCallback((entry: WishlistEntry) => {
-    Alert.alert('Remove saved outfit?', 'This outfit will be removed from Saved Looks.', [
+    const kind = getWishlistRecommendationType(entry);
+    const label = kind === 'look' ? 'look' : kind === 'piece' ? 'piece' : 'list';
+    Alert.alert(`Remove saved ${label}?`, `This saved ${label} will be removed.`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: () => removeItem(entry.id) },
     ]);
@@ -121,8 +179,9 @@ export function SavedLooksScreen({ navigation, route }: SavedLooksScreenProps) {
     <View style={styles.root}>
       <ShopSubpageHeader
         eyebrow="Shop"
-        title="Saved looks"
-        subtitle={entries.length === 0 ? 'No saved outfits yet' : `${entries.length} saved outfit${entries.length === 1 ? '' : 's'}`}
+        title="Saved shopping"
+        compact
+        subtitle={`${savedCounts.looks} look${savedCounts.looks === 1 ? '' : 's'} · ${savedCounts.pieces} piece${savedCounts.pieces === 1 ? '' : 's'} · ${savedCounts.lists} list${savedCounts.lists === 1 ? '' : 's'}`}
         onBack={() => (navigation.canGoBack() ? navigation.goBack() : navigation.replace('ShopMain'))}
         actions={(
           <>
@@ -133,30 +192,46 @@ export function SavedLooksScreen({ navigation, route }: SavedLooksScreenProps) {
             >
               <Ionicons name="images-outline" size={21} color={colors.foreground} />
             </TouchableOpacity>
-            <ActionButton
-              label="Shopping Mode"
-              icon="camera"
+            <TouchableOpacity
+              style={styles.headerIcon}
               onPress={() => navigation.navigate('ShoppingCamera')}
               accessibilityLabel="Open Shopping Mode camera"
-            />
+            >
+              <Ionicons name="camera-outline" size={21} color={colors.foreground} />
+            </TouchableOpacity>
           </>
         )}
       />
 
-      {entries.length === 0 ? (
+      <View style={styles.tabControls}>
+        <SegmentedControl
+          value={activeTab}
+          variant="tabs"
+          options={TABS.map(({ value, label }) => ({ value, label }))}
+          onChange={(value) => {
+            setActiveTab(value);
+            clearAllSearchAndFilters();
+          }}
+        />
+      </View>
+
+      {tabEntries.length === 0 ? (
         <View style={styles.emptyState}>
           <View style={styles.emptyIconCircle}>
             <Ionicons name="bag-handle-outline" size={36} color={colors.primary} />
           </View>
-          <Text style={styles.emptyTitle}>No saved looks yet</Text>
+          <Text style={styles.emptyTitle}>{copy.emptyTitle}</Text>
           <Text style={styles.emptySubtitle}>
-            Ask your AI Stylist to shop for a new outfit. When it suggests one, tap “Save” to keep it here.
+            {copy.emptySubtitle}
           </Text>
           <ActionButton
             style={styles.emptyButton}
             label="Chat with your Stylist"
             icon="sparkles"
-            onPress={() => openStylist(buildShopStylistLaunch('Shop for a new outfit for me', 'shop_new'))}
+            onPress={() => openStylist(buildShopStylistLaunch(
+              activeTab === 'lists' ? 'Build me a focused shopping list.' : activeTab === 'pieces' ? 'Help me find one piece to buy.' : 'Shop for a new outfit for me',
+              activeTab === 'lists' ? 'shop_list' : activeTab === 'pieces' ? 'shop_piece' : 'shop_new',
+            ))}
             accessibilityLabel="Open AI Stylist"
           />
         </View>
@@ -170,13 +245,13 @@ export function SavedLooksScreen({ navigation, route }: SavedLooksScreenProps) {
                   value={query}
                   onChangeText={setQuery}
                   style={styles.searchInput}
-                  placeholder="Search outfits, brands, cities…"
+                  placeholder={copy.searchPlaceholder}
                   placeholderTextColor={colors.mutedForeground}
                   returnKeyType="search"
                   autoCapitalize="none"
                   autoCorrect={false}
                   onSubmitEditing={Keyboard.dismiss}
-                  accessibilityLabel="Search saved outfits"
+                  accessibilityLabel={copy.searchLabel}
                 />
                 {query.length > 0 && (
                   <TouchableOpacity onPress={() => setQuery('')} accessibilityLabel="Clear search">
@@ -187,7 +262,6 @@ export function SavedLooksScreen({ navigation, route }: SavedLooksScreenProps) {
               <FilterControl count={activeFilterCount} onPress={() => setFiltersVisible(true)} />
             </View>
 
-            <SegmentedControl value={scope} variant="tabs" options={SCOPES} onChange={setScope} />
           </View>
 
           <FlatList
@@ -208,7 +282,7 @@ export function SavedLooksScreen({ navigation, route }: SavedLooksScreenProps) {
             ListEmptyComponent={(
               <View style={styles.noResults}>
                 <Ionicons name="search-outline" size={30} color={colors.mutedForeground} />
-                <Text style={styles.noResultsTitle}>No matching outfits</Text>
+                <Text style={styles.noResultsTitle}>{copy.noResultsTitle}</Text>
                 <Text style={styles.noResultsText}>Try another search or clear your filters.</Text>
                 <TouchableOpacity style={styles.clearButton} onPress={clearAllSearchAndFilters}>
                   <Text style={styles.clearButtonText}>Clear search and filters</Text>
@@ -225,13 +299,16 @@ export function SavedLooksScreen({ navigation, route }: SavedLooksScreenProps) {
           categories={categories}
           cities={cities}
           brands={brands}
+          scope={scope}
           sortOrder={sortOrder}
           resultCount={filteredEntries.length}
+          resultNoun={resultNoun}
           onToggleCategory={(value) => setCategories((current) => toggleValue(current, value))}
           onToggleCity={(value) => setCities((current) => toggleValue(current, value))}
           onToggleBrand={(value) => setBrands((current) => toggleValue(current, value))}
+          onScopeChange={setScope}
           onSortChange={setSortOrder}
-          onClear={clearFilters}
+          onClear={clearFiltersAndScope}
           onClose={() => setFiltersVisible(false)}
         />
       )}
@@ -246,6 +323,27 @@ export function SavedLooksScreen({ navigation, route }: SavedLooksScreenProps) {
   );
 }
 
+export function SavedShoppingScreen({ navigation, route }: SavedShoppingScreenProps) {
+  return (
+    <SavedShoppingContent
+      navigation={navigation}
+      initialTab={route.params?.tab ?? 'looks'}
+      selectedId={route.params?.selectedId}
+    />
+  );
+}
+
+/** Backward-compatible deep link used by existing shortcuts and notifications. */
+export function SavedLooksScreen({ navigation, route }: SavedLooksScreenProps) {
+  return (
+    <SavedShoppingContent
+      navigation={navigation as SavedShoppingScreenProps['navigation']}
+      initialTab="looks"
+      selectedId={route.params?.selectedId}
+    />
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   centered: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' },
@@ -255,6 +353,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     gap: spacing.md,
   },
+  tabControls: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   headerIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: colors.surfaceElevated },
   searchBox: {

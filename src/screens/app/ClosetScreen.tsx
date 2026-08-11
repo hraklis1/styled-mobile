@@ -606,13 +606,14 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     openStylist({
       initialQuery: `Build an outfit using these pieces from my closet: ${namedPieces}${remainingCount ? `, plus ${remainingCount} more selected pieces` : ''}`,
       source: 'closet_selection',
+      onNavigateToCloset: (outfitId) => navigation.navigate('OutfitDetail', { outfitId }),
       context: {
         kind: 'closet_selection',
         itemIds: Array.from(selectedIds),
         label: 'Selected closet pieces',
       },
     });
-  }, [items, openStylist, selectedIds]);
+  }, [items, navigation, openStylist, selectedIds]);
 
   const renderItemRow = useCallback(
     ({ item }: { item: (typeof items)[number] }) => {

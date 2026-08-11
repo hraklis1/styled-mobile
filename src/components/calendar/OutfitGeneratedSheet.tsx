@@ -39,7 +39,6 @@ export function OutfitGeneratedSheet({
   const insets = useSafeAreaInsets();
   const backdropAnim = useRef(new Animated.Value(0)).current;
   const sheetAnim = useRef(new Animated.Value(600)).current;
-  // Keep the last result mounted while the close animation runs
   const [shown, setShown] = useState<GenerateOutfitResult | null>(null);
   const shownRef = useRef<GenerateOutfitResult | null>(null);
   const pendingAction = useRef<(() => void) | null>(null);
@@ -62,8 +61,6 @@ export function OutfitGeneratedSheet({
         Animated.spring(sheetAnim, { toValue: 0, damping: 22, stiffness: 220, useNativeDriver: true }),
       ]).start();
     } else if (shownRef.current) {
-      // Parent cleared the result (e.g. after accepting) — animate the sheet out.
-      // The parent owns post-dismiss cleanup here, so we don't call onDone.
       animateOut(() => {
         setShown(null);
         shownRef.current = null;
@@ -99,7 +96,6 @@ export function OutfitGeneratedSheet({
         <Animated.View style={{ transform: [{ translateY: sheetAnim }] }}>
           <View style={[s.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
             <View style={s.handle} />
-
             <View style={s.header}>
               <View style={s.iconBadge}>
                 <Ionicons name="sparkles" size={22} color={colors.primary} />
@@ -109,11 +105,7 @@ export function OutfitGeneratedSheet({
             </View>
 
             {items.length > 0 && (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={s.itemsRow}
-              >
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.itemsRow}>
                 {items.map((item) => {
                   const cover = itemCoverPresentation(item);
                   return (
@@ -133,37 +125,23 @@ export function OutfitGeneratedSheet({
 
             {shown.stylistNotes ? (
               <ScrollView style={s.notesScroll} showsVerticalScrollIndicator={false}>
-                <View style={s.notesCard}>
-                  <Text style={s.notesText}>{shown.stylistNotes}</Text>
-                </View>
+                <View style={s.notesCard}><Text style={s.notesText}>{shown.stylistNotes}</Text></View>
               </ScrollView>
             ) : null}
 
             {shown.missingEssentials.length > 0 ? (
               <View style={s.missingCard}>
                 <Text style={s.missingTitle}>Wardrobe note</Text>
-                <Text style={s.missingText}>
-                  {shown.missingEssentials.map((item) => `${item.label}: ${item.context}`).join(' · ')}
-                </Text>
+                <Text style={s.missingText}>{shown.missingEssentials.map((item) => `${item.label}: ${item.context}`).join(' · ')}</Text>
               </View>
             ) : null}
 
             <View style={s.actions}>
-              <TouchableOpacity
-                style={[s.primaryBtn, isAccepting && s.disabledBtn]}
-                onPress={onAccept}
-                disabled={isAccepting || isRegenerating}
-                activeOpacity={0.85}
-              >
+              <TouchableOpacity style={[s.primaryBtn, isAccepting && s.disabledBtn]} onPress={onAccept} disabled={isAccepting || isRegenerating} activeOpacity={0.85}>
                 <Ionicons name="checkmark-circle-outline" size={18} color={colors.white} />
                 <Text style={s.primaryBtnText}>{isAccepting ? 'Saving…' : 'Use this outfit'}</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.secondaryBtn, isRegenerating && s.disabledBtn]}
-                onPress={onTryAnother}
-                disabled={isAccepting || isRegenerating}
-                activeOpacity={0.8}
-              >
+              <TouchableOpacity style={[s.secondaryBtn, isRegenerating && s.disabledBtn]} onPress={onTryAnother} disabled={isAccepting || isRegenerating} activeOpacity={0.8}>
                 <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
                 <Text style={s.secondaryBtnText}>{isRegenerating ? 'Planning…' : 'Try another'}</Text>
               </TouchableOpacity>
@@ -180,135 +158,30 @@ export function OutfitGeneratedSheet({
 
 const s = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
-  sheet: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius: radii.lg + 4,
-    borderTopRightRadius: radii.lg + 4,
-    paddingHorizontal: spacing.lg,
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    alignSelf: 'center',
-    marginTop: spacing.sm,
-    marginBottom: spacing.xs,
-  },
-  header: {
-    alignItems: 'center',
-    paddingTop: spacing.md,
-    paddingBottom: spacing.lg,
-    gap: spacing.sm,
-  },
-  iconBadge: {
-    width: 48,
-    height: 48,
-    borderRadius: radii.full,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.xs,
-  },
-  eyebrow: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.semibold,
-    color: colors.mutedForeground,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  outfitName: {
-    fontSize: typography.size.xl,
-    fontWeight: typography.weight.bold,
-    color: colors.foreground,
-    letterSpacing: 0,
-    textAlign: 'center',
-  },
-  itemsRow: {
-    gap: spacing.sm,
-    paddingBottom: spacing.lg,
-    flexGrow: 1,
-    justifyContent: 'center',
-  },
-  itemThumb: {
-    width: 64,
-    height: 64,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    overflow: 'hidden',
-  },
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)' },
+  sheet: { backgroundColor: colors.background, borderTopLeftRadius: radii.lg + 4, borderTopRightRadius: radii.lg + 4, paddingHorizontal: spacing.lg },
+  handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginTop: spacing.sm, marginBottom: spacing.xs },
+  header: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.lg, gap: spacing.sm },
+  iconBadge: { width: 48, height: 48, borderRadius: radii.full, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.xs },
+  eyebrow: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 0.5 },
+  outfitName: { fontSize: typography.size.xl, fontWeight: typography.weight.bold, color: colors.foreground, textAlign: 'center' },
+  itemsRow: { gap: spacing.sm, paddingBottom: spacing.lg, flexGrow: 1, justifyContent: 'center' },
+  itemThumb: { width: 64, height: 64, borderRadius: radii.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, overflow: 'hidden' },
   itemImg: { width: '100%', height: '100%' },
-  itemFallback: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: colors.muted,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  itemInitials: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.bold,
-    color: colors.mutedForeground,
-  },
+  itemFallback: { width: '100%', height: '100%', backgroundColor: colors.muted, alignItems: 'center', justifyContent: 'center' },
+  itemInitials: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.mutedForeground },
   notesScroll: { maxHeight: 180, marginBottom: spacing.lg },
-  notesCard: {
-    backgroundColor: colors.muted,
-    borderRadius: radii.md,
-    padding: spacing.md,
-  },
-  notesText: {
-    fontSize: typography.size.sm,
-    color: colors.foreground,
-    lineHeight: typography.size.sm * 1.5,
-  },
-  missingCard: {
-    backgroundColor: `${colors.primary}10`,
-    borderRadius: radii.md,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
-    gap: 3,
-  },
+  notesCard: { backgroundColor: colors.muted, borderRadius: radii.md, padding: spacing.md },
+  notesText: { fontSize: typography.size.sm, color: colors.foreground, lineHeight: typography.size.sm * 1.5 },
+  missingCard: { backgroundColor: `${colors.primary}10`, borderRadius: radii.md, padding: spacing.md, marginBottom: spacing.lg, gap: 3 },
   missingTitle: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.primary },
   missingText: { fontSize: typography.size.xs, color: colors.mutedForeground, lineHeight: typography.size.xs * 1.5 },
   actions: { gap: spacing.sm },
-  primaryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.md,
-    borderRadius: radii.md,
-    backgroundColor: colors.primary,
-  },
-  primaryBtnText: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-    color: colors.white,
-  },
+  primaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingVertical: spacing.md, borderRadius: radii.md, backgroundColor: colors.primary },
+  primaryBtnText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.white },
   disabledBtn: { opacity: 0.55 },
   dismissBtn: { alignItems: 'center', paddingVertical: spacing.sm },
   dismissBtnText: { fontSize: typography.size.sm, color: colors.mutedForeground },
-  secondaryBtn: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.md,
-    borderRadius: radii.md,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  secondaryBtnText: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
+  secondaryBtn: { flexDirection: 'row', gap: spacing.xs, alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.md, borderRadius: radii.md, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  secondaryBtnText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.foreground },
 });

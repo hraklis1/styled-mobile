@@ -31,6 +31,8 @@ type OpenStylistOptions = {
   source: StylistOpenSource;
   eventContext?: StylistEventContext;
   context?: StylistEntryContext;
+  /** Navigation is owned by the screen that launched the global modal. */
+  onNavigateToCloset?: (outfitId: number) => void;
 };
 
 type GlobalAIStylistContextValue = {
@@ -65,13 +67,14 @@ export function GlobalAIStylistProvider({ children }: Props) {
   const [initialDestination, setInitialDestination] = useState<string | undefined>(undefined);
   const [eventContext, setEventContext] = useState<StylistEventContext | undefined>(undefined);
   const [entryContext, setEntryContext] = useState<StylistEntryContext | undefined>(undefined);
+  const [onNavigateToCloset, setOnNavigateToCloset] = useState<((outfitId: number) => void) | undefined>(undefined);
   const [promptRequestId, setPromptRequestId] = useState(0);
   const [openRequestId, setOpenRequestId] = useState(0);
   const [source, setSource] = useState<StylistOpenSource | undefined>(undefined);
   const [threadMode, setThreadMode] = useState<'new' | 'resume'>('resume');
   const { isPremium } = useEntitlement();
 
-  const openStylist = useCallback(async ({ initialQuery: query, initialAttachmentUri: attachmentUri, initialMode: mode, destination, source, eventContext: event, context }: OpenStylistOptions) => {
+  const openStylist = useCallback(async ({ initialQuery: query, initialAttachmentUri: attachmentUri, initialMode: mode, destination, source, eventContext: event, context, onNavigateToCloset: navigateToCloset }: OpenStylistOptions) => {
     if (!isPremium) {
       const shouldUpgrade = await new Promise<boolean>((resolve) => {
         Alert.alert(
@@ -96,6 +99,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
     setInitialDestination(destination);
     setEventContext(event);
     setEntryContext(context);
+    setOnNavigateToCloset(() => navigateToCloset);
     if (query) setPromptRequestId((id) => id + 1);
     setOpenRequestId((id) => id + 1);
     setVisible(true);
@@ -108,7 +112,14 @@ export function GlobalAIStylistProvider({ children }: Props) {
     setInitialMode(undefined);
     setEventContext(undefined);
     setEntryContext(undefined);
+    setOnNavigateToCloset(undefined);
   }, []);
+  const navigateToCloset = useCallback((outfitId: number) => {
+    // The Stylist is presented as a native modal. Dismiss it before changing
+    // the underlying tab stack so the destination is visible immediately.
+    setVisible(false);
+    onNavigateToCloset?.(outfitId);
+  }, [onNavigateToCloset]);
   const consumePrompt = useCallback(() => setInitialQuery(undefined), []);
 
   return (
@@ -132,6 +143,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
           openRequestId={openRequestId}
           source={source}
           threadMode={threadMode}
+          onNavigateToCloset={navigateToCloset}
           onPromptConsumed={consumePrompt}
           onClose={closeStylist}
         />

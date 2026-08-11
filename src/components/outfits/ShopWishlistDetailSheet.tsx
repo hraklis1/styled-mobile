@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { WishlistEntry } from '../../lib/wishlist';
+import { getWishlistRecommendationType } from '../../lib/wishlistType';
 import { colors, spacing, typography } from '../../theme';
 import { ShopOutfitCard } from './ShopOutfitCard';
 
@@ -20,16 +21,19 @@ type Props = {
 };
 
 const DEFAULT_REMOVAL_COPY = {
-  title: 'Remove saved outfit?',
-  message: 'This outfit will be removed from Saved Looks.',
+  title: 'Remove saved item?',
+  message: 'This saved shopping item will be removed.',
   confirmLabel: 'Remove',
-  accessibilityLabel: 'Remove saved outfit',
+  accessibilityLabel: 'Remove saved shopping item',
 };
 
 export function ShopWishlistDetailSheet({ entry, onClose, onRemove, removalCopy = DEFAULT_REMOVAL_COPY }: Props) {
   const ref = useRef<BottomSheetModal>(null);
   const insets = useSafeAreaInsets();
   const snapPoints = useMemo(() => ['94%'], []);
+  const recommendationType = getWishlistRecommendationType(entry);
+  const title = recommendationType === 'look' ? 'Saved look' : recommendationType === 'piece' ? 'Saved piece' : 'Saved list';
+  const fallbackContext = recommendationType === 'list' ? 'Options to consider' : recommendationType === 'piece' ? 'Individual piece' : 'Complete look';
 
   useEffect(() => { ref.current?.present(); }, []);
 
@@ -64,9 +68,9 @@ export function ShopWishlistDetailSheet({ entry, onClose, onRemove, removalCopy 
       <View style={styles.header}>
         <View style={styles.headerSide} />
         <View style={styles.titleWrap}>
-          <Text style={styles.title}>Saved outfit</Text>
+          <Text style={styles.title}>{title}</Text>
           <Text style={styles.subtitle} numberOfLines={1}>
-            {entry.eventContext?.title ?? entry.outfit.city ?? 'Saved Look'}
+            {entry.eventContext?.title ?? entry.outfit.city ?? fallbackContext}
           </Text>
         </View>
         <TouchableOpacity

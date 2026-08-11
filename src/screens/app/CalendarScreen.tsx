@@ -4,24 +4,18 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  ActionSheetIOS,
   RefreshControl,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import {
   useEvents,
   useDeleteEvent,
-  EVENTS_QUERY_KEY,
 } from '../../hooks/useEvents';
 import {
-  useAcceptEventOutfitPlan,
-  useGenerateEventOutfitPlan,
   useOutfits,
-  type GenerateOutfitResult,
 } from '../../hooks/useOutfits';
 import { useItems } from '../../hooks/useItems';
 import { CalendarSyncSheet } from '../../components/calendar/CalendarSyncSheet';
@@ -32,7 +26,6 @@ import { EventItemPickerModal } from '../../components/calendar/EventItemPickerM
 import { EventOutfitPickerModal } from '../../components/calendar/EventOutfitPickerModal';
 import { ItemThumbStack } from '../../components/calendar/ItemThumbStack';
 import { NextEventHero } from '../../components/calendar/NextEventHero';
-import { OutfitGeneratedSheet } from '../../components/calendar/OutfitGeneratedSheet';
 import {
   toDateStr,
   formatDayLabel,
@@ -42,8 +35,6 @@ import {
   OCCASIONS,
   OCCASION_ICONS,
 } from '../../components/calendar/calendarUtils';
-import * as Location from 'expo-location';
-import * as Haptics from 'expo-haptics';
 import { colors, spacing, typography, radii } from '../../theme';
 import { ErrorState } from '../../components/primitives/ErrorState';
 import { ScreenHeader } from '../../components/primitives/Editorial';
@@ -125,22 +116,8 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   const { data: allItems = [] } = useItems();
   const { data: outfits = [] } = useOutfits();
   const deleteEventMutation = useDeleteEvent();
-  const generatePlan = useGenerateEventOutfitPlan();
-  const acceptPlan = useAcceptEventOutfitPlan();
-  const queryClient = useQueryClient();
   const eventsRef = useRef(events);
   eventsRef.current = events;
-
-  const [deviceCoords, setDeviceCoords] = useState<{ lat: number; lon: number } | null>(null);
-
-  useEffect(() => {
-    Location.getForegroundPermissionsAsync().then(({ status }) => {
-      if (status !== 'granted') return;
-      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-        .then((pos) => setDeviceCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude }))
-        .catch(() => { });
-    }).catch(() => { });
-  }, []);
 
   // null = no day filter; a date string filters the list to that day
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -154,8 +131,6 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   const [showAllUpcoming, setShowAllUpcoming] = useState(false);
   const [pastExpanded, setPastExpanded] = useState(false);
   const [syncVisible, setSyncVisible] = useState(false);
-  const [plannedEvent, setPlannedEvent] = useState<Event | null>(null);
-  const [generatedPlan, setGeneratedPlan] = useState<GenerateOutfitResult | null>(null);
 
   const UPCOMING_LIMIT = 4;
 
@@ -329,7 +304,12 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
 
     const showOutfit = () => navigation.navigate('Closet', {
       screen: 'OutfitDetail',
-      params: { outfitId: event.outfitId!, returnTo: 'Calendar' },
+      params: {
+        outfitId: event.outfitId!,
+        returnTo: 'Calendar',
+        returnToEventId: event.id,
+        returnToEventDetail: fromDetail,
+      },
     });
     if (!fromDetail) {
       showOutfit();
@@ -407,8 +387,18 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
       openStylist({
         initialQuery: `${details}.`,
         destination: event.location ?? undefined,
+        initialMode: 'event_plan',
         source,
         eventContext: { id: event.id, title: event.title },
+        onNavigateToCloset: (outfitId) => navigation.navigate('Closet', {
+          screen: 'OutfitDetail',
+          params: {
+            outfitId,
+            returnTo: 'Calendar',
+            returnToEventId: event.id,
+            returnToEventDetail: true,
+          },
+        }),
         context: {
           kind: 'event',
           eventId: event.id,
@@ -423,134 +413,19 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
     }, delay);
   };
 
-  const planOutfitForEvent = async (
-    event: Event,
-    previousCandidateId?: string,
-    returnToDetail = false,
-  ) => {
-    if (!isPremium) {
-      const shouldUpgrade = await new Promise<boolean>((resolve) => {
-        Alert.alert(
-          'Unlock outfit planning',
-          'Get personalized event outfits built from your wardrobe, style, and the forecast.',
-          [
-            { text: 'Not now', style: 'cancel', onPress: () => resolve(false) },
-            { text: 'See plans', onPress: () => resolve(true) },
-          ],
-        );
-      });
-      if (shouldUpgrade) await presentPaywall();
-      return;
-    }
-    // Keep the originating sheet visible while the plan is generated so the
-    // user sees progress. Dismiss only once the result is ready, then present
-    // the result after the page-sheet transition completes.
-    const returnEventId = !previousCandidateId && returnToDetail ? event.id : null;
-    setPlannedEvent(event);
-    generatePlan.mutate(
-      {
-        eventId: event.id,
-        ...(deviceCoords ?? {}),
-        ...(previousCandidateId ? { previousCandidateId } : {}),
-      },
-      {
-        onSuccess: (result) => {
-          const showSheet = () => {
-            setGeneratedPlan(result);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-          };
-          if (returnEventId !== null) {
-            setReturnToDetailEventId(returnEventId);
-            setDetailEvent(null);
-            // iOS rejects presenting a modal while another is still dismissing.
-            setTimeout(showSheet, 300);
-          } else {
-            showSheet();
-          }
-        },
-        onError: (err: any) => {
-          Alert.alert(
-            'Could not plan outfit',
-            err?.response?.data?.message ?? 'Please try again.',
-          );
-          if (!previousCandidateId) setPlannedEvent(null);
-        },
-      },
-    );
-  };
-
-  const acceptGeneratedPlan = () => {
-    if (!plannedEvent || !generatedPlan) return;
-    const eventId = plannedEvent.id;
-    const restoreEventId = returnToDetailEventId;
-    acceptPlan.mutate(
-      { eventId, candidateId: generatedPlan.candidateId },
-      {
-        onSuccess: ({ itemIds, outfit }) => {
-          // Optimistically apply the new outfit so the list and the restored
-          // detail modal show the assigned items immediately (no empty-state flash
-          // before the query invalidation refetch lands).
-          queryClient.setQueryData<Event[]>(EVENTS_QUERY_KEY, (old) =>
-            old?.map((e) => (e.id === eventId ? { ...e, itemIds, outfitId: outfit.id } : e)) ?? old,
-          );
-          setGeneratedPlan(null);
-          setPlannedEvent(null);
-          setReturnToDetailEventId(null);
-          restoreDetailAfterChildClose(restoreEventId);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-        },
-        onError: (err: any) => {
-          Alert.alert('Could not save outfit', err?.response?.data?.message ?? 'Please try again.');
-        },
-      },
-    );
-  };
-
-  const openChangeLookMenu = (event: Event) => {
-    const generateAnother = () => {
-      void planOutfitForEvent(event, undefined, true);
-    };
-    const chooseSavedOutfit = () => openOutfitPicker(event, true);
-    const editPieces = () => openItemPicker(event, true);
-
-    if (process.env.EXPO_OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          title: event.title,
-          message: 'How would you like to change this look?',
-          options: ['Cancel', 'Generate another', 'Choose saved outfit', 'Edit pieces'],
-          cancelButtonIndex: 0,
-        },
-        (index) => {
-          if (index === 1) generateAnother();
-          if (index === 2) chooseSavedOutfit();
-          if (index === 3) editPieces();
-        },
-      );
-      return;
-    }
-
-    Alert.alert(event.title, 'How would you like to change this look?', [
-      { text: 'Generate another', onPress: generateAnother },
-      { text: 'Choose saved outfit', onPress: chooseSavedOutfit },
-      { text: 'Edit pieces', onPress: editPieces },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  };
-
   const handleSelectDate = (s: string) => {
     setSelectedDate((prev) => (prev === s ? null : s));
   };
 
-  // Arriving from a deep link (e.g. an event card on Home): focus that event's
-  // day, scroll the week strip to it, and open its detail — rather than dumping
-  // the user on an unfiltered calendar having lost what they tapped.
+  // Arriving from a deep link or a child screen: focus that event's day, scroll
+  // the week strip to it, and optionally reopen its detail sheet.
   const paramEventId = route.params?.eventId;
   const paramDate = route.params?.date;
+  const paramOpenDetail = route.params?.openDetail;
   useEffect(() => {
     if (paramEventId == null && !paramDate) return;
 
-    const clearParams = () => navigation.setParams({ eventId: undefined, date: undefined });
+    const clearParams = () => navigation.setParams({ eventId: undefined, date: undefined, openDetail: undefined });
 
     if (paramEventId != null) {
       const target = events.find((event) => event.id === paramEventId);
@@ -563,13 +438,13 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
       const eventDate = new Date(target.date);
       setSelectedDate(toDateStr(eventDate));
       setWeekOffset(weekOffsetFor(eventDate));
-      setDetailEvent(target);
+      if (paramOpenDetail !== false) setDetailEvent(target);
     } else if (paramDate) {
       setSelectedDate(paramDate);
       setWeekOffset(weekOffsetFor(new Date(`${paramDate}T00:00:00`)));
     }
     clearParams();
-  }, [paramEventId, paramDate, events, isLoading, navigation]);
+  }, [paramEventId, paramDate, paramOpenDetail, events, isLoading, navigation]);
 
   // A wear log is a date-stamped record, so the calendar is its natural home.
   // Logging from a selected day pre-fills that date; the header logs today.
@@ -723,11 +598,10 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
             allItems={allItems}
             outfit={item.event.outfitId == null ? null : outfitsById.get(item.event.outfitId) ?? null}
             weatherFallback={activeLocation}
-            isPremium={isPremium}
             onPress={() => setDetailEvent(item.event)}
-            onPlanOutfit={() => planOutfitForEvent(item.event)}
+            onPlanOutfit={() => openStylistForEvent(item.event, 'calendar_hero')}
             onOpenOutfit={() => openAssignedOutfit(item.event)}
-            isPlanning={generatePlan.isPending && plannedEvent?.id === item.event.id}
+            isPlanning={false}
           />
         );
       case 'section-heading':
@@ -889,13 +763,9 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
         onAssign={(ev) => openItemPicker(ev, true)}
         onChooseOutfit={(ev) => openOutfitPicker(ev, true)}
         onOpenOutfit={(ev) => openAssignedOutfit(ev, true)}
-        onChangeLook={openChangeLookMenu}
         allItems={allItems}
-        onPlanOutfit={(event) => planOutfitForEvent(event, undefined, true)}
-        isPlanning={generatePlan.isPending && plannedEvent?.id === detailEvent?.id}
         onOpenStylist={(event) => openStylistForEvent(event, 'event_detail')}
         weatherFallback={activeLocation}
-        isPremium={isPremium}
         outfit={detailEvent?.outfitId == null ? null : outfitsById.get(detailEvent.outfitId) ?? null}
       />
       <EventFormModal
@@ -917,26 +787,6 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
       <CalendarSyncSheet
         visible={syncVisible}
         onClose={() => setSyncVisible(false)}
-      />
-      <OutfitGeneratedSheet
-        result={generatedPlan}
-        allItems={allItems}
-        onDone={() => {
-          const restoreEventId = returnToDetailEventId;
-          setGeneratedPlan(null);
-          setPlannedEvent(null);
-          setReturnToDetailEventId(null);
-          restoreDetailAfterChildClose(restoreEventId);
-        }}
-        onAccept={acceptGeneratedPlan}
-        onTryAnother={() => {
-          if (plannedEvent && generatedPlan) {
-            planOutfitForEvent(plannedEvent, generatedPlan.candidateId);
-          }
-        }}
-        isAccepting={acceptPlan.isPending}
-        isRegenerating={generatePlan.isPending}
-        hasCurrentOutfit={(plannedEvent?.itemIds ?? []).length > 0}
       />
     </View>
   );
@@ -1051,10 +901,12 @@ const styles = StyleSheet.create({
   eventOccasion: { fontSize: typography.size.xs, color: colors.primary, fontWeight: typography.weight.medium, flexShrink: 0 },
   eventLoc: { fontSize: typography.size.xs, color: colors.mutedForeground, flex: 1 },
   eventReadiness: {
-    minWidth: 70,
-    alignItems: 'flex-end',
+    minWidth: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
+    gap: 4,
+    paddingLeft: spacing.sm,
   },
   eventLookButton: {
     minWidth: 82,
@@ -1070,8 +922,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.semibold,
   },
   needsOutfitIcon: {
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: colors.surfaceSelected,
+    width: 16, height: 16,
     alignItems: 'center', justifyContent: 'center',
   },
   readinessText: { fontSize: 10, color: colors.primary, fontWeight: typography.weight.semibold },

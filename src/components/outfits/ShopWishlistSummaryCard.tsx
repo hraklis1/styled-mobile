@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { WishlistEntry } from '../../lib/wishlist';
+import { getWishlistRecommendationType } from '../../lib/wishlistType';
 import { WishlistOutfitPreview } from './WishlistOutfitPreview';
 import { colors, radii, spacing, typography } from '../../theme';
 import { EditorialCardMeta } from '../primitives/Editorial';
@@ -13,12 +14,15 @@ type Props = {
 
 export function ShopWishlistSummaryCard({ entry, onPress, onMore }: Props) {
   const { outfit, eventContext } = entry;
+  const recommendationType = getWishlistRecommendationType(entry);
   const brands = [...new Set(outfit.items.map((item) => item.brand?.trim()).filter(Boolean))];
   const context = eventContext?.title ?? outfit.city?.trim();
   const savedDate = new Date(entry.savedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const itemLabel = recommendationType === 'look' ? `${outfit.items.length} ${outfit.items.length === 1 ? 'item' : 'items'}`
+    : recommendationType === 'piece' ? '1 piece' : `${outfit.items.length} options`;
   const accessibilityLabel = [
     outfit.intro,
-    `${outfit.items.length} ${outfit.items.length === 1 ? 'item' : 'items'}`,
+    itemLabel,
     outfit.totalBudget,
     context,
   ].filter(Boolean).join(', ');
@@ -29,7 +33,7 @@ export function ShopWishlistSummaryCard({ entry, onPress, onMore }: Props) {
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityHint="Opens outfit details"
+      accessibilityHint={`Opens ${recommendationType === 'look' ? 'look' : recommendationType === 'piece' ? 'piece' : 'list'} details`}
     >
       <WishlistOutfitPreview entry={entry} style={styles.preview} />
       <View style={styles.content}>
@@ -62,7 +66,7 @@ export function ShopWishlistSummaryCard({ entry, onPress, onMore }: Props) {
         <View style={styles.metaRow}>
           <Text style={styles.budget} numberOfLines={1}>{outfit.totalBudget}</Text>
           <Text style={styles.meta}>
-            {outfit.items.length} {outfit.items.length === 1 ? 'item' : 'items'} · {savedDate}
+            {itemLabel} · {savedDate}
           </Text>
         </View>
       </View>

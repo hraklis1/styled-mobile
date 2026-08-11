@@ -72,6 +72,7 @@ interface LocationAutocompleteInputProps {
   containerStyle?: StyleProp<ViewStyle>;
   autoFocus?: boolean;
   showUseMyLocation?: boolean;
+  dropdownPlacement?: 'overlay' | 'inline';
 }
 
 export function LocationAutocompleteInput({
@@ -82,6 +83,7 @@ export function LocationAutocompleteInput({
   containerStyle,
   autoFocus,
   showUseMyLocation = true,
+  dropdownPlacement = 'overlay',
 }: LocationAutocompleteInputProps) {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [searching, setSearching] = useState(false);
@@ -208,7 +210,7 @@ export function LocationAutocompleteInput({
 
       {showDropdown && (
         <ScrollView
-          style={styles.dropdown}
+          style={dropdownPlacement === 'inline' ? styles.inlineDropdown : styles.dropdown}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           nestedScrollEnabled
@@ -279,6 +281,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
+  },
+  inlineDropdown: {
+    maxHeight: 200,
+    marginTop: spacing.xs,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    overflow: 'hidden',
   },
   suggestion: {
     flexDirection: 'row',

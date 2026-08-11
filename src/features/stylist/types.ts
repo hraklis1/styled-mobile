@@ -2,7 +2,7 @@ import type { ShopOutfit } from '../../types/shop';
 
 export type StylistRole = 'user' | 'assistant';
 
-export type StylistMode = 'from_closet' | 'shop_new' | 'advice' | 'trip';
+export type StylistMode = 'from_closet' | 'event_plan' | 'shop_new' | 'shop_piece' | 'shop_list' | 'advice' | 'trip';
 
 export type StylistRenderType =
   | 'text'
@@ -47,6 +47,15 @@ export type StylistTripPlanData = {
   pending?: boolean;
 };
 
+export type StylistEventPlanData = {
+  candidateId: string;
+  outfitName: string;
+  stylistNotes: string | null;
+  itemIds: number[];
+  missingEssentials: StylistMissingEssential[];
+  recommendationId: number | null;
+};
+
 export type StylistBaseMessage = {
   id: string;
   role: StylistRole;
@@ -74,6 +83,7 @@ export type StylistAssistantMessage = StylistBaseMessage & {
   lookName?: string;
   missingEssentials?: StylistMissingEssential[];
   tripPlan?: StylistTripPlanData;
+  eventPlan?: StylistEventPlanData;
   recId?: number;
 };
 
@@ -185,6 +195,7 @@ export type StylistAskDoneEvent = {
   } | null;
   shopOutfit?: ShopOutfit | null;
   tripPlan?: StylistTripPlanData | null;
+  eventPlan?: StylistEventPlanData | null;
   mode?: StylistMode;
   recId?: number | null;
   conversationId?: number | null;

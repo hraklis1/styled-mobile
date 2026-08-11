@@ -1,4 +1,5 @@
 import type { WishlistEntry } from './wishlist';
+import { getWishlistRecommendationType } from './wishlistType';
 
 export function getWishlistContext(entry: WishlistEntry): string | undefined {
   return entry.eventContext?.title?.trim() || entry.outfit.city?.trim() || undefined;
@@ -17,12 +18,16 @@ export function getWishlistItemSummary(entry: WishlistEntry): string {
 
 export function getWishlistTitle(entry: WishlistEntry): string {
   const firstItemName = entry.outfit.items.find((item) => item.name?.trim())?.name.trim();
-  return entry.outfit.intro?.trim() || firstItemName || getWishlistContext(entry) || 'Saved outfit';
+  const type = getWishlistRecommendationType(entry);
+  const fallback = type === 'piece' ? 'Saved piece' : type === 'list' ? 'Saved list' : 'Saved look';
+  return entry.outfit.intro?.trim() || firstItemName || getWishlistContext(entry) || fallback;
 }
 
 export function getWishlistMeta(entry: WishlistEntry): string {
   const count = entry.outfit.items.length;
-  return [`${count} ${count === 1 ? 'item' : 'items'}`, entry.outfit.totalBudget?.trim()].filter(Boolean).join(' · ');
+  const type = getWishlistRecommendationType(entry);
+  const countLabel = type === 'piece' ? '1 piece' : type === 'list' ? `${count} ${count === 1 ? 'option' : 'options'}` : `${count} ${count === 1 ? 'item' : 'items'}`;
+  return [countLabel, entry.outfit.totalBudget?.trim()].filter(Boolean).join(' · ');
 }
 
 export function getWishlistSearchText(entry: WishlistEntry): string {
@@ -43,4 +48,9 @@ export function getWishlistAccessibilityLabel(entry: WishlistEntry): string {
     getWishlistMeta(entry),
     getWishlistContext(entry),
   ].filter(Boolean).join(', ');
+}
+
+export function getWishlistTypeLabel(entry: WishlistEntry): string {
+  const type = getWishlistRecommendationType(entry);
+  return type === 'piece' ? 'Saved piece' : type === 'list' ? 'Saved list' : 'Saved look';
 }

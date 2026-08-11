@@ -34,9 +34,15 @@ export async function addOutfitToWishlist(
     id: newWishlistId(),
     savedAt: new Date().toISOString(),
     outfit,
+    recommendationType: outfit.recommendationType ?? 'look',
     ...(eventContext ? { eventContext } : {}),
   };
-  await api.post('/api/wishlist', { id: entry.id, outfit, eventContext: eventContext ?? null });
+  await api.post('/api/wishlist', {
+    id: entry.id,
+    outfit,
+    recommendationType: entry.recommendationType,
+    eventContext: eventContext ?? null,
+  });
   queryClient.setQueryData<WishlistEntry[]>(WISHLIST_QUERY_KEY, (old = []) => [entry, ...old]);
   return entry;
 }

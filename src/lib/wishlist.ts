@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { ShopOutfit } from '../types/shop';
+import type { ShopOutfit, ShopRecommendationType } from '../types/shop';
+export { getWishlistRecommendationType } from './wishlistType';
 
 const WISHLIST_KEY = 'styled_wishlist';
 
@@ -7,6 +8,8 @@ export type WishlistEntry = {
   id: string;
   savedAt: string;
   outfit: ShopOutfit;
+  /** Optional for legacy records created before semantic shopping types existed. */
+  recommendationType?: ShopRecommendationType;
   /** Set when saved from the stylist while planning a specific calendar event. */
   eventContext?: { id: number; title: string } | null;
 };

@@ -25,6 +25,8 @@ export type AppTabParamList = {
     eventId?: number;
     /** ISO `yyyy-mm-dd` to select on arrival. Implied by `eventId`. */
     date?: string;
+    /** When false, focus the event's day without opening the detail sheet. */
+    openDetail?: boolean;
   } | undefined;
 };
 
@@ -37,7 +39,12 @@ export type ClosetStackParamList = {
     scanImageUrl?: string;
   };
   ClosetRefresh: undefined;
-  OutfitDetail: { outfitId: number; returnTo?: 'Calendar' | 'Home' };
+  OutfitDetail: {
+    outfitId: number;
+    returnTo?: 'Calendar' | 'Home';
+    returnToEventId?: number;
+    returnToEventDetail?: boolean;
+  };
   BoardDetail: { boardId: number; organize?: boolean; editCover?: boolean };
 };
 
@@ -48,7 +55,8 @@ export type HomeStackParamList = {
   Profile: undefined;
 };
 
-export type ShopSection = 'brief' | 'shortlist' | 'saved-looks';
+export type SavedShoppingTab = 'looks' | 'pieces' | 'lists';
+export type ShopSection = 'brief' | 'shortlist' | 'saved-looks' | 'saved-shopping';
 
 // Shop nested stack (wishlist + shopping tools)
 export type ShopStackParamList = {
@@ -59,6 +67,7 @@ export type ShopStackParamList = {
     selectedId?: string;
     returnTo?: 'Home' | 'Closet';
   } | undefined;
+  SavedShopping: { tab?: SavedShoppingTab; selectedId?: string } | undefined;
   SavedLooks: { selectedId?: string } | undefined;
   ShoppingGallery: {
     focusGroupId?: string;
@@ -103,6 +112,7 @@ export type ShopOverviewScreenProps = CompositeScreenProps<
   BottomTabScreenProps<AppTabParamList>
 >;
 export type SavedLooksScreenProps = NativeStackScreenProps<ShopStackParamList, 'SavedLooks'>;
+export type SavedShoppingScreenProps = NativeStackScreenProps<ShopStackParamList, 'SavedShopping'>;
 export type ShoppingCameraScreenProps = NativeStackScreenProps<ShopStackParamList, 'ShoppingCamera'>;
 export type ShoppingGalleryScreenProps = NativeStackScreenProps<ShopStackParamList, 'ShoppingGallery'>;
 export type ShoppingHaulDetailScreenProps = NativeStackScreenProps<ShopStackParamList, 'ShoppingHaulDetail'>;

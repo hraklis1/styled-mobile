@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from './api';
 import { queryClient } from './queryClient';
 import { loadLocalWishlist, type WishlistEntry } from './wishlist';
+import { getWishlistRecommendationType } from './wishlistType';
 import { WISHLIST_QUERY_KEY } from '../hooks/useWishlist';
 
 const MIGRATED_FLAG = 'styled_wishlist_migrated';
@@ -34,6 +35,7 @@ export async function syncLocalWishlistToServer(): Promise<void> {
         await api.post('/api/wishlist', {
           id: entry.id,
           outfit: entry.outfit,
+          recommendationType: getWishlistRecommendationType(entry),
           eventContext: entry.eventContext ?? null,
         });
       } catch {

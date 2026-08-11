@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  ActivityIndicator,
   ActionSheetIOS,
   Alert,
   Linking,
@@ -24,8 +23,9 @@ import { colors, spacing, typography, radii } from '../../theme';
 import type { Item } from '../../types/item';
 import type { Event } from '../../types/event';
 import type { Outfit } from '../../types/outfit';
-import { getEventItemsActionLabel } from './calendarPlanning';
+import { getEventItemsActionLabel, getEventPlanActionLabel } from './calendarPlanning';
 import { presentCalendarEvent, presentEventNotes } from './calendar-presentation';
+import { PressableScale } from '../primitives/PressableScale';
 
 const WEATHER_ICONS: Record<WeatherCondition, keyof typeof Ionicons.glyphMap> = {
   sunny: 'sunny-outline',
@@ -43,13 +43,9 @@ export function EventDetailModal({
   onAssign,
   onChooseOutfit,
   onOpenOutfit,
-  onChangeLook,
   allItems,
-  onPlanOutfit,
-  isPlanning,
   onOpenStylist,
   weatherFallback,
-  isPremium,
   outfit,
 }: {
   event: Event | null;
@@ -60,14 +56,10 @@ export function EventDetailModal({
   onAssign: (ev: Event) => void;
   onChooseOutfit: (ev: Event) => void;
   onOpenOutfit: (ev: Event) => void;
-  onChangeLook: (ev: Event) => void;
   allItems: Item[];
   outfit: Outfit | null;
-  onPlanOutfit: (event: Event) => void;
-  isPlanning: boolean;
   onOpenStylist: (event: Event) => void;
   weatherFallback: StylingLocationContext | null;
-  isPremium: boolean;
 }) {
   const eventDateStr = event ? event.date.slice(0, 10) : null;
   const forecast = useEventWeatherForecast(
@@ -137,7 +129,7 @@ export function EventDetailModal({
         <ScrollView contentContainerStyle={s.content} contentInsetAdjustmentBehavior="automatic" showsVerticalScrollIndicator={false}>
           <View style={s.titleBlock}>
             <Text selectable style={s.title}>{event.title}</Text>
-            <View style={[s.readinessBadge, hasOutfit && s.readinessBadgeReady]}>
+            <View style={s.readinessBadge}>
               <Ionicons
                 name={hasOutfit ? 'checkmark' : 'sparkles-outline'}
                 size={11}
@@ -224,27 +216,7 @@ export function EventDetailModal({
             </View>
           ) : null}
 
-          {isPlanning ? (
-            <Animated.View
-              style={s.planningCard}
-              entering={FadeInDown.duration(180)}
-              exiting={FadeOutUp.duration(140)}
-              accessible
-              accessibilityRole="progressbar"
-              accessibilityLabel="Styling your outfit"
-              accessibilityLiveRegion="polite"
-            >
-              <View style={s.planningSpinner}>
-                <ActivityIndicator size="small" color={colors.primary} />
-              </View>
-              <View style={s.planningCopy}>
-                <Text style={s.planningTitle}>Styling your outfit</Text>
-                <Text style={s.planningText}>
-                  Considering the occasion, forecast, and pieces in your closet…
-                </Text>
-              </View>
-            </Animated.View>
-          ) : hasOutfit ? (
+          {hasOutfit ? (
             <View style={[s.outfitCard, s.outfitCardReady]}>
               <View style={s.outfitHeader}>
                 <View>
@@ -255,10 +227,9 @@ export function EventDetailModal({
                   <Ionicons name="checkmark" size={14} color={colors.success} />
                 </View>
               </View>
-              <TouchableOpacity
-                style={s.lookPreviewButton}
+              <PressableScale
+                contentStyle={s.lookPreviewButton}
                 onPress={() => onOpenOutfit(event)}
-                activeOpacity={0.82}
                 disabled={event.outfitId == null}
                 accessibilityRole={event.outfitId == null ? undefined : 'button'}
                 accessibilityLabel={event.outfitId == null
@@ -287,7 +258,7 @@ export function EventDetailModal({
                     </View>
                   ) : null}
                 </View>
-              </TouchableOpacity>
+              </PressableScale>
             </View>
           ) : (
             <View style={[s.outfitCard, s.outfitCardEmpty]}>
@@ -295,70 +266,48 @@ export function EventDetailModal({
                 <Ionicons name="sparkles-outline" size={19} color={colors.primary} />
               </View>
               <View style={{ flex: 1, gap: 2 }}>
-                <Text style={s.emptyOutfitTitle}>Ready when you are</Text>
-                <Text style={s.outfitSubtext}>Build a look from your closet, the occasion, and the forecast.</Text>
+                <Text style={s.emptyOutfitTitle}>Ready to plan</Text>
+                <Text style={s.outfitSubtext}>Styled will consider your closet, the occasion, and the forecast.</Text>
               </View>
             </View>
           )}
         </ScrollView>
 
         <View style={s.actions}>
-          <TouchableOpacity
-            style={[s.generateBtn, isPlanning && s.generateBtnDisabled]}
-            onPress={() => hasOutfit ? onChangeLook(event) : onPlanOutfit(event)}
-            disabled={isPlanning}
-            activeOpacity={0.85}
+          <PressableScale
+            contentStyle={s.stylistBtn}
+            onPress={() => onOpenStylist(event)}
             accessibilityRole="button"
-            accessibilityLabel={hasOutfit
-              ? `Change look for ${event.title}`
-              : `Generate outfit for ${event.title}${isPremium ? '' : ', Premium feature'}`}
-            accessibilityState={{ disabled: isPlanning, busy: isPlanning }}
+            accessibilityLabel={getEventPlanActionLabel(hasOutfit)}
           >
-            {isPlanning ? (
-              <ActivityIndicator size="small" color={colors.white} />
-            ) : (
-              <Ionicons name={hasOutfit ? 'options-outline' : 'sparkles-outline'} size={18} color={colors.white} />
-            )}
-            <Text style={s.generateBtnText}>
-              {isPlanning ? 'Planning…' : hasOutfit ? 'Change look' : 'Generate outfit'}
-            </Text>
-            {!isPremium && !hasOutfit && !isPlanning ? (
-              <View style={s.proPill}>
-                <Text style={s.proPillText}>PRO</Text>
-              </View>
-            ) : null}
-          </TouchableOpacity>
-          <TouchableOpacity style={s.stylistBtn} onPress={() => onOpenStylist(event)} activeOpacity={0.8}>
-            <Ionicons name="chatbubble-ellipses-outline" size={17} color={colors.primary} />
-            <Text style={s.stylistBtnText}>Ask stylist about this</Text>
-          </TouchableOpacity>
+            <Ionicons name="sparkles-outline" size={18} color={colors.white} />
+            <Text style={s.stylistBtnText}>{getEventPlanActionLabel(hasOutfit)}</Text>
+          </PressableScale>
 
-          {!hasOutfit ? (
-            <>
-              <TouchableOpacity
-                style={s.manualToggle}
-                onPress={() => setManualExpanded((current) => !current)}
-                activeOpacity={0.75}
-                accessibilityRole="button"
-                accessibilityState={{ expanded: manualExpanded }}
-              >
-                <Text style={s.manualToggleText}>Choose manually</Text>
-                <Ionicons name={manualExpanded ? 'chevron-up' : 'chevron-down'} size={14} color={colors.mutedForeground} />
-              </TouchableOpacity>
-              {manualExpanded ? (
-                <Animated.View style={s.actionRow} entering={FadeInDown.duration(180)} exiting={FadeOutUp.duration(140)}>
-                  <TouchableOpacity style={s.assignBtn} onPress={() => onChooseOutfit(event)} activeOpacity={0.8}>
-                    <Ionicons name="albums-outline" size={18} color={colors.foreground} />
-                    <Text style={s.assignBtnText}>Choose outfit</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={s.assignBtn} onPress={() => onAssign(event)} activeOpacity={0.8}>
-                    <Ionicons name="shirt-outline" size={18} color={colors.foreground} />
-                    <Text style={s.assignBtnText}>{getEventItemsActionLabel(hasOutfit)}</Text>
-                  </TouchableOpacity>
-                </Animated.View>
-              ) : null}
-            </>
-          ) : null}
+          <>
+            <PressableScale
+              contentStyle={s.manualToggle}
+              onPress={() => setManualExpanded((current) => !current)}
+              haptic={false}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: manualExpanded }}
+            >
+              <Text style={s.manualToggleText}>Choose manually</Text>
+              <Ionicons name={manualExpanded ? 'chevron-up' : 'chevron-down'} size={14} color={colors.mutedForeground} />
+            </PressableScale>
+            {manualExpanded ? (
+              <Animated.View style={s.actionRow} entering={FadeInDown.duration(180)} exiting={FadeOutUp.duration(140)}>
+                <PressableScale style={s.assignBtnOuter} contentStyle={s.assignBtn} onPress={() => onChooseOutfit(event)}>
+                  <Ionicons name="albums-outline" size={18} color={colors.foreground} />
+                  <Text style={s.assignBtnText}>Choose outfit</Text>
+                </PressableScale>
+                <PressableScale style={s.assignBtnOuter} contentStyle={s.assignBtn} onPress={() => onAssign(event)}>
+                  <Ionicons name="shirt-outline" size={18} color={colors.foreground} />
+                  <Text style={s.assignBtnText}>{getEventItemsActionLabel(hasOutfit)}</Text>
+                </PressableScale>
+              </Animated.View>
+            ) : null}
+          </>
         </View>
       </View>
     </Modal>
@@ -393,11 +342,7 @@ const s = StyleSheet.create({
     alignSelf: 'flex-start',
     minHeight: 26,
     flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radii.full,
-    backgroundColor: colors.surfaceSelected,
   },
-  readinessBadgeReady: { backgroundColor: '#E8F0EA' },
   readinessBadgeText: { fontSize: 10, color: colors.primary, fontWeight: typography.weight.semibold },
   readinessBadgeTextReady: { color: colors.success },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
@@ -461,15 +406,6 @@ const s = StyleSheet.create({
     borderTopColor: colors.border,
     backgroundColor: colors.background,
   },
-  generateBtn: {
-    minHeight: 50,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    borderRadius: radii.full,
-    backgroundColor: colors.primary,
-  },
   stylistBtn: {
     minHeight: 46,
     flexDirection: 'row',
@@ -477,28 +413,9 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
     borderRadius: radii.full,
-    backgroundColor: colors.surfaceSelected,
-  },
-  proPill: {
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    borderRadius: radii.full,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 1,
-    marginLeft: spacing.xs,
-  },
-  proPillText: {
-    fontSize: 10,
-    fontWeight: typography.weight.bold,
-    color: colors.white,
-    letterSpacing: 0.5,
+    backgroundColor: colors.primary,
   },
   stylistBtnText: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-    color: colors.primary,
-  },
-  generateBtnDisabled: { opacity: 0.7 },
-  generateBtnText: {
     fontSize: typography.size.sm,
     fontWeight: typography.weight.semibold,
     color: colors.white,
@@ -515,7 +432,6 @@ const s = StyleSheet.create({
   },
   manualToggleText: { fontSize: typography.size.xs, color: colors.mutedForeground, fontWeight: typography.weight.medium },
   assignBtn: {
-    flex: 1,
     flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
     justifyContent: 'center',
     minHeight: 46,
@@ -524,6 +440,7 @@ const s = StyleSheet.create({
     backgroundColor: colors.surfaceElevated,
     borderCurve: 'continuous',
   },
+  assignBtnOuter: { flex: 1 },
   assignBtnText: { fontSize: typography.size.sm, color: colors.foreground, fontWeight: typography.weight.medium },
   outfitCard: {
     backgroundColor: colors.surfaceSubtle,
@@ -535,40 +452,16 @@ const s = StyleSheet.create({
     borderColor: colors.border,
     borderCurve: 'continuous',
   },
-  planningCard: {
-    minHeight: 92,
+  outfitCardReady: { backgroundColor: colors.card },
+  outfitCardEmpty: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.surfaceSelected,
-    borderRadius: radii.xl,
-    padding: spacing.lg,
-    marginTop: spacing.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    borderCurve: 'continuous',
+    paddingHorizontal: 0,
+    paddingVertical: spacing.sm,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    borderRadius: 0,
   },
-  planningSpinner: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surfaceElevated,
-  },
-  planningCopy: { flex: 1, gap: 3 },
-  planningTitle: {
-    fontSize: typography.size.sm,
-    color: colors.foreground,
-    fontWeight: typography.weight.semibold,
-  },
-  planningText: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-    lineHeight: 17,
-  },
-  outfitCardReady: { backgroundColor: colors.card },
-  outfitCardEmpty: { flexDirection: 'row', alignItems: 'center' },
   outfitHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   outfitLabel: {
     fontSize: typography.size.xs, fontWeight: typography.weight.semibold,

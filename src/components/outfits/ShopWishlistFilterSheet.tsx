@@ -7,7 +7,7 @@ import {
   BottomSheetScrollView,
 } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { WishlistFilterOptions, WishlistSortOrder } from '../../lib/shopWishlistFilters';
+import type { WishlistFilterOptions, WishlistScope, WishlistSortOrder } from '../../lib/shopWishlistFilters';
 import { colors, radii, spacing, typography } from '../../theme';
 
 type Props = {
@@ -15,11 +15,14 @@ type Props = {
   categories: string[];
   cities: string[];
   brands: string[];
+  scope: WishlistScope;
   sortOrder: WishlistSortOrder;
   resultCount: number;
+  resultNoun: 'look' | 'piece' | 'list';
   onToggleCategory: (value: string) => void;
   onToggleCity: (value: string) => void;
   onToggleBrand: (value: string) => void;
+  onScopeChange: (value: WishlistScope) => void;
   onSortChange: (value: WishlistSortOrder) => void;
   onClear: () => void;
   onClose: () => void;
@@ -61,11 +64,14 @@ export function ShopWishlistFilterSheet({
   categories,
   cities,
   brands,
+  scope,
   sortOrder,
   resultCount,
+  resultNoun,
   onToggleCategory,
   onToggleCity,
   onToggleBrand,
+  onScopeChange,
   onSortChange,
   onClear,
   onClose,
@@ -73,7 +79,7 @@ export function ShopWishlistFilterSheet({
   const ref = useRef<BottomSheetModal>(null);
   const insets = useSafeAreaInsets();
   const snapPoints = useMemo(() => ['90%'], []);
-  const hasFilters = categories.length + cities.length + brands.length > 0 || sortOrder !== 'newest';
+  const hasFilters = scope !== 'all' || categories.length + cities.length + brands.length > 0 || sortOrder !== 'newest';
 
   useEffect(() => { ref.current?.present(); }, []);
 
@@ -109,6 +115,30 @@ export function ShopWishlistFilterSheet({
         contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom + 84, 108) }]}
         showsVerticalScrollIndicator={false}
       >
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Context</Text>
+          <View style={styles.sortGroup}>
+            {([
+              ['all', 'All'],
+              ['event', 'For events'],
+              ['general', 'General'],
+            ] as const).map(([value, label]) => {
+              const active = scope === value;
+              return (
+                <TouchableOpacity
+                  key={value}
+                  style={[styles.sortChoice, active && styles.sortChoiceActive]}
+                  onPress={() => onScopeChange(value)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: active }}
+                >
+                  <Text style={[styles.sortText, active && styles.sortTextActive]}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Sort by</Text>
           <View style={styles.sortGroup}>
@@ -155,7 +185,7 @@ export function ShopWishlistFilterSheet({
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
         <TouchableOpacity style={styles.doneButton} onPress={() => ref.current?.dismiss()} activeOpacity={0.85}>
           <Text style={styles.doneText}>
-            Show {resultCount} {resultCount === 1 ? 'outfit' : 'outfits'}
+            Show {resultCount} {resultNoun}{resultCount === 1 ? '' : 's'}
           </Text>
         </TouchableOpacity>
       </View>

@@ -40,7 +40,7 @@ import { ClosetScreen } from '../screens/app/ClosetScreen';
 import { CalendarScreen } from '../screens/app/CalendarScreen';
 import { ProfileScreen } from '../screens/app/ProfileScreen';
 import { SuggestionsScreen } from '../screens/app/SuggestionsScreen';
-import { SavedLooksScreen } from '../screens/app/ShopScreen';
+import { SavedLooksScreen, SavedShoppingScreen } from '../screens/app/ShopScreen';
 import { ShopOverviewScreen } from '../screens/app/ShopOverviewScreen';
 import { ShoppingCameraScreen } from '../screens/app/ShoppingCameraScreen';
 import { ShoppingGalleryScreen } from '../screens/app/ShoppingGalleryScreen';
@@ -165,6 +165,7 @@ function ShopNavigator() {
   return (
     <ShopStack.Navigator screenOptions={{ headerShown: false }}>
       <ShopStack.Screen name="ShopMain" component={ShopOverviewScreen} />
+      <ShopStack.Screen name="SavedShopping" component={SavedShoppingScreen} />
       <ShopStack.Screen name="SavedLooks" component={SavedLooksScreen} />
       <ShopStack.Screen name="ShoppingGallery" component={ShoppingGalleryScreen} />
       <ShopStack.Screen
@@ -456,9 +457,9 @@ function AppTabNavigator() {
                   },
                   {
                     key: 'saved-looks',
-                    label: 'Saved Looks',
+                    label: 'Saved Shopping',
                     icon: 'heart-outline',
-                    onPress: () => navigation.navigate('Shop', { screen: 'SavedLooks' }),
+                    onPress: () => navigation.navigate('Shop', { screen: 'SavedShopping' }),
                   },
                   {
                     key: 'shopping-history',

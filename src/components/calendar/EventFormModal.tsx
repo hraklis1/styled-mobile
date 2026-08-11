@@ -208,7 +208,13 @@ export function EventFormModal({
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={s.scrollContent} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={s.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+            showsVerticalScrollIndicator={false}
+          >
             <View style={s.field}>
               <Text style={s.label}>Event Name</Text>
               <TextInput
@@ -236,7 +242,7 @@ export function EventFormModal({
                       value={formDate}
                       mode="date"
                       display="compact"
-                      onChange={(_, value) => { if (value) applyDate(value); }}
+                      onValueChange={(_, value) => { if (value) applyDate(value); }}
                       accentColor={colors.primary}
                       style={s.compactPicker}
                     />
@@ -260,7 +266,7 @@ export function EventFormModal({
                       mode="time"
                       display="compact"
                       minuteInterval={5}
-                      onChange={(_, value) => { if (value) applyTime(value); }}
+                      onValueChange={(_, value) => { if (value) applyTime(value); }}
                       accentColor={colors.primary}
                       style={s.compactPicker}
                     />
@@ -306,6 +312,7 @@ export function EventFormModal({
                 onChangeText={setLocation}
                 onSelect={setLocation}
                 placeholder="e.g. Downtown Seattle"
+                dropdownPlacement="inline"
               />
             </View>
 

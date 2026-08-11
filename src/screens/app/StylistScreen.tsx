@@ -26,6 +26,10 @@ export function StylistScreen() {
         openRequestId={1}
         embedded
         onClose={() => navigation.navigate('Home')}
+        onNavigateToCloset={(outfitId) => navigation.navigate('Closet', {
+          screen: 'OutfitDetail',
+          params: { outfitId },
+        })}
       />
     );
   }

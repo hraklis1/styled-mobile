@@ -21,6 +21,7 @@ import {
   buildShopStylistLaunch,
 } from '../../lib/shopDecisionWorkspace';
 import { buildShortlistSpotlight } from '../../lib/shortlistSpotlight';
+import { getWishlistRecommendationType } from '../../lib/wishlistType';
 import { track } from '../../lib/analytics';
 import { presentPaywall } from '../../lib/paywall';
 import { colors, radii, shadows, spacing, typography } from '../../theme';
@@ -41,7 +42,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
   const { openStylist } = useGlobalAIStylist();
   const { refetch: refetchItems } = useItems();
   const { data: remoteSnaps = [], refetch: refetchSnaps } = useShoppingSnaps();
-  const { data: savedLooks = [] } = useWishlist();
+  const { data: savedShopping = [] } = useWishlist();
   const pendingUploads = useShoppingSessionStore((state) => state.pendingUploads);
   const brief = useShoppingBrief(isPremium);
   const [refreshing, setRefreshing] = useState(false);
@@ -54,8 +55,8 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
         focusGroupId: route.params?.focusGroupId,
         returnTo: route.params?.returnTo,
       });
-    } else if (requestedSection === 'saved-looks') {
-      navigation.replace('SavedLooks', { selectedId: route.params?.selectedId });
+    } else if (requestedSection === 'saved-looks' || requestedSection === 'saved-shopping') {
+      navigation.replace('SavedShopping', { selectedId: route.params?.selectedId, tab: 'looks' });
     }
   }, [navigation, requestedSection, route.params?.catalogFilter, route.params?.focusGroupId, route.params?.returnTo, route.params?.selectedId]);
 
@@ -65,6 +66,9 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
   );
   const spotlight = useMemo(() => buildShortlistSpotlight(shoppingItems), [shoppingItems]);
   const activeFinds = spotlight.awaitingDecision;
+  const savedLookCount = savedShopping.filter((entry) => getWishlistRecommendationType(entry) === 'look').length;
+  const savedPieceCount = savedShopping.filter((entry) => getWishlistRecommendationType(entry) === 'piece').length;
+  const savedListCount = savedShopping.filter((entry) => getWishlistRecommendationType(entry) === 'list').length;
 
   useEffect(() => {
     if (!brief.data) return;
@@ -100,8 +104,14 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
 
   const askStylist = useCallback((query: string, mode: StylistMode = 'advice') => {
     track('shop_action_selected', { action: 'ask_stylist' });
-    openStylist(buildShopStylistLaunch(query, mode));
-  }, [openStylist]);
+    openStylist({
+      ...buildShopStylistLaunch(query, mode),
+      onNavigateToCloset: (outfitId) => navigation.navigate('Closet', {
+        screen: 'OutfitDetail',
+        params: { outfitId, returnTo: 'Home' },
+      }),
+    });
+  }, [navigation, openStylist]);
 
   const openHistory = useCallback((params?: { focusGroupId?: string; catalogFilter?: 'active' | 'all' }) => {
     track('shop_section_opened', { section: params?.focusGroupId ? 'candidate' : 'shopping_history' });
@@ -148,14 +158,14 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
             />
             <ShopDestinationRow
               icon="heart-outline"
-              title="Saved Looks"
-              description="Outfits your Stylist helped you keep for later."
-              meta={savedLooks.length > 0 ? `${savedLooks.length} saved look${savedLooks.length === 1 ? '' : 's'}` : 'Nothing saved yet'}
+              title="Saved Shopping"
+              description="Looks, pieces, and focused lists your Stylist helped you keep for later."
+              meta={savedShopping.length > 0 ? `${savedLookCount} look${savedLookCount === 1 ? '' : 's'} · ${savedPieceCount} piece${savedPieceCount === 1 ? '' : 's'} · ${savedListCount} list${savedListCount === 1 ? '' : 's'}` : 'Nothing saved yet'}
               onPress={() => {
-                track('shop_destination_opened', { destination: 'saved-looks' });
-                navigation.navigate('SavedLooks');
+                track('shop_destination_opened', { destination: 'saved-shopping' });
+                navigation.navigate('SavedShopping');
               }}
-              accessibilityLabel="Open Saved Looks"
+              accessibilityLabel="Open Saved Shopping"
             />
           </View>
         </EditorialSection>
@@ -196,7 +206,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
               icon="list-outline"
               title="Build a focused shopping list"
               description="Create a short, versatile list without duplicates."
-              onPress={() => askStylist('Build me a focused shopping list.', 'shop_new')}
+              onPress={() => askStylist('Build me a focused shopping list.', 'shop_list')}
             />
             <StylistActionRow
               icon="chatbubble-outline"

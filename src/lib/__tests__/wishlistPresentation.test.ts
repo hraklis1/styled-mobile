@@ -1,4 +1,5 @@
 import type { WishlistEntry } from '../wishlist';
+import { getWishlistRecommendationType } from '../wishlistType';
 import {
   getWishlistAccessibilityLabel,
   getWishlistBrands,
@@ -7,6 +8,7 @@ import {
   getWishlistMeta,
   getWishlistSearchText,
   getWishlistTitle,
+  getWishlistTypeLabel,
 } from '../wishlistPresentation';
 
 const entry: WishlistEntry = {
@@ -63,6 +65,43 @@ describe('wishlist presentation', () => {
     for (const term of ['polished', 'toronto', 'wedding', 'blazer', 'aritzia', 'outerwear', '$150']) {
       expect(searchText).toContain(term);
     }
+  });
+
+  it('keeps semantic shopping types distinct from legacy item-count fallbacks', () => {
+    const piece: WishlistEntry = {
+      id: 'piece',
+      savedAt: '2026-06-19T12:00:00.000Z',
+      recommendationType: 'piece',
+      outfit: {
+        intro: 'A merino sweater to consider',
+        city: 'Toronto',
+        totalBudget: '$120 CAD',
+        audioSummary: '',
+        items: [{ name: 'Merino sweater', category: 'Top', brand: 'COS', priceRange: '$120', whyItFitsYou: 'Adds useful texture', imageQuery: '' }],
+      },
+    };
+    const list: WishlistEntry = {
+      id: 'list',
+      savedAt: '2026-06-19T12:00:00.000Z',
+      recommendationType: 'list',
+      outfit: {
+        intro: 'Sweaters to compare',
+        city: 'Toronto',
+        totalBudget: '$100–$180 CAD',
+        audioSummary: '',
+        items: [
+          { name: 'Merino sweater', category: 'Top', brand: 'COS', priceRange: '$120', whyItFitsYou: 'Adds useful texture', imageQuery: '' },
+          { name: 'Cashmere sweater', category: 'Top', brand: 'Uniqlo', priceRange: '$160', whyItFitsYou: 'Soft neutral layer', imageQuery: '' },
+        ],
+      },
+    };
+
+    expect(getWishlistRecommendationType(piece)).toBe('piece');
+    expect(getWishlistTypeLabel(piece)).toBe('Saved piece');
+    expect(getWishlistMeta(piece)).toBe('1 piece · $120 CAD');
+    expect(getWishlistRecommendationType(list)).toBe('list');
+    expect(getWishlistTypeLabel(list)).toBe('Saved list');
+    expect(getWishlistMeta(list)).toBe('2 options · $100–$180 CAD');
   });
 
   it('falls back safely when an outfit has no products, images, intro, or event', () => {

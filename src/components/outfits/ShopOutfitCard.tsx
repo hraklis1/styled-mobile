@@ -95,6 +95,11 @@ export function ShopOutfitCard({ outfit, onRemove, onSave, saveLabel }: Props) {
 
   const city = outfit.city?.trim();
   const productWidth = Math.min(252, width - 72);
+  const defaultSaveLabel = outfit.recommendationType === 'piece'
+    ? 'Save this piece'
+    : outfit.recommendationType === 'list'
+      ? 'Save this list'
+      : 'Save this look';
 
   async function handleSave() {
     if (!onSave || saved || saving) return;
@@ -156,7 +161,7 @@ export function ShopOutfitCard({ outfit, onRemove, onSave, saveLabel }: Props) {
                 color={saved ? '#16A34A' : colors.mutedForeground}
               />
               <Text style={[styles.footerBtnText, saved && styles.footerBtnTextSaved]}>
-                {saved ? 'Saved' : saving ? 'Saving…' : saveLabel ?? 'Save'}
+                {saved ? 'Saved' : saving ? 'Saving…' : saveLabel ?? defaultSaveLabel}
               </Text>
             </Pressable>
           )}

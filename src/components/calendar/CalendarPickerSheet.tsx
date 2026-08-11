@@ -36,7 +36,7 @@ export function CalendarPickerSheet({
             value={local}
             mode={mode}
             display="spinner"
-            onChange={(_, d) => { if (d) setLocal(d); }}
+            onValueChange={(_, d) => { if (d) setLocal(d); }}
             style={{ height: 200 }}
           />
         </View>

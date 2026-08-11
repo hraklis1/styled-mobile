@@ -141,7 +141,7 @@ const overlayStyles = StyleSheet.create({
 });
 
 export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProps) {
-  const { outfitId, returnTo } = route.params;
+  const { outfitId, returnTo, returnToEventId, returnToEventDetail } = route.params;
   const { data: outfits = [] } = useOutfits();
   const { data: items = [] } = useItems();
   const { data: events = [] } = useEvents();
@@ -172,10 +172,15 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
     if (!returningToTab || !returnTo) return;
     const timeout = setTimeout(() => {
       navigation.reset({ index: 0, routes: [{ name: 'ClosetMain' }] });
-      navigation.dispatch(CommonActions.navigate({ name: returnTo }));
+      navigation.dispatch(CommonActions.navigate({
+        name: returnTo,
+        params: returnTo === 'Calendar' && returnToEventId != null
+          ? { eventId: returnToEventId, openDetail: returnToEventDetail }
+          : undefined,
+      }));
     }, 0);
     return () => clearTimeout(timeout);
-  }, [navigation, returningToTab, returnTo]);
+  }, [navigation, returningToTab, returnTo, returnToEventId, returnToEventDetail]);
 
   useEffect(() => {
     if (outfit) {
@@ -453,6 +458,7 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
           onPress={() => openStylist({
             initialQuery: `How can I improve my "${outfit.name}" outfit?`,
             source: 'outfit_detail',
+            onNavigateToCloset: (outfitId) => navigation.navigate('OutfitDetail', { outfitId }),
             context: {
               kind: 'outfit',
               outfitId: outfit.id,

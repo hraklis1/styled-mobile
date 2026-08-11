@@ -15,7 +15,9 @@ import { colors, spacing, typography, radii } from '../../theme';
 import type { Item } from '../../types/item';
 import type { Event } from '../../types/event';
 import type { Outfit } from '../../types/outfit';
+import { getEventPlanActionLabel } from './calendarPlanning';
 import { presentCalendarEvent } from './calendar-presentation';
+import { PressableScale } from '../primitives/PressableScale';
 
 const WEATHER_ICONS: Record<WeatherCondition, keyof typeof Ionicons.glyphMap> = {
   sunny: 'sunny-outline',
@@ -28,7 +30,6 @@ export function NextEventHero({
   event,
   allItems,
   weatherFallback,
-  isPremium,
   onPress,
   onPlanOutfit,
   onOpenOutfit,
@@ -39,7 +40,6 @@ export function NextEventHero({
   allItems: Item[];
   outfit: Outfit | null;
   weatherFallback: StylingLocationContext | null;
-  isPremium: boolean;
   onPress: () => void;
   onPlanOutfit: () => void;
   onOpenOutfit: () => void;
@@ -114,10 +114,9 @@ export function NextEventHero({
       </TouchableOpacity>
 
       {hasOutfit ? (
-        <TouchableOpacity
-          style={s.lookPreview}
+        <PressableScale
+          contentStyle={s.lookPreview}
           onPress={onOpenOutfit}
-          activeOpacity={0.8}
           accessibilityRole="button"
           accessibilityLabel={`${event.outfitId == null ? 'View details' : 'View outfit'} for ${event.title}, ${pieceCount} ${pieceCount === 1 ? 'piece' : 'pieces'}`}
         >
@@ -138,27 +137,26 @@ export function NextEventHero({
             <Text style={s.viewLookText}>{event.outfitId == null ? 'View details' : 'View outfit'}</Text>
             <Ionicons name="arrow-forward" size={14} color={colors.primary} />
           </View>
-        </TouchableOpacity>
+        </PressableScale>
       ) : (
         <View style={s.actionRow}>
           <View style={s.outfitStatus}>
             <View style={s.planIcon}>
-              <Ionicons name="sparkles-outline" size={15} color={colors.primary} />
+              <Ionicons name="sparkles-outline" size={14} color={colors.primary} />
             </View>
             <View style={s.outfitCopy}>
-              <Text style={s.outfitReady}>Needs an outfit</Text>
+              <Text style={s.outfitReady}>Needs outfit</Text>
               <Text style={s.outfitHint}>Plan from your wardrobe</Text>
             </View>
           </View>
-          <TouchableOpacity
-            style={[s.planBtn, isPlanning && s.planBtnDisabled]}
+          <PressableScale
+            contentStyle={[s.planBtn, isPlanning && s.planBtnDisabled]}
             onPress={onPlanOutfit}
             disabled={isPlanning}
-            activeOpacity={0.85}
             accessibilityRole="button"
             accessibilityLabel={isPlanning
               ? `Styling an outfit for ${event.title}`
-              : `Plan outfit for ${event.title}${isPremium ? '' : ', Premium feature'}`}
+              : `${getEventPlanActionLabel(false)} for ${event.title}`}
             accessibilityState={{ disabled: isPlanning, busy: isPlanning }}
           >
             {isPlanning ? (
@@ -166,13 +164,8 @@ export function NextEventHero({
             ) : (
               <Ionicons name="sparkles-outline" size={14} color={colors.white} />
             )}
-            <Text style={s.planBtnText}>{isPlanning ? 'Styling…' : 'Plan outfit'}</Text>
-            {!isPremium ? (
-              <View style={s.proPill}>
-                <Text style={s.proPillText}>PRO</Text>
-              </View>
-            ) : null}
-          </TouchableOpacity>
+            <Text style={s.planBtnText}>{isPlanning ? 'Styling…' : 'Ask Styled'}</Text>
+          </PressableScale>
         </View>
       )}
     </View>
@@ -226,9 +219,9 @@ const s = StyleSheet.create({
   },
   meta: { fontSize: typography.size.sm, color: colors.mutedForeground, fontWeight: typography.weight.medium },
 
-  metaDetails: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
-  detail: { flexDirection: 'row', alignItems: 'center', gap: 3, minWidth: 0 },
-  detailShrink: { flexShrink: 1 },
+  metaDetails: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, overflow: 'hidden' },
+  detail: { flexDirection: 'row', alignItems: 'center', gap: 3, minWidth: 0, flexShrink: 0 },
+  detailShrink: { flex: 1, flexShrink: 1 },
   detailText: {
     fontSize: 11, fontWeight: typography.weight.medium,
     color: colors.mutedForeground, textTransform: 'capitalize',
@@ -287,8 +280,7 @@ const s = StyleSheet.create({
   },
   outfitHint: { fontSize: 10, color: colors.mutedForeground },
   planIcon: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: colors.surfaceSelected,
+    width: 20, height: 20,
     alignItems: 'center', justifyContent: 'center',
   },
   planBtn: {
@@ -301,11 +293,4 @@ const s = StyleSheet.create({
   },
   planBtnDisabled: { opacity: 0.72 },
   planBtnText: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.white },
-  proPill: {
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    borderRadius: radii.full,
-    paddingHorizontal: spacing.xs + 1,
-    paddingVertical: 1,
-  },
-  proPillText: { fontSize: 9, fontWeight: typography.weight.bold, color: colors.white, letterSpacing: 0.5 },
 });
