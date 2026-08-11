@@ -108,15 +108,18 @@ const TAB_ICONS: Record<string, { default: keyof typeof Ionicons.glyphMap; selec
   Calendar: { default: 'calendar-outline', selected: 'calendar' },
 };
 
-const STYLIST_CARD_TRANSITION: NonNullable<BottomTabNavigationOptions['transitionSpec']> = {
+const STYLIST_SHEET_TRANSITION: NonNullable<BottomTabNavigationOptions['transitionSpec']> = {
   animation: 'timing',
   config: {
-    duration: 150,
+    duration: 260,
     easing: Easing.out(Easing.cubic),
   },
 };
 
-const stylistCardInterpolator: NonNullable<BottomTabNavigationOptions['sceneStyleInterpolator']> = ({ current }) => ({
+// Keep the center-tab Stylist transition visually aligned with the in-app
+// sheets: the scene fades as it moves vertically, and the same symmetric
+// interpolation is used when opening and returning to the previous tab.
+const stylistSheetInterpolator: NonNullable<BottomTabNavigationOptions['sceneStyleInterpolator']> = ({ current }) => ({
   sceneStyle: {
     opacity: current.progress.interpolate({
       inputRange: [-1, 0, 1],
@@ -126,13 +129,7 @@ const stylistCardInterpolator: NonNullable<BottomTabNavigationOptions['sceneStyl
       {
         translateY: current.progress.interpolate({
           inputRange: [-1, 0, 1],
-          outputRange: [16, 0, 16],
-        }),
-      },
-      {
-        scale: current.progress.interpolate({
-          inputRange: [-1, 0, 1],
-          outputRange: [0.98, 1, 0.98],
+          outputRange: [96, 0, 96],
         }),
       },
     ],
@@ -411,8 +408,8 @@ function AppTabNavigator() {
             tabBarAccessibilityLabel: 'Stylist',
             tabBarLabel: () => null,
             tabBarButton: (props) => <StylistTabButton {...props} />,
-            transitionSpec: STYLIST_CARD_TRANSITION,
-            sceneStyleInterpolator: stylistCardInterpolator,
+            transitionSpec: STYLIST_SHEET_TRANSITION,
+            sceneStyleInterpolator: stylistSheetInterpolator,
           }}
           listeners={({ navigation }) => ({
             tabPress: (event) => {
