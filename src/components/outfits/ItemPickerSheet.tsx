@@ -17,8 +17,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { itemCoverPresentation } from '../../lib/itemImage';
 import { colors, spacing, typography, radii } from '../../theme';
-import { OCCASION_LABELS, SEASON_LABELS } from '../../types/item';
-import type { Item, Occasion, Season } from '../../types/item';
+import { CATEGORY_LABELS, CATEGORY_ORDER, OCCASION_LABELS, SEASON_LABELS } from '../../types/item';
+import type { Item, ItemCategory, Occasion, Season } from '../../types/item';
 
 // ─── Shared filter-row helper ───────────────────────────────────────────────────
 
@@ -69,6 +69,8 @@ export function PickerFilterRow({
 
 type ItemPickerSheetProps = {
   visible: boolean;
+  /** Render inside an existing native modal instead of presenting another one. */
+  inline?: boolean;
   onClose: () => void;
   title: string;
   /** Candidate pool — parent pre-filters by category for swaps. */
@@ -82,6 +84,7 @@ type ItemPickerSheetProps = {
 
 export function ItemPickerSheet({
   visible,
+  inline = false,
   onClose,
   title,
   items,
@@ -93,11 +96,13 @@ export function ItemPickerSheet({
   const [search, setSearch] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [categoryFilters, setCategoryFilters] = useState<string[]>([]);
   const [colorFilters, setColorFilters] = useState<string[]>([]);
   const [seasonFilters, setSeasonFilters] = useState<string[]>([]);
   const [occasionFilters, setOccasionFilters] = useState<string[]>([]);
 
   const filterOptions = useMemo(() => ({
+    categories: CATEGORY_ORDER.filter((category) => items.some((item) => item.category === category)),
     colors: [...new Set(items
       .map((item) => item.colorNormalized ?? item.color)
       .filter((value): value is string => !!value))].sort(),
@@ -110,6 +115,7 @@ export function ItemPickerSheet({
     return items
       .filter((item) => {
         if (favoritesOnly && !item.isFavorite) return false;
+        if (categoryFilters.length > 0 && (!item.category || !categoryFilters.includes(item.category))) return false;
         const itemColor = item.colorNormalized ?? item.color;
         if (colorFilters.length > 0 && (!itemColor || !colorFilters.includes(itemColor))) return false;
         if (seasonFilters.length > 0 && !item.seasons?.some((value) => seasonFilters.includes(value))) return false;
@@ -142,6 +148,7 @@ export function ItemPickerSheet({
     items,
     search,
     favoritesOnly,
+    categoryFilters,
     colorFilters,
     seasonFilters,
     occasionFilters,
@@ -150,12 +157,14 @@ export function ItemPickerSheet({
 
   const activeFilterCount =
     Number(favoritesOnly) +
+    categoryFilters.length +
     colorFilters.length +
     seasonFilters.length +
     occasionFilters.length;
 
   const clearFilters = useCallback(() => {
     setFavoritesOnly(false);
+    setCategoryFilters([]);
     setColorFilters([]);
     setSeasonFilters([]);
     setOccasionFilters([]);
@@ -196,14 +205,8 @@ export function ItemPickerSheet({
     (screenWidth - PICKER_H_PAD * 2 - PICKER_GAP * (PICKER_COLS - 1)) / PICKER_COLS;
   const cardHeight = cardWidth * 1.3;
 
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={handleClose}
-    >
-      <SafeAreaView style={styles.modal} edges={['top', 'bottom']}>
+  const pickerContent = (
+    <SafeAreaView style={styles.modal} edges={['top', 'bottom']}>
         <View style={styles.header}>
           <TouchableOpacity
             onPress={handleClose}
@@ -288,6 +291,16 @@ export function ItemPickerSheet({
               </TouchableOpacity>
             </ScrollView>
 
+            {filterOptions.categories.length > 0 && (
+              <PickerFilterRow
+                label="Category"
+                values={filterOptions.categories}
+                selected={categoryFilters}
+                onToggle={(value) => toggleFilter(value, setCategoryFilters)}
+                getLabel={(value) => CATEGORY_LABELS[value as ItemCategory] ?? value}
+              />
+            )}
+
             {filterOptions.colors.length > 0 && (
               <PickerFilterRow
                 label="Color"
@@ -355,6 +368,9 @@ export function ItemPickerSheet({
                 style={[styles.pickerCard, { width: cardWidth }]}
                 onPress={() => handleSelect(item)}
                 activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={`Choose ${item.name}`}
+                accessibilityState={{ selected: isSelected }}
               >
                 <View style={[styles.pickerCardImage, { height: cardHeight }]}>
                   {imgUri ? (
@@ -387,7 +403,19 @@ export function ItemPickerSheet({
             );
           }}
         />
-      </SafeAreaView>
+    </SafeAreaView>
+  );
+
+  if (inline) return visible ? pickerContent : null;
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={handleClose}
+    >
+      {pickerContent}
     </Modal>
   );
 }

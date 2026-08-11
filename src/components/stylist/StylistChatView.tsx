@@ -69,6 +69,8 @@ import { ResolvedOutfitCollage } from '../outfits/ResolvedOutfitCollage';
 import { StylistRichText } from './StylistRichText';
 import { GapCard } from './GapCard';
 import { TripPlanCard } from './TripPlanCard';
+import { StylistIntakeSheet } from './StylistIntakeSheet';
+import { WardrobeAuditCard } from './WardrobeAuditCard';
 import { buildStylistStarters, buildTodayPrompt, type StylistStarter } from './stylist-empty-state';
 import { colors, radii, shadows, spacing, typography } from '../../theme';
 import { useStylistTransport } from '../../features/stylist/hooks/useStylistTransport';
@@ -87,7 +89,11 @@ import {
   type StylistRenderType,
   type StylistSendOptions,
   type StylistTripPlanData,
+  type StylistWardrobeAuditData,
+  type StylistWorkflow,
 } from '../../features/stylist/types';
+import { deviceTimeContext, summarizeStylistWorkflow } from '../../features/stylist/workflows';
+import { BUDGET_OPTIONS, OCCASION_OPTIONS, STYLE_OPTIONS } from '../../lib/profileOptions';
 import type { ShopOutfit } from '../../types/shop';
 import type { Item } from '../../types/item';
 
@@ -149,9 +155,17 @@ const CHIPS_TRIP = [
   'What am I missing to pack?',
 ];
 
+const CHIPS_AUDIT = [
+  'Show me my best investments',
+  'Which pieces should I let go?',
+  'Build an outfit with an underused piece',
+  'How can I get more from what I own?',
+];
+
 function useContextualChips(lastMessage: ChatMessage | undefined): string[] {
   return useMemo(() => {
     if (!lastMessage || lastMessage.role !== 'assistant') return CHIPS_DEFAULT;
+    if (lastMessage.wardrobeAudit || lastMessage.mode === 'wardrobe_audit') return CHIPS_AUDIT;
     if (lastMessage.tripPlan || lastMessage.mode === 'trip') return CHIPS_TRIP;
     if (lastMessage.mode === 'advice') return CHIPS_ADVICE;
     if (lastMessage.shopOutfit) return CHIPS_SHOP;
@@ -182,11 +196,13 @@ type ServerMessagePayload = {
   missingEssentials?: MissingEssential[];
   shopOutfit?: ShopOutfit;
   tripPlan?: StylistTripPlanData;
+  wardrobeAudit?: StylistWardrobeAuditData;
 };
 
 type ServerMessage = { id: number; role: Role; text: string; recId?: number | null; payload?: ServerMessagePayload | null; createdAt?: string };
 
 function renderTypeForAssistantPayload(payload?: ServerMessagePayload | null): StylistRenderType {
+  if (payload?.wardrobeAudit) return 'wardrobe_audit';
   if (payload?.tripPlan) return 'trip_plan';
   if (payload?.shopOutfit) return 'shopping_outfit';
   if (payload?.mode === 'advice') return 'advice';
@@ -199,7 +215,9 @@ function renderTypeForAssistantMessage(message: {
   shopOutfit?: ShopOutfit;
   mode?: StylistMode;
   suggestedItemIds?: number[];
+  wardrobeAudit?: StylistWardrobeAuditData;
 }): StylistRenderType {
+  if (message.wardrobeAudit) return 'wardrobe_audit';
   if (message.tripPlan) return 'trip_plan';
   if (message.shopOutfit) return 'shopping_outfit';
   if (message.mode === 'advice') return 'advice';
@@ -230,9 +248,11 @@ function isRichAssistantMessage(message: ChatMessage | undefined): message is Ex
       message.renderType === 'closet_outfit'
       || message.renderType === 'shopping_outfit'
       || message.renderType === 'trip_plan'
+      || message.renderType === 'wardrobe_audit'
       || !!message.suggestedItemIds?.length
       || !!message.shopOutfit
       || !!message.tripPlan
+      || !!message.wardrobeAudit
     );
 }
 
@@ -267,6 +287,7 @@ function mapServerMessages(rows: ServerMessage[]): ChatMessage[] {
       ...(p?.shopOutfit ? { shopOutfit: p.shopOutfit } : {}),
       // Reloaded trip plans are complete, never mid-stream — clear the pending flag.
       ...(p?.tripPlan ? { tripPlan: { ...p.tripPlan, pending: false } } : {}),
+      ...(p?.wardrobeAudit ? { wardrobeAudit: p.wardrobeAudit } : {}),
       ...(m.createdAt ? { createdAt: new Date(m.createdAt).getTime() } : {}),
     };
   });
@@ -423,6 +444,8 @@ export function StylistChatView({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [failedRequest, setFailedRequest] = useState<SendOptions | null>(null);
   const [followUpsOpen, setFollowUpsOpen] = useState(false);
+  const [intakeKind, setIntakeKind] = useState<Exclude<StylistWorkflow['kind'], 'wardrobe_audit'> | null>(null);
+  const [intakeInitialItemId, setIntakeInitialItemId] = useState<number | null>(null);
 
   const scrollRef = useRef<ScrollView>(null);
   const messageLayoutsRef = useRef<Record<string, number>>({});
@@ -567,6 +590,7 @@ export function StylistChatView({
         missingEssential: legacyMe,
         shopOutfit,
         tripPlan,
+        wardrobeAudit,
         mode: respMode,
         recId,
         conversationId: doneConversationId,
@@ -588,7 +612,9 @@ export function StylistChatView({
         id: assistantId,
         role: 'assistant',
         kind: 'assistant',
-        renderType: tripPlan
+        renderType: wardrobeAudit
+          ? 'wardrobe_audit'
+          : tripPlan
           ? 'trip_plan'
           : eventPlan
             ? 'closet_outfit'
@@ -604,6 +630,7 @@ export function StylistChatView({
         ...(respMode ? { mode: respMode } : {}),
         ...(shopOutfit ? { shopOutfit } : {}),
         ...(tripPlan ? { tripPlan: { ...tripPlan, pending: false } } : {}),
+        ...(wardrobeAudit ? { wardrobeAudit } : {}),
         ...(eventPlan ? { eventPlan } : {}),
         ...(itemIds?.length ? { suggestedItemIds: itemIds } : {}),
         ...(lookName ? { lookName } : {}),
@@ -612,10 +639,15 @@ export function StylistChatView({
       };
 
       setMessages((prev) => {
-        const hasAssistant = prev.some((m) => m.id === assistantId);
+        const withTranscript = prev.map((m) =>
+          m.id === transportRequestMetaRef.current[assistantId]?.userMessageId && m.role === 'user'
+            ? { ...m, transcript: event.transcript || m.text }
+            : m,
+        );
+        const hasAssistant = withTranscript.some((m) => m.id === assistantId);
         const next = hasAssistant
-          ? prev.map((m) => (m.id === assistantId ? { ...finalMsg, text: finalMsg.text || m.text } : m))
-          : [...prev, finalMsg];
+          ? withTranscript.map((m) => (m.id === assistantId ? { ...finalMsg, text: finalMsg.text || m.text } : m))
+          : [...withTranscript, finalMsg];
         messagesRef.current = next;
         cacheThread(resolvedConvId, next);
         return next;
@@ -661,12 +693,13 @@ export function StylistChatView({
 
   const sendMessage = useCallback(
     (opts: SendOptions) => {
-      const { text, displayText, photoData, attachment, context, mode } = opts;
-      if (!text && !photoData) return;
+      const { text, displayText, photoData, attachment, context, mode, workflow } = opts;
+      if (!text && !photoData && !workflow) return;
       if (isLoading) return;
 
       track('stylist_message_sent', {
         input_type: photoData ? 'photo' : 'text',
+        ...(workflow ? { workflow_kind: workflow.kind } : {}),
       });
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 
@@ -678,7 +711,7 @@ export function StylistChatView({
         role: 'user',
         kind: 'user',
         renderType: 'text',
-        text: displayText ?? text ?? '📷 Photo',
+        text: displayText ?? text ?? 'Styling brief',
         ...(attachment ? { attachment } : {}),
       };
 
@@ -691,6 +724,18 @@ export function StylistChatView({
       tripOutfitsRef.current[assistantId] = [];
 
       const history = buildHistory(messagesRef.current);
+      const lastAssistant = [...messagesRef.current]
+        .reverse()
+        .find((message): message is Extract<ChatMessage, { role: 'assistant' }> => message.role === 'assistant');
+      const continuationMode = !workflow && !mode ? lastAssistant?.mode : undefined;
+      const continuationItemIds = lastAssistant
+        ? Array.from(new Set([
+            ...(lastAssistant.suggestedItemIds ?? []),
+            ...(lastAssistant.tripPlan?.outfits.flatMap((outfit) => outfit.itemIds) ?? []),
+            ...(lastAssistant.wardrobeAudit?.workhorses.map((entry) => entry.itemId) ?? []),
+            ...(lastAssistant.wardrobeAudit?.underused.map((entry) => entry.itemId) ?? []),
+          ])).slice(0, 12)
+        : [];
 
       let weatherSummary: string | undefined;
       if (weather.data) {
@@ -705,6 +750,10 @@ export function StylistChatView({
       const locationSource = activeLocation.source === 'destination' ? 'conversation' : activeLocation.source;
       const request: StylistAskRequest = {
         ...(text ? { text } : {}),
+        ...(workflow ? { workflow } : {}),
+        ...(continuationMode ? { continuationMode } : {}),
+        ...(continuationItemIds.length ? { continuationItemIds } : {}),
+        ...deviceTimeContext(),
         ...(photoData ? { photoData } : {}),
         tempUnit,
         ...(weatherSummary ? { weatherSummary } : {}),
@@ -749,6 +798,8 @@ export function StylistChatView({
     setComposerPhotoData(null);
     setErrorMessage(null);
     setFailedRequest(null);
+    setIntakeKind(null);
+    setIntakeInitialItemId(null);
   }
 
   function applyServerThread(id: number, rows: ServerMessage[]) {
@@ -1013,6 +1064,43 @@ export function StylistChatView({
     setMentionQuery(null);
   }
 
+  function openStarterWorkflow(kind: StylistWorkflow['kind']) {
+    track('stylist_starter_opened', { workflow_kind: kind });
+    if (kind === 'wardrobe_audit') {
+      const workflow: StylistWorkflow = { kind };
+      sendMessage({
+        workflow,
+        displayText: summarizeStylistWorkflow(workflow, allItems),
+      });
+      return;
+    }
+    setIntakeInitialItemId(null);
+    setIntakeKind(kind);
+  }
+
+  function submitStarterWorkflow(workflow: StylistWorkflow) {
+    const stylesByValue = Object.fromEntries(STYLE_OPTIONS.map((option) => [option.value, option.label]));
+    const budgetsByValue = Object.fromEntries(BUDGET_OPTIONS.map((option) => [option.value, option.label]));
+    const lifestylesByValue = Object.fromEntries(OCCASION_OPTIONS.map((option) => [option.value, option.label]));
+    const displayText = summarizeStylistWorkflow(workflow, allItems, {
+      styles: stylesByValue,
+      budgets: budgetsByValue,
+      lifestyles: lifestylesByValue,
+    });
+    if (workflow.kind === 'trip') {
+      setConversationLocationContext(conversationLocation(workflow.destination));
+    }
+    setIntakeKind(null);
+    setIntakeInitialItemId(null);
+    track('stylist_starter_submitted', { workflow_kind: workflow.kind });
+    sendMessage({ workflow, displayText });
+  }
+
+  function openAuditItemStyling(itemId: number) {
+    setIntakeInitialItemId(itemId);
+    setIntakeKind('style_piece');
+  }
+
   function startNewConversation() {
     startFreshThread();
     setConversationLocationContext(null);
@@ -1121,7 +1209,8 @@ export function StylistChatView({
             tempUnit={tempUnit}
             displayName={profile?.displayName}
             wardrobeCount={allItems.length}
-            onPrompt={(q) => sendMessage({ text: q })}
+            onPrompt={(q) => sendMessage({ text: q, mode: 'from_closet' })}
+            onWorkflow={openStarterWorkflow}
           />
         ) : (
           <>
@@ -1144,6 +1233,7 @@ export function StylistChatView({
                   onAddToEvent={onAddToEvent}
                   onNavigateToShop={onNavigateToShop}
                   onNavigateToCloset={onNavigateToCloset}
+                  onStyleAuditItem={openAuditItemStyling}
                   onToggleAudio={
                     msg.role === 'assistant' && !msg.isStreaming
                       ? () =>
@@ -1188,6 +1278,20 @@ export function StylistChatView({
           setLocationPickerVisible(false);
         }}
         onClose={() => setLocationPickerVisible(false)}
+      />
+
+      <StylistIntakeSheet
+        visible={intakeKind !== null}
+        kind={intakeKind}
+        items={allItems}
+        profile={profile}
+        initialItemId={intakeInitialItemId}
+        onClose={() => {
+          if (intakeKind) track('stylist_starter_cancelled', { workflow_kind: intakeKind });
+          setIntakeKind(null);
+          setIntakeInitialItemId(null);
+        }}
+        onSubmit={submitStarterWorkflow}
       />
 
       <BlurView
@@ -1372,11 +1476,27 @@ type BubbleProps = {
   onToggleAudio?: () => void;
   onNavigateToShop?: () => void;
   onNavigateToCloset?: (outfitId: number) => void;
+  onStyleAuditItem?: (itemId: number) => void;
 };
 
-function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContext, onAddToEvent, onToggleAudio, onNavigateToShop, onNavigateToCloset }: BubbleProps) {
+function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContext, onAddToEvent, onToggleAudio, onNavigateToShop, onNavigateToCloset, onStyleAuditItem }: BubbleProps) {
   const isUser = message.role === 'user';
   const [detailItem, setDetailItem] = useState<Item | null>(null);
+
+  if (!isUser && message.wardrobeAudit) {
+    return (
+      <EditorialEntrance>
+        <View style={styles.editorialResponse}>
+          <WardrobeAuditCard
+            audit={message.wardrobeAudit}
+            items={allItems}
+            onStyleItem={onStyleAuditItem ?? (() => {})}
+            onNavigateToShop={onNavigateToShop}
+          />
+        </View>
+      </EditorialEntrance>
+    );
+  }
 
   // Trip plan — multi-outfit carousel + packing list (also renders progressively
   // while streaming, so check before the streaming-text fallback below).
@@ -2272,12 +2392,14 @@ function EmptyState({
   displayName,
   wardrobeCount,
   onPrompt,
+  onWorkflow,
 }: {
   weather: CurrentWeather | undefined;
   tempUnit: 'C' | 'F';
   displayName?: string | null;
   wardrobeCount: number;
   onPrompt: (q: string) => void;
+  onWorkflow: (kind: StylistWorkflow['kind']) => void;
 }) {
   const insets = useSafeAreaInsets();
   const [moreIdeasMounted, setMoreIdeasMounted] = useState(false);
@@ -2288,7 +2410,7 @@ function EmptyState({
   const firstName = displayName?.trim().split(/\s+/)[0];
   const todayPrompt = buildTodayPrompt(weather, tempUnit);
   const services = buildStylistStarters(wardrobeCount);
-  const visibleStarters: StylistStarter[] = [
+  const visibleStarters: Array<StylistStarter | { title: string; subtitle: string; prompt: string }> = [
     { title: 'Style me today', subtitle: todayPrompt, prompt: todayPrompt },
     ...services.slice(0, 2),
   ];
@@ -2321,10 +2443,14 @@ function EmptyState({
     moreIdeasBackdropProgress.value = withTiming(0, { duration: 180 });
   }, [completeMoreIdeasDismiss, moreIdeasBackdropProgress, moreIdeasDragY]);
 
-  const choosePrompt = (prompt: string) => {
+  const chooseStarter = (starter: StylistStarter | { title: string; subtitle: string; prompt: string }) => {
     Haptics.selectionAsync().catch(() => {});
-    if (moreIdeasMounted) dismissMoreIdeas(() => onPrompt(prompt));
-    else onPrompt(prompt);
+    const run = () => {
+      if ('prompt' in starter) onPrompt(starter.prompt);
+      else onWorkflow(starter.workflowKind);
+    };
+    if (moreIdeasMounted) dismissMoreIdeas(run);
+    else run();
   };
 
   useEffect(() => {
@@ -2376,7 +2502,7 @@ function EmptyState({
           <Text style={styles.promptSectionLabel}>START WITH AN IDEA</Text>
           <View style={styles.starterRows}>
             {visibleStarters.map((starter) => (
-              <StarterRow key={starter.title} starter={starter} onPress={() => choosePrompt(starter.prompt)} />
+              <StarterRow key={starter.title} starter={starter} onPress={() => chooseStarter(starter)} />
             ))}
           </View>
           <TouchableOpacity
@@ -2418,7 +2544,7 @@ function EmptyState({
             <Text style={styles.moreIdeasSubtitle}>Start with a broader wardrobe project.</Text>
             <View style={styles.moreIdeasRows}>
               {secondaryStarters.map((starter) => (
-                <StarterRow key={starter.title} starter={starter} onPress={() => choosePrompt(starter.prompt)} />
+                <StarterRow key={starter.title} starter={starter} onPress={() => chooseStarter(starter)} />
               ))}
             </View>
           </Reanimated.View>
@@ -2429,7 +2555,7 @@ function EmptyState({
   );
 }
 
-function StarterRow({ starter, onPress }: { starter: StylistStarter; onPress: () => void }) {
+function StarterRow({ starter, onPress }: { starter: Pick<StylistStarter, 'title' | 'subtitle'>; onPress: () => void }) {
   return (
     <TouchableOpacity
       style={styles.starterRow}

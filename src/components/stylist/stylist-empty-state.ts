@@ -3,7 +3,7 @@ import type { CurrentWeather } from '../../hooks/useWeather';
 export type StylistStarter = {
   title: string;
   subtitle: string;
-  prompt: string;
+  workflowKind: 'occasion' | 'style_piece' | 'trip' | 'wardrobe_audit' | 'wardrobe_build';
 };
 
 export function formatWeatherLead(weather: CurrentWeather, tempUnit: 'C' | 'F'): string {
@@ -28,28 +28,28 @@ export function buildStylistStarters(wardrobeCount: number): StylistStarter[] {
     {
       title: 'Dress for a plan',
       subtitle: 'Match the occasion, dress code, and mood',
-      prompt: 'Help me dress for an upcoming occasion. Ask me about the plan, dress code, and how I want to feel.',
+      workflowKind: 'occasion',
     },
     {
       title: 'Style a piece',
       subtitle: 'Build around something you own',
-      prompt: 'Help me style a piece from my wardrobe. Ask me which piece I want to build around.',
+      workflowKind: 'style_piece',
     },
     {
       title: 'Pack a trip',
       subtitle: 'Plan a polished travel wardrobe',
-      prompt: 'Help me pack for an upcoming trip. Ask me about the destination, dates, plans, and luggage.',
+      workflowKind: 'trip',
     },
     wardrobeCount > 0
       ? {
           title: 'Edit my closet',
           subtitle: 'Spot gaps and invest with intention',
-          prompt: 'Give my wardrobe a thoughtful edit. Identify what I wear most, what is missing, and where I should invest next.',
+          workflowKind: 'wardrobe_audit',
         }
       : {
           title: 'Build my wardrobe',
           subtitle: 'Create a versatile foundation',
-          prompt: 'Help me build a versatile wardrobe from the ground up. Ask about my lifestyle, taste, and budget before recommending what to add.',
+          workflowKind: 'wardrobe_build',
         },
   ];
 }

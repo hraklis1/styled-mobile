@@ -56,9 +56,9 @@ try {
   process.exit(1);
 }
 
-console.log(`[local-api] Starting backend at ${parsedApiUrl.origin}...`);
+console.log(`[local-api] Starting backend with source watching at ${parsedApiUrl.origin}...`);
 const logFd = openSync(logPath, 'a');
-const backend = spawn(process.execPath, ['--env-file=.env', tsxCli, backendEntry], {
+const backend = spawn(process.execPath, ['--env-file=.env', tsxCli, 'watch', backendEntry], {
   cwd: backendDir,
   detached: true,
   env: {

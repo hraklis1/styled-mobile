@@ -2,14 +2,15 @@ import type { ShopOutfit } from '../../types/shop';
 
 export type StylistRole = 'user' | 'assistant';
 
-export type StylistMode = 'from_closet' | 'event_plan' | 'shop_new' | 'shop_piece' | 'shop_list' | 'advice' | 'trip';
+export type StylistMode = 'from_closet' | 'event_plan' | 'shop_new' | 'shop_piece' | 'shop_list' | 'advice' | 'trip' | 'wardrobe_audit';
 
 export type StylistRenderType =
   | 'text'
   | 'closet_outfit'
   | 'shopping_outfit'
   | 'advice'
-  | 'trip_plan';
+  | 'trip_plan'
+  | 'wardrobe_audit';
 
 export type StylistOccasionHint =
   | 'formal'
@@ -47,6 +48,56 @@ export type StylistTripPlanData = {
   pending?: boolean;
 };
 
+export type StylistWardrobeAuditData = {
+  summary: string;
+  strengths: string[];
+  wearDataStatus: 'sufficient' | 'limited' | 'none';
+  workhorses: Array<{
+    itemId: number;
+    wearCount: number;
+    lastWornAt?: string | null;
+  }>;
+  underused: Array<{
+    itemId: number;
+    action: 'remix' | 'repair' | 'let_go';
+    reason: string;
+  }>;
+  investments: StylistMissingEssential[];
+};
+
+export type StylistWorkflow =
+  | {
+      kind: 'occasion';
+      plan: string;
+      dressCode?: string;
+      feeling?: string;
+      notes?: string;
+    }
+  | {
+      kind: 'style_piece';
+      itemId: number;
+      occasion?: string;
+      direction?: string;
+      notes?: string;
+    }
+  | {
+      kind: 'trip';
+      destination: string;
+      startDate: string;
+      endDate: string;
+      plans?: string;
+      luggage?: 'carry_on' | 'checked' | 'not_sure';
+      notes?: string;
+    }
+  | { kind: 'wardrobe_audit' }
+  | {
+      kind: 'wardrobe_build';
+      lifestyle: string[];
+      styleDirection?: string[];
+      budget?: string[];
+      notes?: string;
+    };
+
 export type StylistEventPlanData = {
   candidateId: string;
   outfitName: string;
@@ -83,6 +134,7 @@ export type StylistAssistantMessage = StylistBaseMessage & {
   lookName?: string;
   missingEssentials?: StylistMissingEssential[];
   tripPlan?: StylistTripPlanData;
+  wardrobeAudit?: StylistWardrobeAuditData;
   eventPlan?: StylistEventPlanData;
   recId?: number;
 };
@@ -163,6 +215,11 @@ export type StylistAskRequest = {
   text?: string;
   history?: StylistHistoryMessage[];
   mode?: StylistMode;
+  continuationMode?: StylistMode;
+  continuationItemIds?: number[];
+  workflow?: StylistWorkflow;
+  userTimeZone?: string;
+  userUtcOffsetMinutes?: number;
   /** Resolved display unit so server-generated Shop copy matches the app. */
   tempUnit?: 'C' | 'F';
   locationContext?: StylistLocationContext;
@@ -195,6 +252,7 @@ export type StylistAskDoneEvent = {
   } | null;
   shopOutfit?: ShopOutfit | null;
   tripPlan?: StylistTripPlanData | null;
+  wardrobeAudit?: StylistWardrobeAuditData | null;
   eventPlan?: StylistEventPlanData | null;
   mode?: StylistMode;
   recId?: number | null;
@@ -208,6 +266,7 @@ export type StylistSendOptions = {
   attachment?: StylistComposerAttachment;
   context?: StylistEntryContext;
   mode?: StylistMode;
+  workflow?: StylistWorkflow;
 };
 
 export type StylistFeedbackRating = 'up' | 'down';

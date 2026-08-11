@@ -46,8 +46,13 @@ describe('stylist empty-state prompts', () => {
     expect(withoutWardrobe[3]).toEqual({
       title: 'Build my wardrobe',
       subtitle: 'Create a versatile foundation',
-      prompt: 'Help me build a versatile wardrobe from the ground up. Ask about my lifestyle, taste, and budget before recommending what to add.',
+      workflowKind: 'wardrobe_build',
     });
-    expect(withWardrobe.every(({ prompt }) => prompt.length > 0)).toBe(true);
+    expect(withWardrobe.map(({ workflowKind }) => workflowKind)).toEqual([
+      'occasion',
+      'style_piece',
+      'trip',
+      'wardrobe_audit',
+    ]);
   });
 });
