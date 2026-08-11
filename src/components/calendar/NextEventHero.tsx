@@ -91,26 +91,30 @@ export function NextEventHero({
           </View>
         </View>
 
-        <View style={s.metaDetails}>
-          {occasionMeta ? (
-            <View style={s.detail}>
-              <Ionicons name="shirt-outline" size={12} color={colors.primary} />
-              <Text style={[s.detailText, s.detailTextAccent]}>{occasionMeta.label}</Text>
+        {occasionMeta || event.location || forecast.data ? (
+          <View style={s.context}>
+            <View style={[s.contextLine, !occasionMeta && s.contextLineSolo]}>
+              {occasionMeta ? (
+                <View style={s.detail}>
+                  <Ionicons name="shirt-outline" size={13} color={colors.primary} />
+                  <Text style={[s.detailText, s.detailTextAccent]}>{occasionMeta.label}</Text>
+                </View>
+              ) : null}
+              {forecast.data ? (
+                <View style={s.detail}>
+                  <Ionicons name={WEATHER_ICONS[forecast.data.condition]} size={13} color={colors.mutedForeground} />
+                  <Text style={s.detailText}>{formatTempRange(forecast.data, tempUnit)}</Text>
+                </View>
+              ) : null}
             </View>
-          ) : null}
-          {event.location ? (
-            <View style={[s.detail, s.detailShrink]}>
-              <Ionicons name="location-outline" size={12} color={colors.mutedForeground} />
-              <Text style={s.detailText} numberOfLines={1}>{event.location}</Text>
-            </View>
-          ) : null}
-          {forecast.data ? (
-            <View style={s.detail}>
-              <Ionicons name={WEATHER_ICONS[forecast.data.condition]} size={12} color={colors.mutedForeground} />
-              <Text style={s.detailText}>{formatTempRange(forecast.data, tempUnit)}</Text>
-            </View>
-          ) : null}
-        </View>
+            {event.location ? (
+              <View style={s.locationLine}>
+                <Ionicons name="location-outline" size={13} color={colors.mutedForeground} />
+                <Text style={s.detailText} numberOfLines={1}>{event.location}</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
       </TouchableOpacity>
 
       {hasOutfit ? (
@@ -130,7 +134,7 @@ export function NextEventHero({
             />
           </View>
           <View style={s.outfitCopy}>
-            <Text style={s.outfitReady}>{event.outfitId == null ? 'Custom look' : 'Your outfit'}</Text>
+            <Text style={s.outfitReady}>{event.outfitId == null ? 'Custom look' : 'Your look'}</Text>
             <Text style={s.outfitHint}>{pieceCount} {pieceCount === 1 ? 'piece' : 'pieces'}</Text>
           </View>
           <View style={s.viewLookPill}>
@@ -145,8 +149,8 @@ export function NextEventHero({
               <Ionicons name="sparkles-outline" size={14} color={colors.primary} />
             </View>
             <View style={s.outfitCopy}>
-              <Text style={s.outfitReady}>Needs outfit</Text>
-              <Text style={s.outfitHint}>Plan from your wardrobe</Text>
+              <Text style={s.outfitReady}>Ready to style</Text>
+              <Text style={s.outfitHint}>Styled will build a look from your wardrobe</Text>
             </View>
           </View>
           <PressableScale
@@ -176,13 +180,13 @@ const s = StyleSheet.create({
   card: {
     backgroundColor: colors.card,
     borderRadius: radii.xl,
-    padding: spacing.lg,
+    padding: spacing.xl,
     marginBottom: spacing.lg,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
     borderCurve: 'continuous',
   },
-  eventButton: { gap: spacing.md },
+  eventButton: { gap: spacing.lg },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   upNext: {
     fontSize: typography.size.xs,
@@ -201,7 +205,7 @@ const s = StyleSheet.create({
 
   mainRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   dateBlock: {
-    width: 52, height: 56, borderRadius: radii.lg,
+    width: 60, height: 64, borderRadius: radii.lg,
     backgroundColor: colors.surfaceElevated,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
@@ -209,7 +213,7 @@ const s = StyleSheet.create({
     borderCurve: 'continuous',
   },
   dateMonth: { fontSize: 9, color: colors.primary, fontWeight: typography.weight.bold, letterSpacing: 0.8 },
-  dateDay: { fontSize: typography.size.xl, color: colors.foreground, fontWeight: typography.weight.semibold, fontVariant: ['tabular-nums'] },
+  dateDay: { fontSize: typography.size.xxl, color: colors.foreground, fontWeight: typography.weight.semibold, fontVariant: ['tabular-nums'] },
   body: { flex: 1, gap: 2 },
   title: {
     fontSize: typography.size.lg,
@@ -219,11 +223,13 @@ const s = StyleSheet.create({
   },
   meta: { fontSize: typography.size.sm, color: colors.mutedForeground, fontWeight: typography.weight.medium },
 
-  metaDetails: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, overflow: 'hidden' },
-  detail: { flexDirection: 'row', alignItems: 'center', gap: 3, minWidth: 0, flexShrink: 0 },
-  detailShrink: { flex: 1, flexShrink: 1 },
+  context: { gap: spacing.sm },
+  contextLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 20 },
+  contextLineSolo: { justifyContent: 'flex-end' },
+  locationLine: { flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0 },
+  detail: { flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0, flexShrink: 0 },
   detailText: {
-    fontSize: 11, fontWeight: typography.weight.medium,
+    fontSize: typography.size.xs, fontWeight: typography.weight.medium,
     color: colors.mutedForeground, textTransform: 'capitalize',
     flexShrink: 1,
   },
@@ -232,23 +238,23 @@ const s = StyleSheet.create({
   actionRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     gap: spacing.sm,
-    paddingTop: spacing.md,
+    paddingTop: spacing.lg,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
   lookPreview: {
-    minHeight: 76,
+    minHeight: 92,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
+    marginTop: spacing.lg,
+    paddingTop: spacing.lg,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
   lookCollage: {
-    width: 56,
-    height: 56,
+    width: 72,
+    height: 72,
     overflow: 'hidden',
     borderRadius: radii.lg,
     borderWidth: StyleSheet.hairlineWidth,
@@ -280,7 +286,9 @@ const s = StyleSheet.create({
   },
   outfitHint: { fontSize: 10, color: colors.mutedForeground },
   planIcon: {
-    width: 20, height: 20,
+    width: 32, height: 32,
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceSelected,
     alignItems: 'center', justifyContent: 'center',
   },
   planBtn: {

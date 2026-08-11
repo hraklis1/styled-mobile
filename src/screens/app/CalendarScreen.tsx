@@ -3,6 +3,7 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
+  ActionSheetIOS,
   Alert,
   RefreshControl,
 } from 'react-native';
@@ -33,7 +34,6 @@ import {
   formatTime,
   groupByDate,
   OCCASIONS,
-  OCCASION_ICONS,
 } from '../../components/calendar/calendarUtils';
 import { colors, spacing, typography, radii } from '../../theme';
 import { ErrorState } from '../../components/primitives/ErrorState';
@@ -453,8 +453,33 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
     openLogger(date ? { date } : undefined);
   }, [openLogger]);
 
+  const openCalendarUtilities = useCallback(() => {
+    const logWear = () => handleLogWear(selectedDate ?? undefined);
+    const openCalendars = () => setSyncVisible(true);
+
+    if (process.env.EXPO_OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel', 'Log wear', 'Calendars & sync'],
+          cancelButtonIndex: 0,
+          title: 'Calendar tools',
+        },
+        (index) => {
+          if (index === 1) logWear();
+          if (index === 2) openCalendars();
+        },
+      );
+      return;
+    }
+
+    Alert.alert('Calendar tools', undefined, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Log wear', onPress: logWear },
+      { text: 'Calendars & sync', onPress: openCalendars },
+    ]);
+  }, [handleLogWear, selectedDate]);
+
   const renderEventCard = (event: Event) => {
-    const iconName = (OCCASION_ICONS[event.occasion] ?? 'calendar-outline') as keyof typeof Ionicons.glyphMap;
     const occasion = OCCASIONS.find((option) => option.id === event.occasion)?.label ?? event.occasion;
     const presentation = presentCalendarEvent(event);
     return (
@@ -466,8 +491,9 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
           accessibilityRole="button"
           accessibilityLabel={`${event.title}, ${presentation.readinessLabel}`}
         >
-          <View style={styles.eventIconBox}>
-            <Ionicons name={iconName} size={18} color={colors.primary} />
+          <View style={styles.eventDateBlock}>
+            <Text style={styles.eventDateMonth}>{presentation.monthLabel}</Text>
+            <Text style={styles.eventDateDay}>{presentation.dayLabel}</Text>
           </View>
           <View style={styles.eventBody}>
             <Text style={styles.eventTitle} numberOfLines={1}>{event.title}</Text>
@@ -475,13 +501,8 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
               <Text style={styles.eventTime}>{formatTime(new Date(event.date))}</Text>
               <Text style={styles.dot}>·</Text>
               <Text style={styles.eventOccasion} numberOfLines={1}>{occasion}</Text>
-              {event.location ? (
-                <>
-                  <Text style={styles.dot}>·</Text>
-                  <Text style={styles.eventLoc} numberOfLines={1}>{event.location}</Text>
-                </>
-              ) : null}
             </View>
+            {event.location ? <Text style={styles.eventLoc} numberOfLines={1}>{event.location}</Text> : null}
           </View>
         </TouchableOpacity>
         {presentation.hasOutfit ? (
@@ -493,16 +514,12 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
             accessibilityLabel={`${event.outfitId == null ? 'View details' : 'View outfit'} for ${event.title}, ${event.itemIds!.length} pieces`}
           >
             <ItemThumbStack itemIds={event.itemIds!} allItems={allItems} />
-            <Text style={styles.eventLookText}>{event.outfitId == null ? 'View details' : 'View outfit'}</Text>
+            <Ionicons name="chevron-forward" size={14} color={colors.border} />
           </TouchableOpacity>
         ) : (
           <View style={styles.eventReadiness}>
-            <View style={styles.needsOutfitIcon}>
-              <Ionicons name="sparkles-outline" size={12} color={colors.primary} />
-            </View>
-            <Text style={styles.readinessText}>
-            {presentation.readinessShortLabel}
-            </Text>
+            <Ionicons name="sparkles-outline" size={13} color={colors.primary} />
+            <Text style={styles.readinessText}>Plan</Text>
           </View>
         )}
       </View>
@@ -721,18 +738,11 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
               primaryAction={{ label: 'Add event', icon: 'add', onPress: handleAddEvent }}
               secondaryActions={[
                 {
-                  label: 'Log wear',
-                  accessibilityLabel: 'Record what you wore',
-                  icon: 'checkmark-done-outline',
+                  label: 'More',
+                  accessibilityLabel: 'More calendar tools',
+                  icon: 'ellipsis-horizontal',
                   variant: 'ghost',
-                  onPress: () => handleLogWear(selectedDate ?? undefined),
-                },
-                {
-                  label: 'Calendars',
-                  accessibilityLabel: 'Calendars and syncing',
-                  icon: 'calendar-outline',
-                  variant: 'ghost',
-                  onPress: () => setSyncVisible(true),
+                  onPress: openCalendarUtilities,
                 },
               ]}
             />
@@ -876,32 +886,43 @@ const styles = StyleSheet.create({
 
   eventCard: {
     flexDirection: 'row', alignItems: 'stretch',
-    minHeight: 72,
+    minHeight: 78,
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.md,
   },
   eventMain: {
     flex: 1,
     minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: spacing.md,
   },
-  eventIconBox: {
-    width: 38, height: 38, borderRadius: radii.lg,
-    backgroundColor: colors.surfaceSelected,
-    alignItems: 'center', justifyContent: 'center',
-    borderCurve: 'continuous',
+  eventDateBlock: {
+    width: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  eventBody: { flex: 1, minWidth: 0, gap: 4 },
+  eventDateMonth: {
+    fontSize: 9,
+    color: colors.mutedForeground,
+    fontWeight: typography.weight.bold,
+    letterSpacing: 0.7,
+  },
+  eventDateDay: {
+    fontSize: typography.size.xl,
+    color: colors.foreground,
+    fontWeight: typography.weight.semibold,
+    fontVariant: ['tabular-nums'],
+  },
+  eventBody: { flex: 1, minWidth: 0, gap: 3 },
   eventTitle: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.foreground },
   eventMeta: { flexDirection: 'row', alignItems: 'center', gap: 3, minWidth: 0 },
   eventTime: { fontSize: typography.size.xs, color: colors.mutedForeground, fontWeight: typography.weight.medium },
   dot: { fontSize: typography.size.xs, color: colors.mutedForeground },
   eventOccasion: { fontSize: typography.size.xs, color: colors.primary, fontWeight: typography.weight.medium, flexShrink: 0 },
-  eventLoc: { fontSize: typography.size.xs, color: colors.mutedForeground, flex: 1 },
+  eventLoc: { fontSize: 11, color: colors.mutedForeground, flexShrink: 1 },
   eventReadiness: {
-    minWidth: 72,
+    minWidth: 52,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -909,21 +930,13 @@ const styles = StyleSheet.create({
     paddingLeft: spacing.sm,
   },
   eventLookButton: {
-    minWidth: 82,
+    minWidth: 64,
     minHeight: 56,
-    alignItems: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
+    gap: spacing.xs,
     paddingLeft: spacing.sm,
-  },
-  eventLookText: {
-    fontSize: 10,
-    color: colors.primary,
-    fontWeight: typography.weight.semibold,
-  },
-  needsOutfitIcon: {
-    width: 16, height: 16,
-    alignItems: 'center', justifyContent: 'center',
   },
   readinessText: { fontSize: 10, color: colors.primary, fontWeight: typography.weight.semibold },
 

@@ -141,44 +141,40 @@ export function EventDetailModal({
             </View>
           </View>
 
-          <View style={s.metaRow}>
-            <Ionicons name="calendar-outline" size={15} color={colors.mutedForeground} />
-            <Text selectable style={s.metaText}>{formatDayLabel(d)} · {formatTime(d)}</Text>
-            {countdown && (
-              <View style={s.countdownBadge}>
-                <Text style={s.countdownText}>{countdown}</Text>
+          <View style={s.infoCard}>
+            <View style={s.infoRow}>
+              <Ionicons name="calendar-outline" size={15} color={colors.mutedForeground} />
+              <Text selectable style={s.metaText}>{formatDayLabel(d)} · {formatTime(d)}</Text>
+              {countdown ? (
+                <View style={s.countdownBadge}>
+                  <Text style={s.countdownText}>{countdown}</Text>
+                </View>
+              ) : null}
+            </View>
+
+            <View style={s.infoRow}>
+              <Ionicons name={iconName} size={15} color={colors.mutedForeground} />
+              <Text selectable style={s.metaText}>
+                {[occasionMeta?.label ?? event.occasion, event.environment].filter(Boolean).join(' · ')}
+              </Text>
+            </View>
+
+            {event.location ? (
+              <View style={s.infoRow}>
+                <Ionicons name="location-outline" size={15} color={colors.mutedForeground} />
+                <Text selectable style={s.metaText} numberOfLines={2}>{event.location}</Text>
               </View>
-            )}
-            {forecast.data && (
-              <View style={s.forecastChip}>
-                <Ionicons name={WEATHER_ICONS[forecast.data.condition]} size={12} color={colors.mutedForeground} />
-                <Text style={s.forecastText}>
-                  {formatTempRange(forecast.data, tempUnit)}
+            ) : null}
+
+            {forecast.data ? (
+              <View style={s.infoRow}>
+                <Ionicons name={WEATHER_ICONS[forecast.data.condition]} size={15} color={colors.mutedForeground} />
+                <Text style={s.metaText}>
+                  {formatTempRange(forecast.data, tempUnit)} · {forecast.data.locationSource === 'destination' ? 'Forecast for' : 'Forecast fallback'} {forecast.data.locationLabel}
                 </Text>
               </View>
-            )}
+            ) : null}
           </View>
-
-          <View style={s.metaRow}>
-            <Ionicons name={iconName} size={15} color={colors.mutedForeground} />
-            <Text selectable style={s.metaText}>
-              {[occasionMeta?.label ?? event.occasion, event.environment].filter(Boolean).join(' · ')}
-            </Text>
-          </View>
-
-          {event.location ? (
-            <View style={s.metaRow}>
-              <Ionicons name="location-outline" size={15} color={colors.mutedForeground} />
-              <Text selectable style={s.metaText}>{event.location}</Text>
-            </View>
-          ) : null}
-
-          {forecast.data ? (
-            <Text style={s.weatherSource}>
-              {forecast.data.locationSource === 'destination' ? 'Forecast for' : 'Forecast fallback:'}{' '}
-              {forecast.data.locationLabel}
-            </Text>
-          ) : null}
 
           {notesPresentation.summary || notesPresentation.links.length > 0 ? (
             <View style={s.notesCard}>
@@ -248,7 +244,7 @@ export function EventDetailModal({
                 </View>
                 <View style={s.lookPreviewFooter}>
                   <View>
-                    <Text style={s.lookPreviewTitle}>{event.outfitId == null ? 'Custom look' : 'Your outfit'}</Text>
+                    <Text style={s.lookPreviewTitle}>{event.outfitId == null ? 'Custom look' : 'Your look'}</Text>
                     <Text style={s.lookPreviewMeta}>{pieceCount} {pieceCount === 1 ? 'piece' : 'pieces'}</Text>
                   </View>
                   {event.outfitId != null ? (
@@ -266,7 +262,7 @@ export function EventDetailModal({
                 <Ionicons name="sparkles-outline" size={19} color={colors.primary} />
               </View>
               <View style={{ flex: 1, gap: 2 }}>
-                <Text style={s.emptyOutfitTitle}>Ready to plan</Text>
+                <Text style={s.emptyOutfitTitle}>Ready to style</Text>
                 <Text style={s.outfitSubtext}>Styled will consider your closet, the occasion, and the forecast.</Text>
               </View>
             </View>
@@ -330,7 +326,7 @@ const s = StyleSheet.create({
     backgroundColor: colors.muted,
     alignItems: 'center', justifyContent: 'center',
   },
-  content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxxl },
+  content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxxl },
   titleBlock: { gap: spacing.sm, marginBottom: spacing.xs },
   title: {
     fontSize: typography.size.xxl,
@@ -345,7 +341,16 @@ const s = StyleSheet.create({
   },
   readinessBadgeText: { fontSize: 10, color: colors.primary, fontWeight: typography.weight.semibold },
   readinessBadgeTextReady: { color: colors.success },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  infoCard: {
+    gap: spacing.md,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radii.xl,
+    padding: spacing.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    borderCurve: 'continuous',
+  },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   metaText: { fontSize: typography.size.sm, color: colors.mutedForeground, flex: 1 },
   countdownBadge: {
     backgroundColor: colors.surfaceSelected,
@@ -355,30 +360,12 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   countdownText: { fontSize: 11, fontWeight: typography.weight.semibold, color: colors.primary },
-  forecastChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radii.full,
-    paddingHorizontal: spacing.sm,
-    minHeight: 26,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  forecastText: { fontSize: 11, color: colors.mutedForeground },
-  weatherSource: {
-    marginLeft: 23,
-    marginTop: -spacing.xs,
-    fontSize: 10,
-    color: colors.mutedForeground,
-  },
   notesCard: {
     gap: spacing.md,
     backgroundColor: colors.surfaceSubtle,
     borderRadius: radii.lg,
     padding: spacing.md,
-    marginTop: spacing.sm,
+    marginTop: 0,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
     borderCurve: 'continuous',
@@ -446,7 +433,7 @@ const s = StyleSheet.create({
     backgroundColor: colors.surfaceSubtle,
     borderRadius: radii.xl,
     padding: spacing.lg,
-    marginTop: spacing.sm,
+    marginTop: 0,
     gap: spacing.md,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,

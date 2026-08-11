@@ -239,10 +239,11 @@ export function WeekStrip({
 }
 
 const s = StyleSheet.create({
-  root: { marginBottom: spacing.md },
+  root: { marginBottom: spacing.lg },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     minHeight: 44,
+    marginBottom: spacing.xs,
   },
   monthButton: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   monthLabel: {
