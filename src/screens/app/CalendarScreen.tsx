@@ -40,7 +40,7 @@ import { ErrorState } from '../../components/primitives/ErrorState';
 import { ScreenHeader } from '../../components/primitives/Editorial';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
-import { presentPaywall } from '../../lib/paywall';
+import { ensureEntitled } from '../../lib/entitlementGate';
 import { useGlobalAIStylist, type StylistOpenSource } from '../../contexts/GlobalAIStylistContext';
 import { useGlobalOutfitLogger } from '../../contexts/GlobalOutfitLoggerContext';
 import { track } from '../../lib/analytics';
@@ -273,8 +273,11 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
 
   const handleAddEvent = async () => {
     if (!isPremium && events.length >= FREE_EVENT_LIMIT) {
-      await presentPaywall();
-      return;
+      // No pre-confirmation dialog here on purpose: RC's own paywall already
+      // explains what unlocks, so asking "want to see plans?" first would
+      // just be a second dialog asking the same question.
+      const entitled = await ensureEntitled(false);
+      if (!entitled) return;
     }
     setEditingEvent(null);
     setReturnToDetailEventId(null);

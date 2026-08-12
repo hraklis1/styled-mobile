@@ -21,7 +21,7 @@ import * as Haptics from 'expo-haptics';
 import { track } from '../../lib/analytics';
 import { OCCASIONS as SHARED_OCCASIONS, type OccasionId } from '../../lib/occasions';
 import { useEntitlement } from '../../hooks/useEntitlement';
-import { presentPaywall } from '../../lib/paywall';
+import { ensureEntitled } from '../../lib/entitlementGate';
 import { useGenerateSuggestion } from '../../hooks/useSuggestions';
 import {
   useAcceptEventOutfitPlan,
@@ -147,21 +147,11 @@ export function SuggestionsScreen({ navigation, route }: SuggestionsScreenProps)
   };
 
   const handleGenerate = async () => {
-    if (!isPremium) {
-      const shouldUpgrade = await new Promise<boolean>((resolve) => {
-        Alert.alert(
-          'Unlock Outfit Suggestions',
-          'Get AI-powered outfit suggestions tailored to the weather, occasion, and your actual wardrobe.',
-          [
-            { text: 'Not Now', style: 'cancel', onPress: () => resolve(false) },
-            { text: 'See Plans', onPress: () => resolve(true) },
-          ],
-        );
-      });
-      if (!shouldUpgrade) return;
-      await presentPaywall();
-      return;
-    }
+    const entitled = await ensureEntitled(isPremium, {
+      title: 'Unlock Outfit Suggestions',
+      message: 'Get AI-powered outfit suggestions tailored to the weather, occasion, and your actual wardrobe.',
+    });
+    if (!entitled) return;
     if (selectedEvent) {
       generateEventPlan.mutate(
         { eventId: selectedEvent.id },

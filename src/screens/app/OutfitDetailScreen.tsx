@@ -32,6 +32,7 @@ import { useAssignOutfitEvents } from '../../hooks/useOutfits';
 import { getUpcomingOutfitEvents, parseEventDate } from '../../lib/outfitAssignments';
 import { OutfitEventAssignmentModal } from '../../components/outfits/OutfitEventAssignmentModal';
 import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
+import { useEntitlement } from '../../hooks/useEntitlement';
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', {
@@ -153,6 +154,7 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   const updateOutfit = useUpdateOutfit();
   const assignEvents = useAssignOutfitEvents();
   const { openStylist } = useGlobalAIStylist();
+  const { costOf } = useEntitlement();
 
   const [localName, setLocalName] = useState(outfit?.name ?? '');
   const [localNotes, setLocalNotes] = useState(outfit?.notes ?? '');
@@ -272,7 +274,23 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
 
   const isBusy = deleteOutfit.isPending || markWorn.isPending;
   const handleMarkWorn = () => markWorn.mutate(outfit.id);
-  const handleGenerate = (force = false) => visualize.mutate({ id: outfit.id, force });
+  const handleGenerate = (force = false) => {
+    if (!force) {
+      visualize.mutate({ id: outfit.id, force });
+      return;
+    }
+    const cost = costOf('flatlay');
+    Alert.alert(
+      'Regenerate flat-lay?',
+      cost > 0
+        ? `This uses ${cost} credit${cost === 1 ? '' : 's'} to generate a new version.`
+        : 'This will generate a new version.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Regenerate', onPress: () => visualize.mutate({ id: outfit.id, force }) },
+      ],
+    );
+  };
 
   // When OutfitDetail is the only screen in the ClosetStack (opened from the Home tab),
   // goBack() would bubble up to the tab navigator and go to Home — but leave OutfitDetail

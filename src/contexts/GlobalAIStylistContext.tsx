@@ -1,10 +1,10 @@
 import { createContext, useCallback, useContext, useState } from 'react';
-import { Alert, Modal, View, StyleSheet } from 'react-native';
+import { Modal, View, StyleSheet } from 'react-native';
 
 import { StylistChatView } from '../components/stylist/StylistChatView';
 import { useEntitlement } from '../hooks/useEntitlement';
 import { track } from '../lib/analytics';
-import { presentPaywall } from '../lib/paywall';
+import { ensureEntitled } from '../lib/entitlementGate';
 import type { StylistEntryContext, StylistMode } from '../features/stylist/types';
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -75,21 +75,11 @@ export function GlobalAIStylistProvider({ children }: Props) {
   const { isPremium } = useEntitlement();
 
   const openStylist = useCallback(async ({ initialQuery: query, initialAttachmentUri: attachmentUri, initialMode: mode, destination, source, eventContext: event, context, onNavigateToCloset: navigateToCloset }: OpenStylistOptions) => {
-    if (!isPremium) {
-      const shouldUpgrade = await new Promise<boolean>((resolve) => {
-        Alert.alert(
-          'Unlock your AI Stylist',
-          'Chat with your personal stylist for daily outfit advice, wardrobe insights, and event planning.',
-          [
-            { text: 'Not Now', style: 'cancel', onPress: () => resolve(false) },
-            { text: 'See Plans', onPress: () => resolve(true) },
-          ],
-        );
-      });
-      if (!shouldUpgrade) return;
-      const purchased = await presentPaywall();
-      if (!purchased) return;
-    }
+    const entitled = await ensureEntitled(isPremium, {
+      title: 'Unlock your AI Stylist',
+      message: 'Chat with your personal stylist for daily outfit advice, wardrobe insights, and event planning.',
+    });
+    if (!entitled) return;
     track('stylist_opened', { source });
     setSource(source);
     setThreadMode(threadModeForSource(source));

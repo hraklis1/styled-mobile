@@ -40,6 +40,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { File, Paths, EncodingType } from 'expo-file-system';
+import * as onDeviceSpeech from '../../lib/speech';
 import { api } from '../../lib/api';
 import { track } from '../../lib/analytics';
 import { compressImageToDataUrl } from '../../lib/compressImage';
@@ -512,6 +513,7 @@ export function StylistChatView({
   }, []);
 
   function stopCurrentAudio() {
+    onDeviceSpeech.stop();
     try { player.pause(); } catch { /* ignore */ }
     try { player.replace(null); } catch { /* ignore */ }
     if (playingFileRef.current) {
@@ -541,6 +543,23 @@ export function StylistChatView({
 
   async function playTts(messageId: string, text: string) {
     stopCurrentAudio();
+
+    // On-device speech is the default: it's free, instant, and works offline.
+    // The server round-trip below only runs on a build where expo-speech's
+    // native module isn't linked yet (isAvailable() proves that with a real
+    // bridge call, not just a successful import) — see src/lib/speech.ts.
+    if (await onDeviceSpeech.isAvailable()) {
+      setPlayingId(messageId);
+      // Functional updates below: onDone/onError fire later and must not
+      // clear a DIFFERENT message's playingId if the user tapped another
+      // speaker icon in the meantime.
+      onDeviceSpeech.speak(text, {
+        onDone: () => setPlayingId((id) => (id === messageId ? null : id)),
+        onError: () => setPlayingId((id) => (id === messageId ? null : id)),
+      });
+      return;
+    }
+
     try {
       const { data } = await api.post<TtsResponse>(
         '/api/stylist/tts',

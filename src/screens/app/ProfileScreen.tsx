@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,9 @@ import {
   Linking,
 } from 'react-native';
 import Purchases from 'react-native-purchases';
-import { ENTITLEMENT_ID } from '../../lib/purchases';
+import { ENTITLEMENT_ID, getSubscriptionInfo, type SubscriptionInfo } from '../../lib/purchases';
+import { presentPaywall } from '../../lib/paywall';
+import { useEntitlement } from '../../hooks/useEntitlement';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation } from '@tanstack/react-query';
@@ -312,6 +314,21 @@ function TagList({ tags, onRemove }: { tags: string[]; onRemove: (tag: string) =
   );
 }
 
+function planTierLabel(tier: string | null | undefined): string {
+  if (tier === 'premium') return 'Premium';
+  if (tier === 'beta') return 'Beta Tester';
+  return 'Free';
+}
+
+function CreditPill({ label, value }: { label: string; value: number }) {
+  return (
+    <View style={styles.creditPill}>
+      <Text style={styles.creditPillValue}>{value}</Text>
+      <Text style={styles.creditPillLabel}>{label}</Text>
+    </View>
+  );
+}
+
 function CategoryBudgets({
   budgets,
   onChange,
@@ -351,6 +368,28 @@ export function ProfileScreen(_props: ProfileScreenProps) {
   const form = useProfileForm();
   const { isError: profileError, refetch: refetchProfile } = useProfile();
   const autoTempUnit = resolveTempUnit(null, form.location);
+  const { isPremium, planTier, credits, creditsRefillAt, freeUsage } = useEntitlement();
+
+  // Read directly from RC rather than the server: RC is already the source of
+  // truth the SDK holds on-device, and the renewal date is a DIFFERENT clock
+  // from creditsRefillAt below (an annual subscriber refills credits every 30
+  // days but renews once a year) — never derive one from the other.
+  const [subscriptionInfo, setSubscriptionInfo] = useState<SubscriptionInfo | null>(null);
+  useEffect(() => {
+    if (!isPremium) return;
+    getSubscriptionInfo().then(setSubscriptionInfo).catch(() => {});
+  }, [isPremium]);
+
+  const [isUpgrading, setIsUpgrading] = useState(false);
+  const handleUpgrade = async () => {
+    setIsUpgrading(true);
+    try {
+      await presentPaywall();
+      await refetchProfile();
+    } finally {
+      setIsUpgrading(false);
+    }
+  };
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [newFavoriteColor, setNewFavoriteColor] = useState('');
@@ -594,6 +633,67 @@ export function ProfileScreen(_props: ProfileScreenProps) {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        <SectionCard icon="diamond-outline" title="PLAN & CREDITS">
+          <View style={styles.planHeaderRow}>
+            <View style={styles.planBadge}>
+              <Text style={styles.planBadgeText}>{planTierLabel(planTier)}</Text>
+            </View>
+            {!isPremium && (
+              <TouchableOpacity
+                style={styles.upgradeBtn}
+                onPress={handleUpgrade}
+                disabled={isUpgrading}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Upgrade to Premium"
+                accessibilityState={{ disabled: isUpgrading }}
+              >
+                {isUpgrading
+                  ? <ActivityIndicator size="small" color={colors.primaryForeground} />
+                  : <Text style={styles.upgradeBtnText}>Upgrade</Text>}
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {credits && (
+            <View style={styles.creditsBlock}>
+              <View style={styles.creditsTotalRow}>
+                <Text style={styles.creditsTotalLabel}>Studio credits</Text>
+                <Text style={styles.creditsTotalValue}>{credits.total}</Text>
+              </View>
+              <View style={styles.creditsBreakdownRow}>
+                <CreditPill label="Included" value={credits.included} />
+                <CreditPill label="Onboarding" value={credits.onboarding} />
+                <CreditPill label="Purchased" value={credits.purchased} />
+              </View>
+              {creditsRefillAt && (
+                <Text style={styles.hint}>
+                  Credits reset {new Date(creditsRefillAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+                </Text>
+              )}
+              {isPremium && subscriptionInfo?.willRenew && subscriptionInfo.renewsAt && (
+                <Text style={styles.hint}>
+                  Renews {subscriptionInfo.renewsAt.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                </Text>
+              )}
+            </View>
+          )}
+
+          {!isPremium && freeUsage && (
+            <View style={styles.freeUsageBlock}>
+              <View style={styles.emailRow}>
+                <Text style={styles.emailKey}>Stylist messages</Text>
+                <Text style={styles.emailVal}>
+                  {freeUsage.stylistMessagesUsed} / {freeUsage.stylistMessagesLimit}
+                </Text>
+              </View>
+              <Text style={styles.hint}>
+                Free plan includes up to {freeUsage.itemsLimit} items and {freeUsage.eventsLimit} calendar events.
+              </Text>
+            </View>
+          )}
+        </SectionCard>
+
         <SectionCard icon="sparkles-outline" title="STYLE DNA">
           <View style={styles.field}>
             <FieldLabel>Display name</FieldLabel>
@@ -1376,6 +1476,26 @@ const styles = StyleSheet.create({
   fieldLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   hint: { fontSize: typography.size.xs, color: colors.mutedForeground },
   summaryLine: { fontSize: typography.size.xs, color: colors.mutedForeground },
+  planHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  planBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.full,
+    backgroundColor: colors.accent,
+  },
+  planBadgeText: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.primary, letterSpacing: 0.4, textTransform: 'uppercase' },
+  upgradeBtn: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radii.md, backgroundColor: colors.primary },
+  upgradeBtnText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.primaryForeground },
+  creditsBlock: { gap: spacing.sm },
+  creditsTotalRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  creditsTotalLabel: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.foreground },
+  creditsTotalValue: { fontSize: typography.size.xxl, fontWeight: typography.weight.bold, color: colors.foreground },
+  creditsBreakdownRow: { flexDirection: 'row', gap: spacing.sm },
+  creditPill: { flex: 1, alignItems: 'center', gap: 2, paddingVertical: spacing.sm, borderRadius: radii.md, backgroundColor: colors.muted },
+  creditPillValue: { fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: colors.foreground },
+  creditPillLabel: { fontSize: typography.size.xs, color: colors.mutedForeground },
+  freeUsageBlock: { gap: spacing.sm },
   divTop: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.lg, marginTop: spacing.sm },
   input: {
     backgroundColor: colors.surfaceSubtle,

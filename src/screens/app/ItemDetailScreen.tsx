@@ -22,7 +22,7 @@ import {
 } from '../../hooks/useItems';
 import { OUTFITS_QUERY_KEY } from '../../hooks/useOutfits';
 import type { Outfit } from '../../types/outfit';
-import { api } from '../../lib/api';
+import { api, apiErrorCode, apiErrorMessage } from '../../lib/api';
 import {
   coverImageVariantLabel,
   hasCutout,
@@ -340,10 +340,15 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setCoverSheetOpen(false);
       },
-      onError: (err: any) => {
+      onError: (err) => {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        if (err?.response?.data?.code === 'POLISH_QUOTA_EXCEEDED') {
-          Alert.alert('Out of polish credits', err.response.data.message);
+        const code = apiErrorCode(err);
+        if (code === 'INSUFFICIENT_CREDITS') {
+          Alert.alert('Not enough credits', apiErrorMessage(err, 'You need more credits to polish this item.'));
+          return;
+        }
+        if (code === 'FREE_LIMIT_REACHED') {
+          Alert.alert('Free limit reached', apiErrorMessage(err, 'Upgrade to Premium to keep going.'));
           return;
         }
         Alert.alert('Polish failed', 'Could not generate a catalog image. Your photo is unchanged.');

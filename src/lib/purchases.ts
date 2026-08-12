@@ -41,4 +41,32 @@ export async function getIsPremium(): Promise<boolean> {
   }
 }
 
+export interface SubscriptionInfo {
+  willRenew: boolean;
+  /** Null for a lifetime/non-expiring entitlement, or when there is none active. */
+  renewsAt: Date | null;
+}
+
+/**
+ * When the active subscription renews (or lapses, if cancelled) — read
+ * directly from RC's own CustomerInfo rather than the server, since RC is
+ * already the source of truth the SDK holds on-device. This is deliberately
+ * a DIFFERENT clock from the server's `creditsRefillAt`: an annual
+ * subscriber refills credits every 30 days but renews once a year, so a
+ * screen showing both must never derive one from the other.
+ */
+export async function getSubscriptionInfo(): Promise<SubscriptionInfo> {
+  try {
+    const info = await Purchases.getCustomerInfo();
+    const entitlement = info.entitlements.active[ENTITLEMENT_ID];
+    if (!entitlement) return { willRenew: false, renewsAt: null };
+    return {
+      willRenew: entitlement.willRenew,
+      renewsAt: entitlement.expirationDate ? new Date(entitlement.expirationDate) : null,
+    };
+  } catch {
+    return { willRenew: false, renewsAt: null };
+  }
+}
+
 export { Purchases };

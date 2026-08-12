@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useItems, useUpdateItem } from '../../hooks/useItems';
 import { useAuth } from '../../contexts/AuthContext';
+import { useEntitlement } from '../../hooks/useEntitlement';
 import {
   itemsNeedingCutout,
   resetBackfillCursor,
@@ -27,13 +28,19 @@ export function ClosetVisualsCard() {
   const { user } = useAuth();
   const { data: items = [] } = useItems();
   const updateItem = useUpdateItem();
+  const { credits, costOf } = useEntitlement();
 
   const [progress, setProgress] = useState<BackfillProgress | null>(null);
   const [clearing, setClearing] = useState(false);
   const handleRef = useRef<BackfillHandle | null>(null);
 
+  // This backfill drives POST /api/cutout per item, not the (pricier) `polish`
+  // meter — so the per-item cost here is the cutout price.
+  const cutoutCost = costOf('cutout');
   const pendingCount = itemsNeedingCutout(items).length;
   const cutoutCount = items.filter((i) => !!i.cutoutUrl).length;
+  const pendingTotalCost = pendingCount * cutoutCost;
+  const redoAllTotalCost = items.length * cutoutCost;
   const running = progress !== null && progress.stoppedReason === null
     && progress.completed < progress.total;
 
@@ -65,7 +72,16 @@ export function ClosetVisualsCard() {
     });
   }, [updateItem, user]);
 
-  const handleStart = useCallback(() => startRun(items), [items, startRun]);
+  const handleStart = useCallback(() => {
+    if (cutoutCost > 0 && credits != null && credits.total < pendingTotalCost) {
+      Alert.alert(
+        'Not enough credits',
+        `Polishing ${pendingCount} item${pendingCount === 1 ? '' : 's'} needs ${pendingTotalCost} credit${pendingTotalCost === 1 ? '' : 's'} — you have ${credits.total}.`,
+      );
+      return;
+    }
+    startRun(items);
+  }, [items, startRun, cutoutCost, credits, pendingCount, pendingTotalCost]);
 
   /**
    * Clear every existing cutout and process the library again.
@@ -78,9 +94,16 @@ export function ClosetVisualsCard() {
    */
   const handleRedoAll = useCallback(() => {
     const withCutouts = items.filter((i) => !!i.cutoutUrl);
+    if (cutoutCost > 0 && credits != null && credits.total < redoAllTotalCost) {
+      Alert.alert(
+        'Not enough credits',
+        `Redoing all cutouts needs ${redoAllTotalCost} credit${redoAllTotalCost === 1 ? '' : 's'} — you have ${credits.total}.`,
+      );
+      return;
+    }
     Alert.alert(
       'Redo all cutouts?',
-      `This clears the ${withCutouts.length} existing cutout${withCutouts.length === 1 ? '' : 's'} and processes your closet again with the current quality rules. Your original photos are untouched.`,
+      `This clears the ${withCutouts.length} existing cutout${withCutouts.length === 1 ? '' : 's'} and processes your closet again with the current quality rules${cutoutCost > 0 ? ` (${redoAllTotalCost} credit${redoAllTotalCost === 1 ? '' : 's'})` : ''}. Your original photos are untouched.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -109,7 +132,7 @@ export function ClosetVisualsCard() {
         },
       ],
     );
-  }, [items, startRun, updateItem]);
+  }, [items, startRun, updateItem, cutoutCost, credits, redoAllTotalCost]);
 
   const handleCancel = useCallback(() => {
     handleRef.current?.cancel();
@@ -171,7 +194,9 @@ export function ClosetVisualsCard() {
               color={pendingCount === 0 ? colors.mutedForeground : colors.white}
             />
             <Text style={[styles.buttonText, pendingCount === 0 && styles.buttonTextDisabled]}>
-              {pendingCount === 0 ? 'Nothing to polish' : `Polish ${pendingCount} item${pendingCount === 1 ? '' : 's'}`}
+              {pendingCount === 0
+                ? 'Nothing to polish'
+                : `Polish ${pendingCount} item${pendingCount === 1 ? '' : 's'}${cutoutCost > 0 ? ` · ${pendingTotalCost} credit${pendingTotalCost === 1 ? '' : 's'}` : ''}`}
             </Text>
           </TouchableOpacity>
 
@@ -185,7 +210,9 @@ export function ClosetVisualsCard() {
             >
               <Ionicons name="refresh-outline" size={14} color={colors.mutedForeground} />
               <Text style={styles.secondaryButtonText}>
-                {clearing ? 'Clearing…' : 'Redo all cutouts'}
+                {clearing
+                  ? 'Clearing…'
+                  : `Redo all cutouts${cutoutCost > 0 ? ` · ${redoAllTotalCost} credit${redoAllTotalCost === 1 ? '' : 's'}` : ''}`}
               </Text>
             </TouchableOpacity>
           )}
