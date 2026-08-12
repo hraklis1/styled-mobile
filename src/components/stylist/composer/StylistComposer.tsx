@@ -35,6 +35,9 @@ type RightSlotMode = 'stop' | 'done' | 'send' | 'mic';
 const slotEnter = ZoomIn.springify().damping(16).stiffness(220);
 const slotExit = ZoomOut.duration(110);
 
+const MIN_INPUT_HEIGHT = 44;
+const MAX_INPUT_HEIGHT = 120;
+
 function DictationTimer({ startedAt }: { startedAt: number }) {
   const [now, setNow] = useState(() => Date.now());
 
@@ -166,6 +169,7 @@ export function StylistComposer({
             placeholder="Ask about an outfit or tag @a piece"
             placeholderTextColor={colors.mutedForeground}
             multiline
+            textAlignVertical="top"
             maxLength={2000}
             returnKeyType="default"
             editable={!isLoading && !isDictating}
@@ -304,8 +308,8 @@ const styles = StyleSheet.create({
   },
   textInput: {
     flex: 1,
-    minHeight: 44,
-    maxHeight: 120,
+    minHeight: MIN_INPUT_HEIGHT,
+    maxHeight: MAX_INPUT_HEIGHT,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm + 2,
     fontSize: typography.size.sm,
