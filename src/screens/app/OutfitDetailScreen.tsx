@@ -4,27 +4,26 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
-  Image,
   StyleSheet,
   Alert,
   useWindowDimensions,
   ActivityIndicator,
-  Animated,
-  ActionSheetIOS,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { track } from '../../lib/analytics';
 import { useOutfits, useDeleteOutfit, useMarkOutfitWorn, useVisualizeOutfit, useUpdateOutfit } from '../../hooks/useOutfits';
 import { useItems } from '../../hooks/useItems';
-import { OutfitCollage } from '../../components/outfits/OutfitCollage';
-import { resolveImageUri } from '../../lib/resolveImageUri';
-import { itemCoverPresentation } from '../../lib/itemImage';
+import { OutfitHero } from '../../components/outfits/OutfitHero';
+import { EditorialSection } from '../../components/primitives/Editorial';
+import { PressableScale } from '../../components/primitives/PressableScale';
+import { GarmentImage } from '../../components/wardrobe/garment-image';
+import { getItemCardAccessibilityLabel } from '../../lib/closet-presentation';
 import { CommonActions, usePreventRemove } from '@react-navigation/native';
-import { colors, spacing, typography, radii } from '../../theme';
+import { colors, editorial, spacing, typography, radii } from '../../theme';
 import { CATEGORY_LABELS } from '../../types/item';
 import type { OutfitDetailScreenProps } from '../../navigation/types';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
@@ -32,6 +31,7 @@ import { useEvents } from '../../hooks/useEvents';
 import { useAssignOutfitEvents } from '../../hooks/useOutfits';
 import { getUpcomingOutfitEvents, parseEventDate } from '../../lib/outfitAssignments';
 import { OutfitEventAssignmentModal } from '../../components/outfits/OutfitEventAssignmentModal';
+import { TabQuickMenuSheet, type TabQuickMenuOption } from '../../components/navigation/TabQuickMenuSheet';
 import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
 import { useEntitlement } from '../../hooks/useEntitlement';
 
@@ -40,107 +40,6 @@ function formatDate(iso: string): string {
     month: 'short', day: 'numeric', year: 'numeric',
   });
 }
-
-function Chip({ label }: { label: string }) {
-  return (
-    <View style={chipStyles.chip}>
-      <Text style={chipStyles.label}>{label}</Text>
-    </View>
-  );
-}
-const chipStyles = StyleSheet.create({
-  chip: {
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 4,
-    borderRadius: radii.full,
-    backgroundColor: colors.muted,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginRight: spacing.xs,
-    marginBottom: spacing.xs,
-  },
-  label: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.medium,
-    color: colors.foreground,
-    textTransform: 'capitalize',
-  },
-});
-
-const LOADING_PHRASES = [
-  'Analyzing pieces...',
-  'Arranging layout...',
-  'Adding final polish...',
-  'Styling your look...',
-];
-
-function FlatLayLoadingOverlay({ width }: { width: number }) {
-  const pulseAnim = useRef(new Animated.Value(0.3)).current;
-  const textOpacity = useRef(new Animated.Value(1)).current;
-  const [phraseIndex, setPhraseIndex] = useState(0);
-
-  useEffect(() => {
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 0.75, duration: 900, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 0.3, duration: 900, useNativeDriver: true }),
-      ])
-    );
-    pulse.start();
-    return () => pulse.stop();
-  }, [pulseAnim]);
-
-  useEffect(() => {
-    const cycle = setInterval(() => {
-      Animated.timing(textOpacity, { toValue: 0, duration: 280, useNativeDriver: true }).start(() => {
-        setPhraseIndex((i) => (i + 1) % LOADING_PHRASES.length);
-        Animated.timing(textOpacity, { toValue: 1, duration: 280, useNativeDriver: true }).start();
-      });
-    }, 2500);
-    return () => clearInterval(cycle);
-  }, [textOpacity]);
-
-  return (
-    <View style={[overlayStyles.container, { width, height: width }]}>
-      <Animated.View
-        style={{ ...StyleSheet.absoluteFill, opacity: pulseAnim, backgroundColor: colors.muted }}
-      />
-      <View style={overlayStyles.textBox}>
-        <ActivityIndicator size="small" color={colors.mutedForeground} />
-        <Animated.Text style={[overlayStyles.phrase, { opacity: textOpacity }]}>
-          {LOADING_PHRASES[phraseIndex]}
-        </Animated.Text>
-      </View>
-    </View>
-  );
-}
-
-const overlayStyles = StyleSheet.create({
-  container: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  textBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.xl,
-    backgroundColor: 'rgba(250, 248, 245, 0.85)',
-    borderRadius: radii.full,
-  },
-  phrase: {
-    fontSize: typography.size.sm,
-    color: colors.mutedForeground,
-    fontWeight: typography.weight.medium,
-  },
-});
 
 export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProps) {
   const { outfitId, returnTo, returnToEventId, returnToEventDetail } = route.params;
@@ -161,7 +60,10 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   const [localNotes, setLocalNotes] = useState(outfit?.notes ?? '');
   const [localTags, setLocalTags] = useState<string[]>(outfit?.tags ?? []);
   const [tagDraft, setTagDraft] = useState('');
+  const [tagInputActive, setTagInputActive] = useState(false);
+  const [notesExpanded, setNotesExpanded] = useState(false);
   const [eventPickerVisible, setEventPickerVisible] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [saveSheetOpen, setSaveSheetOpen] = useState(false);
   const [returningToTab, setReturningToTab] = useState(false);
 
@@ -224,12 +126,18 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   const tagInputRef = useRef<TextInput>(null);
   const notesInputRef = useRef<TextInput>(null);
 
+  useEffect(() => () => {
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+  }, []);
+
   const saveName = useCallback(() => {
     if (!outfit) return;
     const trimmed = localName.trim();
     if (!trimmed || trimmed === outfit.name) return;
     updateOutfit.mutate({ id: outfit.id, name: trimmed });
   }, [localName, outfit, updateOutfit]);
+
+  const beginRename = useCallback(() => setIsNameFocused(true), []);
 
   const saveNotes = useCallback(() => {
     if (!outfit) return;
@@ -239,6 +147,7 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
       {
         onSuccess: () => {
           notesInputRef.current?.blur();
+          setNotesExpanded(false);
           setNotesSaved(true);
           savedTimerRef.current = setTimeout(() => setNotesSaved(false), 2000);
         },
@@ -246,8 +155,15 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
     );
   }, [localNotes, outfit, updateOutfit]);
 
-  const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+
+  // Four pieces — the common case — then fit one clean row; 5+ wrap left-aligned.
+  const { tileWidth, tileHeight } = useMemo(() => {
+    const w = Math.floor(
+      (width - spacing.lg * 2 - PIECE_GAP * (PIECE_COLUMNS - 1)) / PIECE_COLUMNS,
+    );
+    return { tileWidth: w, tileHeight: Math.round(w / editorial.garmentAspectRatio) };
+  }, [width]);
 
   const itemMap = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
 
@@ -275,6 +191,11 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
 
   const isBusy = deleteOutfit.isPending || markWorn.isPending;
   const handleMarkWorn = () => markWorn.mutate(outfit.id);
+  const toggleFavourite = () => {
+    updateOutfit.mutate({ id: outfit.id, isFavorite: !outfit.isFavorite });
+  };
+  const favouriteLabel = outfit.isFavorite ? 'Remove from favourites' : 'Add to favourites';
+
   const handleGenerate = (force = false) => {
     if (!force) {
       visualize.mutate({ id: outfit.id, force });
@@ -328,45 +249,52 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
     );
   };
 
+  // Favourite and Save-to-board live in the utility row now, so this is down to
+  // renaming and deleting.
+  const outfitMenuOptions: TabQuickMenuOption[] = [
+    {
+      key: 'rename',
+      label: 'Rename outfit',
+      icon: 'pencil-outline',
+      onPress: beginRename,
+    },
+    {
+      key: 'delete',
+      label: 'Delete outfit',
+      icon: 'trash-outline',
+      tone: 'destructive',
+      onPress: handleDelete,
+    },
+  ];
+
   const openOutfitMenu = () => {
     if (isBusy || updateOutfit.isPending) return;
-
-    const toggleFavourite = () => {
-      updateOutfit.mutate({ id: outfit.id, isFavorite: !outfit.isFavorite });
-    };
-    const options = [
-      'Cancel',
-      'Save to board',
-      outfit.isFavorite ? 'Remove from favourites' : 'Add to favourites',
-      'Delete outfit',
-    ];
-
-    if (process.env.EXPO_OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options,
-          cancelButtonIndex: 0,
-          destructiveButtonIndex: 3,
-          title: outfit.name,
-        },
-        (index) => {
-          if (index === 1) setSaveSheetOpen(true);
-          if (index === 2) toggleFavourite();
-          if (index === 3) handleDelete();
-        },
-      );
-      return;
-    }
-
-    Alert.alert(outfit.name, undefined, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Save to board', onPress: () => setSaveSheetOpen(true) },
-      { text: options[2], onPress: toggleFavourite },
-      { text: 'Delete outfit', style: 'destructive', onPress: handleDelete },
-    ]);
+    Keyboard.dismiss();
+    setMenuOpen(true);
   };
 
   const hasAiImage = !!outfit.aiGeneratedImageUrl;
+
+  const metaLine = [
+    outfit.wearCount > 0
+      ? `Worn ${outfit.wearCount} ${outfit.wearCount === 1 ? 'time' : 'times'}`
+      : 'Never worn',
+    outfit.lastWornAt ? `Last worn ${formatDate(outfit.lastWornAt)}` : null,
+    pieces.length > 0
+      ? `${pieces.length} ${pieces.length === 1 ? 'piece' : 'pieces'}`
+      : null,
+  ].filter(Boolean).join(' · ');
+
+  const storedNotes = outfit.notes ?? '';
+  const notesDirty = localNotes.trim() !== storedNotes;
+  const hasNotes = storedNotes.trim().length > 0;
+
+  const savedBadge = notesSaved ? (
+    <View style={styles.notesSavedBadge}>
+      <Ionicons name="checkmark" size={13} color={colors.primary} />
+      <Text style={styles.notesSavedText}>Saved</Text>
+    </View>
+  ) : null;
 
   return (
     <KeyboardAvoidingView
@@ -379,185 +307,234 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ── Hero ── */}
-        <View style={{ position: 'relative' }}>
-          <OutfitCollage outfit={outfit} size={width} borderRadius={0} />
+        <OutfitHero
+          outfit={outfit}
+          width={width}
+          hasAiImage={hasAiImage}
+          isGenerating={visualize.isPending}
+          menuDisabled={isBusy || updateOutfit.isPending}
+          menuOpen={menuOpen}
+          onBack={handleBack}
+          onMenu={openOutfitMenu}
+          onGenerate={() => handleGenerate(hasAiImage)}
+        />
 
-          {/* Dark tint over collage grid — before generation only */}
-          {!hasAiImage && !visualize.isPending && (
-            <View style={[StyleSheet.absoluteFill, styles.collageOverlay]} />
-          )}
-
-          {/* Shimmer + cycling text — while generating */}
-          {visualize.isPending && <FlatLayLoadingOverlay width={width} />}
-
-          {/* Back */}
-          <TouchableOpacity
-            style={[styles.backButton, { top: insets.top + spacing.sm }]}
-            onPress={handleBack}
-            accessibilityRole="button"
-            accessibilityLabel="Back to closet"
-          >
-            <Ionicons name="chevron-back" size={22} color={colors.foreground} />
-          </TouchableOpacity>
-
-          {/* Secondary outfit utilities */}
-          <TouchableOpacity
-            style={[styles.headerIconButton, { top: insets.top + spacing.sm }, (isBusy || updateOutfit.isPending) && styles.actionDisabled]}
-            onPress={openOutfitMenu}
-            disabled={isBusy || updateOutfit.isPending}
-            accessibilityRole="button"
-            accessibilityLabel="More outfit actions"
-            accessibilityState={{ expanded: false, disabled: isBusy || updateOutfit.isPending }}
-          >
-            <Ionicons name="ellipsis-horizontal" size={21} color={colors.foreground} />
-          </TouchableOpacity>
-        </View>
-
-        {/* ── Title ── */}
-        <View style={[styles.header, { maxWidth: width }]}>
-          <View style={[styles.nameRow, isNameFocused && styles.nameRowFocused]}>
-            <TextInput
-              ref={nameInputRef}
-              style={styles.name}
-              value={localName}
-              onChangeText={setLocalName}
-              onFocus={() => setIsNameFocused(true)}
-              onBlur={() => { setIsNameFocused(false); saveName(); }}
-              onSubmitEditing={saveName}
-              returnKeyType="done"
-              autoCapitalize="words"
-              selectTextOnFocus
-              editable={isNameFocused}
-            />
-            {!isNameFocused && (
-              <TouchableOpacity
-                onPress={() => {
-                  setIsNameFocused(true);
-                  setTimeout(() => nameInputRef.current?.focus(), 0);
-                }}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Ionicons name="pencil-outline" size={16} color={colors.mutedForeground} />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-
-        {/* ── Creative tools ── */}
-        <View style={styles.creativeTools}>
-          <TouchableOpacity
-            style={[styles.creativeAction, visualize.isPending && styles.actionDisabled]}
-            onPress={() => handleGenerate(hasAiImage)}
-            disabled={visualize.isPending}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel={hasAiImage ? `Regenerate flat-lay for ${outfit.name}` : `Generate flat-lay for ${outfit.name}`}
-            accessibilityState={{ disabled: visualize.isPending, busy: visualize.isPending }}
-          >
-            {visualize.isPending ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : (
-              <Ionicons name={hasAiImage ? 'refresh-outline' : 'sparkles-outline'} size={18} color={colors.primary} />
-            )}
-            <Text style={styles.creativeActionLabel} numberOfLines={1}>
-              {visualize.isPending ? 'Generating…' : hasAiImage ? 'Regenerate' : 'Flat-lay'}
+        {visualize.isError && (
+          <View style={styles.errorRow} accessibilityLiveRegion="polite">
+            <Text style={styles.generateErrorText} numberOfLines={2}>
+              {(visualize.error as any)?.response?.data?.message ?? 'Generation failed'}
             </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.creativeAction}
-            onPress={() => openStylist({
-              initialQuery: `How can I improve my "${outfit.name}" outfit?`,
-              source: 'outfit_detail',
-              onNavigateToCloset: (outfitId) => navigation.navigate('OutfitDetail', { outfitId }),
-              context: {
-                kind: 'outfit',
-                outfitId: outfit.id,
-                name: outfit.name,
-                itemIds: (outfit.itemIds ?? []).map((entry) => entry.id),
-              },
-            })}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel={`Get styling advice for ${outfit.name}`}
-          >
-            <Ionicons name="sparkles" size={18} color={colors.primary} />
-            <Text style={styles.creativeActionLabel} numberOfLines={1}>Ask stylist</Text>
-          </TouchableOpacity>
-        </View>
-
-        {(visualize.isError || hasAiImage) && (
-          <View style={styles.creativeMeta}>
-            {visualize.isError ? (
-              <>
-                <Text style={styles.generateErrorText} numberOfLines={2}>
-                  {(visualize.error as any)?.response?.data?.message ?? 'Generation failed'}
-                </Text>
-                <TouchableOpacity onPress={() => handleGenerate(hasAiImage)} accessibilityRole="button" accessibilityLabel="Retry flat-lay generation">
-                  <Text style={styles.retryLabel}>Retry</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <Text style={styles.aiDisclaimer}>AI-generated · approximate</Text>
-            )}
+            <TouchableOpacity
+              onPress={() => handleGenerate(hasAiImage)}
+              accessibilityRole="button"
+              accessibilityLabel="Retry flat-lay generation"
+            >
+              <Text style={styles.retryLabel}>Retry</Text>
+            </TouchableOpacity>
           </View>
         )}
 
-        {/* ── Wear utility ── */}
-        <View style={styles.wearRow}>
-          <View style={styles.wearSummary}>
-            <Ionicons name="checkmark-circle-outline" size={18} color={colors.primary} />
-            <Text style={styles.wearSummaryText}>
-              Worn <Text style={styles.wearSummaryCount}>{outfit.wearCount}</Text> {outfit.wearCount === 1 ? 'time' : 'times'}
-            </Text>
+        {/* ── Title ── */}
+        <View style={styles.header}>
+          {/*
+            Renaming lives in the ⋯ menu, so the title carries no edit affordance
+            of its own. A read-only Text wraps a long name; a TextInput would clip
+            it. The input only mounts while editing, so autoFocus is race-free.
+          */}
+          <View style={[styles.nameRow, isNameFocused && styles.nameRowFocused]}>
+            {isNameFocused ? (
+              <TextInput
+                ref={nameInputRef}
+                style={styles.name}
+                value={localName}
+                onChangeText={setLocalName}
+                onBlur={() => { setIsNameFocused(false); saveName(); }}
+                onSubmitEditing={saveName}
+                returnKeyType="done"
+                autoCapitalize="words"
+                autoFocus
+                accessibilityLabel="Outfit name"
+              />
+            ) : (
+              <Text style={styles.name}>{localName}</Text>
+            )}
           </View>
-          <TouchableOpacity
-            style={[styles.wornButton, isBusy && styles.actionDisabled]}
+          <Text style={styles.nameMeta}>{metaLine}</Text>
+        </View>
+
+        {/* ── Primary action ── */}
+        <PressableScale
+          style={styles.stylistButton}
+          contentStyle={styles.stylistButtonSurface}
+          onPress={() => openStylist({
+            initialQuery: `How can I improve my "${outfit.name}" outfit?`,
+            source: 'outfit_detail',
+            onNavigateToCloset: (outfitId) => navigation.navigate('OutfitDetail', { outfitId }),
+            context: {
+              kind: 'outfit',
+              outfitId: outfit.id,
+              name: outfit.name,
+              itemIds: (outfit.itemIds ?? []).map((entry) => entry.id),
+            },
+          })}
+          accessibilityRole="button"
+          accessibilityLabel={`Get styling advice for ${outfit.name}`}
+        >
+          <Ionicons name="sparkles" size={18} color={colors.primaryForeground} />
+          <Text style={styles.stylistButtonText}>Ask stylist</Text>
+        </PressableScale>
+
+        {/* ── Wardrobe utilities ── */}
+        <View style={styles.utilityRow}>
+          <PressableScale
+            style={styles.utilityButton}
+            contentStyle={[styles.utilityButtonSurface, markWorn.isPending && styles.actionDisabled]}
             onPress={handleMarkWorn}
             disabled={isBusy}
-            activeOpacity={0.8}
             accessibilityRole="button"
             accessibilityLabel={`Mark ${outfit.name} as worn today`}
             accessibilityState={{ disabled: isBusy, busy: markWorn.isPending }}
           >
             {markWorn.isPending ? (
-              <ActivityIndicator size="small" color={colors.primaryForeground} />
+              <ActivityIndicator size="small" color={colors.primary} />
             ) : (
-              <Text style={styles.wornButtonLabel}>Worn today</Text>
+              <Ionicons name="checkmark-circle-outline" size={20} color={colors.primary} />
             )}
-          </TouchableOpacity>
+            <Text style={styles.utilityLabel}>Worn today</Text>
+          </PressableScale>
+          <View style={styles.utilityDivider} />
+          <PressableScale
+            style={styles.utilityButton}
+            contentStyle={[styles.utilityButtonSurface, updateOutfit.isPending && styles.actionDisabled]}
+            onPress={toggleFavourite}
+            disabled={isBusy}
+            accessibilityRole="button"
+            accessibilityLabel={favouriteLabel}
+            accessibilityState={{ selected: outfit.isFavorite, disabled: isBusy }}
+          >
+            <Ionicons
+              name={outfit.isFavorite ? 'heart' : 'heart-outline'}
+              size={20}
+              color={outfit.isFavorite ? colors.primary : colors.foreground}
+            />
+            <Text style={styles.utilityLabel}>{outfit.isFavorite ? 'Favourited' : 'Favourite'}</Text>
+          </PressableScale>
+          <View style={styles.utilityDivider} />
+          <PressableScale
+            style={styles.utilityButton}
+            contentStyle={[styles.utilityButtonSurface, isBusy && styles.actionDisabled]}
+            onPress={() => { Keyboard.dismiss(); setSaveSheetOpen(true); }}
+            disabled={isBusy}
+            accessibilityRole="button"
+            accessibilityLabel={`Add ${outfit.name} to a board`}
+            accessibilityState={{ disabled: isBusy }}
+          >
+            <Ionicons name="bookmark-outline" size={20} color={colors.foreground} />
+            <Text style={styles.utilityLabel}>Board</Text>
+          </PressableScale>
         </View>
 
-        {/* ── Details ── */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Details</Text>
-          <View style={styles.detailGrid}>
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Times worn</Text>
-              <Text style={styles.detailValue}>{outfit.wearCount}</Text>
+        {/* ── Pieces ── */}
+        {pieces.length > 0 && (
+          <EditorialSection
+            title={`Pieces (${pieces.length})`}
+            variant="ruled"
+            style={styles.section}
+          >
+            <View style={styles.piecesGrid}>
+              {pieces.map(({ entry, item }) => {
+                if (!item) {
+                  const categoryLabel =
+                    CATEGORY_LABELS[entry.category as keyof typeof CATEGORY_LABELS] ?? entry.category;
+                  return (
+                    <View
+                      key={`deleted-${entry.id}`}
+                      style={[styles.pieceItem, styles.pieceGhost, { width: tileWidth }]}
+                      accessibilityLabel={`Deleted piece, ${categoryLabel}`}
+                    >
+                      <View
+                        style={[styles.pieceGhostFrame, { width: tileWidth, height: tileHeight }]}
+                      >
+                        <Ionicons name="trash-outline" size={20} color={colors.mutedForeground} />
+                      </View>
+                      <Text style={[styles.pieceName, styles.pieceGhostText]} numberOfLines={1}>Deleted</Text>
+                      <Text style={styles.pieceCategory} numberOfLines={1}>{categoryLabel}</Text>
+                    </View>
+                  );
+                }
+                return (
+                  <PressableScale
+                    key={item.id}
+                    style={[styles.pieceItem, { width: tileWidth }]}
+                    onPress={() => navigation.navigate('ItemDetail', { itemId: item.id })}
+                    accessibilityRole="button"
+                    accessibilityLabel={getItemCardAccessibilityLabel(item)}
+                  >
+                    <GarmentImage
+                      item={item}
+                      width={tileWidth}
+                      height={tileHeight}
+                      borderRadius={radii.md}
+                      placeholderIconSize={20}
+                    />
+                    <Text style={styles.pieceName} numberOfLines={1}>{item.name}</Text>
+                    {item.category ? (
+                      <Text style={styles.pieceCategory} numberOfLines={1}>
+                        {CATEGORY_LABELS[item.category]}
+                      </Text>
+                    ) : null}
+                  </PressableScale>
+                );
+              })}
             </View>
-            {outfit.lastWornAt && (
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Last worn</Text>
-                <Text style={styles.detailValue}>{formatDate(outfit.lastWornAt)}</Text>
-              </View>
+            {hasDeletedPieces && (
+              <TouchableOpacity
+                style={styles.clearDeletedBtn}
+                onPress={() => {
+                  const validIds = pieces.filter((p) => p.item).map((p) => p.entry);
+                  updateOutfit.mutate({ id: outfit.id, itemIds: validIds });
+                }}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Clear deleted items from this outfit"
+              >
+                <Ionicons name="trash-outline" size={13} color={colors.mutedForeground} />
+                <Text style={styles.clearDeletedText}>Clear deleted items</Text>
+              </TouchableOpacity>
             )}
-          </View>
-        </View>
+          </EditorialSection>
+        )}
 
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={[styles.sectionTitle, styles.sectionTitleNoMargin]}>Upcoming events</Text>
-            <TouchableOpacity onPress={() => setEventPickerVisible(true)} activeOpacity={0.7}>
-              <Text style={styles.sectionAction}>Add to events</Text>
-            </TouchableOpacity>
-          </View>
-          {upcomingEvents.length === 0 ? (
-            <Text style={styles.emptySectionText}>This outfit is not assigned to an upcoming event.</Text>
-          ) : (
-            upcomingEvents.map((event) => (
-              <View key={event.id} style={styles.assignedEventRow}>
+        {/* ── Upcoming events ── */}
+        {upcomingEvents.length === 0 ? (
+          <TouchableOpacity
+            style={styles.compactRow}
+            onPress={() => setEventPickerVisible(true)}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={`Add ${outfit.name} to an upcoming event`}
+          >
+            <Ionicons name="calendar-outline" size={18} color={colors.mutedForeground} />
+            <Text style={styles.compactRowLabel}>Add to an event</Text>
+            <Ionicons name="chevron-forward" size={17} color={colors.mutedForeground} />
+          </TouchableOpacity>
+        ) : (
+          <EditorialSection
+            title="Upcoming events"
+            variant="ruled"
+            style={styles.section}
+            actionLabel="Add to events"
+            onAction={() => setEventPickerVisible(true)}
+          >
+            {upcomingEvents.map((event, index) => (
+              <View
+                key={event.id}
+                style={[
+                  styles.assignedEventRow,
+                  // The next section supplies the closing rule.
+                  index < upcomingEvents.length - 1 && styles.assignedEventRowBorder,
+                ]}
+              >
                 <View style={styles.assignedEventIcon}>
                   <Ionicons name="calendar-outline" size={16} color={colors.primary} />
                 </View>
@@ -585,154 +562,162 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
                   <Ionicons name="close-circle-outline" size={20} color={colors.mutedForeground} />
                 </TouchableOpacity>
               </View>
-            ))
-          )}
-        </View>
-
-        {/* ── Pieces ── */}
-        {pieces.length > 0 && (
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Pieces ({pieces.length})</Text>
-            <View style={styles.piecesGrid}>
-              {pieces.map(({ entry, item }) => {
-                if (!item) {
-                  return (
-                    <View key={`deleted-${entry.id}`} style={[styles.pieceItem, styles.pieceGhost]}>
-                      <View style={[styles.pieceImageContainer, styles.pieceGhostImage]}>
-                        <Ionicons name="trash-outline" size={20} color={colors.mutedForeground} />
-                      </View>
-                      <Text style={[styles.pieceName, styles.pieceGhostText]} numberOfLines={1}>Deleted</Text>
-                      <Text style={styles.pieceCategory} numberOfLines={1}>
-                        {CATEGORY_LABELS[entry.category as keyof typeof CATEGORY_LABELS] ?? entry.category}
-                      </Text>
-                    </View>
-                  );
-                }
-                const pieceCover = itemCoverPresentation(item);
-                const uri = pieceCover.uri;
-                return (
-                  <TouchableOpacity
-                    key={item.id}
-                    style={styles.pieceItem}
-                    onPress={() => navigation.navigate('ItemDetail', { itemId: item.id })}
-                    activeOpacity={0.75}
-                  >
-                    <View style={styles.pieceImageContainer}>
-                      {uri ? (
-                        <Image
-                          source={{ uri }}
-                          style={styles.pieceImage}
-                          resizeMode={pieceCover.contentFit}
-                        />
-                      ) : (
-                        <View style={[styles.pieceImage, styles.piecePlaceholder]}>
-                          <Ionicons name="shirt-outline" size={20} color={colors.border} />
-                        </View>
-                      )}
-                    </View>
-                    <Text style={styles.pieceName} numberOfLines={1}>{item.name}</Text>
-                    {item.category ? (
-                      <Text style={styles.pieceCategory} numberOfLines={1}>
-                        {CATEGORY_LABELS[item.category]}
-                      </Text>
-                    ) : null}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            {hasDeletedPieces && (
-              <TouchableOpacity
-                style={styles.clearDeletedBtn}
-                onPress={() => {
-                  const validIds = pieces.filter((p) => p.item).map((p) => p.entry);
-                  updateOutfit.mutate({ id: outfit.id, itemIds: validIds });
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="trash-outline" size={13} color={colors.mutedForeground} />
-                <Text style={styles.clearDeletedText}>Clear deleted items</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+            ))}
+          </EditorialSection>
         )}
 
         {/* ── Tags ── */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Tags</Text>
-          {localTags.length > 0 && (
+        {localTags.length > 0 || tagInputActive ? (
+          <EditorialSection title="Tags" variant="ruled" style={styles.section}>
             <View style={styles.chipRow}>
               {localTags.map((tag) => (
                 <TouchableOpacity
                   key={tag}
-                  style={[chipStyles.chip, styles.tagChip]}
+                  style={styles.tagChip}
                   onPress={() => removeTag(tag)}
                   activeOpacity={0.7}
+                  disabled={updateOutfit.isPending}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove tag ${tag}`}
+                  accessibilityState={{ disabled: updateOutfit.isPending }}
                 >
-                  <Text style={chipStyles.label}>{tag}</Text>
-                  <Ionicons name="close-circle" size={13} color={colors.mutedForeground} />
+                  <Text style={styles.tagChipText}>{tag}</Text>
+                  <Ionicons name="close" size={11} color={colors.mutedForeground} style={{ marginLeft: 3 }} />
                 </TouchableOpacity>
               ))}
+              {tagInputActive ? (
+                <TextInput
+                  ref={tagInputRef}
+                  style={styles.inlineTagInput}
+                  value={tagDraft}
+                  onChangeText={setTagDraft}
+                  onSubmitEditing={() => addTag(tagDraft)}
+                  onBlur={() => { addTag(tagDraft); setTagInputActive(false); }}
+                  placeholder="e.g. summer"
+                  placeholderTextColor={colors.mutedForeground}
+                  autoFocus
+                  blurOnSubmit={false}
+                  maxLength={40}
+                  autoCapitalize="none"
+                  returnKeyType="done"
+                  accessibilityLabel="New tag name"
+                />
+              ) : (
+                <TouchableOpacity
+                  style={styles.addTagButton}
+                  onPress={() => setTagInputActive(true)}
+                  activeOpacity={0.7}
+                  disabled={updateOutfit.isPending}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add tag"
+                  accessibilityState={{ disabled: updateOutfit.isPending }}
+                >
+                  <Ionicons name="add" size={14} color={colors.primary} />
+                  <Text style={styles.addTagText}>Add tag</Text>
+                </TouchableOpacity>
+              )}
             </View>
-          )}
-          <View style={styles.tagAddRow}>
-            <TextInput
-              ref={tagInputRef}
-              style={styles.tagAddInput}
-              value={tagDraft}
-              onChangeText={setTagDraft}
-              placeholder="e.g. summer, casual, linen…"
-              placeholderTextColor={colors.mutedForeground}
-              autoCapitalize="none"
-              returnKeyType="done"
-              onSubmitEditing={() => addTag(tagDraft)}
-              blurOnSubmit={false}
-            />
-            <TouchableOpacity
-              style={[styles.tagAddBtn, !tagDraft.trim() && styles.tagAddBtnDisabled]}
-              onPress={() => addTag(tagDraft)}
-              disabled={!tagDraft.trim()}
-              activeOpacity={0.75}
-            >
-              <Text style={[styles.tagAddBtnLabel, !tagDraft.trim() && styles.tagAddBtnLabelDisabled]}>
-                Add
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+          </EditorialSection>
+        ) : (
+          <TouchableOpacity
+            style={styles.compactRow}
+            onPress={() => setTagInputActive(true)}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Add tags to this outfit"
+          >
+            <Ionicons name="pricetag-outline" size={18} color={colors.mutedForeground} />
+            <Text style={styles.compactRowLabel}>Add tags</Text>
+            <Ionicons name="add" size={18} color={colors.mutedForeground} />
+          </TouchableOpacity>
+        )}
 
         {/* ── Notes ── */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Notes</Text>
-          <TextInput
-            ref={notesInputRef}
-            style={styles.notesTextArea}
-            value={localNotes}
-            onChangeText={setLocalNotes}
-            placeholder="Add styling notes, reminders, or outfit inspiration…"
-            placeholderTextColor={colors.mutedForeground}
-            multiline
-            textAlignVertical="top"
-            autoCapitalize="sentences"
-          />
-          <View style={styles.notesFooter}>
-            {notesSaved ? (
-              <View style={styles.notesSavedBadge}>
-                <Ionicons name="checkmark" size={13} color={colors.primary} />
-                <Text style={styles.notesSavedText}>Saved</Text>
-              </View>
-            ) : localNotes.trim() !== (outfit.notes ?? '') ? (
+        {notesExpanded || hasNotes ? (
+          <EditorialSection
+            title="Notes"
+            variant="ruled"
+            style={styles.section}
+            trailing={savedBadge ?? (!notesExpanded ? (
               <TouchableOpacity
-                style={[styles.notesSaveBtn, updateOutfit.isPending && styles.actionDisabled]}
-                onPress={saveNotes}
-                disabled={updateOutfit.isPending}
-                activeOpacity={0.8}
+                onPress={() => setNotesExpanded(true)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="Edit styling notes"
               >
-                <Text style={styles.notesSaveBtnLabel}>Save</Text>
+                <Ionicons name="pencil-outline" size={16} color={colors.mutedForeground} />
               </TouchableOpacity>
-            ) : null}
-          </View>
-        </View>
+            ) : null)}
+          >
+            {notesExpanded ? (
+              <>
+                <TextInput
+                  ref={notesInputRef}
+                  style={styles.notesTextArea}
+                  value={localNotes}
+                  onChangeText={setLocalNotes}
+                  placeholder="Add styling notes, reminders, or outfit inspiration…"
+                  placeholderTextColor={colors.mutedForeground}
+                  multiline
+                  autoFocus
+                  textAlignVertical="top"
+                  autoCapitalize="sentences"
+                  accessibilityLabel="Styling notes"
+                  onBlur={() => {
+                    // Blur-to-save mirrors the name field, so tapping away can
+                    // never strand an unsaved draft in a collapsed section.
+                    if (notesDirty) saveNotes();
+                    else setNotesExpanded(false);
+                  }}
+                />
+                {notesDirty && (
+                  <View style={styles.notesFooter}>
+                    <TouchableOpacity
+                      style={[styles.notesSaveBtn, updateOutfit.isPending && styles.actionDisabled]}
+                      onPress={saveNotes}
+                      disabled={updateOutfit.isPending}
+                      activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityLabel="Save styling notes"
+                    >
+                      <Text style={styles.notesSaveBtnLabel}>Save</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
+            ) : (
+              <TouchableOpacity
+                onPress={() => setNotesExpanded(true)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Edit styling notes"
+              >
+                <Text style={styles.notesText} numberOfLines={4}>{storedNotes}</Text>
+              </TouchableOpacity>
+            )}
+          </EditorialSection>
+        ) : (
+          <TouchableOpacity
+            style={styles.compactRow}
+            onPress={() => setNotesExpanded(true)}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Add styling notes"
+          >
+            <Ionicons name="create-outline" size={18} color={colors.mutedForeground} />
+            <Text style={styles.compactRowLabel}>Add styling notes</Text>
+            {savedBadge ?? <Ionicons name="add" size={18} color={colors.mutedForeground} />}
+          </TouchableOpacity>
+        )}
       </ScrollView>
+      <TabQuickMenuSheet
+        visible={menuOpen}
+        title="Outfit options"
+        subtitle={outfit.name}
+        options={outfitMenuOptions}
+        onClose={() => setMenuOpen(false)}
+      />
       <OutfitEventAssignmentModal
         outfit={outfit}
         outfits={outfits}
@@ -750,55 +735,23 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   );
 }
 
-const PIECE_SIZE = 80;
+const PIECE_COLUMNS = 4;
+const PIECE_GAP = spacing.sm;
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.background },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  scrollContent: { paddingBottom: spacing.xxxl },
+  // The raised Stylist tab button overhangs its bar by 14pt at the centre.
+  scrollContent: { paddingBottom: spacing.xxxl + 14 },
+  section: { marginHorizontal: spacing.lg },
 
-  // ── Hero buttons ──
-  backButton: {
-    position: 'absolute',
-    left: spacing.lg,
-    backgroundColor: colors.white,
-    borderRadius: radii.full,
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  headerIconButton: {
-    position: 'absolute',
-    right: spacing.lg,
-    backgroundColor: colors.white,
-    borderRadius: radii.full,
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-  },
-
-  // ── Collage overlay ──
-  collageOverlay: {
-    backgroundColor: 'rgba(0, 0, 0, 0.22)',
-  },
-
-  creativeMeta: {
+  errorRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     minHeight: 20,
     marginHorizontal: spacing.lg,
-    marginTop: spacing.sm,
+    marginTop: spacing.md,
   },
   generateErrorText: {
     flex: 1,
@@ -810,16 +763,11 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.semibold,
     color: colors.primary,
   },
-  aiDisclaimer: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-    fontStyle: 'italic',
-  },
 
   // ── Header / Title ──
   header: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
+    paddingTop: spacing.xl,
     paddingBottom: spacing.md,
     gap: 4,
   },
@@ -836,124 +784,98 @@ const styles = StyleSheet.create({
   },
   name: {
     flex: 1,
-    fontSize: typography.size.xl,
-    fontWeight: typography.weight.bold,
+    fontFamily: typography.family.display,
+    fontSize: typography.size.xxl,
+    lineHeight: 34,
+    fontWeight: typography.weight.regular,
     color: colors.foreground,
-    letterSpacing: 0,
-    lineHeight: typography.size.xl * typography.lineHeight.normal,
+    letterSpacing: -0.3,
   },
-  nameEditIcon: {
-    flexShrink: 0,
+  nameMeta: {
+    marginTop: spacing.xs,
+    fontSize: typography.size.sm,
+    lineHeight: 20,
+    color: colors.inkSubtle,
   },
 
-  // ── Creative tools / wear utility ──
-  creativeTools: {
-    flexDirection: 'row',
-    gap: spacing.sm,
+  // ── Primary action ──
+  stylistButton: {
     marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
   },
-  creativeAction: {
-    flex: 1,
+  stylistButtonSurface: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
     minHeight: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    backgroundColor: colors.accent,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: `${colors.primary}26`,
-  },
-  creativeActionLabel: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-    color: colors.primary,
-  },
-  wearRow: {
-    minHeight: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.md,
-    marginBottom: spacing.lg,
-    paddingVertical: spacing.sm,
-    paddingLeft: spacing.md,
-    paddingRight: spacing.sm,
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  wearSummary: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  wearSummaryText: {
-    color: colors.mutedForeground,
-    fontSize: typography.size.sm,
-  },
-  wearSummaryCount: {
-    color: colors.foreground,
-    fontWeight: typography.weight.semibold,
-    fontVariant: ['tabular-nums'],
-  },
-  wornButton: {
-    minHeight: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.lg,
     backgroundColor: colors.primary,
     borderRadius: radii.full,
+    borderCurve: 'continuous',
   },
-  wornButtonLabel: {
-    fontSize: typography.size.sm,
+  stylistButtonText: {
+    fontSize: typography.size.md,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
   },
-  actionDisabled: { opacity: 0.5 },
 
-  // ── Section cards ──
-  sectionCard: {
-    backgroundColor: colors.card,
-    borderRadius: radii.lg,
-    padding: spacing.lg,
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  sectionTitle: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.semibold,
-    color: colors.mutedForeground,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: spacing.md,
-  },
-  sectionHeaderRow: {
+  // ── Wardrobe utilities ──
+  // No bottom rule: the ruled section that follows always supplies its own top
+  // hairline, and two of them 8pt apart read as a double line.
+  utilityRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.md,
+    marginHorizontal: spacing.lg,
+    minHeight: 68,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
   },
-  sectionTitleNoMargin: { marginBottom: 0 },
-  sectionAction: {
-    color: colors.primary,
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
+  utilityButton: { flex: 1 },
+  utilityButtonSurface: {
+    minHeight: 68,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
   },
-  emptySectionText: { color: colors.mutedForeground, fontSize: typography.size.sm },
+  utilityDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 32,
+    backgroundColor: colors.border,
+  },
+  utilityLabel: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.medium,
+    color: colors.foreground,
+  },
+  actionDisabled: { opacity: 0.5 },
+
+  // ── Collapsed section rows ──
+  compactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+    minHeight: 56,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
+  },
+  compactRowLabel: {
+    flex: 1,
+    fontSize: typography.size.md,
+    color: colors.foreground,
+  },
+
+  // ── Events ──
   assignedEventRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     paddingVertical: spacing.sm,
+  },
+  assignedEventRowBorder: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.hairline,
   },
   assignedEventIcon: {
     width: 32,
@@ -967,64 +889,33 @@ const styles = StyleSheet.create({
   assignedEventTitle: { color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
   assignedEventMeta: { color: colors.mutedForeground, fontSize: typography.size.xs },
 
-  detailGrid: { gap: spacing.sm },
-  detailItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  detailLabel: {
-    fontSize: typography.size.sm,
-    color: colors.mutedForeground,
-  },
-  detailValue: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.medium,
-    color: colors.foreground,
-  },
-
+  // ── Pieces ──
   piecesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.md,
+    columnGap: PIECE_GAP,
+    rowGap: spacing.md,
   },
   pieceItem: {
-    width: PIECE_SIZE,
-    alignItems: 'center',
-  },
-  pieceImageContainer: {
-    width: PIECE_SIZE,
-    height: PIECE_SIZE,
-    borderRadius: radii.md,
-    overflow: 'hidden',
-    marginBottom: spacing.xs,
-    backgroundColor: colors.muted,
-  },
-  pieceImage: {
-    width: '100%',
-    height: '100%',
-  },
-  piecePlaceholder: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.muted,
+    alignItems: 'flex-start',
+    gap: 6,
   },
   pieceName: {
     fontSize: typography.size.xs,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
-    textAlign: 'center',
   },
   pieceCategory: {
     fontSize: 10,
     color: colors.mutedForeground,
-    textAlign: 'center',
   },
   pieceGhost: {
     opacity: 0.5,
   },
-  pieceGhostImage: {
+  pieceGhostFrame: {
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
     borderStyle: 'dashed',
@@ -1036,7 +927,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    marginTop: spacing.sm,
+    marginTop: spacing.md,
     alignSelf: 'flex-start',
   },
   clearDeletedText: {
@@ -1044,65 +935,64 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
   },
 
+  // ── Tags ──
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.xs,
-    marginBottom: spacing.sm,
+    columnGap: spacing.sm,
+    rowGap: spacing.sm,
   },
   tagChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    minHeight: 34,
+    paddingHorizontal: spacing.sm + 2,
+    borderRadius: radii.full,
+    backgroundColor: colors.muted,
   },
-  tagAddRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
+  tagChipText: {
+    fontSize: typography.size.xs,
+    color: colors.foreground,
+    fontWeight: typography.weight.medium,
   },
-  tagAddInput: {
-    flex: 1,
-    height: 42,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
+  inlineTagInput: {
+    minHeight: 44,
+    minWidth: 120,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.primary,
+    borderRadius: radii.full,
     paddingHorizontal: spacing.md,
     fontSize: typography.size.sm,
     color: colors.foreground,
-    backgroundColor: colors.background,
   },
-  tagAddBtn: {
-    height: 42,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.md,
-    backgroundColor: colors.foreground,
+  addTagButton: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  tagAddBtnDisabled: {
-    backgroundColor: colors.muted,
-    borderWidth: 1,
+    gap: spacing.xs,
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.full,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
-  tagAddBtnLabel: {
+  addTagText: {
     fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-    color: colors.white,
+    color: colors.primary,
+    fontWeight: typography.weight.medium,
   },
-  tagAddBtnLabelDisabled: {
-    color: colors.mutedForeground,
+
+  // ── Notes ──
+  notesText: {
+    fontSize: typography.size.md,
+    lineHeight: 23,
+    color: colors.foreground,
   },
   notesTextArea: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
     fontSize: typography.size.md,
     color: colors.foreground,
     lineHeight: typography.size.md * 1.5,
     minHeight: 100,
-    backgroundColor: colors.background,
     textAlignVertical: 'top',
   },
   notesFooter: {

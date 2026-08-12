@@ -69,6 +69,8 @@ export function EditorialSection({
   description,
   actionLabel,
   onAction,
+  variant = 'plain',
+  trailing,
   children,
   style,
 }: {
@@ -77,13 +79,24 @@ export function EditorialSection({
   description?: string;
   actionLabel?: string;
   onAction?: () => void;
+  /**
+   * `plain` — a titled block on the page background (overview screens).
+   * `ruled` — hairline-separated editorial section with a small uppercase
+   * eyebrow, for detail screens where sections stack continuously.
+   */
+  variant?: 'plain' | 'ruled';
+  /** Rendered in the header row in place of an action, e.g. a status badge. */
+  trailing?: ReactNode;
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
+  const ruled = variant === 'ruled';
+
   return (
-    <View style={[styles.section, style]}>
+    <View style={[ruled ? styles.ruledSection : styles.section, style]}>
       <View style={[styles.sectionHeader, description ? styles.sectionHeaderTight : null]}>
-        <Text style={styles.sectionTitle}>{title}</Text>
+        <Text style={ruled ? styles.ruledSectionTitle : styles.sectionTitle}>{title}</Text>
+        {trailing}
         {actionLabel && onAction ? (
           <PressableScale
             haptic={false}
@@ -92,7 +105,9 @@ export function EditorialSection({
             accessibilityRole="button"
             accessibilityLabel={actionLabel}
           >
-            <Text style={styles.sectionActionText}>{actionLabel}</Text>
+            <Text style={[styles.sectionActionText, ruled && styles.ruledSectionActionText]}>
+              {actionLabel}
+            </Text>
           </PressableScale>
         ) : null}
       </View>
@@ -354,7 +369,13 @@ const styles = StyleSheet.create({
     color: colors.foreground,
   },
   primaryActionButtonText: { color: colors.primaryForeground },
+  ruledSectionActionText: { color: colors.action },
   section: { marginBottom: spacing.xl },
+  ruledSection: {
+    paddingVertical: spacing.xl,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
+  },
   sectionHeader: {
     minHeight: 28,
     flexDirection: 'row',
@@ -368,6 +389,15 @@ const styles = StyleSheet.create({
     fontSize: typography.size.md,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
+  },
+  ruledSectionTitle: {
+    flex: 1,
+    fontSize: typography.size.xs,
+    lineHeight: 18,
+    fontWeight: typography.weight.semibold,
+    color: colors.mutedForeground,
+    textTransform: 'uppercase',
+    letterSpacing: 1.1,
   },
   sectionDescription: {
     maxWidth: 330,

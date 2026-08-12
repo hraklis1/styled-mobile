@@ -620,7 +620,12 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           <TouchableOpacity
             style={[
               styles.coverPickerButton,
-              { top: insets.top + spacing.sm },
+              {
+                top: insets.top + spacing.sm,
+                right: !viewIsPolished && viewItem.imageUrl
+                  ? spacing.lg + 44 + spacing.sm + 44 + spacing.sm
+                  : spacing.lg + 44 + spacing.sm,
+              },
               polishItem.isPending && styles.actionDisabled,
             ]}
             onPress={() => setCoverSheetOpen(true)}
@@ -649,6 +654,30 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           >
             <Ionicons name="chevron-back" size={22} color={colors.foreground} />
           </TouchableOpacity>
+          {!viewIsPolished && viewItem.imageUrl && (
+            <TouchableOpacity
+              style={[
+                styles.createCoverButton,
+                { top: insets.top + spacing.sm },
+                isBusy && styles.actionDisabled,
+              ]}
+              onPress={handlePolish}
+              disabled={isBusy}
+              accessibilityRole="button"
+              accessibilityLabel={
+                polishItem.isPending
+                  ? 'Creating catalog cover'
+                  : 'Create a catalog cover with AI using a Polish credit'
+              }
+              accessibilityState={{ disabled: isBusy, busy: polishItem.isPending }}
+            >
+              {polishItem.isPending ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Ionicons name="sparkles-outline" size={19} color={colors.primary} />
+              )}
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={[
               styles.itemOptionsButton,
@@ -664,39 +693,6 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
             <Ionicons name="ellipsis-horizontal" size={20} color={colors.foreground} />
           </TouchableOpacity>
         </View>
-
-        {!viewIsPolished && viewItem.imageUrl && (
-          <TouchableOpacity
-            style={[styles.coverEnhancement, polishItem.isPending && styles.actionDisabled]}
-            onPress={handlePolish}
-            disabled={isBusy}
-            activeOpacity={0.78}
-            accessibilityRole="button"
-            accessibilityLabel="Create a catalog cover with AI using a Polish credit"
-            accessibilityState={{ disabled: isBusy, busy: polishItem.isPending }}
-          >
-            <View style={styles.coverEnhancementIcon}>
-              {polishItem.isPending ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Ionicons name="sparkles-outline" size={17} color={colors.primary} />
-              )}
-            </View>
-            <View style={styles.coverEnhancementCopy}>
-              <Text style={styles.coverEnhancementTitle}>
-                {polishItem.isPending ? 'Creating catalog cover' : 'Create a catalog cover'}
-              </Text>
-              <Text style={styles.coverEnhancementText}>
-                {polishItem.isPending
-                  ? 'A clean studio-style image is on its way.'
-                  : 'A clean studio-style image for your closet'}
-              </Text>
-            </View>
-            {!polishItem.isPending && (
-              <Ionicons name="chevron-forward" size={17} color={colors.mutedForeground} />
-            )}
-          </TouchableOpacity>
-        )}
 
         {/* Header */}
         <View style={styles.header}>
@@ -1111,39 +1107,6 @@ const styles = StyleSheet.create({
     fontSize: typography.size.xs,
     lineHeight: 17,
   },
-  coverEnhancement: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    minHeight: 66,
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.lg,
-    borderCurve: 'continuous',
-    backgroundColor: colors.card,
-  },
-  coverEnhancementIcon: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.md,
-    borderCurve: 'continuous',
-    backgroundColor: colors.accent,
-  },
-  coverEnhancementCopy: { flex: 1, gap: 2 },
-  coverEnhancementTitle: {
-    color: colors.foreground,
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-  },
-  coverEnhancementText: {
-    color: colors.mutedForeground,
-    fontSize: typography.size.xs,
-    lineHeight: 17,
-  },
   coverPickerButton: {
     position: 'absolute',
     zIndex: 2,
@@ -1189,6 +1152,21 @@ const styles = StyleSheet.create({
     position: 'absolute',
     zIndex: 2,
     right: spacing.lg,
+    backgroundColor: 'rgba(255,252,247,0.94)',
+    borderRadius: radii.full,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+    boxShadow: '0 2px 8px rgba(29,27,24,0.10)',
+  },
+  createCoverButton: {
+    position: 'absolute',
+    zIndex: 2,
+    right: spacing.lg + 44 + spacing.sm,
     backgroundColor: 'rgba(255,252,247,0.94)',
     borderRadius: radii.full,
     width: 44,
