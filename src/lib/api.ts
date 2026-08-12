@@ -2,6 +2,7 @@ import axios from 'axios';
 import type { AxiosError } from 'axios';
 import { supabase } from './supabase';
 import { queryClient } from './queryClient';
+export { isNetworkError } from './networkError';
 
 /**
  * The server's structured error shape for gated/metered routes — see
@@ -122,10 +123,3 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
-// True only for connectivity failures (no response received).
-// HTTP 4xx/5xx errors have a response and are NOT retryable.
-export function isNetworkError(error: unknown): boolean {
-  const err = error as AxiosError;
-  return !!err?.isAxiosError && !err.response;
-}

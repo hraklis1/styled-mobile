@@ -1,5 +1,5 @@
 import { QueryClient } from '@tanstack/react-query';
-import { isNetworkError } from './api';
+import { isNetworkError } from './networkError';
 
 export const queryClient = new QueryClient({
   defaultOptions: {

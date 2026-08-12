@@ -1,7 +1,3 @@
-jest.mock('../api', () => ({
-  isNetworkError: () => false,
-}));
-
 import { clearUserQueryCache, queryClient } from '../queryClient';
 
 describe('user query cache privacy', () => {

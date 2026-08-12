@@ -10,6 +10,7 @@ import {
   useWindowDimensions,
   ActivityIndicator,
   Animated,
+  ActionSheetIOS,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -327,6 +328,44 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
     );
   };
 
+  const openOutfitMenu = () => {
+    if (isBusy || updateOutfit.isPending) return;
+
+    const toggleFavourite = () => {
+      updateOutfit.mutate({ id: outfit.id, isFavorite: !outfit.isFavorite });
+    };
+    const options = [
+      'Cancel',
+      'Save to board',
+      outfit.isFavorite ? 'Remove from favourites' : 'Add to favourites',
+      'Delete outfit',
+    ];
+
+    if (process.env.EXPO_OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex: 0,
+          destructiveButtonIndex: 3,
+          title: outfit.name,
+        },
+        (index) => {
+          if (index === 1) setSaveSheetOpen(true);
+          if (index === 2) toggleFavourite();
+          if (index === 3) handleDelete();
+        },
+      );
+      return;
+    }
+
+    Alert.alert(outfit.name, undefined, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Save to board', onPress: () => setSaveSheetOpen(true) },
+      { text: options[2], onPress: toggleFavourite },
+      { text: 'Delete outfit', style: 'destructive', onPress: handleDelete },
+    ]);
+  };
+
   const hasAiImage = !!outfit.aiGeneratedImageUrl;
 
   return (
@@ -356,74 +395,24 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
           <TouchableOpacity
             style={[styles.backButton, { top: insets.top + spacing.sm }]}
             onPress={handleBack}
+            accessibilityRole="button"
+            accessibilityLabel="Back to closet"
           >
             <Ionicons name="chevron-back" size={22} color={colors.foreground} />
           </TouchableOpacity>
 
-          {/* Favourite — top-right, left of delete */}
+          {/* Secondary outfit utilities */}
           <TouchableOpacity
-            style={[styles.headerIconButton, styles.favButton, { top: insets.top + spacing.sm }]}
-            onPress={() => updateOutfit.mutate({ id: outfit.id, isFavorite: !outfit.isFavorite })}
-            disabled={updateOutfit.isPending}
+            style={[styles.headerIconButton, { top: insets.top + spacing.sm }, (isBusy || updateOutfit.isPending) && styles.actionDisabled]}
+            onPress={openOutfitMenu}
+            disabled={isBusy || updateOutfit.isPending}
             accessibilityRole="button"
-            accessibilityLabel={outfit.isFavorite ? 'Remove from favourites' : 'Add to favourites'}
-            accessibilityState={{ selected: !!outfit.isFavorite }}
+            accessibilityLabel="More outfit actions"
+            accessibilityState={{ expanded: false, disabled: isBusy || updateOutfit.isPending }}
           >
-            <Ionicons
-              name={outfit.isFavorite ? 'heart' : 'heart-outline'}
-              size={20}
-              color={outfit.isFavorite ? colors.primary : colors.foreground}
-            />
-          </TouchableOpacity>
-
-          {/* Save to board — top-right, left of favourite */}
-          <TouchableOpacity
-            style={[styles.headerIconButton, styles.saveButton, { top: insets.top + spacing.sm }]}
-            onPress={() => setSaveSheetOpen(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Save to board"
-          >
-            <Ionicons name="bookmark-outline" size={20} color={colors.foreground} />
-          </TouchableOpacity>
-
-          {/* Delete — top-right */}
-          <TouchableOpacity
-            style={[styles.headerIconButton, { top: insets.top + spacing.sm }]}
-            onPress={handleDelete}
-            disabled={isBusy}
-          >
-            <Ionicons name="trash-outline" size={20} color={colors.foreground} />
+            <Ionicons name="ellipsis-horizontal" size={21} color={colors.foreground} />
           </TouchableOpacity>
         </View>
-
-        {/* ── Generate / Regenerate ── */}
-        {!hasAiImage && !visualize.isPending && !visualize.isError && (
-          <TouchableOpacity style={styles.generateCta} onPress={() => handleGenerate()}>
-            <Ionicons name="sparkles-outline" size={14} color={colors.primary} />
-            <Text style={styles.generateCtaLabel}>Generate flat-lay</Text>
-          </TouchableOpacity>
-        )}
-
-        {visualize.isError && (
-          <View style={styles.generateErrorRow}>
-            <Text style={styles.generateErrorText}>
-              {(visualize.error as any)?.response?.data?.message ?? 'Generation failed'}
-            </Text>
-            <TouchableOpacity onPress={() => handleGenerate(hasAiImage)}>
-              <Text style={styles.retryLabel}>Retry</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {hasAiImage && !visualize.isPending && (
-          <View style={styles.regenRow}>
-            <Text style={styles.aiDisclaimer}>AI-generated · approximate</Text>
-            <TouchableOpacity style={styles.regenBtn} onPress={() => handleGenerate(true)}>
-              <Ionicons name="refresh-outline" size={13} color={colors.mutedForeground} />
-              <Text style={styles.regenLabel}>Regenerate</Text>
-            </TouchableOpacity>
-          </View>
-        )}
 
         {/* ── Title ── */}
         <View style={[styles.header, { maxWidth: width }]}>
@@ -455,42 +444,90 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
           </View>
         </View>
 
-        {/* ── Primary CTA ── */}
-        <TouchableOpacity
-          style={[styles.wornButton, isBusy && styles.actionDisabled]}
-          onPress={handleMarkWorn}
-          disabled={isBusy}
-        >
-          {markWorn.isPending ? (
-            <ActivityIndicator size="small" color={colors.primaryForeground} />
-          ) : (
-            <>
-              <Ionicons name="checkmark-circle-outline" size={20} color={colors.primaryForeground} />
-              <Text style={styles.wornButtonLabel}>Worn today</Text>
-            </>
-          )}
-        </TouchableOpacity>
+        {/* ── Creative tools ── */}
+        <View style={styles.creativeTools}>
+          <TouchableOpacity
+            style={[styles.creativeAction, visualize.isPending && styles.actionDisabled]}
+            onPress={() => handleGenerate(hasAiImage)}
+            disabled={visualize.isPending}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={hasAiImage ? `Regenerate flat-lay for ${outfit.name}` : `Generate flat-lay for ${outfit.name}`}
+            accessibilityState={{ disabled: visualize.isPending, busy: visualize.isPending }}
+          >
+            {visualize.isPending ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Ionicons name={hasAiImage ? 'refresh-outline' : 'sparkles-outline'} size={18} color={colors.primary} />
+            )}
+            <Text style={styles.creativeActionLabel} numberOfLines={1}>
+              {visualize.isPending ? 'Generating…' : hasAiImage ? 'Regenerate' : 'Flat-lay'}
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.stylistButton}
-          onPress={() => openStylist({
-            initialQuery: `How can I improve my "${outfit.name}" outfit?`,
-            source: 'outfit_detail',
-            onNavigateToCloset: (outfitId) => navigation.navigate('OutfitDetail', { outfitId }),
-            context: {
-              kind: 'outfit',
-              outfitId: outfit.id,
-              name: outfit.name,
-              itemIds: (outfit.itemIds ?? []).map((entry) => entry.id),
-            },
-          })}
-          activeOpacity={0.8}
-          accessibilityRole="button"
-          accessibilityLabel={`Get styling advice for ${outfit.name}`}
-        >
-          <Ionicons name="sparkles" size={17} color={colors.primary} />
-          <Text style={styles.stylistButtonLabel}>Get styling advice</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.creativeAction}
+            onPress={() => openStylist({
+              initialQuery: `How can I improve my "${outfit.name}" outfit?`,
+              source: 'outfit_detail',
+              onNavigateToCloset: (outfitId) => navigation.navigate('OutfitDetail', { outfitId }),
+              context: {
+                kind: 'outfit',
+                outfitId: outfit.id,
+                name: outfit.name,
+                itemIds: (outfit.itemIds ?? []).map((entry) => entry.id),
+              },
+            })}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={`Get styling advice for ${outfit.name}`}
+          >
+            <Ionicons name="sparkles" size={18} color={colors.primary} />
+            <Text style={styles.creativeActionLabel} numberOfLines={1}>Ask stylist</Text>
+          </TouchableOpacity>
+        </View>
+
+        {(visualize.isError || hasAiImage) && (
+          <View style={styles.creativeMeta}>
+            {visualize.isError ? (
+              <>
+                <Text style={styles.generateErrorText} numberOfLines={2}>
+                  {(visualize.error as any)?.response?.data?.message ?? 'Generation failed'}
+                </Text>
+                <TouchableOpacity onPress={() => handleGenerate(hasAiImage)} accessibilityRole="button" accessibilityLabel="Retry flat-lay generation">
+                  <Text style={styles.retryLabel}>Retry</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <Text style={styles.aiDisclaimer}>AI-generated · approximate</Text>
+            )}
+          </View>
+        )}
+
+        {/* ── Wear utility ── */}
+        <View style={styles.wearRow}>
+          <View style={styles.wearSummary}>
+            <Ionicons name="checkmark-circle-outline" size={18} color={colors.primary} />
+            <Text style={styles.wearSummaryText}>
+              Worn <Text style={styles.wearSummaryCount}>{outfit.wearCount}</Text> {outfit.wearCount === 1 ? 'time' : 'times'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.wornButton, isBusy && styles.actionDisabled]}
+            onPress={handleMarkWorn}
+            disabled={isBusy}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={`Mark ${outfit.name} as worn today`}
+            accessibilityState={{ disabled: isBusy, busy: markWorn.isPending }}
+          >
+            {markWorn.isPending ? (
+              <ActivityIndicator size="small" color={colors.primaryForeground} />
+            ) : (
+              <Text style={styles.wornButtonLabel}>Worn today</Text>
+            )}
+          </TouchableOpacity>
+        </View>
 
         {/* ── Details ── */}
         <View style={styles.sectionCard}>
@@ -749,47 +786,22 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
   },
-  favButton: {
-    right: spacing.lg + 44 + spacing.sm,
-  },
-  saveButton: {
-    right: spacing.lg + (44 + spacing.sm) * 2,
-  },
 
   // ── Collage overlay ──
   collageOverlay: {
     backgroundColor: 'rgba(0, 0, 0, 0.22)',
   },
 
-  // ── Generate / Regenerate ──
-  generateCta: {
+  creativeMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
+    minHeight: 20,
     marginHorizontal: spacing.lg,
-    marginTop: spacing.md,
-    backgroundColor: colors.accent,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  generateCtaLabel: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-    color: colors.primary,
-  },
-  generateErrorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.md,
     marginTop: spacing.sm,
-    marginHorizontal: spacing.lg,
   },
   generateErrorText: {
+    flex: 1,
     fontSize: typography.size.sm,
     color: colors.error,
   },
@@ -798,33 +810,17 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.semibold,
     color: colors.primary,
   },
-  regenRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: spacing.sm,
-    paddingHorizontal: spacing.lg,
-  },
   aiDisclaimer: {
     fontSize: typography.size.xs,
     color: colors.mutedForeground,
     fontStyle: 'italic',
-  },
-  regenBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  regenLabel: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
   },
 
   // ── Header / Title ──
   header: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
-    paddingBottom: spacing.sm,
+    paddingBottom: spacing.md,
     gap: 4,
   },
   nameRow: {
@@ -850,40 +846,75 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
 
-  // ── Primary CTA ──
-  wornButton: {
+  // ── Creative tools / wear utility ──
+  creativeTools: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+  },
+  creativeAction: {
+    flex: 1,
+    minHeight: 52,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    backgroundColor: colors.accent,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: `${colors.primary}26`,
+  },
+  creativeActionLabel: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
+  },
+  wearRow: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
     marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
     marginBottom: spacing.lg,
-    paddingVertical: spacing.md + 2,
+    paddingVertical: spacing.sm,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.sm,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  wearSummary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  wearSummaryText: {
+    color: colors.mutedForeground,
+    fontSize: typography.size.sm,
+  },
+  wearSummaryCount: {
+    color: colors.foreground,
+    fontWeight: typography.weight.semibold,
+    fontVariant: ['tabular-nums'],
+  },
+  wornButton: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
     backgroundColor: colors.primary,
-    borderRadius: radii.md,
+    borderRadius: radii.full,
   },
   wornButtonLabel: {
     fontSize: typography.size.sm,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
-  },
-  stylistButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.lg,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.accent,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: `${colors.primary}30`,
-  },
-  stylistButtonLabel: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-    color: colors.primary,
   },
   actionDisabled: { opacity: 0.5 },
 
