@@ -20,6 +20,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   useItems, useUpdateItem, useDeleteItem, useMarkItemWorn, usePolishItem,
 } from '../../hooks/useItems';
+import { useEntitlement } from '../../hooks/useEntitlement';
+import { useAuth } from '../../contexts/AuthContext';
+import { track } from '../../lib/analytics';
+import { hasSeenAiActionCoach, markAiActionCoachSeen } from '../../lib/aiActionCoach';
 import { OUTFITS_QUERY_KEY } from '../../hooks/useOutfits';
 import type { Outfit } from '../../types/outfit';
 import { api, apiErrorCode, apiErrorMessage } from '../../lib/api';
@@ -47,6 +51,7 @@ import {
   type TabQuickMenuOption,
 } from '../../components/navigation/TabQuickMenuSheet';
 import { CoverImageSheet } from '../../components/item/cover-image-sheet';
+import { AiActionCoachmark } from '../../components/primitives/AiActionCoachmark';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -117,6 +122,9 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const deleteItem = useDeleteItem();
   const markWorn = useMarkItemWorn();
   const { openStylist } = useGlobalAIStylist();
+  const { user } = useAuth();
+  const { costOf } = useEntitlement();
+  const polishCost = costOf('polish');
 
   const { width } = useWindowDimensions();
   const imageHeight = width * 0.92;
@@ -141,6 +149,9 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const [coverSheetOpen, setCoverSheetOpen] = useState(false);
   const [cuttingOut, setCuttingOut] = useState(false);
 
+  // ── First-time "AI Polish" coachmark ────────────────────────────────────────
+  const [polishCoachVisible, setPolishCoachVisible] = useState(false);
+
   // Handlers run before the `viewItem` narrowing below, so read the cutout flags
   // off the possibly-null item here.
   const viewHasCutout = hasCutout(item);
@@ -158,6 +169,37 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Only worth showing once the create-cover button is actually on screen —
+  // an already-polished item, or one with no photo yet, has nothing to point at.
+  const polishCoachEligible = !!item && !viewIsPolished && !!item.imageUrl;
+  useEffect(() => {
+    const userId = user?.id;
+    setPolishCoachVisible(false);
+    if (!userId || !polishCoachEligible) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    hasSeenAiActionCoach('item_polish', userId).then((seen) => {
+      if (!active || seen) return;
+      timer = setTimeout(() => {
+        if (active) {
+          track('ai_action_coach_shown', { surface: 'item_polish' });
+          setPolishCoachVisible(true);
+        }
+      }, 700);
+    }).catch(() => undefined);
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [user?.id, polishCoachEligible]);
+
+  const dismissPolishCoach = (reason: 'got_it' | 'button_tap') => {
+    const userId = user?.id;
+    setPolishCoachVisible(false);
+    track('ai_action_coach_dismissed', { surface: 'item_polish', reason });
+    if (userId) void markAiActionCoachSeen('item_polish', userId);
+  };
 
   if (!item && !isCreateMode) {
     if (itemsError) {
@@ -334,6 +376,10 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
    */
   const handlePolish = () => {
     if (!item || polishItem.isPending) return;
+    if (polishCoachVisible) {
+      dismissPolishCoach('button_tap');
+      return;
+    }
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     polishItem.mutate(item.id, {
       onSuccess: () => {
@@ -678,6 +724,14 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
               )}
             </TouchableOpacity>
           )}
+          <AiActionCoachmark
+            visible={polishCoachVisible}
+            title="AI Polish"
+            body={`Creates a clean catalog-style photo of this item. Uses ${polishCost} credit${polishCost === 1 ? '' : 's'} — tap again to try it.`}
+            onDismiss={() => dismissPolishCoach('got_it')}
+            style={{ top: insets.top + spacing.sm + 44 + spacing.sm, right: spacing.lg }}
+            caretRight={44 + spacing.sm + 22}
+          />
           <TouchableOpacity
             style={[
               styles.itemOptionsButton,

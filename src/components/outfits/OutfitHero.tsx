@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii, spacing, typography } from '../../theme';
 import { PressableScale } from '../primitives/PressableScale';
+import { AiActionCoachmark } from '../primitives/AiActionCoachmark';
 import { OutfitCollage } from './OutfitCollage';
 import type { Outfit } from '../../types/outfit';
 
@@ -78,6 +79,9 @@ type Props = {
   onBack: () => void;
   onMenu: () => void;
   onGenerate: () => void;
+  coachVisible?: boolean;
+  coachBody?: string;
+  onCoachDismiss?: () => void;
 };
 
 export function OutfitHero({
@@ -90,6 +94,9 @@ export function OutfitHero({
   onBack,
   onMenu,
   onGenerate,
+  coachVisible = false,
+  coachBody = '',
+  onCoachDismiss,
 }: Props) {
   const insets = useSafeAreaInsets();
 
@@ -170,6 +177,15 @@ export function OutfitHero({
           {isGenerating ? 'Generating…' : hasAiImage ? 'Regenerate' : 'Flat-lay'}
         </Text>
       </PressableScale>
+
+      <AiActionCoachmark
+        visible={coachVisible}
+        title="AI Flat-lay"
+        body={coachBody}
+        onDismiss={() => onCoachDismiss?.()}
+        style={{ top: insets.top + spacing.sm + CONTROL_SIZE + spacing.sm, right: spacing.lg }}
+        caretRight={CONTROL_SIZE + spacing.sm + CONTROL_SIZE / 2}
+      />
 
       {/*
         The AI disclosure carries its own background: it sits over an arbitrary

@@ -34,6 +34,8 @@ import { OutfitEventAssignmentModal } from '../../components/outfits/OutfitEvent
 import { TabQuickMenuSheet, type TabQuickMenuOption } from '../../components/navigation/TabQuickMenuSheet';
 import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
 import { useEntitlement } from '../../hooks/useEntitlement';
+import { useAuth } from '../../contexts/AuthContext';
+import { hasSeenAiActionCoach, markAiActionCoachSeen } from '../../lib/aiActionCoach';
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', {
@@ -55,6 +57,8 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   const assignEvents = useAssignOutfitEvents();
   const { openStylist } = useGlobalAIStylist();
   const { costOf } = useEntitlement();
+  const { user } = useAuth();
+  const flatlayCost = costOf('flatlay');
 
   const [localName, setLocalName] = useState(outfit?.name ?? '');
   const [localNotes, setLocalNotes] = useState(outfit?.notes ?? '');
@@ -66,6 +70,7 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   const [menuOpen, setMenuOpen] = useState(false);
   const [saveSheetOpen, setSaveSheetOpen] = useState(false);
   const [returningToTab, setReturningToTab] = useState(false);
+  const [flatlayCoachVisible, setFlatlayCoachVisible] = useState(false);
 
   // Opened from another tab (Calendar/Home): swiping or backing out should land on
   // that tab, not on the Closet tab this screen happens to live in.
@@ -98,6 +103,34 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   useEffect(() => {
     if (outfitId) track('outfit_viewed', { outfit_id: outfitId });
   }, [outfitId]);
+
+  useEffect(() => {
+    const userId = user?.id;
+    setFlatlayCoachVisible(false);
+    if (!userId) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    hasSeenAiActionCoach('outfit_flatlay', userId).then((seen) => {
+      if (!active || seen) return;
+      timer = setTimeout(() => {
+        if (active) {
+          track('ai_action_coach_shown', { surface: 'outfit_flatlay' });
+          setFlatlayCoachVisible(true);
+        }
+      }, 700);
+    }).catch(() => undefined);
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [user?.id]);
+
+  const dismissFlatlayCoach = (reason: 'got_it' | 'button_tap') => {
+    const userId = user?.id;
+    setFlatlayCoachVisible(false);
+    track('ai_action_coach_dismissed', { surface: 'outfit_flatlay', reason });
+    if (userId) void markAiActionCoachSeen('outfit_flatlay', userId);
+  };
 
   const addTag = useCallback((raw: string) => {
     if (!outfit) return;
@@ -197,6 +230,10 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   const favouriteLabel = outfit.isFavorite ? 'Remove from favourites' : 'Add to favourites';
 
   const handleGenerate = (force = false) => {
+    if (flatlayCoachVisible) {
+      dismissFlatlayCoach('button_tap');
+      return;
+    }
     if (!force) {
       visualize.mutate({ id: outfit.id, force });
       return;
@@ -317,6 +354,9 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
           onBack={handleBack}
           onMenu={openOutfitMenu}
           onGenerate={() => handleGenerate(hasAiImage)}
+          coachVisible={flatlayCoachVisible}
+          coachBody={`Turns this outfit into a styled flat-lay photo. Uses ${flatlayCost} credit${flatlayCost === 1 ? '' : 's'} — tap again to try it.`}
+          onCoachDismiss={() => dismissFlatlayCoach('got_it')}
         />
 
         {visualize.isError && (
