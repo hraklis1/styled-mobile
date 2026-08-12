@@ -74,7 +74,7 @@ export function GapCard({ item, onPress, ctaLabel = 'Shop', style }: GapCardProp
 
       <View style={styles.body}>
         <View style={styles.titleRow}>
-          <Text style={styles.label} numberOfLines={1}>{item.label}</Text>
+          <Text style={styles.label} numberOfLines={1}>{humanizeGeneratedCopy(item.label)}</Text>
           {!!reasonTag && (
             <View style={styles.tag}>
               <Text style={styles.tagText}>{reasonTag}</Text>
@@ -87,7 +87,7 @@ export function GapCard({ item, onPress, ctaLabel = 'Shop', style }: GapCardProp
         {!!item.unlocks?.length && (
           <View style={styles.unlocksRow}>
             <Text style={styles.unlocksLabel}>Unlocks</Text>
-            <Text style={styles.unlocksText} numberOfLines={1}>{item.unlocks.slice(0, 3).join(' · ')}</Text>
+            <Text style={styles.unlocksText} numberOfLines={1}>{item.unlocks.slice(0, 3).map(humanizeGeneratedCopy).join(' · ')}</Text>
           </View>
         )}
       </View>
@@ -100,6 +100,12 @@ export function GapCard({ item, onPress, ctaLabel = 'Shop', style }: GapCardProp
       )}
     </Container>
   );
+}
+
+/** Also protects cached/older replies that predate server-side normalization. */
+export function humanizeGeneratedCopy(value: string): string {
+  const cleaned = value.replace(/\*+/g, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return cleaned.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 const styles = StyleSheet.create({

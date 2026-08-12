@@ -51,8 +51,7 @@ describe('board presentation', () => {
   });
 
   it('makes AI output advisory and handles insufficient content', () => {
-    expect(buildBoardStylistPrompt(board.name, feed, 'outfit')).toContain('Navy blazer');
-    expect(buildBoardStylistPrompt(board.name, feed, 'outfit')).toContain('Do not modify the board');
-    expect(buildBoardStylistPrompt(board.name, [], 'complete')).toContain('does not have enough closet pieces');
+    expect(buildBoardStylistPrompt(board.name, feed, 'outfit')).toBe('Create an outfit for Weekend Edit');
+    expect(buildBoardStylistPrompt(board.name, [], 'complete')).toBe('Complete Weekend Edit');
   });
 });

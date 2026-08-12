@@ -22,6 +22,7 @@ export type TripPlanData = {
   intro: string;
   outfits: TripOutfit[];
   packingList: string[];
+  kind?: 'trip' | 'board_capsule';
   // Set while the stream is still delivering outfit events so the carousel can
   // show placeholder slots ("filling in…") before the done event arrives.
   pending?: boolean;
@@ -174,12 +175,13 @@ export function TripPlanCard({
   const [packed, setPacked] = useState<Record<number, boolean>>({});
   const [activeOutfit, setActiveOutfit] = useState(0);
   const [packingExpanded, setPackingExpanded] = useState(false);
+  const isBoardCapsule = plan.kind === 'board_capsule';
 
   return (
     <View style={styles.container}>
       <View style={styles.sectionEyebrow}>
-        <Ionicons name="briefcase-outline" size={13} color={colors.primary} />
-        <Text style={styles.sectionEyebrowText}>Trip plan</Text>
+        <Ionicons name={isBoardCapsule ? 'albums-outline' : 'briefcase-outline'} size={13} color={colors.primary} />
+        <Text style={styles.sectionEyebrowText}>{isBoardCapsule ? 'Board capsule' : 'Trip plan'}</Text>
       </View>
       {plan.intro ? <Text style={styles.intro}>{plan.intro}</Text> : null}
 
@@ -224,8 +226,8 @@ export function TripPlanCard({
         <View style={styles.packing}>
           <TouchableOpacity style={styles.packingHeader} onPress={() => setPackingExpanded((open) => !open)}>
             <View>
-              <Text style={styles.packingTitle}>Packing list</Text>
-              <Text style={styles.packingMeta}>{Object.values(packed).filter(Boolean).length} of {plan.packingList.length} packed</Text>
+              <Text style={styles.packingTitle}>{isBoardCapsule ? 'Capsule checklist' : 'Packing list'}</Text>
+              <Text style={styles.packingMeta}>{Object.values(packed).filter(Boolean).length} of {plan.packingList.length} selected</Text>
             </View>
             <Ionicons name={packingExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.primary} />
           </TouchableOpacity>

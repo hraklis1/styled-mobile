@@ -259,6 +259,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
         boardId: board.id,
         name: board.name,
         itemIds: items.flatMap((entry) => entry.kind === 'item' ? [entry.item.id] : []),
+        action: intent,
       },
     });
   }, [board, items, navigation, openStylist]);

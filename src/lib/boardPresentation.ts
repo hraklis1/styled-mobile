@@ -57,20 +57,10 @@ export function getBoardInsights(items: BoardFeedItem[]) {
   };
 }
 
-export function buildBoardStylistPrompt(boardName: string, items: BoardFeedItem[], intent: BoardAIIntent): string {
-  const pieceNames = items
-    .filter((entry): entry is Extract<BoardFeedItem, { kind: 'item' }> => entry.kind === 'item')
-    .map((entry) => entry.item.name)
-    .slice(0, 16);
-  const context = pieceNames.length
-    ? `The board contains these closet pieces: ${pieceNames.join(', ')}.`
-    : 'The board does not have enough closet pieces yet; explain what to add before making recommendations.';
-  const instruction = intent === 'outfit'
-    ? 'Create one complete outfit using pieces already saved here. Clearly separate owned pieces from optional additions.'
-    : intent === 'complete'
-    ? 'Audit this board and recommend the smallest set of complementary pieces, missing basics, color links, or category gaps.'
-    : intent === 'capsule'
-    ? 'Turn this board into a practical capsule wardrobe or packing list with repeatable outfit combinations.'
-    : 'Propose an editorial theme and subtitle, summarize the palette, and give styling direction suited to my preferences, season, location, and weather when available.';
-  return `Help me with my private board “${boardName}”. ${context} ${instruction} Do not modify the board or save anything automatically; present recommendations for my approval.`;
+export function buildBoardStylistPrompt(boardName: string, _items: BoardFeedItem[], intent: BoardAIIntent): string {
+  // The action and membership are sent as hidden structured context. Keep this
+  // visible chat bubble human-sized even for a board with dozens of entries.
+  const action = intent === 'outfit' ? 'Create an outfit for' : intent === 'complete'
+    ? 'Complete' : intent === 'capsule' ? 'Build a capsule for' : 'Set the theme for';
+  return `${action} ${boardName}`;
 }

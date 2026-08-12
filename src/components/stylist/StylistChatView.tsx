@@ -198,6 +198,7 @@ type ServerMessagePayload = {
   shopOutfit?: ShopOutfit;
   tripPlan?: StylistTripPlanData;
   wardrobeAudit?: StylistWardrobeAuditData;
+  boardAction?: 'outfit' | 'complete' | 'capsule' | 'theme';
 };
 
 type ServerMessage = { id: number; role: Role; text: string; recId?: number | null; payload?: ServerMessagePayload | null; createdAt?: string };
@@ -289,6 +290,7 @@ function mapServerMessages(rows: ServerMessage[]): ChatMessage[] {
       // Reloaded trip plans are complete, never mid-stream — clear the pending flag.
       ...(p?.tripPlan ? { tripPlan: { ...p.tripPlan, pending: false } } : {}),
       ...(p?.wardrobeAudit ? { wardrobeAudit: p.wardrobeAudit } : {}),
+      ...(p?.boardAction ? { boardAction: p.boardAction } : {}),
       ...(m.createdAt ? { createdAt: new Date(m.createdAt).getTime() } : {}),
     };
   });
@@ -613,6 +615,7 @@ export function StylistChatView({
         mode: respMode,
         recId,
         conversationId: doneConversationId,
+        boardAction,
       } = event;
 
       const resolvedConvId = typeof doneConversationId === 'number' ? doneConversationId : conversationIdRef.current;
@@ -655,6 +658,7 @@ export function StylistChatView({
         ...(lookName ? { lookName } : {}),
         ...(hydratedEssentials.length ? { missingEssentials: hydratedEssentials } : {}),
         ...(typeof recId === 'number' ? { recId } : {}),
+        ...(boardAction ? { boardAction } : {}),
       };
 
       setMessages((prev) => {
@@ -1543,7 +1547,7 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
         <View style={styles.stylistNote}>
           <View style={styles.sectionEyebrow}>
             <Ionicons name="sparkles" size={13} color={colors.primary} />
-            <Text style={styles.sectionEyebrowText}>My take</Text>
+            <Text style={styles.sectionEyebrowText}>{message.boardAction === 'theme' ? 'Board direction' : message.boardAction === 'complete' ? 'Board edit' : 'My take'}</Text>
           </View>
           <StylistRichText text={message.text} streaming={message.isStreaming} />
           {!!message.suggestedItemIds?.length && (

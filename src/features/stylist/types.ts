@@ -45,6 +45,7 @@ export type StylistTripPlanData = {
   intro: string;
   outfits: StylistTripOutfit[];
   packingList: string[];
+  kind?: 'trip' | 'board_capsule';
   pending?: boolean;
 };
 
@@ -137,6 +138,7 @@ export type StylistAssistantMessage = StylistBaseMessage & {
   wardrobeAudit?: StylistWardrobeAuditData;
   eventPlan?: StylistEventPlanData;
   recId?: number;
+  boardAction?: 'outfit' | 'complete' | 'capsule' | 'theme';
 };
 
 export type StylistMessage = StylistUserMessage | StylistAssistantMessage;
@@ -183,6 +185,8 @@ export type StylistEntryContext =
       boardId: number;
       name?: string;
       itemIds?: number[];
+      /** A server-resolved board action; item membership is never trusted from the client. */
+      action?: 'outfit' | 'complete' | 'capsule' | 'theme';
     }
   | {
       kind: 'shopping_find';
@@ -257,6 +261,7 @@ export type StylistAskDoneEvent = {
   mode?: StylistMode;
   recId?: number | null;
   conversationId?: number | null;
+  boardAction?: 'outfit' | 'complete' | 'capsule' | 'theme';
 };
 
 export type StylistSendOptions = {
