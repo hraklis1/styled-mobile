@@ -25,7 +25,7 @@ export function GarmentImage({
   children,
   style,
 }: Props) {
-  const cover = itemCoverPresentation(item);
+  const cover = itemCoverPresentation(item, { preferThumb: true });
   const cutoutMargin = cover.variant === 'cutout'
     ? (Math.min(width, height) * (1 - cutoutScaleFor(item.category))) / 2
     : 0;

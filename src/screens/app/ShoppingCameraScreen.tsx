@@ -24,6 +24,7 @@ import {
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import * as Crypto from 'expo-crypto';
 import * as Haptics from 'expo-haptics';
 import { StatusBar } from 'expo-status-bar';
@@ -98,32 +99,39 @@ function createVisit(now = Date.now()): ShoppingSessionContext {
   };
 }
 
-function imageExtension(
-  mimeType: string | null | undefined,
-  fileNameOrUri: string,
-): string {
-  switch (mimeType) {
-    case 'image/heic': return 'heic';
-    case 'image/heif': return 'heif';
-    case 'image/png': return 'png';
-    case 'image/jpeg': return 'jpg';
-    default: {
-      const extension = fileNameOrUri.match(/\.(heic|heif|png|jpe?g)(?:\?|$)/i)?.[1].toLowerCase();
-      return extension === 'jpeg' ? 'jpg' : extension ?? 'jpg';
-    }
-  }
-}
+const SHOPPING_PHOTO_MAX_DIM = 1600;
+const SHOPPING_PHOTO_COMPRESS = 0.85;
 
+/**
+ * Resizes to at most SHOPPING_PHOTO_MAX_DIM on the long edge and re-encodes as
+ * JPEG — camera captures and gallery imports otherwise land here byte-for-byte
+ * (HEIC/ProRAW originals can be 10-40+ MB). Matches the cap already used for
+ * the scan pipeline elsewhere in the app. Output is always JPEG regardless of
+ * source format, so the destination is always named `.jpg`.
+ */
 async function persistShoppingPhoto(
   temporaryUri: string,
   id: string,
-  extension = 'jpg',
+  dimensions?: { width: number; height: number },
 ): Promise<string> {
   CAPTURE_DIRECTORY.create({ intermediates: true, idempotent: true });
 
-  const source = new File(temporaryUri);
-  const destination = new File(CAPTURE_DIRECTORY, `${id}.${extension}`);
-  await source.copy(destination);
+  const actions: ImageManipulator.Action[] = [];
+  if (dimensions && (dimensions.width > SHOPPING_PHOTO_MAX_DIM || dimensions.height > SHOPPING_PHOTO_MAX_DIM)) {
+    actions.push(
+      dimensions.width >= dimensions.height
+        ? { resize: { width: SHOPPING_PHOTO_MAX_DIM } }
+        : { resize: { height: SHOPPING_PHOTO_MAX_DIM } },
+    );
+  }
+
+  const manipulated = await ImageManipulator.manipulateAsync(temporaryUri, actions, {
+    compress: SHOPPING_PHOTO_COMPRESS,
+    format: ImageManipulator.SaveFormat.JPEG,
+  });
+
+  const destination = new File(CAPTURE_DIRECTORY, `${id}.jpg`);
+  await new File(manipulated.uri).copy(destination);
   return destination.uri;
 }
 
@@ -367,7 +375,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
           const localFileUri = await persistShoppingPhoto(
             asset.uri,
             id,
-            imageExtension(asset.mimeType, asset.fileName ?? asset.uri),
+            asset.width && asset.height ? { width: asset.width, height: asset.height } : undefined,
           );
           const timestamp = Date.now();
           const captureGroup = assignCaptureGroup(importSessionId, Crypto.randomUUID(), timestamp);
@@ -567,7 +575,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
         quality: 0.9,
         shutterSound: false,
       });
-      const localFileUri = await persistShoppingPhoto(photo.uri, id);
+      const localFileUri = await persistShoppingPhoto(photo.uri, id, { width: photo.width, height: photo.height });
       const timestamp = Date.now();
       const captureGroup = assignCaptureGroup(
         capturedSession?.id ?? null,

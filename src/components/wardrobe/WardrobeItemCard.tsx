@@ -32,7 +32,7 @@ export function WardrobeItemCard({
   const cardWidth = (width - SIDE_PADDING * 2 - COLUMN_GAP) / COLUMN_COUNT;
   const imageHeight = cardWidth * 1.25; // 4:5 portrait ratio
 
-  const cover = itemCoverPresentation(item);
+  const cover = itemCoverPresentation(item, { preferThumb: true });
   const imageUri = cover.uri;
 
   const handlePress = selectionMode ? onToggleSelect : onPress;

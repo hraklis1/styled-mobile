@@ -38,7 +38,7 @@ export function WardrobeListRow({
   onToggleSelect,
   onFavorite,
 }: Props) {
-  const cover = itemCoverPresentation(item);
+  const cover = itemCoverPresentation(item, { preferThumb: true });
   const imageUri = cover.uri;
   const handlePress = selectionMode ? onToggleSelect : onPress;
   const visibleTags = item.tags.slice(0, 2);

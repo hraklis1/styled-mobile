@@ -5,7 +5,7 @@ import type { CoverImageVariant } from '../types/item';
 /** An item-shaped object with just the image fields — lets callers pass partials. */
 type ItemImageFields = Pick<
   Item,
-  'imageUrl' | 'cutoutUrl' | 'polishedUrl' | 'coverImageVariant'
+  'imageUrl' | 'cutoutUrl' | 'polishedUrl' | 'thumbUrl' | 'coverImageVariant'
 >;
 
 export type ItemCoverPresentation = {
@@ -39,6 +39,7 @@ export function hasPolished(item: Partial<ItemImageFields> | null | undefined): 
  */
 export function itemCoverPresentation(
   item: Partial<ItemImageFields> | null | undefined,
+  opts?: { preferThumb?: boolean },
 ): ItemCoverPresentation {
   if (!item) {
     return { uri: undefined, variant: 'original', contentFit: 'cover', isCatalogStyle: false };
@@ -60,8 +61,16 @@ export function itemCoverPresentation(
   const variant = selected?.[0] ?? 'original';
   const isCatalogStyle = variant === 'cutout' || variant === 'polished';
 
+  // Thumbnails only exist for the original photo — cutout/polished are
+  // already small (≤512-1024px) — so only substitute when the resolved
+  // variant is 'original' and a thumb was actually generated. Older items
+  // and generation failures fall through to imageUrl unchanged.
+  const uri = opts?.preferThumb && variant === 'original' && item.thumbUrl
+    ? resolveImageUri(item.thumbUrl)
+    : resolveImageUri(selected?.[1]);
+
   return {
-    uri: resolveImageUri(selected?.[1]),
+    uri,
     variant,
     contentFit: isCatalogStyle ? 'contain' : 'cover',
     isCatalogStyle,
@@ -73,6 +82,13 @@ export function itemImageUri(
   item: Partial<ItemImageFields> | null | undefined,
 ): string | undefined {
   return itemCoverPresentation(item).uri;
+}
+
+/** Like itemImageUri, but prefers the small list/grid thumbnail when available. */
+export function itemThumbUri(
+  item: Partial<ItemImageFields> | null | undefined,
+): string | undefined {
+  return itemCoverPresentation(item, { preferThumb: true }).uri;
 }
 
 export function itemImageContentFit(

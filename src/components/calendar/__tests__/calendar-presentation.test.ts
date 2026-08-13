@@ -67,6 +67,7 @@ describe('calendar presentation', () => {
       imageUrl: `https://example.com/${id}.jpg`,
       cutoutUrl: null,
       polishedUrl: null,
+      thumbUrl: null,
       coverImageVariant: 'original',
       color: null,
       colorPalette: [],

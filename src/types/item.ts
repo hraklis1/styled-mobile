@@ -112,6 +112,14 @@ export type Item = {
    */
   polishedUrl: string | null;
   /**
+   * Small WebP list/grid thumbnail derived from imageUrl, generated
+   * server-side. Null for items predating the thumbnail system or when
+   * generation failed — callers fall back to imageUrl in that case. Only
+   * ever backs the 'original' cover variant; cutout/polished are already
+   * small enough to render directly.
+   */
+  thumbUrl: string | null;
+  /**
    * The asset selected to represent this item across the app. This preference
    * never owns or deletes any image; imageUrl, cutoutUrl, and polishedUrl stay
    * available independently.

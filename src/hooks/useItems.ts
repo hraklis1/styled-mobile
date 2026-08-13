@@ -75,41 +75,8 @@ export type CreateItemInput = {
   needsDetails?: boolean;
 };
 
-type ScanInput = {
-  uri: string;
-  brandHint?: string;
-  outfitContext?: string;
-  targetName?: string;
-  targetCategory?: string;
-};
-
-type IdempotentScanInput = ScanInput & { idempotencyKey: string };
-
 function idempotencyHeaders(key?: string) {
   return { 'Idempotency-Key': key ?? Crypto.randomUUID() };
-}
-
-export function useScanItem() {
-  return useMutation({
-    mutationFn: ({ uri, brandHint, outfitContext, targetName, targetCategory, idempotencyKey }: IdempotentScanInput) => {
-      const formData = new FormData();
-      formData.append('image', { uri, type: 'image/jpeg', name: 'scan.jpg' } as unknown as Blob);
-      if (brandHint) formData.append('brandHint', brandHint);
-      if (outfitContext) formData.append('outfitContext', outfitContext);
-      if (targetName) formData.append('targetName', targetName);
-      if (targetCategory) formData.append('targetCategory', targetCategory);
-      return api
-        .post<ScanResult>('/api/items/scan', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            ...idempotencyHeaders(idempotencyKey),
-          },
-        })
-        .then((r) => r.data);
-    },
-    retry: (failureCount, error) => isNetworkError(error) && failureCount < 2,
-    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
-  });
 }
 
 /** Direct API call for parallel multi-item extraction (no hook — avoids shared mutation state). */
@@ -243,20 +210,6 @@ export function useScanTag() {
   return useMutation({
     mutationFn: ({ imageData }: { imageData: string }) =>
       api.post<TagScanResult>('/api/items/scan-tag', { imageData }).then((r) => r.data),
-  });
-}
-
-export type RefineImageInput = {
-  name: string;
-  color: string;
-  brand?: string | null;
-  category: ItemCategory;
-};
-
-export function useRefineImage() {
-  return useMutation({
-    mutationFn: (input: RefineImageInput) =>
-      api.post<{ imageData: string }>('/api/items/refine-image', input).then((r) => r.data),
   });
 }
 

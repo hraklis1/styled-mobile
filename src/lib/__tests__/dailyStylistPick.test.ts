@@ -35,6 +35,7 @@ function item(id: number, patch: Partial<Item> = {}): Item {
     imageUrl: null,
     cutoutUrl: null,
     polishedUrl: null,
+    thumbUrl: null,
     coverImageVariant: 'original',
     color: null,
     colorPalette: [],
