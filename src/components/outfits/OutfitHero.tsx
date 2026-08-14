@@ -102,9 +102,7 @@ export function OutfitHero({
 
   const generateLabel = isGenerating
     ? `Generating flat-lay for ${outfit.name}`
-    : hasAiImage
-      ? `Regenerate flat-lay for ${outfit.name}`
-      : `Generate flat-lay for ${outfit.name}`;
+    : `Generate flat-lay for ${outfit.name}`;
 
   return (
     <View style={styles.hero}>
@@ -154,29 +152,27 @@ export function OutfitHero({
         <Ionicons name="ellipsis-horizontal" size={21} color={colors.foreground} />
       </PressableScale>
 
-      {/* The flat-lay control sits on the surface it replaces, never in a menu. */}
-      <PressableScale
-        style={[styles.generateChip, { top: insets.top + spacing.sm }]}
-        contentStyle={[styles.generateChipSurface, isGenerating && styles.disabled]}
-        onPress={onGenerate}
-        disabled={isGenerating}
-        accessibilityRole="button"
-        accessibilityLabel={generateLabel}
-        accessibilityState={{ disabled: isGenerating, busy: isGenerating }}
-      >
-        {isGenerating ? (
-          <ActivityIndicator size="small" color={colors.primary} />
-        ) : (
-          <Ionicons
-            name={hasAiImage ? 'refresh-outline' : 'sparkles-outline'}
-            size={18}
-            color={colors.primary}
-          />
-        )}
-        <Text style={styles.generateChipLabel} numberOfLines={1}>
-          {isGenerating ? 'Generating…' : hasAiImage ? 'Regenerate' : 'Flat-lay'}
-        </Text>
-      </PressableScale>
+      {/* Once a flat lay exists, regeneration moves into the "..." menu instead. */}
+      {!hasAiImage && (
+        <PressableScale
+          style={[styles.generateChip, { top: insets.top + spacing.sm }]}
+          contentStyle={[styles.generateChipSurface, isGenerating && styles.disabled]}
+          onPress={onGenerate}
+          disabled={isGenerating}
+          accessibilityRole="button"
+          accessibilityLabel={generateLabel}
+          accessibilityState={{ disabled: isGenerating, busy: isGenerating }}
+        >
+          {isGenerating ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Ionicons name="sparkles-outline" size={18} color={colors.primary} />
+          )}
+          <Text style={styles.generateChipLabel} numberOfLines={1}>
+            {isGenerating ? 'Generating…' : 'Flat-lay'}
+          </Text>
+        </PressableScale>
+      )}
 
       <AiActionCoachmark
         visible={coachVisible}

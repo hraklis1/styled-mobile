@@ -286,8 +286,10 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
     );
   };
 
+  const hasAiImage = !!outfit.aiGeneratedImageUrl;
+
   // Favourite and Save-to-board live in the utility row now, so this is down to
-  // renaming and deleting.
+  // renaming, regenerating the flat-lay (once one exists), and deleting.
   const outfitMenuOptions: TabQuickMenuOption[] = [
     {
       key: 'rename',
@@ -295,6 +297,12 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
       icon: 'pencil-outline',
       onPress: beginRename,
     },
+    ...(hasAiImage ? [{
+      key: 'regenerate',
+      label: 'Regenerate flat-lay',
+      icon: 'refresh-outline' as const,
+      onPress: () => handleGenerate(true),
+    }] : []),
     {
       key: 'delete',
       label: 'Delete outfit',
@@ -305,12 +313,10 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   ];
 
   const openOutfitMenu = () => {
-    if (isBusy || updateOutfit.isPending) return;
+    if (isBusy || updateOutfit.isPending || visualize.isPending) return;
     Keyboard.dismiss();
     setMenuOpen(true);
   };
-
-  const hasAiImage = !!outfit.aiGeneratedImageUrl;
 
   const metaLine = [
     outfit.wearCount > 0
@@ -349,12 +355,12 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
           width={width}
           hasAiImage={hasAiImage}
           isGenerating={visualize.isPending}
-          menuDisabled={isBusy || updateOutfit.isPending}
+          menuDisabled={isBusy || updateOutfit.isPending || visualize.isPending}
           menuOpen={menuOpen}
           onBack={handleBack}
           onMenu={openOutfitMenu}
-          onGenerate={() => handleGenerate(hasAiImage)}
-          coachVisible={flatlayCoachVisible}
+          onGenerate={() => handleGenerate(false)}
+          coachVisible={flatlayCoachVisible && !hasAiImage}
           coachBody={`Turns this outfit into a styled flat-lay photo. Uses ${flatlayCost} credit${flatlayCost === 1 ? '' : 's'} — tap again to try it.`}
           onCoachDismiss={() => dismissFlatlayCoach('got_it')}
         />
