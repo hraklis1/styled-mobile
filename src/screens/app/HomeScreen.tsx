@@ -958,6 +958,7 @@ const styles = StyleSheet.create({
   carouselContent: { paddingHorizontal: SIDE_PAD, gap: COL_GAP },
   eventCard: {
     width: 148,
+    height: 152,
     backgroundColor: colors.white,
     borderRadius: radii.lg,
     borderWidth: 1,
