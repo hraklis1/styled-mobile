@@ -18,18 +18,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { GarmentCard } from '../../components/wardrobe/GarmentCard';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
 import { PressableScale } from '../../components/primitives/PressableScale';
-import { useBoards, useBoardFeed, flattenBoardFeed, useDeleteBoard, useUpdateBoard } from '../../hooks/useBoards';
+import { useBoards, useBoardFeed, flattenBoardFeed, useDeleteBoard, useUpdateBoard, useBoardEvent } from '../../hooks/useBoards';
+import { formatCountdown, formatDayLabel } from '../../components/calendar/calendarUtils';
 import type { BoardFeedItem } from '../../types/board';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { BoardDetailScreenProps } from '../../navigation/types';
 import { BoardOptionsMenuSheet } from '../../components/boards/BoardOptionsMenuSheet';
 import { BoardContentPickerModal } from '../../components/boards/BoardContentPickerModal';
 import { BoardCoverPickerModal } from '../../components/boards/BoardCoverPickerModal';
-import { BoardStoreFindCard } from '../../components/boards/BoardStoreFindCard';
-import { StoreFindDetailSheet } from '../../components/boards/StoreFindDetailSheet';
 import { ShopWishlistDetailSheet } from '../../components/outfits/ShopWishlistDetailSheet';
 import { WishlistOutfitPreview } from '../../components/outfits/WishlistOutfitPreview';
-import type { StoreFind } from '../../types/storeFind';
 import type { WishlistEntry } from '../../lib/wishlist';
 import {
   getWishlistAccessibilityLabel,
@@ -38,15 +36,18 @@ import {
   getWishlistTitle,
 } from '../../lib/wishlistPresentation';
 import { useLibraryLaunch } from '../../hooks/useCameraLaunch';
-import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import {
-  buildBoardStylistPrompt,
+  canComposeOutfit,
   filterBoardFeed,
+  getBoardGap,
   getBoardInsights,
-  type BoardAIIntent,
   type BoardFilter,
 } from '../../lib/boardPresentation';
 import { isLegacyDailyFindsBoard } from '../../lib/legacyBoards';
+import { BoardCapsuleSheet } from '../../components/boards/BoardCapsuleSheet';
+import { ensureEntitled } from '../../lib/entitlementGate';
+import { useEntitlement } from '../../hooks/useEntitlement';
+import { track } from '../../lib/analytics';
 
 const SIDE_PAD = spacing.lg;
 const COL_GAP = spacing.sm;
@@ -81,7 +82,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
   const { width } = useWindowDimensions();
   const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / 2;
 
-  const { openStylist } = useGlobalAIStylist();
+  const { isPremium } = useEntitlement();
   const { data: boards = [] } = useBoards();
   const board = boards.find((b) => b.id === boardId);
   const isDailyFinds = isLegacyDailyFindsBoard(board);
@@ -102,21 +103,34 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
   }, [filter, items]);
 
   const boardInsights = useMemo(() => getBoardInsights(items), [items]);
+  const boardGap = useMemo(() => getBoardGap(items), [items]);
+  const canStyle = useMemo(() => canComposeOutfit(items), [items]);
+  const boardEvent = useBoardEvent(boardId);
+
+  // A past event gets a worn-date phrasing rather than a negative countdown;
+  // formatCountdown returns null inside its own 1-day window too.
+  const boardEventWhen = useMemo(() => {
+    if (!boardEvent) return '';
+    const date = new Date(boardEvent.date);
+    if (date.getTime() < Date.now()) {
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+    return formatCountdown(date) ?? formatDayLabel(date);
+  }, [boardEvent]);
 
   const { mutate: deleteBoard } = useDeleteBoard();
   const { mutate: updateBoard } = useUpdateBoard();
   const [optionsMenuVisible, setOptionsMenuVisible] = useState(false);
   const [contentPickerVisible, setContentPickerVisible] = useState(false);
   const [coverPickerVisible, setCoverPickerVisible] = useState(route.params.editCover === true);
-  const [detailStoreFind, setDetailStoreFind] = useState<StoreFind | null>(null);
   const [detailWishlistEntry, setDetailWishlistEntry] = useState<WishlistEntry | null>(null);
   const [organizeMode, setOrganizeMode] = useState(route.params.organize === true);
+  const [capsuleVisible, setCapsuleVisible] = useState(false);
   const [lastRemoval, setLastRemoval] = useState<{
     count: number;
     itemIds: number[];
     outfitIds: number[];
     wishlistIds: string[];
-    storeFinds: StoreFind[];
   } | null>(null);
 
   useEffect(() => {
@@ -173,15 +187,12 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
               itemIds: board.itemIds,
               outfitIds: board.outfitIds,
               wishlistIds: board.wishlistIds,
-              storeFinds: board.storeFinds ?? [],
             });
             const itemIds = new Set<number>();
             const outfitIds = new Set<number>();
             const wishlistIds = new Set<string>();
-            const storeFindIds = new Set<string>();
             for (const key of selectedKeys) {
-              if (key.startsWith('sf_')) storeFindIds.add(key.slice(3));
-              else if (key.startsWith('i')) itemIds.add(Number(key.slice(1)));
+              if (key.startsWith('i')) itemIds.add(Number(key.slice(1)));
               else if (key.startsWith('o')) outfitIds.add(Number(key.slice(1)));
               else if (key.startsWith('w')) wishlistIds.add(key.slice(1));
             }
@@ -190,7 +201,6 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
               itemIds: board.itemIds.filter((id) => !itemIds.has(id)),
               outfitIds: board.outfitIds.filter((id) => !outfitIds.has(id)),
               wishlistIds: board.wishlistIds.filter((id) => !wishlistIds.has(id)),
-              storeFinds: (board.storeFinds ?? []).filter((sf) => !storeFindIds.has(sf.id)),
             });
             setSelectedKeys(new Set());
           },
@@ -206,7 +216,6 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
       itemIds: lastRemoval.itemIds,
       outfitIds: lastRemoval.outfitIds,
       wishlistIds: lastRemoval.wishlistIds,
-      storeFinds: lastRemoval.storeFinds,
     });
     setLastRemoval(null);
   }, [boardId, lastRemoval, updateBoard]);
@@ -247,25 +256,36 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
     setCoverPickerVisible(false);
   }, [boardId, updateBoard]);
 
-  const openBoardStylist = useCallback((intent: BoardAIIntent) => {
-    if (!board) return;
-    openStylist({
-      source: 'board_detail',
-      destination: board.name,
-      initialQuery: buildBoardStylistPrompt(board.name, items, intent),
-      onNavigateToCloset: (outfitId) => navigation.navigate('OutfitDetail', { outfitId }),
-      context: {
-        kind: 'board',
-        boardId: board.id,
-        name: board.name,
-        itemIds: items.flatMap((entry) => entry.kind === 'item' ? [entry.item.id] : []),
-        action: intent,
-      },
+  /**
+   * The chat gates itself on ensureEntitled inside openStylist; this path never
+   * opens the chat, so it has to gate explicitly or free users would reach the
+   * stylist route through a side door.
+   */
+  const handleStyleBoard = useCallback(async () => {
+    const entitled = await ensureEntitled(isPremium, {
+      title: 'Unlock your AI Stylist',
+      message: 'Turn the pieces you have saved here into complete looks.',
     });
-  }, [board, items, navigation, openStylist]);
+    if (!entitled) return;
+    track('board_capsule_opened', { boardId });
+    setCapsuleVisible(true);
+  }, [boardId, isPremium]);
+
+  const handleEventPress = useCallback(() => {
+    if (!boardEvent) return;
+    navigation.getParent()?.navigate('Calendar', { eventId: boardEvent.id });
+  }, [boardEvent, navigation]);
+
+  const handleGapPress = useCallback(() => {
+    if (!boardGap) return;
+    navigation.navigate('ClosetMain', { segment: 'pieces', category: boardGap.missing });
+  }, [boardGap, navigation]);
 
   const handleDelete = useCallback(() => {
-    Alert.alert('Delete board', `Delete "${board?.name ?? 'this board'}"? Saved items stay in your closet.`, [
+    // The FK is ON DELETE SET NULL, so a linked event survives but quietly
+    // loses its board. Say so rather than letting it vanish unannounced.
+    const eventNote = boardEvent ? ` "${boardEvent.title}" will no longer link to it.` : '';
+    Alert.alert('Delete board', `Delete "${board?.name ?? 'this board'}"? Saved items stay in your closet.${eventNote}`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -276,7 +296,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
         },
       },
     ]);
-  }, [boardId, board?.name, deleteBoard, navigation]);
+  }, [boardId, board?.name, boardEvent, deleteBoard, navigation]);
 
   const handleOverflow = useCallback(() => {
     setOptionsMenuVisible(true);
@@ -336,23 +356,6 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
               <Text style={styles.outfitName} numberOfLines={1}>
                 {item.outfit.name}
               </Text>
-            </PressableScale>
-            {selectionOverlay}
-          </View>
-        );
-      }
-      if (item.kind === 'storeFind') {
-        return (
-          <View style={styles.cell}>
-            <PressableScale
-              onPress={
-                isMultiselect
-                  ? () => toggleSelectedKey(key)
-                  : () => setDetailStoreFind(item.storeFind)
-              }
-              onLongPress={() => enterMultiselect(key)}
-            >
-              <BoardStoreFindCard storeFind={item.storeFind} cardWidth={cardWidth} />
             </PressableScale>
             {selectionOverlay}
           </View>
@@ -423,21 +426,45 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
         </View>
       )}
 
-      <View style={styles.aiCard}>
-        <View style={styles.aiHeading}>
-          <View style={styles.aiIcon}><Ionicons name="sparkles" size={16} color={colors.primary} /></View>
-          <View style={styles.aiHeadingText}>
-            <Text style={styles.aiTitle}>Style this board</Text>
-            <Text style={styles.aiSubtitle}>AI suggestions only—nothing is saved without you.</Text>
-          </View>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.aiActions}>
-          <TouchableOpacity style={styles.aiAction} onPress={() => openBoardStylist('outfit')}><Ionicons name="shirt-outline" size={16} color={colors.primary} /><Text style={styles.aiActionText}>Create outfit</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.aiAction} onPress={() => openBoardStylist('complete')}><Ionicons name="add-circle-outline" size={16} color={colors.primary} /><Text style={styles.aiActionText}>Complete board</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.aiAction} onPress={() => openBoardStylist('capsule')}><Ionicons name="briefcase-outline" size={16} color={colors.primary} /><Text style={styles.aiActionText}>Capsule plan</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.aiAction} onPress={() => openBoardStylist('theme')}><Ionicons name="color-palette-outline" size={16} color={colors.primary} /><Text style={styles.aiActionText}>Theme & palette</Text></TouchableOpacity>
-        </ScrollView>
-      </View>
+      {boardEvent && (
+        <TouchableOpacity
+          style={styles.eventStrip}
+          onPress={handleEventPress}
+          accessibilityRole="button"
+          accessibilityLabel={`Planned for ${boardEvent.title}`}
+          accessibilityHint="Opens this event in your calendar"
+        >
+          <Ionicons name="calendar-outline" size={16} color={colors.primary} />
+          <Text style={styles.eventTitle} numberOfLines={1}>{boardEvent.title}</Text>
+          <Text style={styles.eventWhen}>{boardEventWhen}</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Mutually exclusive: a board either still needs something (say what),
+          or it can compose a look (offer to). Never both. */}
+      {boardGap ? (
+        <TouchableOpacity
+          style={styles.gapRow}
+          onPress={handleGapPress}
+          accessibilityRole="button"
+          accessibilityLabel={boardGap.text}
+          accessibilityHint="Opens your closet filtered to that category"
+        >
+          <Text style={styles.gapText} numberOfLines={2}>{boardGap.text}</Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
+        </TouchableOpacity>
+      ) : canStyle ? (
+        <TouchableOpacity
+          style={styles.styleBoardBtn}
+          onPress={handleStyleBoard}
+          accessibilityRole="button"
+          accessibilityLabel={`Style ${board?.name ?? 'this board'}`}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="sparkles" size={16} color={colors.primaryForeground} />
+          <Text style={styles.styleBoardText}>Style this board</Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
   ) : (
     <View style={styles.organizeBanner}>
@@ -572,10 +599,6 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
         onSelect={handleSelectCover}
         onUpload={() => { setCoverPickerVisible(false); setTimeout(handleUploadCover, 300); }}
       />
-      <StoreFindDetailSheet
-        storeFind={detailStoreFind}
-        onClose={() => setDetailStoreFind(null)}
-      />
       {detailWishlistEntry && (
         <ShopWishlistDetailSheet
           entry={detailWishlistEntry}
@@ -584,6 +607,14 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
           removalCopy={BOARD_WISHLIST_REMOVAL_COPY}
         />
       )}
+      {capsuleVisible && board && (
+        <BoardCapsuleSheet
+          board={board}
+          items={items.flatMap((entry) => (entry.kind === 'item' ? [entry.item] : []))}
+          onClose={() => setCapsuleVisible(false)}
+        />
+      )}
+
       {lastRemoval && (
         <View style={[styles.undoToast, { bottom: insets.bottom + spacing.lg }]} accessibilityLiveRegion="polite">
           <Ionicons name="checkmark-circle" size={18} color={colors.success} />
@@ -694,15 +725,41 @@ const styles = StyleSheet.create({
   palette: { flexDirection: 'row', alignItems: 'center' },
   swatch: { width: 22, height: 22, borderRadius: 11, marginRight: -4, borderWidth: 2, borderColor: colors.background },
   insightText: { flex: 1, color: colors.mutedForeground, fontSize: typography.size.xs },
-  aiCard: { marginHorizontal: spacing.lg, padding: spacing.md, gap: spacing.md, borderRadius: radii.lg, backgroundColor: colors.surfaceElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
-  aiHeading: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  aiIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
-  aiHeadingText: { flex: 1 },
-  aiTitle: { color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.bold },
-  aiSubtitle: { color: colors.mutedForeground, fontSize: typography.size.xs },
-  aiActions: { gap: spacing.sm },
-  aiAction: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.accent },
-  aiActionText: { color: colors.secondaryForeground, fontSize: typography.size.xs, fontWeight: typography.weight.semibold },
+  gapRow: {
+    minHeight: 44,
+    marginHorizontal: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  gapText: { flex: 1, color: colors.mutedForeground, fontSize: typography.size.sm },
+  eventStrip: {
+    marginHorizontal: spacing.lg,
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    backgroundColor: colors.accent,
+  },
+  eventTitle: { flex: 1, color: colors.secondaryForeground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+  eventWhen: { color: colors.secondaryForeground, fontSize: typography.size.xs },
+  styleBoardBtn: {
+    marginHorizontal: spacing.lg,
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    borderRadius: radii.full,
+    backgroundColor: colors.primary,
+  },
+  styleBoardText: {
+    color: colors.primaryForeground,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+  },
   organizeBanner: { minHeight: 48, marginHorizontal: spacing.lg, marginBottom: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.accent },
   organizeText: { flex: 1, color: colors.secondaryForeground, fontSize: typography.size.xs },
   filteredEmpty: { paddingTop: spacing.xxxl, alignItems: 'center', gap: spacing.xs },

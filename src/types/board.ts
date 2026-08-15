@@ -6,6 +6,10 @@ import type { WishlistEntry } from '../lib/wishlist';
  * A Pinterest-style collection. Membership is three explicit id arrays:
  * items/outfits reference server entities by integer id, wishlist references
  * the client-minted string id. `coverImageUrl` is a server-baked 2x2 composite.
+ *
+ * The server also carries a legacy `storeFinds` jsonb column, but the capture
+ * flow that wrote it was removed and its only rows belong to the hidden "Daily
+ * Finds" board (see lib/legacyBoards.ts). The client no longer models it.
  */
 export type Board = {
   id: number;
@@ -16,8 +20,6 @@ export type Board = {
   itemIds: number[];
   outfitIds: number[];
   wishlistIds: string[];
-  storeFindIds?: string[];
-  storeFinds?: import('./storeFind').StoreFind[];
   createdAt: string;
 };
 
@@ -28,5 +30,4 @@ export type Board = {
 export type BoardFeedItem =
   | { kind: 'item'; key: string; item: Item }
   | { kind: 'outfit'; key: string; outfit: Outfit }
-  | { kind: 'wishlist'; key: string; entry: WishlistEntry }
-  | { kind: 'storeFind'; key: string; storeFind: import('./storeFind').StoreFind };
+  | { kind: 'wishlist'; key: string; entry: WishlistEntry };

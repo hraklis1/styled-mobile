@@ -18,6 +18,8 @@ import { useTempUnit } from '../../hooks/useTempUnit';
 import { formatTempRange } from '../../lib/temperature';
 import Animated, { FadeInDown, FadeOutUp } from 'react-native-reanimated';
 import { EventLookCollage } from './EventLookCollage';
+import type { Board } from '../../types/board';
+import { EventBoardPickerModal } from './EventBoardPickerModal';
 import { OCCASIONS, OCCASION_ICONS, formatDayLabel, formatTime, formatCountdown } from './calendarUtils';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { Item } from '../../types/item';
@@ -47,6 +49,9 @@ export function EventDetailModal({
   onOpenStylist,
   weatherFallback,
   outfit,
+  onSelectBoard,
+  board,
+  onOpenBoard,
 }: {
   event: Event | null;
   visible: boolean;
@@ -60,6 +65,11 @@ export function EventDetailModal({
   outfit: Outfit | null;
   onOpenStylist: (event: Event) => void;
   weatherFallback: StylingLocationContext | null;
+  /** Attach/detach the board. Omitted hides the menu entry entirely. */
+  onSelectBoard?: (boardId: number | null) => void;
+  /** The linked board, resolved by the parent, for the summary row. */
+  board?: Board | null;
+  onOpenBoard?: (boardId: number) => void;
 }) {
   const eventDateStr = event ? event.date.slice(0, 10) : null;
   const forecast = useEventWeatherForecast(
@@ -71,6 +81,7 @@ export function EventDetailModal({
   const { width } = useWindowDimensions();
   const [manualExpanded, setManualExpanded] = useState(false);
   const [notesExpanded, setNotesExpanded] = useState(false);
+  const [boardPickerVisible, setBoardPickerVisible] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -89,20 +100,29 @@ export function EventDetailModal({
   const pieceCount = event.itemIds?.length ?? 0;
   const lookWidth = Math.max(240, Math.min(width - spacing.lg * 4, 480));
 
+  const boardLabel = event.boardId != null ? 'Change board' : 'Plan from a board';
+
+  // Delayed so the action sheet finishes dismissing first — iOS drops a modal
+  // presented while another is still on its way out.
+  const chooseBoard = onSelectBoard
+    ? () => setTimeout(() => setBoardPickerVisible(true), 300)
+    : undefined;
+
   const openEventMenu = () => {
     const edit = () => onEdit(event);
     const remove = () => onDelete(event);
     if (process.env.EXPO_OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
-          options: ['Cancel', 'Edit event', 'Delete event'],
+          options: ['Cancel', 'Edit event', ...(chooseBoard ? [boardLabel] : []), 'Delete event'],
           cancelButtonIndex: 0,
-          destructiveButtonIndex: 2,
+          destructiveButtonIndex: chooseBoard ? 3 : 2,
           title: event.title,
         },
         (index) => {
           if (index === 1) edit();
-          if (index === 2) remove();
+          if (chooseBoard && index === 2) chooseBoard();
+          if (index === (chooseBoard ? 3 : 2)) remove();
         },
       );
       return;
@@ -110,6 +130,7 @@ export function EventDetailModal({
     Alert.alert(event.title, undefined, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Edit event', onPress: edit },
+      ...(chooseBoard ? [{ text: boardLabel, onPress: chooseBoard }] : []),
       { text: 'Delete event', style: 'destructive', onPress: remove },
     ]);
   };
@@ -267,6 +288,24 @@ export function EventDetailModal({
               </View>
             </View>
           )}
+
+          {board && (
+            <TouchableOpacity
+              style={s.boardRow}
+              onPress={() => onOpenBoard?.(board.id)}
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel={`Planned from ${board.name}`}
+              accessibilityHint="Opens this board"
+            >
+              <Ionicons name="albums-outline" size={18} color={colors.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.boardEyebrow}>PLANNED FROM</Text>
+                <Text style={s.boardName} numberOfLines={1}>{board.name}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          )}
         </ScrollView>
 
         <View style={s.actions}>
@@ -306,6 +345,22 @@ export function EventDetailModal({
           </>
         </View>
       </View>
+
+      {/* Nested inside this Modal on purpose. React Native presents a Modal
+          from the root view controller, which is already busy presenting this
+          one, so a sibling picker in CalendarScreen silently never appears.
+          Same reason ItemPickerSheet lives inside StylistChatView. */}
+      {onSelectBoard && (
+        <EventBoardPickerModal
+          visible={boardPickerVisible}
+          selectedBoardId={event.boardId ?? null}
+          onClose={() => setBoardPickerVisible(false)}
+          onSelect={(boardId) => {
+            onSelectBoard(boardId);
+            setBoardPickerVisible(false);
+          }}
+        />
+      )}
     </Modal>
   );
 }
@@ -479,6 +534,24 @@ const s = StyleSheet.create({
     color: colors.foreground,
   },
   lookPreviewMeta: { marginTop: 2, fontSize: typography.size.xs, color: colors.mutedForeground },
+  boardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 56,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  boardEyebrow: {
+    fontSize: 10,
+    fontWeight: typography.weight.bold,
+    color: colors.primary,
+    letterSpacing: 1,
+  },
+  boardName: { fontSize: typography.size.md, fontWeight: typography.weight.medium, color: colors.foreground },
   viewLookPill: {
     minHeight: 40,
     flexDirection: 'row',

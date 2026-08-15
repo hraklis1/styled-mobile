@@ -12,6 +12,12 @@ type Props = {
   entry: WishlistEntry;
   onClose: () => void;
   onRemove: () => void;
+  /**
+   * Omitted where boarding makes no sense (this sheet also opens from inside a
+   * board). The parent owns the picker — presenting a second BottomSheetModal
+   * from here while this one dismisses wedges both.
+   */
+  onSaveToBoard?: () => void;
   removalCopy?: {
     title: string;
     message: string;
@@ -27,7 +33,7 @@ const DEFAULT_REMOVAL_COPY = {
   accessibilityLabel: 'Remove saved shopping item',
 };
 
-export function ShopWishlistDetailSheet({ entry, onClose, onRemove, removalCopy = DEFAULT_REMOVAL_COPY }: Props) {
+export function ShopWishlistDetailSheet({ entry, onClose, onRemove, onSaveToBoard, removalCopy = DEFAULT_REMOVAL_COPY }: Props) {
   const ref = useRef<BottomSheetModal>(null);
   const insets = useSafeAreaInsets();
   const snapPoints = useMemo(() => ['94%'], []);
@@ -66,7 +72,18 @@ export function ShopWishlistDetailSheet({ entry, onClose, onRemove, removalCopy 
       backgroundStyle={styles.background}
     >
       <View style={styles.header}>
-        <View style={styles.headerSide} />
+        {onSaveToBoard ? (
+          <TouchableOpacity
+            style={styles.headerSide}
+            onPress={onSaveToBoard}
+            accessibilityRole="button"
+            accessibilityLabel="Save to board"
+          >
+            <Ionicons name="bookmark-outline" size={20} color={colors.foreground} />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.headerSide} />
+        )}
         <View style={styles.titleWrap}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.subtitle} numberOfLines={1}>

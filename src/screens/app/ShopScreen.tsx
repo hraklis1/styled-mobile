@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
+  ActionSheetIOS,
   ActivityIndicator,
   Alert,
   FlatList,
@@ -19,6 +20,8 @@ import { ShopWishlistSummaryCard } from '../../components/outfits/ShopWishlistSu
 import { ShopWishlistDetailSheet } from '../../components/outfits/ShopWishlistDetailSheet';
 import { ShopWishlistFilterSheet } from '../../components/outfits/ShopWishlistFilterSheet';
 import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
+import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
+import type { BoardEntryRef } from '../../hooks/useBoards';
 import { useWishlist, useRemoveFromWishlist } from '../../hooks/useWishlist';
 import {
   countWishlistFilters,
@@ -95,6 +98,7 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<SavedShoppingTab>(initialTab);
   const [selectedEntry, setSelectedEntry] = useState<WishlistEntry | null>(null);
+  const [boardTarget, setBoardTarget] = useState<BoardEntryRef | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -166,6 +170,43 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
       { text: 'Remove', style: 'destructive', onPress: () => removeItem(entry.id) },
     ]);
   }, [removeItem]);
+
+  /**
+   * Open the board picker for a saved entry. Any presented detail sheet is
+   * closed first and the picker opened on a delay: presenting one
+   * BottomSheetModal while a sibling is dismissing wedges the first at
+   * DISMISSING, after which every later present() silently no-ops.
+   */
+  const openBoardPicker = useCallback((entry: WishlistEntry) => {
+    setSelectedEntry(null);
+    setTimeout(() => setBoardTarget({ type: 'wishlist', id: entry.id }), 300);
+  }, []);
+
+  const openEntryMenu = useCallback((entry: WishlistEntry) => {
+    const kind = getWishlistRecommendationType(entry);
+    const label = kind === 'look' ? 'look' : kind === 'piece' ? 'piece' : 'list';
+
+    if (process.env.EXPO_OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel', 'Save to board', `Remove saved ${label}`],
+          cancelButtonIndex: 0,
+          destructiveButtonIndex: 2,
+        },
+        (index) => {
+          if (index === 1) openBoardPicker(entry);
+          if (index === 2) confirmRemove(entry);
+        },
+      );
+      return;
+    }
+
+    Alert.alert(`Saved ${label}`, undefined, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Save to board', onPress: () => openBoardPicker(entry) },
+      { text: 'Remove', style: 'destructive', onPress: () => confirmRemove(entry) },
+    ]);
+  }, [confirmRemove, openBoardPicker]);
 
   if (loading) {
     return (
@@ -276,7 +317,7 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
               <ShopWishlistSummaryCard
                 entry={item}
                 onPress={() => setSelectedEntry(item)}
-                onMore={() => confirmRemove(item)}
+                onMore={() => openEntryMenu(item)}
               />
             )}
             ListEmptyComponent={(
@@ -317,7 +358,11 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
           entry={selectedEntry}
           onClose={() => setSelectedEntry(null)}
           onRemove={() => removeItem(selectedEntry.id)}
+          onSaveToBoard={() => openBoardPicker(selectedEntry)}
         />
+      )}
+      {boardTarget && (
+        <SaveToBoardSheet target={boardTarget} onClose={() => setBoardTarget(null)} />
       )}
     </View>
   );

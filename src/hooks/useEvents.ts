@@ -75,6 +75,34 @@ export function useAssignEventItems() {
   });
 }
 
+/**
+ * Attach or detach the board an event was planned from.
+ *
+ * Deliberately its own narrow patch rather than a field on EventInput:
+ * useUpdateEvent sends a whole EventInput, so folding boardId in there would
+ * null the link on any unrelated edit (a rename, a time change).
+ */
+export function useSetEventBoard() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, boardId }: { id: number; boardId: number | null }) =>
+      api.patch<Event>(`/api/events/${id}`, { boardId }).then((r) => r.data),
+    onMutate: async ({ id, boardId }) => {
+      await qc.cancelQueries({ queryKey: EVENTS_QUERY_KEY });
+      const previous = qc.getQueryData<Event[]>(EVENTS_QUERY_KEY);
+      qc.setQueryData<Event[]>(EVENTS_QUERY_KEY, (old) =>
+        old?.map((e) => (e.id === id ? { ...e, boardId } : e)) ?? []
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous) qc.setQueryData(EVENTS_QUERY_KEY, ctx.previous);
+      Alert.alert('Error', "Couldn't link that board. Please try again.");
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: EVENTS_QUERY_KEY }),
+  });
+}
+
 export function useDeleteEvent() {
   const qc = useQueryClient();
   return useMutation({

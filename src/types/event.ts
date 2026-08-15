@@ -9,4 +9,10 @@ export type Event = {
   environment: string | null;
   itemIds: number[] | null;
   outfitId: number | null;
+  /**
+   * The board this event was planned from, if any. Optional rather than
+   * required: a client can briefly outrun the backend deploy that adds the
+   * column, in which case the field is simply absent from the response.
+   */
+  boardId?: number | null;
 };

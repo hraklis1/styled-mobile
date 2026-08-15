@@ -1,7 +1,7 @@
 import type { CompositeScreenProps, NavigatorScreenParams } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import type { ScanResult } from '../types/item';
+import type { ItemCategory, ScanResult } from '../types/item';
 
 export type RootStackParamList = {
   Auth: undefined;
@@ -32,7 +32,11 @@ export type AppTabParamList = {
 
 // Unified closet stack (items + outfits + boards + their detail screens)
 export type ClosetStackParamList = {
-  ClosetMain: { segment?: 'pieces' | 'outfits' | 'boards' } | undefined;
+  ClosetMain: {
+    segment?: 'pieces' | 'outfits' | 'boards';
+    /** Preselect this category filter on arrival (board gap line deep-links here). */
+    category?: ItemCategory;
+  } | undefined;
   ItemDetail: {
     itemId?: number;
     scanData?: ScanResult;

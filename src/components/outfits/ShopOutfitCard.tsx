@@ -20,6 +20,12 @@ type Props = {
   onRemove?: () => void;
   /** Called after user taps Save — pass undefined to hide the button */
   onSave?: () => Promise<void>;
+  /**
+   * Fired after a successful save. Lets the parent act on the freshly created
+   * wishlist entry (e.g. offer to board it) without this card — which is also
+   * used outside the stylist — having to know about boards.
+   */
+  onSaved?: () => void;
   /** Override the default "Save" button label (e.g. "Save for <event>") */
   saveLabel?: string;
 };
@@ -88,7 +94,7 @@ function ProductCard({ item, width }: { item: ShopOutfitItem; width: number }) {
   );
 }
 
-export function ShopOutfitCard({ outfit, onRemove, onSave, saveLabel }: Props) {
+export function ShopOutfitCard({ outfit, onRemove, onSave, onSaved, saveLabel }: Props) {
   const { width } = useWindowDimensions();
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -107,6 +113,7 @@ export function ShopOutfitCard({ outfit, onRemove, onSave, saveLabel }: Props) {
     try {
       await onSave();
       setSaved(true);
+      onSaved?.();
     } finally {
       setSaving(false);
     }

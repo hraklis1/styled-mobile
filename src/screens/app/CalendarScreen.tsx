@@ -14,7 +14,9 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   useEvents,
   useDeleteEvent,
+  useSetEventBoard,
 } from '../../hooks/useEvents';
+import { useBoards } from '../../hooks/useBoards';
 import {
   useOutfits,
 } from '../../hooks/useOutfits';
@@ -125,6 +127,9 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   const [formVisible, setFormVisible] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [detailEvent, setDetailEvent] = useState<Event | null>(null);
+  const { data: boards = [] } = useBoards();
+  const { mutate: setEventBoard } = useSetEventBoard();
+  const boardsById = useMemo(() => new Map(boards.map((b) => [b.id, b])), [boards]);
   const [pickerEvent, setPickerEvent] = useState<Event | null>(null);
   const [outfitPickerEvent, setOutfitPickerEvent] = useState<Event | null>(null);
   const [returnToDetailEventId, setReturnToDetailEventId] = useState<number | null>(null);
@@ -780,6 +785,19 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
         onOpenStylist={(event) => openStylistForEvent(event, 'event_detail')}
         weatherFallback={activeLocation}
         outfit={detailEvent?.outfitId == null ? null : outfitsById.get(detailEvent.outfitId) ?? null}
+        board={detailEvent?.boardId == null ? null : boardsById.get(detailEvent.boardId) ?? null}
+        onSelectBoard={(boardId) => {
+          if (!detailEvent) return;
+          setEventBoard({ id: detailEvent.id, boardId });
+          setDetailEvent({ ...detailEvent, boardId });
+        }}
+        onOpenBoard={(boardId) => {
+          setDetailEvent(null);
+          // CalendarScreen's navigation prop is already composite, so the tab
+          // is addressed directly here — getParent() is for screens nested in
+          // a stack, like BoardDetail.
+          navigation.navigate('Closet', { screen: 'BoardDetail', params: { boardId } });
+        }}
       />
       <EventFormModal
         visible={formVisible}

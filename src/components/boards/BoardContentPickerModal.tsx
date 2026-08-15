@@ -255,10 +255,4 @@ const styles = StyleSheet.create({
   rowSubtitle: { color: colors.mutedForeground, fontSize: typography.size.xs },
   rowMeta: { color: colors.mutedForeground, fontSize: typography.size.xs, fontVariant: ['tabular-nums'] },
   empty: { paddingTop: spacing.xxxl, textAlign: 'center', color: colors.mutedForeground, fontSize: typography.size.sm },
-  findsState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.xl },
-  findsIcon: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
-  findsTitle: { color: colors.foreground, fontSize: typography.size.lg, fontWeight: typography.weight.bold },
-  findsCopy: { color: colors.mutedForeground, fontSize: typography.size.sm, textAlign: 'center', maxWidth: 300 },
-  primaryButton: { marginTop: spacing.sm, minHeight: 48, borderRadius: radii.full, paddingHorizontal: spacing.xl, backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  primaryButtonText: { color: colors.primaryForeground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
 });

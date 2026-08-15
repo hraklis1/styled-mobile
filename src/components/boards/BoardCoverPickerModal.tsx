@@ -21,8 +21,6 @@ export function BoardCoverPickerModal({ visible, items, onClose, onSelect, onUpl
       ? itemImageUri(item.item)
       : resolveImageUri((item.kind === 'outfit'
       ? item.outfit.aiGeneratedImageUrl
-      : item.kind === 'storeFind'
-      ? item.storeFind.imageUrls?.[0] ?? item.storeFind.imageUrl
       : null) ?? undefined);
     return uri ? [{ key: item.key, uri }] : [];
   });

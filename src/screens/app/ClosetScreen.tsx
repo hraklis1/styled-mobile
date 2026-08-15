@@ -345,6 +345,21 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     setSelectedCategories(next);
   }, [selectedCategories, setActiveSubcategory, setSelectedCategories]);
 
+  // Arriving from a board's gap line: land on Pieces filtered to the one
+  // category that board is missing. Cleared immediately so a later manual
+  // filter change isn't undone by a stale param on the next render.
+  useEffect(() => {
+    const requestedCategory = route.params?.category;
+    if (!requestedCategory) return;
+    if (segment !== 'pieces') handleSegmentChange('pieces');
+    setSelectedCategories([requestedCategory]);
+    setActiveSubcategory(null);
+    navigation.setParams({ category: undefined });
+  }, [
+    handleSegmentChange, navigation, route.params?.category, segment,
+    setActiveSubcategory, setSelectedCategories,
+  ]);
+
   const handleCategoryPress = useCallback((cat: ItemCategory) => {
     applySelectedCategories(
       selectedCategories.includes(cat)

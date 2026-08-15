@@ -43,6 +43,8 @@ function TripOutfitCard({
   intro,
   eventContext,
   onAddToEvent,
+  onSaveOutfit,
+  saveLabel,
 }: {
   outfit: TripOutfit;
   allItems: Item[];
@@ -51,6 +53,8 @@ function TripOutfitCard({
   intro: string;
   eventContext?: EventContext;
   onAddToEvent?: (itemIds: number[]) => Promise<unknown>;
+  onSaveOutfit?: (input: CreateOutfitInput) => Promise<unknown>;
+  saveLabel?: string;
 }) {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -79,7 +83,9 @@ function TripOutfitCard({
         description: (outfit.note || intro).slice(0, 200) || null,
         itemIds: items.map((i) => ({ id: i.id, category: i.category as string })),
       };
-      await createOutfit.mutateAsync(input);
+      // Defaults to a plain closet save; the board capsule sheet passes a
+      // wrapper that also files the new outfit onto the board.
+      await (onSaveOutfit ? onSaveOutfit(input) : createOutfit.mutateAsync(input));
       setSaved(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     } catch {
@@ -87,7 +93,7 @@ function TripOutfitCard({
     } finally {
       setSaving(false);
     }
-  }, [saved, saving, items, outfit.label, outfit.note, intro, createOutfit]);
+  }, [saved, saving, items, outfit.label, outfit.note, intro, createOutfit, onSaveOutfit]);
 
   const handleAddToEvent = useCallback(async () => {
     if (!onAddToEvent || added || adding || items.length === 0) return;
@@ -150,7 +156,7 @@ function TripOutfitCard({
           color={saved ? colors.primaryForeground : colors.primary}
         />
         <Text style={[styles.saveBtnText, saved && styles.saveBtnTextDone]}>
-          {saving ? 'Saving…' : saved ? 'Saved' : 'Save look'}
+          {saving ? 'Saving…' : saved ? 'Saved' : saveLabel ?? 'Save look'}
         </Text>
       </TouchableOpacity>
     </View>
@@ -163,12 +169,17 @@ export function TripPlanCard({
   createOutfit,
   eventContext,
   onAddToEvent,
+  onSaveOutfit,
+  saveLabel,
 }: {
   plan: TripPlanData;
   allItems: Item[];
   createOutfit: ReturnType<typeof useCreateOutfit>;
   eventContext?: EventContext;
   onAddToEvent?: (itemIds: number[]) => Promise<unknown>;
+  /** Override what saving a look does — defaults to createOutfit.mutateAsync. */
+  onSaveOutfit?: (input: CreateOutfitInput) => Promise<unknown>;
+  saveLabel?: string;
 }) {
   const { width } = useWindowDimensions();
   const cardWidth = Math.min(width - spacing.xxl * 2, 320);
@@ -206,6 +217,8 @@ export function TripPlanCard({
             intro={plan.intro}
             eventContext={eventContext}
             onAddToEvent={onAddToEvent}
+            onSaveOutfit={onSaveOutfit}
+            saveLabel={saveLabel}
           />
         ))}
         {plan.pending && (

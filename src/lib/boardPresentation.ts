@@ -1,15 +1,15 @@
 import { resolveImageUri } from './resolveImageUri';
 import { itemThumbUri } from './itemImage';
 import { CATEGORY_LABELS } from '../types/item';
+import type { ItemCategory } from '../types/item';
 import type { Board, BoardFeedItem } from '../types/board';
 import type { Item } from '../types/item';
 import type { Outfit } from '../types/outfit';
 
 export type BoardFilter = 'all' | BoardFeedItem['kind'];
-export type BoardAIIntent = 'outfit' | 'complete' | 'capsule' | 'theme';
 
 export function getBoardSavedCount(board: Board): number {
-  return board.itemIds.length + board.outfitIds.length + board.wishlistIds.length + (board.storeFinds?.length ?? 0);
+  return board.itemIds.length + board.outfitIds.length + board.wishlistIds.length;
 }
 
 export function getBoardCoverUris(
@@ -29,7 +29,6 @@ export function getBoardCoverUris(
   if (uris.length > 0) return uris;
   board.itemIds.forEach((id) => add(itemThumbUri(itemMap.get(id))));
   board.outfitIds.forEach((id) => add(outfitMap.get(id)?.aiGeneratedImageUrl));
-  (board.storeFinds ?? []).forEach((find) => add(find.imageUrls?.[0] ?? find.imageUrl));
   return uris.slice(0, 4);
 }
 
@@ -57,10 +56,89 @@ export function getBoardInsights(items: BoardFeedItem[]) {
   };
 }
 
-export function buildBoardStylistPrompt(boardName: string, _items: BoardFeedItem[], intent: BoardAIIntent): string {
-  // The action and membership are sent as hidden structured context. Keep this
-  // visible chat bubble human-sized even for a board with dozens of entries.
-  const action = intent === 'outfit' ? 'Create an outfit for' : intent === 'complete'
-    ? 'Complete' : intent === 'capsule' ? 'Build a capsule for' : 'Set the theme for';
-  return `${action} ${boardName}`;
+/** The two structural silhouettes an outfit can be built from. */
+const OUTFIT_PATHS: ItemCategory[][] = [
+  ['full_body', 'shoes'],
+  ['top', 'bottom', 'shoes'],
+];
+
+/**
+ * Which slot to name when several are missing. Shoes first because a board of
+ * clothes with nothing to wear on your feet is the most common near-miss.
+ */
+const SLOT_PRECEDENCE: ItemCategory[] = ['shoes', 'bottom', 'top', 'full_body'];
+
+const SLOT_NOUNS: Record<ItemCategory, string> = {
+  top: 'a top', bottom: 'a bottom', full_body: 'a dress or set', shoes: 'shoes',
+  outerwear: 'outerwear', accessory: 'an accessory', valuables: 'a piece',
+};
+
+export type BoardGap = { text: string; missing: ItemCategory };
+
+/** Board members the server would consider wearable, mirroring its own filter. */
+function wearableItems(items: BoardFeedItem[]) {
+  return items.flatMap((entry) =>
+    entry.kind === 'item'
+      && !entry.item.isArchived
+      && entry.item.condition !== 'needs_repair'
+      && entry.item.condition !== 'donate'
+      ? [entry.item]
+      : []);
+}
+
+/**
+ * Whether this board holds a complete silhouette the stylist could actually
+ * build a look from — the exact predicate the server applies in
+ * canBuildOutfitFromItems.
+ *
+ * Distinct from `getBoardGap(items) === null`, which is also true for a board
+ * holding almost nothing. Using the gap for the button gate offered to style
+ * empty boards, which the server then answers with prose.
+ */
+export function canComposeOutfit(items: BoardFeedItem[]): boolean {
+  const present = new Set(wearableItems(items).map((item) => item.category));
+  return OUTFIT_PATHS.some((path) => path.every((slot) => present.has(slot)));
+}
+
+/**
+ * A single deterministic sentence about what this board still needs before it
+ * could become an outfit, or null when it needs nothing (or too little is
+ * saved to say anything useful).
+ *
+ * The "needs nothing" case mirrors the server's canBuildOutfitFromItems
+ * (Styled/server/stylistRouting.ts) exactly — including its wearability
+ * filter — because the board detail screen uses a null gap as the gate for
+ * offering to style the board. If the two disagreed, the button would appear
+ * for boards the server then refuses to compose from.
+ */
+export function getBoardGap(items: BoardFeedItem[]): BoardGap | null {
+  const wearable = wearableItems(items);
+
+  // Below this there is nothing worth saying — every board starts here.
+  if (wearable.length < 3) return null;
+
+  const present = new Set(wearable.map((item) => item.category));
+  const rank = (slots: ItemCategory[]) =>
+    SLOT_PRECEDENCE.findIndex((slot) => slots.includes(slot));
+
+  // Fewest missing slots wins; ties break on precedence so a board holding a
+  // top is told to add a bottom rather than to replace it with a dress.
+  const nearest = OUTFIT_PATHS
+    .map((path) => path.filter((slot) => !present.has(slot)))
+    .reduce((a, b) => {
+      if (b.length !== a.length) return b.length < a.length ? b : a;
+      return rank(b) < rank(a) ? b : a;
+    });
+
+  if (nearest.length === 0) return null;
+
+  const missing = SLOT_PRECEDENCE.find((slot) => nearest.includes(slot)) ?? nearest[0];
+  const noun = SLOT_NOUNS[missing];
+
+  // Only promise a finished outfit when exactly one slot stands in the way.
+  const text = nearest.length === 1
+    ? `Add ${noun} and this board can become an outfit.`
+    : `Add ${noun} to start building outfits here.`;
+
+  return { text, missing };
 }

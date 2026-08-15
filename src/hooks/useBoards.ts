@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'react-native';
 
@@ -8,6 +8,8 @@ import type { Board, BoardFeedItem } from '../types/board';
 import type { Item } from '../types/item';
 import type { Outfit } from '../types/outfit';
 import type { WishlistEntry } from '../lib/wishlist';
+import type { Event } from '../types/event';
+import { useEvents } from './useEvents';
 
 export const BOARDS_QUERY_KEY = ['boards'] as const;
 
@@ -29,7 +31,6 @@ export type UpdateBoardInput = {
   outfitIds?: number[];
   wishlistIds?: string[];
   coverImageUrl?: string | null;
-  storeFinds?: import('../types/storeFind').StoreFind[];
 };
 
 /** A reference that can be toggled into/out of a board. */
@@ -141,6 +142,30 @@ export function useToggleBoardEntry() {
   );
 }
 
+/**
+ * The event a board is attached to, preferring the soonest one still ahead.
+ *
+ * A pure derivation over the events already in cache rather than a query of its
+ * own: the link lives on `events.boardId`, so there is nothing extra to fetch.
+ * Falls back to the most recent past event so a board used for something that
+ * already happened still shows what it was for.
+ */
+export function useBoardEvent(boardId: number): Event | null {
+  const { data: events = [] } = useEvents();
+  return useMemo(() => {
+    const linked = events.filter((event) => event.boardId === boardId);
+    if (linked.length === 0) return null;
+    const now = Date.now();
+    const upcoming = linked
+      .filter((event) => new Date(event.date).getTime() >= now)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    if (upcoming.length > 0) return upcoming[0];
+    return linked
+      .slice()
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+  }, [events, boardId]);
+}
+
 /** Whether a board already contains the given reference (for checkmarks in the save sheet). */
 export function boardContains(board: Board, ref: BoardEntryRef): boolean {
   if (ref.type === 'item') return board.itemIds.includes(ref.id);
@@ -151,8 +176,7 @@ export function boardContains(board: Board, ref: BoardEntryRef): boolean {
 type BoardFeedRef =
   | { kind: 'item'; data: Item }
   | { kind: 'outfit'; data: Outfit }
-  | { kind: 'wishlist'; data: WishlistEntry }
-  | { kind: 'storeFind'; data: import('../types/storeFind').StoreFind };
+  | { kind: 'wishlist'; data: WishlistEntry };
 type BoardFeedPage = { items: BoardFeedRef[]; nextCursor: string | null };
 
 /** Cursor-paginated mixed feed for a board (items + outfits + wishlist). */
@@ -176,10 +200,12 @@ export function flattenBoardFeed(pages: BoardFeedPage[] | undefined): BoardFeedI
   const out: BoardFeedItem[] = [];
   for (const page of pages) {
     for (const ref of page.items) {
+      // Match kinds explicitly rather than falling through to wishlist: the
+      // server still emits legacy `storeFind` entries for the hidden Daily
+      // Finds board, and a catch-all would render one as a malformed tile.
       if (ref.kind === 'item') out.push({ kind: 'item', key: `i${ref.data.id}`, item: ref.data });
       else if (ref.kind === 'outfit') out.push({ kind: 'outfit', key: `o${ref.data.id}`, outfit: ref.data });
-      else if (ref.kind === 'storeFind') out.push({ kind: 'storeFind', key: `sf_${ref.data.id}`, storeFind: ref.data });
-      else out.push({ kind: 'wishlist', key: `w${ref.data.id}`, entry: ref.data });
+      else if (ref.kind === 'wishlist') out.push({ kind: 'wishlist', key: `w${ref.data.id}`, entry: ref.data });
     }
   }
   return out;

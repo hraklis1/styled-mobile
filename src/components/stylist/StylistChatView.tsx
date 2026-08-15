@@ -66,6 +66,8 @@ import { StylistComposer } from './composer/StylistComposer';
 import { LocationAutocompleteInput } from '../primitives/LocationAutocompleteInput';
 import { ShopOutfitCard } from '../outfits/ShopOutfitCard';
 import { ItemPickerSheet } from '../outfits/ItemPickerSheet';
+import { BoardPickerModal } from '../boards/BoardPickerModal';
+import type { BoardEntryRef } from '../../hooks/useBoards';
 import { ResolvedOutfitCollage } from '../outfits/ResolvedOutfitCollage';
 import { StylistRichText } from './StylistRichText';
 import { GapCard } from './GapCard';
@@ -442,6 +444,7 @@ export function StylistChatView({
   const [showNewSessionConfirm, setShowNewSessionConfirm] = useState(false);
   const [attachmentSheetVisible, setAttachmentSheetVisible] = useState(false);
   const [wardrobePickerVisible, setWardrobePickerVisible] = useState(false);
+  const [boardTarget, setBoardTarget] = useState<BoardEntryRef | null>(null);
   const [composerAttachment, setComposerAttachment] = useState<ComposerAttachment | null>(null);
   const [composerPhotoData, setComposerPhotoData] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -1257,6 +1260,7 @@ export function StylistChatView({
                   onNavigateToShop={onNavigateToShop}
                   onNavigateToCloset={onNavigateToCloset}
                   onStyleAuditItem={openAuditItemStyling}
+                  onSaveToBoard={setBoardTarget}
                   onToggleAudio={
                     msg.role === 'assistant' && !msg.isStreaming
                       ? () =>
@@ -1416,6 +1420,15 @@ export function StylistChatView({
         </View>
       </StylistOverlaySheet>
 
+      {/* One picker for the whole thread — mounting per card would create a
+          modal per message. A plain Modal, not SaveToBoardSheet: this view
+          lives inside a fullscreen RN Modal that a bottom sheet renders behind. */}
+      <BoardPickerModal
+        visible={boardTarget != null}
+        target={boardTarget}
+        onClose={() => setBoardTarget(null)}
+      />
+
       <ItemPickerSheet
         visible={wardrobePickerVisible}
         onClose={() => setWardrobePickerVisible(false)}
@@ -1500,11 +1513,15 @@ type BubbleProps = {
   onNavigateToShop?: () => void;
   onNavigateToCloset?: (outfitId: number) => void;
   onStyleAuditItem?: (itemId: number) => void;
+  onSaveToBoard?: (ref: BoardEntryRef) => void;
 };
 
-function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContext, onAddToEvent, onToggleAudio, onNavigateToShop, onNavigateToCloset, onStyleAuditItem }: BubbleProps) {
+function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContext, onAddToEvent, onToggleAudio, onNavigateToShop, onNavigateToCloset, onStyleAuditItem, onSaveToBoard }: BubbleProps) {
   const isUser = message.role === 'user';
   const [detailItem, setDetailItem] = useState<Item | null>(null);
+  // Bridges ShopOutfitCard's onSave (which mints the entry) to its onSaved
+  // (which offers to board it) without widening the card's public contract.
+  const savedWishlistIdRef = useRef<string | null>(null);
 
   if (!isUser && message.wardrobeAudit) {
     return (
@@ -1619,6 +1636,7 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
             isPlaying={isPlaying}
             onToggleAudio={onToggleAudio}
             onNavigateToCloset={onNavigateToCloset}
+            onSaveToBoard={onSaveToBoard}
           />
         </View>
       </EditorialEntrance>
@@ -1637,8 +1655,16 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
             outfit={message.shopOutfit}
             saveLabel={eventContext ? `Save ${message.shopOutfit.recommendationType === 'piece' ? 'piece' : message.shopOutfit.recommendationType === 'list' ? 'list' : 'look'} for ${eventContext.title}` : undefined}
             onSave={async () => {
-              await addOutfitToWishlist(message.shopOutfit!, eventContext);
+              // addOutfitToWishlist mints the id client-side and POSTs it; only
+              // offer to board the entry once the server has actually stored it,
+              // or the board would reference an id the feed omits.
+              const entry = await addOutfitToWishlist(message.shopOutfit!, eventContext);
+              savedWishlistIdRef.current = entry.id;
               track('outfit_saved_to_wishlist', { forEvent: !!eventContext });
+            }}
+            onSaved={() => {
+              const id = savedWishlistIdRef.current;
+              if (id) onSaveToBoard?.({ type: 'wishlist', id });
             }}
           />
           {onToggleAudio && (
@@ -1833,6 +1859,8 @@ type OutfitSuggestionCardProps = {
   isPlaying?: boolean;
   onToggleAudio?: () => void;
   onNavigateToCloset?: (outfitId: number) => void;
+  /** Offered only once the look exists in the closet — boards reference real outfit ids. */
+  onSaveToBoard?: (ref: BoardEntryRef) => void;
 };
 
 function OutfitSuggestionCard({
@@ -1848,6 +1876,7 @@ function OutfitSuggestionCard({
   isPlaying,
   onToggleAudio,
   onNavigateToCloset,
+  onSaveToBoard,
 }: OutfitSuggestionCardProps) {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -2239,16 +2268,30 @@ function OutfitSuggestionCard({
       )}
 
       {savedOutfitId != null ? (
-        <TouchableOpacity
-          style={styles.viewClosetBtn}
-          onPress={() => onNavigateToCloset?.(savedOutfitId)}
-          activeOpacity={0.75}
-          accessibilityRole="button"
-          accessibilityLabel="View saved outfit in Closet"
-        >
-          <Text style={styles.viewClosetText}>View saved outfit</Text>
-          <Ionicons name="arrow-forward-outline" size={15} color={colors.primary} />
-        </TouchableOpacity>
+        <View style={styles.savedOutfitActions}>
+          <TouchableOpacity
+            style={styles.viewClosetBtn}
+            onPress={() => onNavigateToCloset?.(savedOutfitId)}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel="View saved outfit in Closet"
+          >
+            <Text style={styles.viewClosetText}>View saved outfit</Text>
+            <Ionicons name="arrow-forward-outline" size={15} color={colors.primary} />
+          </TouchableOpacity>
+          {onSaveToBoard && (
+            <TouchableOpacity
+              style={styles.viewClosetBtn}
+              onPress={() => onSaveToBoard({ type: 'outfit', id: savedOutfitId })}
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel="Save this outfit to a board"
+            >
+              <Ionicons name="albums-outline" size={15} color={colors.primary} />
+              <Text style={styles.viewClosetText}>Save to board</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       ) : null}
 
       {choosingReason && !feedback && (
@@ -3703,6 +3746,13 @@ const styles = StyleSheet.create({
     fontSize: typography.size.xs,
     fontWeight: typography.weight.semibold,
     color: colors.white,
+  },
+  savedOutfitActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
   },
   viewClosetBtn: {
     alignSelf: 'center',
