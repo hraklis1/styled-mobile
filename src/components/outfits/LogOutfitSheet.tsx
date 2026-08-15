@@ -21,13 +21,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { track } from '../../lib/analytics';
 import { useCreateItem, useItems } from '../../hooks/useItems';
 import { useCreateOutfitLog, useScanOutfitLog, type OutfitScanResult } from '../../hooks/useOutfitLogs';
-import { useCameraLaunch, useLibraryLaunch } from '../../hooks/useCameraLaunch';
+import { useCameraLaunch, useLibraryLaunch, type CapturedImage } from '../../hooks/useCameraLaunch';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { itemImageContentFit, itemImageUri } from '../../lib/itemImage';
 import { LocationAutocompleteInput } from '../primitives/LocationAutocompleteInput';
 import { PhotoSourceSheet } from '../primitives/PhotoSourceSheet';
 import { colors, spacing, typography, radii } from '../../theme';
 import { CATEGORY_LABELS, CATEGORY_ORDER, type Item, type ItemCategory } from '../../types/item';
+import type { OutfitLoggerLaunch } from '../../contexts/GlobalOutfitLoggerContext';
 import {
   buildNewClosetItemInput,
   initialScanSelections,
@@ -88,6 +89,12 @@ type Props = {
   initialDate?: string;
   /** Bumped by the opener each time it requests a date. See the seeding effect. */
   initialDateRequestId?: number;
+  /** Optional quick-start action selected from the Home capture chooser. */
+  initialLaunch?: OutfitLoggerLaunch;
+  /** Image already selected by the Home quick-start native picker. */
+  initialImage?: CapturedImage;
+  /** Optional initial logger view selected from the Home capture chooser. */
+  initialView?: 'picker';
   onClose: () => void;
   onSaved?: () => void;
   onAddToWardrobe?: (onItemsSaved: (items: Item[]) => void) => void;
@@ -99,6 +106,9 @@ export function LogOutfitSheet({
   visible,
   initialDate,
   initialDateRequestId = 0,
+  initialLaunch,
+  initialImage,
+  initialView,
   onClose,
   onSaved,
   onAddToWardrobe,
@@ -126,6 +136,7 @@ export function LogOutfitSheet({
   const [notes, setNotes] = useState('');
   const [location, setLocation] = useState('');
   const [rating, setRating] = useState<number | null>(null);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
 
   // View
   const [view, setView] = useState<SheetView>('form');
@@ -143,8 +154,10 @@ export function LogOutfitSheet({
   const [editingMatchIndex, setEditingMatchIndex] = useState<number | null>(null);
   const [newItemDrafts, setNewItemDrafts] = useState<Record<number, NewItemDraft>>({});
   const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+  const [autoLaunchPending, setAutoLaunchPending] = useState(false);
 
   const notesRef = useRef<TextInput>(null);
+  const autoLaunchRef = useRef<OutfitLoggerLaunch | undefined>(undefined);
 
   // ── Derived ──────────────────────────────────────────────────────────────────
 
@@ -242,13 +255,7 @@ export function LogOutfitSheet({
     );
   }, []);
 
-  const runScan = useCallback(async (source: 'camera' | 'library') => {
-    const image =
-      source === 'camera'
-        ? await launchCamera({ maxDim: 1600 })
-        : await launchLibrary({ maxDim: 1600 });
-    if (!image) return;
-
+  const processScanImage = useCallback(async (image: CapturedImage) => {
     try {
       const results = await scanOutfit.mutateAsync(image.dataUrl);
       const selections = initialScanSelections(results);
@@ -271,7 +278,31 @@ export function LogOutfitSheet({
     } catch {
       Alert.alert('Scan failed', 'Could not analyze the photo. Please try again.');
     }
-  }, [launchCamera, launchLibrary, scanOutfit]);
+  }, [scanOutfit]);
+
+  const runScan = useCallback(async (source: 'camera' | 'library') => {
+    let image: Awaited<ReturnType<typeof launchCamera>>;
+    try {
+      image = source === 'camera'
+        ? await launchCamera({ maxDim: 1600 })
+        : await launchLibrary({ maxDim: 1600 });
+    } catch {
+      Alert.alert(
+        source === 'camera' ? 'Couldn’t open the camera' : 'Couldn’t open your photo library',
+        'Please try again.',
+      );
+      if (initialLaunch) onClose();
+      return;
+    }
+    if (!image) {
+      // A quick-start cancel should return to Home rather than strand the user
+      // in an empty full logger form.
+      if (initialLaunch) onClose();
+      return;
+    }
+
+    await processScanImage(image);
+  }, [initialLaunch, launchCamera, launchLibrary, onClose, processScanImage]);
 
   // Close the chooser before the camera/library picker opens: on iOS a native
   // picker presented while another modal is still dismissing never appears.
@@ -279,6 +310,28 @@ export function LogOutfitSheet({
     setSourcePickerOpen(false);
     setTimeout(() => runScan(source), 300);
   }, [runScan]);
+
+  useEffect(() => {
+    if (!visible) {
+      autoLaunchRef.current = undefined;
+      setAutoLaunchPending(false);
+    }
+  }, [visible]);
+
+  const handleModalShow = useCallback(() => {
+    if (!initialLaunch || initialLaunch === 'closet' || autoLaunchRef.current === initialLaunch) return;
+
+    autoLaunchRef.current = initialLaunch;
+    setAutoLaunchPending(true);
+    const launch = initialImage
+      ? processScanImage(initialImage)
+      : runScan(initialLaunch);
+    void launch.finally(() => setAutoLaunchPending(false));
+  }, [initialImage, initialLaunch, processScanImage, runScan]);
+
+  useEffect(() => {
+    if (visible && initialView === 'picker') setView('picker');
+  }, [initialView, visible]);
 
   const finishScanReview = useCallback((
     selections: ScanSelections = scanSelections,
@@ -421,6 +474,7 @@ export function LogOutfitSheet({
     setNotes('');
     setLocation('');
     setRating(null);
+    setDetailsExpanded(false);
     setView('form');
     setSearch('');
     setScanResults(null);
@@ -434,11 +488,26 @@ export function LogOutfitSheet({
     setEditingMatchIndex(null);
     setNewItemDrafts({});
     setSourcePickerOpen(false);
+    setAutoLaunchPending(false);
   }, []);
+
+  useEffect(() => {
+    if (!visible) reset();
+  }, [reset, visible]);
 
   const handleClose = () => {
     reset();
     onClose();
+  };
+
+  const handlePickerBack = () => {
+    // Home quick-start is a self-contained session. Back/cancel should return
+    // to Home, not expose the full logger form that launched the picker.
+    if (initialLaunch || initialView === 'picker') {
+      handleClose();
+      return;
+    }
+    setView('form');
   };
 
   const handleSave = () => {
@@ -477,6 +546,12 @@ export function LogOutfitSheet({
   const pickerCardWidth =
     (screenWidth - PICKER_H_PAD * 2 - PICKER_GAP * (PICKER_COLS - 1)) / PICKER_COLS;
   const pickerCardHeight = pickerCardWidth * 1.3;
+  const showAutoLaunchState = Boolean(
+    initialLaunch &&
+    view === 'form' &&
+    scanResults === null &&
+    (autoLaunchPending || autoLaunchRef.current === undefined),
+  );
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Render
@@ -487,7 +562,8 @@ export function LogOutfitSheet({
       visible={visible}
       animationType="slide"
       presentationStyle="pageSheet"
-      onRequestClose={view === 'picker' ? () => setView('form') : handleClose}
+      onShow={handleModalShow}
+      onRequestClose={view === 'picker' ? handlePickerBack : handleClose}
     >
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -498,7 +574,14 @@ export function LogOutfitSheet({
           {/* ════════════════════════════════════════
               FORM VIEW
           ════════════════════════════════════════ */}
-          {view === 'form' && (
+          {showAutoLaunchState ? (
+            <View style={styles.autoLaunchState}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={styles.autoLaunchTitle}>
+                {initialLaunch === 'camera' ? 'Opening camera…' : 'Opening photo library…'}
+              </Text>
+            </View>
+          ) : view === 'form' && (
             <>
               <View style={styles.header}>
                 <TouchableOpacity
@@ -507,7 +590,7 @@ export function LogOutfitSheet({
                 >
                   <Text style={styles.headerCancel}>Cancel</Text>
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Record What You Wore</Text>
+                <Text style={styles.headerTitle}>What Did You Wear?</Text>
                 <TouchableOpacity
                   onPress={handleSave}
                   disabled={selectedIds.length === 0 || createLog.isPending}
@@ -595,19 +678,29 @@ export function LogOutfitSheet({
                   )}
                 </View>
 
-                {/* ── Items ────────────────────────────────────────────── */}
-                <Text style={[styles.label, styles.itemsLabel]}>Choose from your closet</Text>
+                {/* ── Outfit source ───────────────────────────────────── */}
+                <Text style={[styles.label, styles.itemsLabel]}>Add your outfit</Text>
+
+                <Text style={styles.introText}>
+                  Snap a photo and we’ll match the pieces to your closet, or choose them yourself.
+                </Text>
 
                 {selectedItems.length > 0 && (
-                  <View style={styles.selectedList}>
-                    {selectedItems.map((item) => (
-                      <SelectedItemRow
-                        key={item.id}
-                        item={item}
-                        onRemove={() => toggleItem(item.id)}
-                      />
-                    ))}
-                  </View>
+                  <>
+                    <View style={styles.selectedHeader}>
+                      <Text style={styles.selectedHeaderTitle}>Selected pieces</Text>
+                      <Text style={styles.selectedHeaderCount}>{selectedItems.length}</Text>
+                    </View>
+                    <View style={styles.selectedList}>
+                      {selectedItems.map((item) => (
+                        <SelectedItemRow
+                          key={item.id}
+                          item={item}
+                          onRemove={() => toggleItem(item.id)}
+                        />
+                      ))}
+                    </View>
+                  </>
                 )}
 
                 <TouchableOpacity
@@ -615,6 +708,8 @@ export function LogOutfitSheet({
                   onPress={() => setSourcePickerOpen(true)}
                   disabled={scanOutfit.isPending}
                   activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Match your outfit from a photo"
                 >
                   {scanOutfit.isPending ? (
                     <ActivityIndicator size="small" color={colors.primary} />
@@ -623,11 +718,11 @@ export function LogOutfitSheet({
                   )}
                   <View style={styles.addItemsBtnCopy}>
                     <Text style={styles.addItemsBtnText}>
-                      {scanOutfit.isPending ? 'Matching photo…' : 'Match from an outfit photo'}
+                      {scanOutfit.isPending ? 'Matching photo…' : 'Match from a photo'}
                     </Text>
                     {!scanOutfit.isPending && (
                       <Text style={styles.addItemsBtnSubtext}>
-                        Find saved clothes, or add new pieces
+                        Take a selfie or choose a photo from your library
                       </Text>
                     )}
                   </View>
@@ -641,63 +736,89 @@ export function LogOutfitSheet({
                     setView('picker');
                   }}
                   activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={selectedItems.length > 0 ? 'Add more pieces from your closet' : 'Choose pieces from your closet'}
                 >
                   <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
                   <View style={styles.addItemsBtnCopy}>
                     <Text style={styles.addItemsBtnText}>
-                      {selectedItems.length > 0 ? 'Select more clothes' : 'Select clothes manually'}
+                      {selectedItems.length > 0 ? 'Add more from your closet' : 'Choose from your closet'}
                     </Text>
-                    <Text style={styles.addItemsBtnSubtext}>Choose saved pieces from your closet</Text>
+                    <Text style={styles.addItemsBtnSubtext}>Select the pieces you wore yourself</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={16} color={colors.primary} />
                 </TouchableOpacity>
 
-                {/* ── Location ─────────────────────────────────────── */}
-                <Text style={[styles.label, styles.itemsLabel]}>Location</Text>
-                <LocationAutocompleteInput
-                  value={location}
-                  onChangeText={setLocation}
-                  onSelect={setLocation}
-                  placeholder="Where did you wear this?"
-                  containerStyle={{ marginHorizontal: spacing.lg }}
-                />
-
-                {/* ── Rating ───────────────────────────────────────── */}
-                <Text style={[styles.label, styles.itemsLabel]}>How did it go?</Text>
-                <View style={styles.ratingRow}>
-                  {[1, 2, 3, 4, 5].map((star) => (
+                {selectedItems.length > 0 && (
+                  <>
                     <TouchableOpacity
-                      key={star}
-                      onPress={() => setRating(rating === star ? null : star)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      style={styles.detailsToggle}
+                      onPress={() => setDetailsExpanded((current) => !current)}
                       activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityState={{ expanded: detailsExpanded }}
+                      accessibilityLabel={detailsExpanded ? 'Hide outfit details' : 'Add outfit details'}
                     >
+                      <View style={styles.detailsToggleCopy}>
+                        <Text style={styles.detailsToggleTitle}>Add details</Text>
+                        <Text style={styles.detailsToggleSubtitle}>Location, rating, or a note</Text>
+                      </View>
                       <Ionicons
-                        name={rating != null && rating >= star ? 'star' : 'star-outline'}
-                        size={28}
-                        color={rating != null && rating >= star ? '#F59E0B' : colors.border}
+                        name={detailsExpanded ? 'chevron-up' : 'chevron-down'}
+                        size={18}
+                        color={colors.primary}
                       />
                     </TouchableOpacity>
-                  ))}
-                </View>
 
-                {/* ── Notes ────────────────────────────────────────── */}
-                <Text style={[styles.label, styles.itemsLabel]}>Notes</Text>
-                <View style={[styles.textFieldRow, styles.notesField]}>
-                  <TextInput
-                    ref={notesRef}
-                    style={[styles.textField, styles.notesInput]}
-                    value={notes}
-                    onChangeText={setNotes}
-                    placeholder="How did it feel? Any styling tips…"
-                    placeholderTextColor={colors.mutedForeground}
-                    multiline
-                    returnKeyType="default"
-                    autoCapitalize="sentences"
-                    maxLength={1000}
-                    textAlignVertical="top"
-                  />
-                </View>
+                    {detailsExpanded && (
+                      <View style={styles.detailsContent}>
+                        <Text style={styles.detailLabel}>Location</Text>
+                        <LocationAutocompleteInput
+                          value={location}
+                          onChangeText={setLocation}
+                          onSelect={setLocation}
+                          placeholder="Where did you wear this?"
+                          containerStyle={{ marginHorizontal: 0 }}
+                        />
+
+                        <Text style={styles.detailLabel}>How did it go?</Text>
+                        <View style={styles.ratingRow}>
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <TouchableOpacity
+                              key={star}
+                              onPress={() => setRating(rating === star ? null : star)}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              activeOpacity={0.7}
+                            >
+                              <Ionicons
+                                name={rating != null && rating >= star ? 'star' : 'star-outline'}
+                                size={28}
+                                color={rating != null && rating >= star ? '#F59E0B' : colors.border}
+                              />
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+
+                        <Text style={styles.detailLabel}>Notes</Text>
+                        <View style={[styles.textFieldRow, styles.notesField, styles.detailsField]}>
+                          <TextInput
+                            ref={notesRef}
+                            style={[styles.textField, styles.notesInput]}
+                            value={notes}
+                            onChangeText={setNotes}
+                            placeholder="How did it feel? Any styling tips…"
+                            placeholderTextColor={colors.mutedForeground}
+                            multiline
+                            returnKeyType="default"
+                            autoCapitalize="sentences"
+                            maxLength={1000}
+                            textAlignVertical="top"
+                          />
+                        </View>
+                      </View>
+                    )}
+                  </>
+                )}
 
                 <View style={{ height: 48 }} />
               </ScrollView>
@@ -711,12 +832,18 @@ export function LogOutfitSheet({
             <>
               <View style={styles.header}>
                 <TouchableOpacity
-                  onPress={() => setView('form')}
+                  onPress={handlePickerBack}
                   style={styles.backBtn}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Ionicons name="chevron-back-outline" size={20} color={colors.foreground} />
-                  <Text style={styles.backText}>Back</Text>
+                  {initialLaunch || initialView === 'picker' ? (
+                    <Text style={styles.headerCancel}>Cancel</Text>
+                  ) : (
+                    <>
+                      <Ionicons name="chevron-back-outline" size={20} color={colors.foreground} />
+                      <Text style={styles.backText}>Back</Text>
+                    </>
+                  )}
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Select from Your Closet</Text>
                 <TouchableOpacity
@@ -784,11 +911,14 @@ export function LogOutfitSheet({
                   const imgUri = itemImageUri(item);
                   return (
                     <TouchableOpacity
-                      style={[styles.pickerCard, { width: pickerCardWidth }]}
+                      style={[styles.pickerCard, isSelected && styles.pickerCardSelected, { width: pickerCardWidth }]}
                       onPress={() => toggleItem(item.id)}
                       activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isSelected }}
+                      accessibilityLabel={`${isSelected ? 'Remove' : 'Select'} ${item.name}`}
                     >
-                      <View style={[styles.pickerCardImage, { height: pickerCardHeight }]}>
+                      <View style={[styles.pickerCardImage, isSelected && styles.pickerCardImageSelected, { height: pickerCardHeight }]}>
                         {imgUri ? (
                           <Image
                             source={{ uri: imgUri }}
@@ -849,7 +979,7 @@ export function LogOutfitSheet({
                   <Ionicons name="chevron-back-outline" size={20} color={colors.foreground} />
                   <Text style={styles.backText}>Back</Text>
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Review Your Clothes</Text>
+                <Text style={styles.headerTitle}>Check Your Matches</Text>
                 <TouchableOpacity
                   onPress={() => finishScanReview()}
                   disabled={(scanCounts?.unresolved ?? 0) > 0}
@@ -880,13 +1010,15 @@ export function LogOutfitSheet({
                 ) : (
                   <>
                     <View style={styles.scanSummary}>
-                      <Text style={styles.scanSummaryTitle}>We found {scanResults.length} pieces</Text>
+                      <Text style={styles.scanSummaryTitle}>
+                        We found {scanResults.length} {scanResults.length === 1 ? 'piece' : 'pieces'}
+                      </Text>
                       <Text style={styles.scanSummaryText}>
-                        {scanCounts?.matched ?? 0} matched · {scanCounts?.new ?? 0} added · {scanCounts?.unresolved ?? 0} need review
+                        {scanCounts?.matched ?? 0} matched · {scanCounts?.new ?? 0} new · {scanCounts?.unresolved ?? 0} to review
                       </Text>
                     </View>
                     <Text style={styles.scanHint}>
-                      Confirm closet matches, add new pieces, or skip anything the AI got wrong.
+                      Confirm each match before saving this outfit.
                     </Text>
                     {scanResults.map((result, idx) => {
                       const selectedId = scanSelections[idx];
@@ -937,28 +1069,24 @@ export function LogOutfitSheet({
                               <Text style={styles.scanItemName} numberOfLines={2}>
                                 {matched ? matched.name : result.suggested_metadata.name || result.detected_type}
                               </Text>
-                              <Text style={styles.scanDetectedLabel} numberOfLines={1}>
-                                AI detected {result.detected_type}
+                              <Text
+                                style={[
+                                  styles.scanDetectedLabel,
+                                  isCreated && styles.scanStatusAddedText,
+                                  isSkipped && styles.scanStatusSkippedText,
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {isSkipped
+                                  ? 'Skipped'
+                                  : isCreated
+                                    ? 'Added to your closet'
+                                    : matched
+                                      ? 'Matched from your closet'
+                                      : candidateIds.length > 0
+                                        ? 'Needs a closet match'
+                                        : 'New to your closet'}
                               </Text>
-                              <View style={styles.scanBadgeRow}>
-                                <View style={[
-                                  styles.scanStatusBadge,
-                                  isCreated && styles.scanStatusAdded,
-                                  isSkipped && styles.scanStatusSkipped,
-                                ]}>
-                                  <Text style={styles.scanStatusText}>
-                                    {isSkipped
-                                      ? 'Skipped'
-                                      : isCreated
-                                        ? 'Added to closet'
-                                        : matched
-                                          ? 'Matched from closet'
-                                          : candidateIds.length > 0
-                                            ? 'Choose a closet match'
-                                            : 'New to your closet'}
-                                  </Text>
-                                </View>
-                              </View>
                             </View>
                           </View>
 
@@ -1125,10 +1253,11 @@ export function LogOutfitSheet({
 
       <PhotoSourceSheet
         visible={sourcePickerOpen}
-        title="Match an Outfit Photo"
-        subtitle="We'll match visible clothes to your closet. New pieces can be added during review."
-        cameraHint="Snap the outfit you're wearing"
-        libraryLabel="Photo Library"
+        title="Add an Outfit Photo"
+        subtitle="We’ll match the visible pieces to your closet."
+        cameraLabel="Take a selfie"
+        cameraHint="Use your camera right now"
+        libraryLabel="Choose from library"
         libraryHint="Pick a photo from your camera roll"
         onCamera={() => pickSource('camera')}
         onLibrary={() => pickSource('library')}
@@ -1174,6 +1303,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  autoLaunchState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+  },
+  autoLaunchTitle: {
+    fontSize: typography.size.md,
+    color: colors.mutedForeground,
+  },
 
   // ── Header
   header: {
@@ -1195,6 +1335,7 @@ const styles = StyleSheet.create({
     fontSize: typography.size.md,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
+    letterSpacing: 0.1,
   },
   headerSave: {
     fontSize: typography.size.md,
@@ -1234,6 +1375,13 @@ const styles = StyleSheet.create({
   itemsLabel: {
     marginTop: spacing.xxl,
   },
+  introText: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    fontSize: typography.size.md,
+    lineHeight: 22,
+    color: colors.mutedForeground,
+  },
 
   // ── Date pills
   datePillRow: {
@@ -1270,6 +1418,32 @@ const styles = StyleSheet.create({
   },
 
   // ── Selected items list
+  selectedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  selectedHeaderTitle: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  selectedHeaderCount: {
+    minWidth: 22,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceSelected,
+    color: colors.primary,
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    textAlign: 'center',
+    fontVariant: ['tabular-nums'],
+  },
   selectedList: {
     marginHorizontal: spacing.lg,
     gap: spacing.sm,
@@ -1279,10 +1453,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: colors.card,
+    backgroundColor: colors.surfaceElevated,
     borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     minHeight: 56,
@@ -1313,6 +1487,44 @@ const styles = StyleSheet.create({
   },
 
   // ── Location / Notes text fields
+  detailsToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.xxl,
+    paddingVertical: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  detailsToggleCopy: {
+    gap: 2,
+  },
+  detailsToggleTitle: {
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.semibold,
+    color: colors.foreground,
+  },
+  detailsToggleSubtitle: {
+    fontSize: typography.size.xs,
+    color: colors.mutedForeground,
+  },
+  detailsContent: {
+    marginHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  detailLabel: {
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    color: colors.mutedForeground,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
   textFieldRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1337,6 +1549,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     minHeight: 96,
   },
+  detailsField: {
+    marginHorizontal: 0,
+  },
   fieldIcon: {
     flexShrink: 0,
   },
@@ -1358,10 +1573,11 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.md,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: `${colors.primary}40`,
-    borderStyle: 'dashed',
+    borderRadius: radii.lg,
+    borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceElevated,
   },
   addItemsBtnText: {
     fontSize: typography.size.sm,
@@ -1409,11 +1625,25 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     gap: spacing.sm,
   },
-  pickerCard: {},
+  pickerCard: {
+    paddingBottom: spacing.xs,
+  },
+  pickerCardSelected: {
+    borderRadius: radii.lg,
+    borderCurve: 'continuous',
+    backgroundColor: colors.surfaceSelected,
+  },
   pickerCardImage: {
     borderRadius: radii.md,
+    borderCurve: 'continuous',
     overflow: 'hidden',
     backgroundColor: colors.muted,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  pickerCardImageSelected: {
+    borderWidth: 2,
+    borderColor: colors.primary,
   },
   pickerCardPlaceholder: {
     flex: 1,
@@ -1426,7 +1656,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(149, 109, 81, 0.2)',
+    backgroundColor: 'rgba(111, 89, 72, 0.12)',
   },
   pickerCheck: {
     position: 'absolute',
@@ -1468,8 +1698,8 @@ const styles = StyleSheet.create({
 
   // ── Scan button variant
   scanBtn: {
-    borderColor: `${colors.primary}30`,
-    backgroundColor: `${colors.primary}08`,
+    borderColor: `${colors.primary}35`,
+    backgroundColor: `${colors.primary}0D`,
     marginBottom: spacing.sm,
   },
 
@@ -1480,9 +1710,11 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxxl,
   },
   scanSummary: {
-    backgroundColor: colors.surfaceSelected,
+    backgroundColor: colors.surfaceSubtle,
     borderRadius: radii.lg,
     borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
@@ -1544,6 +1776,12 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     marginTop: 2,
     textTransform: 'capitalize',
+  },
+  scanStatusAddedText: {
+    color: colors.success,
+  },
+  scanStatusSkippedText: {
+    color: colors.mutedForeground,
   },
   scanBadgeRow: {
     flexDirection: 'row',

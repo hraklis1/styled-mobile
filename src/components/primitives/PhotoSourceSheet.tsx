@@ -17,15 +17,20 @@ import { colors, spacing, typography, radii, shadows } from '../../theme';
 
 type Props = {
   visible: boolean;
+  variant?: 'source' | 'quick-log';
   title: string;
   subtitle?: string;
   cameraLabel?: string;
   cameraHint?: string;
   libraryLabel?: string;
   libraryHint?: string;
+  manualLabel?: string;
+  manualHint?: string;
   onCamera: () => void;
   onLibrary: () => void;
+  onManual?: () => void;
   onCancel: () => void;
+  onDismiss?: () => void;
 };
 
 /**
@@ -35,15 +40,20 @@ type Props = {
  */
 export function PhotoSourceSheet({
   visible,
+  variant = 'source',
   title,
   subtitle,
   cameraLabel = 'Take Photo',
   cameraHint = 'Use the camera right now',
   libraryLabel = 'From Library',
   libraryHint = 'Pick from your camera roll',
+  manualLabel = 'Choose from your closet',
+  manualHint = 'Select the pieces you wore yourself',
   onCamera,
   onLibrary,
+  onManual,
   onCancel,
+  onDismiss,
 }: Props) {
   const insets = useSafeAreaInsets();
   const anim = useRef(new Animated.Value(0)).current;
@@ -80,6 +90,7 @@ export function PhotoSourceSheet({
       animationType="none"
       statusBarTranslucent
       onRequestClose={onCancel}
+      onDismiss={onDismiss}
     >
       <View style={styles.root}>
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: anim }]}>
@@ -98,26 +109,53 @@ export function PhotoSourceSheet({
           <Text style={styles.title}>{title}</Text>
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
 
-          <View style={styles.options}>
+          <View style={[styles.options, variant === 'quick-log' && styles.quickOptions]}>
             <TouchableOpacity
-              style={styles.option}
+              style={[styles.option, variant === 'quick-log' && styles.quickPrimaryOption]}
               onPress={() => select(onCamera)}
               activeOpacity={0.75}
               accessibilityRole="button"
               accessibilityLabel={cameraLabel}
             >
-              <View style={styles.iconBox}>
-                <Ionicons name="camera-outline" size={22} color={colors.primary} />
+              <View style={[styles.iconBox, variant === 'quick-log' && styles.quickPrimaryIconBox]}>
+                <Ionicons
+                  name="camera-outline"
+                  size={22}
+                  color={variant === 'quick-log' ? colors.primaryForeground : colors.primary}
+                />
               </View>
               <View style={styles.optionText}>
-                <Text style={styles.optionTitle}>{cameraLabel}</Text>
-                <Text style={styles.optionSub}>{cameraHint}</Text>
+                <Text style={[styles.optionTitle, variant === 'quick-log' && styles.quickPrimaryTitle]}>{cameraLabel}</Text>
+                <Text style={[styles.optionSub, variant === 'quick-log' && styles.quickPrimarySub]}>{cameraHint}</Text>
               </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.border} />
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={variant === 'quick-log' ? colors.primary : colors.border}
+              />
             </TouchableOpacity>
 
+            {onManual ? (
+              <TouchableOpacity
+                style={styles.option}
+                onPress={() => select(onManual)}
+                activeOpacity={0.75}
+                accessibilityRole="button"
+                accessibilityLabel={manualLabel}
+              >
+                <View style={styles.iconBox}>
+                  <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
+                </View>
+                <View style={styles.optionText}>
+                  <Text style={styles.optionTitle}>{manualLabel}</Text>
+                  <Text style={styles.optionSub}>{manualHint}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={colors.border} />
+              </TouchableOpacity>
+            ) : null}
+
             <TouchableOpacity
-              style={styles.option}
+              style={[styles.option, variant === 'quick-log' && styles.quickLibraryOption]}
               onPress={() => select(onLibrary)}
               activeOpacity={0.75}
               accessibilityRole="button"
@@ -127,7 +165,7 @@ export function PhotoSourceSheet({
                 <Ionicons name="image-outline" size={22} color={colors.primary} />
               </View>
               <View style={styles.optionText}>
-                <Text style={styles.optionTitle}>{libraryLabel}</Text>
+                <Text style={[styles.optionTitle, variant === 'quick-log' && styles.quickLibraryTitle]}>{libraryLabel}</Text>
                 <Text style={styles.optionSub}>{libraryHint}</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={colors.border} />
@@ -186,6 +224,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     marginTop: spacing.lg,
   },
+  quickOptions: {
+    gap: spacing.sm,
+  },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -196,6 +237,29 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.card,
+  },
+  quickPrimaryOption: {
+    backgroundColor: colors.surfaceSelected,
+    borderColor: colors.primary,
+    borderWidth: 1.5,
+  },
+  quickPrimaryIconBox: {
+    backgroundColor: colors.primary,
+    borderRadius: radii.full,
+  },
+  quickPrimaryTitle: {
+    color: colors.primary,
+  },
+  quickPrimarySub: {
+    color: colors.mutedForeground,
+  },
+  quickLibraryOption: {
+    borderColor: colors.hairline,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  quickLibraryTitle: {
+    color: colors.mutedForeground,
+    fontWeight: typography.weight.medium,
   },
   iconBox: {
     width: 44,

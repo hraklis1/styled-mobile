@@ -209,7 +209,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
   const handleRecordWear = useCallback(() => {
     track('home_wardrobe_action_tapped', { action: 'record_wear' });
-    openLogger();
+    openLogger({ quickStart: true });
   }, [openLogger]);
 
   // Derived data
@@ -419,7 +419,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           contentStyle={styles.wardrobeAction}
           onPress={handleRecordWear}
           accessibilityRole="button"
-          accessibilityLabel="Record what you wore. Match a photo or select clothes already in your closet"
+          accessibilityLabel="What did you wear? Snap a photo to match your closet, or choose pieces yourself"
         >
           <View style={[styles.wardrobeActionVisual, styles.wardrobeActionVisualWear]}>
             <Ionicons name="camera-outline" size={22} color={colors.primary} />
@@ -428,9 +428,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             </View>
           </View>
           <View style={styles.wardrobeActionCopy}>
-            <Text style={styles.wardrobeActionTitle}>Record what you wore</Text>
+            <Text style={styles.wardrobeActionTitle}>What did you wear?</Text>
             <Text style={styles.wardrobeActionSubtitle}>
-              Match a photo or select clothes already in your closet
+              Snap a photo to match your closet, or choose pieces yourself
             </Text>
           </View>
           <Ionicons name="arrow-forward" size={17} color={colors.primary} />

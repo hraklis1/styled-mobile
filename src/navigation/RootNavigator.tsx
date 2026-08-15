@@ -365,7 +365,7 @@ function AppTabNavigator() {
                   },
                   {
                     key: 'log-wear',
-                    label: 'Record what you wore',
+                    label: 'What did you wear?',
                     icon: 'checkmark-done',
                     iconColor: colors.primaryForeground,
                     iconBg: colors.primary,

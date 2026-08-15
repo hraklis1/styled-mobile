@@ -589,7 +589,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
             <Text style={styles.dayEmptyTitle}>Nothing planned</Text>
             <Text style={styles.dayEmptyText}>
               {item.isPast
-                ? 'Record what you wore, or add the occasion.'
+                ? 'What did you wear, or add the occasion.'
                 : 'Keep the day open or add an occasion.'}
             </Text>
             <View style={styles.dayEmptyActions}>
@@ -608,7 +608,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
                 onPress={() => handleLogWear(item.date)}
                 activeOpacity={0.8}
                 accessibilityRole="button"
-                accessibilityLabel="Record what you wore on this day"
+                accessibilityLabel="What did you wear on this day"
               >
                 <Ionicons name="checkmark-done-outline" size={14} color={colors.primary} />
                 <Text style={styles.dayEmptyBtnText}>Log wear</Text>

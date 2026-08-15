@@ -2,16 +2,23 @@ import { createContext, useContext, useState, useCallback, useRef } from 'react'
 import { View, StyleSheet } from 'react-native';
 
 import { LogOutfitSheet } from '../components/outfits/LogOutfitSheet';
+import { PhotoSourceSheet } from '../components/primitives/PhotoSourceSheet';
 import { useGlobalAddSheet } from './GlobalAddSheetContext';
 import { useGlobalScan } from './GlobalScanContext';
 import type { Item } from '../types/item';
+import { track } from '../lib/analytics';
+import { useCameraLaunch, useLibraryLaunch, type CapturedImage } from '../hooks/useCameraLaunch';
 
 // ─── Context ──────────────────────────────────────────────────────────────────
 
 export type OpenLoggerOptions = {
   /** ISO `yyyy-mm-dd` the log should default to. Omit for today. */
   date?: string;
+  /** Open the lightweight Home capture chooser instead of the full logger. */
+  quickStart?: boolean;
 };
+
+export type OutfitLoggerLaunch = 'camera' | 'library' | 'closet';
 
 type GlobalOutfitLoggerContextValue = {
   openLogger: (options?: OpenLoggerOptions) => void;
@@ -33,16 +40,82 @@ type Props = {
 
 export function GlobalOutfitLoggerProvider({ children }: Props) {
   const [visible, setVisible] = useState(false);
+  const [quickStartVisible, setQuickStartVisible] = useState(false);
   const [dateRequest, setDateRequest] = useState<{ id: number; date?: string }>({ id: 0 });
+  const [initialLaunch, setInitialLaunch] = useState<OutfitLoggerLaunch | undefined>();
+  const [initialView, setInitialView] = useState<'picker' | undefined>();
+  const [initialImage, setInitialImage] = useState<CapturedImage | undefined>();
+  const [quickStartPending, setQuickStartPending] = useState<OutfitLoggerLaunch | undefined>();
+  const launchCamera = useCameraLaunch();
+  const launchLibrary = useLibraryLaunch();
   const { openAddSheet } = useGlobalAddSheet();
   const { openScanItem, openBatchScan } = useGlobalScan();
   const detourPhase = useRef<'idle' | 'add' | 'scan'>('idle');
 
   const openLogger = useCallback((options?: OpenLoggerOptions) => {
     setDateRequest((prev) => ({ id: prev.id + 1, date: options?.date }));
+    if (options?.quickStart) {
+      track('outfit_log_quick_started', { entry_point: 'home' });
+      setInitialLaunch(undefined);
+      setInitialView(undefined);
+      setInitialImage(undefined);
+      setQuickStartPending(undefined);
+      setVisible(false);
+      setQuickStartVisible(true);
+      return;
+    }
+    setQuickStartVisible(false);
+    setInitialLaunch(undefined);
+    setInitialView(undefined);
+    setInitialImage(undefined);
+    setQuickStartPending(undefined);
     setVisible(true);
   }, []);
-  const closeLogger = useCallback(() => setVisible(false), []);
+  const closeLogger = useCallback(() => {
+    setVisible(false);
+    setInitialLaunch(undefined);
+    setInitialView(undefined);
+    setInitialImage(undefined);
+  }, []);
+  const closeQuickStart = useCallback(() => {
+    setQuickStartPending(undefined);
+    setQuickStartVisible(false);
+  }, []);
+  const launchQuickStart = useCallback((launch: OutfitLoggerLaunch) => {
+    track('outfit_log_source_selected', { entry_point: 'home', source: launch });
+    setQuickStartPending(launch);
+    setQuickStartVisible(false);
+  }, []);
+  const handleQuickStartDismissed = useCallback(async () => {
+    const launch = quickStartPending;
+    if (!launch) return;
+    setQuickStartPending(undefined);
+
+    if (launch === 'closet') {
+      setInitialLaunch(undefined);
+      setInitialView('picker');
+      setVisible(true);
+      return;
+    }
+
+    try {
+      const image = launch === 'camera'
+        ? await launchCamera({ maxDim: 1600 })
+        : await launchLibrary({ maxDim: 1600 });
+      if (!image) return;
+
+      setInitialLaunch(launch);
+      setInitialView(undefined);
+      setInitialImage(image);
+      setVisible(true);
+    } catch {
+      // The launch hooks handle permission and image-processing errors. This
+      // covers native presentation failures so the quick-start flow cannot
+      // leave an invisible modal blocking Home.
+      setInitialLaunch(undefined);
+      setInitialImage(undefined);
+    }
+  }, [launchCamera, launchLibrary, quickStartPending]);
   const resumeLogger = useCallback(() => {
     detourPhase.current = 'idle';
     setVisible(true);
@@ -80,8 +153,28 @@ export function GlobalOutfitLoggerProvider({ children }: Props) {
         visible={visible}
         initialDate={dateRequest.date}
         initialDateRequestId={dateRequest.id}
+        initialLaunch={initialLaunch}
+        initialView={initialView}
+        initialImage={initialImage}
         onClose={closeLogger}
         onAddToWardrobe={openAddClothesDetour}
+      />
+      <PhotoSourceSheet
+        visible={quickStartVisible}
+        variant="quick-log"
+        title="Log today’s look"
+        subtitle="Capture what you’re wearing or choose the pieces yourself."
+        cameraLabel="Take an outfit photo"
+        cameraHint="Match the visible pieces to your closet"
+        manualLabel="Choose from your closet"
+        manualHint="Select the pieces you wore yourself"
+        libraryLabel="Use a photo from library"
+        libraryHint="Pick a saved outfit photo"
+        onCamera={() => launchQuickStart('camera')}
+        onLibrary={() => launchQuickStart('library')}
+        onManual={() => launchQuickStart('closet')}
+        onCancel={closeQuickStart}
+        onDismiss={handleQuickStartDismissed}
       />
     </GlobalOutfitLoggerContext.Provider>
   );
