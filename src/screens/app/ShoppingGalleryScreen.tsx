@@ -391,7 +391,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
           <View style={styles.heroActions}>
             {selectionMode ? (
               <TouchableOpacity style={styles.headerTextButton} onPress={cancelSelection}>
-                <Text style={styles.headerTextButtonText}>Cancel</Text>
+                <Text style={styles.headerTextButtonText} numberOfLines={1}>Cancel</Text>
               </TouchableOpacity>
             ) : (
               <>
@@ -570,7 +570,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
       {selectionMode ? (
         <View style={[styles.selectionBar, { paddingBottom: insets.bottom + spacing.md }]}>
           <TouchableOpacity style={styles.selectionBarButton} onPress={cancelSelection} disabled={isDeletingSelection}>
-            <Text style={styles.selectionBarCancel}>Cancel</Text>
+            <Text style={styles.selectionBarCancel} numberOfLines={1}>Cancel</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[

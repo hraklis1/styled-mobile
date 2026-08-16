@@ -15,12 +15,21 @@ type Props = {
   itemMap: Map<number, Item>;
   outfitMap: Map<number, Outfit>;
   size: number;
+  height?: number;
   compact?: boolean;
 };
 
-const GAP = 2;
+const GAP = 3;
 
-function CoverCell({ uri, recyclingKey }: { uri: string; recyclingKey: string }) {
+function CoverCell({
+  uri,
+  recyclingKey,
+  contentFit = 'cover',
+}: {
+  uri: string;
+  recyclingKey: string;
+  contentFit?: 'cover' | 'contain';
+}) {
   const [failed, setFailed] = useState(false);
   return (
     <View style={styles.cell}>
@@ -29,7 +38,7 @@ function CoverCell({ uri, recyclingKey }: { uri: string; recyclingKey: string })
         <Image
           source={{ uri }}
           style={StyleSheet.absoluteFill}
-          contentFit="cover"
+          contentFit={contentFit}
           cachePolicy="memory-disk"
           recyclingKey={recyclingKey}
           transition={150}
@@ -40,19 +49,23 @@ function CoverCell({ uri, recyclingKey }: { uri: string; recyclingKey: string })
   );
 }
 
-export function BoardCover({ board, itemMap, outfitMap, size, compact }: Props) {
+export function BoardCover({ board, itemMap, outfitMap, size, height = size, compact }: Props) {
   const covers = useMemo(() => getBoardCoverUris(board, itemMap, outfitMap), [board, itemMap, outfitMap]);
 
   const count = getBoardSavedCount(board);
   const overflow = Math.max(0, count - covers.length);
 
-  const cell = (index: number) => (
-    <CoverCell uri={covers[index]} recyclingKey={`${board.id}-${index}-${covers[index]}`} />
+  const cell = (index: number, contentFit?: 'cover' | 'contain') => (
+    <CoverCell
+      uri={covers[index]}
+      recyclingKey={`${board.id}-${index}-${covers[index]}`}
+      contentFit={contentFit}
+    />
   );
 
   return (
     <View
-      style={[styles.cover, { width: size, height: size, borderRadius: compact ? radii.md : radii.lg }]}
+      style={[styles.cover, { width: size, height, borderRadius: compact ? radii.md : radii.lg }]}
       accessibilityLabel={`${board.name} cover`}
     >
       {covers.length >= 4 ? (
@@ -77,7 +90,7 @@ export function BoardCover({ board, itemMap, outfitMap, size, compact }: Props) 
       ) : covers.length === 2 ? (
         <View style={styles.row}>{cell(0)}{cell(1)}</View>
       ) : covers.length === 1 ? (
-        cell(0)
+        cell(0, 'cover')
       ) : (
         <LinearGradient
           colors={['#F4F0E9', '#E7DED3']}
@@ -89,7 +102,7 @@ export function BoardCover({ board, itemMap, outfitMap, size, compact }: Props) 
             <Ionicons name="albums-outline" size={compact ? 18 : 30} color={colors.primary} />
           </View>
           {!compact && (
-            <Text style={styles.fallbackText}>Ready for your ideas</Text>
+            <Text style={styles.fallbackText}>Start curating</Text>
           )}
         </LinearGradient>
       )}
@@ -105,7 +118,7 @@ const styles = StyleSheet.create({
     borderColor: colors.hairline,
   },
   moodboard: { flex: 1, flexDirection: 'row', gap: GAP },
-  heroColumn: { flex: 1.18 },
+  heroColumn: { flex: 1.45 },
   sideColumn: { flex: 1, gap: GAP },
   grid: { flex: 1, gap: GAP },
   row: { flex: 1, flexDirection: 'row', gap: GAP },

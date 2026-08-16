@@ -29,7 +29,7 @@ export function BoardCoverPickerModal({ visible, items, onClose, onSelect, onUpl
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={styles.root}>
         <View style={styles.header}>
-          <TouchableOpacity style={styles.side} onPress={onClose}><Text style={styles.cancel}>Cancel</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.side} onPress={onClose}><Text style={styles.cancel} numberOfLines={1}>Cancel</Text></TouchableOpacity>
           <Text style={styles.title}>Board cover</Text>
           <View style={styles.side} />
         </View>

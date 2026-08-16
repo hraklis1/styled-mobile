@@ -18,6 +18,8 @@ type Props = {
   selectionMode?: boolean;
   isSelected?: boolean;
   onToggleSelect?: () => void;
+  /** Board Detail can own the outer grid rhythm without changing Closet cards. */
+  bottomSpacing?: number;
 };
 
 function GarmentCardComponent({
@@ -29,6 +31,7 @@ function GarmentCardComponent({
   selectionMode = false,
   isSelected = false,
   onToggleSelect,
+  bottomSpacing = spacing.md,
 }: Props) {
   const imageHeight = cardWidth / aspectRatio;
   const handlePress = selectionMode ? onToggleSelect : onPress;
@@ -41,7 +44,7 @@ function GarmentCardComponent({
 
   return (
     <PressableScale
-      contentStyle={[styles.card, { width: cardWidth }]}
+      contentStyle={[styles.card, { width: cardWidth, marginBottom: bottomSpacing }]}
       onPress={handlePress}
       onLongPress={selectionMode ? undefined : onLongPress}
       delayLongPress={450}

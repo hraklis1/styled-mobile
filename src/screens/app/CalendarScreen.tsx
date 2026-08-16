@@ -458,7 +458,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   // Logging from a selected day pre-fills that date; the header logs today.
   const handleLogWear = useCallback((date?: string) => {
     track('outfit_log_opened', { source: date ? 'calendar_day' : 'calendar_header' });
-    openLogger(date ? { date } : undefined);
+    openLogger(date ? { date, quickStart: true } : { quickStart: true });
   }, [openLogger]);
 
   const openCalendarUtilities = useCallback(() => {

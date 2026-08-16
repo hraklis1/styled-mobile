@@ -76,7 +76,7 @@ export function OutfitEventAssignmentModal({
       <View style={styles.root}>
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.headerSide}>
-            <Text style={styles.cancel}>Cancel</Text>
+            <Text style={styles.cancel} numberOfLines={1}>Cancel</Text>
           </TouchableOpacity>
           <Text style={styles.title}>Add to events</Text>
           <TouchableOpacity

@@ -1,5 +1,6 @@
-import { useMemo, useCallback, useState, useEffect } from 'react';
+import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import {
+  Animated,
   View,
   Text,
   StyleSheet,
@@ -15,9 +16,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { GarmentCard } from '../../components/wardrobe/GarmentCard';
-import { OutfitCollage } from '../../components/outfits/OutfitCollage';
-import { PressableScale } from '../../components/primitives/PressableScale';
 import { useBoards, useBoardFeed, flattenBoardFeed, useDeleteBoard, useUpdateBoard, useBoardEvent } from '../../hooks/useBoards';
 import { formatCountdown, formatDayLabel } from '../../components/calendar/calendarUtils';
 import type { BoardFeedItem } from '../../types/board';
@@ -26,20 +24,16 @@ import type { BoardDetailScreenProps } from '../../navigation/types';
 import { BoardOptionsMenuSheet } from '../../components/boards/BoardOptionsMenuSheet';
 import { BoardContentPickerModal } from '../../components/boards/BoardContentPickerModal';
 import { BoardCoverPickerModal } from '../../components/boards/BoardCoverPickerModal';
+import { BoardIdentityRail } from '../../components/boards/BoardIdentityRail';
+import { BoardCompactIdentityBar } from '../../components/boards/BoardCompactIdentityBar';
+import { BoardFeedTile } from '../../components/boards/BoardFeedTile';
 import { ShopWishlistDetailSheet } from '../../components/outfits/ShopWishlistDetailSheet';
-import { WishlistOutfitPreview } from '../../components/outfits/WishlistOutfitPreview';
 import type { WishlistEntry } from '../../lib/wishlist';
-import {
-  getWishlistAccessibilityLabel,
-  getWishlistContext,
-  getWishlistMeta,
-  getWishlistTitle,
-} from '../../lib/wishlistPresentation';
 import { useLibraryLaunch } from '../../hooks/useCameraLaunch';
 import {
   canComposeOutfit,
   filterBoardFeed,
-  getBoardGap,
+  getBoardContentSummary,
   getBoardInsights,
   type BoardFilter,
 } from '../../lib/boardPresentation';
@@ -51,7 +45,8 @@ import { track } from '../../lib/analytics';
 
 const SIDE_PAD = spacing.lg;
 const COL_GAP = spacing.sm;
-const CARD_ASPECT_RATIO = 0.85;
+const HEADER_SCROLL_THRESHOLD = 10;
+const HEADER_SCROLL_DELTA = 6;
 const BOARD_WISHLIST_REMOVAL_COPY = {
   title: 'Remove from board?',
   message: 'This outfit will stay in your Shop Wishlist.',
@@ -98,14 +93,72 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
     return remoteItems;
   }, [remoteItems]);
 
+  const boardItemMap = useMemo(
+    () => new Map(items.flatMap((entry) => (entry.kind === 'item' ? [[entry.item.id, entry.item] as const] : []))),
+    [items],
+  );
+  const boardOutfitMap = useMemo(
+    () => new Map(items.flatMap((entry) => (entry.kind === 'outfit' ? [[entry.outfit.id, entry.outfit] as const] : []))),
+    [items],
+  );
+
   const visibleItems = useMemo(() => {
     return filterBoardFeed(items, filter);
   }, [filter, items]);
 
   const boardInsights = useMemo(() => getBoardInsights(items), [items]);
-  const boardGap = useMemo(() => getBoardGap(items), [items]);
   const canStyle = useMemo(() => canComposeOutfit(items), [items]);
   const boardEvent = useBoardEvent(boardId);
+
+  const lastScrollY = useRef(0);
+  const compactBarState = useRef(false);
+  const compactBarProgress = useRef(new Animated.Value(0)).current;
+  const [compactBarVisible, setCompactBarVisible] = useState(false);
+
+  const expandCompactBar = useCallback(() => {
+    if (!compactBarState.current) return;
+    compactBarState.current = false;
+    setCompactBarVisible(false);
+    Animated.spring(compactBarProgress, {
+      toValue: 0,
+      useNativeDriver: true,
+      tension: 150,
+      friction: 25,
+    }).start();
+  }, [compactBarProgress]);
+
+  const collapseCompactBar = useCallback(() => {
+    if (compactBarState.current) return;
+    compactBarState.current = true;
+    setCompactBarVisible(true);
+    Animated.spring(compactBarProgress, {
+      toValue: 1,
+      useNativeDriver: true,
+      tension: 150,
+      friction: 25,
+    }).start();
+  }, [compactBarProgress]);
+
+  const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { y: number } } }) => {
+    const y = event.nativeEvent.contentOffset.y;
+    const delta = y - lastScrollY.current;
+    lastScrollY.current = y;
+
+    if (y <= HEADER_SCROLL_THRESHOLD) {
+      expandCompactBar();
+    } else if (delta > HEADER_SCROLL_DELTA) {
+      collapseCompactBar();
+    } else if (delta < -HEADER_SCROLL_DELTA) {
+      expandCompactBar();
+    }
+  }, [collapseCompactBar, expandCompactBar]);
+
+  useEffect(() => {
+    lastScrollY.current = 0;
+    compactBarState.current = false;
+    compactBarProgress.setValue(0);
+    setCompactBarVisible(false);
+  }, [boardId, compactBarProgress]);
 
   // A past event gets a worn-date phrasing rather than a negative countdown;
   // formatCountdown returns null inside its own 1-day window too.
@@ -276,11 +329,6 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
     navigation.getParent()?.navigate('Calendar', { eventId: boardEvent.id });
   }, [boardEvent, navigation]);
 
-  const handleGapPress = useCallback(() => {
-    if (!boardGap) return;
-    navigation.navigate('ClosetMain', { segment: 'pieces', category: boardGap.missing });
-  }, [boardGap, navigation]);
-
   const handleDelete = useCallback(() => {
     // The FK is ON DELETE SET NULL, so a linked event survives but quietly
     // loses its board. Say so rather than letting it vanish unannounced.
@@ -315,74 +363,23 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
       const key = item.key;
       const isSelected = selectedKeys.has(key);
 
-      const selectionOverlay = isMultiselect ? (
-        <View style={[styles.selectionOverlay, !isSelected && styles.selectionOverlayIdle]} pointerEvents="none">
-          <View style={[styles.selectionCheck, !isSelected && styles.selectionCheckIdle]}>
-            {isSelected && <Ionicons name="checkmark" size={16} color={colors.primaryForeground} />}
-          </View>
-        </View>
-      ) : null;
-
-      if (item.kind === 'item') {
-        return (
-          <View style={styles.cell}>
-            <GarmentCard
-              item={item.item}
-              aspectRatio={CARD_ASPECT_RATIO}
-              cardWidth={cardWidth}
-              onPress={
-                isMultiselect
-                  ? () => toggleSelectedKey(key)
-                  : () => navigation.navigate('ItemDetail', { itemId: item.item.id })
-              }
-              onLongPress={() => enterMultiselect(key)}
-            />
-            {selectionOverlay}
-          </View>
-        );
-      }
-      if (item.kind === 'outfit') {
-        return (
-          <View style={styles.cell}>
-            <PressableScale
-              onPress={
-                isMultiselect
-                  ? () => toggleSelectedKey(key)
-                  : () => navigation.navigate('OutfitDetail', { outfitId: item.outfit.id })
-              }
-              onLongPress={() => enterMultiselect(key)}
-            >
-              <OutfitCollage outfit={item.outfit} size={cardWidth} />
-              <Text style={styles.outfitName} numberOfLines={1}>
-                {item.outfit.name}
-              </Text>
-            </PressableScale>
-            {selectionOverlay}
-          </View>
-        );
-      }
-      // wishlist
-      const wishlistContext = getWishlistContext(item.entry);
       return (
-        <View style={styles.cell}>
-          <PressableScale
-            onLongPress={() => enterMultiselect(key)}
-            onPress={isMultiselect ? () => toggleSelectedKey(key) : () => setDetailWishlistEntry(item.entry)}
-            accessibilityRole="button"
-            accessibilityLabel={getWishlistAccessibilityLabel(item.entry)}
-            accessibilityHint={isMultiselect ? 'Selects this outfit' : 'Opens outfit details'}
-          >
-            <View style={[styles.wishlistTile, { width: cardWidth, height: cardWidth }]}>
-              <WishlistOutfitPreview entry={item.entry} style={styles.wishlistPreview} />
-              <View style={styles.wishlistInfo}>
-                {!!wishlistContext && <Text style={styles.wishlistContext} numberOfLines={1}>{wishlistContext}</Text>}
-                <Text style={styles.wishlistLabel} numberOfLines={2}>{getWishlistTitle(item.entry)}</Text>
-                <Text style={styles.wishlistBudget} numberOfLines={1}>{getWishlistMeta(item.entry)}</Text>
-              </View>
-            </View>
-          </PressableScale>
-          {selectionOverlay}
-        </View>
+        <BoardFeedTile
+          entry={item}
+          cardWidth={cardWidth}
+          isMultiselect={isMultiselect}
+          isSelected={isSelected}
+          onPress={
+            isMultiselect
+              ? () => toggleSelectedKey(key)
+              : () => {
+                  if (item.kind === 'item') navigation.navigate('ItemDetail', { itemId: item.item.id });
+                  else if (item.kind === 'outfit') navigation.navigate('OutfitDetail', { outfitId: item.outfit.id });
+                  else setDetailWishlistEntry(item.entry);
+                }
+          }
+          onLongPress={() => enterMultiselect(key)}
+        />
       );
     },
     [cardWidth, navigation, isMultiselect, selectedKeys, enterMultiselect, toggleSelectedKey],
@@ -401,6 +398,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
                 key={option.key}
                 style={[styles.filterChip, filter === option.key && styles.filterChipActive]}
                 onPress={() => setFilter(option.key)}
+                hitSlop={{ top: spacing.xs, bottom: spacing.xs }}
                 accessibilityRole="button"
                 accessibilityState={{ selected: filter === option.key }}
               >
@@ -411,60 +409,38 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
         </ScrollView>
       )}
 
-      {(boardInsights.colors.length > 0 || boardInsights.categories.length > 0) && (
-        <View style={styles.insightRow}>
-          {boardInsights.colors.length > 0 && (
-            <View style={styles.palette} accessibilityLabel={`Board palette: ${boardInsights.colors.join(', ')}`}>
-              {boardInsights.colors.map((color, index) => <View key={`${color}-${index}`} style={[styles.swatch, { backgroundColor: swatchColor(color) }]} />)}
-            </View>
+      {(boardEvent || canStyle) && (
+        <View style={styles.contextRow}>
+          {boardEvent && (
+            <TouchableOpacity
+              style={styles.eventStrip}
+              onPress={handleEventPress}
+              hitSlop={{ top: spacing.xs, bottom: spacing.xs }}
+              accessibilityRole="button"
+              accessibilityLabel={`Planned for ${boardEvent.title}`}
+              accessibilityHint="Opens this event in your calendar"
+            >
+              <Ionicons name="calendar-outline" size={15} color={colors.primary} />
+              <Text style={styles.eventTitle} numberOfLines={1}>{boardEvent.title}</Text>
+              <Text style={styles.eventWhen}>{boardEventWhen}</Text>
+            </TouchableOpacity>
           )}
-          {boardInsights.categories.length > 0 && (
-            <Text style={styles.insightText} numberOfLines={1}>
-              {boardInsights.categories.map(([name, count]) => `${name} ${count}`).join(' · ')}
-            </Text>
+
+          {canStyle && (
+            <TouchableOpacity
+              style={styles.styleBoardBtn}
+              onPress={handleStyleBoard}
+              hitSlop={{ top: spacing.xs, bottom: spacing.xs }}
+              accessibilityRole="button"
+              accessibilityLabel={`Style ${board?.name ?? 'this board'}`}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="sparkles" size={15} color={colors.primaryForeground} />
+              <Text style={styles.styleBoardText}>Style</Text>
+            </TouchableOpacity>
           )}
         </View>
       )}
-
-      {boardEvent && (
-        <TouchableOpacity
-          style={styles.eventStrip}
-          onPress={handleEventPress}
-          accessibilityRole="button"
-          accessibilityLabel={`Planned for ${boardEvent.title}`}
-          accessibilityHint="Opens this event in your calendar"
-        >
-          <Ionicons name="calendar-outline" size={16} color={colors.primary} />
-          <Text style={styles.eventTitle} numberOfLines={1}>{boardEvent.title}</Text>
-          <Text style={styles.eventWhen}>{boardEventWhen}</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* Mutually exclusive: a board either still needs something (say what),
-          or it can compose a look (offer to). Never both. */}
-      {boardGap ? (
-        <TouchableOpacity
-          style={styles.gapRow}
-          onPress={handleGapPress}
-          accessibilityRole="button"
-          accessibilityLabel={boardGap.text}
-          accessibilityHint="Opens your closet filtered to that category"
-        >
-          <Text style={styles.gapText} numberOfLines={2}>{boardGap.text}</Text>
-          <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
-        </TouchableOpacity>
-      ) : canStyle ? (
-        <TouchableOpacity
-          style={styles.styleBoardBtn}
-          onPress={handleStyleBoard}
-          accessibilityRole="button"
-          accessibilityLabel={`Style ${board?.name ?? 'this board'}`}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="sparkles" size={16} color={colors.primaryForeground} />
-          <Text style={styles.styleBoardText}>Style this board</Text>
-        </TouchableOpacity>
-      ) : null}
     </View>
   ) : (
     <View style={styles.organizeBanner}>
@@ -473,12 +449,34 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
     </View>
   );
 
+  const boardContext = board && !organizeMode ? (
+    <>
+      <BoardIdentityRail
+        board={board}
+        itemMap={boardItemMap}
+        outfitMap={boardOutfitMap}
+        summary={getBoardContentSummary(board)}
+        insightText={boardInsights.categories.length > 0
+          ? boardInsights.categories.map(([name, count]) => `${name} ${count}`).join(' · ')
+          : undefined}
+        swatches={boardInsights.colors.map(swatchColor)}
+      />
+      {boardTools}
+    </>
+  ) : null;
+
+  const boardListHeader = boardContext ? (
+    <View style={styles.listHeader}>
+      {boardContext}
+    </View>
+  ) : null;
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         {isMultiselect ? (
-          <TouchableOpacity style={styles.headerBtn} onPress={exitMultiselect} accessibilityLabel="Cancel selection">
-            <Text style={styles.cancelText}>Cancel</Text>
+          <TouchableOpacity style={styles.headerTextBtn} onPress={exitMultiselect} accessibilityLabel="Cancel selection">
+            <Text style={styles.cancelText} numberOfLines={1}>Cancel</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()} accessibilityLabel="Back">
@@ -486,16 +484,10 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
           </TouchableOpacity>
         )}
         <View style={styles.headerTitleWrap}>
-          {isMultiselect ? (
+          {isMultiselect && (
             <Text style={styles.headerTitle} numberOfLines={1}>
               {selectedKeys.size} selected
             </Text>
-          ) : (
-            <>
-              <Text style={styles.headerTitle} numberOfLines={1}>
-                {board?.name ?? 'Board'}
-              </Text>
-            </>
           )}
         </View>
         {isMultiselect ? (
@@ -523,37 +515,45 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
         )}
       </View>
 
-      {boardTools}
+      {organizeMode && boardTools}
 
       {showInitialLoading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
-      ) : items.length === 0 ? (
-        <View style={styles.centered}>
-          <View style={styles.emptyIcon}>
-            <Ionicons name="albums-outline" size={30} color={colors.mutedForeground} />
+        <>
+          {boardContext && <View style={styles.emptyHeader}>{boardContext}</View>}
+          <View style={styles.centered}>
+            <ActivityIndicator color={colors.primary} />
           </View>
-          <Text style={styles.emptyTitle}>Nothing saved yet</Text>
-          <Text style={styles.emptySub}>Save pieces, outfits, and wishlist looks to this board.</Text>
-          <TouchableOpacity
-            style={styles.emptyBtn}
-            onPress={() => setContentPickerVisible(true)}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel="Add to board"
-          >
-            <Text style={styles.emptyBtnText}>Add to Board</Text>
-          </TouchableOpacity>
-        </View>
+        </>
+      ) : items.length === 0 ? (
+        <>
+          {boardContext && <View style={styles.emptyHeader}>{boardContext}</View>}
+          <View style={styles.centered}>
+            <View style={styles.emptyIcon}>
+              <Ionicons name="albums-outline" size={30} color={colors.mutedForeground} />
+            </View>
+            <Text style={styles.emptyTitle}>Nothing saved yet</Text>
+            <Text style={styles.emptySub}>Save pieces, outfits, and wishlist looks to this board.</Text>
+            <TouchableOpacity
+              style={styles.emptyBtn}
+              onPress={() => setContentPickerVisible(true)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Add to board"
+            >
+              <Text style={styles.emptyBtnText}>Add to Board</Text>
+            </TouchableOpacity>
+          </View>
+        </>
       ) : (
-        <View style={{ flex: 1, paddingHorizontal: SIDE_PAD - COL_GAP / 2 }}>
+        <View style={styles.listStage}>
           <FlashList
             data={visibleItems}
             numColumns={2}
             renderItem={renderItem}
             keyExtractor={(it) => it.key}
             showsVerticalScrollIndicator={false}
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
             onEndReachedThreshold={0.5}
             onEndReached={() => {
               if (feed.hasNextPage && !feed.isFetchingNextPage) feed.fetchNextPage();
@@ -563,7 +563,8 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
                 <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.lg }} />
               ) : null
             }
-            contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: spacing.xxxl * 2 }}
+            ListHeaderComponent={boardListHeader}
+            contentContainerStyle={styles.listContent}
             ListEmptyComponent={
               <View style={styles.filteredEmpty}>
                 <Text style={styles.emptyTitle}>Nothing in this section</Text>
@@ -571,6 +572,27 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
               </View>
             }
           />
+          {board && !organizeMode && (
+            <Animated.View
+              pointerEvents={compactBarVisible ? 'auto' : 'none'}
+              style={[
+                styles.compactBarOverlay,
+                {
+                  opacity: compactBarProgress,
+                  transform: [{
+                    translateY: compactBarProgress.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }),
+                  }],
+                },
+              ]}
+            >
+              <BoardCompactIdentityBar
+                board={board}
+                itemMap={boardItemMap}
+                outfitMap={boardOutfitMap}
+                summary={getBoardContentSummary(board)}
+              />
+            </Animated.View>
+          )}
         </View>
       )}
 
@@ -643,6 +665,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerTextBtn: {
+    minWidth: 60,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerTitleWrap: {
     flex: 1,
     flexDirection: 'row',
@@ -656,98 +684,65 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.bold,
     color: colors.foreground,
   },
-  cell: {
-    paddingHorizontal: COL_GAP / 2,
-    marginBottom: spacing.md,
-  },
-  outfitName: {
-    marginTop: spacing.xs,
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.medium,
-    color: colors.foreground,
-  },
-  wishlistTile: {
-    borderRadius: radii.lg,
-    overflow: 'hidden',
-    backgroundColor: colors.surfaceElevated,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  wishlistPreview: { width: '100%', height: '52%', borderRadius: 0 },
-  wishlistInfo: { flex: 1, justifyContent: 'center', gap: 2, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
-  wishlistContext: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.primary },
-  wishlistLabel: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  wishlistBudget: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-  },
   cancelText: {
     color: colors.primary,
     fontSize: typography.size.sm,
     fontWeight: typography.weight.medium,
+    flexShrink: 0,
   },
-  selectionOverlay: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: `${colors.primary}40`,
-    borderRadius: radii.lg,
-    alignItems: 'flex-end',
-    justifyContent: 'flex-start',
-    padding: spacing.xs,
+  listStage: { flex: 1, overflow: 'hidden' },
+  listContent: {
+    paddingTop: spacing.xs,
+    paddingHorizontal: SIDE_PAD - COL_GAP / 2,
+    paddingBottom: spacing.xxxl * 2,
   },
-  selectionOverlayIdle: { backgroundColor: 'transparent' },
-  selectionCheck: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+  listHeader: {
+    marginHorizontal: -(SIDE_PAD - COL_GAP / 2),
   },
-  selectionCheckIdle: { backgroundColor: colors.surfaceElevated, borderWidth: 2, borderColor: colors.border },
-  tools: { gap: spacing.sm, paddingBottom: spacing.sm },
-  filterRow: { paddingHorizontal: spacing.lg, gap: spacing.sm },
+  emptyHeader: { paddingTop: spacing.xs },
+  compactBarOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 2,
+  },
+  tools: { gap: spacing.xs, paddingBottom: spacing.sm },
+  filterRow: { paddingHorizontal: spacing.lg, gap: spacing.xs },
   filterChip: {
-    minHeight: 36,
-    paddingHorizontal: spacing.md,
+    minHeight: 32,
+    paddingHorizontal: spacing.sm,
     borderRadius: radii.full,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.secondary,
+    backgroundColor: 'transparent',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
   },
-  filterChipActive: { backgroundColor: colors.primary },
+  filterChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   filterText: { color: colors.mutedForeground, fontSize: typography.size.xs, fontWeight: typography.weight.medium, fontVariant: ['tabular-nums'] },
   filterTextActive: { color: colors.primaryForeground, fontWeight: typography.weight.semibold },
-  insightRow: { minHeight: 34, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg },
-  palette: { flexDirection: 'row', alignItems: 'center' },
-  swatch: { width: 22, height: 22, borderRadius: 11, marginRight: -4, borderWidth: 2, borderColor: colors.background },
-  insightText: { flex: 1, color: colors.mutedForeground, fontSize: typography.size.xs },
-  gapRow: {
-    minHeight: 44,
+  contextRow: {
     marginHorizontal: spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
-  gapText: { flex: 1, color: colors.mutedForeground, fontSize: typography.size.sm },
   eventStrip: {
-    marginHorizontal: spacing.lg,
-    minHeight: 40,
+    flex: 1,
+    minHeight: 38,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
     borderRadius: radii.md,
     backgroundColor: colors.accent,
   },
-  eventTitle: { flex: 1, color: colors.secondaryForeground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+  eventTitle: { flex: 1, color: colors.secondaryForeground, fontSize: typography.size.xs, fontWeight: typography.weight.semibold },
   eventWhen: { color: colors.secondaryForeground, fontSize: typography.size.xs },
   styleBoardBtn: {
-    marginHorizontal: spacing.lg,
-    minHeight: 44,
+    minHeight: 38,
+    paddingHorizontal: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -757,7 +752,7 @@ const styles = StyleSheet.create({
   },
   styleBoardText: {
     color: colors.primaryForeground,
-    fontSize: typography.size.sm,
+    fontSize: typography.size.xs,
     fontWeight: typography.weight.semibold,
   },
   organizeBanner: { minHeight: 48, marginHorizontal: spacing.lg, marginBottom: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.accent },

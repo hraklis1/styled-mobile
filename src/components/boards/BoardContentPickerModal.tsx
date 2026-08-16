@@ -143,7 +143,7 @@ export function BoardContentPickerModal({ board, visible, onClose }: Props) {
       <View style={styles.root}>
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.headerSide} accessibilityRole="button">
-            <Text style={styles.cancelText}>Cancel</Text>
+            <Text style={styles.cancelText} numberOfLines={1}>Cancel</Text>
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={styles.title}>Add to board</Text>

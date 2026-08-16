@@ -48,6 +48,7 @@ import {
   ViewModeControl,
 } from '../../components/primitives/Editorial';
 import { GarmentCardSkeleton } from '../../components/primitives/GarmentCardSkeleton';
+import { SkeletonBlock } from '../../components/primitives/SkeletonLoader';
 import { ErrorState } from '../../components/primitives/ErrorState';
 import type { ClosetScreenProps } from '../../navigation/types';
 import { useLibraryLaunch } from '../../hooks/useCameraLaunch';
@@ -58,6 +59,7 @@ import {
   hasActivePieceFilters,
   shouldClearActiveSubcategory,
 } from '../../lib/closet-presentation';
+import { shouldShowBoardSearch } from '../../lib/boardPresentation';
 import {
   loadPiecesViewMode,
   savePiecesViewMode,
@@ -78,6 +80,8 @@ const OUTFIT_SORT_OPTIONS: { key: OutfitSortKey; label: string }[] = [
 
 const SIDE_PAD = spacing.lg;
 const COL_GAP  = spacing.sm;
+const BOARD_CARD_ASPECT_RATIO = 0.8;
+const STARTER_BOARD_NAMES = ['Workwear', 'Vacation', 'Never Worn', 'Seasonal Rotation'];
 
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: 'newest',        label: 'Newest first' },
@@ -194,7 +198,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const { data: items = [], isLoading: itemsLoading, isError: itemsError, refetch: refetchItems } = useItems();
   const { data: outfits = [] } = useOutfits();
   const { data: events = [] } = useEvents();
-  const { data: boards = [] } = useBoards();
+  const { data: boards = [], isLoading: boardsLoading } = useBoards();
 
   const itemMap = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
   const outfitMap = useMemo(() => new Map(outfits.map((o) => [o.id, o])), [outfits]);
@@ -203,6 +207,8 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
       return filterVisibleBoards(boards)
       .filter((board) => !normalized || board.name.toLowerCase().includes(normalized))
     }, [boardSearch, boards]);
+  const showBoardSearch = shouldShowBoardSearch(boards);
+  const visibleBoardCount = filterVisibleBoards(boards).length;
   const createBoard = useCreateBoard();
   const updateBoard = useUpdateBoard();
   const deleteBoard = useDeleteBoard();
@@ -613,6 +619,24 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     setOutfitBuilderVisible(true);
   }, [handleAddPieces, handleNewBoard, segment]);
 
+  const renderStarterBoard = (name: string, emptyState = false) => {
+    const exists = boards.some((board) => board.name.toLowerCase() === name.toLowerCase());
+    const disabled = exists || createBoard.isPending;
+    return (
+      <TouchableOpacity
+        key={name}
+        style={[styles.smartBoardChip, emptyState && styles.emptyThemeChip, exists && styles.smartBoardChipDisabled]}
+        onPress={() => createSmartBoard(name)}
+        disabled={disabled}
+        accessibilityRole="button"
+        accessibilityState={{ disabled }}
+      >
+        <Ionicons name={exists ? 'checkmark' : 'add'} size={14} color={exists ? colors.mutedForeground : colors.primary} />
+        <Text style={[styles.smartBoardChipText, exists && styles.smartBoardChipTextDisabled]}>{name}</Text>
+      </TouchableOpacity>
+    );
+  };
+
   const handleStyleSelected = useCallback(() => {
     if (selectedIds.size === 0) return;
     const names = items.filter((item) => selectedIds.has(item.id)).map((item) => item.name);
@@ -867,7 +891,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         <Ionicons name="albums-outline" size={32} color={colors.mutedForeground} />
       </View>
       <Text style={styles.emptyTitle}>No boards yet</Text>
-      <Text style={styles.emptySub}>Create your first board to organize your style.</Text>
+      <Text style={styles.emptySub}>Create your first board to start curating your style.</Text>
       <TouchableOpacity
         style={styles.emptyBtn}
         onPress={handleNewBoard}
@@ -878,6 +902,22 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         <Ionicons name="add" size={16} color={colors.primaryForeground} />
         <Text style={styles.emptyBtnText}>Create board</Text>
       </TouchableOpacity>
+      <Text style={styles.emptyThemeLabel}>Or start with a theme</Text>
+      <View style={styles.emptyThemeGrid}>
+        {STARTER_BOARD_NAMES.map((name) => renderStarterBoard(name, true))}
+      </View>
+    </View>
+  );
+
+  const boardLoadingSkeleton = (
+    <View style={styles.boardSkeletonGrid}>
+      {[0, 1, 2, 3].map((index) => (
+        <View key={index} style={{ width: cardWidth, marginBottom: spacing.lg }}>
+          <SkeletonBlock width={cardWidth} height={cardWidth / BOARD_CARD_ASPECT_RATIO} borderRadius={radii.lg} />
+          <SkeletonBlock width="72%" height={16} borderRadius={radii.sm} style={styles.boardSkeletonTitle} />
+          <SkeletonBlock width="42%" height={12} borderRadius={radii.sm} style={styles.boardSkeletonSubtitle} />
+        </View>
+      ))}
     </View>
   );
 
@@ -1009,7 +1049,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             )}
             ListHeaderComponent={
               <View style={styles.boardListHeader}>
-                {sortedBoards.length >= 6 && (
+                {showBoardSearch && (
                   <View style={styles.boardSearchWrap}>
                     <Ionicons name="search-outline" size={17} color={colors.mutedForeground} />
                     <TextInput
@@ -1028,34 +1068,27 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
                     )}
                   </View>
                 )}
-                <View style={styles.smartBoardHeading}>
-                  <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
-                  <Text style={styles.smartBoardTitle}>Quick private boards</Text>
-                </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.smartBoardRow}>
-                  {['Workwear', 'Vacation', 'Never Worn', 'Seasonal Rotation'].map((name) => {
-                    const exists = boards.some((board) => board.name.toLowerCase() === name.toLowerCase());
-                    return (
-                      <TouchableOpacity
-                        key={name}
-                        style={[styles.smartBoardChip, exists && styles.smartBoardChipDisabled]}
-                        onPress={() => createSmartBoard(name)}
-                        disabled={exists || createBoard.isPending}
-                        accessibilityRole="button"
-                        accessibilityState={{ disabled: exists }}
-                      >
-                        <Ionicons name={exists ? 'checkmark' : 'add'} size={14} color={exists ? colors.mutedForeground : colors.primary} />
-                        <Text style={[styles.smartBoardChipText, exists && styles.smartBoardChipTextDisabled]}>{name}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-                {boardSearch.length > 0 && sortedBoards.length === 0 && (
-                  <View style={styles.noBoardResults}><Text style={styles.emptySub}>No boards match “{boardSearch}”.</Text></View>
+                {visibleBoardCount > 0 && (
+                  <>
+                    <View style={styles.smartBoardHeading}>
+                      <Text style={styles.smartBoardTitle}>Start with a theme</Text>
+                    </View>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.smartBoardRow}>
+                      {STARTER_BOARD_NAMES.map((name) => renderStarterBoard(name))}
+                    </ScrollView>
+                  </>
                 )}
               </View>
             }
-            ListEmptyComponent={sortedBoards.length === 0 ? emptyBoards : null}
+            ListEmptyComponent={
+              boardsLoading
+                ? boardLoadingSkeleton
+                : boardSearch.trim().length > 0
+                  ? <View style={styles.noBoardResults}><Text style={styles.emptySub}>No boards match “{boardSearch}”.</Text></View>
+                  : visibleBoardCount === 0
+                    ? emptyBoards
+                    : null
+            }
             contentContainerStyle={{
               paddingTop: spacing.md,
               paddingHorizontal: SIDE_PAD - COL_GAP / 2,
@@ -1169,7 +1202,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         <View style={[styles.bulkBar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
           <View style={styles.bulkBarTop}>
             <TouchableOpacity onPress={exitSelectionMode} accessibilityRole="button" accessibilityLabel="Cancel selection">
-              <Text style={styles.bulkCancel}>Cancel</Text>
+              <Text style={styles.bulkCancel} numberOfLines={1}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => {
@@ -1268,7 +1301,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         <View style={[styles.bulkBar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
           <View style={styles.bulkBarTop}>
             <TouchableOpacity onPress={exitOutfitSelectionMode} accessibilityRole="button" accessibilityLabel="Cancel selection">
-              <Text style={styles.bulkCancel}>Cancel</Text>
+              <Text style={styles.bulkCancel} numberOfLines={1}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => {
@@ -1465,14 +1498,20 @@ const styles = StyleSheet.create({
   boardSearchWrap: { minHeight: 46, paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.secondary, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   boardSearchInput: { flex: 1, minHeight: 46, color: colors.foreground, fontSize: typography.size.md, lineHeight: typography.inputLineHeight(typography.size.md) },
   boardSearchClear: { width: 36, height: 44, alignItems: 'center', justifyContent: 'center' },
-  smartBoardHeading: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  smartBoardTitle: { color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+  smartBoardHeading: { alignItems: 'flex-start' },
+  smartBoardTitle: { color: colors.mutedForeground, fontSize: typography.size.xs, fontWeight: typography.weight.semibold, letterSpacing: 0.9, textTransform: 'uppercase' },
   smartBoardRow: { gap: spacing.sm, paddingRight: spacing.lg },
-  smartBoardChip: { minHeight: 38, paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.accent, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  smartBoardChipDisabled: { backgroundColor: colors.secondary },
-  smartBoardChipText: { color: colors.secondaryForeground, fontSize: typography.size.xs, fontWeight: typography.weight.semibold },
+  smartBoardChip: { minHeight: 38, paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: 'transparent', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  emptyThemeChip: { marginBottom: spacing.sm },
+  smartBoardChipDisabled: { backgroundColor: colors.secondary, borderColor: colors.secondary },
+  smartBoardChipText: { color: colors.secondaryForeground, fontSize: typography.size.xs, fontWeight: typography.weight.medium },
   smartBoardChipTextDisabled: { color: colors.mutedForeground },
   noBoardResults: { paddingVertical: spacing.xl, alignItems: 'center' },
+  emptyThemeLabel: { marginTop: spacing.lg, color: colors.mutedForeground, fontSize: typography.size.xs, fontWeight: typography.weight.semibold, letterSpacing: 0.9, textTransform: 'uppercase' },
+  emptyThemeGrid: { marginTop: spacing.sm, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm },
+  boardSkeletonGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: COL_GAP / 2 },
+  boardSkeletonTitle: { marginTop: spacing.sm + 1 },
+  boardSkeletonSubtitle: { marginTop: spacing.xs },
   root: {
     flex: 1,
     backgroundColor: colors.background,
@@ -1872,6 +1911,7 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
     color: colors.mutedForeground,
     fontWeight: typography.weight.medium,
+    flexShrink: 0,
   },
   bulkSelectAll: {
     fontSize: typography.size.sm,

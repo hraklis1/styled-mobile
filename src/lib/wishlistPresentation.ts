@@ -23,6 +23,31 @@ export function getWishlistTitle(entry: WishlistEntry): string {
   return entry.outfit.intro?.trim() || firstItemName || getWishlistContext(entry) || fallback;
 }
 
+function getFirstSentence(value: string): string {
+  const normalized = value.trim().replace(/\s+/g, ' ');
+  const sentence = normalized.match(/^(.+?[.!?])(?:\s|$)/)?.[1];
+  return sentence ?? normalized;
+}
+
+/**
+ * Board tiles need an editorial product name rather than the stylist's full
+ * rationale. The complete intro remains available in the detail sheet and
+ * accessibility label.
+ */
+export function getWishlistBoardTitle(entry: WishlistEntry): string {
+  const firstItemName = entry.outfit.items.find((item) => item.name?.trim())?.name.trim();
+  if (firstItemName) return firstItemName;
+
+  const intro = entry.outfit.intro?.trim();
+  if (intro) return getFirstSentence(intro);
+
+  return getWishlistContext(entry) || getWishlistBoardLabel(entry);
+}
+
+export function getWishlistBoardLabel(entry: WishlistEntry): string {
+  return getWishlistRecommendationType(entry) === 'piece' ? 'Saved piece' : 'Shopping edit';
+}
+
 export function getWishlistMeta(entry: WishlistEntry): string {
   const count = entry.outfit.items.length;
   const type = getWishlistRecommendationType(entry);

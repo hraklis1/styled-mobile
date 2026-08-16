@@ -232,7 +232,7 @@ function AppTabNavigator() {
 
   const quickLogWear = useCallback(() => {
     track('closet_quick_action_tapped', { action: 'record_wear' });
-    openLogger();
+    openLogger({ quickStart: true });
   }, [openLogger]);
 
   useEffect(() => {

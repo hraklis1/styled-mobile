@@ -95,7 +95,7 @@ export function EventItemPickerModal({
         <View style={s.root}>
           <View style={s.header}>
             <TouchableOpacity onPress={onClose} style={s.headerSide}>
-              <Text style={s.cancelText}>Cancel</Text>
+              <Text style={s.cancelText} numberOfLines={1}>Cancel</Text>
             </TouchableOpacity>
             <Text style={s.headerTitle}>{getEventItemsActionLabel((event?.itemIds ?? []).length > 0)}</Text>
             <TouchableOpacity onPress={handleConfirm} disabled={assignItems.isPending} style={[s.headerSide, { alignItems: 'flex-end' }]}>

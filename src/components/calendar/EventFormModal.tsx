@@ -191,7 +191,7 @@ export function EventFormModal({
         <View style={s.root}>
           <View style={s.header}>
             <TouchableOpacity onPress={requestClose} style={s.headerSide} accessibilityRole="button" accessibilityLabel="Cancel event editing">
-              <Text style={s.cancelText}>Cancel</Text>
+              <Text style={s.cancelText} numberOfLines={1}>Cancel</Text>
             </TouchableOpacity>
             <Text style={s.headerTitle}>{event ? 'Edit Event' : 'New Event'}</Text>
             <TouchableOpacity

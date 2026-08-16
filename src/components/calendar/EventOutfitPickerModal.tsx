@@ -70,7 +70,7 @@ export function EventOutfitPickerModal({
       <View style={s.root}>
         <View style={s.header}>
           <TouchableOpacity onPress={onClose} style={s.headerSide}>
-            <Text style={s.cancelText}>Cancel</Text>
+            <Text style={s.cancelText} numberOfLines={1}>Cancel</Text>
           </TouchableOpacity>
           <Text style={s.headerTitle}>Choose outfit</Text>
           <TouchableOpacity

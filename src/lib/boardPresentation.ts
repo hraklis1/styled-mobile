@@ -1,6 +1,7 @@
 import { resolveImageUri } from './resolveImageUri';
 import { itemThumbUri } from './itemImage';
 import { CATEGORY_LABELS } from '../types/item';
+import { filterVisibleBoards } from './legacyBoards';
 import type { ItemCategory } from '../types/item';
 import type { Board, BoardFeedItem } from '../types/board';
 import type { Item } from '../types/item';
@@ -10,6 +11,25 @@ export type BoardFilter = 'all' | BoardFeedItem['kind'];
 
 export function getBoardSavedCount(board: Board): number {
   return board.itemIds.length + board.outfitIds.length + board.wishlistIds.length;
+}
+
+/** Compact editorial metadata for board cards and the board identity rail. */
+export function getBoardContentSummary(
+  board: Pick<Board, 'itemIds' | 'outfitIds' | 'wishlistIds'>,
+): string {
+  const pieces = board.itemIds.length;
+  const looks = board.outfitIds.length + board.wishlistIds.length;
+  const segments: string[] = [];
+
+  if (pieces > 0) segments.push(`${pieces} ${pieces === 1 ? 'piece' : 'pieces'}`);
+  if (looks > 0) segments.push(`${looks} ${looks === 1 ? 'look' : 'looks'}`);
+
+  return segments.join(' · ') || 'Empty board';
+}
+
+/** Search is a stable affordance once the visible collection is large enough. */
+export function shouldShowBoardSearch(boards: Pick<Board, 'name'>[]): boolean {
+  return filterVisibleBoards(boards).length >= 6;
 }
 
 export function getBoardCoverUris(
@@ -62,19 +82,6 @@ const OUTFIT_PATHS: ItemCategory[][] = [
   ['top', 'bottom', 'shoes'],
 ];
 
-/**
- * Which slot to name when several are missing. Shoes first because a board of
- * clothes with nothing to wear on your feet is the most common near-miss.
- */
-const SLOT_PRECEDENCE: ItemCategory[] = ['shoes', 'bottom', 'top', 'full_body'];
-
-const SLOT_NOUNS: Record<ItemCategory, string> = {
-  top: 'a top', bottom: 'a bottom', full_body: 'a dress or set', shoes: 'shoes',
-  outerwear: 'outerwear', accessory: 'an accessory', valuables: 'a piece',
-};
-
-export type BoardGap = { text: string; missing: ItemCategory };
-
 /** Board members the server would consider wearable, mirroring its own filter. */
 function wearableItems(items: BoardFeedItem[]) {
   return items.flatMap((entry) =>
@@ -91,54 +98,8 @@ function wearableItems(items: BoardFeedItem[]) {
  * build a look from — the exact predicate the server applies in
  * canBuildOutfitFromItems.
  *
- * Distinct from `getBoardGap(items) === null`, which is also true for a board
- * holding almost nothing. Using the gap for the button gate offered to style
- * empty boards, which the server then answers with prose.
  */
 export function canComposeOutfit(items: BoardFeedItem[]): boolean {
   const present = new Set(wearableItems(items).map((item) => item.category));
   return OUTFIT_PATHS.some((path) => path.every((slot) => present.has(slot)));
-}
-
-/**
- * A single deterministic sentence about what this board still needs before it
- * could become an outfit, or null when it needs nothing (or too little is
- * saved to say anything useful).
- *
- * The "needs nothing" case mirrors the server's canBuildOutfitFromItems
- * (Styled/server/stylistRouting.ts) exactly — including its wearability
- * filter — because the board detail screen uses a null gap as the gate for
- * offering to style the board. If the two disagreed, the button would appear
- * for boards the server then refuses to compose from.
- */
-export function getBoardGap(items: BoardFeedItem[]): BoardGap | null {
-  const wearable = wearableItems(items);
-
-  // Below this there is nothing worth saying — every board starts here.
-  if (wearable.length < 3) return null;
-
-  const present = new Set(wearable.map((item) => item.category));
-  const rank = (slots: ItemCategory[]) =>
-    SLOT_PRECEDENCE.findIndex((slot) => slots.includes(slot));
-
-  // Fewest missing slots wins; ties break on precedence so a board holding a
-  // top is told to add a bottom rather than to replace it with a dress.
-  const nearest = OUTFIT_PATHS
-    .map((path) => path.filter((slot) => !present.has(slot)))
-    .reduce((a, b) => {
-      if (b.length !== a.length) return b.length < a.length ? b : a;
-      return rank(b) < rank(a) ? b : a;
-    });
-
-  if (nearest.length === 0) return null;
-
-  const missing = SLOT_PRECEDENCE.find((slot) => nearest.includes(slot)) ?? nearest[0];
-  const noun = SLOT_NOUNS[missing];
-
-  // Only promise a finished outfit when exactly one slot stands in the way.
-  const text = nearest.length === 1
-    ? `Add ${noun} and this board can become an outfit.`
-    : `Add ${noun} to start building outfits here.`;
-
-  return { text, missing };
 }

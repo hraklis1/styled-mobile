@@ -4,11 +4,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { PressableScale } from '../primitives/PressableScale';
 import { EditorialCardMeta } from '../primitives/Editorial';
 import { BoardCover } from './BoardCover';
-import { colors, radii, spacing } from '../../theme';
+import { colors, radii, spacing, typography } from '../../theme';
 import type { Board } from '../../types/board';
 import type { Item } from '../../types/item';
 import type { Outfit } from '../../types/outfit';
-import { getBoardSavedCount } from '../../lib/boardPresentation';
+import { getBoardContentSummary } from '../../lib/boardPresentation';
+
+const BOARD_CARD_ASPECT_RATIO = 0.8;
 
 type Props = {
   board: Board;
@@ -20,47 +22,57 @@ type Props = {
 };
 
 export const BoardCard = React.memo(function BoardCard({ board, itemMap, outfitMap, width, onPress, onOptions }: Props) {
-  const count = getBoardSavedCount(board);
-  const savedLabel = `${count} saved`;
+  const summary = getBoardContentSummary(board);
+  const coverHeight = width / BOARD_CARD_ASPECT_RATIO;
 
   return (
     <View style={{ width }}>
-      <PressableScale onPress={onPress} accessibilityRole="button" accessibilityLabel={`Open ${board.name} board, ${count} saved`}>
-        <BoardCover board={board} itemMap={itemMap} outfitMap={outfitMap} size={width} />
-      </PressableScale>
-      <View style={styles.metaRow}>
-        <EditorialCardMeta title={board.name} subtitle={savedLabel} />
+      <View style={styles.coverWrap}>
+        <PressableScale onPress={onPress} accessibilityRole="button" accessibilityLabel={`Open ${board.name} board, ${summary}`}>
+          <BoardCover board={board} itemMap={itemMap} outfitMap={outfitMap} size={width} height={coverHeight} />
+        </PressableScale>
         {onOptions && (
           <TouchableOpacity
             style={styles.optionsButton}
             onPress={onOptions}
+            activeOpacity={0.72}
             accessibilityRole="button"
             accessibilityLabel={`Options for ${board.name}`}
           >
-            <Ionicons name="ellipsis-horizontal" size={19} color={colors.mutedForeground} />
+            <Ionicons name="ellipsis-horizontal" size={19} color={colors.foreground} />
           </TouchableOpacity>
         )}
+      </View>
+      <View style={styles.metaRow}>
+        <EditorialCardMeta title={board.name} subtitle={summary} titleStyle={styles.boardTitle} />
       </View>
     </View>
   );
 });
 
 const styles = StyleSheet.create({
+  coverWrap: {
+    position: 'relative',
+  },
   metaRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
     paddingTop: spacing.sm + 1,
   },
   optionsButton: {
-    width: 36,
-    height: 36,
-    marginTop: -5,
-    marginRight: -6,
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radii.full,
     backgroundColor: colors.surfaceElevated,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
+  },
+  boardTitle: {
+    fontFamily: typography.family.display,
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.regular,
   },
 });
