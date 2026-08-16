@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -47,6 +47,14 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
   const brief = useShoppingBrief(isPremium);
   const [refreshing, setRefreshing] = useState(false);
   const requestedSection = route.params?.section ?? 'brief';
+  const scrollRef = useRef<ScrollView>(null);
+  // Set only when a caller explicitly asks for the brief (Home's "Read the
+  // brief" link) — not on `requestedSection`, which defaults to 'brief' on
+  // every plain tab tap and would hijack scroll position on normal visits.
+  const pendingBriefScroll = useRef(false);
+  useEffect(() => {
+    if (route.params?.section === 'brief') pendingBriefScroll.current = true;
+  }, [route.params?.section]);
 
   useEffect(() => {
     if (requestedSection === 'shortlist') {
@@ -126,6 +134,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
   return (
     <View style={styles.root}>
       <ScrollView
+        ref={scrollRef}
         contentInsetAdjustmentBehavior="never"
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} tintColor={colors.primary} />}
@@ -170,25 +179,36 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
           </View>
         </EditorialSection>
 
-        <ShoppingBriefCard
-          style={styles.brief}
-          isPremium={isPremium}
-          brief={brief.data}
-          isLoading={brief.isLoading}
-          isError={brief.isError}
-          onSelectPriority={(priority) => (
-            askStylist(`Help me shop thoughtfully for ${priority.label}. ${priority.context}`)
-          )}
-          onStartShopping={() => askStylist('Help me choose my next best purchase.', 'shop_new')}
-          onUpgrade={() => {
-            track('shop_brief_upgrade_tapped');
-            void presentPaywall();
+        <View
+          onLayout={(e) => {
+            if (!pendingBriefScroll.current) return;
+            pendingBriefScroll.current = false;
+            const y = e.nativeEvent.layout.y;
+            requestAnimationFrame(() => {
+              scrollRef.current?.scrollTo({ y: Math.max(y - spacing.lg, 0), animated: true });
+            });
           }}
-          onAddWardrobePieces={() => (
-            navigation.getParent()?.navigate('Closet', { screen: 'ClosetMain', params: { segment: 'pieces' } })
-          )}
-          onRetry={() => void brief.refetch()}
-        />
+        >
+          <ShoppingBriefCard
+            style={styles.brief}
+            isPremium={isPremium}
+            brief={brief.data}
+            isLoading={brief.isLoading}
+            isError={brief.isError}
+            onSelectPriority={(priority) => (
+              askStylist(`Help me shop thoughtfully for ${priority.label}. ${priority.context}`)
+            )}
+            onStartShopping={() => askStylist('Help me choose my next best purchase.', 'shop_new')}
+            onUpgrade={() => {
+              track('shop_brief_upgrade_tapped');
+              void presentPaywall();
+            }}
+            onAddWardrobePieces={() => (
+              navigation.getParent()?.navigate('Closet', { screen: 'ClosetMain', params: { segment: 'pieces' } })
+            )}
+            onRetry={() => void brief.refetch()}
+          />
+        </View>
 
         <EditorialSection
           style={styles.consultationSection}
