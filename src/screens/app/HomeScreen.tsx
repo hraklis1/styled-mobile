@@ -7,8 +7,10 @@ import {
   TouchableOpacity,
   useWindowDimensions,
   Linking,
+  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
@@ -18,13 +20,14 @@ import { GarmentCardSkeleton } from '../../components/primitives/GarmentCardSkel
 import { ErrorState } from '../../components/primitives/ErrorState';
 import { useOutfits } from '../../hooks/useOutfits';
 import { useEvents } from '../../hooks/useEvents';
-import { useOutfitLogs, useDeleteOutfitLog } from '../../hooks/useOutfitLogs';
+import { useOutfitLogs, useDeleteOutfitLog, type OutfitLog } from '../../hooks/useOutfitLogs';
 import { useShoppingSnaps } from '../../hooks/useShoppingSnaps';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import { ShortlistDecisionCard } from '../../components/shopping/ShortlistDecisionCard';
 import { buildShoppingEditItems, mergeShoppingSnaps } from '../../lib/shoppingGallery';
 import { buildShortlistSpotlight } from '../../lib/shortlistSpotlight';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
+import { ResolvedOutfitCollage, type ResolvedOutfitSlot } from '../../components/outfits/ResolvedOutfitCollage';
 import { useGlobalOutfitLogger } from '../../contexts/GlobalOutfitLoggerContext';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { useGlobalAddSheet } from '../../contexts/GlobalAddSheetContext';
@@ -35,6 +38,7 @@ import { useStylingWeatherToday } from '../../hooks/useWeather';
 import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
 import { useProfile } from '../../hooks/useProfile';
 import { StylingLocationSheet } from '../../components/home/StylingLocationSheet';
+import { HomeBriefBand } from '../../components/home/HomeBriefBand';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { track } from '../../lib/analytics';
 import { itemCoverPresentation } from '../../lib/itemImage';
@@ -49,21 +53,22 @@ import {
   recordDailyPick,
   saveDailyPickHistory,
 } from '../../lib/dailyPickHistory';
-import { colors, shadows, spacing, typography, radii } from '../../theme';
+import { colors, shadows, spacing, typography, radii, editorial } from '../../theme';
 import { PressableScale } from '../../components/primitives/PressableScale';
-import { ScreenHeader } from '../../components/primitives/Editorial';
+import { ScreenHeader, EditorialSection } from '../../components/primitives/Editorial';
 import type { HomeScreenProps } from '../../navigation/types';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const SIDE_PAD = spacing.lg;
 const COL_GAP  = spacing.md;
+const WEEK_TILE_SIZE = 104;
 
-const WEATHER_EMOJI: Record<string, string> = {
-  sunny: '☀️',
-  rainy: '🌧️',
-  cold:  '❄️',
-  mild:  '⛅',
+const WEATHER_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
+  sunny: 'sunny-outline',
+  rainy: 'rainy-outline',
+  cold:  'snow-outline',
+  mild:  'partly-sunny-outline',
 };
 
 const OCCASION_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -186,8 +191,11 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     }
   }, [fabCollapsed]);
   const { width } = useWindowDimensions();
-  const heroWidth = width - SIDE_PAD * 2;
-  const heroHeight = Math.round(heroWidth * 0.78);
+  // Full-bleed: the hero runs edge to edge rather than sitting inset like the
+  // rest of the page's cards, at the same portrait ratio outfit photography
+  // uses everywhere else in the app.
+  const heroWidth = width;
+  const heroHeight = Math.round(heroWidth / editorial.outfitAspectRatio);
 
   // Tapping the row goes straight to the camera: photographing a piece is the
   // overwhelmingly common intent, and the old menu made every capture cost an
@@ -212,6 +220,21 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     openLogger({ quickStart: true });
   }, [openLogger]);
 
+  // The rail's tiles are inside a horizontally-scrolling carousel, so a
+  // swipe-to-delete gesture would fight the carousel's own pan — long-press
+  // (already the row's other affordance elsewhere on this screen) plus a
+  // confirm keeps deletion intentional without that conflict.
+  const confirmDeleteLog = useCallback((log: OutfitLog) => {
+    Alert.alert(
+      'Delete this entry?',
+      `Remove ${formatLogDate(log.date)} from your week in wear.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => deleteLog.mutate(log.id) },
+      ],
+    );
+  }, [deleteLog]);
+
   // Derived data
   const upcomingEvents = useMemo(() => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -224,6 +247,14 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const nextUpEvent = useMemo(
     () => upcomingEvents.find((event) => !event.outfitId && (event.itemIds?.length ?? 0) === 0) ?? upcomingEvents[0],
     [upcomingEvents],
+  );
+  // The standalone "Next up" card only ever shows when the shortlist is
+  // empty (see render below) — when it does, it's always drawn from this
+  // same list, so the carousel underneath must not repeat it.
+  const showNextUpCard = shortlist.awaitingDecision.length === 0 && !!nextUpEvent;
+  const carouselEvents = useMemo(
+    () => (showNextUpCard ? upcomingEvents.filter((event) => event.id !== nextUpEvent!.id) : upcomingEvents),
+    [showNextUpCard, upcomingEvents, nextUpEvent],
   );
 
   const recentOutfits = useMemo(
@@ -241,14 +272,15 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const isHomeFallback = locationSource === 'home';
   const isDestination = locationSource === 'destination';
   const locationBadge = isDestination ? 'Trip' : isHomeFallback ? 'Home' : undefined;
-  const weatherLocationLine = weather.data
-    ? [
-      `${WEATHER_EMOJI[weather.data.current.condition] ?? '🌡️'} ${formatTemp(weather.data.current, tempUnit)}`,
-      compactActiveLocation,
-      locationBadge,
-    ].filter(Boolean).join(' · ')
+  const weatherLocationIcon: keyof typeof Ionicons.glyphMap | undefined = weather.data
+    ? (WEATHER_ICON[weather.data.current.condition] ?? 'thermometer-outline')
     : compactActiveLocation
-      ? [`📍 ${compactActiveLocation}`, locationBadge].filter(Boolean).join(' · ')
+      ? 'location-outline'
+      : undefined;
+  const weatherLocationLine = weather.data
+    ? [formatTemp(weather.data.current, tempUnit), compactActiveLocation, locationBadge].filter(Boolean).join(' · ')
+    : compactActiveLocation
+      ? [compactActiveLocation, locationBadge].filter(Boolean).join(' · ')
       : 'Set weather location';
   const locationAccessibilityLabel = activeLocationLabel
     ? `Weather location: ${activeLocationLabel}. ${
@@ -271,7 +303,11 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     [dailyPickDate, dailyPickHistory, dailyPickHistoryLoaded, events, items, logs, outfits, weather.data, tempUnit],
   );
   const featuredOutfit = dailyPick?.outfit ?? recentOutfits[0];
-  const featuredReason = dailyPick?.reason ?? "Today’s edit";
+  // The section title above already says "Today's Look" — when there's no
+  // real reason to show, echo it rather than coin a second name for the
+  // same thing.
+  const featuredReason = dailyPick?.reason ?? "Today’s Look";
+  const hasFeaturedAiImage = !!featuredOutfit?.aiGeneratedImageUrl;
 
   useEffect(() => {
     if (!dailyPickHistoryLoaded || !user?.id || !dailyPick?.outfit) return;
@@ -323,6 +359,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       <View style={styles.headerRow}>
         <ScreenHeader
           title={getGreeting(user?.displayName)}
+          titleVariant="display"
           safeTop={false}
           style={styles.greetingHeader}
           subtitleNode={(
@@ -333,6 +370,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               accessibilityRole="button"
               accessibilityLabel={locationAccessibilityLabel}
             >
+              {weatherLocationIcon ? (
+                <Ionicons name={weatherLocationIcon} size={13} color={colors.primary} />
+              ) : null}
               <Text style={styles.weatherLocationText} numberOfLines={1}>
                 {weatherLocationLine}
               </Text>
@@ -383,7 +423,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
       {/* ── Permanent wardrobe actions ─────────────────────────── */}
       <View style={styles.wardrobeActions}>
-        <Text style={styles.wardrobeActionsEyebrow}>Your closet</Text>
         <PressableScale
           contentStyle={styles.wardrobeAction}
           onPress={handleQuickAddPhoto}
@@ -438,50 +477,58 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       </View>
 
       {/* ── Featured outfit ────────────────────────────────────── */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Today’s Look</Text>
-          <TouchableOpacity
+      <EditorialSection
+        variant="ruled"
+        title="Today’s Look"
+        actionLabel="View all"
+        onAction={() => navigation.navigate('Closet', {
+          screen: 'ClosetMain',
+          params: { segment: 'outfits' },
+        })}
+      >
+        {featuredOutfit ? (
+          <PressableScale
+            contentStyle={styles.featuredOutfit}
             onPress={() => navigation.navigate('Closet', {
-              screen: 'ClosetMain',
-              params: { segment: 'outfits' },
+              screen: 'OutfitDetail',
+              params: { outfitId: featuredOutfit.id, returnTo: 'Home' },
             })}
             accessibilityRole="button"
-            accessibilityLabel="View all outfits"
+            accessibilityLabel={featuredOutfit.name}
           >
-            <Text style={styles.sectionLink}>View all</Text>
-          </TouchableOpacity>
-        </View>
-
-        {featuredOutfit ? (
-          <>
-            <PressableScale
-              contentStyle={styles.featuredOutfit}
-              onPress={() => navigation.navigate('Closet', {
-                screen: 'OutfitDetail',
-                params: { outfitId: featuredOutfit.id, returnTo: 'Home' },
-              })}
-              accessibilityRole="button"
-              accessibilityLabel={featuredOutfit.name}
-            >
+            <View style={{ width: heroWidth, height: heroHeight }}>
               <OutfitCollage
                 outfit={featuredOutfit}
                 size={heroWidth}
                 height={heroHeight}
-                borderRadius={radii.lg}
+                borderRadius={0}
               />
+              {/*
+                Scrim only over a real photo — the mosaic path renders a flat
+                board and a dark-to-transparent ramp over a solid fill bands
+                badly (same rule OutfitHero uses on the detail screen).
+              */}
+              {hasFeaturedAiImage && (
+                <>
+                  <LinearGradient
+                    pointerEvents="none"
+                    colors={['transparent', 'rgba(29,27,24,0.34)']}
+                    style={styles.heroScrim}
+                  />
+                  <View style={styles.heroCaptionOverlay}>
+                    <Text style={styles.featuredEyebrowOverlay} numberOfLines={1}>{featuredReason}</Text>
+                    <Text style={styles.featuredOutfitNameOverlay} numberOfLines={1}>{featuredOutfit.name}</Text>
+                  </View>
+                </>
+              )}
+            </View>
+            {!hasFeaturedAiImage && (
               <View style={styles.featuredOutfitInfo}>
-                <View style={styles.featuredOutfitCopy}>
-                  <Text style={styles.featuredEyebrow} numberOfLines={1}>{featuredReason}</Text>
-                  <Text style={styles.featuredOutfitName} numberOfLines={1}>{featuredOutfit.name}</Text>
-                </View>
-                <View style={styles.featuredArrow}>
-                  <Ionicons name="arrow-forward" size={16} color={colors.primaryForeground} />
-                </View>
+                <Text style={styles.featuredEyebrow} numberOfLines={1}>{featuredReason}</Text>
+                <Text style={styles.featuredOutfitName} numberOfLines={1}>{featuredOutfit.name}</Text>
               </View>
-            </PressableScale>
-
-          </>
+            )}
+          </PressableScale>
         ) : (
           <View style={styles.emptyOutfits}>
             <View style={[styles.emptyOutfitIcon, { backgroundColor: `${colors.primary}18` }]}>
@@ -504,7 +551,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             )}
           </View>
         )}
-      </View>
+      </EditorialSection>
 
       {/* ── Next up ─────────────────────────────────────────────── */}
       {shortlist.awaitingDecision.length > 0 ? (
@@ -520,36 +567,34 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             });
           }}
         />
-      ) : nextUpEvent ? (
+      ) : showNextUpCard ? (
         <PressableScale
           contentStyle={styles.nextUpCard}
-          onPress={() => navigation.navigate('Calendar', { eventId: nextUpEvent.id })}
+          onPress={() => navigation.navigate('Calendar', { eventId: nextUpEvent!.id })}
           accessibilityRole="button"
-          accessibilityLabel={`${nextUpEvent.title}, ${formatEventDate(nextUpEvent.date)}. Open in Calendar`}
+          accessibilityLabel={`${nextUpEvent!.title}, ${formatEventDate(nextUpEvent!.date)}. Open in Calendar`}
         >
           <View style={styles.nextUpIcon}>
             <Ionicons name="calendar-outline" size={18} color={colors.primary} />
           </View>
           <View style={styles.nextUpCopy}>
             <Text style={styles.nextUpEyebrow}>Next up</Text>
-            <Text style={styles.nextUpTitle} numberOfLines={1}>{nextUpEvent.title}</Text>
+            <Text style={styles.nextUpTitle} numberOfLines={1}>{nextUpEvent!.title}</Text>
             <Text style={styles.nextUpSubtitle}>
-              {nextUpEvent.outfitId || (nextUpEvent.itemIds?.length ?? 0) > 0 ? 'Your look is planned' : 'Plan a look for your next occasion'} · {formatEventDate(nextUpEvent.date)}
+              {nextUpEvent!.outfitId || (nextUpEvent!.itemIds?.length ?? 0) > 0 ? 'Your look is planned' : 'Plan a look for your next occasion'} · {formatEventDate(nextUpEvent!.date)}
             </Text>
           </View>
           <Ionicons name="arrow-forward" size={17} color={colors.primary} />
         </PressableScale>
       ) : null}
 
-      {/* ── Upcoming Events ───────────────────────────────────────── */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Upcoming Events</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Calendar')} accessibilityRole="button" accessibilityLabel="View all events">
-            <Text style={styles.sectionLink}>View all</Text>
-          </TouchableOpacity>
-        </View>
-
+      {/* ── On the Calendar ───────────────────────────────────────── */}
+      <EditorialSection
+        variant="ruled"
+        title="On the Calendar"
+        actionLabel="View all"
+        onAction={() => navigation.navigate('Calendar')}
+      >
         {upcomingEvents.length === 0 ? (
           <PressableScale
             contentStyle={styles.emptyCard}
@@ -566,14 +611,14 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             </View>
             <Ionicons name="chevron-forward" size={16} color={colors.border} />
           </PressableScale>
-        ) : (
+        ) : carouselEvents.length > 0 ? (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.carousel}
             contentContainerStyle={styles.carouselContent}
           >
-            {upcomingEvents.map((event) => {
+            {carouselEvents.map((event) => {
               const iconName = OCCASION_ICONS[event.occasion] ?? 'calendar-outline';
               const isToday = formatEventDate(event.date) === 'Today';
               return (
@@ -602,81 +647,58 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             })}
             <View style={{ width: SIDE_PAD }} />
           </ScrollView>
-        )}
-      </View>
+        ) : null}
+      </EditorialSection>
 
-      {/* ── Outfit Log History ───────────────────────────────────── */}
+      {/* ── Your Week in Wear ─────────────────────────────────────── */}
       {logs.length > 0 && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recently worn</Text>
-          </View>
-
-          <View style={styles.logList}>
-            {logs.slice(0, 5).map((log) => {
+        <EditorialSection variant="ruled" title="Your Week in Wear">
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.carousel}
+            contentContainerStyle={styles.carouselContent}
+          >
+            {logs.slice(0, 7).map((log) => {
               const logItems = (log.itemIds ?? [])
                 .map((id) => items.find((it) => it.id === id))
                 .filter((it): it is NonNullable<typeof it> => !!it);
+              const slots: ResolvedOutfitSlot[] = logItems.map((item) => {
+                const cover = itemCoverPresentation(item);
+                return { key: String(item.id), uri: cover.uri, contentFit: cover.contentFit };
+              });
               return (
-                <View key={log.id} style={styles.logRow}>
-                  {/* Stacked thumbnails */}
-                  <View style={styles.logThumbs}>
-                    {logItems.slice(0, 4).map((item, idx) => {
-                      const itemCover = itemCoverPresentation(item);
-                      const imgUri = itemCover.uri;
-                      return (
-                        <View
-                          key={item.id}
-                          style={[
-                            styles.logThumb,
-                            { marginLeft: idx > 0 ? -10 : 0, zIndex: 4 - idx },
-                          ]}
-                        >
-                          {imgUri ? (
-                            <Image
-                              source={{ uri: imgUri }}
-                              style={StyleSheet.absoluteFill}
-                              contentFit={itemCover.contentFit}
-                              transition={150}
-                            />
-                          ) : (
-                            <Ionicons name="shirt-outline" size={12} color={colors.mutedForeground} />
-                          )}
-                        </View>
-                      );
-                    })}
-                    {logItems.length > 4 && (
-                      <View style={[styles.logThumb, styles.logThumbMore, { marginLeft: -10 }]}>
-                        <Text style={styles.logThumbMoreText}>+{logItems.length - 4}</Text>
-                      </View>
-                    )}
-                  </View>
-
-                  {/* Date + count */}
-                  <View style={styles.logInfo}>
-                    <Text style={styles.logDate}>{formatLogDate(log.date)}</Text>
-                    <Text style={styles.logCount}>
-                      {log.itemIds?.length ?? 0} item{(log.itemIds?.length ?? 0) !== 1 ? 's' : ''}
-                    </Text>
-                  </View>
-
-                  {/* Delete */}
-                  <PressableScale
-                    onPress={() => deleteLog.mutate(log.id)}
-                    disabled={deleteLog.isPending}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    contentStyle={styles.logDeleteBtn}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Delete outfit log for ${formatLogDate(log.date)}`}
-                  >
-                    <Ionicons name="trash-outline" size={15} color={colors.mutedForeground} />
-                  </PressableScale>
-                </View>
+                <PressableScale
+                  key={log.id}
+                  contentStyle={styles.weekTile}
+                  onLongPress={() => confirmDeleteLog(log)}
+                  disabled={deleteLog.isPending}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${formatLogDate(log.date)}, ${logItems.length} item${logItems.length !== 1 ? 's' : ''}`}
+                  accessibilityHint="Long press to delete this entry"
+                >
+                  <ResolvedOutfitCollage
+                    slots={slots}
+                    size={WEEK_TILE_SIZE}
+                    height={WEEK_TILE_SIZE}
+                    borderRadius={radii.md}
+                  />
+                  <Text style={styles.weekTileDate} numberOfLines={1}>{formatLogDate(log.date)}</Text>
+                </PressableScale>
               );
             })}
-          </View>
-        </View>
+            <View style={{ width: SIDE_PAD }} />
+          </ScrollView>
+        </EditorialSection>
       )}
+
+      {/* ── Wardrobe brief closing statement ──────────────────────── */}
+      <HomeBriefBand
+        onPress={() => {
+          track('shop_section_opened', { section: 'home_brief' });
+          navigation.navigate('Shop', { screen: 'ShopMain', params: { section: 'brief' } });
+        }}
+      />
 
     </ScrollView>
       {locationSheetVisible && (
@@ -791,25 +813,14 @@ const styles = StyleSheet.create({
     fontSize: typography.size.md,
     color: colors.mutedForeground,
   },
+  // Flat and quiet, deliberately: the fashion imagery below is what should
+  // carry visual weight on this page, not the utility actions above it.
   wardrobeActions: {
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: colors.surfaceSubtle,
     borderRadius: radii.xl,
     borderCurve: 'continuous',
-    borderWidth: 1,
-    borderColor: colors.border,
     marginBottom: spacing.xl,
     overflow: 'hidden',
-    ...shadows.sm,
-  },
-  wardrobeActionsEyebrow: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xs,
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.semibold,
-    color: colors.primary,
-    textTransform: 'uppercase',
-    letterSpacing: 1.1,
   },
   wardrobeAction: {
     minHeight: 78,
@@ -906,24 +917,6 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
   },
 
-  // Sections
-  section: { marginBottom: spacing.xl },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.md,
-  },
-  sectionTitle: {
-    fontSize: typography.size.md,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  sectionLink: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-  },
-
   // Empty card (events / generic)
   emptyCard: {
     flexDirection: 'row',
@@ -1000,30 +993,46 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  // Outfits grid
-  outfitGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: COL_GAP,
-  },
-  secondaryOutfitGrid: {
-    marginBottom: spacing.xl,
-  },
+  // Today's Look hero — full-bleed against the screen's own SIDE_PAD inset,
+  // at the app's portrait outfit ratio. No card chrome: it's meant to read
+  // as a photograph, not a container.
   featuredOutfit: {
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radii.lg,
-    overflow: 'hidden',
-    ...shadows.md,
+    marginHorizontal: -SIDE_PAD,
   },
-  featuredOutfitInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.lg,
+  // Scrim + overlaid caption path — AI-generated flat lays only. See the
+  // comment above where hasFeaturedAiImage is checked in the JSX.
+  heroScrim: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 140,
   },
-  featuredOutfitCopy: {
-    flex: 1,
+  heroCaptionOverlay: {
+    position: 'absolute',
+    left: SIDE_PAD,
+    right: SIDE_PAD,
+    bottom: spacing.lg,
     gap: 2,
+  },
+  featuredEyebrowOverlay: {
+    fontSize: 10,
+    fontWeight: typography.weight.bold,
+    color: colors.white,
+    textTransform: 'uppercase',
+    letterSpacing: 1.1,
+  },
+  featuredOutfitNameOverlay: {
+    fontFamily: typography.family.display,
+    fontSize: typography.size.xxl,
+    color: colors.white,
+  },
+  // Caption-below-image path — the mosaic board, whose flat fill a scrim
+  // would band against.
+  featuredOutfitInfo: {
+    gap: 2,
+    paddingHorizontal: SIDE_PAD,
+    paddingTop: spacing.md,
   },
   featuredEyebrow: {
     fontSize: 10,
@@ -1033,40 +1042,8 @@ const styles = StyleSheet.create({
     letterSpacing: 1.1,
   },
   featuredOutfitName: {
-    fontSize: typography.size.lg,
-    fontWeight: typography.weight.bold,
-    color: colors.foreground,
-    letterSpacing: 0,
-  },
-  featuredArrow: {
-    width: 34,
-    height: 34,
-    borderRadius: radii.full,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  outfitCard: {
-    borderRadius: radii.md,
-    // Shadow on outer card so overflow:hidden on inner wrapper doesn't clip it
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  collageWrapper: {
-    borderRadius: radii.md,
-    overflow: 'hidden',
-  },
-  outfitInfo: {
-    paddingTop: spacing.md,
-    paddingHorizontal: 2,
-    gap: 2,
-  },
-  outfitName: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
+    fontFamily: typography.family.display,
+    fontSize: typography.size.xxl,
     color: colors.foreground,
   },
 
@@ -1107,60 +1084,16 @@ const styles = StyleSheet.create({
   },
   emptyOutfitButtonText: { color: colors.primaryForeground, fontSize: typography.size.xs, fontWeight: typography.weight.semibold },
 
-  // Outfit log history
-  logList: {
-    gap: spacing.sm,
+  // Your Week in Wear — a diary rail, not a receipt list. Long-press a tile
+  // to delete (see confirmDeleteLog); a swipe gesture would fight this
+  // ScrollView's own horizontal pan.
+  weekTile: {
+    width: WEEK_TILE_SIZE,
+    gap: spacing.xs,
   },
-  logRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
-    minHeight: 56,
-  },
-  logThumbs: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexShrink: 0,
-  },
-  logThumb: {
-    width: 32,
-    height: 32,
-    borderRadius: radii.sm,
-    overflow: 'hidden',
-    backgroundColor: colors.muted,
-    borderWidth: 2,
-    borderColor: colors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logThumbMore: {
-    backgroundColor: colors.secondary,
-  },
-  logThumbMoreText: {
-    fontSize: 9,
-    fontWeight: typography.weight.semibold,
-    color: colors.mutedForeground,
-  },
-  logInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  logDate: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.medium,
-    color: colors.foreground,
-  },
-  logCount: {
+  weekTileDate: {
     fontSize: typography.size.xs,
+    fontWeight: typography.weight.medium,
     color: colors.mutedForeground,
   },
-  logDeleteBtn: {
-    padding: spacing.xs,
-    flexShrink: 0,
-  },
-
 });

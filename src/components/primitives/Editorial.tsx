@@ -31,6 +31,12 @@ type ScreenHeaderProps = {
   secondaryActions?: HeaderAction[];
   safeTop?: boolean;
   style?: StyleProp<ViewStyle>;
+  /**
+   * `default` — system sans, used across most screens with an active header.
+   * `display` — the serif editorial face, for screens whose title is a
+   * masthead rather than a chrome label (currently Home only).
+   */
+  titleVariant?: 'default' | 'display';
 };
 
 export function ScreenHeader({
@@ -42,6 +48,7 @@ export function ScreenHeader({
   secondaryActions = [],
   safeTop = true,
   style,
+  titleVariant = 'default',
 }: ScreenHeaderProps) {
   const insets = useSafeAreaInsets();
 
@@ -49,7 +56,12 @@ export function ScreenHeader({
     <View style={[styles.header, safeTop && { paddingTop: insets.top + spacing.md }, style]}>
       <View style={styles.headerCopy}>
         {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-        <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
+        <Text
+          style={[styles.headerTitle, titleVariant === 'display' && styles.headerTitleDisplay]}
+          numberOfLines={1}
+        >
+          {title}
+        </Text>
         {subtitleNode ?? (subtitle ? <Text style={styles.headerSubtitle} numberOfLines={2}>{subtitle}</Text> : null)}
       </View>
       {(primaryAction || secondaryActions.length > 0) && (
@@ -326,6 +338,10 @@ const styles = StyleSheet.create({
     fontSize: typography.size.xxl,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
+  },
+  headerTitleDisplay: {
+    fontFamily: typography.family.display,
+    fontWeight: typography.weight.regular,
   },
   headerSubtitle: {
     fontSize: typography.size.sm,
