@@ -16,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ShoppingEditCard } from './ShoppingEditCard';
+import { useCurrencyCode } from '../../hooks/useCurrencyCode';
 import { formatShoppingPrice, garmentFriendlyContentFit } from '../../lib/shoppingPresentation';
 import { shoppingSessionHighlights, type ShoppingSessionGroup } from '../../lib/shoppingSessionGroups';
 import { colors, radii, spacing, typography } from '../../theme';
@@ -41,7 +42,8 @@ function ShoppingSessionTile({
   onLongPress: () => void;
 }) {
   const [failed, setFailed] = useState(false);
-  const price = formatShoppingPrice(item.extractedPrice);
+  const currencyCode = useCurrencyCode();
+  const price = formatShoppingPrice(item.extractedPrice, currencyCode);
 
   return (
     <TouchableOpacity
@@ -128,7 +130,8 @@ export function ShoppingSessionBundle({
   // contents, so the row a card sits in is the same width on either screen.
   const cardWidth = (width - spacing.lg * 2 - spacing.md * 2 - spacing.sm) / 2;
   const highlights = shoppingSessionHighlights(group);
-  const spend = formatShoppingPrice(group.knownSpend);
+  const currencyCode = useCurrencyCode();
+  const spend = formatShoppingPrice(group.knownSpend, currencyCode);
   const isOpen = expanded && !previewOnly;
   const stripItems = group.items.slice(0, STRIP_LIMIT);
   // A short trip fills the row instead of trailing off; a long one keeps the

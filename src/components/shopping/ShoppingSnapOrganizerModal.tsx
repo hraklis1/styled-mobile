@@ -7,6 +7,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DraggablePhotoGrid } from './DraggablePhotoGrid';
+import { useCurrencyCode } from '../../hooks/useCurrencyCode';
+import { formatShoppingPrice } from '../../lib/shoppingPresentation';
 import {
   buildShoppingSnapOrganizationUpdates,
   type ShoppingSnapOrganizationStage,
@@ -22,15 +24,6 @@ const TILE_INNER_GAP = spacing.xs;
 const TILE_HEIGHT = PHOTO_HEIGHT + TILE_INNER_GAP + CHIP_HEIGHT;
 const GRID_GAP = spacing.sm;
 
-function priceLabel(price: number | null): string | null {
-  if (price === null) return null;
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 2,
-  }).format(price);
-}
-
 function roleLabel(role: ShoppingCaptureRole): string {
   if (role === 'tag') return 'Tag';
   if (role === 'garment') return 'Garment';
@@ -43,12 +36,12 @@ function nextRole(role: ShoppingCaptureRole): ShoppingCaptureRole {
   return 'unknown';
 }
 
-function stagePrice(snaps: ShoppingSnap[], snapIds: string[]): string | null {
+function stagePrice(snaps: ShoppingSnap[], snapIds: string[], currencyCode: string): string | null {
   const snapSet = new Set(snapIds);
   const price = snaps.find((snap) => snapSet.has(snap.id) && snap.captureRole === 'tag' && snap.extractedPrice !== null)?.extractedPrice
     ?? snaps.find((snap) => snapSet.has(snap.id) && snap.extractedPrice !== null)?.extractedPrice
     ?? null;
-  return priceLabel(price);
+  return formatShoppingPrice(price, currencyCode);
 }
 
 export function ShoppingSnapOrganizerModal({
@@ -65,6 +58,7 @@ export function ShoppingSnapOrganizerModal({
   isSaving: boolean;
 }) {
   const insets = useSafeAreaInsets();
+  const currencyCode = useCurrencyCode();
   const [unassignedIds, setUnassignedIds] = useState<string[]>([]);
   const [stages, setStages] = useState<ShoppingSnapOrganizationStage[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
@@ -233,8 +227,8 @@ export function ShoppingSnapOrganizerModal({
                   <Text style={styles.sectionTitle}>Item {index + 1}</Text>
                   <Text style={styles.sectionMeta}>
                     {stage.snapIds.length} photo{stage.snapIds.length === 1 ? '' : 's'}
-                    {stagePrice(snapsWithStagedRoles, stage.snapIds)
-                      ? ` · ${stagePrice(snapsWithStagedRoles, stage.snapIds)}`
+                    {stagePrice(snapsWithStagedRoles, stage.snapIds, currencyCode)
+                      ? ` · ${stagePrice(snapsWithStagedRoles, stage.snapIds, currencyCode)}`
                       : ''}
                   </Text>
                 </View>

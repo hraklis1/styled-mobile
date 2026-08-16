@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { ShoppingBriefCard } from '../../components/shopping/ShoppingBriefCard';
 import { ShortlistCarousel } from '../../components/shopping/ShortlistCarousel';
-import { ShopDestinationRow } from '../../components/shopping/ShopDestinationRow';
-import { EditorialSection } from '../../components/primitives/Editorial';
-import { PressableScale } from '../../components/primitives/PressableScale';
+import { EditorialSection, IconButton } from '../../components/primitives/Editorial';
+import { EditorialRow } from '../../components/primitives/EditorialRow';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useItems } from '../../hooks/useItems';
 import { useShoppingBrief } from '../../hooks/useShoppingBrief';
@@ -21,10 +18,9 @@ import {
   buildShopStylistLaunch,
 } from '../../lib/shopDecisionWorkspace';
 import { buildShortlistSpotlight } from '../../lib/shortlistSpotlight';
-import { getWishlistRecommendationType } from '../../lib/wishlistType';
 import { track } from '../../lib/analytics';
 import { presentPaywall } from '../../lib/paywall';
-import { colors, radii, shadows, spacing, typography } from '../../theme';
+import { colors, spacing, typography } from '../../theme';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import type { ShopOverviewScreenProps } from '../../navigation/types';
 import type { StylistMode } from '../../features/stylist/types';
@@ -32,9 +28,9 @@ import type { StylistMode } from '../../features/stylist/types';
 /**
  * Shop answers two questions, in this order: what should I shop for (the brief,
  * stated in full, ending in the way to act on it), and what have I already
- * started (the shortlist rail). The camera opens the page as a quiet white
- * strip, because saving a find is what the user is doing while standing in a
- * shop — everything below it is for planning.
+ * started (the shortlist rail). Both sit in the first scroll — the camera lives
+ * in the header instead of a card of its own, because saving a find is a
+ * one-tap habit once you're in the app, not the thing the page needs to sell.
  */
 export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProps) {
   const insets = useSafeAreaInsets();
@@ -74,9 +70,6 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
   );
   const spotlight = useMemo(() => buildShortlistSpotlight(shoppingItems), [shoppingItems]);
   const activeFinds = spotlight.awaitingDecision;
-  const savedLookCount = savedShopping.filter((entry) => getWishlistRecommendationType(entry) === 'look').length;
-  const savedPieceCount = savedShopping.filter((entry) => getWishlistRecommendationType(entry) === 'piece').length;
-  const savedListCount = savedShopping.filter((entry) => getWishlistRecommendationType(entry) === 'list').length;
 
   useEffect(() => {
     if (!brief.data) return;
@@ -141,43 +134,18 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
         contentContainerStyle={styles.content}
       >
         <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-          <Text style={styles.eyebrow}>SHOP</Text>
-          <Text style={styles.headerTitle}>Buy fewer, better pieces</Text>
-          <Text style={styles.headerDeck}>Shop intentionally, with your wardrobe in mind.</Text>
-        </View>
-
-        <SaveFindCard onPress={openShoppingCamera} />
-
-        <EditorialSection
-          style={styles.exploreSection}
-          title="Explore Shop"
-          description="Keep an eye on the pieces and looks you want to return to."
-        >
-          <View style={styles.exploreList}>
-            <ShopDestinationRow
-              icon="images-outline"
-              title="Shortlist"
-              description="Pieces you photographed while shopping, kept here while you decide."
-              meta={spotlight.itemCount > 0 ? `${spotlight.itemCount} piece${spotlight.itemCount === 1 ? '' : 's'}` : 'Nothing saved yet'}
-              onPress={() => {
-                track('shop_destination_opened', { destination: 'shortlist' });
-                navigation.navigate('ShoppingGallery');
-              }}
-              accessibilityLabel="Open Shortlist"
-            />
-            <ShopDestinationRow
-              icon="heart-outline"
-              title="Saved Shopping"
-              description="Looks, pieces, and focused lists your Stylist helped you keep for later."
-              meta={savedShopping.length > 0 ? `${savedLookCount} look${savedLookCount === 1 ? '' : 's'} · ${savedPieceCount} piece${savedPieceCount === 1 ? '' : 's'} · ${savedListCount} list${savedListCount === 1 ? '' : 's'}` : 'Nothing saved yet'}
-              onPress={() => {
-                track('shop_destination_opened', { destination: 'saved-shopping' });
-                navigation.navigate('SavedShopping');
-              }}
-              accessibilityLabel="Open Saved Shopping"
-            />
+          <View style={styles.headerCopy}>
+            <Text style={styles.eyebrow}>SHOP</Text>
+            <Text style={styles.headerTitle}>Buy fewer, better pieces</Text>
           </View>
-        </EditorialSection>
+          <IconButton
+            icon="camera-outline"
+            label="Save a find"
+            variant="secondary"
+            onPress={openShoppingCamera}
+            accessibilityLabel="Window shopping? Save items here to review before you buy"
+          />
+        </View>
 
         <View
           onLayout={(e) => {
@@ -211,33 +179,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
         </View>
 
         <EditorialSection
-          style={styles.consultationSection}
-          title="Shop with your Stylist"
-          description="Choose a focused question before you buy."
-        >
-          <View style={styles.consultationList}>
-            <StylistActionRow
-              icon="sparkles-outline"
-              title="Choose my next best purchase"
-              description="Find the one addition with the greatest wardrobe impact."
-              onPress={() => askStylist('Help me choose my next best purchase.', 'shop_new')}
-            />
-            <StylistActionRow
-              icon="list-outline"
-              title="Build a focused shopping list"
-              description="Create a short, versatile list without duplicates."
-              onPress={() => askStylist('Build me a focused shopping list.', 'shop_list')}
-            />
-            <StylistActionRow
-              icon="chatbubble-outline"
-              title="Ask my own question"
-              description="Start a blank shopping conversation."
-              onPress={() => openStylist({ source: 'shop' })}
-            />
-          </View>
-        </EditorialSection>
-
-        <EditorialSection
+          variant="ruled"
           style={styles.section}
           title="Your Shortlist"
           description="Pieces you photographed while shopping, kept here until you price them and decide."
@@ -245,20 +187,47 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
           onAction={() => openHistory({ catalogFilter: activeFinds.length > 0 ? 'active' : 'all' })}
         >
           {spotlight.itemCount > 0 ? (
-            <ShortlistCarousel
-              items={spotlight.railItems}
-              totalCount={spotlight.itemCount}
-              onPressItem={openFind}
-              onSeeAll={() => openHistory({ catalogFilter: 'all' })}
-            />
+            <>
+              <ShortlistCarousel
+                items={spotlight.railItems}
+                totalCount={spotlight.itemCount}
+                onPressItem={openFind}
+                onSeeAll={() => openHistory({ catalogFilter: 'all' })}
+              />
+            </>
           ) : (
-            <EmptyRow
+            <EditorialRow
+              variant="filled"
               icon="camera-outline"
               title="Nothing on your shortlist yet"
-              text="Photograph a piece and its price tag while you shop, and keep it here until you decide."
+              description="Photograph a piece and its price tag while you shop, and keep it here until you decide."
               onPress={openShoppingCamera}
             />
           )}
+        </EditorialSection>
+
+        <EditorialSection variant="ruled" style={styles.section} title="Your Stylist">
+          <View style={styles.stylistList}>
+            <EditorialRow
+              icon="heart-outline"
+              title="From Your Stylist"
+              description="Looks, pieces, and lists your Stylist put aside for you."
+              meta={savedShopping.length > 0 ? `${savedShopping.length} saved` : 'Nothing saved yet'}
+              onPress={() => {
+                track('shop_destination_opened', { destination: 'saved-shopping' });
+                navigation.navigate('SavedShopping');
+              }}
+              accessibilityLabel="Open your saved Stylist picks"
+              accessibilityHint="Opens this Shop page"
+            />
+            <EditorialRow
+              icon="chatbubble-outline"
+              title="Shop with your Stylist"
+              description="Ask a focused question before you buy."
+              onPress={() => openStylist({ source: 'shop' })}
+              accessibilityLabel="Ask your AI Stylist a shopping question"
+            />
+          </View>
         </EditorialSection>
 
       </ScrollView>
@@ -271,223 +240,26 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
   );
 }
 
-function StylistActionRow({
-  icon,
-  title,
-  description,
-  onPress,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  description: string;
-  onPress: () => void;
-}) {
-  return (
-    <PressableScale
-      contentStyle={styles.consultationRow}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${title}. ${description}`}
-    >
-      <View style={styles.consultationIcon}>
-        <Ionicons name={icon} size={18} color={colors.primary} />
-      </View>
-      <View style={styles.consultationCopy}>
-        <Text style={styles.consultationTitle}>{title}</Text>
-        <Text style={styles.consultationDescription}>{description}</Text>
-      </View>
-      <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
-    </PressableScale>
-  );
-}
-
-/**
- * The way into the camera, kept in the feed rather than the header's corner:
- * shopping happens with the phone already out, so the invitation to save a find
- * should be legible at a glance instead of hidden behind an icon.
- */
-function SaveFindCard({ onPress }: { onPress: () => void }) {
-  return (
-    <PressableScale
-      scaleTo={0.99}
-      style={styles.saveFindLayout}
-      contentStyle={styles.saveFind}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel="Window shopping? Save items here to review before you buy"
-      accessibilityHint="Opens the camera"
-    >
-      {/* Warm white lifting off the ivory ground — the page's only gradient, and
-          faint enough to read as light on paper rather than as a second brand
-          surface. Rounded rather than clipped so the shadow is not cut off. */}
-      <LinearGradient
-        colors={['#FFFFFF', '#FBF4EA']}
-        start={{ x: 0.1, y: 0 }}
-        end={{ x: 0.9, y: 1 }}
-        style={styles.saveFindSheen}
-      />
-      <View style={styles.saveFindCopy}>
-        <Text style={styles.saveFindTitle}>Window shopping?</Text>
-        <Text style={styles.saveFindText}>Save items here to review before you buy.</Text>
-      </View>
-      {/* Reads as the button it is, but stays inside the row's single press
-          target — two nested controls would only split the tap area. */}
-      <View style={styles.saveFindButton}>
-        <Ionicons name="camera" size={19} color={colors.primaryForeground} />
-      </View>
-    </PressableScale>
-  );
-}
-
-/**
- * The shortlist's empty state. Deliberately a single quiet row: the brief above
- * already carries the call to action, so an empty section only needs to say
- * what would live here.
- */
-function EmptyRow({
-  icon,
-  title,
-  text,
-  onPress,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  text: string;
-  onPress: () => void;
-}) {
-  return (
-    <PressableScale
-      scaleTo={0.99}
-      contentStyle={styles.emptyRow}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${title}. ${text}`}
-    >
-      <View style={styles.emptyIcon}>
-        <Ionicons name={icon} size={17} color={colors.primary} />
-      </View>
-      <View style={styles.emptyCopy}>
-        <Text style={styles.emptyTitle}>{title}</Text>
-        <Text style={styles.emptyText}>{text}</Text>
-      </View>
-      <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
-    </PressableScale>
-  );
-}
-
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   content: { paddingBottom: spacing.xxxl },
-  header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
-  eyebrow: {
-    fontSize: 11,
-    fontWeight: typography.weight.bold,
-    letterSpacing: 2.1,
-    color: colors.primary,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
   },
+  headerCopy: { flex: 1, gap: spacing.sm },
+  eyebrow: { ...typography.eyebrowLarge, color: colors.primary },
   headerTitle: {
-    paddingTop: spacing.sm,
     fontFamily: typography.family.display,
-    fontSize: 30,
-    lineHeight: 36,
+    ...typography.display.md,
     color: colors.foreground,
   },
-  headerDeck: {
-    maxWidth: 320,
-    paddingTop: spacing.xs,
-    fontSize: typography.size.sm,
-    lineHeight: 20,
-    color: colors.mutedForeground,
-  },
-  saveFindLayout: { marginHorizontal: spacing.lg, marginBottom: spacing.md },
-  // Raised on a warm shadow against the brief's flat tinted block below: the two
-  // sit next to each other, so depth is what tells you which one you can press.
-  saveFind: {
-    minHeight: 72,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.lg,
-    borderCurve: 'continuous',
-    backgroundColor: colors.surfaceElevated,
-    ...shadows.warm,
-  },
-  saveFindSheen: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    borderRadius: radii.lg,
-    borderCurve: 'continuous',
-  },
-  saveFindCopy: { flex: 1, gap: 2 },
-  saveFindTitle: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  saveFindText: { fontSize: typography.size.xs, lineHeight: 17, color: colors.mutedForeground },
-  saveFindButton: {
-    width: 40,
-    height: 40,
-    borderRadius: radii.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
-  },
-  exploreSection: { paddingHorizontal: spacing.lg, marginBottom: spacing.xxl },
-  exploreList: { gap: spacing.sm },
-  brief: { marginHorizontal: spacing.lg, marginBottom: spacing.xxl },
-  section: { paddingHorizontal: spacing.lg, marginBottom: spacing.xxl },
-  consultationSection: {
-    marginBottom: spacing.xxl,
-    paddingHorizontal: spacing.lg,
-  },
-  consultationList: { gap: spacing.xs },
-  consultationRow: {
-    minHeight: 68,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.hairline,
-  },
-  consultationIcon: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.md,
-    borderCurve: 'continuous',
-    backgroundColor: `${colors.primary}12`,
-  },
-  consultationCopy: { flex: 1, gap: 2 },
-  consultationTitle: { color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
-  consultationDescription: { color: colors.mutedForeground, fontSize: typography.size.xs, lineHeight: 17 },
-  emptyRow: {
-    minHeight: 72,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
-    borderRadius: radii.lg,
-    borderCurve: 'continuous',
-    backgroundColor: colors.surfaceSubtle,
-  },
-  emptyIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radii.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: `${colors.primary}14`,
-  },
-  emptyCopy: { flex: 1, gap: 2 },
-  emptyTitle: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.foreground },
-  emptyText: { fontSize: typography.size.xs, lineHeight: 17, color: colors.mutedForeground },
+  brief: { marginHorizontal: spacing.lg },
+  section: { paddingHorizontal: spacing.lg },
+  stylistList: { gap: spacing.xs },
   safeAreaScrim: { position: 'absolute', zIndex: 20, top: 0, left: 0, right: 0, backgroundColor: colors.background },
 });

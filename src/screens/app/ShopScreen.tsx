@@ -219,9 +219,8 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
   return (
     <View style={styles.root}>
       <ShopSubpageHeader
-        eyebrow="Shop"
-        title="Saved shopping"
-        compact
+        eyebrow="SHOP"
+        title="From your Stylist"
         subtitle={`${savedCounts.looks} look${savedCounts.looks === 1 ? '' : 's'} · ${savedCounts.pieces} piece${savedCounts.pieces === 1 ? '' : 's'} · ${savedCounts.lists} list${savedCounts.lists === 1 ? '' : 's'}`}
         onBack={() => (navigation.canGoBack() ? navigation.goBack() : navigation.replace('ShopMain'))}
         actions={(

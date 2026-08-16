@@ -13,6 +13,18 @@ const PRIORITY_LIMIT = 2;
 /** Priority labels arrive lowercase ("formal trousers") but read as chip titles here. */
 const sentenceCase = (label: string) => label.charAt(0).toUpperCase() + label.slice(1);
 
+/** "Your shopping brief" paired with an issue line, e.g. "August brief" — so
+ *  the card reads as something issued this month rather than computed live. */
+function BriefMasthead() {
+  const issue = new Date().toLocaleDateString('en-US', { month: 'long' });
+  return (
+    <View style={styles.masthead}>
+      <Text style={styles.label}>Your shopping brief</Text>
+      <Text style={styles.issue}>{issue} brief</Text>
+    </View>
+  );
+}
+
 type Props = {
   isPremium: boolean;
   brief: ShoppingBrief | undefined;
@@ -65,7 +77,7 @@ export function ShoppingBriefCard({
   if (!isPremium) {
     return shell(
       <>
-        <Text style={styles.label}>Your shopping brief</Text>
+        <BriefMasthead />
         <Text style={styles.headline}>Know what to shop for before you go</Text>
         <Text style={styles.body}>
           See which additions would genuinely expand your wardrobe—and when you are better off buying nothing.
@@ -87,7 +99,7 @@ export function ShoppingBriefCard({
   if (isError || !brief) {
     return shell(
       <>
-        <Text style={styles.label}>Your shopping brief</Text>
+        <BriefMasthead />
         <Text style={styles.headline}>Your brief is temporarily unavailable</Text>
         <Text style={styles.body}>Your shortlist is still here.</Text>
         <TextAction label="Try again" onPress={onRetry} />
@@ -98,7 +110,7 @@ export function ShoppingBriefCard({
   if (brief.status === 'insufficient_data') {
     return shell(
       <>
-        <Text style={styles.label}>Your shopping brief</Text>
+        <BriefMasthead />
         <Text style={styles.headline}>{brief.headline}</Text>
         <Text style={styles.body}>{brief.summary}</Text>
         <TextAction label="Add wardrobe pieces" onPress={onAddWardrobePieces} />
@@ -110,13 +122,13 @@ export function ShoppingBriefCard({
 
   return shell(
     <>
-      <Text style={styles.label}>Your shopping brief</Text>
+      <BriefMasthead />
       <Text style={styles.headline}>{brief.headline}</Text>
       <Text style={styles.body}>{brief.summary}</Text>
 
       {priorities.length > 0 ? (
         <View style={styles.priorities}>
-          <Text style={styles.prioritiesLabel}>PRIORITIES</Text>
+          <Text style={styles.prioritiesLabel}>Priorities</Text>
           {priorities.map((priority) => (
             <View key={`${priority.priority}-${priority.label}`} style={styles.priorityRow}>
               <View style={styles.priorityHead}>
@@ -177,39 +189,34 @@ function TextAction({
 }
 
 const styles = StyleSheet.create({
+  // No fill: the brief is the page's masthead, not a tinted utility block. The
+  // hairline top rule is its only boundary, matching the `ruled` section motif
+  // used everywhere else on Shop and Home.
   card: {
     gap: spacing.sm,
-    padding: spacing.lg,
-    borderRadius: radii.xl,
-    borderCurve: 'continuous',
-    backgroundColor: colors.surfaceSubtle,
+    paddingVertical: spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
   },
   loadingBlock: { minHeight: 104, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
-  label: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
+  masthead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
+  label: { ...typography.eyebrow, color: colors.primary },
+  issue: { fontSize: typography.size.xs, color: colors.mutedForeground },
   headline: {
     fontFamily: typography.family.display,
-    fontSize: typography.size.xl,
-    lineHeight: 27,
+    ...typography.display.md,
     color: colors.foreground,
   },
   body: { fontSize: typography.size.sm, lineHeight: 20, color: colors.mutedForeground },
-  prioritiesLabel: {
-    fontSize: 10,
-    fontWeight: typography.weight.bold,
-    letterSpacing: 1.2,
-    color: colors.mutedForeground,
-  },
-  priorities: { gap: spacing.sm, paddingTop: spacing.xs },
+  prioritiesLabel: { ...typography.eyebrow, color: colors.mutedForeground },
+  priorities: { paddingTop: spacing.sm },
+  // Hairline-separated, not a white card inside a tinted one: the priority is
+  // the reading, not a nested surface.
   priorityRow: {
     gap: 5,
-    padding: spacing.md,
-    borderRadius: radii.lg,
-    borderCurve: 'continuous',
-    backgroundColor: colors.surfaceElevated,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.hairline,
   },
   priorityHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   priorityLabel: {

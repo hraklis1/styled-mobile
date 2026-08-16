@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
 import { PressableScale } from '../primitives/PressableScale';
+import { useCurrencyCode } from '../../hooks/useCurrencyCode';
 import { formatShoppingPrice, shoppingCatalogChips } from '../../lib/shoppingPresentation';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { ShoppingEditItem } from '../../lib/shoppingGallery';
@@ -77,7 +78,8 @@ export function ShortlistCarousel({
 function ShortlistFindCard({ item, onPress }: { item: ShoppingEditItem; onPress: () => void }) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
-  const price = formatShoppingPrice(item.extractedPrice);
+  const currencyCode = useCurrencyCode();
+  const price = formatShoppingPrice(item.extractedPrice, currencyCode);
   const place = cardPlaceLabel(item);
   const catalogChips = shoppingCatalogChips(item);
   // What the piece is, in the user's own terms — never the photo bookkeeping the

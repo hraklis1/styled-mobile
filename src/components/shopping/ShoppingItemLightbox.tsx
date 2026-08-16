@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ShoppingSnapOrganizerModal } from './ShoppingSnapOrganizerModal';
+import { useCurrencyCode } from '../../hooks/useCurrencyCode';
 import { useShoppingItemActions } from '../../hooks/useShoppingItemActions';
 import { formatShoppingDetailLocation } from '../../lib/shoppingLocations';
 import {
@@ -141,7 +142,8 @@ export function ShoppingItemLightbox({
     [displayItem],
   );
   const heroHeight = Math.min(height * 0.55, 560);
-  const price = formatShoppingPrice(displayItem.extractedPrice);
+  const currencyCode = useCurrencyCode();
+  const price = formatShoppingPrice(displayItem.extractedPrice, currencyCode);
   const meta = [displayItem.sizeLabel ? `Size ${displayItem.sizeLabel}` : null, displayItem.colorLabel, displayItem.materialLabel]
     .filter(Boolean)
     .join('   ·   ');

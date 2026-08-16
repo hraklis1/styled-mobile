@@ -327,13 +327,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   headerCopy: { flex: 1, minWidth: 0, gap: 3 },
-  eyebrow: {
-    fontSize: 10,
-    fontWeight: typography.weight.bold,
-    color: colors.primary,
-    letterSpacing: 1.1,
-    textTransform: 'uppercase',
-  },
+  eyebrow: { ...typography.eyebrow, color: colors.primary },
   headerTitle: {
     fontSize: typography.size.xxl,
     fontWeight: typography.weight.bold,
@@ -413,7 +407,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
     textTransform: 'uppercase',
-    letterSpacing: 1.1,
+    letterSpacing: typography.eyebrow.letterSpacing,
   },
   sectionDescription: {
     maxWidth: 330,
@@ -537,13 +531,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   cardMetaCopy: { flex: 1, minWidth: 0, gap: 2 },
-  cardEyebrow: {
-    fontSize: 10,
-    fontWeight: typography.weight.bold,
-    color: colors.primary,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
+  cardEyebrow: { ...typography.eyebrow, color: colors.primary },
   cardTitle: {
     fontSize: typography.size.sm,
     fontWeight: typography.weight.semibold,

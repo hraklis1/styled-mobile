@@ -1,3 +1,4 @@
+import { DEFAULT_CURRENCY_CODE } from './currency';
 import type { ShoppingEditItem } from './shoppingGallery';
 import type { ShoppingCaptureRole, ShoppingFindCatalog, ShoppingFindCatalogStatus, ShoppingSnap } from '../types/shoppingSnap';
 
@@ -29,11 +30,11 @@ const REVIEW_REASON_LABELS: Record<ShoppingReviewReasonKey, string> = {
   'text-needs-price-check': 'Check text',
 };
 
-export function formatShoppingPrice(price: number | null): string | null {
+export function formatShoppingPrice(price: number | null, currencyCode: string = DEFAULT_CURRENCY_CODE): string | null {
   if (price === null) return null;
   return new Intl.NumberFormat(undefined, {
     style: 'currency',
-    currency: 'USD',
+    currency: currencyCode,
     maximumFractionDigits: 2,
   }).format(price);
 }

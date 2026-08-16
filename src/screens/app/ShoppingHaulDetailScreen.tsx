@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ShoppingEditCard } from '../../components/shopping/ShoppingEditCard';
 import { ShoppingItemLightbox } from '../../components/shopping/ShoppingItemLightbox';
+import { useCurrencyCode } from '../../hooks/useCurrencyCode';
 import { useShoppingSnaps } from '../../hooks/useShoppingSnaps';
 import { buildShoppingEditItems, mergeShoppingSnaps, type ShoppingEditItem } from '../../lib/shoppingGallery';
 import { formatShoppingPrice } from '../../lib/shoppingPresentation';
@@ -22,6 +23,7 @@ export function ShoppingHaulDetailScreen({ route, navigation }: ShoppingHaulDeta
 
   const { data: remoteSnaps = [] } = useShoppingSnaps();
   const pendingUploads = useShoppingSessionStore((state) => state.pendingUploads);
+  const currencyCode = useCurrencyCode();
   // Unfiltered on purpose — the immersive gallery shows the whole haul
   // regardless of whatever store/date filters are active back on the list.
   const allItems = useMemo(
@@ -47,7 +49,7 @@ export function ShoppingHaulDetailScreen({ route, navigation }: ShoppingHaulDeta
     return null;
   }
 
-  const spend = formatShoppingPrice(group.knownSpend);
+  const spend = formatShoppingPrice(group.knownSpend, currencyCode);
   const highlights = shoppingSessionHighlights(group);
 
   return (

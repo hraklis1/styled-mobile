@@ -38,6 +38,13 @@ export const spacing = {
   xxxl: 48,
 } as const;
 
+const weight = {
+  regular:  '400' as const,
+  medium:   '500' as const,
+  semibold: '600' as const,
+  bold:     '700' as const,
+};
+
 export const typography = {
   family: {
     display: Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' }),
@@ -51,11 +58,41 @@ export const typography = {
     xxl:  28,
     xxxl: 40,
   },
-  weight: {
-    regular:  '400' as const,
-    medium:   '500' as const,
-    semibold: '600' as const,
-    bold:     '700' as const,
+  /**
+   * The serif editorial face's own scale — mastheads, hero headlines, and the
+   * titles of pages that are read rather than operated. Sizes only: callers
+   * still apply `family.display` and a colour, because a display line set over
+   * photography needs different colour handling than one on the page ground.
+   *
+   * `lg` is a page masthead, `md` a section or card hero, `sm` a compact header
+   * title. Anything smaller belongs in `size`, set in the system face.
+   */
+  display: {
+    lg: { fontSize: 34, lineHeight: 39 },
+    md: { fontSize: 28, lineHeight: 33 },
+    sm: { fontSize: 22, lineHeight: 26 },
+  },
+  weight,
+  /**
+   * The small letterspaced label above a title. Two sizes only — `eyebrow` sits
+   * over card and section titles, `eyebrowLarge` over a page masthead, where
+   * the wider tracking has room to read.
+   *
+   * Complete style objects rather than tokens: an eyebrow is always all four of
+   * these properties together, and the drift they replaced (four different
+   * letter-spacings across the app) came from setting them one at a time.
+   */
+  eyebrow: {
+    fontSize: 10,
+    fontWeight: weight.bold,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase' as const,
+  },
+  eyebrowLarge: {
+    fontSize: 11,
+    fontWeight: weight.bold,
+    letterSpacing: 2.1,
+    textTransform: 'uppercase' as const,
   },
   lineHeight: {
     tight:  1.2,

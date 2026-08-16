@@ -454,7 +454,7 @@ function AppTabNavigator() {
                   },
                   {
                     key: 'saved-looks',
-                    label: 'Saved Shopping',
+                    label: 'From Your Stylist',
                     icon: 'heart-outline',
                     onPress: () => navigation.navigate('Shop', { screen: 'SavedShopping' }),
                   },

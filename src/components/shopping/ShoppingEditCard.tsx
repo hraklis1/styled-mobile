@@ -5,6 +5,7 @@ import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
+import { useCurrencyCode } from '../../hooks/useCurrencyCode';
 import {
   formatShoppingPrice,
   itemRoleSummary,
@@ -44,7 +45,8 @@ export function ShoppingEditCard({
 }) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
-  const price = formatShoppingPrice(item.extractedPrice);
+  const currencyCode = useCurrencyCode();
+  const price = formatShoppingPrice(item.extractedPrice, currencyCode);
   const badges = shoppingItemBadges(item);
   const title = showStore ? item.storeName ?? 'Store not set' : item.category;
   const catalogChips = shoppingCatalogChips(showStore ? item : { ...item, category: null });

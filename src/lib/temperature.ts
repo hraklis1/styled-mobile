@@ -4,23 +4,21 @@
 // infer the unit from their saved Home location (`profile.location`), and fall
 // back to °F when that tells us nothing.
 
+import {
+  AMBIGUOUS_STATE_COUNTRY_CODES,
+  normalizeLocationSegment,
+  splitLocationSegments,
+  US_STATE_CODES,
+  US_STATE_NAMES,
+} from './locationSegments';
+
 export type ResolvedTempUnit = 'C' | 'F';
 
 // ── Home-location inference ───────────────────────────────────────────────────
-// Home locations come from the Nominatim autocomplete or reverse geocoding, so
-// they usually look like "Brooklyn, New York, US" / "Athens, Attica, GR" — a
-// trailing ISO-3166 alpha-2 code after the region. Hand-typed values are looser
-// ("Brooklyn, NY", "Paris, France"), so we read every segment.
-
-function normalize(segment: string): string {
-  return segment
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[.']/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+// Home-location segment parsing (normalization, US state detection, the
+// California/Canada-style ambiguous codes) lives in locationSegments.ts,
+// shared with currency.ts — both infer a preference from the same
+// `profile.location` string.
 
 /** Countries on Fahrenheit, by ISO alpha-2 code. */
 const FAHRENHEIT_COUNTRY_CODES = new Set([
@@ -62,46 +60,15 @@ const CELSIUS_COUNTRY_NAMES = new Set([
   'united kingdom', 'uk', 'uruguay', 'venezuela', 'vietnam', 'wales',
 ]);
 
-const US_STATE_CODES = new Set([
-  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'HI',
-  'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN',
-  'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH',
-  'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA',
-  'WV', 'WI', 'WY',
-]);
-
-/**
- * Codes that are both a US state abbreviation and an ISO country code, e.g. CA
- * (California / Canada) or DE (Delaware / Germany). Geocoded labels append the
- * country last, so a third segment means the trailing code is the country.
- */
-const AMBIGUOUS_CODES = new Set([
-  'AL', 'AR', 'CA', 'CO', 'DE', 'GA', 'ID', 'IL', 'IN', 'LA', 'MA', 'MD',
-  'ME', 'MN', 'MO', 'MT', 'NC', 'NE', 'PA', 'SC', 'SD', 'TN', 'VA',
-]);
-
-const US_STATE_NAMES = new Set([
-  'alabama', 'alaska', 'arizona', 'arkansas', 'california', 'colorado',
-  'connecticut', 'delaware', 'district of columbia', 'washington dc',
-  'florida', 'georgia', 'hawaii', 'idaho', 'illinois', 'indiana', 'iowa',
-  'kansas', 'kentucky', 'louisiana', 'maine', 'maryland', 'massachusetts',
-  'michigan', 'minnesota', 'mississippi', 'missouri', 'montana', 'nebraska',
-  'nevada', 'new hampshire', 'new jersey', 'new mexico', 'new york',
-  'north carolina', 'north dakota', 'ohio', 'oklahoma', 'oregon',
-  'pennsylvania', 'rhode island', 'south carolina', 'south dakota',
-  'tennessee', 'texas', 'utah', 'vermont', 'virginia', 'washington',
-  'west virginia', 'wisconsin', 'wyoming',
-]);
-
 /**
  * Infers the temperature unit a location's country uses, or `undefined` when
  * the label carries no usable country signal.
  */
 export function unitForLocation(location?: string | null): ResolvedTempUnit | undefined {
-  const segments = (location ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  const segments = splitLocationSegments(location);
   if (segments.length === 0) return undefined;
 
-  const normalized = segments.map(normalize);
+  const normalized = segments.map(normalizeLocationSegment);
 
   // A spelled-out country is the strongest signal. Read right to left: the
   // country sits last, so "Atlanta, Georgia, US" is Fahrenheit while "Tbilisi,
@@ -119,7 +86,7 @@ export function unitForLocation(location?: string | null): ResolvedTempUnit | un
   const trailing = segments[segments.length - 1].toUpperCase();
   if (/^[A-Z]{2}$/.test(trailing)) {
     if (FAHRENHEIT_COUNTRY_CODES.has(trailing)) return 'F';
-    if (AMBIGUOUS_CODES.has(trailing)) return segments.length >= 3 ? 'C' : 'F';
+    if (AMBIGUOUS_STATE_COUNTRY_CODES.has(trailing)) return segments.length >= 3 ? 'C' : 'F';
     if (US_STATE_CODES.has(trailing)) return 'F';
     return 'C'; // A trailing two-letter code we don't read as a US state.
   }
