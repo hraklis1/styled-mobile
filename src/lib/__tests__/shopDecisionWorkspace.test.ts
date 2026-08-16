@@ -1,9 +1,7 @@
 import {
-  buildShopConsultationPrompt,
   buildShopStylistLaunch,
   parseShoppingBrief,
   selectActiveShoppingFinds,
-  type ShoppingBrief,
 } from '../shopDecisionWorkspace';
 import type { ShoppingEditItem } from '../shoppingGallery';
 
@@ -25,37 +23,6 @@ function item(id: string, patch: Partial<ShoppingEditItem> = {}): ShoppingEditIt
 }
 
 describe('shop decision workspace', () => {
-  const brief: ShoppingBrief = {
-    status: 'ready',
-    headline: 'Strengthen winter and formal coverage',
-    summary: 'A few targeted additions would improve occasion coverage.',
-    generatedAt: '2026-08-05T12:00:00.000Z',
-    source: 'model',
-    priorities: [
-      { label: 'formal shoes', category: 'shoes', reason: 'occasion', context: 'Limited formal options', priority: 1, unlocks: ['formal'] },
-      { label: 'winter tops', category: 'tops', reason: 'weather', context: 'Limited cold-weather options', priority: 2, unlocks: ['winter'] },
-    ],
-  };
-
-  it('builds deliberate consultation prompts and leaves non-AI routes prompt-free', () => {
-    expect(buildShopConsultationPrompt('next_purchase')).toContain('single purchase');
-    expect(buildShopConsultationPrompt('focused_list')).toContain('no more than five additions');
-    expect(buildShopConsultationPrompt('review_find')).toBeUndefined();
-    expect(buildShopConsultationPrompt('custom')).toBeUndefined();
-  });
-
-  it('grounds a Shopping Brief review in the current brief', () => {
-    expect(buildShopConsultationPrompt('brief_review', brief)).toBe(
-      'Review my current Shopping Brief. It says: "Strengthen winter and formal coverage" A few targeted additions would improve occasion coverage. Priorities: formal shoes, winter tops. Pressure-test these priorities, remove anything unnecessary, and tell me what to address first.',
-    );
-  });
-
-  it('uses a wardrobe-based fallback when the Shopping Brief is unavailable', () => {
-    expect(buildShopConsultationPrompt('brief_review')).toBe(
-      'Review my current wardrobe and pressure-test my shopping priorities. Remove anything unnecessary and tell me what, if anything, to address first.',
-    );
-  });
-
   it('marks decision advice explicitly while preserving deliberate new-outfit shopping', () => {
     expect(buildShopStylistLaunch('Should I buy this?')).toEqual({
       initialQuery: 'Should I buy this?',
