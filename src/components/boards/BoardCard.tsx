@@ -10,8 +10,6 @@ import type { Item } from '../../types/item';
 import type { Outfit } from '../../types/outfit';
 import { getBoardContentSummary } from '../../lib/boardPresentation';
 
-const BOARD_CARD_ASPECT_RATIO = 0.8;
-
 type Props = {
   board: Board;
   itemMap: Map<number, Item>;
@@ -23,23 +21,24 @@ type Props = {
 
 export const BoardCard = React.memo(function BoardCard({ board, itemMap, outfitMap, width, onPress, onOptions }: Props) {
   const summary = getBoardContentSummary(board);
-  const coverHeight = width / BOARD_CARD_ASPECT_RATIO;
 
   return (
     <View style={{ width }}>
       <View style={styles.coverWrap}>
         <PressableScale onPress={onPress} accessibilityRole="button" accessibilityLabel={`Open ${board.name} board, ${summary}`}>
-          <BoardCover board={board} itemMap={itemMap} outfitMap={outfitMap} size={width} height={coverHeight} />
+          <BoardCover board={board} itemMap={itemMap} outfitMap={outfitMap} size={width} />
         </PressableScale>
         {onOptions && (
           <TouchableOpacity
-            style={styles.optionsButton}
+            style={styles.optionsHitArea}
             onPress={onOptions}
             activeOpacity={0.72}
             accessibilityRole="button"
             accessibilityLabel={`Options for ${board.name}`}
           >
-            <Ionicons name="ellipsis-horizontal" size={19} color={colors.foreground} />
+            <View style={styles.optionsButton}>
+              <Ionicons name="ellipsis-horizontal" size={17} color={colors.foreground} />
+            </View>
           </TouchableOpacity>
         )}
       </View>
@@ -55,9 +54,9 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   metaRow: {
-    paddingTop: spacing.sm + 1,
+    paddingTop: spacing.sm,
   },
-  optionsButton: {
+  optionsHitArea: {
     position: 'absolute',
     top: spacing.sm,
     right: spacing.sm,
@@ -65,10 +64,17 @@ const styles = StyleSheet.create({
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  optionsButton: {
+    width: 35,
+    height: 35,
     borderRadius: radii.full,
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: 'rgba(255,252,247,0.94)',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderCurve: 'continuous',
   },
   boardTitle: {
     fontFamily: typography.family.display,

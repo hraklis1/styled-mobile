@@ -1,13 +1,10 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   TextInput,
-  Alert,
-  ActionSheetIOS,
-  Platform,
   Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +17,7 @@ import {
 import { TaxonomySelector } from '../primitives/TaxonomySelector';
 import { BrandAutocompleteInput } from '../primitives/BrandAutocompleteInput';
 import { ColorSwatchGrid } from './ColorSwatchGrid';
+import { PhotoSourceSheet } from '../primitives/PhotoSourceSheet';
 
 interface ManualEntryFormProps {
   name: string;
@@ -68,40 +66,18 @@ export function ManualEntryForm({
 }: ManualEntryFormProps) {
   const launchCamera = useCameraLaunch();
   const launchLibrary = useLibraryLaunch();
+  const [photoSourceVisible, setPhotoSourceVisible] = useState(false);
 
   const handlePickPhoto = useCallback(() => {
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options: ['Cancel', 'Take Photo', 'Choose from Library'], cancelButtonIndex: 0 },
-        async (idx) => {
-          if (idx === 1) {
-            const img = await launchCamera({ maxDim: 800, allowsEditing: true });
-            if (img) onImageChange(img.dataUrl);
-          } else if (idx === 2) {
-            const img = await launchLibrary({ maxDim: 800, allowsEditing: true });
-            if (img) onImageChange(img.dataUrl);
-          }
-        },
-      );
-    } else {
-      Alert.alert('Add Photo', undefined, [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Take Photo',
-          onPress: async () => {
-            const img = await launchCamera({ maxDim: 800, allowsEditing: true });
-            if (img) onImageChange(img.dataUrl);
-          },
-        },
-        {
-          text: 'Choose from Library',
-          onPress: async () => {
-            const img = await launchLibrary({ maxDim: 800, allowsEditing: true });
-            if (img) onImageChange(img.dataUrl);
-          },
-        },
-      ]);
-    }
+    setPhotoSourceVisible(true);
+  }, []);
+
+  const choosePhotoSource = useCallback(async (source: 'camera' | 'library') => {
+    setPhotoSourceVisible(false);
+    const img = source === 'camera'
+      ? await launchCamera({ maxDim: 800, allowsEditing: true })
+      : await launchLibrary({ maxDim: 800, allowsEditing: true });
+    if (img) onImageChange(img.dataUrl);
   }, [launchCamera, launchLibrary, onImageChange]);
 
   const toggleSeason = useCallback(
@@ -119,7 +95,8 @@ export function ManualEntryForm({
   );
 
   return (
-    <View style={styles.container}>
+    <>
+      <View style={styles.container}>
       {/* Photo */}
       <View style={styles.field}>
         <Text style={styles.label}>Photo</Text>
@@ -242,7 +219,16 @@ export function ManualEntryForm({
           ))}
         </View>
       </View>
-    </View>
+      </View>
+      <PhotoSourceSheet
+        visible={photoSourceVisible}
+        title="Add a photo"
+        subtitle="Choose how to add this piece."
+        onCamera={() => { void choosePhotoSource('camera'); }}
+        onLibrary={() => { void choosePhotoSource('library'); }}
+        onCancel={() => setPhotoSourceVisible(false)}
+      />
+    </>
   );
 }
 

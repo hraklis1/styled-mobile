@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  Platform,
   ScrollView,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
@@ -22,6 +21,7 @@ import type { BoardFeedItem } from '../../types/board';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { BoardDetailScreenProps } from '../../navigation/types';
 import { BoardOptionsMenuSheet } from '../../components/boards/BoardOptionsMenuSheet';
+import { BoardNameSheet } from '../../components/boards/BoardNameSheet';
 import { BoardContentPickerModal } from '../../components/boards/BoardContentPickerModal';
 import { BoardCoverPickerModal } from '../../components/boards/BoardCoverPickerModal';
 import { BoardIdentityRail } from '../../components/boards/BoardIdentityRail';
@@ -82,6 +82,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
   const board = boards.find((b) => b.id === boardId);
   const isDailyFinds = isLegacyDailyFindsBoard(board);
   const [filter, setFilter] = useState<BoardFilter>('all');
+  const [renameSheetVisible, setRenameSheetVisible] = useState(false);
 
   const feed = useBoardFeed(boardId);
 
@@ -172,7 +173,8 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
   }, [boardEvent]);
 
   const { mutate: deleteBoard } = useDeleteBoard();
-  const { mutate: updateBoard } = useUpdateBoard();
+  const updateBoardMutation = useUpdateBoard();
+  const { mutate: updateBoard } = updateBoardMutation;
   const [optionsMenuVisible, setOptionsMenuVisible] = useState(false);
   const [contentPickerVisible, setContentPickerVisible] = useState(false);
   const [coverPickerVisible, setCoverPickerVisible] = useState(route.params.editCover === true);
@@ -276,19 +278,13 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
   const launchLibrary = useLibraryLaunch();
 
   const handleRename = useCallback(() => {
-    if (Platform.OS === 'ios') {
-      Alert.prompt(
-        'Rename board',
-        undefined,
-        (text) => {
-          const name = text?.trim();
-          if (name) updateBoard({ id: boardId, name });
-        },
-        'plain-text',
-        board?.name ?? '',
-      );
-    }
-  }, [boardId, board?.name, updateBoard]);
+    setRenameSheetVisible(true);
+  }, []);
+
+  const submitRename = useCallback((name: string) => {
+    setRenameSheetVisible(false);
+    updateBoard({ id: boardId, name });
+  }, [boardId, updateBoard]);
 
   const handleUploadCover = useCallback(async () => {
     const image = await launchLibrary({ allowsEditing: true, maxDim: 800 });
@@ -600,7 +596,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
         <BoardOptionsMenuSheet
           visible={optionsMenuVisible}
           boardName={board?.name ?? 'Board'}
-          canRename={Platform.OS === 'ios'}
+          canRename
           onClose={() => setOptionsMenuVisible(false)}
           onRename={handleRename}
           onChangeCover={() => setCoverPickerVisible(true)}
@@ -609,6 +605,16 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
           onDelete={handleDelete}
         />
       )}
+      <BoardNameSheet
+        visible={renameSheetVisible}
+        title="Rename board"
+        subtitle="Update this board’s name."
+        initialValue={board?.name ?? ''}
+        submitLabel="Save name"
+        submitting={updateBoardMutation.isPending}
+        onCancel={() => setRenameSheetVisible(false)}
+        onSubmit={submitRename}
+      />
       <BoardContentPickerModal
         board={board ?? null}
         visible={contentPickerVisible}

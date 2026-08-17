@@ -3,7 +3,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  ActionSheetIOS,
   Alert,
   RefreshControl,
 } from 'react-native';
@@ -40,6 +39,7 @@ import {
 import { colors, spacing, typography, radii } from '../../theme';
 import { ErrorState } from '../../components/primitives/ErrorState';
 import { ScreenHeader } from '../../components/primitives/Editorial';
+import { ActionMenuSheet } from '../../components/primitives/ActionMenuSheet';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
 import { ensureEntitled } from '../../lib/entitlementGate';
@@ -136,6 +136,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   const [showAllUpcoming, setShowAllUpcoming] = useState(false);
   const [pastExpanded, setPastExpanded] = useState(false);
   const [syncVisible, setSyncVisible] = useState(false);
+  const [calendarMenuVisible, setCalendarMenuVisible] = useState(false);
 
   const UPCOMING_LIMIT = 4;
 
@@ -462,30 +463,8 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   }, [openLogger]);
 
   const openCalendarUtilities = useCallback(() => {
-    const logWear = () => handleLogWear(selectedDate ?? undefined);
-    const openCalendars = () => setSyncVisible(true);
-
-    if (process.env.EXPO_OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: ['Cancel', 'Log wear', 'Calendars & sync'],
-          cancelButtonIndex: 0,
-          title: 'Calendar tools',
-        },
-        (index) => {
-          if (index === 1) logWear();
-          if (index === 2) openCalendars();
-        },
-      );
-      return;
-    }
-
-    Alert.alert('Calendar tools', undefined, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Log wear', onPress: logWear },
-      { text: 'Calendars & sync', onPress: openCalendars },
-    ]);
-  }, [handleLogWear, selectedDate]);
+    setCalendarMenuVisible(true);
+  }, []);
 
   const renderEventCard = (event: Event) => {
     const occasion = OCCASIONS.find((option) => option.id === event.occasion)?.label ?? event.occasion;
@@ -818,6 +797,16 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
       <CalendarSyncSheet
         visible={syncVisible}
         onClose={() => setSyncVisible(false)}
+      />
+      <ActionMenuSheet
+        visible={calendarMenuVisible}
+        title="Calendar tools"
+        subtitle="Keep your wardrobe plan up to date."
+        options={[
+          { label: 'Log wear', icon: 'shirt-outline', onPress: () => handleLogWear(selectedDate ?? undefined) },
+          { label: 'Calendars & sync', icon: 'calendar-outline', onPress: () => setSyncVisible(true) },
+        ]}
+        onClose={() => setCalendarMenuVisible(false)}
       />
     </View>
   );

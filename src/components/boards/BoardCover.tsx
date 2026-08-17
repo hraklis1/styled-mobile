@@ -19,7 +19,7 @@ type Props = {
   compact?: boolean;
 };
 
-const GAP = 3;
+const GAP = 2;
 
 function CoverCell({
   uri,
@@ -33,7 +33,9 @@ function CoverCell({
   const [failed, setFailed] = useState(false);
   return (
     <View style={styles.cell}>
-      <Ionicons name="sparkles-outline" size={16} color={colors.mutedForeground} />
+      <View style={styles.cellPlaceholder}>
+        <Ionicons name="sparkles-outline" size={15} color={colors.mutedForeground} />
+      </View>
       {!failed && (
         <Image
           source={{ uri }}
@@ -116,6 +118,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceSubtle,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.hairline,
+    borderCurve: 'continuous',
   },
   moodboard: { flex: 1, flexDirection: 'row', gap: GAP },
   heroColumn: { flex: 1.45 },
@@ -132,6 +135,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.surfaceSubtle,
   },
+  cellPlaceholder: {
+    width: 30,
+    height: 30,
+    borderRadius: radii.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,252,247,0.72)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+  },
   overflow: {
     ...StyleSheet.absoluteFill,
     alignItems: 'center',
@@ -139,7 +152,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(40,35,31,0.36)',
   },
   overflowText: { color: colors.white, fontSize: typography.size.lg, fontWeight: typography.weight.semibold },
-  fallback: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, padding: spacing.md },
+  fallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderCurve: 'continuous',
+  },
   fallbackIcon: {
     width: 46,
     height: 46,
@@ -147,6 +167,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,252,247,0.62)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,252,247,0.72)',
   },
   fallbackText: { color: colors.inkSubtle, fontSize: typography.size.sm, fontWeight: typography.weight.medium, textAlign: 'center' },
 });

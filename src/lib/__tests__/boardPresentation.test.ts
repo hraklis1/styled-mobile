@@ -66,6 +66,31 @@ describe('board presentation', () => {
     expect(getBoardCoverUris({ ...board, coverImageUrl: null }, new Map([[1, item], [2, { ...item, id: 2 }]]), new Map())).toEqual(['https://example.com/blazer.jpg']);
   });
 
+  it('caps fallback covers at four unique member images in board order', () => {
+    const items = new Map(
+      [1, 2, 3, 4, 5].map((id) => [id, { ...item, id, imageUrl: `https://example.com/item-${id}.jpg` }]),
+    );
+
+    expect(getBoardCoverUris({ ...board, coverImageUrl: null, itemIds: [1, 2, 3, 4, 5], outfitIds: [], wishlistIds: [] }, items, new Map())).toEqual([
+      'https://example.com/item-1.jpg',
+      'https://example.com/item-2.jpg',
+      'https://example.com/item-3.jpg',
+      'https://example.com/item-4.jpg',
+    ]);
+  });
+
+  it('falls back to outfit imagery when a board has no usable item imagery', () => {
+    const outfits = new Map([[3, { aiGeneratedImageUrl: 'https://example.com/look.jpg' } as never]]);
+
+    expect(getBoardCoverUris({ ...board, coverImageUrl: null, itemIds: [99], outfitIds: [3], wishlistIds: [] }, new Map(), outfits)).toEqual([
+      'https://example.com/look.jpg',
+    ]);
+  });
+
+  it('returns no cover sources for empty or wishlist-only boards', () => {
+    expect(getBoardCoverUris({ ...board, coverImageUrl: null, itemIds: [], outfitIds: [], wishlistIds: ['wish-1'] }, new Map(), new Map())).toEqual([]);
+  });
+
   it('filters mixed board content and derives fashion insights', () => {
     expect(filterBoardFeed(feed, 'item')).toHaveLength(1);
     expect(filterBoardFeed(feed, 'outfit')).toHaveLength(0);

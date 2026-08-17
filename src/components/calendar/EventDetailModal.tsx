@@ -5,8 +5,6 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  ActionSheetIOS,
-  Alert,
   Linking,
   useWindowDimensions,
 } from 'react-native';
@@ -28,6 +26,7 @@ import type { Outfit } from '../../types/outfit';
 import { getEventItemsActionLabel, getEventPlanActionLabel } from './calendarPlanning';
 import { presentCalendarEvent, presentEventNotes } from './calendar-presentation';
 import { PressableScale } from '../primitives/PressableScale';
+import { ActionMenuSheet } from '../primitives/ActionMenuSheet';
 
 const WEATHER_ICONS: Record<WeatherCondition, keyof typeof Ionicons.glyphMap> = {
   sunny: 'sunny-outline',
@@ -82,6 +81,7 @@ export function EventDetailModal({
   const [manualExpanded, setManualExpanded] = useState(false);
   const [notesExpanded, setNotesExpanded] = useState(false);
   const [boardPickerVisible, setBoardPickerVisible] = useState(false);
+  const [eventMenuVisible, setEventMenuVisible] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -109,30 +109,7 @@ export function EventDetailModal({
     : undefined;
 
   const openEventMenu = () => {
-    const edit = () => onEdit(event);
-    const remove = () => onDelete(event);
-    if (process.env.EXPO_OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: ['Cancel', 'Edit event', ...(chooseBoard ? [boardLabel] : []), 'Delete event'],
-          cancelButtonIndex: 0,
-          destructiveButtonIndex: chooseBoard ? 3 : 2,
-          title: event.title,
-        },
-        (index) => {
-          if (index === 1) edit();
-          if (chooseBoard && index === 2) chooseBoard();
-          if (index === (chooseBoard ? 3 : 2)) remove();
-        },
-      );
-      return;
-    }
-    Alert.alert(event.title, undefined, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Edit event', onPress: edit },
-      ...(chooseBoard ? [{ text: boardLabel, onPress: chooseBoard }] : []),
-      { text: 'Delete event', style: 'destructive', onPress: remove },
-    ]);
+    setEventMenuVisible(true);
   };
 
   return (
@@ -307,6 +284,18 @@ export function EventDetailModal({
             </TouchableOpacity>
           )}
         </ScrollView>
+
+        <ActionMenuSheet
+          visible={eventMenuVisible}
+          title="Event options"
+          subtitle={event.title}
+          options={[
+            { label: 'Edit event', icon: 'pencil-outline', onPress: () => onEdit(event) },
+            ...(chooseBoard ? [{ label: boardLabel, icon: 'albums-outline' as const, onPress: chooseBoard }] : []),
+            { label: 'Delete event', icon: 'trash-outline', destructive: true, onPress: () => onDelete(event) },
+          ]}
+          onClose={() => setEventMenuVisible(false)}
+        />
 
         <View style={s.actions}>
           <PressableScale

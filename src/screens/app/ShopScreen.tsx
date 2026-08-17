@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
-  ActionSheetIOS,
   ActivityIndicator,
   Alert,
   FlatList,
@@ -21,6 +20,7 @@ import { ShopWishlistDetailSheet } from '../../components/outfits/ShopWishlistDe
 import { ShopWishlistFilterSheet } from '../../components/outfits/ShopWishlistFilterSheet';
 import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
 import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
+import { ActionMenuSheet } from '../../components/primitives/ActionMenuSheet';
 import type { BoardEntryRef } from '../../hooks/useBoards';
 import { useWishlist, useRemoveFromWishlist } from '../../hooks/useWishlist';
 import {
@@ -98,6 +98,7 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<SavedShoppingTab>(initialTab);
   const [selectedEntry, setSelectedEntry] = useState<WishlistEntry | null>(null);
+  const [menuEntry, setMenuEntry] = useState<WishlistEntry | null>(null);
   const [boardTarget, setBoardTarget] = useState<BoardEntryRef | null>(null);
 
   useFocusEffect(
@@ -183,30 +184,8 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
   }, []);
 
   const openEntryMenu = useCallback((entry: WishlistEntry) => {
-    const kind = getWishlistRecommendationType(entry);
-    const label = kind === 'look' ? 'look' : kind === 'piece' ? 'piece' : 'list';
-
-    if (process.env.EXPO_OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: ['Cancel', 'Save to board', `Remove saved ${label}`],
-          cancelButtonIndex: 0,
-          destructiveButtonIndex: 2,
-        },
-        (index) => {
-          if (index === 1) openBoardPicker(entry);
-          if (index === 2) confirmRemove(entry);
-        },
-      );
-      return;
-    }
-
-    Alert.alert(`Saved ${label}`, undefined, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Save to board', onPress: () => openBoardPicker(entry) },
-      { text: 'Remove', style: 'destructive', onPress: () => confirmRemove(entry) },
-    ]);
-  }, [confirmRemove, openBoardPicker]);
+    setMenuEntry(entry);
+  }, []);
 
   if (loading) {
     return (
@@ -362,6 +341,23 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
       )}
       {boardTarget && (
         <SaveToBoardSheet target={boardTarget} onClose={() => setBoardTarget(null)} />
+      )}
+      {menuEntry && (
+        <ActionMenuSheet
+          visible
+          title="Saved item options"
+          subtitle={getWishlistRecommendationType(menuEntry) === 'look' ? 'Saved look' : getWishlistRecommendationType(menuEntry) === 'piece' ? 'Saved piece' : 'Saved list'}
+          options={[
+            { label: 'Save to board', icon: 'albums-outline', onPress: () => openBoardPicker(menuEntry) },
+            {
+              label: `Remove saved ${getWishlistRecommendationType(menuEntry)}`,
+              icon: 'trash-outline',
+              destructive: true,
+              onPress: () => confirmRemove(menuEntry),
+            },
+          ]}
+          onClose={() => setMenuEntry(null)}
+        />
       )}
     </View>
   );

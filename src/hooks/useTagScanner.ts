@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, ActionSheetIOS, Platform } from 'react-native';
+import { Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { compressImageToDataUrl } from '../lib/compressImage';
 import { useScanTag, useUpdateItem } from './useItems';
@@ -9,6 +9,7 @@ import type { Item } from '../types/item';
 export function useTagScanner(item: Item | null) {
   const [tagResult, setTagResult] = useState<TagScanResult | null>(null);
   const [tagSelectedFields, setTagSelectedFields] = useState<Set<string>>(new Set());
+  const [sourceMenuVisible, setSourceMenuVisible] = useState(false);
   const scanTag = useScanTag();
   const updateItem = useUpdateItem();
 
@@ -42,21 +43,7 @@ export function useTagScanner(item: Item | null) {
   };
 
   const handleScanLabel = () => {
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options: ['Cancel', 'Take Photo', 'Choose from Library'], cancelButtonIndex: 0 },
-        (idx) => {
-          if (idx === 1) pickLabelPhoto('camera');
-          if (idx === 2) pickLabelPhoto('library');
-        }
-      );
-    } else {
-      Alert.alert('Scan clothing label', 'Choose a source', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Camera', onPress: () => pickLabelPhoto('camera') },
-        { text: 'Photo Library', onPress: () => pickLabelPhoto('library') },
-      ]);
-    }
+    setSourceMenuVisible(true);
   };
 
   const handleApplyTagScan = () => {
@@ -80,6 +67,12 @@ export function useTagScanner(item: Item | null) {
     tagResult,
     tagSelectedFields,
     setTagSelectedFields,
+    sourceMenuVisible,
+    dismissSourceMenu: () => setSourceMenuVisible(false),
+    selectLabelSource: (source: 'camera' | 'library') => {
+      setSourceMenuVisible(false);
+      void pickLabelPhoto(source);
+    },
     handleScanLabel,
     handleApplyTagScan,
     dismissTagResult: () => setTagResult(null),

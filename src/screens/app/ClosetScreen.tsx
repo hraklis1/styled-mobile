@@ -10,7 +10,6 @@ import {
   Animated,
   useWindowDimensions,
   Alert,
-  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { FlashList, type FlashListRef, type ViewToken } from '@shopify/flash-list';
@@ -28,6 +27,7 @@ import { OutfitFilterPanel } from '../../components/outfits/OutfitFilterPanel';
 import { ClosetGrid } from '../../components/wardrobe/ClosetGrid';
 import { BoardCard } from '../../components/boards/BoardCard';
 import { BoardOptionsMenuSheet } from '../../components/boards/BoardOptionsMenuSheet';
+import { BoardNameSheet } from '../../components/boards/BoardNameSheet';
 import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
 import { useBoards, useCreateBoard, useDeleteBoard, useUpdateBoard, type BoardEntryRef } from '../../hooks/useBoards';
 import { filterVisibleBoards } from '../../lib/legacyBoards';
@@ -69,6 +69,9 @@ import { ItemSecondaryMeta } from '../../components/wardrobe/item-secondary-meta
 
 type ViewMode = 'grid' | 'list';
 type Segment = 'pieces' | 'outfits' | 'boards';
+type BoardNameMode =
+  | { kind: 'new' }
+  | { kind: 'rename'; board: Board };
 
 const OUTFIT_SORT_OPTIONS: { key: OutfitSortKey; label: string }[] = [
   { key: 'newest',        label: 'Newest first' },
@@ -80,7 +83,6 @@ const OUTFIT_SORT_OPTIONS: { key: OutfitSortKey; label: string }[] = [
 
 const SIDE_PAD = spacing.lg;
 const COL_GAP  = spacing.sm;
-const BOARD_CARD_ASPECT_RATIO = 0.8;
 const STARTER_BOARD_NAMES = ['Workwear', 'Vacation', 'Never Worn', 'Seasonal Rotation'];
 
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
@@ -217,6 +219,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   // SaveToBoardSheet target for the bulk "Add to Board" action.
   const [saveSheetTarget, setSaveSheetTarget] = useState<BoardEntryRef[] | null>(null);
   const [boardOptionsTarget, setBoardOptionsTarget] = useState<Board | null>(null);
+  const [boardNameMode, setBoardNameMode] = useState<BoardNameMode | null>(null);
   const updateItem = useUpdateItem();
   const deleteItem = useDeleteItem();
   const markWorn = useMarkItemWorn();
@@ -561,24 +564,22 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   }, [openAddSheet, openBatchScan, openScanItem]);
 
   const handleNewBoard = useCallback(() => {
-    if (Platform.OS === 'ios') {
-      Alert.prompt('New board', 'Name your board', (text) => {
-        const name = text?.trim();
-        if (name) createBoard.mutate({ name });
-      });
-    } else {
-      // Android has no Alert.prompt; create with a default name the user can rename.
-      createBoard.mutate({ name: 'New board' });
-    }
-  }, [createBoard]);
+    setBoardNameMode({ kind: 'new' });
+  }, []);
 
   const renameBoard = useCallback((board: Board) => {
-    if (Platform.OS !== 'ios') return;
-    Alert.prompt('Rename board', undefined, (text) => {
-      const name = text?.trim();
-      if (name) updateBoard.mutate({ id: board.id, name });
-    }, 'plain-text', board.name);
-  }, [updateBoard]);
+    setBoardNameMode({ kind: 'rename', board });
+  }, []);
+
+  const submitBoardName = useCallback((name: string) => {
+    if (!boardNameMode) return;
+    setBoardNameMode(null);
+    if (boardNameMode.kind === 'new') {
+      createBoard.mutate({ name });
+    } else {
+      updateBoard.mutate({ id: boardNameMode.board.id, name });
+    }
+  }, [boardNameMode, createBoard, updateBoard]);
 
   const uploadBoardCover = useCallback(async (board: Board) => {
     const image = await launchLibrary({ allowsEditing: true, maxDim: 800 });
@@ -912,8 +913,8 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const boardLoadingSkeleton = (
     <View style={styles.boardSkeletonGrid}>
       {[0, 1, 2, 3].map((index) => (
-        <View key={index} style={{ width: cardWidth, marginBottom: spacing.lg }}>
-          <SkeletonBlock width={cardWidth} height={cardWidth / BOARD_CARD_ASPECT_RATIO} borderRadius={radii.lg} />
+        <View key={index} style={{ width: cardWidth, marginBottom: spacing.md }}>
+          <SkeletonBlock width={cardWidth} height={cardWidth} borderRadius={radii.lg} />
           <SkeletonBlock width="72%" height={16} borderRadius={radii.sm} style={styles.boardSkeletonTitle} />
           <SkeletonBlock width="42%" height={12} borderRadius={radii.sm} style={styles.boardSkeletonSubtitle} />
         </View>
@@ -1036,7 +1037,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             keyExtractor={(b) => String(b.id)}
             numColumns={2}
             renderItem={({ item }) => (
-              <View style={{ paddingHorizontal: COL_GAP / 2, marginBottom: spacing.lg }}>
+              <View style={{ paddingHorizontal: COL_GAP / 2, marginBottom: spacing.md }}>
                 <BoardCard
                   board={item}
                   itemMap={itemMap}
@@ -1478,13 +1479,25 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         <BoardOptionsMenuSheet
           visible
           boardName={boardOptionsTarget.name}
-          canRename={Platform.OS === 'ios'}
+          canRename
           onClose={() => setBoardOptionsTarget(null)}
           onOrganize={() => navigation.navigate('BoardDetail', { boardId: boardOptionsTarget.id, organize: true })}
           onChangeCover={() => navigation.navigate('BoardDetail', { boardId: boardOptionsTarget.id, editCover: true })}
           onUploadCover={() => uploadBoardCover(boardOptionsTarget)}
           onRename={() => renameBoard(boardOptionsTarget)}
           onDelete={() => confirmDeleteBoard(boardOptionsTarget)}
+        />
+      )}
+      {boardNameMode !== null && (
+        <BoardNameSheet
+          visible
+          title={boardNameMode.kind === 'new' ? 'New board' : 'Rename board'}
+          subtitle={boardNameMode.kind === 'new' ? 'Give your next edit a name.' : 'Update this board’s name.'}
+          initialValue={boardNameMode.kind === 'rename' ? boardNameMode.board.name : ''}
+          submitLabel={boardNameMode.kind === 'new' ? 'Create board' : 'Save name'}
+          submitting={boardNameMode.kind === 'new' ? createBoard.isPending : updateBoard.isPending}
+          onCancel={() => setBoardNameMode(null)}
+          onSubmit={submitBoardName}
         />
       )}
     </View>

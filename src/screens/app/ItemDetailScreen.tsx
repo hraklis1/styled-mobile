@@ -52,6 +52,7 @@ import {
 } from '../../components/navigation/TabQuickMenuSheet';
 import { CoverImageSheet } from '../../components/item/cover-image-sheet';
 import { AiActionCoachmark } from '../../components/primitives/AiActionCoachmark';
+import { ActionMenuSheet } from '../../components/primitives/ActionMenuSheet';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1046,6 +1047,25 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           </View>
         </View>
       </Modal>
+
+      <ActionMenuSheet
+        visible={tagScanner.sourceMenuVisible}
+        title="Scan clothing label"
+        subtitle="Choose a photo source."
+        options={[
+          {
+            label: 'Take Photo',
+            icon: 'camera-outline',
+            onPress: () => tagScanner.selectLabelSource('camera'),
+          },
+          {
+            label: 'Choose from Library',
+            icon: 'image-outline',
+            onPress: () => tagScanner.selectLabelSource('library'),
+          },
+        ]}
+        onClose={tagScanner.dismissSourceMenu}
+      />
 
       {/* ── Edit modal ──────────────────────────────────────────────────────── */}
       <EditItemModal
