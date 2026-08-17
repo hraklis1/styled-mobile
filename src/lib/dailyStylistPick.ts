@@ -27,6 +27,15 @@ export type DailyStylistPick = {
   scoreDetails: DailyPickScoreDetails;
 };
 
+export type DailyLookGenerationTrigger = 'no_saved_looks' | 'event_gap' | 'weather_gap' | 'rotation_gap';
+
+export type DailyLookGenerationDecision = {
+  shouldGenerate: boolean;
+  trigger?: DailyLookGenerationTrigger;
+  reason?: string;
+  eventId?: number;
+};
+
 type SelectDailyStylistPickInput = {
   outfits: Outfit[];
   items: Item[];
@@ -137,6 +146,134 @@ function scoreWearRotation(outfit: Outfit, now: Date): number {
   if (daysSinceWorn >= 7) return 3;
   if (daysSinceWorn >= 2) return 0;
   return -10;
+}
+
+function isWearable(item: Item): boolean {
+  return !item.isArchived && item.condition !== 'needs_repair' && item.condition !== 'donate';
+}
+
+function hasCompleteWardrobe(items: Item[]): boolean {
+  const wearable = items.filter(isWearable);
+  return wearable.some((item) => item.category === 'shoes')
+    && (
+      wearable.some((item) => item.category === 'full_body')
+      || (wearable.some((item) => item.category === 'top') && wearable.some((item) => item.category === 'bottom'))
+    );
+}
+
+function coreKey(itemIds: Array<{ id: number; category: string }>): string {
+  return itemIds
+    .filter((entry) => ['top', 'bottom', 'full_body'].includes(entry.category))
+    .map((entry) => entry.id)
+    .sort((a, b) => a - b)
+    .join(',');
+}
+
+function hasUnusedCoreCombination(items: Item[], outfits: Outfit[]): boolean {
+  const wearable = items.filter(isWearable);
+  const tops = wearable.filter((item) => item.category === 'top');
+  const bottoms = wearable.filter((item) => item.category === 'bottom');
+  const fullBodies = wearable.filter((item) => item.category === 'full_body');
+  const savedCore = new Set(outfits.map((outfit) => coreKey(outfit.itemIds)));
+  for (const top of tops) {
+    for (const bottom of bottoms) {
+      if (!savedCore.has(coreKey([{ id: top.id, category: 'top' }, { id: bottom.id, category: 'bottom' }]))) return true;
+    }
+  }
+  return fullBodies.some((item) => !savedCore.has(coreKey([{ id: item.id, category: 'full_body' }])));
+}
+
+function isFeaturedOrRecentlyWorn(outfit: Outfit, recentPickIds: Set<number>, now: Date): boolean {
+  if (recentPickIds.has(outfit.id)) return true;
+  if (!outfit.lastWornAt) return false;
+  const daysSinceWorn = Math.floor((now.getTime() - new Date(outfit.lastWornAt).getTime()) / 86_400_000);
+  return daysSinceWorn < 2;
+}
+
+/**
+ * Pure gate for the premium daily composition request. The saved selector
+ * remains authoritative; this helper only opens one conservative gap.
+ */
+export function getDailyLookGenerationDecision({
+  outfits,
+  items,
+  events,
+  weather,
+  date,
+  now = new Date(),
+  history,
+}: {
+  outfits: Outfit[];
+  items: Item[];
+  events: Event[];
+  weather?: TodayWeather;
+  date: string;
+  now?: Date;
+  history: DailyPickHistoryEntry[];
+}): DailyLookGenerationDecision {
+  const eligible = outfits.filter((outfit) => !outfit.isDraft);
+  const nextTodayEvent = getNextTodayEvent(events, now, date);
+  if (nextTodayEvent?.outfitId) return { shouldGenerate: false };
+  if (!hasCompleteWardrobe(items)) return { shouldGenerate: false };
+  if (eligible.length === 0) {
+    return {
+      shouldGenerate: true,
+      trigger: 'no_saved_looks',
+      reason: 'Styled from your wardrobe today',
+    };
+  }
+
+  const itemMap = new Map(items.map((item) => [item.id, item]));
+  if (nextTodayEvent) {
+    const bestOccasionScore = Math.max(
+      ...eligible.map((outfit) => scoreOccasion(outfit, outfitItems(outfit, itemMap), nextTodayEvent)),
+      0,
+    );
+    if (bestOccasionScore < 24) {
+      return {
+        shouldGenerate: true,
+        trigger: 'event_gap',
+        eventId: nextTodayEvent.id,
+        reason: `For ${nextTodayEvent.title.trim() || formatOccasion(nextTodayEvent.occasion)}`,
+      };
+    }
+  }
+
+  const weatherGap = !!weather && (
+    weather.current.condition === 'rainy'
+    || weather.current.temperatureC <= 8
+    || weather.current.temperatureC >= 24
+  );
+  if (weatherGap) {
+    const allWeatherScores = eligible.map((outfit) => scoreWeather(outfitItems(outfit, itemMap), weather));
+    if (allWeatherScores.every((score) => score <= 0)) {
+      return {
+        shouldGenerate: true,
+        trigger: 'weather_gap',
+        reason: weather.current.condition === 'rainy'
+          ? 'A polished layer for today’s rain'
+          : weather.current.temperatureC <= 8
+            ? 'Warm layers for today’s weather'
+            : 'Light layers for today’s heat',
+      };
+    }
+  }
+
+  const recentPickIds = new Set(
+    history.filter((entry) => isWithinPreviousSevenDays(entry.date, date)).map((entry) => entry.outfitId),
+  );
+  if (
+    eligible.every((outfit) => isFeaturedOrRecentlyWorn(outfit, recentPickIds, now))
+    && hasUnusedCoreCombination(items, eligible)
+  ) {
+    return {
+      shouldGenerate: true,
+      trigger: 'rotation_gap',
+      reason: 'A fresh way to wear your wardrobe',
+    };
+  }
+
+  return { shouldGenerate: false };
 }
 
 function deterministicTieBreak(date: string, outfitId: number): number {

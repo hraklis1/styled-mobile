@@ -1,4 +1,4 @@
-import { selectDailyStylistPick, toLocalDateKey, type DailyPickHistoryEntry } from '../dailyStylistPick';
+import { getDailyLookGenerationDecision, selectDailyStylistPick, toLocalDateKey, type DailyPickHistoryEntry } from '../dailyStylistPick';
 import type { Event } from '../../types/event';
 import type { Item } from '../../types/item';
 import type { Outfit } from '../../types/outfit';
@@ -219,5 +219,50 @@ describe('daily stylist pick', () => {
       outfit(2, { createdAt: '2026-06-10T12:00:00.000Z', lastWornAt: wornAt }),
     ], { items: [] });
     expect(result?.outfit.id).toBe(2);
+  });
+});
+
+describe('daily look generation gate', () => {
+  const completeItems = [
+    item(1, { category: 'top', warmthRating: 1, occasions: ['casual'] }),
+    item(2, { category: 'bottom', warmthRating: 1, occasions: ['casual'] }),
+    item(3, { category: 'shoes', warmthRating: 1 }),
+    item(4, { category: 'top', warmthRating: 5, occasions: ['business'] }),
+  ];
+  const saved = outfit(10, { itemIds: [{ id: 1, category: 'top' }, { id: 2, category: 'bottom' }, { id: 3, category: 'shoes' }] });
+
+  const decide = (patch: Partial<Parameters<typeof getDailyLookGenerationDecision>[0]> = {}) => getDailyLookGenerationDecision({
+    outfits: [saved],
+    items: completeItems,
+    events: [],
+    date,
+    now,
+    history: [],
+    ...patch,
+  });
+
+  it('generates only when there are no saved looks and the wardrobe is complete', () => {
+    expect(decide({ outfits: [] }).trigger).toBe('no_saved_looks');
+    expect(decide({ outfits: [], items: completeItems.filter((entry) => entry.category !== 'shoes') }).shouldGenerate).toBe(false);
+  });
+
+  it('never displaces an assigned event outfit', () => {
+    expect(decide({ events: [event(1, 14, { outfitId: 10 })] })).toEqual({ shouldGenerate: false });
+  });
+
+  it('opens an event gap when the saved look has no meaningful occasion match', () => {
+    expect(decide({ events: [event(1, 14, { occasion: 'business' })] }).trigger).toBe('event_gap');
+  });
+
+  it('opens a weather gap when every saved look is unsuitable for severe weather', () => {
+    expect(decide({ weather: {
+      current: { condition: 'cold', temperatureC: 2, temperatureF: 36, summary: 'Cold' },
+      forecast: { condition: 'cold', tempMaxC: 4, tempMinC: -2, tempMaxF: 39, tempMinF: 28 },
+    } }).trigger).toBe('weather_gap');
+  });
+
+  it('opens a rotation gap only when the wardrobe has an unused core combination', () => {
+    expect(decide({ history: [{ date: '2026-06-11', outfitId: 10 }] }).trigger).toBe('rotation_gap');
+    expect(decide({ history: [] }).shouldGenerate).toBe(false);
   });
 });

@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
@@ -37,6 +38,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useStylingWeatherToday } from '../../hooks/useWeather';
 import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
 import { useProfile } from '../../hooks/useProfile';
+import { useEntitlement } from '../../hooks/useEntitlement';
+import { useDismissDailyLook, useResolveDailyLook, useSaveDailyLook, type DailyLookCandidate, type DailyLookResolveInput } from '../../hooks/useDailyLook';
+import { DailyLookDetailSheet } from '../../components/home/DailyLookDetailSheet';
 import { StylingLocationSheet } from '../../components/home/StylingLocationSheet';
 import { HomeBriefBand } from '../../components/home/HomeBriefBand';
 import { resolveImageUri } from '../../lib/resolveImageUri';
@@ -45,6 +49,7 @@ import { itemCoverPresentation } from '../../lib/itemImage';
 import { formatTemp, resolveTempUnit } from '../../lib/temperature';
 import {
   selectDailyStylistPick,
+  getDailyLookGenerationDecision,
   toLocalDateKey,
   type DailyPickHistoryEntry,
 } from '../../lib/dailyStylistPick';
@@ -57,6 +62,7 @@ import { colors, shadows, spacing, typography, radii, editorial } from '../../th
 import { PressableScale } from '../../components/primitives/PressableScale';
 import { ScreenHeader, EditorialSection } from '../../components/primitives/Editorial';
 import type { HomeScreenProps } from '../../navigation/types';
+import type { Outfit } from '../../types/outfit';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -107,6 +113,25 @@ function formatEventDate(isoDate: string): string {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
+function generatedPreviewOutfit(candidate: DailyLookCandidate): Outfit {
+  return {
+    id: -candidate.id,
+    userId: candidate.userId,
+    name: candidate.name,
+    description: candidate.stylistNotes,
+    event: null,
+    itemIds: candidate.itemIds,
+    tags: [],
+    notes: candidate.stylistNotes,
+    isDraft: false,
+    isFavorite: false,
+    aiGeneratedImageUrl: candidate.aiGeneratedImageUrl,
+    wearCount: 0,
+    lastWornAt: null,
+    createdAt: candidate.createdAt,
+  };
+}
+
 // ── Screen ───────────────────────────────────────────────────────────────────
 
 function formatLogDate(dateStr: string): string {
@@ -122,6 +147,7 @@ function formatLogDate(dateStr: string): string {
 
 export function HomeScreen({ navigation }: HomeScreenProps) {
   const { user } = useAuth();
+  const { isPremium } = useEntitlement();
   const { data: items = [], isLoading: itemsLoading, isError: itemsError, refetch: refetchItems } = useItems();
   const { data: outfits = [], isLoading: outfitsLoading, isError: outfitsError, refetch: refetchOutfits } = useOutfits();
   const { data: events  = [] } = useEvents();
@@ -145,6 +171,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [dailyPickDate, setDailyPickDate] = useState(() => toLocalDateKey(new Date()));
   const [dailyPickHistory, setDailyPickHistory] = useState<DailyPickHistoryEntry[]>([]);
   const [dailyPickHistoryLoaded, setDailyPickHistoryLoaded] = useState(false);
+  const [dailyLookSheetVisible, setDailyLookSheetVisible] = useState(false);
+  const [savedDailyOutfit, setSavedDailyOutfit] = useState<Outfit | null>(null);
+  const saveDailyLook = useSaveDailyLook();
+  const dismissDailyLook = useDismissDailyLook();
   const shortlist = useMemo(
     () => buildShortlistSpotlight(buildShoppingEditItems(mergeShoppingSnaps(shoppingSnaps, pendingShoppingUploads))),
     [pendingShoppingUploads, shoppingSnaps],
@@ -155,6 +185,11 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     fabCollapsed.value = 0;
     setDailyPickDate(toLocalDateKey(new Date()));
   }, [fabCollapsed]));
+
+  useEffect(() => {
+    setSavedDailyOutfit(null);
+    setDailyLookSheetVisible(false);
+  }, [dailyPickDate, user?.id]);
 
   useEffect(() => {
     let active = true;
@@ -302,21 +337,113 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       : null,
     [dailyPickDate, dailyPickHistory, dailyPickHistoryLoaded, events, items, logs, outfits, weather.data, tempUnit],
   );
-  const featuredOutfit = dailyPick?.outfit ?? recentOutfits[0];
+  const dailyLookDecision = useMemo(
+    () => dailyPickHistoryLoaded
+      ? getDailyLookGenerationDecision({ outfits, items, events, weather: weather.data, date: dailyPickDate, history: dailyPickHistory })
+      : { shouldGenerate: false },
+    [dailyPickDate, dailyPickHistory, dailyPickHistoryLoaded, events, items, outfits, weather.data],
+  );
+  const dailyLookInput = useMemo<DailyLookResolveInput | null>(() => {
+    if (!dailyLookDecision.shouldGenerate || !dailyLookDecision.trigger) return null;
+    const active = stylingLocation.activeLocation;
+    return {
+      localDate: dailyPickDate,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+      location: {
+        source: active.source,
+        label: active.label,
+        lat: active.coords?.lat,
+        lon: active.coords?.lon,
+      },
+      weather: weather.data ? {
+        condition: weather.data.current.condition,
+        temperatureC: weather.data.current.temperatureC,
+        summary: weather.data.current.summary,
+      } : undefined,
+      trigger: dailyLookDecision.trigger,
+      eventId: dailyLookDecision.eventId,
+      recentOutfitIds: dailyPickHistory
+        .filter((entry) => entry.date !== dailyPickDate)
+        .slice(0, 7)
+        .map((entry) => entry.outfitId),
+      currentOutfitId: dailyPick?.outfit.id ?? null,
+    };
+  }, [dailyLookDecision, dailyPick?.outfit.id, dailyPickDate, dailyPickHistory, stylingLocation.activeLocation, weather.data]);
+  const dailyLookQuery = useResolveDailyLook(
+    dailyLookInput,
+    isPremium && dailyPickHistoryLoaded && !weather.isLoading && !stylingLocation.isLoading,
+  );
+  const generatedCandidate = savedDailyOutfit
+    ? null
+    : dailyLookQuery.data?.outcome === 'candidate' && dailyLookQuery.data.candidate?.status === 'active'
+      ? dailyLookQuery.data.candidate
+      : null;
+  const featuredOutfit = savedDailyOutfit ?? (generatedCandidate ? undefined : dailyPick?.outfit ?? recentOutfits[0]);
   // The section title above already says "Today's Look" — when there's no
   // real reason to show, echo it rather than coin a second name for the
   // same thing.
-  const featuredReason = dailyPick?.reason ?? "Today’s Look";
+  const featuredReason = savedDailyOutfit ? dailyLookQuery.data?.candidate?.reason ?? 'Today’s Look' : generatedCandidate?.reason ?? dailyPick?.reason ?? "Today’s Look";
   const hasFeaturedAiImage = !!featuredOutfit?.aiGeneratedImageUrl;
 
   useEffect(() => {
-    if (!dailyPickHistoryLoaded || !user?.id || !dailyPick?.outfit) return;
+    if (dailyLookDecision.shouldGenerate && dailyLookDecision.trigger) {
+      track('daily_look_generation_eligible', { trigger: dailyLookDecision.trigger });
+    }
+  }, [dailyLookDecision]);
+
+  useEffect(() => {
+    if (!generatedCandidate) return;
+    track('daily_look_generated', { candidateId: generatedCandidate.id, trigger: generatedCandidate.trigger });
+  }, [generatedCandidate?.id]);
+
+  useEffect(() => {
+    if (!dailyLookQuery.isError) return;
+    track('daily_look_generation_failed');
+  }, [dailyLookQuery.isError]);
+
+  useEffect(() => {
+    if (!dailyPickHistoryLoaded || !user?.id || !dailyPick?.outfit || generatedCandidate || savedDailyOutfit || dailyLookQuery.isFetching) return;
     const current = dailyPickHistory.find((entry) => entry.date === dailyPickDate);
     if (current?.outfitId === dailyPick.outfit.id) return;
     const next = recordDailyPick(dailyPickHistory, { date: dailyPickDate, outfitId: dailyPick.outfit.id });
     setDailyPickHistory(next);
     saveDailyPickHistory(user.id, next).catch(() => {});
-  }, [dailyPick, dailyPickDate, dailyPickHistory, dailyPickHistoryLoaded, user?.id]);
+  }, [dailyLookQuery.isFetching, dailyPick, dailyPickDate, dailyPickHistory, dailyPickHistoryLoaded, generatedCandidate, savedDailyOutfit, user?.id]);
+
+  const handleDailyLookSave = useCallback(() => {
+    if (!generatedCandidate) return;
+    track('daily_look_save_tapped', { candidateId: generatedCandidate.id });
+    saveDailyLook.mutate(
+      { candidateId: generatedCandidate.id },
+      {
+        onSuccess: ({ outfit }) => {
+          setSavedDailyOutfit(outfit);
+          setDailyLookSheetVisible(false);
+          if (user?.id) {
+            const next = recordDailyPick(dailyPickHistory, { date: dailyPickDate, outfitId: outfit.id });
+            setDailyPickHistory(next);
+            saveDailyPickHistory(user.id, next).catch(() => {});
+          }
+        },
+        onError: (error) => {
+          if ((error as { response?: { status?: number } }).response?.status === 409) {
+            setDailyLookSheetVisible(false);
+            Alert.alert('This look is no longer available', 'Today’s Look has been updated to match your wardrobe.');
+            return;
+          }
+          Alert.alert('Couldn’t save this look', 'The look is still here. Please try again.');
+        },
+      },
+    );
+  }, [dailyPickHistory, dailyPickDate, generatedCandidate, saveDailyLook, user]);
+
+  const handleDailyLookDismiss = useCallback(() => {
+    if (!generatedCandidate) return;
+    dismissDailyLook.mutate(
+      { candidateId: generatedCandidate.id },
+      { onSuccess: () => setDailyLookSheetVisible(false) },
+    );
+  }, [dismissDailyLook, generatedCandidate]);
 
   if ((itemsError || outfitsError) && items.length === 0 && outfits.length === 0) {
     return (
@@ -486,7 +613,49 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           params: { segment: 'outfits' },
         })}
       >
-        {featuredOutfit ? (
+        {generatedCandidate ? (
+          <Animated.View entering={FadeIn.duration(260)} exiting={FadeOut.duration(200)}>
+          <View style={styles.featuredOutfit}>
+            <PressableScale
+              contentStyle={styles.generatedHeroPressable}
+              onPress={() => {
+                track('daily_look_detail_opened', { candidateId: generatedCandidate.id });
+                setDailyLookSheetVisible(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`${generatedCandidate.name}. ${generatedCandidate.reason}. Open details`}
+            >
+              <View style={{ width: heroWidth, height: heroHeight }}>
+                <OutfitCollage
+                  outfit={generatedPreviewOutfit(generatedCandidate)}
+                  size={heroWidth}
+                  height={heroHeight}
+                  borderRadius={0}
+                />
+              </View>
+            </PressableScale>
+            <View style={styles.generatedCaption}>
+              <View style={styles.generatedCaptionCopy}>
+                <Text style={styles.featuredEyebrow} numberOfLines={1}>Styled for you today</Text>
+                <Text style={styles.featuredOutfitName} numberOfLines={1}>{generatedCandidate.name}</Text>
+                <Text style={styles.generatedReason} numberOfLines={1}>{generatedCandidate.reason}</Text>
+              </View>
+              <PressableScale
+                contentStyle={styles.saveLookControl}
+                onPress={handleDailyLookSave}
+                disabled={saveDailyLook.isPending}
+                accessibilityRole="button"
+                accessibilityLabel="Save look"
+                accessibilityHint="Save this curated look to your outfits"
+              >
+                <Ionicons name="bookmark-outline" size={17} color={colors.primary} />
+                <Text style={styles.saveLookLabel}>Save look</Text>
+              </PressableScale>
+            </View>
+          </View>
+          </Animated.View>
+        ) : featuredOutfit ? (
+          <Animated.View entering={FadeIn.duration(260)} exiting={FadeOut.duration(200)}>
           <PressableScale
             contentStyle={styles.featuredOutfit}
             onPress={() => navigation.navigate('Closet', {
@@ -529,6 +698,12 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               </View>
             )}
           </PressableScale>
+          </Animated.View>
+        ) : dailyLookQuery.isFetching && dailyLookDecision.shouldGenerate ? (
+          <View style={styles.curatingPlaceholder} accessibilityLiveRegion="polite">
+            <Ionicons name="sparkles-outline" size={18} color={colors.primary} />
+            <Text style={styles.curatingPlaceholderText}>Curating today’s look…</Text>
+          </View>
         ) : (
           <View style={styles.emptyOutfits}>
             <View style={[styles.emptyOutfitIcon, { backgroundColor: `${colors.primary}18` }]}>
@@ -701,6 +876,16 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       />
 
     </ScrollView>
+      <DailyLookDetailSheet
+        visible={dailyLookSheetVisible && !!generatedCandidate}
+        candidate={generatedCandidate}
+        items={items}
+        saving={saveDailyLook.isPending}
+        dismissing={dismissDailyLook.isPending}
+        onClose={() => setDailyLookSheetVisible(false)}
+        onSave={handleDailyLookSave}
+        onDismiss={handleDailyLookDismiss}
+      />
       {locationSheetVisible && (
         <StylingLocationSheet
           visible
@@ -998,6 +1183,48 @@ const styles = StyleSheet.create({
   // as a photograph, not a container.
   featuredOutfit: {
     marginHorizontal: -SIDE_PAD,
+  },
+  generatedHeroPressable: {
+    width: '100%',
+  },
+  generatedCaption: {
+    paddingHorizontal: SIDE_PAD,
+    paddingTop: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  generatedCaptionCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  generatedReason: {
+    color: colors.mutedForeground,
+    fontSize: typography.size.xs,
+  },
+  saveLookControl: {
+    minHeight: 44,
+    paddingHorizontal: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  saveLookLabel: {
+    color: colors.primary,
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+  },
+  curatingPlaceholder: {
+    minHeight: 120,
+    marginHorizontal: -SIDE_PAD,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.card,
+  },
+  curatingPlaceholderText: {
+    color: colors.mutedForeground,
+    fontSize: typography.size.sm,
   },
   // Scrim + overlaid caption path — AI-generated flat lays only. See the
   // comment above where hasFeaturedAiImage is checked in the JSX.
