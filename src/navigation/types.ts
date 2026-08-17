@@ -60,7 +60,7 @@ export type HomeStackParamList = {
 };
 
 export type SavedShoppingTab = 'looks' | 'pieces' | 'lists';
-export type ShopSection = 'brief' | 'shortlist' | 'saved-looks' | 'saved-shopping';
+export type ShopSection = 'shortlist' | 'saved-looks' | 'saved-shopping';
 
 // Shop nested stack (wishlist + shopping tools)
 export type ShopStackParamList = {
@@ -80,6 +80,7 @@ export type ShopStackParamList = {
   } | undefined;
   ShoppingHaulDetail: { groupKey: string };
   ShoppingCamera: undefined;
+  ShoppingBriefDetail: undefined;
 };
 
 // Wardrobe nested stack
@@ -120,6 +121,10 @@ export type SavedShoppingScreenProps = NativeStackScreenProps<ShopStackParamList
 export type ShoppingCameraScreenProps = NativeStackScreenProps<ShopStackParamList, 'ShoppingCamera'>;
 export type ShoppingGalleryScreenProps = NativeStackScreenProps<ShopStackParamList, 'ShoppingGallery'>;
 export type ShoppingHaulDetailScreenProps = NativeStackScreenProps<ShopStackParamList, 'ShoppingHaulDetail'>;
+export type ShoppingBriefDetailScreenProps = CompositeScreenProps<
+  NativeStackScreenProps<ShopStackParamList, 'ShoppingBriefDetail'>,
+  BottomTabScreenProps<AppTabParamList>
+>;
 export type CalendarScreenProps = BottomTabScreenProps<AppTabParamList, 'Calendar'>;
 export type ProfileScreenProps = NativeStackScreenProps<HomeStackParamList, 'Profile'>;
 

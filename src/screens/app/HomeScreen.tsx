@@ -696,7 +696,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       <HomeBriefBand
         onPress={() => {
           track('shop_section_opened', { section: 'home_brief' });
-          navigation.navigate('Shop', { screen: 'ShopMain', params: { section: 'brief' } });
+          navigation.navigate('Shop', { screen: 'ShoppingBriefDetail' });
         }}
       />
 

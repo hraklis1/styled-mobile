@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,11 +26,12 @@ import type { ShopOverviewScreenProps } from '../../navigation/types';
 import type { StylistMode } from '../../features/stylist/types';
 
 /**
- * Shop answers two questions, in this order: what should I shop for (the brief,
- * stated in full, ending in the way to act on it), and what have I already
- * started (the shortlist rail). Both sit in the first scroll — the camera lives
- * in the header instead of a card of its own, because saving a find is a
- * one-tap habit once you're in the app, not the thing the page needs to sell.
+ * Shop answers two questions, in this order: what should I shop for (the
+ * brief, summarized here and stated in full one tap away on
+ * ShoppingBriefDetailScreen), and what have I already started (the shortlist
+ * rail). All three sit in the first scroll — the camera lives in the header
+ * instead of a card of its own, because saving a find is a one-tap habit
+ * once you're in the app, not the thing the page needs to sell.
  */
 export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProps) {
   const insets = useSafeAreaInsets();
@@ -42,15 +43,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
   const pendingUploads = useShoppingSessionStore((state) => state.pendingUploads);
   const brief = useShoppingBrief(isPremium);
   const [refreshing, setRefreshing] = useState(false);
-  const requestedSection = route.params?.section ?? 'brief';
-  const scrollRef = useRef<ScrollView>(null);
-  // Set only when a caller explicitly asks for the brief (Home's "Read the
-  // brief" link) — not on `requestedSection`, which defaults to 'brief' on
-  // every plain tab tap and would hijack scroll position on normal visits.
-  const pendingBriefScroll = useRef(false);
-  useEffect(() => {
-    if (route.params?.section === 'brief') pendingBriefScroll.current = true;
-  }, [route.params?.section]);
+  const requestedSection = route.params?.section;
 
   useEffect(() => {
     if (requestedSection === 'shortlist') {
@@ -127,7 +120,6 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
   return (
     <View style={styles.root}>
       <ScrollView
-        ref={scrollRef}
         contentInsetAdjustmentBehavior="never"
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} tintColor={colors.primary} />}
@@ -147,25 +139,13 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
           />
         </View>
 
-        <View
-          onLayout={(e) => {
-            if (!pendingBriefScroll.current) return;
-            pendingBriefScroll.current = false;
-            const y = e.nativeEvent.layout.y;
-            requestAnimationFrame(() => {
-              scrollRef.current?.scrollTo({ y: Math.max(y - spacing.lg, 0), animated: true });
-            });
-          }}
-        >
+        <View style={styles.briefBand}>
           <ShoppingBriefCard
-            style={styles.brief}
             isPremium={isPremium}
             brief={brief.data}
             isLoading={brief.isLoading}
             isError={brief.isError}
-            onSelectPriority={(priority) => (
-              askStylist(`Help me shop thoughtfully for ${priority.label}. ${priority.context}`)
-            )}
+            onOpenFullBrief={() => navigation.navigate('ShoppingBriefDetail')}
             onStartShopping={() => askStylist('Help me choose my next best purchase.', 'shop_new')}
             onUpgrade={() => {
               track('shop_brief_upgrade_tapped');
@@ -180,8 +160,8 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
 
         <EditorialSection
           variant="ruled"
-          style={styles.section}
-          title="Your Shortlist"
+          style={[styles.section, styles.firstSection]}
+          title="01 · Your Shortlist"
           description="Pieces you photographed while shopping, kept here until you price them and decide."
           actionLabel={spotlight.itemCount > 0 ? 'See all' : undefined}
           onAction={() => openHistory({ catalogFilter: activeFinds.length > 0 ? 'active' : 'all' })}
@@ -206,28 +186,19 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
           )}
         </EditorialSection>
 
-        <EditorialSection variant="ruled" style={styles.section} title="Your Stylist">
-          <View style={styles.stylistList}>
-            <EditorialRow
-              icon="heart-outline"
-              title="From Your Stylist"
-              description="Looks, pieces, and lists your Stylist put aside for you."
-              meta={savedShopping.length > 0 ? `${savedShopping.length} saved` : 'Nothing saved yet'}
-              onPress={() => {
-                track('shop_destination_opened', { destination: 'saved-shopping' });
-                navigation.navigate('SavedShopping');
-              }}
-              accessibilityLabel="Open your saved Stylist picks"
-              accessibilityHint="Opens this Shop page"
-            />
-            <EditorialRow
-              icon="chatbubble-outline"
-              title="Shop with your Stylist"
-              description="Ask a focused question before you buy."
-              onPress={() => openStylist({ source: 'shop' })}
-              accessibilityLabel="Ask your AI Stylist a shopping question"
-            />
-          </View>
+        <EditorialSection variant="ruled" style={styles.section} title="02 · Saved by Your Stylist">
+          <EditorialRow
+            icon="heart-outline"
+            title="From Your Stylist"
+            description="Looks, pieces, and lists your Stylist put aside for you."
+            meta={savedShopping.length > 0 ? `${savedShopping.length} saved` : 'Nothing saved yet'}
+            onPress={() => {
+              track('shop_destination_opened', { destination: 'saved-shopping' });
+              navigation.navigate('SavedShopping');
+            }}
+            accessibilityLabel="Open your saved Stylist picks"
+            accessibilityHint="Opens this Shop page"
+          />
         </EditorialSection>
 
       </ScrollView>
@@ -258,8 +229,19 @@ const styles = StyleSheet.create({
     ...typography.display.md,
     color: colors.foreground,
   },
-  brief: { marginHorizontal: spacing.lg },
+  // The brief is the page's cover feature, not another department: a full-
+  // width tinted ground breaks it out of the uniform gutter every other
+  // section shares, so it reads as the one thing the page leads with.
+  briefBand: {
+    backgroundColor: colors.surfaceSubtle,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xl,
+  },
   section: { paddingHorizontal: spacing.lg },
-  stylistList: { gap: spacing.xs },
+  // Extra air below the tinted band before the first numbered department,
+  // stacked on top of ruledSection's own paddingVertical, so the shift back
+  // to the page ground reads as a deliberate break rather than two sections
+  // sharing one rule.
+  firstSection: { marginTop: spacing.sm },
   safeAreaScrim: { position: 'absolute', zIndex: 20, top: 0, left: 0, right: 0, backgroundColor: colors.background },
 });

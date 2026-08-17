@@ -5,13 +5,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { PressableScale } from '../primitives/PressableScale';
 import { categoryIcon } from '../stylist/GapCard';
 import { colors, radii, spacing, typography } from '../../theme';
-import type { ShoppingBrief, ShoppingBriefPriority } from '../../lib/shopDecisionWorkspace';
+import type { ShoppingBrief } from '../../lib/shopDecisionWorkspace';
 
 /** Two is a strategy; five is a shopping list. The rest live behind "View plan". */
 const PRIORITY_LIMIT = 2;
 
-/** Priority labels arrive lowercase ("formal trousers") but read as chip titles here. */
-const sentenceCase = (label: string) => label.charAt(0).toUpperCase() + label.slice(1);
+/** Priority labels arrive lowercase ("formal trousers") but read as chip titles
+ *  here and on ShoppingBriefDetailScreen — exported for that reuse. */
+export const sentenceCase = (label: string) => label.charAt(0).toUpperCase() + label.slice(1);
 
 /** "Your shopping brief" paired with an issue line, e.g. "August brief" — so
  *  the card reads as something issued this month rather than computed live. */
@@ -30,7 +31,9 @@ type Props = {
   brief: ShoppingBrief | undefined;
   isLoading: boolean;
   isError: boolean;
-  onSelectPriority: (priority: ShoppingBriefPriority) => void;
+  /** Opens ShoppingBriefDetailScreen — the full summary, every priority, and
+   *  each one's own Ask stylist control, all folded off this compressed card. */
+  onOpenFullBrief: () => void;
   onStartShopping: () => void;
   onUpgrade: () => void;
   onAddWardrobePieces: () => void;
@@ -39,17 +42,18 @@ type Props = {
 };
 
 /**
- * Shop's hero: what to shop for, stated in full. Nothing generated for the user
- * is folded away, and the page's one action sits at the foot of the reasoning
- * that justifies it — so "Start shopping" is read as the conclusion of the
- * brief rather than a button the page happens to carry.
+ * Shop's cover feature, summarized: enough of the brief to justify the page's
+ * one action, with the reasoning behind it one tap away on
+ * ShoppingBriefDetailScreen rather than filling the card itself. The action
+ * sits at the foot of the card so it still reads as the brief's conclusion,
+ * not a button the page happens to carry.
  */
 export function ShoppingBriefCard({
   isPremium,
   brief,
   isLoading,
   isError,
-  onSelectPriority,
+  onOpenFullBrief,
   onStartShopping,
   onUpgrade,
   onAddWardrobePieces,
@@ -66,10 +70,10 @@ export function ShoppingBriefCard({
         contentStyle={styles.startButton}
         onPress={onStartShopping}
         accessibilityRole="button"
-        accessibilityLabel="Start shopping with your stylist"
+        accessibilityLabel="Ask your stylist what to buy first"
       >
         <Ionicons name="sparkles" size={15} color={colors.primaryForeground} />
-        <Text style={styles.startLabel}>Start shopping</Text>
+        <Text style={styles.startLabel}>What should I buy first?</Text>
       </PressableScale>
     </View>
   );
@@ -78,7 +82,7 @@ export function ShoppingBriefCard({
     return shell(
       <>
         <BriefMasthead />
-        <Text style={styles.headline}>Know what to shop for before you go</Text>
+        <Text style={styles.headline} numberOfLines={2}>Know what to shop for before you go</Text>
         <Text style={styles.body}>
           See which additions would genuinely expand your wardrobe—and when you are better off buying nothing.
         </Text>
@@ -100,7 +104,7 @@ export function ShoppingBriefCard({
     return shell(
       <>
         <BriefMasthead />
-        <Text style={styles.headline}>Your brief is temporarily unavailable</Text>
+        <Text style={styles.headline} numberOfLines={2}>Your brief is temporarily unavailable</Text>
         <Text style={styles.body}>Your shortlist is still here.</Text>
         <TextAction label="Try again" onPress={onRetry} />
       </>,
@@ -111,7 +115,7 @@ export function ShoppingBriefCard({
     return shell(
       <>
         <BriefMasthead />
-        <Text style={styles.headline}>{brief.headline}</Text>
+        <Text style={styles.headline} numberOfLines={2}>{brief.headline}</Text>
         <Text style={styles.body}>{brief.summary}</Text>
         <TextAction label="Add wardrobe pieces" onPress={onAddWardrobePieces} />
       </>,
@@ -123,8 +127,8 @@ export function ShoppingBriefCard({
   return shell(
     <>
       <BriefMasthead />
-      <Text style={styles.headline}>{brief.headline}</Text>
-      <Text style={styles.body}>{brief.summary}</Text>
+      <Text style={styles.headline} numberOfLines={2}>{brief.headline}</Text>
+      <Text style={styles.body} numberOfLines={3}>{brief.summary}</Text>
 
       {priorities.length > 0 ? (
         <View style={styles.priorities}>
@@ -135,31 +139,21 @@ export function ShoppingBriefCard({
                 <Ionicons name={categoryIcon(priority.category)} size={15} color={colors.primary} />
                 <Text style={styles.priorityLabel} numberOfLines={1}>{sentenceCase(priority.label)}</Text>
               </View>
-              {priority.context ? <Text style={styles.priorityContext}>{priority.context}</Text> : null}
               {priority.unlocks.length > 0 ? (
                 <Text style={styles.priorityUnlocks} numberOfLines={2}>
-                  Unlocks {priority.unlocks.slice(0, 3).join(' · ')}
+                  Unlocks {priority.unlocks.join(' · ')}
                 </Text>
               ) : null}
-              {/* Only this control reaches the stylist: a stray tap on the row must
-                  never spend a request the user did not ask for. Set as text
-                  rather than a filled pill so the card carries one button, and
-                  it is the one at the foot. */}
-              <PressableScale
-                haptic={false}
-                scaleTo={0.97}
-                contentStyle={styles.askButton}
-                onPress={() => onSelectPriority(priority)}
-                accessibilityRole="button"
-                accessibilityLabel={`Ask your stylist about ${priority.label}`}
-              >
-                <Text style={styles.askText}>Ask stylist</Text>
-                <Ionicons name="arrow-forward" size={13} color={colors.action} />
-              </PressableScale>
             </View>
           ))}
         </View>
       ) : null}
+
+      {/* The reasoning behind each priority, and the stylist control to act
+          on it, live on ShoppingBriefDetailScreen — this is the one door to
+          it, so a card that only ever states a headline and two labels still
+          reads as a brief rather than a teaser. */}
+      <TextAction label="Read the full brief" onPress={onOpenFullBrief} />
     </>,
   );
 }
@@ -189,22 +183,24 @@ function TextAction({
 }
 
 const styles = StyleSheet.create({
-  // No fill: the brief is the page's masthead, not a tinted utility block. The
-  // hairline top rule is its only boundary, matching the `ruled` section motif
-  // used everywhere else on Shop and Home.
+  // No fill and no hairline of its own: the card sits inside Shop's tinted
+  // brief band (ShopOverviewScreen's `briefBand`), whose own edge is the
+  // boundary — a rule here on top of that would read as two dividers in the
+  // space of one.
   card: {
     gap: spacing.sm,
     paddingVertical: spacing.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.hairline,
   },
   loadingBlock: { minHeight: 104, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   masthead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
   label: { ...typography.eyebrow, color: colors.primary },
   issue: { fontSize: typography.size.xs, color: colors.mutedForeground },
+  // display.sm, not .md: at .md this matched the page's own masthead
+  // ("Buy fewer, better pieces") one-for-one and the two competed. A step
+  // down reads as the page's cover feature rather than a second title.
   headline: {
     fontFamily: typography.family.display,
-    ...typography.display.md,
+    ...typography.display.sm,
     color: colors.foreground,
   },
   body: { fontSize: typography.size.sm, lineHeight: 20, color: colors.mutedForeground },
@@ -225,20 +221,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
-  priorityContext: { fontSize: typography.size.xs, lineHeight: 18, color: colors.mutedForeground },
   priorityUnlocks: { fontSize: 10, lineHeight: 15, fontWeight: typography.weight.medium, color: colors.primary },
-  // Unfilled and flush with the row's copy: the priority is the reading, and
-  // the way out of it should sit in the text rather than on top of it.
-  askButton: {
-    minHeight: 36,
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingTop: spacing.xs,
-    paddingRight: spacing.sm,
-  },
-  askText: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.action },
   // Full width, unlike every other action on this card: it is the page's one
   // filled button, and stretching it across the foot is what makes it read as
   // the brief's conclusion rather than a fourth thing to consider.

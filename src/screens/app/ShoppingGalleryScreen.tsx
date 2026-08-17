@@ -146,7 +146,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
       return;
     }
     if (navigation.canGoBack()) navigation.goBack();
-    else navigation.replace('ShopMain', { section: 'brief' });
+    else navigation.replace('ShopMain');
   }, [navigation, returnTo]);
 
   useEffect(() => {
