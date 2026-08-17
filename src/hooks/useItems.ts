@@ -223,10 +223,18 @@ export function useScanTag() {
 export function usePolishItem() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (itemId: number) =>
+    mutationFn: ({ itemId, idempotencyKey }: { itemId: number; idempotencyKey: string }) =>
       api
-        .post<{ polishedUrl: string; item: Item }>(`/api/items/${itemId}/polish`, {})
+        .post<{ polishedUrl: string; item: Item }>(`/api/items/${itemId}/polish`, {}, {
+          timeout: 120_000,
+          headers: idempotencyHeaders(idempotencyKey),
+        })
         .then((r) => r.data),
+    // Reuse the same idempotency key if the connection drops. The server can
+    // then join the original in-flight work or return its cached result rather
+    // than starting another paid generation.
+    retry: (failureCount, error) => isNetworkError(error) && failureCount < 1,
+    retryDelay: 2_000,
     onSuccess: ({ item }) => {
       queryClient.setQueryData<Item[]>(ITEMS_QUERY_KEY, (old) =>
         old?.map((current) => current.id === item.id ? item : current) ?? [item]

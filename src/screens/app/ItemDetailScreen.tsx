@@ -18,7 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { compressImageToDataUrl } from '../../lib/compressImage';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  useItems, useUpdateItem, useDeleteItem, useMarkItemWorn, usePolishItem,
+  ITEMS_QUERY_KEY, useItems, useUpdateItem, useDeleteItem, useMarkItemWorn, usePolishItem,
 } from '../../hooks/useItems';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useAuth } from '../../contexts/AuthContext';
@@ -26,7 +26,7 @@ import { track } from '../../lib/analytics';
 import { hasSeenAiActionCoach, markAiActionCoachSeen } from '../../lib/aiActionCoach';
 import { OUTFITS_QUERY_KEY } from '../../hooks/useOutfits';
 import type { Outfit } from '../../types/outfit';
-import { api, apiErrorCode, apiErrorMessage } from '../../lib/api';
+import { api, apiErrorCode, apiErrorMessage, isNetworkError } from '../../lib/api';
 import {
   coverImageVariantLabel,
   hasCutout,
@@ -39,6 +39,7 @@ import { CATEGORY_LABELS, SEASON_LABELS } from '../../types/item';
 import type { CoverImageVariant, Item, Season } from '../../types/item';
 import type { ItemDetailScreenProps } from '../../navigation/types';
 import * as Haptics from 'expo-haptics';
+import * as Crypto from 'expo-crypto';
 import { useTagScanner } from '../../hooks/useTagScanner';
 import { EditItemModal } from '../../components/item/EditItemModal';
 import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
@@ -382,12 +383,47 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
       return;
     }
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    polishItem.mutate(item.id, {
+    const idempotencyKey = Crypto.randomUUID();
+    const applyPolishedItem = (polishedItem: Item) => {
+      qc.setQueryData<Item[]>(ITEMS_QUERY_KEY, (old) =>
+        old?.map((current) => current.id === polishedItem.id ? polishedItem : current) ?? [polishedItem]
+      );
+      setCoverSheetOpen(false);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    };
+    const reconcilePolish = async (): Promise<boolean> => {
+      const latestItems = await qc.fetchQuery<Item[]>({
+        queryKey: ITEMS_QUERY_KEY,
+        queryFn: () => api.get<Item[]>('/api/items').then((r) => r.data),
+        staleTime: 0,
+      });
+      const latest = latestItems.find((candidate) => candidate.id === item.id);
+      if (!latest?.polishedUrl) return false;
+      applyPolishedItem(latest);
+      return true;
+    };
+    polishItem.mutate({ itemId: item.id, idempotencyKey }, {
       onSuccess: () => {
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        // The mutation hook has already merged the authoritative item into the cache.
         setCoverSheetOpen(false);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       },
       onError: (err) => {
+        // A missing response is ambiguous: the server may still be finishing and
+        // may already have persisted the polished asset. Check server truth before
+        // telling the user that the operation failed.
+        if (isNetworkError(err)) {
+          void reconcilePolish().then((reconciled) => {
+            if (reconciled) return;
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            Alert.alert('Polish failed', 'Could not confirm the catalog image. Please try again.');
+          }).catch(() => {
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            Alert.alert('Polish failed', 'Could not confirm the catalog image. Please try again.');
+          });
+          return;
+        }
+
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         const code = apiErrorCode(err);
         if (code === 'INSUFFICIENT_CREDITS') {
@@ -398,7 +434,11 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           Alert.alert('Free limit reached', apiErrorMessage(err, 'Upgrade to Premium to keep going.'));
           return;
         }
-        Alert.alert('Polish failed', 'Could not generate a catalog image. Your photo is unchanged.');
+        if (code === 'RATE_LIMITED' || code === 'CAPACITY' || code?.startsWith('POLISH_')) {
+          Alert.alert('Polish unavailable', apiErrorMessage(err, 'The styling studio is temporarily unavailable. Please try again shortly.'));
+          return;
+        }
+        Alert.alert('Polish failed', apiErrorMessage(err, 'Could not generate a catalog image. Your photo is unchanged.'));
       },
     });
   };
