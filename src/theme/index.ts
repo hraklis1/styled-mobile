@@ -47,7 +47,7 @@ const weight = {
 
 export const typography = {
   family: {
-    display: Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' }),
+    display: 'BodoniModa_400Regular',
   },
   size: {
     xs:   12,

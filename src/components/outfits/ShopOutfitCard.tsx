@@ -208,7 +208,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   intro: {
-    fontFamily: typography.family.display,
     fontSize: typography.size.xl,
     color: colors.foreground,
     lineHeight: typography.size.xl * 1.35,
@@ -256,7 +255,6 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   itemName: {
-    fontFamily: typography.family.display,
     fontSize: typography.size.lg,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,

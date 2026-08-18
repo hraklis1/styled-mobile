@@ -1,4 +1,4 @@
-import { parseShoppingPriorityEdit } from '../shoppingPriorityEdit';
+import { parseShoppingPriorityEdit, shoppingPriorityEditDisplayHeadline } from '../shoppingPriorityEdit';
 
 const priority = {
   label: 'Everyday trousers',
@@ -80,4 +80,13 @@ test('rejects partial ready edits', () => {
     status: 'ready', headline: 'Start', summary: 'Only one.', generatedAt: new Date().toISOString(), priority,
     targets: [target('a')], noBuyReason: null,
   })).toThrow();
+});
+
+test('keeps concise display headlines and normalizes whitespace', () => {
+  expect(shoppingPriorityEditDisplayHeadline('  Three   polished directions ', 'formal shirts')).toBe('Three polished directions');
+});
+
+test('falls back to the priority label for verbose legacy headlines', () => {
+  expect(shoppingPriorityEditDisplayHeadline('Formal shirt options for the test event', 'formal shirt or blouse')).toBe('Formal shirt or blouse');
+  expect(shoppingPriorityEditDisplayHeadline('A very long but restrained editorial headline', 'lightweight coat')).toBe('Lightweight coat');
 });

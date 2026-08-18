@@ -77,7 +77,6 @@ const styles = StyleSheet.create({
     borderCurve: 'continuous',
   },
   boardTitle: {
-    fontFamily: typography.family.display,
     fontSize: typography.size.md,
     fontWeight: typography.weight.regular,
   },

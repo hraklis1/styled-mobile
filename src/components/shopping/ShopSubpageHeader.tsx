@@ -13,11 +13,13 @@ type Props = {
   onBack: () => void;
   actions?: ReactNode;
   compact?: boolean;
+  titleNumberOfLines?: number;
+  subtitleNumberOfLines?: number;
   style?: StyleProp<ViewStyle>;
 };
 
 /** Consistent in-app header for Shop stack pages (the native header is hidden). */
-export function ShopSubpageHeader({ title, subtitle, eyebrow = 'SHOP', onBack, actions, compact = false, style }: Props) {
+export function ShopSubpageHeader({ title, subtitle, eyebrow = 'SHOP', onBack, actions, compact = false, titleNumberOfLines, subtitleNumberOfLines, style }: Props) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -46,8 +48,8 @@ export function ShopSubpageHeader({ title, subtitle, eyebrow = 'SHOP', onBack, a
       {!compact && (
         <>
           <Text style={styles.eyebrow}>{eyebrow}</Text>
-          <Text style={styles.title}>{title}</Text>
-          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+          <Text style={styles.title} numberOfLines={titleNumberOfLines}>{title}</Text>
+          {subtitle ? <Text style={styles.subtitle} numberOfLines={subtitleNumberOfLines}>{subtitle}</Text> : null}
         </>
       )}
     </View>

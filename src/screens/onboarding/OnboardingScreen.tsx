@@ -343,8 +343,7 @@ const s = StyleSheet.create({
     letterSpacing: 1.4,
     marginBottom: spacing.sm,
   },
-  // Georgia, not the sans bold this screen used to run — the serif display face
-  // is the app's editorial signature and onboarding was the one place ignoring it.
+  // The app's editorial display face makes onboarding part of the same visual system.
   title: {
     fontFamily: typography.family.display,
     fontSize: 32,

@@ -335,7 +335,6 @@ const styles = StyleSheet.create({
   },
   headerTitleDisplay: {
     fontFamily: typography.family.display,
-    fontWeight: typography.weight.regular,
   },
   headerSubtitle: {
     fontSize: typography.size.sm,

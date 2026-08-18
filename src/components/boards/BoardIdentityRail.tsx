@@ -67,7 +67,6 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   title: {
-    fontFamily: typography.family.display,
     fontSize: typography.size.xl,
     lineHeight: 25,
     color: colors.foreground,

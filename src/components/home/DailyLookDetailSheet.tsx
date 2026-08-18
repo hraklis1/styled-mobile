@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  headerTitle: { fontFamily: typography.family.display, fontSize: typography.size.xl, color: colors.foreground },
+  headerTitle: { fontSize: typography.size.xl, color: colors.foreground },
   content: { alignItems: 'center', padding: spacing.lg, paddingBottom: spacing.xxxl },
   eyebrow: {
     alignSelf: 'stretch',
@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
   notes: { alignSelf: 'stretch', marginTop: spacing.md, color: colors.foreground, fontSize: typography.size.sm, lineHeight: 21 },
   gapBrief: { alignSelf: 'stretch', marginTop: spacing.lg, padding: spacing.md, gap: spacing.xs, borderRadius: radii.md, backgroundColor: colors.card },
   gapBriefLabel: { color: colors.primary, fontSize: 9, fontWeight: typography.weight.bold, letterSpacing: 0.9 },
-  gapBriefTitle: { color: colors.foreground, fontFamily: typography.family.display, fontSize: typography.size.xl, textTransform: 'capitalize' },
+  gapBriefTitle: { color: colors.foreground, fontSize: typography.size.xl, textTransform: 'capitalize' },
   gapBriefContext: { color: colors.foreground, fontSize: typography.size.sm, lineHeight: 20 },
   gapBriefMeta: { color: colors.mutedForeground, fontSize: typography.size.xs, textTransform: 'capitalize' },
   pieces: { alignSelf: 'stretch', marginTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },

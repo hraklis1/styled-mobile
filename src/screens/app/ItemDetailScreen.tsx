@@ -1303,7 +1303,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.family.display,
     fontSize: typography.size.xxl,
     lineHeight: 34,
-    fontWeight: typography.weight.regular,
     color: colors.foreground,
     letterSpacing: -0.3,
   },

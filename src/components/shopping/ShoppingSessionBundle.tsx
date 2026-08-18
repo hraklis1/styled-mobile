@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
   },
   headerCopy: { flex: 1 },
   visitCover: { width: 62, height: 76, borderRadius: radii.md, borderCurve: 'continuous', backgroundColor: colors.surfaceSubtle },
-  headerDate: { fontFamily: typography.family.display, fontSize: typography.size.xl, color: colors.foreground },
+  headerDate: { fontSize: typography.size.xl, color: colors.foreground },
   headerStore: { paddingTop: spacing.xs, fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.primary },
   addStoreButton: {
     minHeight: 44,
@@ -454,7 +454,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surfaceSubtle,
   },
-  overflowCount: { fontFamily: typography.family.display, fontSize: typography.size.xl, color: colors.foreground, fontVariant: ['tabular-nums'] },
+  overflowCount: { fontSize: typography.size.xl, color: colors.foreground, fontVariant: ['tabular-nums'] },
   overflowLabel: { fontSize: 10, letterSpacing: 0.4, textTransform: 'uppercase', color: colors.mutedForeground },
   grid: { gap: spacing.sm, paddingTop: spacing.xs, paddingBottom: spacing.sm },
   gridRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.md },

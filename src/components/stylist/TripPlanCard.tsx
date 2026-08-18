@@ -287,7 +287,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   intro: {
-    fontFamily: typography.family.display,
     fontSize: typography.size.xl,
     color: colors.foreground,
     lineHeight: typography.size.xl * 1.4,
@@ -304,7 +303,6 @@ const styles = StyleSheet.create({
   placeholderCard: { alignItems: 'center', justifyContent: 'center', minHeight: 220 },
   placeholderText: { color: colors.mutedForeground, fontSize: typography.size.sm, marginTop: spacing.xs },
   outfitLabel: {
-    fontFamily: typography.family.display,
     fontSize: typography.size.lg,
     color: colors.foreground,
   },
@@ -357,7 +355,6 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   packingTitle: {
-    fontFamily: typography.family.display,
     fontSize: typography.size.lg,
     color: colors.foreground,
   },

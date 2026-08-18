@@ -3844,7 +3844,7 @@ const styles = StyleSheet.create({
   gapList: { gap: spacing.xs },
   adviceThumbs: { gap: spacing.sm, paddingVertical: spacing.xs },
   responseSection: { gap: spacing.sm, marginTop: spacing.sm },
-  responseSectionTitle: { color: colors.foreground, fontFamily: typography.family.display, fontSize: typography.size.lg },
+  responseSectionTitle: { color: colors.foreground, fontSize: typography.size.lg, fontWeight: typography.weight.semibold },
   adviceThumb: {
     width: 56,
     height: 56,

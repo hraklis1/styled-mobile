@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInUp, FadeOutDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,12 +7,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PressableScale } from '../../components/primitives/PressableScale';
 import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
 import { ShoppingPriorityTargetCard } from '../../components/shopping/ShoppingPriorityTargetCard';
-import { categoryIcon } from '../../components/stylist/GapCard';
+import { sentenceCase } from '../../components/shopping/ShoppingBriefCard';
 import { useItems } from '../../hooks/useItems';
 import { useShoppingPriorityEdit } from '../../hooks/useShoppingPriorityEdit';
 import { addOutfitToWishlist, useWishlist } from '../../hooks/useWishlist';
 import { track } from '../../lib/analytics';
-import { sentenceCase } from '../../components/shopping/ShoppingBriefCard';
+import { shoppingPriorityEditDisplayHeadline } from '../../lib/shoppingPriorityEdit';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { ShopOutfit } from '../../types/shop';
 import type { ShoppingPriorityEditScreenProps } from '../../navigation/types';
@@ -29,6 +29,8 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
   const [savedLocally, setSavedLocally] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showSaveToast, setShowSaveToast] = useState(false);
+  const [heroHeight, setHeroHeight] = useState(0);
+  const [showCompactHeader, setShowCompactHeader] = useState(false);
   const reduceMotion = useReducedMotion();
   const wearable = useMemo(() => new Map(items.filter((item) => !item.isArchived && item.condition !== 'needs_repair' && item.condition !== 'donate').map((item) => [item.id, item])), [items]);
   const savedFromWishlist = useMemo(() => {
@@ -54,6 +56,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
   useEffect(() => {
     setExpandedTargetKey(null);
     setSavedLocally(false);
+    setShowCompactHeader(false);
   }, [edit.data?.generatedAt]);
 
   useEffect(() => () => {
@@ -80,7 +83,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
       recommendationType: 'list',
       source: 'shopping_brief',
       shoppingBrief: edit.data,
-      intro: edit.data.headline,
+      intro: shoppingPriorityEditDisplayHeadline(edit.data.headline, priority.label),
       city: '',
       items: [],
       totalBudget: edit.data.targets.map((target) => target.priceRange).join(' · '),
@@ -111,6 +114,13 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
     });
   }, [expandedTargetKey, priority.category]);
 
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (heroHeight === 0) return;
+    const compactHeight = insets.top + 64;
+    const nextVisible = event.nativeEvent.contentOffset.y >= Math.max(0, heroHeight - compactHeight);
+    setShowCompactHeader((current) => current === nextVisible ? current : nextVisible);
+  }, [heroHeight, insets.top]);
+
   if (edit.isLoading) {
     return (
       <StateScreen onBack={goBack} title="Curating your edit">
@@ -134,27 +144,17 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
   }
 
   const data = edit.data;
+  const displayHeadline = shoppingPriorityEditDisplayHeadline(data.headline, priority.label);
   if (data.status === 'no_buy' && data.briefUpdated && data.updatedBrief) {
     return (
       <View style={styles.screen}>
-        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xxxl }]} showsVerticalScrollIndicator={false}>
-          <ShopSubpageHeader
-            eyebrow="SHOPPING EDIT"
-            title="Your brief was updated"
-            subtitle={data.summary}
-            onBack={goBack}
-            style={styles.fullBleedHeader}
-          />
+        <ScrollView contentContainerStyle={[styles.stateContent, { paddingBottom: insets.bottom + spacing.xxxl }]} showsVerticalScrollIndicator={false}>
+          <ShopSubpageHeader eyebrow="SHOPPING EDIT" title="Your brief was updated" subtitle={data.summary} onBack={goBack} style={styles.fullBleedHeader} />
           <View style={styles.noBuyCard} accessibilityLiveRegion="polite">
             <Ionicons name="checkmark-circle-outline" size={30} color={colors.primary} />
             <Text selectable style={styles.noBuyTitle}>This priority is already covered</Text>
             <Text selectable style={styles.body}>{data.noBuyReason}</Text>
-            <PressableScale
-              contentStyle={styles.primaryButton}
-              onPress={goBack}
-              accessibilityRole="button"
-              accessibilityLabel="View updated Shopping Brief"
-            >
+            <PressableScale contentStyle={styles.primaryButton} onPress={goBack} accessibilityRole="button" accessibilityLabel="View updated Shopping Brief">
               <Text style={styles.primaryButtonText}>View updated brief</Text>
               <Ionicons name="arrow-forward" size={15} color={colors.primaryForeground} />
             </PressableScale>
@@ -167,8 +167,8 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
   if (data.status === 'no_buy') {
     return (
       <View style={styles.screen}>
-        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xxxl }]} showsVerticalScrollIndicator={false}>
-          <ShopSubpageHeader eyebrow="SHOPPING EDIT" title={data.headline} subtitle={data.summary} onBack={goBack} style={styles.fullBleedHeader} />
+        <ScrollView contentContainerStyle={[styles.stateContent, { paddingBottom: insets.bottom + spacing.xxxl }]} showsVerticalScrollIndicator={false}>
+          <ShopSubpageHeader eyebrow="SHOPPING EDIT" title={displayHeadline} subtitle={data.summary} onBack={goBack} style={styles.fullBleedHeader} />
           <View style={styles.noBuyCard}>
             <Ionicons name="checkmark-circle-outline" size={30} color={colors.primary} />
             <Text selectable style={styles.noBuyTitle}>You can wait</Text>
@@ -181,39 +181,43 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xxxl }]} showsVerticalScrollIndicator={false}>
-        <ShopSubpageHeader
-          eyebrow="SHOPPING EDIT"
-          title={data.headline}
-          subtitle={data.summary}
-          onBack={goBack}
-          style={styles.fullBleedHeader}
-          actions={(
-            <PressableScale
-              contentStyle={[styles.saveAction, isSaved && styles.saveActionSaved]}
-              onPress={() => void saveEdit()}
-              disabled={saving || isSaved}
-              haptic={!isSaved}
-              accessibilityRole="button"
-              accessibilityLabel={saving ? 'Saving Shopping Edit' : isSaved ? 'Shopping Edit saved' : 'Save Shopping Edit'}
-              accessibilityState={{ selected: isSaved, busy: saving, disabled: saving || isSaved }}
-            >
-              {saving ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name={isSaved ? 'checkmark' : 'bookmark-outline'} size={19} color={isSaved ? colors.primaryForeground : colors.primary} />}
-            </PressableScale>
-          )}
-        />
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xxxl }]}
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={handleScroll}
+      >
+        <View onLayout={(event) => setHeroHeight(event.nativeEvent.layout.height)}>
+          <ShopSubpageHeader
+            eyebrow="SHOPPING EDIT"
+            title={displayHeadline}
+            subtitle={data.summary}
+            titleNumberOfLines={2}
+            subtitleNumberOfLines={2}
+            onBack={goBack}
+            style={[styles.fullBleedHeader, styles.readyHeader]}
+            actions={<SaveEditAction saving={saving} isSaved={isSaved} onPress={saveEdit} />}
+          />
+        </View>
         <View style={styles.priorityContext}>
-          <View style={styles.priorityIcon}><Ionicons name={categoryIcon(priority.category)} size={17} color={colors.primary} /></View>
           <View style={styles.priorityText}>
             <Text style={styles.priorityEyebrow}>The wardrobe gap</Text>
             <Text selectable style={styles.priorityLabel}>{sentenceCase(priority.label)}</Text>
             <Text selectable style={styles.body}>{priority.context}</Text>
-            {priority.unlocks.length > 0 ? <Text selectable style={styles.priorityUnlocks}>Unlocks {priority.unlocks.join(' · ')}</Text> : null}
+            {priority.unlocks.length > 0 ? (
+              <View style={styles.priorityUnlockRow}>
+                <Ionicons name="checkmark-circle-outline" size={16} color={colors.primary} />
+                <Text selectable style={styles.priorityUnlocks}>Unlocks {priority.unlocks.join(' · ')}</Text>
+              </View>
+            ) : null}
           </View>
         </View>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionLabel}>3 directions</Text>
-          <Text selectable style={styles.sectionDescription}>Each solves the same gap in a different way.</Text>
+          <Text style={styles.sectionCount}>03</Text>
+          <View style={styles.sectionHeadingCopy}>
+            <Text style={styles.sectionLabel}>Curated directions</Text>
+            <Text selectable style={styles.sectionDescription}>Three distinct ways to close the gap.</Text>
+          </View>
         </View>
         {data.targets.map((target, index) => (
           <ShoppingPriorityTargetCard
@@ -226,18 +230,41 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
           />
         ))}
       </ScrollView>
+      {showCompactHeader ? (
+        <Animated.View entering={reduceMotion ? undefined : FadeInUp.duration(150)} exiting={reduceMotion ? undefined : FadeOutDown.duration(100)} style={styles.stickyHeader}>
+          <ShopSubpageHeader
+            compact
+            eyebrow="SHOPPING EDIT"
+            title={displayHeadline}
+            onBack={goBack}
+            style={styles.stickyHeaderContent}
+            actions={<SaveEditAction saving={saving} isSaved={isSaved} onPress={saveEdit} />}
+          />
+        </Animated.View>
+      ) : null}
       {showSaveToast ? (
-        <Animated.View
-          entering={reduceMotion ? undefined : FadeInUp.duration(160)}
-          exiting={reduceMotion ? undefined : FadeOutDown.duration(120)}
-          style={[styles.saveToast, { bottom: insets.bottom + spacing.lg }]}
-          accessibilityLiveRegion="polite"
-        >
+        <Animated.View entering={reduceMotion ? undefined : FadeInUp.duration(160)} exiting={reduceMotion ? undefined : FadeOutDown.duration(120)} style={[styles.saveToast, { bottom: insets.bottom + spacing.lg }]} accessibilityLiveRegion="polite">
           <Ionicons name="checkmark-circle" size={18} color={colors.success} />
           <Text style={styles.saveToastText}>Edit saved</Text>
         </Animated.View>
       ) : null}
     </View>
+  );
+}
+
+function SaveEditAction({ saving, isSaved, onPress }: { saving: boolean; isSaved: boolean; onPress: () => Promise<void> }) {
+  return (
+    <PressableScale
+      contentStyle={[styles.saveAction, isSaved && styles.saveActionSaved]}
+      onPress={() => void onPress()}
+      disabled={saving || isSaved}
+      haptic={!isSaved}
+      accessibilityRole="button"
+      accessibilityLabel={saving ? 'Saving Shopping Edit' : isSaved ? 'Shopping Edit saved' : 'Save Shopping Edit'}
+      accessibilityState={{ selected: isSaved, busy: saving, disabled: saving || isSaved }}
+    >
+      {saving ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name={isSaved ? 'checkmark' : 'bookmark-outline'} size={19} color={isSaved ? colors.primaryForeground : colors.primary} />}
+    </PressableScale>
   );
 }
 
@@ -255,22 +282,25 @@ function StateScreen({ children, onBack, title }: { children: ReactNode; onBack:
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  content: { paddingHorizontal: spacing.lg, gap: spacing.xl },
+  content: { paddingHorizontal: spacing.lg },
   fullBleedHeader: { marginHorizontal: -spacing.lg },
+  readyHeader: { paddingBottom: spacing.lg, backgroundColor: colors.background },
   stateContent: { flexGrow: 1, paddingHorizontal: spacing.lg, gap: spacing.xl },
   stateCard: { flex: 1, minHeight: 260, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl, borderRadius: radii.xl, borderCurve: 'continuous', backgroundColor: colors.surfaceElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   loadingText: { color: colors.mutedForeground, fontSize: typography.size.sm },
   stateTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.foreground },
   stateCopy: { textAlign: 'center', color: colors.mutedForeground, lineHeight: 20 },
-  priorityContext: { flexDirection: 'row', gap: spacing.md, padding: spacing.lg, borderRadius: radii.xl, borderCurve: 'continuous', backgroundColor: colors.surfaceSubtle },
-  priorityIcon: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: radii.full, backgroundColor: colors.surfaceElevated },
-  priorityText: { flex: 1, gap: 4 },
+  priorityContext: { marginHorizontal: -spacing.lg, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg, backgroundColor: colors.surfaceSubtle, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  priorityText: { gap: spacing.xs },
   priorityEyebrow: { ...typography.eyebrow, color: colors.primary },
   priorityLabel: { fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: colors.foreground },
-  priorityUnlocks: { paddingTop: spacing.xs, fontSize: typography.size.xs, lineHeight: 18, fontWeight: typography.weight.medium, color: colors.primary },
+  priorityUnlockRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingTop: spacing.sm },
+  priorityUnlocks: { flex: 1, fontSize: typography.size.xs, lineHeight: 18, fontWeight: typography.weight.medium, color: colors.primary },
   body: { fontSize: typography.size.sm, lineHeight: 20, color: colors.mutedForeground },
-  sectionHeader: { gap: spacing.xs },
-  sectionLabel: { fontFamily: typography.family.display, ...typography.display.sm, color: colors.foreground },
+  sectionHeader: { minHeight: 92, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.lg },
+  sectionCount: { minWidth: 48, fontFamily: typography.family.display, fontSize: 34, lineHeight: 39, color: colors.primary },
+  sectionHeadingCopy: { flex: 1, gap: spacing.xs },
+  sectionLabel: { ...typography.eyebrowLarge, color: colors.primary },
   sectionDescription: { fontSize: typography.size.sm, lineHeight: 20, color: colors.mutedForeground },
   noBuyCard: { padding: spacing.lg, gap: spacing.sm, borderRadius: radii.xl, borderCurve: 'continuous', backgroundColor: colors.surfaceElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   noBuyTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.foreground },
@@ -278,6 +308,8 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: colors.primaryForeground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
   saveAction: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: radii.full, backgroundColor: colors.surfaceElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   saveActionSaved: { backgroundColor: colors.primary, borderColor: colors.primary },
-  saveToast: { position: 'absolute', left: spacing.lg, right: spacing.lg, minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.lg, borderCurve: 'continuous', backgroundColor: colors.surfaceElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, boxShadow: '0 4px 14px rgba(40, 35, 31, 0.12)' },
+  stickyHeader: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
+  stickyHeaderContent: { backgroundColor: colors.background, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  saveToast: { position: 'absolute', left: spacing.lg, right: spacing.lg, minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.lg, borderCurve: 'continuous', backgroundColor: colors.surfaceElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, boxShadow: '0 4px 14px rgba(40, 35, 31, 0.12)', zIndex: 20 },
   saveToastText: { flex: 1, color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.medium },
 });

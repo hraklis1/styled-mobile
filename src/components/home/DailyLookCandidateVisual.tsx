@@ -127,7 +127,6 @@ const styles = StyleSheet.create({
   },
   gapTitle: {
     color: colors.foreground,
-    fontFamily: typography.family.display,
     fontSize: typography.size.lg,
     textAlign: 'center',
     textTransform: 'capitalize',

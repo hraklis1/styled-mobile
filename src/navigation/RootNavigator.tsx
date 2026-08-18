@@ -439,7 +439,7 @@ function AppTabNavigator() {
             tabBarAccessibilityLabel: 'Shop. Press and hold for shortcuts.',
             tabBarButton: (props) => <QuickMenuTabButton {...props} pulseToken={shortcutCoachPulse} />,
             tabBarStyle:
-              getFocusedRouteNameFromRoute(route) === 'ShoppingCamera'
+              ['ShoppingCamera', 'ShoppingPriorityEdit'].includes(getFocusedRouteNameFromRoute(route) ?? '')
                 ? { ...baseTabBarStyle, display: 'none' }
                 : baseTabBarStyle,
           })}

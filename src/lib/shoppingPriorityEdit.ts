@@ -30,6 +30,20 @@ export type ShoppingPriorityEdit = {
   updatedBrief?: ShoppingBrief;
 };
 
+function normalizeEditorialCopy(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+export function shoppingPriorityEditDisplayHeadline(headline: string, priorityLabel: string): string {
+  const candidate = normalizeEditorialCopy(headline);
+  const wordCount = candidate ? candidate.split(' ').length : 0;
+  if (candidate.length <= 42 && wordCount <= 5) return candidate;
+
+  const fallback = normalizeEditorialCopy(priorityLabel);
+  if (!fallback) return candidate;
+  return fallback.charAt(0).toUpperCase() + fallback.slice(1);
+}
+
 export function parseShoppingPriorityEdit(value: unknown): ShoppingPriorityEdit {
   if (!value || typeof value !== 'object') throw new Error('Invalid Shopping Edit response');
   const edit = value as Partial<ShoppingPriorityEdit>;

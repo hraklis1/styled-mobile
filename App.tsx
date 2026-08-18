@@ -1,5 +1,6 @@
 import * as Sentry from '@sentry/react-native';
 import * as SplashScreen from 'expo-splash-screen';
+import { useFonts, BodoniModa_400Regular } from '@expo-google-fonts/bodoni-moda';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -28,6 +29,9 @@ SplashScreen.preventAutoHideAsync();
 
 function App() {
   useAppStateListener();
+  const [fontsLoaded, fontError] = useFonts({ BodoniModa_400Regular });
+
+  if (!fontsLoaded && !fontError) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

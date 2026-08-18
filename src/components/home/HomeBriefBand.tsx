@@ -54,7 +54,6 @@ export function HomeBriefBand({ onPress, style }: Props) {
 
 const styles = StyleSheet.create({
   headline: {
-    fontFamily: typography.family.display,
     fontSize: typography.size.xl,
     lineHeight: 27,
     color: colors.foreground,
