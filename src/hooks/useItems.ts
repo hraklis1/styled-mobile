@@ -8,6 +8,7 @@ import { track } from '../lib/analytics';
 import type { CoverImageVariant, Item, ItemCategory, ScanResult } from '../types/item';
 import type { SizeProfile } from '../lib/sizes';
 import { OUTFITS_QUERY_KEY } from './useOutfits';
+import { invalidateShoppingBriefQueries } from './useShoppingBrief';
 
 export type { ScanResult };
 
@@ -40,6 +41,7 @@ export const CLOSET_REFRESH_QUERY_KEY = ['closet', 'refresh'] as const;
 function invalidateItemQueries(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
   qc.invalidateQueries({ queryKey: BRANDS_QUERY_KEY });
+  invalidateShoppingBriefQueries(qc);
 }
 
 export type CreateItemInput = {
@@ -277,6 +279,7 @@ export function useArchiveItems() {
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
       qc.invalidateQueries({ queryKey: ARCHIVED_ITEMS_QUERY_KEY });
+      invalidateShoppingBriefQueries(qc);
     },
   });
 }

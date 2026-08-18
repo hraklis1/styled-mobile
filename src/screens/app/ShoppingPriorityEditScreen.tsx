@@ -1,31 +1,41 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, { FadeInUp, FadeOutDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PressableScale } from '../../components/primitives/PressableScale';
 import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
+import { ShoppingPriorityTargetCard } from '../../components/shopping/ShoppingPriorityTargetCard';
 import { categoryIcon } from '../../components/stylist/GapCard';
-import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { useItems } from '../../hooks/useItems';
 import { useShoppingPriorityEdit } from '../../hooks/useShoppingPriorityEdit';
-import { addOutfitToWishlist } from '../../hooks/useWishlist';
-import { itemImageContentFit, itemImageUri } from '../../lib/itemImage';
+import { addOutfitToWishlist, useWishlist } from '../../hooks/useWishlist';
 import { track } from '../../lib/analytics';
 import { sentenceCase } from '../../components/shopping/ShoppingBriefCard';
 import { colors, radii, spacing, typography } from '../../theme';
-import type { Item } from '../../types/item';
 import type { ShopOutfit } from '../../types/shop';
 import type { ShoppingPriorityEditScreenProps } from '../../navigation/types';
 
 export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriorityEditScreenProps) {
   const insets = useSafeAreaInsets();
-  const { priority, source } = route.params;
-  const edit = useShoppingPriorityEdit(priority);
+  const { priority, source, origin, briefGeneratedAt } = route.params;
+  const edit = useShoppingPriorityEdit(priority, { origin, briefGeneratedAt });
   const { data: items = [] } = useItems();
-  const { openStylist } = useGlobalAIStylist();
+  const { data: wishlist = [] } = useWishlist();
   const startedAt = useRef(Date.now());
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [expandedTargetKey, setExpandedTargetKey] = useState<string | null>(null);
+  const [savedLocally, setSavedLocally] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [showSaveToast, setShowSaveToast] = useState(false);
+  const reduceMotion = useReducedMotion();
   const wearable = useMemo(() => new Map(items.filter((item) => !item.isArchived && item.condition !== 'needs_repair' && item.condition !== 'donate').map((item) => [item.id, item])), [items]);
+  const savedFromWishlist = useMemo(() => {
+    if (!edit.data || edit.data.status !== 'ready') return false;
+    return wishlist.some((entry) => entry.outfit.shoppingBrief?.generatedAt === edit.data?.generatedAt);
+  }, [edit.data, wishlist]);
+  const isSaved = savedLocally || savedFromWishlist;
 
   useEffect(() => {
     track('shopping_brief_edit_opened', {
@@ -41,13 +51,31 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
     if (edit.data) track('shopping_brief_edit_loaded', { category: priority.category, reason: priority.reason, rank: priority.priority, source: source ?? 'shopping_brief', outcome: edit.data.status, targetCount: edit.data.targets.length, latencyMs: Date.now() - startedAt.current });
   }, [edit.data, edit.isError, priority, source]);
 
+  useEffect(() => {
+    setExpandedTargetKey(null);
+    setSavedLocally(false);
+  }, [edit.data?.generatedAt]);
+
+  useEffect(() => () => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+  }, []);
+
   const goBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
     else navigation.replace('ShoppingBriefDetail');
   }, [navigation]);
 
+  const showSavedToast = useCallback(() => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setShowSaveToast(true);
+    toastTimer.current = setTimeout(() => {
+      setShowSaveToast(false);
+      toastTimer.current = null;
+    }, 2200);
+  }, []);
+
   const saveEdit = useCallback(async () => {
-    if (!edit.data || edit.data.status !== 'ready' || edit.data.targets.length !== 3) return;
+    if (!edit.data || edit.data.status !== 'ready' || edit.data.targets.length !== 3 || isSaved || saving) return;
     const outfit: ShopOutfit = {
       recommendationType: 'list',
       source: 'shopping_brief',
@@ -59,50 +87,92 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
       audioSummary: edit.data.summary,
     };
     try {
+      setSaving(true);
       await addOutfitToWishlist(outfit);
+      setSavedLocally(true);
+      showSavedToast();
       track('shopping_brief_edit_saved', { category: priority.category, reason: priority.reason, rank: priority.priority, source: source ?? 'shopping_brief', targetCount: 3 });
     } catch {
       track('shopping_brief_edit_save_failed', { category: priority.category });
+      Alert.alert("Couldn't save this edit", 'Please try again in a moment.');
+    } finally {
+      setSaving(false);
     }
-  }, [edit.data, priority, source]);
+  }, [edit.data, isSaved, priority, saving, showSavedToast, source]);
 
-  const refine = useCallback(() => {
-    if (!edit.data || edit.data.status !== 'ready') return;
-    track('shopping_brief_stylist_follow_up', { category: priority.category, reason: priority.reason, rank: priority.priority, source: source ?? 'shopping_brief', targetCount: edit.data.targets.length });
-    openStylist({
-      source: 'shop',
-      context: { kind: 'shopping_brief_edit', priority: edit.data.priority, targets: edit.data.targets },
+  const toggleTarget = useCallback((targetKey: string, index: number) => {
+    const expanded = expandedTargetKey !== targetKey;
+    setExpandedTargetKey(expanded ? targetKey : null);
+    track('shopping_brief_edit_target_toggled', {
+      category: priority.category,
+      targetKey,
+      index: index + 1,
+      expanded,
     });
-  }, [edit.data, openStylist, priority, source]);
+  }, [expandedTargetKey, priority.category]);
 
   if (edit.isLoading) {
-    return <View style={styles.loading}><ActivityIndicator color={colors.primary} /><Text style={styles.loadingText}>Curating your options…</Text></View>;
+    return (
+      <StateScreen onBack={goBack} title="Curating your edit">
+        <ActivityIndicator color={colors.primary} />
+        <Text selectable style={styles.loadingText}>Curating your options…</Text>
+      </StateScreen>
+    );
   }
 
   if (edit.isError || !edit.data) {
     return (
-      <View style={styles.state}>
+      <StateScreen onBack={goBack} title="Shopping Edit">
         <Ionicons name="cloud-offline-outline" size={28} color={colors.primary} />
-        <Text style={styles.stateTitle}>This edit needs another look</Text>
-        <Text style={styles.stateCopy}>We couldn’t build the options just now. Your Shopping Brief is unchanged.</Text>
+        <Text selectable style={styles.stateTitle}>This edit needs another look</Text>
+        <Text selectable style={styles.stateCopy}>We couldn’t build the options just now. Your Shopping Brief is unchanged.</Text>
         <PressableScale contentStyle={styles.primaryButton} onPress={() => { track('shopping_brief_edit_retry', { category: priority.category }); void edit.refetch(); }} accessibilityRole="button" accessibilityLabel="Retry Shopping Edit">
           <Text style={styles.primaryButtonText}>Try again</Text>
         </PressableScale>
-        <TouchableOpacity onPress={goBack} accessibilityRole="button" accessibilityLabel="Back to Shopping Brief"><Text style={styles.backText}>Back to brief</Text></TouchableOpacity>
-      </View>
+      </StateScreen>
     );
   }
 
   const data = edit.data;
+  if (data.status === 'no_buy' && data.briefUpdated && data.updatedBrief) {
+    return (
+      <View style={styles.screen}>
+        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xxxl }]} showsVerticalScrollIndicator={false}>
+          <ShopSubpageHeader
+            eyebrow="SHOPPING EDIT"
+            title="Your brief was updated"
+            subtitle={data.summary}
+            onBack={goBack}
+            style={styles.fullBleedHeader}
+          />
+          <View style={styles.noBuyCard} accessibilityLiveRegion="polite">
+            <Ionicons name="checkmark-circle-outline" size={30} color={colors.primary} />
+            <Text selectable style={styles.noBuyTitle}>This priority is already covered</Text>
+            <Text selectable style={styles.body}>{data.noBuyReason}</Text>
+            <PressableScale
+              contentStyle={styles.primaryButton}
+              onPress={goBack}
+              accessibilityRole="button"
+              accessibilityLabel="View updated Shopping Brief"
+            >
+              <Text style={styles.primaryButtonText}>View updated brief</Text>
+              <Ionicons name="arrow-forward" size={15} color={colors.primaryForeground} />
+            </PressableScale>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
+
   if (data.status === 'no_buy') {
     return (
       <View style={styles.screen}>
-        <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.xxxl }]}>
-          <ShopSubpageHeader eyebrow="SHOPPING EDIT" title={data.headline} subtitle={data.summary} onBack={goBack} />
+        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xxxl }]} showsVerticalScrollIndicator={false}>
+          <ShopSubpageHeader eyebrow="SHOPPING EDIT" title={data.headline} subtitle={data.summary} onBack={goBack} style={styles.fullBleedHeader} />
           <View style={styles.noBuyCard}>
             <Ionicons name="checkmark-circle-outline" size={30} color={colors.primary} />
-            <Text style={styles.noBuyTitle}>You can wait</Text>
-            <Text style={styles.body}>{data.noBuyReason}</Text>
+            <Text selectable style={styles.noBuyTitle}>You can wait</Text>
+            <Text selectable style={styles.body}>{data.noBuyReason}</Text>
           </View>
         </ScrollView>
       </View>
@@ -111,89 +181,103 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 96 }]} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xxxl }]} showsVerticalScrollIndicator={false}>
         <ShopSubpageHeader
           eyebrow="SHOPPING EDIT"
           title={data.headline}
           subtitle={data.summary}
           onBack={goBack}
+          style={styles.fullBleedHeader}
+          actions={(
+            <PressableScale
+              contentStyle={[styles.saveAction, isSaved && styles.saveActionSaved]}
+              onPress={() => void saveEdit()}
+              disabled={saving || isSaved}
+              haptic={!isSaved}
+              accessibilityRole="button"
+              accessibilityLabel={saving ? 'Saving Shopping Edit' : isSaved ? 'Shopping Edit saved' : 'Save Shopping Edit'}
+              accessibilityState={{ selected: isSaved, busy: saving, disabled: saving || isSaved }}
+            >
+              {saving ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name={isSaved ? 'checkmark' : 'bookmark-outline'} size={19} color={isSaved ? colors.primaryForeground : colors.primary} />}
+            </PressableScale>
+          )}
         />
         <View style={styles.priorityContext}>
-          <Ionicons name={categoryIcon(priority.category)} size={16} color={colors.primary} />
-          <View style={styles.priorityText}><Text style={styles.priorityLabel}>{sentenceCase(priority.label)}</Text><Text style={styles.body}>{priority.context}</Text></View>
-        </View>
-        <Text style={styles.sectionLabel}>THREE WAYS TO SOLVE IT</Text>
-        {data.targets.map((target, index) => (
-          <View key={target.key} style={styles.targetCard}>
-            <View style={styles.targetIndex}><Text style={styles.targetIndexText}>0{index + 1}</Text></View>
-            <Text style={styles.targetTitle}>{target.title}</Text>
-            <Text style={styles.targetRationale}>{target.rationale}</Text>
-            <View style={styles.metaGrid}>
-              <Meta label="Silhouette" value={target.silhouette} />
-              <Meta label="Color" value={target.color} />
-              <Meta label="Material" value={target.material} />
-              <Meta label="Price band" value={target.priceRange} />
-            </View>
-            <Text style={styles.retailers}>Places to look: {target.retailerExamples.join(' · ')}</Text>
-            {target.unlocks.length > 0 ? <Text style={styles.unlocks}>Unlocks {target.unlocks.join(' · ')}</Text> : null}
-            <Text style={styles.pairsLabel}>Pairs from your wardrobe</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pairsRail}>
-              {target.pairsWithItemIds.map((id) => <WardrobePair key={id} item={wearable.get(id)} />)}
-            </ScrollView>
+          <View style={styles.priorityIcon}><Ionicons name={categoryIcon(priority.category)} size={17} color={colors.primary} /></View>
+          <View style={styles.priorityText}>
+            <Text style={styles.priorityEyebrow}>The wardrobe gap</Text>
+            <Text selectable style={styles.priorityLabel}>{sentenceCase(priority.label)}</Text>
+            <Text selectable style={styles.body}>{priority.context}</Text>
+            {priority.unlocks.length > 0 ? <Text selectable style={styles.priorityUnlocks}>Unlocks {priority.unlocks.join(' · ')}</Text> : null}
           </View>
+        </View>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionLabel}>3 directions</Text>
+          <Text selectable style={styles.sectionDescription}>Each solves the same gap in a different way.</Text>
+        </View>
+        {data.targets.map((target, index) => (
+          <ShoppingPriorityTargetCard
+            key={target.key}
+            target={target}
+            index={index + 1}
+            wardrobe={wearable}
+            expanded={expandedTargetKey === target.key}
+            onToggle={() => toggleTarget(target.key, index)}
+          />
         ))}
       </ScrollView>
-      <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
-        <PressableScale contentStyle={styles.primaryButton} onPress={() => void saveEdit()} accessibilityRole="button" accessibilityLabel="Save this edit">
-          <Ionicons name="bookmark-outline" size={16} color={colors.primaryForeground} /><Text style={styles.primaryButtonText}>Save this edit</Text>
-        </PressableScale>
-        <TouchableOpacity style={styles.refineButton} onPress={refine} accessibilityRole="button" accessibilityLabel="Refine with stylist"><Ionicons name="sparkles-outline" size={16} color={colors.action} /><Text style={styles.refineText}>Refine with stylist</Text></TouchableOpacity>
-      </View>
+      {showSaveToast ? (
+        <Animated.View
+          entering={reduceMotion ? undefined : FadeInUp.duration(160)}
+          exiting={reduceMotion ? undefined : FadeOutDown.duration(120)}
+          style={[styles.saveToast, { bottom: insets.bottom + spacing.lg }]}
+          accessibilityLiveRegion="polite"
+        >
+          <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+          <Text style={styles.saveToastText}>Edit saved</Text>
+        </Animated.View>
+      ) : null}
     </View>
   );
 }
 
-function Meta({ label, value }: { label: string; value: string }) { return <View style={styles.metaCell}><Text style={styles.metaLabel}>{label}</Text><Text style={styles.metaValue}>{value}</Text></View>; }
-
-function WardrobePair({ item }: { item?: Item }) {
-  return <View style={styles.pair}><View style={styles.pairImage}>{item && itemImageUri(item) ? <Image source={{ uri: itemImageUri(item) }} style={StyleSheet.absoluteFill} resizeMode={itemImageContentFit(item)} /> : <Ionicons name="shirt-outline" size={18} color={colors.mutedForeground} />}</View><Text style={styles.pairName} numberOfLines={1}>{item?.name ?? 'Wardrobe piece'}</Text></View>;
+function StateScreen({ children, onBack, title }: { children: ReactNode; onBack: () => void; title: string }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.stateContent, { paddingBottom: insets.bottom + spacing.xxxl }]} showsVerticalScrollIndicator={false}>
+        <ShopSubpageHeader compact eyebrow="SHOPPING EDIT" title={title} onBack={onBack} style={styles.fullBleedHeader} />
+        <View style={styles.stateCard}>{children}</View>
+      </ScrollView>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  content: { paddingHorizontal: spacing.lg },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, backgroundColor: colors.background },
+  content: { paddingHorizontal: spacing.lg, gap: spacing.xl },
+  fullBleedHeader: { marginHorizontal: -spacing.lg },
+  stateContent: { flexGrow: 1, paddingHorizontal: spacing.lg, gap: spacing.xl },
+  stateCard: { flex: 1, minHeight: 260, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl, borderRadius: radii.xl, borderCurve: 'continuous', backgroundColor: colors.surfaceElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   loadingText: { color: colors.mutedForeground, fontSize: typography.size.sm },
-  state: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md, backgroundColor: colors.background },
   stateTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.foreground },
   stateCopy: { textAlign: 'center', color: colors.mutedForeground, lineHeight: 20 },
-  backText: { color: colors.action, fontWeight: typography.weight.semibold },
-  priorityContext: { flexDirection: 'row', gap: spacing.sm, paddingVertical: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline },
+  priorityContext: { flexDirection: 'row', gap: spacing.md, padding: spacing.lg, borderRadius: radii.xl, borderCurve: 'continuous', backgroundColor: colors.surfaceSubtle },
+  priorityIcon: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: radii.full, backgroundColor: colors.surfaceElevated },
   priorityText: { flex: 1, gap: 4 },
+  priorityEyebrow: { ...typography.eyebrow, color: colors.primary },
   priorityLabel: { fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: colors.foreground },
-  sectionLabel: { ...typography.eyebrow, color: colors.mutedForeground, marginTop: spacing.xl, marginBottom: spacing.sm },
-  targetCard: { paddingVertical: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline, gap: spacing.sm },
-  targetIndex: { width: 28, height: 22, borderRadius: radii.sm, backgroundColor: colors.secondary, alignItems: 'center', justifyContent: 'center' },
-  targetIndexText: { fontSize: 11, fontWeight: typography.weight.bold, color: colors.primary },
-  targetTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.foreground },
-  targetRationale: { fontSize: typography.size.sm, lineHeight: 20, color: colors.mutedForeground },
+  priorityUnlocks: { paddingTop: spacing.xs, fontSize: typography.size.xs, lineHeight: 18, fontWeight: typography.weight.medium, color: colors.primary },
   body: { fontSize: typography.size.sm, lineHeight: 20, color: colors.mutedForeground },
-  metaGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  metaCell: { width: '47%', gap: 2 },
-  metaLabel: { ...typography.eyebrow, color: colors.mutedForeground },
-  metaValue: { fontSize: typography.size.sm, color: colors.foreground },
-  retailers: { fontSize: typography.size.xs, lineHeight: 18, color: colors.mutedForeground },
-  unlocks: { fontSize: typography.size.xs, lineHeight: 18, color: colors.primary },
-  pairsLabel: { marginTop: spacing.xs, fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.foreground },
-  pairsRail: { gap: spacing.sm, paddingVertical: 2 },
-  pair: { width: 76, gap: 4 },
-  pairImage: { width: 76, height: 76, borderRadius: radii.md, backgroundColor: colors.surfaceSubtle, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  pairName: { fontSize: 10, color: colors.mutedForeground },
-  noBuyCard: { marginTop: spacing.xl, padding: spacing.lg, gap: spacing.sm, borderRadius: radii.lg, backgroundColor: colors.surfaceElevated },
+  sectionHeader: { gap: spacing.xs },
+  sectionLabel: { fontFamily: typography.family.display, ...typography.display.sm, color: colors.foreground },
+  sectionDescription: { fontSize: typography.size.sm, lineHeight: 20, color: colors.mutedForeground },
+  noBuyCard: { padding: spacing.lg, gap: spacing.sm, borderRadius: radii.xl, borderCurve: 'continuous', backgroundColor: colors.surfaceElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   noBuyTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.foreground },
-  footer: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, gap: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline, backgroundColor: colors.background },
   primaryButton: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: radii.full, backgroundColor: colors.primary },
   primaryButtonText: { color: colors.primaryForeground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
-  refineButton: { minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  refineText: { color: colors.action, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+  saveAction: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: radii.full, backgroundColor: colors.surfaceElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  saveActionSaved: { backgroundColor: colors.primary, borderColor: colors.primary },
+  saveToast: { position: 'absolute', left: spacing.lg, right: spacing.lg, minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.lg, borderCurve: 'continuous', backgroundColor: colors.surfaceElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, boxShadow: '0 4px 14px rgba(40, 35, 31, 0.12)' },
+  saveToastText: { flex: 1, color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.medium },
 });

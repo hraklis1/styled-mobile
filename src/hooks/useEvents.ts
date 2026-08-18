@@ -2,8 +2,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'react-native';
 import { api } from '../lib/api';
 import type { Event } from '../types/event';
+import { invalidateShoppingBriefQueries } from './useShoppingBrief';
 
 export const EVENTS_QUERY_KEY = ['events'] as const;
+
+function invalidateEventQueries(qc: ReturnType<typeof useQueryClient>): void {
+  void qc.invalidateQueries({ queryKey: EVENTS_QUERY_KEY });
+  invalidateShoppingBriefQueries(qc);
+}
 
 export function useEvents() {
   return useQuery({
@@ -26,9 +32,7 @@ export function useCreateEvent() {
   return useMutation({
     mutationFn: (input: EventInput) =>
       api.post<Event>('/api/events', input).then((r) => r.data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: EVENTS_QUERY_KEY });
-    },
+    onSuccess: () => invalidateEventQueries(qc),
   });
 }
 
@@ -48,7 +52,7 @@ export function useUpdateEvent() {
     onError: (_err, _vars, ctx) => {
       if (ctx?.previous) qc.setQueryData(EVENTS_QUERY_KEY, ctx.previous);
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: EVENTS_QUERY_KEY }),
+    onSettled: () => invalidateEventQueries(qc),
   });
 }
 
@@ -71,7 +75,7 @@ export function useAssignEventItems() {
       if (ctx?.previous) qc.setQueryData(EVENTS_QUERY_KEY, ctx.previous);
       Alert.alert('Error', "Couldn't assign items to event. Please try again.");
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: EVENTS_QUERY_KEY }),
+    onSettled: () => invalidateEventQueries(qc),
   });
 }
 
@@ -99,7 +103,7 @@ export function useSetEventBoard() {
       if (ctx?.previous) qc.setQueryData(EVENTS_QUERY_KEY, ctx.previous);
       Alert.alert('Error', "Couldn't link that board. Please try again.");
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: EVENTS_QUERY_KEY }),
+    onSettled: () => invalidateEventQueries(qc),
   });
 }
 
@@ -117,6 +121,6 @@ export function useDeleteEvent() {
       if (ctx?.previous) qc.setQueryData(EVENTS_QUERY_KEY, ctx.previous);
       Alert.alert('Error', "Couldn't delete event. Please try again.");
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: EVENTS_QUERY_KEY }),
+    onSettled: () => invalidateEventQueries(qc),
   });
 }

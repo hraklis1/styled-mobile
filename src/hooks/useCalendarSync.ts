@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { EVENTS_QUERY_KEY } from './useEvents';
+import { invalidateShoppingBriefQueries } from './useShoppingBrief';
 
 export interface CalendarConnections {
   google: { connected: boolean; tokenExpiry: string | null };
@@ -53,6 +54,7 @@ export function useImportGoogleCalendarEvents() {
       api.post('/api/calendar/google/sync', { externalIds }).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: EVENTS_QUERY_KEY });
+      invalidateShoppingBriefQueries(qc);
       qc.invalidateQueries({ queryKey: CALENDAR_CONNECTIONS_KEY });
       qc.invalidateQueries({ queryKey: ['/api/calendar/google/preview'] });
     },
@@ -66,6 +68,7 @@ export function useImportAppleCalendarEvents() {
       api.post('/api/calendar/apple/sync', { externalIds }).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: EVENTS_QUERY_KEY });
+      invalidateShoppingBriefQueries(qc);
       qc.invalidateQueries({ queryKey: ['/api/calendar/apple/preview'] });
     },
   });

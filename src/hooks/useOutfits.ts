@@ -7,6 +7,7 @@ import { useTempUnit } from './useTempUnit';
 import type { Outfit, OutfitItemEntry } from '../types/outfit';
 import type { Event } from '../types/event';
 import { EVENTS_QUERY_KEY } from './useEvents';
+import { invalidateShoppingBriefQueries } from './useShoppingBrief';
 
 export const OUTFITS_QUERY_KEY = ['outfits'] as const;
 
@@ -148,6 +149,7 @@ export function useAcceptEventOutfitPlan() {
     onSuccess: (_result, { eventId }) => {
       qc.invalidateQueries({ queryKey: OUTFITS_QUERY_KEY });
       qc.invalidateQueries({ queryKey: ['events'] });
+      invalidateShoppingBriefQueries(qc);
       track('calendar_outfit_plan_accepted', { eventId });
     },
   });
@@ -186,6 +188,7 @@ export function useDeleteOutfit() {
     onSettled: () => {
       invalidateOutfitQueries(qc);
       qc.invalidateQueries({ queryKey: EVENTS_QUERY_KEY });
+      invalidateShoppingBriefQueries(qc);
     },
   });
 }
@@ -198,6 +201,7 @@ export function useAssignOutfitEvents() {
     onSuccess: (events) => {
       qc.setQueryData<Event[]>(EVENTS_QUERY_KEY, events);
       invalidateOutfitQueries(qc);
+      invalidateShoppingBriefQueries(qc);
     },
     onError: () => {
       Alert.alert('Error', "Couldn't update event assignments. Please try again.");

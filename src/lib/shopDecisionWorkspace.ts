@@ -8,6 +8,8 @@ export function buildShopStylistLaunch(initialQuery: string, initialMode: Stylis
 export type ShoppingBriefReason = 'weather' | 'occasion' | 'wardrobe_gap' | 'ratio_imbalance';
 
 export type ShoppingBriefPriority = {
+  /** Stable server-side verified gap identity used to reconcile edits. */
+  candidateKey?: string;
   label: string;
   category: string;
   reason: ShoppingBriefReason;

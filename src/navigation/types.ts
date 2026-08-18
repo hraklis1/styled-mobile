@@ -82,7 +82,12 @@ export type ShopStackParamList = {
   ShoppingHaulDetail: { groupKey: string };
   ShoppingCamera: undefined;
   ShoppingBriefDetail: undefined;
-  ShoppingPriorityEdit: { priority: ShoppingBriefPriority; source?: 'home_daily_look' };
+  ShoppingPriorityEdit: {
+    priority: ShoppingBriefPriority;
+    source?: 'home_daily_look';
+    origin?: 'shopping_brief';
+    briefGeneratedAt?: string;
+  };
 };
 
 // Wardrobe nested stack

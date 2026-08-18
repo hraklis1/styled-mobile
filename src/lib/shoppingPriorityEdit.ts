@@ -1,4 +1,8 @@
-import type { ShoppingBriefPriority } from './shopDecisionWorkspace';
+import {
+  parseShoppingBrief,
+  type ShoppingBrief,
+  type ShoppingBriefPriority,
+} from './shopDecisionWorkspace';
 
 export type ShoppingPriorityTarget = {
   key: string;
@@ -22,6 +26,8 @@ export type ShoppingPriorityEdit = {
   priority: ShoppingBriefPriority;
   targets: ShoppingPriorityTarget[];
   noBuyReason: string | null;
+  briefUpdated?: boolean;
+  updatedBrief?: ShoppingBrief;
 };
 
 export function parseShoppingPriorityEdit(value: unknown): ShoppingPriorityEdit {
@@ -35,8 +41,18 @@ export function parseShoppingPriorityEdit(value: unknown): ShoppingPriorityEdit 
     || !edit.priority || typeof edit.priority !== 'object'
     || !Array.isArray(edit.targets)
     || (edit.noBuyReason != null && typeof edit.noBuyReason !== 'string')
+    || (edit.briefUpdated != null && typeof edit.briefUpdated !== 'boolean')
   ) throw new Error('Invalid Shopping Edit response');
   if (edit.status === 'ready' && edit.targets.length !== 3) throw new Error('Invalid Shopping Edit response');
   if (edit.status === 'no_buy' && edit.targets.length !== 0) throw new Error('Invalid Shopping Edit response');
-  return { ...edit, noBuyReason: edit.noBuyReason ?? null } as ShoppingPriorityEdit;
+  const updatedBrief = edit.updatedBrief == null ? undefined : parseShoppingBrief(edit.updatedBrief);
+  if (edit.briefUpdated === true && (edit.status !== 'no_buy' || !updatedBrief)) {
+    throw new Error('Invalid Shopping Edit response');
+  }
+  if (edit.briefUpdated !== true && updatedBrief) throw new Error('Invalid Shopping Edit response');
+  return {
+    ...edit,
+    noBuyReason: edit.noBuyReason ?? null,
+    ...(updatedBrief ? { updatedBrief } : {}),
+  } as ShoppingPriorityEdit;
 }

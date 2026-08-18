@@ -1,9 +1,18 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, type QueryClient } from '@tanstack/react-query';
 
 import { api } from '../lib/api';
 import { parseShoppingBrief } from '../lib/shopDecisionWorkspace';
 
 export const SHOPPING_BRIEF_QUERY_KEY = ['shop', 'brief'] as const;
+
+/**
+ * The brief and every focused edit share this prefix. Any wardrobe or event
+ * mutation can change both the ranked priorities and the evidence behind a
+ * previously generated edit, so invalidate the whole decision subtree.
+ */
+export function invalidateShoppingBriefQueries(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries({ queryKey: SHOPPING_BRIEF_QUERY_KEY });
+}
 
 /**
  * Shared by Shop and Home's `HomeBriefBand` under one query key, so whichever

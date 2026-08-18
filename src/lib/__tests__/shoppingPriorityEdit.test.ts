@@ -37,6 +37,44 @@ test('accepts no-buy without target cards', () => {
   }).status).toBe('no_buy');
 });
 
+test('accepts a reconciled no-buy with the updated parent brief', () => {
+  const updatedBrief = {
+    status: 'balanced' as const,
+    headline: 'Your wardrobe is well covered',
+    summary: 'The blazer priority was removed because an owned piece already fills that role.',
+    generatedAt: new Date().toISOString(),
+    source: 'rules' as const,
+    priorities: [],
+  };
+  const edit = parseShoppingPriorityEdit({
+    status: 'no_buy',
+    headline: 'Tailored blazer',
+    summary: 'Your current tailoring already covers this need.',
+    generatedAt: new Date().toISOString(),
+    priority,
+    targets: [],
+    noBuyReason: 'An owned blazer already covers professional settings.',
+    briefUpdated: true,
+    updatedBrief,
+  });
+
+  expect(edit.briefUpdated).toBe(true);
+  expect(edit.updatedBrief).toEqual(updatedBrief);
+});
+
+test('rejects a brief-updated response without its replacement brief', () => {
+  expect(() => parseShoppingPriorityEdit({
+    status: 'no_buy',
+    headline: 'Updated',
+    summary: 'The priority changed.',
+    generatedAt: new Date().toISOString(),
+    priority,
+    targets: [],
+    noBuyReason: 'Already covered.',
+    briefUpdated: true,
+  })).toThrow('Invalid Shopping Edit response');
+});
+
 test('rejects partial ready edits', () => {
   expect(() => parseShoppingPriorityEdit({
     status: 'ready', headline: 'Start', summary: 'Only one.', generatedAt: new Date().toISOString(), priority,

@@ -82,7 +82,14 @@ export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScr
                   haptic={false}
                   scaleTo={0.97}
                   contentStyle={styles.askButton}
-                  onPress={() => { track('shopping_brief_priority_opened', { category: priority.category, reason: priority.reason, rank: priority.priority }); navigation.navigate('ShoppingPriorityEdit', { priority }); }}
+                  onPress={() => {
+                    track('shopping_brief_priority_opened', { category: priority.category, reason: priority.reason, rank: priority.priority });
+                    navigation.navigate('ShoppingPriorityEdit', {
+                      priority,
+                      origin: 'shopping_brief',
+                      briefGeneratedAt: data.generatedAt,
+                    });
+                  }}
                   accessibilityRole="button"
                   accessibilityLabel={`See options for ${priority.label}`}
                 >
