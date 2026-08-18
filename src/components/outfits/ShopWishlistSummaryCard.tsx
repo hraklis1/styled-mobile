@@ -16,9 +16,10 @@ export function ShopWishlistSummaryCard({ entry, onPress, onMore }: Props) {
   const { outfit, eventContext } = entry;
   const recommendationType = getWishlistRecommendationType(entry);
   const brands = [...new Set(outfit.items.map((item) => item.brand?.trim()).filter(Boolean))];
+  const savedEdit = outfit.shoppingBrief;
   const context = eventContext?.title ?? outfit.city?.trim();
   const savedDate = new Date(entry.savedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  const itemLabel = recommendationType === 'look' ? `${outfit.items.length} ${outfit.items.length === 1 ? 'item' : 'items'}`
+  const itemLabel = savedEdit ? `${savedEdit.targets.length} options` : recommendationType === 'look' ? `${outfit.items.length} ${outfit.items.length === 1 ? 'item' : 'items'}`
     : recommendationType === 'piece' ? '1 piece' : `${outfit.items.length} options`;
   const accessibilityLabel = [
     outfit.intro,
@@ -33,7 +34,7 @@ export function ShopWishlistSummaryCard({ entry, onPress, onMore }: Props) {
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityHint={`Opens ${recommendationType === 'look' ? 'look' : recommendationType === 'piece' ? 'piece' : 'list'} details`}
+      accessibilityHint={`Opens ${savedEdit ? 'saved edit' : recommendationType === 'look' ? 'look' : recommendationType === 'piece' ? 'piece' : 'list'} details`}
     >
       <WishlistOutfitPreview entry={entry} style={styles.preview} />
       <View style={styles.content}>
@@ -59,12 +60,12 @@ export function ShopWishlistSummaryCard({ entry, onPress, onMore }: Props) {
           </TouchableOpacity>
         </View>
         <EditorialCardMeta
-          title={outfit.intro}
-          subtitle={brands.length > 0 ? brands.slice(0, 3).join(' · ') : undefined}
+          title={savedEdit ? savedEdit.headline : outfit.intro}
+          subtitle={savedEdit ? 'Shopping Brief' : brands.length > 0 ? brands.slice(0, 3).join(' · ') : undefined}
           titleStyle={styles.intro}
         />
         <View style={styles.metaRow}>
-          <Text style={styles.budget} numberOfLines={1}>{outfit.totalBudget}</Text>
+          <Text style={styles.budget} numberOfLines={1}>{savedEdit ? 'Saved edit' : outfit.totalBudget}</Text>
           <Text style={styles.meta}>
             {itemLabel} · {savedDate}
           </Text>

@@ -30,13 +30,16 @@ export type DailyStylistPick = {
 export type DailyLookGenerationTrigger = 'no_saved_looks' | 'event_gap' | 'weather_gap' | 'rotation_gap';
 
 export type DailyLookGenerationDecision = {
+  /** Whether the client detected a reason to compose a new look. */
   shouldGenerate: boolean;
+  /** Premium Home always resolves useful wardrobe options through server hard validation. */
+  shouldResolve: boolean;
   trigger?: DailyLookGenerationTrigger;
   reason?: string;
   eventId?: number;
 };
 
-type SelectDailyStylistPickInput = {
+export type SelectDailyStylistPickInput = {
   outfits: Outfit[];
   items: Item[];
   events: Event[];
@@ -152,13 +155,41 @@ function isWearable(item: Item): boolean {
   return !item.isArchived && item.condition !== 'needs_repair' && item.condition !== 'donate';
 }
 
-function hasCompleteWardrobe(items: Item[]): boolean {
-  const wearable = items.filter(isWearable);
-  return wearable.some((item) => item.category === 'shoes')
-    && (
-      wearable.some((item) => item.category === 'full_body')
-      || (wearable.some((item) => item.category === 'top') && wearable.some((item) => item.category === 'bottom'))
-    );
+/**
+ * Today’s Look must resolve to a complete outfit in the wardrobe as it exists
+ * now. Saved outfits intentionally retain missing item references so their
+ * detail screen can explain deletions, but those historical placeholders must
+ * never be promoted as a wearable daily recommendation.
+ */
+export function isCompleteWearableOutfit(
+  outfit: Pick<Outfit, 'itemIds'>,
+  items: Item[],
+): boolean {
+  if (outfit.itemIds.length === 0) return false;
+
+  const itemMap = new Map(items.map((item) => [item.id, item]));
+  const selected = outfit.itemIds.map((entry) => itemMap.get(entry.id));
+  if (selected.some((item) => !item || !isWearable(item))) return false;
+
+  const resolved = selected.filter((item): item is Item => !!item);
+  if (new Set(resolved.map((item) => item.id)).size !== resolved.length) return false;
+
+  const hasShoes = resolved.some((item) => item.category === 'shoes');
+  const hasOnePiece = resolved.some((item) => item.category === 'full_body');
+  const hasTwoPiece = resolved.some((item) => item.category === 'top')
+    && resolved.some((item) => item.category === 'bottom');
+  const outerwearCount = resolved.filter((item) => item.category === 'outerwear').length;
+
+  return hasShoes && (hasOnePiece || hasTwoPiece) && outerwearCount <= 1;
+}
+
+function hasUsefulWardrobeAnchor(items: Item[]): boolean {
+  return items.some((item) => isWearable(item) && (
+    item.category === 'top'
+    || item.category === 'bottom'
+    || item.category === 'full_body'
+    || item.category === 'outerwear'
+  ));
 }
 
 function coreKey(itemIds: Array<{ id: number; category: string }>): string {
@@ -191,8 +222,8 @@ function isFeaturedOrRecentlyWorn(outfit: Outfit, recentPickIds: Set<number>, no
 }
 
 /**
- * Pure gate for the premium daily composition request. The saved selector
- * remains authoritative; this helper only opens one conservative gap.
+ * Pure decision for premium Home resolution. Soft client ranking supplies an
+ * ordered fallback, but every useful result still passes server hard validation.
  */
 export function getDailyLookGenerationDecision({
   outfits,
@@ -211,15 +242,31 @@ export function getDailyLookGenerationDecision({
   now?: Date;
   history: DailyPickHistoryEntry[];
 }): DailyLookGenerationDecision {
-  const eligible = outfits.filter((outfit) => !outfit.isDraft);
+  const eligible = outfits.filter(
+    (outfit) => !outfit.isDraft && isCompleteWearableOutfit(outfit, items),
+  );
   const nextTodayEvent = getNextTodayEvent(events, now, date);
-  if (nextTodayEvent?.outfitId) return { shouldGenerate: false };
-  if (!hasCompleteWardrobe(items)) return { shouldGenerate: false };
+  const validAssignedOutfit = nextTodayEvent?.outfitId == null
+    ? undefined
+    : eligible.find((outfit) => outfit.id === nextTodayEvent.outfitId);
+  const eventContext = nextTodayEvent ? { eventId: nextTodayEvent.id } : {};
+  if (!hasUsefulWardrobeAnchor(items)) return { shouldGenerate: false, shouldResolve: false, ...eventContext };
+  if (validAssignedOutfit) {
+    return {
+      shouldGenerate: false,
+      shouldResolve: true,
+      trigger: 'event_gap',
+      reason: `For ${nextTodayEvent?.title.trim() || formatOccasion(nextTodayEvent?.occasion ?? '')}`,
+      ...eventContext,
+    };
+  }
   if (eligible.length === 0) {
     return {
       shouldGenerate: true,
+      shouldResolve: true,
       trigger: 'no_saved_looks',
       reason: 'Styled from your wardrobe today',
+      ...eventContext,
     };
   }
 
@@ -232,6 +279,7 @@ export function getDailyLookGenerationDecision({
     if (bestOccasionScore < 24) {
       return {
         shouldGenerate: true,
+        shouldResolve: true,
         trigger: 'event_gap',
         eventId: nextTodayEvent.id,
         reason: `For ${nextTodayEvent.title.trim() || formatOccasion(nextTodayEvent.occasion)}`,
@@ -249,7 +297,9 @@ export function getDailyLookGenerationDecision({
     if (allWeatherScores.every((score) => score <= 0)) {
       return {
         shouldGenerate: true,
+        shouldResolve: true,
         trigger: 'weather_gap',
+        ...eventContext,
         reason: weather.current.condition === 'rainy'
           ? 'A polished layer for today’s rain'
           : weather.current.temperatureC <= 8
@@ -268,12 +318,36 @@ export function getDailyLookGenerationDecision({
   ) {
     return {
       shouldGenerate: true,
+      shouldResolve: true,
       trigger: 'rotation_gap',
       reason: 'A fresh way to wear your wardrobe',
+      ...eventContext,
     };
   }
 
-  return { shouldGenerate: false };
+  if (nextTodayEvent) {
+    return {
+      shouldGenerate: false,
+      shouldResolve: true,
+      trigger: 'event_gap',
+      reason: `For ${nextTodayEvent.title.trim() || formatOccasion(nextTodayEvent.occasion)}`,
+      ...eventContext,
+    };
+  }
+  if (weatherGap) {
+    return {
+      shouldGenerate: false,
+      shouldResolve: true,
+      trigger: 'weather_gap',
+      reason: 'Validated for today’s weather',
+    };
+  }
+  return {
+    shouldGenerate: false,
+    shouldResolve: true,
+    trigger: 'rotation_gap',
+    reason: 'Today’s edit',
+  };
 }
 
 function deterministicTieBreak(date: string, outfitId: number): number {
@@ -314,7 +388,7 @@ function reasonForPick(
   return outfit.event ? `Ready for ${formatOccasion(outfit.event)}` : 'Today’s edit';
 }
 
-export function selectDailyStylistPick({
+export function rankDailyStylistPicks({
   outfits,
   items,
   events,
@@ -324,21 +398,16 @@ export function selectDailyStylistPick({
   now = new Date(),
   history,
   tempUnit,
-}: SelectDailyStylistPickInput): DailyStylistPick | null {
-  const eligible = outfits.filter((outfit) => !outfit.isDraft);
-  if (eligible.length === 0) return null;
+}: SelectDailyStylistPickInput): DailyStylistPick[] {
+  const eligible = outfits.filter(
+    (outfit) => !outfit.isDraft && isCompleteWearableOutfit(outfit, items),
+  );
+  if (eligible.length === 0) return [];
 
   const nextTodayEvent = getNextTodayEvent(events, now, date);
   const assigned = nextTodayEvent?.outfitId == null
     ? undefined
     : eligible.find((outfit) => outfit.id === nextTodayEvent.outfitId);
-  if (assigned && nextTodayEvent) {
-    return {
-      outfit: assigned,
-      reason: `For ${nextTodayEvent.title.trim() || formatOccasion(nextTodayEvent.occasion)}`,
-      scoreDetails: { ...ZERO_SCORE, occasion: 100, total: 100 },
-    };
-  }
 
   const itemMap = new Map(items.map((item) => [item.id, item]));
   const recentPickIds = new Set(
@@ -363,15 +432,6 @@ export function selectDailyStylistPick({
 
   const cached = history.find((entry) => entry.date === date);
   const cachedOutfit = cached ? eligible.find((outfit) => outfit.id === cached.outfitId) : undefined;
-  if (cachedOutfit) {
-    const details = scoreOutfit(cachedOutfit);
-    return {
-      outfit: cachedOutfit,
-      reason: reasonForPick(cachedOutfit, details, weather, nextTodayEvent, tempUnit),
-      scoreDetails: details,
-    };
-  }
-
   const scored = eligible.map((outfit) => {
     return { outfit, details: scoreOutfit(outfit) };
   });
@@ -382,13 +442,29 @@ export function selectDailyStylistPick({
     return deterministicTieBreak(date, b.outfit.id) - deterministicTieBreak(date, a.outfit.id);
   });
 
-  const hasNoRankingContext = !nextTodayEvent && !weather && logs.length === 0 && history.length === 0 && items.length === 0;
-  const selected = allScoresEqual && hasNoRankingContext
-    ? [...scored].sort((a, b) => new Date(b.outfit.createdAt).getTime() - new Date(a.outfit.createdAt).getTime())[0]
-    : scored[0];
-  return {
-    outfit: selected.outfit,
-    reason: reasonForPick(selected.outfit, selected.details, weather, nextTodayEvent, tempUnit),
-    scoreDetails: selected.details,
-  };
+  const hasNoRankingContext = !nextTodayEvent && !weather && logs.length === 0 && history.length === 0;
+  const ordered = allScoresEqual && hasNoRankingContext
+    ? [...scored].sort((a, b) => new Date(b.outfit.createdAt).getTime() - new Date(a.outfit.createdAt).getTime())
+    : scored;
+  if (cachedOutfit) {
+    const cachedIndex = ordered.findIndex((entry) => entry.outfit.id === cachedOutfit.id);
+    if (cachedIndex > 0) ordered.unshift(...ordered.splice(cachedIndex, 1));
+  }
+  if (assigned) {
+    const assignedIndex = ordered.findIndex((entry) => entry.outfit.id === assigned.id);
+    if (assignedIndex > 0) ordered.unshift(...ordered.splice(assignedIndex, 1));
+  }
+  return ordered.map(({ outfit, details }) => ({
+    outfit,
+    reason: assigned?.id === outfit.id && nextTodayEvent
+      ? `For ${nextTodayEvent.title.trim() || formatOccasion(nextTodayEvent.occasion)}`
+      : reasonForPick(outfit, details, weather, nextTodayEvent, tempUnit),
+    scoreDetails: assigned?.id === outfit.id
+      ? { ...ZERO_SCORE, occasion: 100, total: 100 }
+      : details,
+  }));
+}
+
+export function selectDailyStylistPick(input: SelectDailyStylistPickInput): DailyStylistPick | null {
+  return rankDailyStylistPicks(input)[0] ?? null;
 }

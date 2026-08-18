@@ -80,6 +80,9 @@
     "lint": "eslint . --quiet",
     "test": "jest --runInBand",
     "check": "npm run typecheck && npm run lint && npm test",
+    "eval:commerce": "node scripts/eval-commerce-provider.mjs --provider fixture",
+    "eval:commerce:selftest": "node scripts/commerce-eval-selftest.mjs",
+    "eval:commerce:sovrn": "node --env-file-if-exists=.env.local scripts/eval-commerce-provider.mjs --provider sovrn",
     "postinstall": "patch-package"
   },
   "jest": {

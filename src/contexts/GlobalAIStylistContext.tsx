@@ -5,7 +5,7 @@ import { StylistChatView } from '../components/stylist/StylistChatView';
 import { useEntitlement } from '../hooks/useEntitlement';
 import { track } from '../lib/analytics';
 import { ensureEntitled } from '../lib/entitlementGate';
-import type { StylistEntryContext, StylistMode } from '../features/stylist/types';
+import type { StylistEntryContext, StylistMissingEssential, StylistMode } from '../features/stylist/types';
 
 // ─── Context ──────────────────────────────────────────────────────────────────
 
@@ -33,6 +33,7 @@ type OpenStylistOptions = {
   context?: StylistEntryContext;
   /** Navigation is owned by the screen that launched the global modal. */
   onNavigateToCloset?: (outfitId: number) => void;
+  onNavigateToShop?: (gap?: StylistMissingEssential) => void;
 };
 
 type GlobalAIStylistContextValue = {
@@ -68,13 +69,14 @@ export function GlobalAIStylistProvider({ children }: Props) {
   const [eventContext, setEventContext] = useState<StylistEventContext | undefined>(undefined);
   const [entryContext, setEntryContext] = useState<StylistEntryContext | undefined>(undefined);
   const [onNavigateToCloset, setOnNavigateToCloset] = useState<((outfitId: number) => void) | undefined>(undefined);
+  const [onNavigateToShop, setOnNavigateToShop] = useState<((gap?: StylistMissingEssential) => void) | undefined>(undefined);
   const [promptRequestId, setPromptRequestId] = useState(0);
   const [openRequestId, setOpenRequestId] = useState(0);
   const [source, setSource] = useState<StylistOpenSource | undefined>(undefined);
   const [threadMode, setThreadMode] = useState<'new' | 'resume'>('resume');
   const { isPremium } = useEntitlement();
 
-  const openStylist = useCallback(async ({ initialQuery: query, initialAttachmentUri: attachmentUri, initialMode: mode, destination, source, eventContext: event, context, onNavigateToCloset: navigateToCloset }: OpenStylistOptions) => {
+  const openStylist = useCallback(async ({ initialQuery: query, initialAttachmentUri: attachmentUri, initialMode: mode, destination, source, eventContext: event, context, onNavigateToCloset: navigateToCloset, onNavigateToShop: navigateToShop }: OpenStylistOptions) => {
     const entitled = await ensureEntitled(isPremium, {
       title: 'Unlock your AI Stylist',
       message: 'Chat with your personal stylist for daily outfit advice, wardrobe insights, and event planning.',
@@ -90,6 +92,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
     setEventContext(event);
     setEntryContext(context);
     setOnNavigateToCloset(() => navigateToCloset);
+    setOnNavigateToShop(() => navigateToShop);
     if (query) setPromptRequestId((id) => id + 1);
     setOpenRequestId((id) => id + 1);
     setVisible(true);
@@ -103,6 +106,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
     setEventContext(undefined);
     setEntryContext(undefined);
     setOnNavigateToCloset(undefined);
+    setOnNavigateToShop(undefined);
   }, []);
   const navigateToCloset = useCallback((outfitId: number) => {
     // The Stylist is presented as a native modal. Dismiss it before changing
@@ -134,6 +138,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
           source={source}
           threadMode={threadMode}
           onNavigateToCloset={navigateToCloset}
+          onNavigateToShop={onNavigateToShop}
           onPromptConsumed={consumePrompt}
           onClose={closeStylist}
         />

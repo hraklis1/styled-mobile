@@ -1,4 +1,4 @@
-import { getDailyLookGenerationDecision, selectDailyStylistPick, toLocalDateKey, type DailyPickHistoryEntry } from '../dailyStylistPick';
+import { getDailyLookGenerationDecision, rankDailyStylistPicks, selectDailyStylistPick, toLocalDateKey, type DailyPickHistoryEntry } from '../dailyStylistPick';
 import type { Event } from '../../types/event';
 import type { Item } from '../../types/item';
 import type { Outfit } from '../../types/outfit';
@@ -8,13 +8,18 @@ const now = new Date(2026, 5, 12, 9);
 const date = toLocalDateKey(now);
 
 function outfit(id: number, patch: Partial<Outfit> = {}): Outfit {
+  const itemBase = id * 10;
   return {
     id,
     name: `Outfit ${id}`,
     description: null,
     userId: 1,
     event: null,
-    itemIds: [{ id, category: 'top' }],
+    itemIds: [
+      { id: itemBase + 1, category: 'top' },
+      { id: itemBase + 2, category: 'bottom' },
+      { id: itemBase + 3, category: 'shoes' },
+    ],
     tags: [],
     notes: null,
     isDraft: false,
@@ -96,7 +101,12 @@ const select = (
   } = {},
 ) => selectDailyStylistPick({
   outfits,
-  items: options.items ?? outfits.map((entry) => item(entry.id)),
+  items: options.items ?? Array.from(
+    new Map(outfits.flatMap((entry) => entry.itemIds).map((entry) => [
+      entry.id,
+      item(entry.id, { category: entry.category as Item['category'] }),
+    ])).values(),
+  ),
   events: options.events ?? [],
   weather: options.weather,
   logs: options.logs ?? [],
@@ -144,6 +154,40 @@ describe('daily stylist pick', () => {
     expect(result?.outfit.id).toBe(2);
   });
 
+  it('never promotes an outfit whose shoe reference was deleted', () => {
+    const stale = outfit(1);
+    const valid = outfit(2);
+    const wardrobe = [
+      item(11, { category: 'top' }),
+      item(12, { category: 'bottom' }),
+      item(21, { category: 'top' }),
+      item(22, { category: 'bottom' }),
+      item(23, { category: 'shoes' }),
+    ];
+
+    const result = select([stale, valid], {
+      items: wardrobe,
+      history: [{ date, outfitId: stale.id }],
+    });
+
+    expect(result?.outfit.id).toBe(valid.id);
+  });
+
+  it('never promotes outerwear and bottoms without a top or one-piece', () => {
+    const incomplete = outfit(1, {
+      itemIds: [
+        { id: 11, category: 'outerwear' },
+        { id: 12, category: 'bottom' },
+        { id: 13, category: 'shoes' },
+      ],
+    });
+    const valid = outfit(2);
+
+    const result = select([incomplete, valid]);
+
+    expect(result?.outfit.id).toBe(valid.id);
+  });
+
   it('rotates away from recently featured outfits', () => {
     const result = select([outfit(1), outfit(2)], {
       history: [{ date: '2026-06-11', outfitId: 2 }],
@@ -164,8 +208,12 @@ describe('daily stylist pick', () => {
       {
         events: [event(1, 13, { occasion: 'business' })],
         items: [
-          item(1, { occasions: ['business'], warmthRating: 5, seasons: ['winter'], sleeveLength: 'long' }),
-          item(2, { warmthRating: 1, seasons: ['summer'], sleeveLength: 'short' }),
+          item(11, { category: 'top', occasions: ['business'], warmthRating: 5, seasons: ['winter'], sleeveLength: 'long' }),
+          item(12, { category: 'bottom', occasions: ['business'], warmthRating: 5, seasons: ['winter'] }),
+          item(13, { category: 'shoes', occasions: ['business'], warmthRating: 4, seasons: ['winter'] }),
+          item(21, { category: 'top', warmthRating: 1, seasons: ['summer'], sleeveLength: 'short' }),
+          item(22, { category: 'bottom', warmthRating: 1, seasons: ['summer'] }),
+          item(23, { category: 'shoes', warmthRating: 1, seasons: ['summer'] }),
         ],
         weather: {
           current: { condition: 'cold', temperatureC: 2, temperatureF: 36, summary: 'Cold' },
@@ -188,7 +236,7 @@ describe('daily stylist pick', () => {
           id: 1,
           userId: 1,
           date,
-          itemIds: [2],
+          itemIds: [21, 22, 23],
           notes: null,
           location: null,
           rating: 5,
@@ -207,9 +255,9 @@ describe('daily stylist pick', () => {
     expect(first?.outfit.id).toBe(second?.outfit.id);
   });
 
-  it('ignores drafts and works without optional context or item metadata', () => {
+  it('ignores drafts and outfits whose pieces cannot be resolved', () => {
     const result = select([outfit(1, { isDraft: true }), outfit(2)], { items: [] });
-    expect(result?.outfit.id).toBe(2);
+    expect(result).toBeNull();
   });
 
   it('falls back to the newest outfit when no signals distinguish candidates', () => {
@@ -217,7 +265,7 @@ describe('daily stylist pick', () => {
     const result = select([
       outfit(1, { createdAt: '2026-06-01T12:00:00.000Z', lastWornAt: wornAt }),
       outfit(2, { createdAt: '2026-06-10T12:00:00.000Z', lastWornAt: wornAt }),
-    ], { items: [] });
+    ]);
     expect(result?.outfit.id).toBe(2);
   });
 });
@@ -241,13 +289,44 @@ describe('daily look generation gate', () => {
     ...patch,
   });
 
-  it('generates only when there are no saved looks and the wardrobe is complete', () => {
+  it('generates from a useful wardrobe anchor, but not a truly empty wardrobe', () => {
     expect(decide({ outfits: [] }).trigger).toBe('no_saved_looks');
-    expect(decide({ outfits: [], items: completeItems.filter((entry) => entry.category !== 'shoes') }).shouldGenerate).toBe(false);
+    expect(decide({ outfits: [], items: [completeItems[0]] }).trigger).toBe('no_saved_looks');
+    expect(decide({ outfits: [], items: [] })).toMatchObject({ shouldGenerate: false, shouldResolve: false });
   });
 
-  it('never displaces an assigned event outfit', () => {
-    expect(decide({ events: [event(1, 14, { outfitId: 10 })] })).toEqual({ shouldGenerate: false });
+  it('treats incomplete or stale saved outfits as having no usable saved looks', () => {
+    const incomplete = outfit(11, {
+      itemIds: [
+        { id: 1, category: 'outerwear' },
+        { id: 2, category: 'bottom' },
+        { id: 99, category: 'shoes' },
+      ],
+    });
+
+    expect(decide({ outfits: [incomplete] }).trigger).toBe('no_saved_looks');
+  });
+
+  it('sends a valid assigned event outfit through premium server validation', () => {
+    expect(decide({ events: [event(1, 14, { outfitId: 10 })] })).toMatchObject({
+      shouldGenerate: false,
+      shouldResolve: true,
+      trigger: 'event_gap',
+      eventId: 1,
+    });
+  });
+
+  it('retains event context when no saved look takes trigger precedence', () => {
+    expect(decide({ outfits: [], events: [event(4, 14, { occasion: 'business' })] })).toMatchObject({
+      shouldGenerate: true,
+      shouldResolve: true,
+      trigger: 'no_saved_looks',
+      eventId: 4,
+    });
+  });
+
+  it('does not let an invalid assigned outfit suppress a better resolution', () => {
+    expect(decide({ events: [event(1, 14, { outfitId: 999, occasion: 'business' })] }).trigger).toBe('event_gap');
   });
 
   it('opens an event gap when the saved look has no meaningful occasion match', () => {
@@ -263,6 +342,40 @@ describe('daily look generation gate', () => {
 
   it('opens a rotation gap only when the wardrobe has an unused core combination', () => {
     expect(decide({ history: [{ date: '2026-06-11', outfitId: 10 }] }).trigger).toBe('rotation_gap');
-    expect(decide({ history: [] }).shouldGenerate).toBe(false);
+    expect(decide({ history: [] })).toMatchObject({ shouldGenerate: false, shouldResolve: true });
+  });
+});
+
+describe('ranked daily look fallbacks', () => {
+  it('returns every structurally valid outfit in recommendation order', () => {
+    const first = outfit(1, { isFavorite: true });
+    const second = outfit(2);
+    const ranked = rankDailyStylistPicks({
+      outfits: [second, first],
+      items: [...first.itemIds, ...second.itemIds].map((entry) => item(entry.id, { category: entry.category as Item['category'] })),
+      events: [],
+      logs: [],
+      date,
+      now,
+      history: [],
+    });
+
+    expect(ranked.map((entry) => entry.outfit.id)).toEqual([1, 2]);
+  });
+
+  it('ranks a valid assigned event outfit first while retaining alternatives for server validation', () => {
+    const assigned = outfit(1);
+    const other = outfit(2);
+    const ranked = rankDailyStylistPicks({
+      outfits: [other, assigned],
+      items: [...assigned.itemIds, ...other.itemIds].map((entry) => item(entry.id, { category: entry.category as Item['category'] })),
+      events: [event(1, 14, { outfitId: assigned.id })],
+      logs: [],
+      date,
+      now,
+      history: [],
+    });
+
+    expect(ranked.map((entry) => entry.outfit.id)).toEqual([assigned.id, other.id]);
   });
 });

@@ -41,18 +41,29 @@ import { useProfile } from '../../hooks/useProfile';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useDismissDailyLook, useResolveDailyLook, useSaveDailyLook, type DailyLookCandidate, type DailyLookResolveInput } from '../../hooks/useDailyLook';
 import { DailyLookDetailSheet } from '../../components/home/DailyLookDetailSheet';
+import { DailyLookCandidateVisual } from '../../components/home/DailyLookCandidateVisual';
 import { StylingLocationSheet } from '../../components/home/StylingLocationSheet';
 import { HomeBriefBand } from '../../components/home/HomeBriefBand';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { track } from '../../lib/analytics';
 import { itemCoverPresentation } from '../../lib/itemImage';
 import { formatTemp, resolveTempUnit } from '../../lib/temperature';
+import type { StylistMissingEssential } from '../../features/stylist/types';
 import {
-  selectDailyStylistPick,
+  rankDailyStylistPicks,
   getDailyLookGenerationDecision,
+  isCompleteWearableOutfit,
   toLocalDateKey,
   type DailyPickHistoryEntry,
 } from '../../lib/dailyStylistPick';
+import {
+  buildDailyLookContextRevision,
+  buildDailyLookResolveInput,
+  reconcileSavedDailyLookContext,
+  resolveDailyLookPresentation,
+  shoppingPriorityFromDailyLookGap,
+  type SavedDailyLookContext,
+} from '../../lib/dailyLookPresentation';
 import {
   loadDailyPickHistory,
   recordDailyPick,
@@ -173,6 +184,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [dailyPickHistoryLoaded, setDailyPickHistoryLoaded] = useState(false);
   const [dailyLookSheetVisible, setDailyLookSheetVisible] = useState(false);
   const [savedDailyOutfit, setSavedDailyOutfit] = useState<Outfit | null>(null);
+  const [savedDailyLookContext, setSavedDailyLookContext] = useState<SavedDailyLookContext | null>(null);
   const saveDailyLook = useSaveDailyLook();
   const dismissDailyLook = useDismissDailyLook();
   const shortlist = useMemo(
@@ -188,6 +200,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
   useEffect(() => {
     setSavedDailyOutfit(null);
+    setSavedDailyLookContext(null);
     setDailyLookSheetVisible(false);
   }, [dailyPickDate, user?.id]);
 
@@ -293,10 +306,11 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   );
 
   const recentOutfits = useMemo(
-    () => [...outfits]
+    () => outfits
+      .filter((outfit) => isCompleteWearableOutfit(outfit, items))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 6),
-    [outfits],
+    [items, outfits],
   );
 
   const profilePhotoUri = profile?.photoUrl ? resolveImageUri(profile.photoUrl) : undefined;
@@ -322,9 +336,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       isDestination ? 'Styling for a destination.' : isHomeFallback ? 'Using Home city.' : 'Using current location.'
     } Tap to change.`
     : 'No weather location set. Tap to set weather location.';
-  const dailyPick = useMemo(
+  const rankedDailyPicks = useMemo(
     () => dailyPickHistoryLoaded
-      ? selectDailyStylistPick({
+      ? rankDailyStylistPicks({
         outfits,
         items,
         events,
@@ -334,55 +348,88 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         history: dailyPickHistory,
         tempUnit,
       })
-      : null,
+      : [],
     [dailyPickDate, dailyPickHistory, dailyPickHistoryLoaded, events, items, logs, outfits, weather.data, tempUnit],
   );
+  const dailyPick = rankedDailyPicks[0] ?? null;
   const dailyLookDecision = useMemo(
     () => dailyPickHistoryLoaded
       ? getDailyLookGenerationDecision({ outfits, items, events, weather: weather.data, date: dailyPickDate, history: dailyPickHistory })
-      : { shouldGenerate: false },
+      : { shouldGenerate: false, shouldResolve: false },
     [dailyPickDate, dailyPickHistory, dailyPickHistoryLoaded, events, items, outfits, weather.data],
   );
-  const dailyLookInput = useMemo<DailyLookResolveInput | null>(() => {
-    if (!dailyLookDecision.shouldGenerate || !dailyLookDecision.trigger) return null;
+  const dailyLookLocation = useMemo(() => {
     const active = stylingLocation.activeLocation;
     return {
+      source: active.source,
+      label: active.label,
+      lat: active.coords?.lat,
+      lon: active.coords?.lon,
+    };
+  }, [stylingLocation.activeLocation]);
+  const dailyLookContextRevision = useMemo(
+    () => buildDailyLookContextRevision({
+      items,
+      outfits,
+      events,
+      weather: weather.data,
+      location: dailyLookLocation,
+    }),
+    [dailyLookLocation, events, items, outfits, weather.data],
+  );
+  const dailyLookInput = useMemo<DailyLookResolveInput | null>(() => {
+    return buildDailyLookResolveInput({
+      decision: dailyLookDecision,
       localDate: dailyPickDate,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
-      location: {
-        source: active.source,
-        label: active.label,
-        lat: active.coords?.lat,
-        lon: active.coords?.lon,
-      },
-      weather: weather.data ? {
-        condition: weather.data.current.condition,
-        temperatureC: weather.data.current.temperatureC,
-        summary: weather.data.current.summary,
-      } : undefined,
-      trigger: dailyLookDecision.trigger,
-      eventId: dailyLookDecision.eventId,
-      recentOutfitIds: dailyPickHistory
-        .filter((entry) => entry.date !== dailyPickDate)
-        .slice(0, 7)
-        .map((entry) => entry.outfitId),
+      location: dailyLookLocation,
+      weather: weather.data,
+      history: dailyPickHistory,
+      rankedOutfitIds: rankedDailyPicks.map((entry) => entry.outfit.id),
       currentOutfitId: dailyPick?.outfit.id ?? null,
-    };
-  }, [dailyLookDecision, dailyPick?.outfit.id, dailyPickDate, dailyPickHistory, stylingLocation.activeLocation, weather.data]);
+      items,
+      outfits,
+      events,
+    });
+  }, [dailyLookDecision, dailyLookLocation, dailyPick?.outfit.id, dailyPickDate, dailyPickHistory, events, items, outfits, rankedDailyPicks, weather.data]);
   const dailyLookQuery = useResolveDailyLook(
     dailyLookInput,
     isPremium && dailyPickHistoryLoaded && !weather.isLoading && !stylingLocation.isLoading,
   );
-  const generatedCandidate = savedDailyOutfit
-    ? null
-    : dailyLookQuery.data?.outcome === 'candidate' && dailyLookQuery.data.candidate?.status === 'active'
-      ? dailyLookQuery.data.candidate
-      : null;
-  const featuredOutfit = savedDailyOutfit ?? (generatedCandidate ? undefined : dailyPick?.outfit ?? recentOutfits[0]);
-  // The section title above already says "Today's Look" — when there's no
-  // real reason to show, echo it rather than coin a second name for the
-  // same thing.
-  const featuredReason = savedDailyOutfit ? dailyLookQuery.data?.candidate?.reason ?? 'Today’s Look' : generatedCandidate?.reason ?? dailyPick?.reason ?? "Today’s Look";
+  useEffect(() => {
+    if (!savedDailyOutfit || !savedDailyLookContext) return;
+    const reconciliation = reconcileSavedDailyLookContext(savedDailyLookContext, dailyLookContextRevision);
+    if (reconciliation === 'observe_target') {
+      setSavedDailyLookContext((current) => current ? { ...current, targetObserved: true } : null);
+      return;
+    }
+    if (reconciliation === 'clear') {
+      setSavedDailyOutfit(null);
+      setSavedDailyLookContext(null);
+      setDailyLookSheetVisible(false);
+    }
+  }, [dailyLookContextRevision, savedDailyLookContext, savedDailyOutfit]);
+  const dailyLookPresentation = resolveDailyLookPresentation({
+    premium: isPremium,
+    shouldResolve: dailyLookDecision.shouldResolve,
+    fetching: dailyLookQuery.isFetching,
+    response: dailyLookQuery.data,
+    rankedOutfit: dailyPick?.outfit,
+    rankedReason: dailyPick?.reason,
+    fallbackOutfits: rankedDailyPicks.map((entry) => ({ outfit: entry.outfit, reason: entry.reason })),
+    savedOutfit: savedDailyOutfit,
+    savedReason: dailyLookQuery.data?.candidate?.reason,
+  });
+  const generatedCandidate = dailyLookPresentation.kind === 'ready'
+    || dailyLookPresentation.kind === 'incomplete'
+    || dailyLookPresentation.kind === 'priority'
+    ? dailyLookPresentation.candidate
+    : null;
+  const featuredOutfit = dailyLookPresentation.kind === 'owned' ? dailyLookPresentation.outfit : undefined;
+  const featuredReason = dailyLookPresentation.kind === 'owned' ? dailyLookPresentation.reason : 'Today’s Look';
+  const candidateGap = dailyLookPresentation.kind === 'incomplete' || dailyLookPresentation.kind === 'priority'
+    ? dailyLookPresentation.gap
+    : undefined;
   const hasFeaturedAiImage = !!featuredOutfit?.aiGeneratedImageUrl;
 
   useEffect(() => {
@@ -393,8 +440,36 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
   useEffect(() => {
     if (!generatedCandidate) return;
-    track('daily_look_generated', { candidateId: generatedCandidate.id, trigger: generatedCandidate.trigger });
-  }, [generatedCandidate?.id]);
+    track('daily_look_generated', {
+      candidateId: generatedCandidate.id,
+      trigger: generatedCandidate.trigger,
+      resolutionKind: generatedCandidate.readinessStatus,
+      gapCount: generatedCandidate.missingEssentials.length,
+      fallbackUsed: false,
+    });
+    if (generatedCandidate.readinessStatus !== 'ready') {
+      track('daily_look_partial_impression', {
+        candidateId: generatedCandidate.id,
+        resolutionKind: generatedCandidate.readinessStatus,
+        gapCount: generatedCandidate.missingEssentials.length,
+      });
+    }
+  }, [generatedCandidate?.id, generatedCandidate?.readinessStatus]);
+
+  useEffect(() => {
+    if (dailyLookPresentation.kind !== 'owned' || dailyLookPresentation.source !== 'fallback') return;
+    track('daily_look_resolved', { resolutionKind: 'fallback', fallbackUsed: true, outfitId: dailyLookPresentation.outfit.id });
+  }, [dailyLookPresentation.kind, dailyLookPresentation.kind === 'owned' ? dailyLookPresentation.outfit.id : null]);
+
+  useEffect(() => {
+    if (!dailyLookInput || !dailyLookQuery.data || dailyLookPresentation.kind !== 'empty') return;
+    track('daily_look_resolved', {
+      resolutionKind: 'empty',
+      trigger: dailyLookInput.trigger,
+      fallbackUsed: false,
+      outcome: dailyLookQuery.data.outcome,
+    });
+  }, [dailyLookInput?.clientContextRevision, dailyLookPresentation.kind, dailyLookQuery.data?.outcome]);
 
   useEffect(() => {
     if (!dailyLookQuery.isError) return;
@@ -402,22 +477,38 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   }, [dailyLookQuery.isError]);
 
   useEffect(() => {
-    if (!dailyPickHistoryLoaded || !user?.id || !dailyPick?.outfit || generatedCandidate || savedDailyOutfit || dailyLookQuery.isFetching) return;
+    if (!dailyPickHistoryLoaded || !user?.id || dailyLookPresentation.kind !== 'owned' || savedDailyOutfit || dailyLookQuery.isFetching) return;
+    const presentedOutfit = dailyLookPresentation.outfit;
     const current = dailyPickHistory.find((entry) => entry.date === dailyPickDate);
-    if (current?.outfitId === dailyPick.outfit.id) return;
-    const next = recordDailyPick(dailyPickHistory, { date: dailyPickDate, outfitId: dailyPick.outfit.id });
+    if (current?.outfitId === presentedOutfit.id) return;
+    const next = recordDailyPick(dailyPickHistory, { date: dailyPickDate, outfitId: presentedOutfit.id });
     setDailyPickHistory(next);
     saveDailyPickHistory(user.id, next).catch(() => {});
-  }, [dailyLookQuery.isFetching, dailyPick, dailyPickDate, dailyPickHistory, dailyPickHistoryLoaded, generatedCandidate, savedDailyOutfit, user?.id]);
+  }, [dailyLookQuery.isFetching, dailyLookPresentation, dailyPickDate, dailyPickHistory, dailyPickHistoryLoaded, savedDailyOutfit, user?.id]);
 
   const handleDailyLookSave = useCallback(() => {
-    if (!generatedCandidate) return;
+    if (!generatedCandidate || generatedCandidate.readinessStatus !== 'ready') return;
     track('daily_look_save_tapped', { candidateId: generatedCandidate.id });
     saveDailyLook.mutate(
       { candidateId: generatedCandidate.id },
       {
         onSuccess: ({ outfit }) => {
+          const outfitsAfterSave = outfits.some((entry) => entry.id === outfit.id)
+            ? outfits.map((entry) => entry.id === outfit.id ? outfit : entry)
+            : [outfit, ...outfits];
+          const targetRevision = buildDailyLookContextRevision({
+            items,
+            outfits: outfitsAfterSave,
+            events,
+            weather: weather.data,
+            location: dailyLookLocation,
+          });
           setSavedDailyOutfit(outfit);
+          setSavedDailyLookContext({
+            sourceRevision: dailyLookContextRevision,
+            targetRevision,
+            targetObserved: false,
+          });
           setDailyLookSheetVisible(false);
           if (user?.id) {
             const next = recordDailyPick(dailyPickHistory, { date: dailyPickDate, outfitId: outfit.id });
@@ -435,7 +526,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         },
       },
     );
-  }, [dailyPickHistory, dailyPickDate, generatedCandidate, saveDailyLook, user]);
+  }, [dailyLookContextRevision, dailyLookLocation, dailyPickHistory, dailyPickDate, events, generatedCandidate, items, outfits, saveDailyLook, user, weather.data]);
 
   const handleDailyLookDismiss = useCallback(() => {
     if (!generatedCandidate) return;
@@ -444,6 +535,24 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       { onSuccess: () => setDailyLookSheetVisible(false) },
     );
   }, [dismissDailyLook, generatedCandidate]);
+
+  const handleDailyLookFindPiece = useCallback(() => {
+    if (!generatedCandidate || !candidateGap) return;
+    track('daily_look_missing_piece_tapped', {
+      candidateId: generatedCandidate.id,
+      resolutionKind: generatedCandidate.readinessStatus,
+      category: candidateGap.category,
+      source: 'home_daily_look',
+    });
+    setDailyLookSheetVisible(false);
+    navigation.navigate('Shop', {
+      screen: 'ShoppingPriorityEdit',
+      params: {
+        source: 'home_daily_look',
+        priority: shoppingPriorityFromDailyLookGap(candidateGap),
+      },
+    });
+  }, [candidateGap, generatedCandidate, navigation]);
 
   if ((itemsError || outfitsError) && items.length === 0 && outfits.length === 0) {
     return (
@@ -536,6 +645,12 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             screen: 'OutfitDetail',
             params: { outfitId, returnTo: 'Home' },
           }),
+          onNavigateToShop: (gap?: StylistMissingEssential) => {
+            if (!gap) return;
+            navigation.navigate('Shop', { screen: 'ShoppingPriorityEdit', params: {
+              priority: shoppingPriorityFromDailyLookGap(gap),
+            }});
+          },
         })}
         activeOpacity={0.7}
         accessibilityRole="button"
@@ -606,12 +721,12 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       {/* ── Featured outfit ────────────────────────────────────── */}
       <EditorialSection
         variant="ruled"
-        title="Today’s Look"
-        actionLabel="View all"
-        onAction={() => navigation.navigate('Closet', {
+        title={dailyLookPresentation.kind === 'priority' ? 'Today’s Priority' : 'Today’s Look'}
+        actionLabel={dailyLookPresentation.kind === 'owned' || dailyLookPresentation.kind === 'ready' ? 'View all' : undefined}
+        onAction={dailyLookPresentation.kind === 'owned' || dailyLookPresentation.kind === 'ready' ? () => navigation.navigate('Closet', {
           screen: 'ClosetMain',
           params: { segment: 'outfits' },
-        })}
+        }) : undefined}
       >
         {generatedCandidate ? (
           <Animated.View entering={FadeIn.duration(260)} exiting={FadeOut.duration(200)}>
@@ -625,31 +740,48 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               accessibilityRole="button"
               accessibilityLabel={`${generatedCandidate.name}. ${generatedCandidate.reason}. Open details`}
             >
-              <View style={{ width: heroWidth, height: heroHeight }}>
-                <OutfitCollage
-                  outfit={generatedPreviewOutfit(generatedCandidate)}
-                  size={heroWidth}
-                  height={heroHeight}
-                  borderRadius={0}
-                />
+              <View style={{ width: heroWidth, height: candidateGap && generatedCandidate.readinessStatus === 'priority' ? Math.round(heroHeight * 0.72) : heroHeight }}>
+                {candidateGap ? (
+                  <DailyLookCandidateVisual
+                    candidate={generatedCandidate}
+                    gap={candidateGap}
+                    items={items}
+                    width={heroWidth}
+                    height={generatedCandidate.readinessStatus === 'priority' ? Math.round(heroHeight * 0.72) : heroHeight}
+                    borderRadius={0}
+                  />
+                ) : (
+                  <OutfitCollage
+                    outfit={generatedPreviewOutfit(generatedCandidate)}
+                    size={heroWidth}
+                    height={heroHeight}
+                    borderRadius={0}
+                  />
+                )}
               </View>
             </PressableScale>
             <View style={styles.generatedCaption}>
               <View style={styles.generatedCaptionCopy}>
-                <Text style={styles.featuredEyebrow} numberOfLines={1}>Styled for you today</Text>
+                <Text style={styles.featuredEyebrow} numberOfLines={1}>
+                  {generatedCandidate.readinessStatus === 'incomplete'
+                    ? 'One piece away'
+                    : generatedCandidate.readinessStatus === 'priority'
+                      ? 'Highest-impact wardrobe gap'
+                      : 'Styled for you today'}
+                </Text>
                 <Text style={styles.featuredOutfitName} numberOfLines={1}>{generatedCandidate.name}</Text>
                 <Text style={styles.generatedReason} numberOfLines={1}>{generatedCandidate.reason}</Text>
               </View>
               <PressableScale
                 contentStyle={styles.saveLookControl}
-                onPress={handleDailyLookSave}
+                onPress={candidateGap ? handleDailyLookFindPiece : handleDailyLookSave}
                 disabled={saveDailyLook.isPending}
                 accessibilityRole="button"
-                accessibilityLabel="Save look"
-                accessibilityHint="Save this curated look to your outfits"
+                accessibilityLabel={candidateGap ? `Find ${candidateGap.label}, suggested and not in your closet` : 'Save look'}
+                accessibilityHint={candidateGap ? 'Open a shopping edit for this missing piece' : 'Save this curated look to your outfits'}
               >
-                <Ionicons name="bookmark-outline" size={17} color={colors.primary} />
-                <Text style={styles.saveLookLabel}>Save look</Text>
+                <Ionicons name={candidateGap ? 'search-outline' : 'bookmark-outline'} size={17} color={colors.primary} />
+                <Text style={styles.saveLookLabel}>{candidateGap ? `Find ${candidateGap.label.replaceAll('_', ' ')}` : 'Save look'}</Text>
               </PressableScale>
             </View>
           </View>
@@ -699,7 +831,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             )}
           </PressableScale>
           </Animated.View>
-        ) : dailyLookQuery.isFetching && dailyLookDecision.shouldGenerate ? (
+        ) : dailyLookPresentation.kind === 'loading' ? (
           <View style={styles.curatingPlaceholder} accessibilityLiveRegion="polite">
             <Ionicons name="sparkles-outline" size={18} color={colors.primary} />
             <Text style={styles.curatingPlaceholderText}>Curating today’s look…</Text>
@@ -709,9 +841,19 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             <View style={[styles.emptyOutfitIcon, { backgroundColor: `${colors.primary}18` }]}>
               <Ionicons name="layers-outline" size={28} color={colors.primary} />
             </View>
-            <Text style={styles.emptyOutfitTitle}>{items.length === 0 ? 'Your closet is ready for its first look' : 'No saved outfits yet'}</Text>
+            <Text style={styles.emptyOutfitTitle}>
+              {items.length === 0
+                ? 'Your closet is ready for its first look'
+                : outfits.length > 0
+                  ? 'No suitable look for today'
+                  : 'No saved outfits yet'}
+            </Text>
             <Text style={styles.emptyOutfitSub}>
-              {items.length === 0 ? 'Add a few pieces to unlock personalized outfit suggestions.' : 'Build an outfit from your closet to see it here'}
+              {items.length === 0
+                ? 'Add a few pieces to unlock personalized outfit suggestions.'
+                : outfits.length > 0
+                  ? 'Your stylist won’t force a combination that misses today’s needs.'
+                  : 'Build an outfit from your closet to see it here'}
             </Text>
             {items.length === 0 && (
               <PressableScale
@@ -885,6 +1027,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         onClose={() => setDailyLookSheetVisible(false)}
         onSave={handleDailyLookSave}
         onDismiss={handleDailyLookDismiss}
+        onFindPiece={handleDailyLookFindPiece}
       />
       {locationSheetVisible && (
         <StylingLocationSheet

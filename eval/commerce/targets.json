@@ -1,0 +1,294 @@
+{
+  "version": "commerce-ca-v1",
+  "description": "Anonymized Canadian-market shopping targets for evaluating product-catalog coverage and result quality.",
+  "targets": [
+    {
+      "id": "w-olive-linen-overshirt",
+      "title": "Women's olive linen overshirt",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 80, "max": 220 },
+      "content": "Find a women's olive or moss linen-blend overshirt with a relaxed but polished silhouette. It should work as a light layer over cream knitwear and dark straight-leg jeans, avoid obvious logos, and suit a minimalist smart-casual wardrobe in Toronto.",
+      "expected": {
+        "termGroups": [["olive", "moss", "khaki"], ["overshirt", "shirt jacket", "button-down", "button down"], ["linen", "linen-blend", "linen blend"]],
+        "excludeTerms": ["kids", "girls", "costume"]
+      }
+    },
+    {
+      "id": "w-cream-merino-polo",
+      "title": "Women's cream merino knit polo",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 90, "max": 240 },
+      "content": "Find a women's cream, ivory, or ecru fine-merino knit polo with a clean collar and refined fit. It should layer beneath a navy blazer and pair with camel trousers without feeling sporty.",
+      "expected": {
+        "termGroups": [["cream", "ivory", "ecru"], ["polo", "collared knit"], ["merino", "wool"]],
+        "excludeTerms": ["kids", "girls", "golf uniform"]
+      }
+    },
+    {
+      "id": "w-burgundy-blazer",
+      "title": "Women's burgundy tailored blazer",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 160, "max": 420 },
+      "content": "Find a women's burgundy, wine, or oxblood single-breasted tailored blazer. The shape should be polished rather than oversized and coordinate with cream, charcoal, and camel wardrobe pieces.",
+      "expected": {
+        "termGroups": [["burgundy", "wine", "oxblood", "merlot"], ["blazer", "suit jacket"], ["tailored", "single-breasted", "single breasted"]],
+        "excludeTerms": ["kids", "girls", "costume"]
+      }
+    },
+    {
+      "id": "w-camel-wool-trouser",
+      "title": "Women's camel wool straight trouser",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 120, "max": 320 },
+      "content": "Find women's camel, tan, or warm-beige straight-leg trousers in wool or a wool blend. They should be office appropriate, full length, and versatile with navy and cream tops.",
+      "expected": {
+        "termGroups": [["camel", "tan", "beige"], ["trouser", "pant"], ["wool", "wool-blend", "wool blend"]],
+        "excludeTerms": ["kids", "girls", "jogger", "sweatpant"]
+      }
+    },
+    {
+      "id": "w-dark-straight-jean",
+      "title": "Women's dark-wash straight jean",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 90, "max": 260 },
+      "content": "Find women's high-rise straight-leg jeans in a clean dark indigo wash with no distressing. They should feel polished enough for smart casual outfits and not be skinny or wide leg.",
+      "expected": {
+        "termGroups": [["dark wash", "dark-wash", "indigo"], ["straight", "straight-leg", "straight leg"], ["jean", "denim"]],
+        "excludeTerms": ["kids", "girls", "distressed", "ripped", "skinny"]
+      }
+    },
+    {
+      "id": "w-navy-silk-midi-dress",
+      "title": "Women's navy silk midi dress",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 180, "max": 520 },
+      "content": "Find a women's navy midi dress in silk or a silk blend for dinners and semi-formal events. Prefer a fluid, understated silhouette with sleeves or bra-friendly straps and no sequins.",
+      "expected": {
+        "termGroups": [["navy", "midnight blue"], ["midi", "mid-length", "mid length"], ["dress"], ["silk", "satin"]],
+        "excludeTerms": ["kids", "girls", "sequin", "mini dress"]
+      }
+    },
+    {
+      "id": "w-burgundy-chelsea-boot",
+      "title": "Women's burgundy leather Chelsea boot",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 170, "max": 420 },
+      "content": "Find women's burgundy or oxblood leather Chelsea ankle boots with a low comfortable heel and weather-sensible sole. They should complement navy, charcoal, and camel outfits.",
+      "expected": {
+        "termGroups": [["burgundy", "oxblood", "wine"], ["chelsea", "ankle boot"], ["leather"]],
+        "excludeTerms": ["kids", "girls", "rain boot", "high heel"]
+      }
+    },
+    {
+      "id": "w-camel-crossbody",
+      "title": "Women's camel structured crossbody",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 120, "max": 450 },
+      "content": "Find a structured camel or tan leather crossbody bag with subtle hardware, room for daily essentials, and minimal branding. It should work with a polished neutral wardrobe.",
+      "expected": {
+        "termGroups": [["camel", "tan", "cognac"], ["crossbody", "cross-body", "shoulder bag"], ["leather"]],
+        "excludeTerms": ["kids", "girls", "logo print", "phone pouch"]
+      }
+    },
+    {
+      "id": "w-stone-trench",
+      "title": "Women's stone waterproof trench",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 180, "max": 550 },
+      "content": "Find a women's stone, taupe, or light-beige trench coat with genuine rain protection and a clean tailored shape. It should be practical for Toronto spring and fall commuting.",
+      "expected": {
+        "termGroups": [["stone", "taupe", "beige"], ["trench", "raincoat"], ["waterproof", "water-resistant", "water resistant"]],
+        "excludeTerms": ["kids", "girls", "costume"]
+      }
+    },
+    {
+      "id": "w-emerald-wedding-guest-dress",
+      "title": "Women's emerald wedding-guest dress",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 140, "max": 380 },
+      "content": "Find an emerald or forest-green midi dress suitable for a fall wedding guest. Prefer an elegant defined waist, comfortable coverage, and inclusive sizing through at least women's 18.",
+      "expected": {
+        "termGroups": [["emerald", "forest green", "dark green"], ["midi", "mid-length", "mid length"], ["dress"]],
+        "excludeTerms": ["kids", "girls", "bridesmaid costume", "mini dress"]
+      }
+    },
+    {
+      "id": "m-navy-unstructured-blazer",
+      "title": "Men's navy unstructured blazer",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 180, "max": 520 },
+      "content": "Find a men's navy unstructured blazer in wool, cotton, or a breathable blend. It should feel relaxed enough for jeans but polished enough for dinner, with minimal shoulder padding.",
+      "expected": {
+        "termGroups": [["navy", "dark blue"], ["blazer", "sport coat", "sports coat"], ["unstructured", "soft shoulder", "unlined"]],
+        "excludeTerms": ["kids", "boys", "uniform"]
+      }
+    },
+    {
+      "id": "m-ecru-straight-jean",
+      "title": "Men's ecru straight jean",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 90, "max": 260 },
+      "content": "Find men's ecru, cream, or off-white straight-fit jeans with a clean finish and no distressing. They should expand a wardrobe dominated by dark denim and navy trousers.",
+      "expected": {
+        "termGroups": [["ecru", "cream", "off-white", "off white"], ["straight", "straight-fit", "straight fit"], ["jean", "denim"]],
+        "excludeTerms": ["kids", "boys", "distressed", "ripped", "skinny"]
+      }
+    },
+    {
+      "id": "m-brown-suede-loafer",
+      "title": "Men's dark-brown suede loafer",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 150, "max": 390 },
+      "content": "Find men's dark-brown or chocolate suede loafers with a refined almond or round toe. They should bridge casual chinos and tailored trousers without prominent hardware.",
+      "expected": {
+        "termGroups": [["dark brown", "chocolate", "brown"], ["loafer"], ["suede"]],
+        "excludeTerms": ["kids", "boys", "slipper", "driving shoe"]
+      }
+    },
+    {
+      "id": "m-charcoal-raincoat",
+      "title": "Men's charcoal technical raincoat",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 180, "max": 480 },
+      "content": "Find a men's charcoal or dark-grey waterproof raincoat with a clean city silhouette, sealed-seam protection, and room for a blazer underneath. Avoid outdoorsy contrast logos.",
+      "expected": {
+        "termGroups": [["charcoal", "dark grey", "dark gray"], ["raincoat", "rain jacket", "shell"], ["waterproof", "sealed seam"]],
+        "excludeTerms": ["kids", "boys", "poncho", "camo"]
+      }
+    },
+    {
+      "id": "m-cream-knit-polo",
+      "title": "Men's cream textured knit polo",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 80, "max": 240 },
+      "content": "Find a men's cream or ivory short-sleeve textured knit polo for elevated warm-weather outfits. Prefer cotton or merino and an open or understated collar, without athletic branding.",
+      "expected": {
+        "termGroups": [["cream", "ivory", "ecru"], ["knit polo", "polo"], ["cotton", "merino", "wool"]],
+        "excludeTerms": ["kids", "boys", "golf logo", "performance polo"]
+      }
+    },
+    {
+      "id": "m-black-leather-belt",
+      "title": "Men's minimal black leather belt",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 60, "max": 180 },
+      "content": "Find a men's black full-grain or genuine leather belt with a minimal silver buckle, suitable for both tailored trousers and dark denim. Avoid oversized logos.",
+      "expected": {
+        "termGroups": [["black"], ["belt"], ["leather"]],
+        "excludeTerms": ["kids", "boys", "logo buckle", "canvas"]
+      }
+    },
+    {
+      "id": "u-white-leather-sneaker",
+      "title": "Minimal white leather sneaker",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 110, "max": 300 },
+      "content": "Find a minimal white or off-white leather low-top sneaker with subtle branding and a slim profile. It should work with trousers, jeans, and casual dresses rather than reading as a running shoe.",
+      "expected": {
+        "termGroups": [["white", "off-white", "off white"], ["sneaker", "trainer"], ["leather"], ["low-top", "low top"]],
+        "excludeTerms": ["kids", "running", "trail", "high-top", "high top"]
+      }
+    },
+    {
+      "id": "u-black-packable-vest",
+      "title": "Black packable down vest",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 90, "max": 260 },
+      "content": "Find a streamlined black packable down or recycled-insulation vest for travel and transitional weather. It should layer under a coat, avoid bulky quilting, and have minimal branding.",
+      "expected": {
+        "termGroups": [["black"], ["vest", "gilet"], ["packable", "lightweight"], ["down", "insulated", "insulation"]],
+        "excludeTerms": ["kids", "hunting", "utility vest"]
+      }
+    },
+    {
+      "id": "u-camel-wool-scarf",
+      "title": "Camel wool scarf",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 70, "max": 240 },
+      "content": "Find a plain camel or warm-tan wool scarf with a soft hand and enough length for winter layering. Avoid loud logos, checks, and synthetic-only fabric.",
+      "expected": {
+        "termGroups": [["camel", "tan"], ["scarf"], ["wool", "cashmere"]],
+        "excludeTerms": ["kids", "acrylic only", "logo", "plaid", "check"]
+      }
+    },
+    {
+      "id": "u-black-work-tote",
+      "title": "Black structured work tote",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 140, "max": 480 },
+      "content": "Find a structured black leather or high-quality recycled-material work tote that fits a 14-inch laptop, closes securely, and has restrained branding.",
+      "expected": {
+        "termGroups": [["black"], ["tote"], ["work", "laptop", "commuter"]],
+        "excludeTerms": ["kids", "mini tote", "beach bag", "open weave"]
+      }
+    },
+    {
+      "id": "w-wide-fit-ankle-boot",
+      "title": "Women's wide-fit black ankle boot",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 140, "max": 360 },
+      "content": "Find women's black leather ankle boots explicitly offered in a wide width, with a stable heel under 50 mm and a cushioned sole. They should be polished enough for work trousers.",
+      "expected": {
+        "termGroups": [["black"], ["ankle boot", "bootie"], ["wide", "wide-fit", "wide fit", "wide width"]],
+        "excludeTerms": ["kids", "girls", "stiletto", "high heel"]
+      }
+    },
+    {
+      "id": "w-petite-navy-trouser",
+      "title": "Women's petite navy trouser",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 90, "max": 260 },
+      "content": "Find women's navy tailored trousers offered in petite sizing, with a mid or high rise and straight or gently tapered leg. Avoid cropped lengths and synthetic shine.",
+      "expected": {
+        "termGroups": [["navy", "dark blue"], ["trouser", "pant"], ["petite", "short inseam"]],
+        "excludeTerms": ["kids", "girls", "cropped", "capri", "jogger"]
+      }
+    },
+    {
+      "id": "w-tall-charcoal-trouser",
+      "title": "Women's tall charcoal trouser",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 100, "max": 280 },
+      "content": "Find women's charcoal tailored trousers available in tall or long inseams, with a full-length straight or wide leg. They should be office-ready and resist wrinkling.",
+      "expected": {
+        "termGroups": [["charcoal", "dark grey", "dark gray"], ["trouser", "pant"], ["tall", "long inseam", "long length"]],
+        "excludeTerms": ["kids", "girls", "cropped", "capri", "jogger"]
+      }
+    },
+    {
+      "id": "w-washable-ivory-blouse",
+      "title": "Women's washable ivory work blouse",
+      "market": "cad_en",
+      "currency": "CAD",
+      "priceRange": { "min": 70, "max": 220 },
+      "content": "Find a women's ivory or cream work blouse that is explicitly machine washable, opaque, and bra friendly. Prefer a fluid drape with sleeves and no dry-clean-only silk.",
+      "expected": {
+        "termGroups": [["ivory", "cream", "off-white", "off white"], ["blouse", "shirt"], ["machine washable", "washable"]],
+        "excludeTerms": ["kids", "girls", "dry clean only", "sheer", "cropped"]
+      }
+    }
+  ]
+}

@@ -13,11 +13,12 @@ import * as Haptics from 'expo-haptics';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { itemImageContentFit, itemImageUri } from '../../lib/itemImage';
 import { ResolvedOutfitCollage } from '../outfits/ResolvedOutfitCollage';
+import { GapCard } from './GapCard';
 import { useCreateOutfit, type CreateOutfitInput } from '../../hooks/useOutfits';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { Item } from '../../types/item';
 
-export type TripOutfit = { label: string; note: string; itemIds: number[] };
+export type TripOutfit = { label: string; note: string; itemIds: number[]; status?: 'ready' | 'incomplete'; foundationItemIds?: number[]; missingEssentials?: Array<{ label: string; category: string; reason: string; context: string; priority: number; unlocks?: string[] }> };
 export type TripPlanData = {
   intro: string;
   outfits: TripOutfit[];
@@ -62,8 +63,8 @@ function TripOutfitCard({
   const [adding, setAdding] = useState(false);
 
   const items = useMemo(
-    () => outfit.itemIds.map((id) => allItems.find((i) => i.id === id)).filter((i): i is Item => !!i),
-    [outfit.itemIds, allItems],
+    () => (outfit.status === 'incomplete' ? (outfit.foundationItemIds ?? []) : outfit.itemIds).map((id) => allItems.find((i) => i.id === id)).filter((i): i is Item => !!i),
+    [outfit.itemIds, outfit.foundationItemIds, outfit.status, allItems],
   );
   const slots = useMemo(
     () => items.map((i) => ({
@@ -81,6 +82,7 @@ function TripOutfitCard({
       const input: CreateOutfitInput = {
         name: outfitName(items, outfit.label || 'Trip look'),
         description: (outfit.note || intro).slice(0, 200) || null,
+        isDraft: outfit.status === 'incomplete',
         itemIds: items.map((i) => ({ id: i.id, category: i.category as string })),
       };
       // Defaults to a plain closet save; the board capsule sheet passes a
@@ -96,7 +98,7 @@ function TripOutfitCard({
   }, [saved, saving, items, outfit.label, outfit.note, intro, createOutfit, onSaveOutfit]);
 
   const handleAddToEvent = useCallback(async () => {
-    if (!onAddToEvent || added || adding || items.length === 0) return;
+    if (!onAddToEvent || outfit.status === 'incomplete' || added || adding || items.length === 0) return;
     setAdding(true);
     try {
       await onAddToEvent(items.map((i) => i.id));
@@ -113,7 +115,10 @@ function TripOutfitCard({
 
   return (
     <View style={[styles.outfitCard, { width: cardWidth }]}>
-      {outfit.label ? <Text style={styles.outfitLabel} numberOfLines={1}>{outfit.label}</Text> : null}
+      <View style={styles.outfitHeader}>
+        {outfit.label ? <Text style={styles.outfitLabel} numberOfLines={1}>{outfit.label}</Text> : null}
+        {outfit.status === 'incomplete' && <Text style={styles.incompleteLabel}>FOUNDATION</Text>}
+      </View>
       {slots.length > 0 && (
         <View style={styles.collageFrame}>
           <ResolvedOutfitCollage
@@ -125,6 +130,12 @@ function TripOutfitCard({
         </View>
       )}
       {outfit.note ? <Text style={styles.outfitNote}>{outfit.note}</Text> : null}
+      {outfit.status === 'incomplete' && outfit.missingEssentials?.length ? (
+        <View style={styles.tripGaps}>
+          <Text style={styles.tripGapsTitle}>Complete before packing</Text>
+          {outfit.missingEssentials.slice(0, 3).map((gap, index) => <GapCard key={`${gap.category}-${index}`} item={gap} />)}
+        </View>
+      ) : null}
       {onAddToEvent && eventContext && (
         <TouchableOpacity
           style={[styles.addEventBtn, added && styles.addEventBtnDone]}
@@ -156,7 +167,7 @@ function TripOutfitCard({
           color={saved ? colors.primaryForeground : colors.primary}
         />
         <Text style={[styles.saveBtnText, saved && styles.saveBtnTextDone]}>
-          {saving ? 'Saving…' : saved ? 'Saved' : saveLabel ?? 'Save look'}
+          {saving ? 'Saving…' : saved ? 'Saved' : saveLabel ?? (outfit.status === 'incomplete' ? 'Save foundation' : 'Save look')}
         </Text>
       </TouchableOpacity>
     </View>
@@ -297,12 +308,16 @@ const styles = StyleSheet.create({
     fontSize: typography.size.lg,
     color: colors.foreground,
   },
+  outfitHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  incompleteLabel: { fontSize: 10, fontWeight: typography.weight.bold, letterSpacing: 1, color: colors.action },
   collageFrame: { borderRadius: radii.md, overflow: 'hidden' },
   outfitNote: {
     fontSize: typography.size.sm,
     color: colors.mutedForeground,
     lineHeight: typography.size.sm * 1.5,
   },
+  tripGaps: { backgroundColor: '#F7F1E8', borderRadius: radii.md, padding: spacing.sm, gap: spacing.xs },
+  tripGapsTitle: { fontSize: typography.size.xs, fontWeight: typography.weight.bold, color: colors.action, textTransform: 'uppercase', letterSpacing: 0.6 },
   addEventBtn: {
     flexDirection: 'row',
     alignItems: 'center',

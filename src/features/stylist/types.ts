@@ -1,4 +1,6 @@
 import type { ShopOutfit } from '../../types/shop';
+import type { ShoppingBriefPriority } from '../../lib/shopDecisionWorkspace';
+import type { ShoppingPriorityTarget } from '../../lib/shoppingPriorityEdit';
 
 export type StylistRole = 'user' | 'assistant';
 
@@ -26,6 +28,19 @@ export type StylistMissingEssential = {
   context: string;
   priority: number;
   unlocks?: string[];
+  anchorItemIds?: number[];
+  formality?: string;
+  silhouette?: string;
+  material?: string;
+  preferredColors?: string[];
+};
+
+export type StylistReadinessStatus = 'ready' | 'incomplete' | 'needs_clarification';
+
+export type StylistClarification = {
+  question: string;
+  options: Array<{ label: string; value: string }>;
+  safestOption?: string;
 };
 
 export type StylistComposerAttachment = {
@@ -39,6 +54,9 @@ export type StylistTripOutfit = {
   label: string;
   note: string;
   itemIds: number[];
+  status?: 'ready' | 'incomplete';
+  foundationItemIds?: number[];
+  missingEssentials?: StylistMissingEssential[];
 };
 
 export type StylistTripPlanData = {
@@ -101,11 +119,13 @@ export type StylistWorkflow =
 
 export type StylistEventPlanData = {
   candidateId: string;
+  status?: StylistReadinessStatus;
   outfitName: string;
   stylistNotes: string | null;
   itemIds: number[];
   missingEssentials: StylistMissingEssential[];
   recommendationId: number | null;
+  foundationItemIds?: number[];
 };
 
 export type StylistBaseMessage = {
@@ -134,6 +154,9 @@ export type StylistAssistantMessage = StylistBaseMessage & {
   suggestedItemIds?: number[];
   lookName?: string;
   missingEssentials?: StylistMissingEssential[];
+  readinessStatus?: StylistReadinessStatus;
+  foundationItemIds?: number[];
+  clarification?: StylistClarification;
   tripPlan?: StylistTripPlanData;
   wardrobeAudit?: StylistWardrobeAuditData;
   eventPlan?: StylistEventPlanData;
@@ -197,6 +220,11 @@ export type StylistEntryContext =
       color?: string | null;
       material?: string | null;
       notes?: string | null;
+    }
+  | {
+      kind: 'shopping_brief_edit';
+      priority: ShoppingBriefPriority;
+      targets: ShoppingPriorityTarget[];
     };
 
 export type StylistLocationContext = {
@@ -249,6 +277,9 @@ export type StylistAskDoneEvent = {
   itemIds?: number[];
   lookName?: string | null;
   missingEssentials?: StylistMissingEssential[];
+  readinessStatus?: StylistReadinessStatus;
+  foundationItemIds?: number[];
+  clarification?: StylistClarification;
   missingEssential?: {
     label: string;
     category: string;

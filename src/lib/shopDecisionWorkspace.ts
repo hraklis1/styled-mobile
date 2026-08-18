@@ -14,6 +14,11 @@ export type ShoppingBriefPriority = {
   context: string;
   priority: number;
   unlocks: string[];
+  anchorItemIds?: number[];
+  formality?: string;
+  silhouette?: string;
+  material?: string;
+  preferredColors?: string[];
 };
 
 export type ShoppingBrief = {
@@ -51,4 +56,3 @@ export function selectActiveShoppingFinds(items: ShoppingEditItem[], limit = 4):
     })
     .slice(0, limit);
 }
-

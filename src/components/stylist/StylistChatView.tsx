@@ -74,6 +74,7 @@ import { GapCard } from './GapCard';
 import { TripPlanCard } from './TripPlanCard';
 import { StylistIntakeSheet } from './StylistIntakeSheet';
 import { WardrobeAuditCard } from './WardrobeAuditCard';
+import { StylistLookResponseCard } from './StylistLookResponseCard';
 import { buildStylistStarters, buildTodayPrompt, type StylistStarter } from './stylist-empty-state';
 import { colors, radii, shadows, spacing, typography } from '../../theme';
 import { useStylistTransport } from '../../features/stylist/hooks/useStylistTransport';
@@ -87,6 +88,8 @@ import {
   type StylistFeedbackMetadata,
   type StylistMessage,
   type StylistMissingEssential,
+  type StylistClarification,
+  type StylistReadinessStatus,
   type StylistMode,
   type StylistNegativeReason,
   type StylistRenderType,
@@ -165,8 +168,9 @@ const CHIPS_AUDIT = [
   'How can I get more from what I own?',
 ];
 
-function useContextualChips(lastMessage: ChatMessage | undefined): string[] {
+function useContextualChips(lastMessage: ChatMessage | undefined, entryContext?: StylistEntryContext): string[] {
   return useMemo(() => {
+    if (entryContext?.kind === 'shopping_brief_edit') return ['Which option is most versatile?', 'Make these more polished.', 'Keep this within my budget.'];
     if (!lastMessage || lastMessage.role !== 'assistant') return CHIPS_DEFAULT;
     if (lastMessage.wardrobeAudit || lastMessage.mode === 'wardrobe_audit') return CHIPS_AUDIT;
     if (lastMessage.tripPlan || lastMessage.mode === 'trip') return CHIPS_TRIP;
@@ -174,7 +178,7 @@ function useContextualChips(lastMessage: ChatMessage | undefined): string[] {
     if (lastMessage.shopOutfit) return CHIPS_SHOP;
     if (lastMessage.suggestedItemIds?.length) return CHIPS_CLOSET;
     return CHIPS_DEFAULT;
-  }, [lastMessage]);
+  }, [entryContext, lastMessage]);
 }
 
 function makeId() {
@@ -192,6 +196,9 @@ const threadKey = (id: number) => `stylist_thread_${id}`;
 // reloaded thread redraws outfit cards, shop edits, and trip carousels instead
 // of degrading them to plain notes. Mirrors the /ask `done` event's rich fields.
 type ServerMessagePayload = {
+  readinessStatus?: StylistReadinessStatus;
+  foundationItemIds?: number[];
+  clarification?: StylistClarification;
   mode?: StylistMode;
   itemIds?: number[];
   eventPlan?: StylistEventPlanData | null;
@@ -210,7 +217,7 @@ function renderTypeForAssistantPayload(payload?: ServerMessagePayload | null): S
   if (payload?.tripPlan) return 'trip_plan';
   if (payload?.shopOutfit) return 'shopping_outfit';
   if (payload?.mode === 'advice') return 'advice';
-  if (payload?.itemIds?.length || payload?.eventPlan) return 'closet_outfit';
+  if (payload?.itemIds?.length || payload?.eventPlan || payload?.readinessStatus === 'incomplete' || payload?.readinessStatus === 'needs_clarification') return 'closet_outfit';
   return 'text';
 }
 
@@ -220,12 +227,13 @@ function renderTypeForAssistantMessage(message: {
   mode?: StylistMode;
   suggestedItemIds?: number[];
   wardrobeAudit?: StylistWardrobeAuditData;
+  readinessStatus?: StylistReadinessStatus;
 }): StylistRenderType {
   if (message.wardrobeAudit) return 'wardrobe_audit';
   if (message.tripPlan) return 'trip_plan';
   if (message.shopOutfit) return 'shopping_outfit';
   if (message.mode === 'advice') return 'advice';
-  if (message.suggestedItemIds?.length) return 'closet_outfit';
+  if (message.suggestedItemIds?.length || message.readinessStatus === 'incomplete' || message.readinessStatus === 'needs_clarification') return 'closet_outfit';
   return 'text';
 }
 
@@ -254,6 +262,8 @@ function isRichAssistantMessage(message: ChatMessage | undefined): message is Ex
       || message.renderType === 'trip_plan'
       || message.renderType === 'wardrobe_audit'
       || !!message.suggestedItemIds?.length
+      || message.readinessStatus === 'incomplete'
+      || message.readinessStatus === 'needs_clarification'
       || !!message.shopOutfit
       || !!message.tripPlan
       || !!message.wardrobeAudit
@@ -284,7 +294,10 @@ function mapServerMessages(rows: ServerMessage[]): ChatMessage[] {
       text: m.text,
       ...(typeof m.recId === 'number' ? { recId: m.recId } : {}),
       ...(p?.mode ? { mode: p.mode } : {}),
-      ...(p?.itemIds?.length && p.boardAction !== 'complete' && p.boardAction !== 'theme' ? { suggestedItemIds: p.itemIds } : {}),
+      ...(p?.readinessStatus ? { readinessStatus: p.readinessStatus } : {}),
+      ...(p?.foundationItemIds?.length ? { foundationItemIds: p.foundationItemIds } : {}),
+      ...(p?.clarification ? { clarification: p.clarification } : {}),
+      ...(p?.readinessStatus !== 'incomplete' && p?.readinessStatus !== 'needs_clarification' && p?.itemIds?.length && p.boardAction !== 'complete' && p.boardAction !== 'theme' ? { suggestedItemIds: p.itemIds } : {}),
       ...(p?.eventPlan ? { eventPlan: p.eventPlan } : {}),
       ...(p?.lookName ? { lookName: p.lookName } : {}),
       ...(p?.missingEssentials?.length ? { missingEssentials: p.missingEssentials } : {}),
@@ -367,7 +380,7 @@ type Props = {
   onClose?: () => void;
   /** True when rendered as the permanent Stylist tab rather than a contextual modal. */
   embedded?: boolean;
-  onNavigateToShop?: () => void;
+  onNavigateToShop?: (gap?: StylistMissingEssential) => void;
   onNavigateToCloset?: (outfitId: number) => void;
 };
 
@@ -612,6 +625,9 @@ export function StylistChatView({
         eventPlan,
         missingEssentials: mes,
         missingEssential: legacyMe,
+        readinessStatus,
+        foundationItemIds,
+        clarification,
         shopOutfit,
         tripPlan,
         wardrobeAudit,
@@ -652,12 +668,15 @@ export function StylistChatView({
                 : 'text',
         text: responseText ?? '',
         isStreaming: false,
+        ...(readinessStatus ? { readinessStatus } : {}),
+        ...(foundationItemIds?.length ? { foundationItemIds } : {}),
+        ...(clarification ? { clarification } : {}),
         ...(respMode ? { mode: respMode } : {}),
         ...(shopOutfit ? { shopOutfit } : {}),
         ...(tripPlan ? { tripPlan: { ...tripPlan, pending: false } } : {}),
         ...(wardrobeAudit ? { wardrobeAudit } : {}),
         ...(eventPlan ? { eventPlan } : {}),
-        ...(itemIds?.length && boardAction !== 'complete' && boardAction !== 'theme' ? { suggestedItemIds: itemIds } : {}),
+        ...(readinessStatus === 'ready' && itemIds?.length && boardAction !== 'complete' && boardAction !== 'theme' ? { suggestedItemIds: itemIds } : {}),
         ...(lookName ? { lookName } : {}),
         ...(hydratedEssentials.length ? { missingEssentials: hydratedEssentials } : {}),
         ...(typeof recId === 'number' ? { recId } : {}),
@@ -1148,7 +1167,7 @@ export function StylistChatView({
 
   const isEmpty = messages.length === 0 && !isLoading && !errorMessage;
   const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant');
-  const contextualChips = useContextualChips(lastAssistantMsg);
+  const contextualChips = useContextualChips(lastAssistantMsg, entryContext);
 
   return (
     <KeyboardAvoidingView
@@ -1256,8 +1275,10 @@ export function StylistChatView({
                   isPlaying={playingId === msg.id}
                   createOutfit={createOutfit}
                   eventContext={eventContext}
+                  entryContext={entryContext}
                   onAddToEvent={onAddToEvent}
                   onNavigateToShop={onNavigateToShop}
+                  onClarificationSelect={(value) => sendMessage({ text: value, mode: 'from_closet' })}
                   onNavigateToCloset={onNavigateToCloset}
                   onStyleAuditItem={openAuditItemStyling}
                   onSaveToBoard={setBoardTarget}
@@ -1508,15 +1529,17 @@ type BubbleProps = {
   isPlaying: boolean;
   createOutfit: ReturnType<typeof useCreateOutfit>;
   eventContext?: EventContext;
+  entryContext?: StylistEntryContext;
   onAddToEvent?: (itemIds: number[], eventPlan?: StylistEventPlanData | null) => Promise<unknown>;
   onToggleAudio?: () => void;
-  onNavigateToShop?: () => void;
+  onNavigateToShop?: (gap?: StylistMissingEssential) => void;
+  onClarificationSelect?: (value: string) => void;
   onNavigateToCloset?: (outfitId: number) => void;
   onStyleAuditItem?: (itemId: number) => void;
   onSaveToBoard?: (ref: BoardEntryRef) => void;
 };
 
-function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContext, onAddToEvent, onToggleAudio, onNavigateToShop, onNavigateToCloset, onStyleAuditItem, onSaveToBoard }: BubbleProps) {
+function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContext, entryContext, onAddToEvent, onToggleAudio, onNavigateToShop, onClarificationSelect, onNavigateToCloset, onStyleAuditItem, onSaveToBoard }: BubbleProps) {
   const isUser = message.role === 'user';
   const [detailItem, setDetailItem] = useState<Item | null>(null);
   // Bridges ShopOutfitCard's onSave (which mints the entry) to its onSaved
@@ -1556,6 +1579,33 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
     );
   }
 
+  if (!isUser && message.readinessStatus && message.readinessStatus !== 'ready') {
+    return (
+      <EditorialEntrance>
+        <View style={styles.editorialResponse}>
+          <StylistLookResponseCard
+            status={message.readinessStatus}
+            messageText={message.text}
+            lookName={message.lookName}
+            itemIds={message.suggestedItemIds ?? []}
+            foundationItemIds={message.foundationItemIds}
+            missingEssentials={message.missingEssentials}
+            clarification={message.clarification}
+            allItems={allItems}
+            createOutfit={createOutfit}
+            eventContext={eventContext}
+            eventPlan={message.eventPlan}
+            onAddToEvent={onAddToEvent}
+            onNavigateToShop={onNavigateToShop}
+            onClarificationSelect={onClarificationSelect}
+            onToggleAudio={onToggleAudio}
+            isPlaying={isPlaying}
+          />
+        </View>
+      </EditorialEntrance>
+    );
+  }
+
   // Advice / wardrobe audit — rich text (allows bullets) plus any referenced
   // wardrobe thumbnails and gap chips. Never an editable outfit card.
   if (!isUser && message.mode === 'advice') {
@@ -1569,7 +1619,7 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
           <StylistRichText text={message.text} streaming={message.isStreaming} />
           {!!message.suggestedItemIds?.length && (
             <View style={styles.responseSection}>
-              <Text style={styles.responseSectionTitle}>Wear it with</Text>
+              <Text style={styles.responseSectionTitle}>{entryContext?.kind === 'shopping_brief_edit' ? 'Pairs from your wardrobe' : 'Wear it with'}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.adviceThumbs}>
                 {message.suggestedItemIds
                   .map((id) => allItems.find((i) => i.id === id))

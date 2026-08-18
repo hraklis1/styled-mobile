@@ -32,9 +32,10 @@ type Props = {
   isLoading: boolean;
   isError: boolean;
   /** Opens ShoppingBriefDetailScreen — the full summary, every priority, and
-   *  each one's own Ask stylist control, all folded off this compressed card. */
+   *  each one's own See options control, all folded off this compressed card. */
   onOpenFullBrief: () => void;
-  onStartShopping: () => void;
+  onStartShopping?: () => void;
+  startLabel?: string;
   onUpgrade: () => void;
   onAddWardrobePieces: () => void;
   onRetry: () => void;
@@ -55,26 +56,26 @@ export function ShoppingBriefCard({
   isError,
   onOpenFullBrief,
   onStartShopping,
+  startLabel,
   onUpgrade,
   onAddWardrobePieces,
   onRetry,
   style,
 }: Props) {
-  // The action is the shell's, not any branch's: a brief that failed to
-  // generate is still a page you can start shopping from.
   const shell = (children: ReactNode, cardStyle?: object) => (
     <View style={[styles.card, cardStyle, style]}>
       {children}
-      <PressableScale
+      {onStartShopping ? <PressableScale
         scaleTo={0.97}
         contentStyle={styles.startButton}
         onPress={onStartShopping}
         accessibilityRole="button"
-        accessibilityLabel="Ask your stylist what to buy first"
+        accessibilityLabel={startLabel ?? 'Start with your first shopping priority'}
       >
         <Ionicons name="sparkles" size={15} color={colors.primaryForeground} />
-        <Text style={styles.startLabel}>What should I buy first?</Text>
+        <Text style={styles.startLabel}>{startLabel ?? 'Start with your first priority'}</Text>
       </PressableScale>
+      : null}
     </View>
   );
 
@@ -149,7 +150,7 @@ export function ShoppingBriefCard({
         </View>
       ) : null}
 
-      {/* The reasoning behind each priority, and the stylist control to act
+      {/* The reasoning behind each priority, and the dedicated edit control to act
           on it, live on ShoppingBriefDetailScreen — this is the one door to
           it, so a card that only ever states a headline and two labels still
           reads as a brief rather than a teaser. */}

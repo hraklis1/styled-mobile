@@ -20,6 +20,7 @@ export type CreateOutfitInput = {
   event?: string | null;
   notes?: string | null;
   tags?: string[];
+  isDraft?: boolean;
   itemIds?: OutfitItemEntry[];
 };
 
@@ -93,6 +94,8 @@ export function useMarkOutfitWorn() {
 
 export type GenerateOutfitResult = {
   candidateId: string;
+  status?: 'ready' | 'incomplete' | 'needs_clarification';
+  foundationItemIds?: number[];
   outfitName: string;
   stylistNotes: string | null;
   itemIds: number[];

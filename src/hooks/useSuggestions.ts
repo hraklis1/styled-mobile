@@ -12,6 +12,10 @@ export type SuggestionRequest = {
 
 export type SuggestionResult = {
   suggestion: string;
+  readinessStatus?: 'ready' | 'incomplete' | 'needs_clarification';
+  foundationItemIds?: number[];
+  missingEssentials?: Array<{ label: string; category: string; reason: string; context: string; priority: number; unlocks?: string[] }>;
+  clarification?: { question: string; options: Array<{ label: string; value: string }>; safestOption?: string };
   outfit: {
     itemIds?: Array<{ id: number; category: string }>;
   };

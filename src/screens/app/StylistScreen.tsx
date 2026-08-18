@@ -10,6 +10,8 @@ import { presentPaywall } from '../../lib/paywall';
 import { colors, radii, spacing, typography } from '../../theme';
 import { ActionButton } from '../../components/primitives/Editorial';
 import type { AppTabParamList } from '../../navigation/types';
+import type { StylistMissingEssential } from '../../features/stylist/types';
+import type { ShoppingBriefReason } from '../../lib/shopDecisionWorkspace';
 
 export function StylistScreen() {
   const { isPremium } = useEntitlement();
@@ -30,6 +32,23 @@ export function StylistScreen() {
           screen: 'OutfitDetail',
           params: { outfitId },
         })}
+        onNavigateToShop={(gap?: StylistMissingEssential) => {
+          if (!gap) return;
+          const reason: ShoppingBriefReason = gap.reason === 'weather' || gap.reason === 'occasion' ? 'occasion' : gap.reason === 'ratio_imbalance' ? 'ratio_imbalance' : 'wardrobe_gap';
+          navigation.navigate('Shop', {
+            screen: 'ShoppingPriorityEdit',
+            params: {
+              priority: {
+                label: gap.label,
+                category: gap.category,
+                reason,
+                context: gap.context,
+                priority: gap.priority,
+                unlocks: gap.unlocks ?? [],
+              },
+            },
+          });
+        }}
       />
     );
   }

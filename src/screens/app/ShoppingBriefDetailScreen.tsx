@@ -1,21 +1,17 @@
 import { useCallback } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EditorialSection } from '../../components/primitives/Editorial';
 import { PressableScale } from '../../components/primitives/PressableScale';
 import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
 import { sentenceCase } from '../../components/shopping/ShoppingBriefCard';
 import { categoryIcon } from '../../components/stylist/GapCard';
-import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useShoppingBrief } from '../../hooks/useShoppingBrief';
-import { track } from '../../lib/analytics';
-import { buildShopStylistLaunch } from '../../lib/shopDecisionWorkspace';
 import { colors, radii, spacing, typography } from '../../theme';
+import { track } from '../../lib/analytics';
 import type { ShoppingBriefDetailScreenProps } from '../../navigation/types';
-import type { StylistMode } from '../../features/stylist/types';
 
 /**
  * The brief in full — everything ShoppingBriefCard clamps or drops to keep
@@ -35,21 +31,8 @@ import type { StylistMode } from '../../features/stylist/types';
  * (touch_path) in the simulator.
  */
 export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScreenProps) {
-  const insets = useSafeAreaInsets();
   const { isPremium } = useEntitlement();
-  const { openStylist } = useGlobalAIStylist();
   const brief = useShoppingBrief(isPremium);
-
-  const askStylist = useCallback((query: string, mode: StylistMode = 'advice') => {
-    track('shop_action_selected', { action: 'ask_stylist' });
-    openStylist({
-      ...buildShopStylistLaunch(query, mode),
-      onNavigateToCloset: (outfitId) => navigation.navigate('Closet', {
-        screen: 'OutfitDetail',
-        params: { outfitId, returnTo: 'Home' },
-      }),
-    });
-  }, [navigation, openStylist]);
 
   const goBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -86,7 +69,9 @@ export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScr
             {data.priorities.map((priority) => (
               <View key={`${priority.priority}-${priority.label}`} style={styles.priorityRow}>
                 <View style={styles.priorityHead}>
-                  <Ionicons name={categoryIcon(priority.category)} size={16} color={colors.primary} />
+                  <View style={styles.priorityIconBadge}>
+                    <Ionicons name={categoryIcon(priority.category)} size={16} color={colors.primary} />
+                  </View>
                   <Text style={styles.priorityLabel}>{sentenceCase(priority.label)}</Text>
                 </View>
                 <Text style={styles.priorityContext}>{priority.context}</Text>
@@ -97,30 +82,18 @@ export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScr
                   haptic={false}
                   scaleTo={0.97}
                   contentStyle={styles.askButton}
-                  onPress={() => askStylist(`Help me shop thoughtfully for ${priority.label}. ${priority.context}`)}
+                  onPress={() => { track('shopping_brief_priority_opened', { category: priority.category, reason: priority.reason, rank: priority.priority }); navigation.navigate('ShoppingPriorityEdit', { priority }); }}
                   accessibilityRole="button"
-                  accessibilityLabel={`Ask your stylist about ${priority.label}`}
+                  accessibilityLabel={`See options for ${priority.label}`}
                 >
-                  <Text style={styles.askText}>Ask stylist</Text>
-                  <Ionicons name="arrow-forward" size={13} color={colors.action} />
+                  <Text style={styles.askText}>See options</Text>
+                  <Ionicons name="arrow-forward" size={14} color={colors.primaryForeground} />
                 </PressableScale>
               </View>
             ))}
           </EditorialSection>
         ) : null}
       </ScrollView>
-      <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
-        <PressableScale
-          scaleTo={0.97}
-          contentStyle={styles.startButton}
-          onPress={() => askStylist('Help me choose my next best purchase.', 'shop_new')}
-          accessibilityRole="button"
-          accessibilityLabel="Ask your stylist what to buy first"
-        >
-          <Ionicons name="sparkles" size={15} color={colors.primaryForeground} />
-          <Text style={styles.startLabel}>What should I buy first?</Text>
-        </PressableScale>
-      </View>
     </View>
   );
 }
@@ -132,38 +105,31 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxxl },
   header: { marginHorizontal: -spacing.lg },
   priorityRow: {
-    gap: 5,
-    paddingVertical: spacing.md,
+    gap: spacing.sm,
+    paddingVertical: spacing.xl,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.hairline,
+    borderBottomColor: colors.border,
   },
-  priorityHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  priorityHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  priorityIconBadge: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceSelected,
+  },
   priorityLabel: {
     flexShrink: 1,
-    fontSize: typography.size.md,
+    fontSize: typography.size.lg,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   priorityContext: { fontSize: typography.size.sm, lineHeight: 20, color: colors.mutedForeground },
-  priorityUnlocks: { fontSize: 11, lineHeight: 16, fontWeight: typography.weight.medium, color: colors.primary },
+  priorityUnlocks: { fontSize: 11, lineHeight: 16, fontWeight: typography.weight.medium, color: colors.mutedForeground },
   askButton: {
-    minHeight: 36,
+    minHeight: 44,
     alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingTop: spacing.xs,
-  },
-  askText: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.action },
-  footer: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.hairline,
-    backgroundColor: colors.background,
-  },
-  startButton: {
-    minHeight: 46,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -172,9 +138,5 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     backgroundColor: colors.primary,
   },
-  startLabel: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-    color: colors.primaryForeground,
-  },
+  askText: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.primaryForeground },
 });

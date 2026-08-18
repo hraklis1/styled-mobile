@@ -2,6 +2,7 @@ import type { CompositeScreenProps, NavigatorScreenParams } from '@react-navigat
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { ItemCategory, ScanResult } from '../types/item';
+import type { ShoppingBriefPriority } from '../lib/shopDecisionWorkspace';
 
 export type RootStackParamList = {
   Auth: undefined;
@@ -81,6 +82,7 @@ export type ShopStackParamList = {
   ShoppingHaulDetail: { groupKey: string };
   ShoppingCamera: undefined;
   ShoppingBriefDetail: undefined;
+  ShoppingPriorityEdit: { priority: ShoppingBriefPriority; source?: 'home_daily_look' };
 };
 
 // Wardrobe nested stack
@@ -123,6 +125,10 @@ export type ShoppingGalleryScreenProps = NativeStackScreenProps<ShopStackParamLi
 export type ShoppingHaulDetailScreenProps = NativeStackScreenProps<ShopStackParamList, 'ShoppingHaulDetail'>;
 export type ShoppingBriefDetailScreenProps = CompositeScreenProps<
   NativeStackScreenProps<ShopStackParamList, 'ShoppingBriefDetail'>,
+  BottomTabScreenProps<AppTabParamList>
+>;
+export type ShoppingPriorityEditScreenProps = CompositeScreenProps<
+  NativeStackScreenProps<ShopStackParamList, 'ShoppingPriorityEdit'>,
   BottomTabScreenProps<AppTabParamList>
 >;
 export type CalendarScreenProps = BottomTabScreenProps<AppTabParamList, 'Calendar'>;

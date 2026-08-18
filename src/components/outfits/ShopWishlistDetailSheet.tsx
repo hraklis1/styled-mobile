@@ -38,7 +38,7 @@ export function ShopWishlistDetailSheet({ entry, onClose, onRemove, onSaveToBoar
   const insets = useSafeAreaInsets();
   const snapPoints = useMemo(() => ['94%'], []);
   const recommendationType = getWishlistRecommendationType(entry);
-  const title = recommendationType === 'look' ? 'Saved look' : recommendationType === 'piece' ? 'Saved piece' : 'Saved list';
+  const title = entry.outfit.shoppingBrief ? 'Saved edit' : recommendationType === 'look' ? 'Saved look' : recommendationType === 'piece' ? 'Saved piece' : 'Saved list';
   const fallbackContext = recommendationType === 'list' ? 'Options to consider' : recommendationType === 'piece' ? 'Individual piece' : 'Complete look';
 
   useEffect(() => { ref.current?.present(); }, []);
@@ -87,7 +87,7 @@ export function ShopWishlistDetailSheet({ entry, onClose, onRemove, onSaveToBoar
         <View style={styles.titleWrap}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.subtitle} numberOfLines={1}>
-            {entry.eventContext?.title ?? entry.outfit.city ?? fallbackContext}
+            {entry.outfit.shoppingBrief ? entry.outfit.shoppingBrief.priority.label : entry.eventContext?.title ?? entry.outfit.city ?? fallbackContext}
           </Text>
         </View>
         <TouchableOpacity
@@ -103,7 +103,21 @@ export function ShopWishlistDetailSheet({ entry, onClose, onRemove, onSaveToBoar
         contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, spacing.xl) }]}
         showsVerticalScrollIndicator={false}
       >
-        <ShopOutfitCard outfit={entry.outfit} />
+        {entry.outfit.shoppingBrief ? (
+          <View style={styles.editContent}>
+            <Text style={styles.editHeadline}>{entry.outfit.shoppingBrief.headline}</Text>
+            <Text style={styles.editSummary}>{entry.outfit.shoppingBrief.summary}</Text>
+            {entry.outfit.shoppingBrief.targets.map((target, index) => (
+              <View key={target.key} style={styles.editTarget}>
+                <Text style={styles.editTargetIndex}>0{index + 1}</Text>
+                <Text style={styles.editTargetTitle}>{target.title}</Text>
+                <Text style={styles.editTargetMeta}>{target.silhouette} · {target.color} · {target.material}</Text>
+                <Text style={styles.editTargetMeta}>{target.priceRange} · Look at {target.retailerExamples.join(' · ')}</Text>
+                <Text style={styles.editTargetRationale}>{target.rationale}</Text>
+              </View>
+            ))}
+          </View>
+        ) : <ShopOutfitCard outfit={entry.outfit} />}
       </BottomSheetScrollView>
     </BottomSheetModal>
   );
@@ -125,4 +139,12 @@ const styles = StyleSheet.create({
   title: { fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: colors.foreground },
   subtitle: { maxWidth: '90%', fontSize: typography.size.xs, color: colors.mutedForeground },
   content: { padding: spacing.lg },
+  editContent: { gap: spacing.md },
+  editHeadline: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.foreground },
+  editSummary: { fontSize: typography.size.sm, lineHeight: 20, color: colors.mutedForeground },
+  editTarget: { paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline, gap: 4 },
+  editTargetIndex: { ...typography.eyebrow, color: colors.primary },
+  editTargetTitle: { fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: colors.foreground },
+  editTargetMeta: { fontSize: typography.size.xs, color: colors.mutedForeground },
+  editTargetRationale: { marginTop: spacing.xs, fontSize: typography.size.sm, lineHeight: 19, color: colors.mutedForeground },
 });

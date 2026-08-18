@@ -10,6 +10,22 @@ export type DailyLookCandidateItem = {
   category: string;
 };
 
+export type DailyLookReadinessStatus = 'ready' | 'incomplete' | 'priority';
+
+export type DailyLookMissingEssential = {
+  label: string;
+  category: string;
+  reason: string;
+  context: string;
+  priority: number;
+  unlocks: string[];
+  anchorItemIds: number[];
+  formality?: string;
+  silhouette?: string;
+  material?: string;
+  preferredColors?: string[];
+};
+
 export type DailyLookCandidate = {
   id: number;
   userId: number;
@@ -21,6 +37,10 @@ export type DailyLookCandidate = {
   reason: string;
   stylistNotes: string | null;
   itemIds: DailyLookCandidateItem[];
+  readinessStatus: DailyLookReadinessStatus;
+  foundationItemIds: DailyLookCandidateItem[];
+  missingEssentials: DailyLookMissingEssential[];
+  contextHash: string | null;
   aiGeneratedImageUrl: string | null;
   compositionHash: string | null;
   recommendationId: number | null;
@@ -47,6 +67,8 @@ export type DailyLookResolveInput = {
   trigger: DailyLookGenerationTrigger;
   eventId?: number;
   recentOutfitIds: number[];
+  fallbackOutfitIds: number[];
+  clientContextRevision: string;
   currentOutfitId?: number | null;
 };
 
@@ -54,15 +76,34 @@ export type DailyLookResolveResponse = {
   outcome: 'candidate' | 'none' | 'dismissed' | 'failed' | 'generating';
   candidate: DailyLookCandidate | null;
   candidateId?: number;
+  fallbackOutfitId?: number | null;
 };
 
 export const DAILY_LOOK_QUERY_KEY = ['daily-look'] as const;
 
+function normalizeCandidate(candidate: DailyLookCandidate | null): DailyLookCandidate | null {
+  if (!candidate) return null;
+  return {
+    ...candidate,
+    readinessStatus: candidate.readinessStatus ?? 'ready',
+    foundationItemIds: candidate.foundationItemIds ?? [],
+    missingEssentials: (candidate.missingEssentials ?? []).map((gap) => ({
+      ...gap,
+      unlocks: gap.unlocks ?? [],
+      anchorItemIds: gap.anchorItemIds ?? [],
+    })),
+    contextHash: candidate.contextHash ?? null,
+  };
+}
+
 export function useResolveDailyLook(input: DailyLookResolveInput | null, enabled: boolean) {
   return useQuery<DailyLookResolveResponse, Error>({
-    queryKey: [...DAILY_LOOK_QUERY_KEY, input?.localDate ?? null],
+    queryKey: [...DAILY_LOOK_QUERY_KEY, input?.localDate ?? null, input?.clientContextRevision ?? null],
     enabled: enabled && !!input,
-    queryFn: () => api.post<DailyLookResolveResponse>('/api/home/daily-look/resolve', input).then((response) => response.data),
+    queryFn: () => api.post<DailyLookResolveResponse>('/api/home/daily-look/resolve', input).then((response) => ({
+      ...response.data,
+      candidate: normalizeCandidate(response.data.candidate),
+    })),
     staleTime: 86_400_000,
     retry: false,
   });

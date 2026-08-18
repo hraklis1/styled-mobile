@@ -94,16 +94,17 @@ export async function scanItemDirect(input: {
     .then((r) => r.data);
 }
 
-function useWardrobeBrands() {
+function useWardrobeBrands(enabled = true) {
   return useQuery({
     queryKey: BRANDS_QUERY_KEY,
     queryFn: () => api.get<string[]>('/api/items/brands').then((r) => r.data),
     staleTime: 5 * 60 * 1000,
+    enabled,
   });
 }
 
-export function useBrandSuggestions(): string[] {
-  const { data: wardrobeBrands = [] } = useWardrobeBrands();
+export function useBrandSuggestions(enabled = true): string[] {
+  const { data: wardrobeBrands = [] } = useWardrobeBrands(enabled);
   return useMemo(() => {
     const wardrobeSet = new Set(wardrobeBrands.map((b) => b.toLowerCase()));
     const extras = FASHION_BRANDS.filter((b) => !wardrobeSet.has(b.toLowerCase()));

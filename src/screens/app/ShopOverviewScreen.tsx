@@ -3,7 +3,6 @@ import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { ShoppingBriefCard } from '../../components/shopping/ShoppingBriefCard';
 import { ShortlistCarousel } from '../../components/shopping/ShortlistCarousel';
 import { EditorialSection, IconButton } from '../../components/primitives/Editorial';
@@ -14,16 +13,12 @@ import { useShoppingBrief } from '../../hooks/useShoppingBrief';
 import { useShoppingSnaps } from '../../hooks/useShoppingSnaps';
 import { useWishlist } from '../../hooks/useWishlist';
 import { buildShoppingEditItems, mergeShoppingSnaps, type ShoppingEditItem } from '../../lib/shoppingGallery';
-import {
-  buildShopStylistLaunch,
-} from '../../lib/shopDecisionWorkspace';
 import { buildShortlistSpotlight } from '../../lib/shortlistSpotlight';
 import { track } from '../../lib/analytics';
 import { presentPaywall } from '../../lib/paywall';
 import { colors, spacing, typography } from '../../theme';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import type { ShopOverviewScreenProps } from '../../navigation/types';
-import type { StylistMode } from '../../features/stylist/types';
 
 /**
  * Shop answers two questions, in this order: what should I shop for (the
@@ -36,7 +31,6 @@ import type { StylistMode } from '../../features/stylist/types';
 export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProps) {
   const insets = useSafeAreaInsets();
   const { isPremium } = useEntitlement();
-  const { openStylist } = useGlobalAIStylist();
   const { refetch: refetchItems } = useItems();
   const { data: remoteSnaps = [], refetch: refetchSnaps } = useShoppingSnaps();
   const { data: savedShopping = [] } = useWishlist();
@@ -96,16 +90,6 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
     navigation.navigate('ShoppingCamera');
   }, [navigation]);
 
-  const askStylist = useCallback((query: string, mode: StylistMode = 'advice') => {
-    track('shop_action_selected', { action: 'ask_stylist' });
-    openStylist({
-      ...buildShopStylistLaunch(query, mode),
-      onNavigateToCloset: (outfitId) => navigation.navigate('Closet', {
-        screen: 'OutfitDetail',
-        params: { outfitId, returnTo: 'Home' },
-      }),
-    });
-  }, [navigation, openStylist]);
 
   const openHistory = useCallback((params?: { focusGroupId?: string; catalogFilter?: 'active' | 'all' }) => {
     track('shop_section_opened', { section: params?.focusGroupId ? 'candidate' : 'shopping_history' });
@@ -146,7 +130,6 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
             isLoading={brief.isLoading}
             isError={brief.isError}
             onOpenFullBrief={() => navigation.navigate('ShoppingBriefDetail')}
-            onStartShopping={() => askStylist('Help me choose my next best purchase.', 'shop_new')}
             onUpgrade={() => {
               track('shop_brief_upgrade_tapped');
               void presentPaywall();

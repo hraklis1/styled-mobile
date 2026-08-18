@@ -176,7 +176,7 @@ export function SuggestionsScreen({ navigation, route }: SuggestionsScreenProps)
   };
 
   const handleSave = () => {
-    if (!generateMutation.data) return;
+    if (!generateMutation.data || generateMutation.data.readinessStatus !== 'ready') return;
     const wLabel = WEATHER_OPTIONS.find((w) => w.id === weather)?.label ?? '';
     const oLabel = OCCASION_OPTIONS.find((o) => o.id === occasion)?.label ?? '';
     setSaveName(selectedEvent?.title ?? `${oLabel} — ${wLabel}`);
@@ -208,12 +208,36 @@ export function SuggestionsScreen({ navigation, route }: SuggestionsScreenProps)
     );
   };
 
+  const saveEventFoundation = () => {
+    if (!eventPlan || !selectedEvent || eventPlan.status !== 'incomplete') return;
+    const foundationIds = eventPlan.foundationItemIds ?? eventPlan.itemIds;
+    if (!foundationIds.length) return;
+    createOutfit.mutate({
+      name: `${selectedEvent.title} Foundation`,
+      description: eventPlan.stylistNotes,
+      event: null,
+      notes: `Needs: ${eventPlan.missingEssentials.map((gap) => gap.label).join(', ')}`,
+      tags: ['stylist-foundation'],
+      isDraft: true,
+      itemIds: foundationIds.map((id) => {
+        const item = (items ?? []).find((candidate) => candidate.id === id);
+        return { id, category: item?.category ?? 'other' };
+      }),
+    }, {
+      onSuccess: () => {
+        setEventPlan(null);
+        Alert.alert('Foundation saved', 'Complete the missing pieces when you are ready.');
+      },
+    });
+  };
+
   // Resolve item objects from the suggestion result
   const resultItems: Item[] = generateMutation.data
-    ? (generateMutation.data.outfit.itemIds ?? [])
+    ? (generateMutation.data.outfit.itemIds?.length ? generateMutation.data.outfit.itemIds : (generateMutation.data.foundationItemIds ?? []).map((id) => ({ id, category: '' })))
         .map((e) => (items ?? []).find((i) => i.id === e.id))
         .filter((i): i is Item => i != null)
     : [];
+  const suggestionIncomplete = generateMutation.data?.readinessStatus === 'incomplete';
 
   return (
     <KeyboardAvoidingView
@@ -429,7 +453,7 @@ export function SuggestionsScreen({ navigation, route }: SuggestionsScreenProps)
           {/* Result */}
           {generateMutation.data && !selectedEvent && (
             <View style={styles.resultCard}>
-              <Text style={styles.resultHeading}>Your Curated Look</Text>
+              <Text style={styles.resultHeading}>{suggestionIncomplete ? 'Look foundation' : 'Your Curated Look'}</Text>
               <View style={styles.suggestionQuote}>
                 <View style={styles.quoteLine} />
                 <Text style={styles.suggestionText}>
@@ -445,7 +469,14 @@ export function SuggestionsScreen({ navigation, route }: SuggestionsScreenProps)
                 </View>
               )}
 
-              <View style={styles.resultActions}>
+              {suggestionIncomplete && generateMutation.data.missingEssentials?.length ? (
+                <View style={styles.errorBox}>
+                  <Ionicons name="layers-outline" size={18} color={colors.action} />
+                  <Text style={[styles.errorText, { color: colors.inkSubtle }]}>This request needs {generateMutation.data.missingEssentials.map((gap) => gap.label).join(' and ')} before it is ready to wear.</Text>
+                </View>
+              ) : null}
+
+              {!suggestionIncomplete && <View style={styles.resultActions}>
                 <TouchableOpacity
                   onPress={handleSave}
                   disabled={createOutfit.isPending}
@@ -465,7 +496,7 @@ export function SuggestionsScreen({ navigation, route }: SuggestionsScreenProps)
                   <Ionicons name="refresh-outline" size={18} color={colors.mutedForeground} />
                   <Text style={styles.retryBtnText}>Try again</Text>
                 </TouchableOpacity>
-              </View>
+              </View>}
             </View>
           )}
         </ScrollView>
@@ -538,6 +569,7 @@ export function SuggestionsScreen({ navigation, route }: SuggestionsScreenProps)
             { onSuccess: setEventPlan },
           );
         }}
+        onSaveFoundation={saveEventFoundation}
         isAccepting={acceptEventPlan.isPending}
         isRegenerating={generateEventPlan.isPending}
         hasCurrentOutfit={(selectedEvent?.itemIds ?? []).length > 0}

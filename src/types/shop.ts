@@ -22,4 +22,7 @@ export type ShopOutfit = {
   items: ShopOutfitItem[];
   totalBudget: string;
   audioSummary: string;
+  /** Saved editorial Shopping Brief edit; kept in the existing wishlist payload. */
+  source?: 'shopping_brief';
+  shoppingBrief?: import('../lib/shoppingPriorityEdit').ShoppingPriorityEdit;
 };

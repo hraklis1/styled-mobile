@@ -2,6 +2,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensio
 import { Ionicons } from '@expo/vector-icons';
 
 import { OutfitCollage } from '../outfits/OutfitCollage';
+import { DailyLookCandidateVisual } from './DailyLookCandidateVisual';
 import { PressableScale } from '../primitives/PressableScale';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { Item } from '../../types/item';
@@ -17,6 +18,7 @@ type Props = {
   onClose: () => void;
   onSave: () => void;
   onDismiss: () => void;
+  onFindPiece: () => void;
 };
 
 function previewOutfit(candidate: DailyLookCandidate): Outfit {
@@ -31,7 +33,7 @@ function previewOutfit(candidate: DailyLookCandidate): Outfit {
     notes: candidate.stylistNotes,
     isDraft: false,
     isFavorite: false,
-    aiGeneratedImageUrl: candidate.aiGeneratedImageUrl,
+    aiGeneratedImageUrl: candidate.readinessStatus === 'ready' ? candidate.aiGeneratedImageUrl : null,
     wearCount: 0,
     lastWornAt: null,
     createdAt: candidate.createdAt,
@@ -47,6 +49,7 @@ export function DailyLookDetailSheet({
   onClose,
   onSave,
   onDismiss,
+  onFindPiece,
 }: Props) {
   const { width } = useWindowDimensions();
   if (!candidate) return null;
@@ -54,12 +57,15 @@ export function DailyLookDetailSheet({
   const outfit = previewOutfit(candidate);
   const busy = saving || dismissing;
   const imageSize = Math.min(width - spacing.lg * 2, 380);
+  const isReady = candidate.readinessStatus === 'ready';
+  const gap = candidate.missingEssentials[0];
+  const ownedEntries = isReady ? candidate.itemIds : candidate.foundationItemIds;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={styles.root}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Today’s Look</Text>
+          <Text style={styles.headerTitle}>{candidate.readinessStatus === 'priority' ? 'Today’s Priority' : 'Today’s Look'}</Text>
           <Pressable
             onPress={onClose}
             hitSlop={12}
@@ -70,14 +76,38 @@ export function DailyLookDetailSheet({
           </Pressable>
         </View>
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-          <OutfitCollage outfit={outfit} size={imageSize} height={Math.round(imageSize * 1.28)} borderRadius={radii.lg} />
-          <Text style={styles.eyebrow}>Styled for you today</Text>
+          {isReady || !gap ? (
+            <OutfitCollage outfit={outfit} size={imageSize} height={Math.round(imageSize * 1.28)} borderRadius={radii.lg} />
+          ) : (
+            <DailyLookCandidateVisual
+              candidate={candidate}
+              gap={gap}
+              items={items}
+              width={imageSize}
+              height={Math.round(imageSize * (candidate.readinessStatus === 'priority' ? 0.9 : 1.12))}
+            />
+          )}
+          <Text style={styles.eyebrow}>{isReady ? 'Styled for you today' : candidate.readinessStatus === 'incomplete' ? 'One piece away' : 'Highest-impact wardrobe gap'}</Text>
           <Text style={styles.title}>{candidate.name}</Text>
           <Text style={styles.reason}>{candidate.reason}</Text>
           {candidate.stylistNotes ? <Text style={styles.notes}>{candidate.stylistNotes}</Text> : null}
 
+          {!isReady && gap ? (
+            <View style={styles.gapBrief} accessible accessibilityLabel={`Suggested ${gap.label}, not in your closet. ${gap.context}`}>
+              <Text style={styles.gapBriefLabel}>COMPLETE IT WITH</Text>
+              <Text style={styles.gapBriefTitle}>{gap.label.replaceAll('_', ' ')}</Text>
+              <Text style={styles.gapBriefContext}>{gap.context}</Text>
+              {[gap.formality, gap.silhouette, gap.material, gap.preferredColors?.join(' · ')].filter(Boolean).length > 0 ? (
+                <Text style={styles.gapBriefMeta}>
+                  {[gap.formality, gap.silhouette, gap.material, gap.preferredColors?.join(' · ')].filter(Boolean).join(' · ')}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+
           <View style={styles.pieces}>
-            {candidate.itemIds.map((entry) => {
+            {!isReady ? <Text style={styles.piecesLabel}>IN YOUR CLOSET</Text> : null}
+            {ownedEntries.map((entry) => {
               const item = itemMap.get(entry.id);
               return (
                 <View key={entry.id} style={styles.pieceRow}>
@@ -90,16 +120,29 @@ export function DailyLookDetailSheet({
           </View>
 
           <View style={styles.actions}>
-            <PressableScale
-              contentStyle={styles.saveButton}
-              onPress={onSave}
-              disabled={busy}
-              accessibilityRole="button"
-              accessibilityLabel="Save look"
-            >
-              <Ionicons name="bookmark-outline" size={17} color={colors.primaryForeground} />
-              <Text style={styles.saveButtonText}>{saving ? 'Saving…' : 'Save look'}</Text>
-            </PressableScale>
+            {isReady ? (
+              <PressableScale
+                contentStyle={styles.saveButton}
+                onPress={onSave}
+                disabled={busy}
+                accessibilityRole="button"
+                accessibilityLabel="Save look"
+              >
+                <Ionicons name="bookmark-outline" size={17} color={colors.primaryForeground} />
+                <Text style={styles.saveButtonText}>{saving ? 'Saving…' : 'Save look'}</Text>
+              </PressableScale>
+            ) : gap ? (
+              <PressableScale
+                contentStyle={styles.saveButton}
+                onPress={onFindPiece}
+                disabled={busy}
+                accessibilityRole="button"
+                accessibilityLabel={`Find ${gap.label}, suggested and not in your closet`}
+              >
+                <Ionicons name="search-outline" size={17} color={colors.primaryForeground} />
+                <Text style={styles.saveButtonText}>Find {gap.label.replaceAll('_', ' ')}</Text>
+              </PressableScale>
+            ) : null}
             <PressableScale
               contentStyle={styles.dismissButton}
               onPress={onDismiss}
@@ -142,7 +185,13 @@ const styles = StyleSheet.create({
   title: { alignSelf: 'stretch', marginTop: 2, fontFamily: typography.family.display, fontSize: typography.size.xxl, color: colors.foreground },
   reason: { alignSelf: 'stretch', marginTop: spacing.xs, color: colors.mutedForeground, fontSize: typography.size.sm },
   notes: { alignSelf: 'stretch', marginTop: spacing.md, color: colors.foreground, fontSize: typography.size.sm, lineHeight: 21 },
+  gapBrief: { alignSelf: 'stretch', marginTop: spacing.lg, padding: spacing.md, gap: spacing.xs, borderRadius: radii.md, backgroundColor: colors.card },
+  gapBriefLabel: { color: colors.primary, fontSize: 9, fontWeight: typography.weight.bold, letterSpacing: 0.9 },
+  gapBriefTitle: { color: colors.foreground, fontFamily: typography.family.display, fontSize: typography.size.xl, textTransform: 'capitalize' },
+  gapBriefContext: { color: colors.foreground, fontSize: typography.size.sm, lineHeight: 20 },
+  gapBriefMeta: { color: colors.mutedForeground, fontSize: typography.size.xs, textTransform: 'capitalize' },
   pieces: { alignSelf: 'stretch', marginTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  piecesLabel: { paddingTop: spacing.sm, color: colors.mutedForeground, fontSize: 9, fontWeight: typography.weight.bold, letterSpacing: 0.8 },
   pieceRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   pieceDot: { width: 6, height: 6, borderRadius: 3, marginRight: spacing.sm, backgroundColor: colors.primary },
   pieceName: { flex: 1, color: colors.foreground, fontSize: typography.size.sm },

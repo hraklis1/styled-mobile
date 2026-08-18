@@ -48,6 +48,7 @@ import { useGlobalOutfitLogger } from '../../contexts/GlobalOutfitLoggerContext'
 import { track } from '../../lib/analytics';
 import type { CalendarScreenProps } from '../../navigation/types';
 import type { Event } from '../../types/event';
+import type { StylistMissingEssential } from '../../features/stylist/types';
 import { presentCalendarEvent } from '../../components/calendar/calendar-presentation';
 
 const FREE_EVENT_LIMIT = 5;
@@ -408,6 +409,19 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
             returnToEventDetail: true,
           },
         }),
+        onNavigateToShop: (gap?: StylistMissingEssential) => {
+          if (!gap) return;
+          navigation.navigate('Shop', { screen: 'ShoppingPriorityEdit', params: {
+            priority: {
+              label: gap.label,
+              category: gap.category,
+              reason: gap.reason === 'weather' || gap.reason === 'occasion' ? 'occasion' : gap.reason === 'ratio_imbalance' ? 'ratio_imbalance' : 'wardrobe_gap',
+              context: gap.context,
+              priority: gap.priority,
+              unlocks: gap.unlocks ?? [],
+            },
+          }});
+        },
         context: {
           kind: 'event',
           eventId: event.id,

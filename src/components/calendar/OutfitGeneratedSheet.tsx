@@ -23,6 +23,7 @@ export function OutfitGeneratedSheet({
   onDone,
   onAccept,
   onTryAnother,
+  onSaveFoundation,
   isAccepting,
   isRegenerating,
   hasCurrentOutfit,
@@ -32,6 +33,7 @@ export function OutfitGeneratedSheet({
   onDone: () => void;
   onAccept: () => void;
   onTryAnother: () => void;
+  onSaveFoundation?: () => void;
   isAccepting: boolean;
   isRegenerating: boolean;
   hasCurrentOutfit: boolean;
@@ -85,6 +87,7 @@ export function OutfitGeneratedSheet({
   const items = shown.itemIds
     .map((id) => allItems.find((i) => i.id === id))
     .filter(Boolean) as Item[];
+  const incomplete = shown.status === 'incomplete' || shown.status === 'needs_clarification';
 
   return (
     <Modal visible transparent animationType="none" onRequestClose={() => close()}>
@@ -100,7 +103,7 @@ export function OutfitGeneratedSheet({
               <View style={s.iconBadge}>
                 <Ionicons name="sparkles" size={22} color={colors.primary} />
               </View>
-              <Text style={s.eyebrow}>Your outfit plan</Text>
+              <Text style={s.eyebrow}>{incomplete ? 'Look foundation' : 'Your outfit plan'}</Text>
               <Text style={s.outfitName}>{shown.outfitName}</Text>
             </View>
 
@@ -137,14 +140,18 @@ export function OutfitGeneratedSheet({
             ) : null}
 
             <View style={s.actions}>
-              <TouchableOpacity style={[s.primaryBtn, isAccepting && s.disabledBtn]} onPress={onAccept} disabled={isAccepting || isRegenerating} activeOpacity={0.85}>
+              {!incomplete && <TouchableOpacity style={[s.primaryBtn, isAccepting && s.disabledBtn]} onPress={onAccept} disabled={isAccepting || isRegenerating} activeOpacity={0.85}>
                 <Ionicons name="checkmark-circle-outline" size={18} color={colors.white} />
                 <Text style={s.primaryBtnText}>{isAccepting ? 'Saving…' : 'Use this outfit'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[s.secondaryBtn, isRegenerating && s.disabledBtn]} onPress={onTryAnother} disabled={isAccepting || isRegenerating} activeOpacity={0.8}>
+              </TouchableOpacity>}
+              {incomplete && onSaveFoundation ? <TouchableOpacity style={s.secondaryBtn} onPress={onSaveFoundation} disabled={isAccepting || isRegenerating} activeOpacity={0.8}>
+                <Ionicons name="bookmark-outline" size={16} color={colors.primary} />
+                <Text style={s.secondaryBtnText}>Save foundation</Text>
+              </TouchableOpacity> : null}
+              {!incomplete && <TouchableOpacity style={[s.secondaryBtn, isRegenerating && s.disabledBtn]} onPress={onTryAnother} disabled={isAccepting || isRegenerating} activeOpacity={0.8}>
                 <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
                 <Text style={s.secondaryBtnText}>{isRegenerating ? 'Planning…' : 'Try another'}</Text>
-              </TouchableOpacity>
+              </TouchableOpacity>}
               <TouchableOpacity style={s.dismissBtn} onPress={() => close()} disabled={isAccepting} activeOpacity={0.8}>
                 <Text style={s.dismissBtnText}>{hasCurrentOutfit ? 'Keep current outfit' : 'Not now'}</Text>
               </TouchableOpacity>

@@ -2,6 +2,7 @@ import type { WishlistEntry } from './wishlist';
 import { getWishlistRecommendationType } from './wishlistType';
 
 export function getWishlistContext(entry: WishlistEntry): string | undefined {
+  if (entry.outfit.shoppingBrief) return 'Shopping Brief';
   return entry.eventContext?.title?.trim() || entry.outfit.city?.trim() || undefined;
 }
 
@@ -10,6 +11,7 @@ export function getWishlistBrands(entry: WishlistEntry): string[] {
 }
 
 export function getWishlistItemSummary(entry: WishlistEntry): string {
+  if (entry.outfit.shoppingBrief) return `${entry.outfit.shoppingBrief.targets.length} shopping targets`;
   const names = entry.outfit.items.map((item) => item.name?.trim()).filter(Boolean);
   if (names.length === 0) return 'No products listed';
   if (names.length <= 2) return names.join(' · ');
@@ -17,6 +19,7 @@ export function getWishlistItemSummary(entry: WishlistEntry): string {
 }
 
 export function getWishlistTitle(entry: WishlistEntry): string {
+  if (entry.outfit.shoppingBrief) return entry.outfit.shoppingBrief.headline;
   const firstItemName = entry.outfit.items.find((item) => item.name?.trim())?.name.trim();
   const type = getWishlistRecommendationType(entry);
   const fallback = type === 'piece' ? 'Saved piece' : type === 'list' ? 'Saved list' : 'Saved look';
@@ -49,6 +52,7 @@ export function getWishlistBoardLabel(entry: WishlistEntry): string {
 }
 
 export function getWishlistMeta(entry: WishlistEntry): string {
+  if (entry.outfit.shoppingBrief) return `${entry.outfit.shoppingBrief.targets.length} options`;
   const count = entry.outfit.items.length;
   const type = getWishlistRecommendationType(entry);
   const countLabel = type === 'piece' ? '1 piece' : type === 'list' ? `${count} ${count === 1 ? 'option' : 'options'}` : `${count} ${count === 1 ? 'item' : 'items'}`;
@@ -56,12 +60,19 @@ export function getWishlistMeta(entry: WishlistEntry): string {
 }
 
 export function getWishlistSearchText(entry: WishlistEntry): string {
+  const editText = entry.outfit.shoppingBrief ? [
+    entry.outfit.shoppingBrief.priority.label,
+    entry.outfit.shoppingBrief.priority.category,
+    entry.outfit.shoppingBrief.summary,
+    ...entry.outfit.shoppingBrief.targets.flatMap((target) => [target.title, target.category, target.color, target.material, target.silhouette]),
+  ] : [];
   return [
     entry.outfit.intro,
     entry.outfit.city,
     entry.outfit.totalBudget,
     entry.eventContext?.title,
     ...entry.outfit.items.flatMap((item) => [item.name, item.brand, item.category, item.priceRange]),
+    ...editText,
   ].filter(Boolean).join(' ').toLocaleLowerCase();
 }
 
@@ -76,6 +87,7 @@ export function getWishlistAccessibilityLabel(entry: WishlistEntry): string {
 }
 
 export function getWishlistTypeLabel(entry: WishlistEntry): string {
+  if (entry.outfit.shoppingBrief) return 'Saved edit';
   const type = getWishlistRecommendationType(entry);
   return type === 'piece' ? 'Saved piece' : type === 'list' ? 'Saved list' : 'Saved look';
 }

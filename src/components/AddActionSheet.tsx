@@ -63,8 +63,6 @@ export function AddActionSheet({
   const createItem = useCreateItem();
   const updateItem = useUpdateItem();
   const bottomSheetRef = useRef<BottomSheetModal>(null);
-  const brandSuggestions = useBrandSuggestions();
-
   const [view, setView] = useState<View_>('menu');
   const [manualName, setManualName] = useState('');
   const [manualCategory, setManualCategory] = useState<ItemCategory | null>(null);
@@ -76,6 +74,11 @@ export function AddActionSheet({
   const [manualOccasions, setManualOccasions] = useState<Occasion[]>([]);
   const [manualBrand, setManualBrand] = useState('');
   const [manualImageDataUrl, setManualImageDataUrl] = useState<string | null>(null);
+  // Brand suggestions are only needed by the manual form. Keeping this query
+  // disabled on the initial action menu avoids making an optional request
+  // before the user has chosen that path (and keeps the camera/library paths
+  // independent of the brands endpoint).
+  const brandSuggestions = useBrandSuggestions(view === 'manual' || view === 'saving');
 
   const isManualView = view === 'manual' || view === 'saving';
 

@@ -46,6 +46,7 @@ import { ShoppingCameraScreen } from '../screens/app/ShoppingCameraScreen';
 import { ShoppingGalleryScreen } from '../screens/app/ShoppingGalleryScreen';
 import { ShoppingHaulDetailScreen } from '../screens/app/ShoppingHaulDetailScreen';
 import { ShoppingBriefDetailScreen } from '../screens/app/ShoppingBriefDetailScreen';
+import { ShoppingPriorityEditScreen } from '../screens/app/ShoppingPriorityEditScreen';
 import { StylistScreen } from '../screens/app/StylistScreen';
 import { ErrorState } from '../components/primitives/ErrorState';
 import { QuickMenuTabButton } from '../components/navigation/QuickMenuTabButton';
@@ -164,6 +165,7 @@ function ShopNavigator() {
     <ShopStack.Navigator screenOptions={{ headerShown: false }}>
       <ShopStack.Screen name="ShopMain" component={ShopOverviewScreen} />
       <ShopStack.Screen name="ShoppingBriefDetail" component={ShoppingBriefDetailScreen} />
+      <ShopStack.Screen name="ShoppingPriorityEdit" component={ShoppingPriorityEditScreen} />
       <ShopStack.Screen name="SavedShopping" component={SavedShoppingScreen} />
       <ShopStack.Screen name="SavedLooks" component={SavedLooksScreen} />
       <ShopStack.Screen name="ShoppingGallery" component={ShoppingGalleryScreen} />
