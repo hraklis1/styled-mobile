@@ -29,6 +29,7 @@ export function useWishlist() {
 export async function addOutfitToWishlist(
   outfit: ShopOutfit,
   eventContext?: { id: number; title: string } | null,
+  shoppingBriefRecommendationKey?: string,
 ): Promise<WishlistEntry> {
   const entry: WishlistEntry = {
     id: newWishlistId(),
@@ -42,6 +43,7 @@ export async function addOutfitToWishlist(
     outfit,
     recommendationType: entry.recommendationType,
     eventContext: eventContext ?? null,
+    ...(shoppingBriefRecommendationKey ? { shoppingBriefRecommendationKey } : {}),
   });
   queryClient.setQueryData<WishlistEntry[]>(WISHLIST_QUERY_KEY, (old = []) => [entry, ...old]);
   return entry;

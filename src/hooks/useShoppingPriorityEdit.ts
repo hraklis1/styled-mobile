@@ -35,6 +35,7 @@ export function useShoppingPriorityEdit(
     queryFn: () => api.post('/api/shop/brief/priority-edit', {
       priority,
       ...(origin ? { origin } : {}),
+      ...(briefGeneratedAt ? { briefGeneratedAt } : {}),
     }).then((response) => parseShoppingPriorityEdit(response.data)),
     staleTime: 24 * 60 * 60 * 1000,
     retry: 1,
@@ -42,7 +43,7 @@ export function useShoppingPriorityEdit(
 
   useEffect(() => {
     if (!query.data?.briefUpdated || !query.data.updatedBrief) return;
-    queryClient.setQueryData(SHOPPING_BRIEF_QUERY_KEY, query.data.updatedBrief);
+    queryClient.setQueriesData({ queryKey: SHOPPING_BRIEF_QUERY_KEY }, query.data.updatedBrief);
   }, [query.data, queryClient]);
 
   return query;

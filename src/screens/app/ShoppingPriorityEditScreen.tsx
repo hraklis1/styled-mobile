@@ -92,7 +92,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
     };
     try {
       setSaving(true);
-      await addOutfitToWishlist(outfit);
+      await addOutfitToWishlist(outfit, null, priority.recommendationKey);
       setSavedLocally(true);
       showSavedToast();
       track('shopping_brief_edit_saved', { category: priority.category, reason: priority.reason, rank: priority.priority, source: source ?? 'shopping_brief', targetCount: 3 });

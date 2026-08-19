@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -8,7 +8,8 @@ import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
 import { sentenceCase } from '../../components/shopping/ShoppingBriefCard';
 import { categoryIcon } from '../../components/stylist/GapCard';
 import { useEntitlement } from '../../hooks/useEntitlement';
-import { useShoppingBrief } from '../../hooks/useShoppingBrief';
+import { useNotNowShoppingPriority, useShoppingBrief } from '../../hooks/useShoppingBrief';
+import { toLocalDateKey } from '../../lib/dailyStylistPick';
 import { colors, radii, spacing, typography } from '../../theme';
 import { track } from '../../lib/analytics';
 import type { ShoppingBriefDetailScreenProps } from '../../navigation/types';
@@ -33,6 +34,8 @@ import type { ShoppingBriefDetailScreenProps } from '../../navigation/types';
 export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScreenProps) {
   const { isPremium } = useEntitlement();
   const brief = useShoppingBrief(isPremium);
+  const notNow = useNotNowShoppingPriority();
+  const [notNowNotice, setNotNowNotice] = useState(false);
 
   const goBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -64,6 +67,8 @@ export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScr
           onBack={goBack}
           style={styles.header}
         />
+        {notNowNotice ? <Text style={styles.notice}>We’ll hold this priority for now.</Text> : null}
+        {notNow.isError ? <Text style={styles.errorNotice}>Couldn’t update this priority. Tap “Not now” to retry.</Text> : null}
         {data.priorities.length > 0 ? (
           <EditorialSection variant="ruled" title="Priorities">
             {data.priorities.map((priority) => (
@@ -96,6 +101,26 @@ export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScr
                   <Text style={styles.askText}>See options</Text>
                   <Ionicons name="arrow-forward" size={14} color={colors.primaryForeground} />
                 </PressableScale>
+                <PressableScale
+                  haptic={false}
+                  contentStyle={styles.notNowButton}
+                  onPress={() => {
+                    if (!priority.recommendationKey || notNow.isPending) return;
+                    notNow.reset();
+                    notNow.mutate({
+                      recommendationKey: priority.recommendationKey,
+                      localDate: data.localDate ?? toLocalDateKey(new Date()),
+                    }, { onSuccess: () => {
+                      setNotNowNotice(true);
+                      track('shopping_brief_priority_not_now', { category: priority.category, reason: priority.reason, scope: priority.scope ?? 'general' });
+                    } });
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Not now for ${priority.label}`}
+                  disabled={!priority.recommendationKey || notNow.isPending}
+                >
+                  <Text style={styles.notNowText}>{notNow.isPending ? 'Updating…' : 'Not now'}</Text>
+                </PressableScale>
               </View>
             ))}
           </EditorialSection>
@@ -111,6 +136,8 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxxl },
   header: { marginHorizontal: -spacing.lg },
+  notice: { ...typography.text.caption, color: colors.mutedForeground, paddingVertical: spacing.sm },
+  errorNotice: { ...typography.text.caption, color: colors.destructive, paddingVertical: spacing.sm },
   priorityRow: {
     gap: spacing.sm,
     paddingVertical: spacing.xl,
@@ -146,4 +173,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   askText: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, color: colors.primaryForeground },
+  notNowButton: { minHeight: 36, alignSelf: 'flex-start', justifyContent: 'center', paddingHorizontal: spacing.sm },
+  notNowText: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
 });

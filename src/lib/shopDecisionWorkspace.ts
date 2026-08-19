@@ -21,6 +21,10 @@ export type ShoppingBriefPriority = {
   silhouette?: string;
   material?: string;
   preferredColors?: string[];
+  recommendationKey?: string;
+  scope?: 'general' | 'event';
+  eventId?: number;
+  eventTitle?: string;
 };
 
 export type ShoppingBrief = {
@@ -30,6 +34,8 @@ export type ShoppingBrief = {
   generatedAt: string;
   source: 'model' | 'rules';
   priorities: ShoppingBriefPriority[];
+  localDate?: string;
+  updatedAt?: string;
 };
 
 export function parseShoppingBrief(value: unknown): ShoppingBrief {
