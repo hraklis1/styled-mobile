@@ -871,7 +871,15 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         )}
       </EditorialSection>
 
-      {/* ── Next up ─────────────────────────────────────────────── */}
+      {/* ── Wardrobe brief ── */}
+      <HomeBriefBand
+        onPress={() => {
+          track('shop_section_opened', { section: 'home_brief' });
+          navigation.navigate('Shop', { screen: 'ShoppingBriefDetail' });
+        }}
+      />
+
+      {/* ── Next up ── */}
       {shortlist.awaitingDecision.length > 0 ? (
         <ShortlistDecisionCard
           items={shortlist.awaitingDecision}
@@ -1009,14 +1017,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           </ScrollView>
         </EditorialSection>
       )}
-
-      {/* ── Wardrobe brief closing statement ──────────────────────── */}
-      <HomeBriefBand
-        onPress={() => {
-          track('shop_section_opened', { section: 'home_brief' });
-          navigation.navigate('Shop', { screen: 'ShoppingBriefDetail' });
-        }}
-      />
 
     </ScrollView>
       <DailyLookDetailSheet
