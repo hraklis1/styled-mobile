@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { PressableScale } from '../primitives/PressableScale';
 import { categoryIcon } from '../stylist/GapCard';
 import { colors, radii, spacing, typography } from '../../theme';
-import type { ShoppingBrief } from '../../lib/shopDecisionWorkspace';
+import type { ShoppingBrief, ShoppingBriefPriority } from '../../lib/shopDecisionWorkspace';
 
 /** Two is a strategy; five is a shopping list. The rest live behind "View plan". */
 const PRIORITY_LIMIT = 2;
@@ -113,11 +113,16 @@ export function ShoppingBriefCard({
   }
 
   if (brief.status === 'insufficient_data') {
+    // Below the versatility floor still carries a starter_capsule sequence
+    // now (server/shoppingOpportunities.ts) rather than an empty list, so a
+    // brand-new wardrobe sees a labeled first step instead of only the CTA.
+    const starterPriorities = brief.priorities.slice(0, PRIORITY_LIMIT);
     return shell(
       <>
         <BriefMasthead />
         <Text style={styles.headline} numberOfLines={2}>{brief.headline}</Text>
         <Text style={styles.body}>{brief.summary}</Text>
+        <PriorityList priorities={starterPriorities} />
         <TextAction label="Add wardrobe pieces" onPress={onAddWardrobePieces} />
       </>,
     );
@@ -131,24 +136,18 @@ export function ShoppingBriefCard({
       <Text style={styles.headline} numberOfLines={2}>{brief.headline}</Text>
       <Text style={styles.body} numberOfLines={3}>{brief.summary}</Text>
 
-      {priorities.length > 0 ? (
-        <View style={styles.priorities}>
-          <Text style={styles.prioritiesLabel}>Priorities</Text>
-          {priorities.map((priority) => (
-            <View key={`${priority.priority}-${priority.label}`} style={styles.priorityRow}>
-              <View style={styles.priorityHead}>
-                <Ionicons name={categoryIcon(priority.category)} size={15} color={colors.primary} />
-                <Text style={styles.priorityLabel} numberOfLines={1}>{sentenceCase(priority.label)}</Text>
-              </View>
-              {priority.unlocks.length > 0 ? (
-                <Text style={styles.priorityUnlocks} numberOfLines={2}>
-                  Unlocks {priority.unlocks.join(' · ')}
-                </Text>
-              ) : null}
-            </View>
-          ))}
+      {/* "Balanced" with no priorities but a known next candidate — distinct
+          from "well covered", where nothing was ever found. The summary
+          already names it in prose (see routes.ts); this chip repeats it as
+          a scannable label rather than new information. */}
+      {brief.status === 'balanced' && brief.nextUp ? (
+        <View style={styles.nextUpRow}>
+          <Ionicons name="time-outline" size={13} color={colors.mutedForeground} />
+          <Text style={styles.nextUpLabel} numberOfLines={1}>Next up: {sentenceCase(brief.nextUp.label)}</Text>
         </View>
       ) : null}
+
+      <PriorityList priorities={priorities} />
 
       {/* The reasoning behind each priority, and the dedicated edit control to act
           on it, live on ShoppingBriefDetailScreen — this is the one door to
@@ -156,6 +155,28 @@ export function ShoppingBriefCard({
           reads as a brief rather than a teaser. */}
       <TextAction label="Read the full brief" onPress={onOpenFullBrief} />
     </>,
+  );
+}
+
+function PriorityList({ priorities }: { priorities: ShoppingBriefPriority[] }) {
+  if (priorities.length === 0) return null;
+  return (
+    <View style={styles.priorities}>
+      <Text style={styles.prioritiesLabel}>Priorities</Text>
+      {priorities.map((priority) => (
+        <View key={`${priority.priority}-${priority.label}`} style={styles.priorityRow}>
+          <View style={styles.priorityHead}>
+            <Ionicons name={categoryIcon(priority.category)} size={15} color={colors.primary} />
+            <Text style={styles.priorityLabel} numberOfLines={1}>{sentenceCase(priority.label)}</Text>
+          </View>
+          {priority.unlocks.length > 0 ? (
+            <Text style={styles.priorityUnlocks} numberOfLines={2}>
+              Unlocks {priority.unlocks.join(' · ')}
+            </Text>
+          ) : null}
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -204,6 +225,8 @@ const styles = StyleSheet.create({
     color: colors.foreground,
   },
   body: { ...typography.text.bodySmall, color: colors.inkSubtle },
+  nextUpRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  nextUpLabel: { ...typography.text.caption, fontWeight: typography.weight.medium, color: colors.mutedForeground },
   prioritiesLabel: { ...typography.text.eyebrow, color: colors.mutedForeground },
   priorities: { paddingTop: spacing.sm },
   // Hairline-separated, not a white card inside a tinted one: the priority is

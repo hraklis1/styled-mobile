@@ -79,10 +79,24 @@ test('rejects a brief-updated response without its replacement brief', () => {
   })).toThrow('Invalid Shopping Edit response');
 });
 
-test('rejects partial ready edits', () => {
-  expect(() => parseShoppingPriorityEdit({
+test('accepts a single ready target — widened from an exact 3 to a 1-5 range ahead of real product results', () => {
+  expect(parseShoppingPriorityEdit({
     status: 'ready', headline: 'Start', summary: 'Only one.', generatedAt: new Date().toISOString(), priority,
     targets: [target('a')], noBuyReason: null,
+  }).targets).toHaveLength(1);
+});
+
+test('rejects a ready edit with no targets', () => {
+  expect(() => parseShoppingPriorityEdit({
+    status: 'ready', headline: 'Start', summary: 'None.', generatedAt: new Date().toISOString(), priority,
+    targets: [], noBuyReason: null,
+  })).toThrow();
+});
+
+test('rejects a ready edit past the widened five-target ceiling', () => {
+  expect(() => parseShoppingPriorityEdit({
+    status: 'ready', headline: 'Start', summary: 'Too many.', generatedAt: new Date().toISOString(), priority,
+    targets: [target('a'), target('b'), target('c'), target('d'), target('e'), target('f')], noBuyReason: null,
   })).toThrow();
 });
 

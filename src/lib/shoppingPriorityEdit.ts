@@ -16,6 +16,14 @@ export type ShoppingPriorityTarget = {
   rationale: string;
   unlocks: string[];
   pairsWithItemIds: number[];
+  // Commerce seam — unpopulated until a product-matching layer (Sovrn
+  // Commerce) exists server-side. Field names match ShopOutfitItem in
+  // src/types/shop.ts. See ShoppingPriorityTargetCard for the tappable
+  // "Where to look" row this enables.
+  imageUrl?: string;
+  productUrl?: string;
+  merchant?: string;
+  price?: string;
 };
 
 export type ShoppingPriorityEdit = {
@@ -76,7 +84,10 @@ export function parseShoppingPriorityEdit(value: unknown): ShoppingPriorityEdit 
     || (edit.noBuyReason != null && typeof edit.noBuyReason !== 'string')
     || (edit.briefUpdated != null && typeof edit.briefUpdated !== 'boolean')
   ) throw new Error('Invalid Shopping Edit response');
-  if (edit.status === 'ready' && edit.targets.length !== 3) throw new Error('Invalid Shopping Edit response');
+  // Widened from an exact 3 to a range — matches the backend relaxation in
+  // server/shoppingPriorityEdit.ts, done ahead of real product results
+  // (Sovrn) making a fixed count impossible. Still always 3 today.
+  if (edit.status === 'ready' && (edit.targets.length < 1 || edit.targets.length > 5)) throw new Error('Invalid Shopping Edit response');
   if (edit.status === 'no_buy' && edit.targets.length !== 0) throw new Error('Invalid Shopping Edit response');
   const updatedBrief = edit.updatedBrief == null ? undefined : parseShoppingBrief(edit.updatedBrief);
   if (edit.briefUpdated === true && (edit.status !== 'no_buy' || !updatedBrief)) {

@@ -2,9 +2,12 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser';
 
 import { getSwatchColor } from '../../lib/colorUtils';
 import { itemCoverPresentation } from '../../lib/itemImage';
+import { track } from '../../lib/analytics';
+import { PressableScale } from '../primitives/PressableScale';
 import { colors, cutoutScaleFor, radii, shadows, spacing, typography } from '../../theme';
 import type { ShoppingPriorityTarget } from '../../lib/shoppingPriorityEdit';
 import type { Item } from '../../types/item';
@@ -48,7 +51,26 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe }: Props) {
       <View style={styles.details}>
         <InlineDetail label="Silhouette" value={target.silhouette} />
         {target.retailerExamples.length > 0 ? (
-          <InlineDetail label="Where to look" value={target.retailerExamples.join(' · ')} />
+          // Tappable only once a product-matching layer populates
+          // productUrl (see the commerce-seam comment on
+          // ShoppingPriorityTarget) — until then this stays the same inert
+          // text it always was, since retailerExamples are "suitable places
+          // to look", never availability claims.
+          target.productUrl ? (
+            <PressableScale
+              haptic={false}
+              onPress={() => {
+                track('shopping_brief_product_opened', { targetKey: target.key, merchant: target.merchant ?? null });
+                void WebBrowser.openBrowserAsync(target.productUrl!);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`Shop ${target.title}${target.merchant ? ` at ${target.merchant}` : ''}`}
+            >
+              <InlineDetail label="Where to look" value={target.merchant ?? target.retailerExamples.join(' · ')} linked />
+            </PressableScale>
+          ) : (
+            <InlineDetail label="Where to look" value={target.retailerExamples.join(' · ')} />
+          )
         ) : null}
       </View>
 
@@ -80,11 +102,14 @@ function ColorSwatch({ primary, secondary }: { primary: string; secondary?: stri
   );
 }
 
-function InlineDetail({ label, value }: { label: string; value: string }) {
+function InlineDetail({ label, value, linked }: { label: string; value: string; linked?: boolean }) {
   return (
     <View style={styles.detailRow}>
       <Text style={styles.detailLabel}>{label}</Text>
-      <Text selectable style={styles.detailValue}>{value}</Text>
+      <View style={styles.detailValueRow}>
+        <Text selectable={!linked} style={[styles.detailValue, linked && styles.detailValueLinked]}>{value}</Text>
+        {linked ? <Ionicons name="open-outline" size={13} color={colors.action} /> : null}
+      </View>
     </View>
   );
 }
@@ -183,7 +208,9 @@ const styles = StyleSheet.create({
   details: { gap: spacing.md },
   detailRow: { gap: spacing.xs },
   detailLabel: { ...typography.text.eyebrow, color: colors.mutedForeground },
+  detailValueRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   detailValue: { fontSize: typography.text.bodySmall.fontSize, lineHeight: 20, color: colors.inkSubtle },
+  detailValueLinked: { color: colors.action, fontWeight: typography.weight.medium },
   pairsSection: { gap: spacing.sm },
   pairsLabel: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground },
   pairsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },

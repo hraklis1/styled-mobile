@@ -7,12 +7,29 @@ export function buildShopStylistLaunch(initialQuery: string, initialMode: Stylis
 
 export type ShoppingBriefReason = 'weather' | 'occasion' | 'wardrobe_gap' | 'ratio_imbalance';
 
+/** How the server found this candidate. 'structural'/'occasion' are an
+ *  absent category or an unbuildable event outfit; the rest come from the
+ *  wardrobe-versatility engine and answer "what would unlock the most"
+ *  instead — see server/shoppingOpportunities.ts. Optional and rendered
+ *  permissively: an unrecognized value (older app build, newer server kind)
+ *  should fall back to a default icon/framing, never fail to render. */
+export type ShoppingBriefOpportunityKind =
+  | 'structural'
+  | 'occasion'
+  | 'multiplier'
+  | 'bridge'
+  | 'occasion_coverage'
+  | 'seasonal'
+  | 'starter_capsule'
+  | 'replacement';
+
 export type ShoppingBriefPriority = {
   /** Stable server-side verified gap identity used to reconcile edits. */
   candidateKey?: string;
   label: string;
   category: string;
   reason: ShoppingBriefReason;
+  kind?: ShoppingBriefOpportunityKind | (string & {});
   context: string;
   priority: number;
   unlocks: string[];
@@ -21,6 +38,10 @@ export type ShoppingBriefPriority = {
   silhouette?: string;
   material?: string;
   preferredColors?: string[];
+  /** Outfit combinations this candidate would add, when computed — the
+   *  wardrobe-multiplier signal. Not present on structural/occasion
+   *  candidates, which have no comparable count. */
+  impactScore?: number;
   recommendationKey?: string;
   scope?: 'general' | 'event';
   eventId?: number;
@@ -36,6 +57,10 @@ export type ShoppingBrief = {
   priorities: ShoppingBriefPriority[];
   localDate?: string;
   updatedAt?: string;
+  /** Set only on a "balanced" brief where real candidates exist but are all
+   *  currently on cooldown — lets the UI say what's coming back instead of
+   *  going quiet. */
+  nextUp?: { label: string; availableOn: string };
 };
 
 export function parseShoppingBrief(value: unknown): ShoppingBrief {
