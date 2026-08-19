@@ -373,7 +373,7 @@ const s = StyleSheet.create({
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxxl },
   titleBlock: { gap: spacing.sm, marginBottom: spacing.xs },
   title: {
-    fontSize: typography.size.xxl,
+    fontSize: typography.text.pageTitle.fontSize,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
     lineHeight: 34,
@@ -383,7 +383,7 @@ const s = StyleSheet.create({
     minHeight: 26,
     flexDirection: 'row', alignItems: 'center', gap: 4,
   },
-  readinessBadgeText: { fontSize: 10, color: colors.primary, fontWeight: typography.weight.semibold },
+  readinessBadgeText: { ...typography.text.label, color: colors.primary },
   readinessBadgeTextReady: { color: colors.success },
   infoCard: {
     gap: spacing.md,
@@ -395,7 +395,7 @@ const s = StyleSheet.create({
     borderCurve: 'continuous',
   },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  metaText: { fontSize: typography.size.sm, color: colors.mutedForeground, flex: 1 },
+  metaText: { fontSize: typography.text.bodySmall.fontSize, color: colors.mutedForeground, flex: 1 },
   countdownBadge: {
     backgroundColor: colors.surfaceSelected,
     borderRadius: radii.full,
@@ -403,7 +403,7 @@ const s = StyleSheet.create({
     minHeight: 24,
     justifyContent: 'center',
   },
-  countdownText: { fontSize: 11, fontWeight: typography.weight.semibold, color: colors.primary },
+  countdownText: { ...typography.text.label, color: colors.primary },
   notesCard: {
     gap: spacing.md,
     backgroundColor: colors.surfaceSubtle,
@@ -415,10 +415,10 @@ const s = StyleSheet.create({
     borderCurve: 'continuous',
   },
   notesHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  notesLabel: { fontSize: typography.size.xs, color: colors.primary, fontWeight: typography.weight.semibold, textTransform: 'uppercase', letterSpacing: 0.5 },
-  notesText: { fontSize: typography.size.sm, color: colors.inkSubtle, lineHeight: typography.size.sm * 1.5 },
+  notesLabel: { fontSize: typography.text.caption.fontSize, color: colors.primary, fontWeight: typography.weight.semibold, textTransform: 'uppercase', letterSpacing: typography.tracking.meta },
+  notesText: { fontSize: typography.text.bodySmall.fontSize, color: colors.inkSubtle, lineHeight: typography.text.bodySmall.fontSize * 1.5 },
   notesMoreBtn: { minHeight: 32, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4 },
-  notesMoreText: { fontSize: typography.size.xs, color: colors.primary, fontWeight: typography.weight.semibold },
+  notesMoreText: { fontSize: typography.text.caption.fontSize, color: colors.primary, fontWeight: typography.weight.semibold },
   sourceLinks: { gap: spacing.xs },
   sourceLink: {
     minHeight: 40,
@@ -429,7 +429,7 @@ const s = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
-  sourceLinkText: { flex: 1, fontSize: typography.size.xs, color: colors.primary, fontWeight: typography.weight.semibold },
+  sourceLinkText: { flex: 1, fontSize: typography.text.caption.fontSize, color: colors.primary, fontWeight: typography.weight.semibold },
   actions: {
     gap: spacing.sm,
     padding: spacing.lg,
@@ -447,7 +447,7 @@ const s = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   stylistBtnText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.white,
   },
@@ -461,7 +461,7 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
     paddingHorizontal: spacing.md,
   },
-  manualToggleText: { fontSize: typography.size.xs, color: colors.mutedForeground, fontWeight: typography.weight.medium },
+  manualToggleText: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground, fontWeight: typography.weight.medium },
   assignBtn: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
     justifyContent: 'center',
@@ -472,7 +472,7 @@ const s = StyleSheet.create({
     borderCurve: 'continuous',
   },
   assignBtnOuter: { flex: 1 },
-  assignBtnText: { fontSize: typography.size.sm, color: colors.foreground, fontWeight: typography.weight.medium },
+  assignBtnText: { fontSize: typography.text.bodySmall.fontSize, color: colors.foreground, fontWeight: typography.weight.medium },
   outfitCard: {
     backgroundColor: colors.surfaceSubtle,
     borderRadius: radii.xl,
@@ -495,10 +495,10 @@ const s = StyleSheet.create({
   },
   outfitHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   outfitLabel: {
-    fontSize: typography.size.xs, fontWeight: typography.weight.semibold,
-    color: colors.primary, textTransform: 'uppercase', letterSpacing: 0.6,
+    fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold,
+    color: colors.primary, textTransform: 'uppercase', letterSpacing: typography.tracking.label,
   },
-  outfitSubtext: { fontSize: typography.size.xs, color: colors.mutedForeground, lineHeight: 17, marginTop: 2 },
+  outfitSubtext: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground, lineHeight: 17, marginTop: 2 },
   readyMark: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#E8F0EA', alignItems: 'center', justifyContent: 'center' },
   lookPreviewButton: {
     overflow: 'hidden',
@@ -518,11 +518,11 @@ const s = StyleSheet.create({
     padding: spacing.md,
   },
   lookPreviewTitle: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
-  lookPreviewMeta: { marginTop: 2, fontSize: typography.size.xs, color: colors.mutedForeground },
+  lookPreviewMeta: { marginTop: 2, fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
   boardRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -535,12 +535,10 @@ const s = StyleSheet.create({
     borderColor: colors.border,
   },
   boardEyebrow: {
-    fontSize: 10,
-    fontWeight: typography.weight.bold,
+    ...typography.text.eyebrow,
     color: colors.primary,
-    letterSpacing: 1,
   },
-  boardName: { fontSize: typography.size.md, fontWeight: typography.weight.medium, color: colors.foreground },
+  boardName: { fontSize: typography.text.body.fontSize, fontWeight: typography.weight.medium, color: colors.foreground },
   viewLookPill: {
     minHeight: 40,
     flexDirection: 'row',
@@ -553,7 +551,7 @@ const s = StyleSheet.create({
     backgroundColor: colors.surfaceElevated,
   },
   viewLookText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.primary,
     fontWeight: typography.weight.semibold,
   },
@@ -562,5 +560,5 @@ const s = StyleSheet.create({
     backgroundColor: colors.surfaceSelected,
     alignItems: 'center', justifyContent: 'center',
   },
-  emptyOutfitTitle: { fontSize: typography.size.sm, color: colors.foreground, fontWeight: typography.weight.semibold },
+  emptyOutfitTitle: { fontSize: typography.text.bodySmall.fontSize, color: colors.foreground, fontWeight: typography.weight.semibold },
 });

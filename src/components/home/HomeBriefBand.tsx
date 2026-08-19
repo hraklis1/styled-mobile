@@ -54,7 +54,7 @@ export function HomeBriefBand({ onPress, style }: Props) {
 
 const styles = StyleSheet.create({
   headline: {
-    fontSize: typography.size.xl,
+    fontSize: typography.text.sheetTitle.fontSize,
     lineHeight: 27,
     color: colors.foreground,
     marginBottom: spacing.sm,
@@ -67,7 +67,7 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   linkText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.action,
   },

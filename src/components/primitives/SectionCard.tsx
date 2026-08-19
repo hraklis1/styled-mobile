@@ -80,18 +80,18 @@ const styles = StyleSheet.create({
   },
   chevron: { marginLeft: 'auto' },
   iconLabel: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
-    letterSpacing: 0.5,
+    letterSpacing: typography.tracking.meta,
     textTransform: 'uppercase',
   },
   title: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    letterSpacing: typography.tracking.wide,
     marginBottom: spacing.md,
   },
   summary: {

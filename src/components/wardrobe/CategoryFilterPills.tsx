@@ -72,7 +72,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   pillText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.mutedForeground,
     marginRight: spacing.xs,
@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.25)',
   },
   badgeText: {
-    fontSize: 11,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
   },

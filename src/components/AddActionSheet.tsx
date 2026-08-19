@@ -393,7 +393,7 @@ const styles = StyleSheet.create({
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center' },
   headerTitle: {
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
@@ -422,7 +422,7 @@ const styles = StyleSheet.create({
   },
   saveBtnDisabled: { opacity: 0.4 },
   saveBtnText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
   },

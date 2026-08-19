@@ -61,6 +61,6 @@ const s = StyleSheet.create({
     width: '100%', height: '100%',
     backgroundColor: colors.muted, alignItems: 'center', justifyContent: 'center',
   },
-  thumbInitials: { fontSize: 8, fontWeight: typography.weight.bold, color: colors.mutedForeground },
-  overflow: { fontSize: typography.size.xs, color: colors.mutedForeground, fontWeight: typography.weight.medium },
+  thumbInitials: { ...typography.text.caption, fontWeight: typography.weight.bold, color: colors.mutedForeground },
+  overflow: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground, fontWeight: typography.weight.medium },
 });

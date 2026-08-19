@@ -39,7 +39,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   disabledText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.mutedForeground,
   },
 });

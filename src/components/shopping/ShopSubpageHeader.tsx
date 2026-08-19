@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PressableScale } from '../primitives/PressableScale';
-import { colors, spacing, typography } from '../../theme';
+import { AppText } from '../primitives/AppText';
+import { colors, spacing } from '../../theme';
 
 type Props = {
   title: string;
@@ -37,9 +38,9 @@ export function ShopSubpageHeader({ title, subtitle, eyebrow = 'SHOP', onBack, a
           </PressableScale>
           {compact && (
             <View style={styles.compactTitleWrap}>
-              <Text style={styles.compactEyebrow}>{eyebrow}</Text>
-              <Text style={styles.compactTitle} numberOfLines={1}>{title}</Text>
-              {subtitle ? <Text style={styles.compactSubtitle} numberOfLines={1}>{subtitle}</Text> : null}
+              <AppText variant="eyebrow" tone="brand">{eyebrow}</AppText>
+              <AppText variant="sectionTitle" tone="primary" numberOfLines={1}>{title}</AppText>
+              {subtitle ? <AppText variant="caption" tone="muted" numberOfLines={1}>{subtitle}</AppText> : null}
             </View>
           )}
         </View>
@@ -47,9 +48,9 @@ export function ShopSubpageHeader({ title, subtitle, eyebrow = 'SHOP', onBack, a
       </View>
       {!compact && (
         <>
-          <Text style={styles.eyebrow}>{eyebrow}</Text>
-          <Text style={styles.title} numberOfLines={titleNumberOfLines}>{title}</Text>
-          {subtitle ? <Text style={styles.subtitle} numberOfLines={subtitleNumberOfLines}>{subtitle}</Text> : null}
+          <AppText variant="eyebrowLarge" tone="brand">{eyebrow}</AppText>
+          <AppText variant="editorialHero" tone="primary" style={styles.title} numberOfLines={titleNumberOfLines}>{title}</AppText>
+          {subtitle ? <AppText variant="bodySmall" tone="secondary" style={styles.subtitle} numberOfLines={subtitleNumberOfLines}>{subtitle}</AppText> : null}
         </>
       )}
     </View>
@@ -63,12 +64,12 @@ const styles = StyleSheet.create({
   topRowCompact: { minHeight: 52, marginBottom: 0 },
   compactTitleRow: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   compactTitleWrap: { flex: 1, minWidth: 0, gap: 1 },
-  compactEyebrow: { ...typography.eyebrow, color: colors.primary },
-  compactTitle: { fontFamily: typography.family.display, ...typography.display.sm, color: colors.foreground },
-  compactSubtitle: { fontSize: typography.size.xs, lineHeight: 15, color: colors.mutedForeground },
+  compactEyebrow: {},
+  compactTitle: {},
+  compactSubtitle: {},
   backButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: colors.surfaceElevated },
   actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  eyebrow: { ...typography.eyebrowLarge, color: colors.primary },
-  title: { maxWidth: 340, paddingTop: spacing.sm, fontFamily: typography.family.display, ...typography.display.lg, color: colors.foreground },
-  subtitle: { maxWidth: 340, paddingTop: spacing.sm, fontSize: typography.size.sm, lineHeight: 20, color: colors.mutedForeground },
+  eyebrow: {},
+  title: { maxWidth: 340, paddingTop: spacing.sm },
+  subtitle: { maxWidth: 340, paddingTop: spacing.sm },
 });

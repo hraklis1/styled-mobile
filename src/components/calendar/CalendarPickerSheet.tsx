@@ -98,6 +98,6 @@ const s = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  cancelBtn: { fontSize: typography.size.md, color: colors.mutedForeground },
-  doneBtn: { fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: colors.primary },
+  cancelBtn: { fontSize: typography.text.body.fontSize, color: colors.mutedForeground },
+  doneBtn: { fontSize: typography.text.body.fontSize, fontWeight: typography.weight.semibold, color: colors.primary },
 });

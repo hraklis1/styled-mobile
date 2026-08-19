@@ -237,7 +237,7 @@ const s = StyleSheet.create({
   },
   permissionBtnGranted: { opacity: 0.8 },
   permissionText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primary,
   },

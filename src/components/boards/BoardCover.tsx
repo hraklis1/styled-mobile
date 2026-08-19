@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(40,35,31,0.36)',
   },
-  overflowText: { color: colors.white, fontSize: typography.size.lg, fontWeight: typography.weight.semibold },
+  overflowText: { color: colors.white, fontSize: typography.text.sectionTitle.fontSize, fontWeight: typography.weight.semibold },
   fallback: {
     flex: 1,
     alignItems: 'center',
@@ -170,5 +170,5 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,252,247,0.72)',
   },
-  fallbackText: { color: colors.inkSubtle, fontSize: typography.size.sm, fontWeight: typography.weight.medium, textAlign: 'center' },
+  fallbackText: { color: colors.inkSubtle, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.medium, textAlign: 'center' },
 });

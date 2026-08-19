@@ -56,21 +56,21 @@ export function StylistRichText({ text, streaming }: { text: string; streaming?:
 const styles = StyleSheet.create({
   container: { gap: spacing.xs },
   paragraph: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
-    lineHeight: typography.size.md * 1.6,
+    lineHeight: typography.text.body.fontSize * 1.6,
   },
   bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
   bulletDot: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.primary,
-    lineHeight: typography.size.md * 1.6,
+    lineHeight: typography.text.body.fontSize * 1.6,
   },
   bulletText: {
     flex: 1,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
-    lineHeight: typography.size.md * 1.6,
+    lineHeight: typography.text.body.fontSize * 1.6,
   },
   bold: { fontWeight: typography.weight.bold },
 });

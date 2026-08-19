@@ -207,13 +207,13 @@ export const boardPickerContentStyle = {
 
 const styles = StyleSheet.create({
   title: {
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 },
   doneButton: { minWidth: 52, minHeight: 44, alignItems: 'flex-end', justifyContent: 'center' },
-  doneText: { color: colors.primary, fontSize: typography.size.md, fontWeight: typography.weight.semibold },
+  doneText: { color: colors.primary, fontSize: typography.text.body.fontSize, fontWeight: typography.weight.semibold },
   confirmation: {
     minHeight: 44,
     borderRadius: radii.md,
@@ -223,9 +223,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  confirmationText: { flex: 1, color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.medium },
+  confirmationText: { flex: 1, color: colors.foreground, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.medium },
   undoButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  undoText: { color: colors.primary, fontSize: typography.size.sm, fontWeight: typography.weight.bold },
+  undoText: { color: colors.primary, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.bold },
   newBoardRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
   newBoardIcon: {
     width: 40,
@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  newBoardText: { fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: colors.primary },
+  newBoardText: { fontSize: typography.text.body.fontSize, fontWeight: typography.weight.semibold, color: colors.primary },
   createRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   input: {
     flex: 1,
@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
   },
   createBtn: {
@@ -252,11 +252,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm + 2,
   },
-  createBtnText: { color: colors.primaryForeground, fontWeight: typography.weight.semibold, fontSize: typography.size.sm },
+  createBtnText: { color: colors.primaryForeground, fontWeight: typography.weight.semibold, fontSize: typography.text.bodySmall.fontSize },
   list: { flex: 1 },
   boardRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
   boardInfo: { flex: 1 },
-  boardName: { fontSize: typography.size.md, fontWeight: typography.weight.medium, color: colors.foreground },
-  boardCount: { fontSize: typography.size.xs, color: colors.mutedForeground },
-  emptyHint: { fontSize: typography.size.sm, color: colors.mutedForeground, paddingVertical: spacing.md },
+  boardName: { fontSize: typography.text.body.fontSize, fontWeight: typography.weight.medium, color: colors.foreground },
+  boardCount: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
+  emptyHint: { fontSize: typography.text.bodySmall.fontSize, color: colors.mutedForeground, paddingVertical: spacing.md },
 });

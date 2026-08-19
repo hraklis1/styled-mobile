@@ -1213,12 +1213,12 @@ const styles = StyleSheet.create({
   polishStatusCopy: { flex: 1, gap: 3 },
   polishStatusTitle: {
     color: colors.foreground,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
   },
   polishStatusText: {
     color: colors.mutedForeground,
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     lineHeight: 17,
   },
   coverPickerButton: {
@@ -1238,7 +1238,7 @@ const styles = StyleSheet.create({
     borderCurve: 'continuous',
   },
   coverPickerText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
@@ -1300,26 +1300,23 @@ const styles = StyleSheet.create({
   },
   headerText: { gap: 5 },
   name: {
-    fontFamily: typography.family.display,
-    fontSize: typography.size.xxl,
-    lineHeight: 34,
+    ...typography.text.editorialTitle,
     color: colors.foreground,
-    letterSpacing: -0.3,
   },
   brand: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     lineHeight: 21,
     fontWeight: typography.weight.medium,
     color: colors.inkSubtle,
   },
   breadcrumb: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     lineHeight: 19,
     color: colors.mutedForeground,
   },
   essentialFacts: {
     marginTop: spacing.xs,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     lineHeight: 20,
     color: colors.inkSubtle,
   },
@@ -1337,7 +1334,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
   },
   stylistButtonText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
   },
@@ -1365,7 +1362,7 @@ const styles = StyleSheet.create({
   },
   actionDisabled: { opacity: 0.5 },
   actionLabel: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
   },
@@ -1378,12 +1375,12 @@ const styles = StyleSheet.create({
     borderTopColor: colors.hairline,
   },
   sectionTitle: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     lineHeight: 18,
     fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
     textTransform: 'uppercase',
-    letterSpacing: 1.1,
+    letterSpacing: typography.tracking.eyebrow,
   },
   profileEmptyRow: {
     flexDirection: 'row',
@@ -1392,13 +1389,13 @@ const styles = StyleSheet.create({
   },
   profileEmptyCopy: { flex: 1, gap: 3 },
   profileEmptyTitle: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     lineHeight: 21,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
   },
   profileEmptyText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     lineHeight: 19,
     color: colors.mutedForeground,
   },
@@ -1414,7 +1411,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   analyseButtonText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.primary,
     fontWeight: typography.weight.semibold,
   },
@@ -1431,7 +1428,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   profileDescriptors: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     lineHeight: 23,
     color: colors.foreground,
   },
@@ -1456,13 +1453,13 @@ const styles = StyleSheet.create({
   detailLabel: {
     flexBasis: 104,
     flexShrink: 0,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     lineHeight: 21,
     color: colors.mutedForeground,
   },
   detailValue: {
     flex: 1,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     lineHeight: 22,
     color: colors.foreground,
     fontWeight: typography.weight.medium,
@@ -1479,7 +1476,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.muted,
   },
   tagChipText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.foreground,
     fontWeight: typography.weight.medium,
   },
@@ -1490,7 +1487,7 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     borderRadius: radii.full,
     paddingHorizontal: spacing.md,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.foreground,
   },
   addTagButton: {
@@ -1505,15 +1502,15 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   addTagText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.primary,
     fontWeight: typography.weight.medium,
   },
 
   notes: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
-    lineHeight: typography.size.md * typography.lineHeight.normal,
+    lineHeight: typography.text.body.fontSize * typography.lineHeight.normal,
   },
 
   scanLabelBtn: {
@@ -1526,7 +1523,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   scanLabelBtnText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.primary,
     fontWeight: typography.weight.medium,
   },
@@ -1552,13 +1549,13 @@ const lsStyles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   sheetTitle: {
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
     marginBottom: 4,
   },
   sheetSubtitle: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
     marginBottom: spacing.lg,
   },
@@ -1580,14 +1577,14 @@ const lsStyles = StyleSheet.create({
   },
   rowLeft: { flex: 1, gap: 2 },
   rowLabel: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: typography.tracking.meta,
   },
   rowValue: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
     fontWeight: typography.weight.medium,
   },
@@ -1613,7 +1610,7 @@ const lsStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   applyBtnText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
   },
@@ -1622,7 +1619,7 @@ const lsStyles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   dismissBtnText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.mutedForeground,
   },
 });

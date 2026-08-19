@@ -311,17 +311,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   resetText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.mutedForeground,
     minWidth: 48,
   },
   panelTitle: {
     flex: 1,
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
-    letterSpacing: 0,
+    letterSpacing: typography.tracking.none,
     textAlign: 'center',
   },
 
@@ -338,11 +338,11 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
   },
   sectionLabel: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    letterSpacing: typography.tracking.wide,
   },
   accordionBadge: {
     marginLeft: spacing.sm,
@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   accordionBadgeText: {
-    fontSize: 10,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.bold,
     color: colors.primaryForeground,
   },
@@ -371,7 +371,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   rowText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
   },
 
@@ -412,7 +412,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   chipText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.foreground,
   },
   chipTextActive: {
@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   applyText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
   },

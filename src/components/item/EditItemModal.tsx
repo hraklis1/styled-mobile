@@ -650,16 +650,16 @@ const styles = StyleSheet.create({
   headerButton: { minWidth: 60 },
   headerButtonDisabled: { opacity: 0.4 },
   headerCancel: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.mutedForeground,
   },
   headerTitle: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   headerSave: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primary,
     textAlign: 'right',
@@ -687,7 +687,7 @@ const styles = StyleSheet.create({
     borderColor: colors.foreground,
   },
   optionChipText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.mutedForeground,
   },
@@ -740,7 +740,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   tagChipText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.foreground,
     fontWeight: typography.weight.medium,
   },
@@ -748,7 +748,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 120,
     height: 28,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.foreground,
     paddingHorizontal: 4,
     marginBottom: spacing.xs,

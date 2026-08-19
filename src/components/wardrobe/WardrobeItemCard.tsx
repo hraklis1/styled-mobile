@@ -162,17 +162,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   name: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   brand: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     marginTop: 2,
   },
   wornCount: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     marginTop: 2,
   },

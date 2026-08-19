@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   nameDense: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
@@ -175,12 +175,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   name: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   worn: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
   },
   draftBadge: {
@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   draftText: {
-    fontSize: 10,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
   },

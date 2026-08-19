@@ -920,17 +920,17 @@ const styles = StyleSheet.create({
     minHeight: 52,
   },
   headerCancel: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.mutedForeground,
     minWidth: 44,
   },
   headerTitle: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   headerSave: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primary,
     minWidth: 44,
@@ -940,7 +940,7 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
   },
   headerClear: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.error,
     minWidth: 44,
     textAlign: 'right',
@@ -952,7 +952,7 @@ const styles = StyleSheet.create({
     minWidth: 70,
   },
   backText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
   },
 
@@ -979,22 +979,22 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   previewCount: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   previewHint: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
-    lineHeight: typography.size.xs * 1.5,
+    lineHeight: typography.text.caption.fontSize * 1.5,
   },
 
   label: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    letterSpacing: typography.tracking.wide,
     marginHorizontal: spacing.lg,
     marginTop: spacing.xl,
     marginBottom: spacing.sm,
@@ -1025,7 +1025,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   occasionChipText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
   },
@@ -1038,7 +1038,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     height: 46,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
     backgroundColor: colors.card,
     marginHorizontal: spacing.lg,
@@ -1085,7 +1085,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   slotLabel: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
@@ -1093,7 +1093,7 @@ const styles = StyleSheet.create({
     color: colors.border,
   },
   slotSub: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     marginTop: 2,
   },
@@ -1103,11 +1103,11 @@ const styles = StyleSheet.create({
 
   // ── Unmatched items
   unmatchedNote: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     marginHorizontal: spacing.lg,
     marginBottom: spacing.sm,
-    lineHeight: typography.size.xs * 1.5,
+    lineHeight: typography.text.caption.fontSize * 1.5,
   },
   unmatchedRow: {
     flexDirection: 'row',
@@ -1123,7 +1123,7 @@ const styles = StyleSheet.create({
   },
   unmatchedName: {
     flex: 1,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.foreground,
   },
 
@@ -1149,7 +1149,7 @@ const styles = StyleSheet.create({
   },
   pickerSearchInput: {
     flex: 1,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
     paddingVertical: 0,
   },
@@ -1179,7 +1179,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pickerFilterBadgeText: {
-    fontSize: 9,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.bold,
     color: colors.background,
     fontVariant: ['tabular-nums'],
@@ -1197,12 +1197,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   pickerFilterTitle: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   pickerFilterClear: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.primary,
   },
@@ -1211,7 +1211,7 @@ const styles = StyleSheet.create({
   },
   pickerFilterGroupLabel: {
     paddingHorizontal: spacing.lg,
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
   },
@@ -1235,7 +1235,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   pickerFilterChipText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.mutedForeground,
     textTransform: 'capitalize',
@@ -1291,14 +1291,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pickerCardName: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
     marginTop: spacing.xs,
     paddingHorizontal: 2,
   },
   pickerCardMeta: {
-    fontSize: 10,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     marginTop: 2,
     paddingHorizontal: 2,
@@ -1312,15 +1312,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xxl,
   },
   pickerEmptyTitle: {
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   pickerEmptySubtitle: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.mutedForeground,
     textAlign: 'center',
-    lineHeight: typography.size.md * 1.5,
+    lineHeight: typography.text.body.fontSize * 1.5,
   },
 
   // ── Tag chip input
@@ -1350,14 +1350,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.secondary,
   },
   tagChipText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.primary,
   },
   tagInput: {
     flex: 1,
     minWidth: 80,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
     height: 30,
     padding: 0,

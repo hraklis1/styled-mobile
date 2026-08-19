@@ -442,7 +442,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     flex: 1,
     textAlign: 'center',
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
@@ -453,7 +453,7 @@ const styles = StyleSheet.create({
     width: 70,
   },
   backText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
   },
 
@@ -480,8 +480,8 @@ const styles = StyleSheet.create({
   pickerSearchInput: {
     flex: 1,
     height: 38,
-    fontSize: typography.size.md,
-    lineHeight: typography.inputLineHeight(typography.size.md),
+    fontSize: typography.text.body.fontSize,
+    lineHeight: typography.inputLineHeight(typography.text.body.fontSize),
     color: colors.foreground,
     paddingVertical: 0,
   },
@@ -511,7 +511,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pickerFilterBadgeText: {
-    fontSize: 9,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.bold,
     color: colors.background,
     fontVariant: ['tabular-nums'],
@@ -529,12 +529,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   pickerFilterTitle: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   pickerFilterClear: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.primary,
   },
@@ -543,7 +543,7 @@ const styles = StyleSheet.create({
   },
   pickerFilterGroupLabel: {
     paddingHorizontal: spacing.lg,
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
   },
@@ -567,7 +567,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   pickerFilterChipText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.mutedForeground,
     textTransform: 'capitalize',
@@ -620,14 +620,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pickerCardName: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
     marginTop: spacing.xs,
     paddingHorizontal: 2,
   },
   pickerCardMeta: {
-    fontSize: 10,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     marginTop: 2,
     paddingHorizontal: 2,
@@ -641,14 +641,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xxl,
   },
   pickerEmptyTitle: {
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   pickerEmptySubtitle: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.mutedForeground,
     textAlign: 'center',
-    lineHeight: typography.size.md * 1.5,
+    lineHeight: typography.text.body.fontSize * 1.5,
   },
 });

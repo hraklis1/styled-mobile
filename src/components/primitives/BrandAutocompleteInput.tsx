@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
     backgroundColor: colors.background,
   },
@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   suggestionText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.foreground,
   },
 });

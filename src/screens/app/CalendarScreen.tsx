@@ -839,7 +839,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     marginBottom: spacing.md,
   },
-  sectionTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.foreground },
+  sectionTitle: { fontSize: typography.text.sectionTitle.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground },
   sectionTitleMuted: { color: colors.mutedForeground },
   sectionCount: {
     minWidth: 24,
@@ -850,16 +850,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.muted,
     color: colors.mutedForeground,
     textAlign: 'center',
-    fontSize: 11,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     fontVariant: ['tabular-nums'],
   },
   sectionEyebrow: {
-    fontSize: 10,
-    fontWeight: typography.weight.bold,
+    ...typography.text.eyebrow,
     color: colors.primary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
     marginBottom: 2,
   },
 
@@ -868,14 +865,14 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     marginBottom: spacing.lg,
   },
-  filterTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.foreground },
+  filterTitle: { fontSize: typography.text.sectionTitle.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground },
   clearFilterBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     minHeight: 40,
     paddingHorizontal: spacing.md,
     borderRadius: radii.full, backgroundColor: colors.muted,
   },
-  clearFilterText: { fontSize: 11, fontWeight: typography.weight.medium, color: colors.mutedForeground },
+  clearFilterText: { ...typography.text.label, fontWeight: typography.weight.medium, color: colors.mutedForeground },
 
   dayEmpty: {
     alignItems: 'center', gap: spacing.sm,
@@ -889,8 +886,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceSelected,
     alignItems: 'center', justifyContent: 'center',
   },
-  dayEmptyTitle: { fontSize: typography.size.md, color: colors.foreground, fontWeight: typography.weight.semibold },
-  dayEmptyText: { fontSize: typography.size.sm, color: colors.mutedForeground, textAlign: 'center' },
+  dayEmptyTitle: { fontSize: typography.text.body.fontSize, color: colors.foreground, fontWeight: typography.weight.semibold },
+  dayEmptyText: { fontSize: typography.text.bodySmall.fontSize, color: colors.mutedForeground, textAlign: 'center' },
   dayEmptyActions: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     flexWrap: 'wrap', gap: spacing.sm,
@@ -901,12 +898,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     borderRadius: radii.full, backgroundColor: colors.surfaceSelected,
   },
-  dayEmptyBtnText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.primary },
+  dayEmptyBtnText: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.primary },
 
   dayHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.xs },
-  dayLabel: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 0.5 },
+  dayLabel: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: typography.tracking.meta },
   dayDivider: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
-  dayCountdown: { fontSize: 11, fontWeight: typography.weight.medium, color: colors.primary },
+  dayCountdown: { ...typography.text.caption, fontWeight: typography.weight.medium, color: colors.primary },
 
   eventCard: {
     flexDirection: 'row', alignItems: 'stretch',
@@ -927,24 +924,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   eventDateMonth: {
-    fontSize: 9,
+    ...typography.text.eyebrow,
     color: colors.mutedForeground,
-    fontWeight: typography.weight.bold,
-    letterSpacing: 0.7,
   },
   eventDateDay: {
-    fontSize: typography.size.xl,
+    fontSize: typography.text.sheetTitle.fontSize,
     color: colors.foreground,
     fontWeight: typography.weight.semibold,
     fontVariant: ['tabular-nums'],
   },
   eventBody: { flex: 1, minWidth: 0, gap: 3 },
-  eventTitle: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.foreground },
+  eventTitle: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground },
   eventMeta: { flexDirection: 'row', alignItems: 'center', gap: 3, minWidth: 0 },
-  eventTime: { fontSize: typography.size.xs, color: colors.mutedForeground, fontWeight: typography.weight.medium },
-  dot: { fontSize: typography.size.xs, color: colors.mutedForeground },
-  eventOccasion: { fontSize: typography.size.xs, color: colors.primary, fontWeight: typography.weight.medium, flexShrink: 0 },
-  eventLoc: { fontSize: 11, color: colors.mutedForeground, flexShrink: 1 },
+  eventTime: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground, fontWeight: typography.weight.medium },
+  dot: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
+  eventOccasion: { fontSize: typography.text.caption.fontSize, color: colors.primary, fontWeight: typography.weight.medium, flexShrink: 0 },
+  eventLoc: { ...typography.text.caption, color: colors.mutedForeground, flexShrink: 1 },
   eventReadiness: {
     minWidth: 52,
     flexDirection: 'row',
@@ -962,7 +957,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     paddingLeft: spacing.sm,
   },
-  readinessText: { fontSize: 10, color: colors.primary, fontWeight: typography.weight.semibold },
+  readinessText: { ...typography.text.caption, color: colors.primary, fontWeight: typography.weight.semibold },
 
   pastToggle: {
     minHeight: 64,
@@ -975,8 +970,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
-  pastToggleTitle: { fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: colors.mutedForeground },
-  pastToggleMeta: { fontSize: 11, color: colors.mutedForeground, marginTop: 2 },
+  pastToggleTitle: { fontSize: typography.text.body.fontSize, fontWeight: typography.weight.semibold, color: colors.mutedForeground },
+  pastToggleMeta: { ...typography.text.caption, color: colors.mutedForeground, marginTop: 2 },
 
   pastCard: {
     flexDirection: 'row', alignItems: 'stretch',
@@ -999,11 +994,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pastMonth: { fontSize: 9, color: colors.mutedForeground, fontWeight: typography.weight.bold, letterSpacing: 0.6 },
-  pastDay: { fontSize: typography.size.lg, color: colors.mutedForeground, fontWeight: typography.weight.semibold, fontVariant: ['tabular-nums'] },
+  pastMonth: { ...typography.text.eyebrow, color: colors.mutedForeground },
+  pastDay: { fontSize: typography.text.sectionTitle.fontSize, color: colors.mutedForeground, fontWeight: typography.weight.semibold, fontVariant: ['tabular-nums'] },
   pastBody: { flex: 1, gap: 2 },
-  pastTitle: { fontSize: typography.size.sm, fontWeight: typography.weight.medium, color: colors.foreground },
-  pastDate: { fontSize: typography.size.xs, color: colors.mutedForeground },
+  pastTitle: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.medium, color: colors.foreground },
+  pastDate: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
   pastLookButton: {
     minWidth: 76,
     minHeight: 56,
@@ -1013,7 +1008,7 @@ const styles = StyleSheet.create({
     paddingLeft: spacing.sm,
   },
   pastLookText: {
-    fontSize: 10,
+    ...typography.text.caption,
     color: colors.primary,
     fontWeight: typography.weight.semibold,
   },
@@ -1023,15 +1018,15 @@ const styles = StyleSheet.create({
     minHeight: 44, borderRadius: radii.md,
     marginTop: spacing.sm,
   },
-  showMoreText: { fontSize: typography.size.xs, color: colors.mutedForeground, fontWeight: typography.weight.medium },
+  showMoreText: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground, fontWeight: typography.weight.medium },
 
   empty: { alignItems: 'center', paddingTop: spacing.xxxl, paddingHorizontal: spacing.xl, gap: spacing.md },
   emptyIconBox: {
     width: 68, height: 68, borderRadius: 34,
     backgroundColor: colors.surfaceSelected, alignItems: 'center', justifyContent: 'center',
   },
-  emptyTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.foreground, textAlign: 'center' },
-  emptySubtitle: { fontSize: typography.size.sm, color: colors.mutedForeground, textAlign: 'center', maxWidth: 260 },
+  emptyTitle: { fontSize: typography.text.sectionTitle.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground, textAlign: 'center' },
+  emptySubtitle: { fontSize: typography.text.bodySmall.fontSize, color: colors.mutedForeground, textAlign: 'center', maxWidth: 260 },
   emptyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1042,7 +1037,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     marginTop: spacing.sm,
   },
-  emptyBtnText: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.white },
+  emptyBtnText: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.white },
 
   skeletonWrap: { gap: spacing.md, paddingTop: spacing.sm },
   skeletonHero: {

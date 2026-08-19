@@ -66,12 +66,12 @@ const styles = StyleSheet.create({
   preview: { width: '100%', aspectRatio: 1 },
   copy: { gap: 2, paddingHorizontal: 2, paddingBottom: spacing.xs },
   title: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     lineHeight: 18,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   contextRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  context: { flex: 1, fontSize: typography.size.xs, color: colors.mutedForeground },
-  meta: { fontSize: typography.size.xs, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
+  context: { flex: 1, fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
+  meta: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
 });

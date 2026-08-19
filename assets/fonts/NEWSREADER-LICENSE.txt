@@ -1,0 +1,7 @@
+Newsreader
+
+Newsreader is designed by Production Type and distributed under the SIL Open Font License, Version 1.1.
+
+The font is bundled through @expo-google-fonts/newsreader. The complete font license is included in that package under LICENSE_FONT and is available at:
+https://scripts.sil.org/OFL
+

@@ -72,6 +72,7 @@ import {
 import { colors, shadows, spacing, typography, radii, editorial } from '../../theme';
 import { PressableScale } from '../../components/primitives/PressableScale';
 import { ScreenHeader, EditorialSection } from '../../components/primitives/Editorial';
+import { AppText } from '../../components/primitives/AppText';
 import type { HomeScreenProps } from '../../navigation/types';
 import type { Outfit } from '../../types/outfit';
 
@@ -609,9 +610,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               {weatherLocationIcon ? (
                 <Ionicons name={weatherLocationIcon} size={13} color={colors.primary} />
               ) : null}
-              <Text style={styles.weatherLocationText} numberOfLines={1}>
+              <AppText variant="caption" tone="brand" style={styles.weatherLocationText} numberOfLines={1}>
                 {weatherLocationLine}
-              </Text>
+              </AppText>
               <Ionicons name="chevron-down" size={13} color={colors.primary} />
             </TouchableOpacity>
           )}
@@ -1076,9 +1077,9 @@ const styles = StyleSheet.create({
     backgroundColor: `${colors.primary}15`,
   },
   nextUpCopy: { flex: 1, gap: 2 },
-  nextUpEyebrow: { fontSize: 10, fontWeight: typography.weight.bold, letterSpacing: 1.1, textTransform: 'uppercase', color: colors.primary },
-  nextUpTitle: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.foreground },
-  nextUpSubtitle: { fontSize: typography.size.xs, lineHeight: 17, color: colors.mutedForeground },
+  nextUpEyebrow: { ...typography.text.eyebrow, color: colors.primary },
+  nextUpTitle: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground },
+  nextUpSubtitle: { fontSize: typography.text.caption.fontSize, lineHeight: 17, color: colors.mutedForeground },
 
   // Greeting
   headerRow: {
@@ -1114,8 +1115,6 @@ const styles = StyleSheet.create({
   },
   weatherLocationText: {
     flexShrink: 1,
-    fontSize: typography.size.xs,
-    color: colors.primary,
   },
 
   // AI Stylist fake-input pill
@@ -1138,7 +1137,7 @@ const styles = StyleSheet.create({
   },
   stylistPillText: {
     flex: 1,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.mutedForeground,
   },
   // Flat and quiet, deliberately: the fashion imagery below is what should
@@ -1198,12 +1197,12 @@ const styles = StyleSheet.create({
     backgroundColor: `${colors.primary}0F`,
   },
   wardrobeActionTitle: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   wardrobeActionSubtitle: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     lineHeight: 17,
     color: colors.mutedForeground,
   },
@@ -1236,12 +1235,12 @@ const styles = StyleSheet.create({
   },
   nudgeText: { flex: 1, gap: 2 },
   nudgeTitle: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primary,
   },
   nudgeSub: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
   },
 
@@ -1264,12 +1263,12 @@ const styles = StyleSheet.create({
   },
   emptyText: { flex: 1, gap: 2 },
   emptyTitle: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.mutedForeground,
   },
   emptySubtitle: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     opacity: 0.7,
   },
@@ -1301,13 +1300,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   eventTitle: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
-    lineHeight: typography.size.sm * 1.35,
+    lineHeight: typography.text.bodySmall.fontSize * 1.35,
   },
   eventDate: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
   },
   eventDateToday: {
@@ -1315,7 +1314,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.semibold,
   },
   eventOccasion: {
-    fontSize: 10,
+    fontSize: typography.text.caption.fontSize,
     color: colors.primary,
     textTransform: 'capitalize',
     marginTop: 2,
@@ -1343,7 +1342,7 @@ const styles = StyleSheet.create({
   },
   generatedReason: {
     color: colors.mutedForeground,
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
   },
   saveLookControl: {
     minHeight: 44,
@@ -1354,7 +1353,7 @@ const styles = StyleSheet.create({
   },
   saveLookLabel: {
     color: colors.primary,
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
   },
   curatingPlaceholder: {
@@ -1367,7 +1366,7 @@ const styles = StyleSheet.create({
   },
   curatingPlaceholderText: {
     color: colors.mutedForeground,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
   },
   // Scrim + overlaid caption path — AI-generated flat lays only. See the
   // comment above where hasFeaturedAiImage is checked in the JSX.
@@ -1386,15 +1385,11 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   featuredEyebrowOverlay: {
-    fontSize: 10,
-    fontWeight: typography.weight.bold,
+    ...typography.text.eyebrow,
     color: colors.white,
-    textTransform: 'uppercase',
-    letterSpacing: 1.1,
   },
   featuredOutfitNameOverlay: {
-    fontFamily: typography.family.display,
-    fontSize: typography.size.xxl,
+    ...typography.text.editorialTitle,
     color: colors.white,
   },
   // Caption-below-image path — the mosaic board, whose flat fill a scrim
@@ -1405,15 +1400,11 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   featuredEyebrow: {
-    fontSize: 10,
-    fontWeight: typography.weight.bold,
+    ...typography.text.eyebrow,
     color: colors.primary,
-    textTransform: 'uppercase',
-    letterSpacing: 1.1,
   },
   featuredOutfitName: {
-    fontFamily: typography.family.display,
-    fontSize: typography.size.xxl,
+    ...typography.text.editorialTitle,
     color: colors.foreground,
   },
 
@@ -1431,17 +1422,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyOutfitTitle: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
     textAlign: 'center',
   },
   emptyOutfitSub: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     textAlign: 'center',
     maxWidth: 220,
-    lineHeight: typography.size.xs * 1.5,
+    lineHeight: typography.text.caption.fontSize * 1.5,
   },
   emptyOutfitButton: {
     minHeight: 40,
@@ -1452,7 +1443,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     backgroundColor: colors.primary,
   },
-  emptyOutfitButtonText: { color: colors.primaryForeground, fontSize: typography.size.xs, fontWeight: typography.weight.semibold },
+  emptyOutfitButtonText: { color: colors.primaryForeground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold },
 
   // Your Week in Wear — a diary rail, not a receipt list. Long-press a tile
   // to delete (see confirmDeleteLog); a swipe gesture would fight this
@@ -1462,7 +1453,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   weekTileDate: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.mutedForeground,
   },

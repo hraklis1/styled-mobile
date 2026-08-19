@@ -228,5 +228,5 @@ const s = StyleSheet.create({
     borderRadius: radii.full,
     backgroundColor: colors.surfaceSelected,
   },
-  tagText: { fontSize: typography.size.xs, color: colors.foreground },
+  tagText: { fontSize: typography.text.caption.fontSize, color: colors.foreground },
 });

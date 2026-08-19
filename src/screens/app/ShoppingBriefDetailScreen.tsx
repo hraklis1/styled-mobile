@@ -128,12 +128,12 @@ const styles = StyleSheet.create({
   },
   priorityLabel: {
     flexShrink: 1,
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
-  priorityContext: { fontSize: typography.size.sm, lineHeight: 20, color: colors.mutedForeground },
-  priorityUnlocks: { fontSize: 11, lineHeight: 16, fontWeight: typography.weight.medium, color: colors.mutedForeground },
+  priorityContext: { fontSize: typography.text.bodySmall.fontSize, lineHeight: 20, color: colors.mutedForeground },
+  priorityUnlocks: { ...typography.text.caption, fontWeight: typography.weight.medium, color: colors.mutedForeground },
   askButton: {
     minHeight: 44,
     alignSelf: 'flex-start',
@@ -145,5 +145,5 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     backgroundColor: colors.primary,
   },
-  askText: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.primaryForeground },
+  askText: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, color: colors.primaryForeground },
 });

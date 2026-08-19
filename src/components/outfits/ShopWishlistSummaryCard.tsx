@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
   content: { flex: 1, minWidth: 0, justifyContent: 'space-between' },
   topRow: { minHeight: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.xs },
   contextRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 },
-  contextText: { flex: 1, fontSize: typography.size.xs, fontWeight: typography.weight.medium, color: colors.mutedForeground },
+  contextText: { flex: 1, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.medium, color: colors.mutedForeground },
   moreButton: {
     width: 44,
     height: 44,
@@ -102,9 +102,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     backgroundColor: 'transparent',
   },
-  intro: { fontSize: typography.size.md, lineHeight: 20, fontWeight: typography.weight.semibold, color: colors.foreground },
-  brands: { fontSize: typography.size.xs, color: colors.mutedForeground },
+  intro: { fontSize: typography.text.body.fontSize, lineHeight: 20, fontWeight: typography.weight.semibold, color: colors.foreground },
+  brands: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
   metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.xs },
-  budget: { flexShrink: 1, fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.foreground },
-  meta: { fontSize: typography.size.xs, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
+  budget: { flexShrink: 1, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground },
+  meta: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
 });

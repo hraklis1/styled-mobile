@@ -120,20 +120,18 @@ const styles = StyleSheet.create({
     backgroundColor: `${colors.primary}18`,
   },
   gapEyebrow: {
+    ...typography.text.eyebrow,
     color: colors.primary,
-    fontSize: 9,
-    fontWeight: typography.weight.bold,
-    letterSpacing: 1,
   },
   gapTitle: {
+    ...typography.text.sectionTitle,
     color: colors.foreground,
-    fontSize: typography.size.lg,
     textAlign: 'center',
     textTransform: 'capitalize',
   },
   notOwned: {
+    ...typography.text.caption,
     color: colors.mutedForeground,
-    fontSize: 10,
     textAlign: 'center',
   },
   priorityCard: {
@@ -155,24 +153,20 @@ const styles = StyleSheet.create({
     backgroundColor: `${colors.primary}18`,
   },
   suggestedLabel: {
+    ...typography.text.eyebrow,
     color: colors.primary,
-    fontSize: 9,
-    fontWeight: typography.weight.bold,
-    letterSpacing: 1,
   },
   priorityTitle: {
+    ...typography.text.editorialTitle,
     color: colors.foreground,
-    fontFamily: typography.family.display,
-    fontSize: typography.size.xxl,
     textTransform: 'capitalize',
   },
   priorityContext: {
-    color: colors.mutedForeground,
-    fontSize: typography.size.sm,
-    lineHeight: 20,
+    ...typography.text.bodySmall,
+    color: colors.inkSubtle,
   },
   anchorSection: { width: '100%', paddingTop: spacing.md, gap: spacing.sm },
-  anchorLabel: { color: colors.mutedForeground, fontSize: 9, fontWeight: typography.weight.bold, letterSpacing: 0.8 },
+  anchorLabel: { ...typography.text.eyebrow, color: colors.mutedForeground },
   anchorRow: { flexDirection: 'row', gap: spacing.sm },
   anchorTile: {
     width: 54,

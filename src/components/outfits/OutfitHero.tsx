@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
     boxShadow: '0 2px 8px rgba(29,27,24,0.14)',
   },
   generateChipLabel: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primary,
   },
@@ -287,7 +287,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(29,27,24,0.42)',
   },
   captionText: {
-    fontSize: 10,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
     color: 'rgba(255,252,247,0.95)',
   },
@@ -316,7 +316,7 @@ const overlayStyles = StyleSheet.create({
     borderRadius: radii.full,
   },
   phrase: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
     fontWeight: typography.weight.medium,
   },

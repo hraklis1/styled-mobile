@@ -335,27 +335,21 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   skipBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  skipText: { fontSize: typography.size.xs, color: colors.mutedForeground },
+  skipText: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
   eyebrow: {
-    fontSize: 11,
-    fontWeight: typography.weight.bold,
+    ...typography.text.eyebrowLarge,
     color: colors.primary,
-    letterSpacing: 1.4,
     marginBottom: spacing.sm,
   },
   // The app's editorial display face makes onboarding part of the same visual system.
   title: {
-    fontFamily: typography.family.display,
-    fontSize: 32,
-    lineHeight: 38,
-    letterSpacing: -0.3,
+    ...typography.text.editorialHero,
     color: colors.foreground,
     marginBottom: spacing.xs,
   },
   desc: {
-    fontSize: typography.size.sm,
-    lineHeight: typography.size.sm * typography.lineHeight.normal,
-    color: colors.mutedForeground,
+    ...typography.text.bodySmall,
+    color: colors.inkSubtle,
     marginBottom: spacing.xs,
   },
   progressRow: {
@@ -391,13 +385,13 @@ const s = StyleSheet.create({
     minHeight: 46,
   },
   footerBtnGhostText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
   },
   footerBtnPrimary: { backgroundColor: colors.primary },
   footerBtnPrimaryText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
   },

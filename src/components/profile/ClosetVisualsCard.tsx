@@ -230,11 +230,11 @@ export function ClosetVisualsCard() {
 
 const styles = StyleSheet.create({
   summary: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
   },
   body: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
     lineHeight: 20,
     marginBottom: spacing.md,
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.muted,
   },
   buttonText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.white,
   },
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   secondaryButtonText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
   },
@@ -281,16 +281,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   progressText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
   },
   cancel: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primary,
   },
   hint: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     lineHeight: 17,
     marginTop: spacing.xs,

@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import {
   StyleSheet,
-  Text,
   View,
   type StyleProp,
   type TextStyle,
@@ -9,8 +8,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, radii, shadows, spacing, typography } from '../../theme';
+import { colors, radii, shadows, spacing } from '../../theme';
 import { PressableScale } from './PressableScale';
+import { AppText } from './AppText';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -55,14 +55,16 @@ export function ScreenHeader({
   return (
     <View style={[styles.header, safeTop && { paddingTop: insets.top + spacing.md }, style]}>
       <View style={styles.headerCopy}>
-        {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-        <Text
-          style={[styles.headerTitle, titleVariant === 'display' && styles.headerTitleDisplay]}
-          numberOfLines={1}
+        {eyebrow ? <AppText variant="eyebrow" tone="brand">{eyebrow}</AppText> : null}
+        <AppText
+          variant={titleVariant === 'display' ? 'editorialHero' : 'pageTitle'}
+          tone="primary"
+          style={styles.headerTitle}
+          numberOfLines={titleVariant === 'display' ? 2 : 1}
         >
           {title}
-        </Text>
-        {subtitleNode ?? (subtitle ? <Text style={styles.headerSubtitle} numberOfLines={2}>{subtitle}</Text> : null)}
+        </AppText>
+        {subtitleNode ?? (subtitle ? <AppText variant="bodySmall" tone="muted" style={styles.headerSubtitle} numberOfLines={2}>{subtitle}</AppText> : null)}
       </View>
       {(primaryAction || secondaryActions.length > 0) && (
         <View style={styles.headerActions}>
@@ -107,7 +109,7 @@ export function EditorialSection({
   return (
     <View style={[ruled ? styles.ruledSection : styles.section, style]}>
       <View style={[styles.sectionHeader, description ? styles.sectionHeaderTight : null]}>
-        <Text style={ruled ? styles.ruledSectionTitle : styles.sectionTitle}>{title}</Text>
+        <AppText variant={ruled ? 'eyebrow' : 'sectionTitle'} tone={ruled ? 'muted' : 'primary'} style={ruled ? styles.ruledSectionTitle : undefined}>{title}</AppText>
         {trailing}
         {actionLabel && onAction ? (
           <PressableScale
@@ -117,13 +119,13 @@ export function EditorialSection({
             accessibilityRole="button"
             accessibilityLabel={actionLabel}
           >
-            <Text style={[styles.sectionActionText, ruled && styles.ruledSectionActionText]}>
+            <AppText variant="label" tone="action" style={styles.sectionActionText}>
               {actionLabel}
-            </Text>
+            </AppText>
           </PressableScale>
         ) : null}
       </View>
-      {description ? <Text style={styles.sectionDescription}>{description}</Text> : null}
+      {description ? <AppText variant="bodySmall" tone="secondary" style={styles.sectionDescription}>{description}</AppText> : null}
       {children}
     </View>
   );
@@ -173,9 +175,9 @@ export function ActionButton({
         size={16}
         color={variant === 'primary' ? colors.primaryForeground : colors.foreground}
       />
-      <Text style={[styles.actionButtonText, variant === 'primary' && styles.primaryActionButtonText]}>
+      <AppText variant="label" tone={variant === 'primary' ? 'inverse' : 'primary'} style={styles.actionButtonText}>
         {label}
-      </Text>
+      </AppText>
     </PressableScale>
   );
 }
@@ -213,15 +215,14 @@ export function SegmentedControl<T extends string>({
             accessibilityState={{ selected: active }}
             accessibilityLabel={option.label}
           >
-            <Text
-              style={[
-                isTabs ? styles.tabsText : styles.segmentText,
-                active && (isTabs ? styles.tabsTextActive : styles.segmentTextActive),
-              ]}
+            <AppText
+              variant={isTabs ? 'label' : 'bodySmall'}
+              tone={active ? 'primary' : 'muted'}
+              style={isTabs ? styles.tabsText : styles.segmentText}
               numberOfLines={1}
             >
               {option.label}
-            </Text>
+            </AppText>
             {isTabs && <View style={[styles.tabsUnderline, active && styles.tabsUnderlineActive]} />}
           </PressableScale>
         );
@@ -248,7 +249,7 @@ export function FilterControl({
       accessibilityLabel={`${label}${active ? `, ${count} active` : ''}`}
     >
       <Ionicons name="options-outline" size={18} color={active ? colors.primaryForeground : colors.foreground} />
-      {active ? <Text style={styles.filterCount}>{count}</Text> : null}
+      {active ? <AppText variant="caption" tone="inverse" style={styles.filterCount}>{count}</AppText> : null}
     </PressableScale>
   );
 }
@@ -307,9 +308,9 @@ export function EditorialCardMeta({
   return (
     <View style={[styles.cardMeta, style]}>
       <View style={styles.cardMetaCopy}>
-        {eyebrow ? <Text style={styles.cardEyebrow} numberOfLines={1}>{eyebrow}</Text> : null}
-        <Text style={[styles.cardTitle, titleStyle]} numberOfLines={1}>{title}</Text>
-        {subtitle ? <Text style={styles.cardSubtitle} numberOfLines={1}>{subtitle}</Text> : null}
+        {eyebrow ? <AppText variant="eyebrow" tone="brand" numberOfLines={1}>{eyebrow}</AppText> : null}
+        <AppText variant="cardTitle" tone="primary" style={titleStyle} numberOfLines={1}>{title}</AppText>
+        {subtitle ? <AppText variant="caption" tone="muted" numberOfLines={1}>{subtitle}</AppText> : null}
       </View>
       {trailing}
     </View>
@@ -327,20 +328,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   headerCopy: { flex: 1, minWidth: 0, gap: 3 },
-  eyebrow: { ...typography.eyebrow, color: colors.primary },
-  headerTitle: {
-    fontSize: typography.size.xxl,
-    fontWeight: typography.weight.bold,
-    color: colors.foreground,
-  },
-  headerTitleDisplay: {
-    fontFamily: typography.family.display,
-  },
-  headerSubtitle: {
-    fontSize: typography.size.sm,
-    lineHeight: 18,
-    color: colors.mutedForeground,
-  },
+  headerTitle: { flexShrink: 1 },
+  headerSubtitle: { flexShrink: 1 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexShrink: 0 },
   iconButton: {
     width: 40,
@@ -372,11 +361,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   ghostActionButton: { backgroundColor: 'transparent' },
-  actionButtonText: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
+  actionButtonText: { flexShrink: 1 },
   primaryActionButtonText: { color: colors.primaryForeground },
   ruledSectionActionText: { color: colors.action },
   section: { marginBottom: spacing.xl },
@@ -394,33 +379,15 @@ const styles = StyleSheet.create({
   },
   // A description carries its own gap to the content below it.
   sectionHeaderTight: { marginBottom: spacing.xs },
-  sectionTitle: {
-    fontSize: typography.size.md,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
   ruledSectionTitle: {
     flex: 1,
-    fontSize: typography.size.xs,
-    lineHeight: 18,
-    fontWeight: typography.weight.semibold,
-    color: colors.mutedForeground,
-    textTransform: 'uppercase',
-    letterSpacing: typography.eyebrow.letterSpacing,
   },
   sectionDescription: {
     maxWidth: 330,
     marginBottom: spacing.md,
-    fontSize: typography.size.sm,
-    lineHeight: 20,
-    color: colors.mutedForeground,
   },
   sectionAction: { paddingVertical: spacing.xs, paddingLeft: spacing.md },
-  sectionActionText: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.semibold,
-    color: colors.mutedForeground,
-  },
+  sectionActionText: { flexShrink: 1 },
   segment: {
     flexDirection: 'row',
     backgroundColor: colors.surfaceSubtle,
@@ -441,15 +408,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceElevated,
     ...shadows.xs,
   },
-  segmentText: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.medium,
-    color: colors.mutedForeground,
-  },
-  segmentTextActive: {
-    color: colors.foreground,
-    fontWeight: typography.weight.semibold,
-  },
+  segmentText: {},
+  segmentTextActive: {},
   tabsSegment: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -460,15 +420,8 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     gap: 5,
   },
-  tabsText: {
-    fontSize: typography.size.md,
-    fontWeight: typography.weight.medium,
-    color: colors.mutedForeground,
-  },
-  tabsTextActive: {
-    color: colors.foreground,
-    fontWeight: typography.weight.semibold,
-  },
+  tabsText: {},
+  tabsTextActive: {},
   tabsUnderline: {
     width: '100%',
     height: 2,
@@ -495,12 +448,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  filterCount: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.bold,
-    color: colors.primaryForeground,
-    fontVariant: ['tabular-nums'],
-  },
+  filterCount: { minWidth: 12, textAlign: 'center' },
   viewModeControl: {
     height: 44,
     flexDirection: 'row',
@@ -530,14 +478,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   cardMetaCopy: { flex: 1, minWidth: 0, gap: 2 },
-  cardEyebrow: { ...typography.eyebrow, color: colors.primary },
-  cardTitle: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  cardSubtitle: {
-    fontSize: typography.size.xs,
-    color: colors.mutedForeground,
-  },
+  cardEyebrow: {},
+  cardTitle: {},
+  cardSubtitle: {},
 });

@@ -901,9 +901,9 @@ const idleStyles = StyleSheet.create({
     gap: spacing.lg,
   },
   subtitle: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
-    lineHeight: typography.size.sm * 1.6,
+    lineHeight: typography.text.bodySmall.fontSize * 1.6,
     textAlign: 'center',
   },
   pickBtn: {
@@ -916,12 +916,12 @@ const idleStyles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
   },
   pickBtnText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
   },
   hint: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     textAlign: 'center',
   },
@@ -1012,7 +1012,7 @@ const procStyles = StyleSheet.create({
   container: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: spacing.lg },
   progressSection: { gap: spacing.xs },
   progressLabel: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     textAlign: 'right',
   },
@@ -1041,7 +1041,7 @@ const procStyles = StyleSheet.create({
     gap: 4,
   },
   statusText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     flex: 1,
   },
 });
@@ -1163,9 +1163,9 @@ function PreExtractCard({
 const preExtractStyles = StyleSheet.create({
   container: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, gap: spacing.sm },
   hint: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
-    lineHeight: typography.size.sm * 1.5,
+    lineHeight: typography.text.bodySmall.fontSize * 1.5,
     marginBottom: spacing.xs,
   },
   retryBanner: {
@@ -1181,7 +1181,7 @@ const preExtractStyles = StyleSheet.create({
   },
   retryText: {
     flex: 1,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.foreground,
   },
   retryBtn: {
@@ -1190,7 +1190,7 @@ const preExtractStyles = StyleSheet.create({
     gap: 4,
   },
   retryBtnText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primary,
   },
@@ -1212,7 +1212,7 @@ const preExtractCardStyles = StyleSheet.create({
     gap: spacing.xs,
   },
   itemName: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
     fontWeight: typography.weight.medium,
   },
@@ -1293,13 +1293,13 @@ const extractStyles = StyleSheet.create({
   },
   progressBar: { flex: 1 },
   progressCount: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     minWidth: 32,
     textAlign: 'right',
   },
   statusMsg: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
   },
 });
@@ -1370,9 +1370,9 @@ function ReviewContent({
 const reviewStyles = StyleSheet.create({
   container: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, gap: spacing.sm },
   hint: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
-    lineHeight: typography.size.sm * 1.5,
+    lineHeight: typography.text.bodySmall.fontSize * 1.5,
     marginBottom: spacing.xs,
   },
   retryBanner: {
@@ -1388,7 +1388,7 @@ const reviewStyles = StyleSheet.create({
   },
   retryText: {
     flex: 1,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.foreground,
   },
   retryBtn: {
@@ -1398,7 +1398,7 @@ const reviewStyles = StyleSheet.create({
   },
   retryBtnDisabled: { opacity: 0.4 },
   retryBtnText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primary,
   },
@@ -1422,11 +1422,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const fieldStyles = StyleSheet.create({
   container: { gap: spacing.xs },
   label: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    letterSpacing: typography.tracking.label,
   },
 });
 
@@ -1652,11 +1652,11 @@ const cardStyles = StyleSheet.create({
   },
   info: { flex: 1, gap: 3 },
   name: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
-  meta: { fontSize: typography.size.sm, color: colors.mutedForeground },
+  meta: { fontSize: typography.text.bodySmall.fontSize, color: colors.mutedForeground },
   editForm: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
@@ -1669,7 +1669,7 @@ const cardStyles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
     backgroundColor: colors.background,
   },
@@ -1685,7 +1685,7 @@ const cardStyles = StyleSheet.create({
   },
   pillActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   pillText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.foreground,
     fontWeight: typography.weight.medium,
   },
@@ -1736,7 +1736,7 @@ const styles = StyleSheet.create({
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   headerTitle: {
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
@@ -1758,7 +1758,7 @@ const styles = StyleSheet.create({
   },
   saveBtnBusy: { opacity: 0.7 },
   saveBtnText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
   },

@@ -463,12 +463,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
   },
   headerSubtitle: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     marginTop: 1,
   },
@@ -480,12 +480,12 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
   },
   loadingText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.mutedForeground,
     marginTop: spacing.sm,
   },
   errorText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
     textAlign: 'center',
   },
@@ -497,7 +497,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   retryBtnText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
   },
   content: {
@@ -522,21 +522,21 @@ const styles = StyleSheet.create({
   },
   statCardInner: { flex: 1 },
   statLabel: {
-    fontSize: 10,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.mutedForeground,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: typography.tracking.meta,
   },
   statValue: {
-    fontSize: typography.size.xxl,
+    fontSize: typography.text.pageTitle.fontSize,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
     marginTop: 2,
-    lineHeight: typography.size.xxl * 1.2,
+    lineHeight: typography.text.pageTitle.fontSize * 1.2,
   },
   statHint: {
-    fontSize: 10,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     marginTop: 2,
   },
@@ -563,14 +563,14 @@ const styles = StyleSheet.create({
   },
   bannerText: { flex: 1, gap: spacing.xs },
   bannerTitle: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   bannerBody: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
-    lineHeight: typography.size.sm * typography.lineHeight.normal,
+    lineHeight: typography.text.bodySmall.fontSize * typography.lineHeight.normal,
   },
 
   // Sections
@@ -586,12 +586,12 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   sectionTitle: {
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   sectionCount: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
   },
 
@@ -611,17 +611,17 @@ const styles = StyleSheet.create({
   staleNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   staleItemName: {
     flex: 1,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   staleCategory: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     textTransform: 'capitalize',
   },
   staleSubtitle: {
-    fontSize: 11,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     marginTop: 1,
   },
@@ -642,7 +642,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   wornBtnText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.primary,
   },
   deleteBtn: {
@@ -658,14 +658,14 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
   },
   newBadgeText: {
-    fontSize: 9,
-    letterSpacing: 0.5,
+    fontSize: typography.text.caption.fontSize,
+    letterSpacing: typography.tracking.meta,
     color: colors.mutedForeground,
     fontWeight: typography.weight.medium,
   },
   showMoreBtn: { alignItems: 'center', paddingVertical: spacing.md },
   showMoreText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.primary,
   },
 
@@ -686,12 +686,12 @@ const styles = StyleSheet.create({
   },
   groupHeaderLeft: { flex: 1, gap: 2 },
   groupLabel: {
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   groupSubtitle: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
   },
   groupBadge: {
@@ -702,19 +702,19 @@ const styles = StyleSheet.create({
     marginLeft: spacing.sm,
   },
   groupBadgeText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     fontWeight: typography.weight.semibold,
   },
   groupThumbs: { gap: spacing.md, paddingRight: spacing.sm },
   groupThumbItem: { width: 80, gap: 4 },
   groupThumbName: {
-    fontSize: 11,
+    fontSize: typography.text.caption.fontSize,
     color: colors.foreground,
     textAlign: 'center',
   },
   groupThumbBrand: {
-    fontSize: 10,
+    fontSize: typography.text.caption.fontSize,
     color: colors.primary,
     textAlign: 'center',
   },
@@ -729,7 +729,7 @@ const styles = StyleSheet.create({
   },
   thumbImg: { width: '100%', height: '100%', resizeMode: 'cover' },
   thumbFallback: {
-    fontSize: typography.size.xl,
+    fontSize: typography.text.sheetTitle.fontSize,
     fontWeight: typography.weight.bold,
     color: colors.mutedForeground,
   },
@@ -746,7 +746,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.xl,
   },
   emptyText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.mutedForeground,
     textAlign: 'center',
     paddingHorizontal: spacing.lg,
@@ -773,7 +773,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   bucketSheetTitle: {
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },

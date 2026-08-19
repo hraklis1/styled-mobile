@@ -288,7 +288,7 @@ const styles = StyleSheet.create({
   },
   attachmentPillLabel: {
     flexShrink: 1,
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
   },
@@ -312,7 +312,7 @@ const styles = StyleSheet.create({
     maxHeight: MAX_INPUT_HEIGHT,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm + 2,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.foreground,
   },
   sendBtn: {
@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.error,
   },
   dictationTimer: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     fontVariant: ['tabular-nums'],
   },

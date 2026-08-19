@@ -236,11 +236,11 @@ const styles = StyleSheet.create({
   container: { gap: spacing.lg },
   field: { gap: spacing.sm },
   label: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    letterSpacing: typography.tracking.label,
   },
   input: {
     height: 46,
@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
     backgroundColor: colors.background,
   },
@@ -265,12 +265,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.muted,
   },
   photoPlaceholderText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
   },
   photoPlaceholderSub: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     opacity: 0.7,
   },
@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   chipText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.foreground,
     fontWeight: typography.weight.medium,
   },

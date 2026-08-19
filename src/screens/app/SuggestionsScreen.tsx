@@ -604,7 +604,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
@@ -636,15 +636,15 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   noEventsTitle: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   noEventsSub: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     marginTop: 2,
-    lineHeight: typography.size.xs * 1.5,
+    lineHeight: typography.text.caption.fontSize * 1.5,
   },
 
   // Hero
@@ -662,16 +662,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   heroTitle: {
-    fontSize: typography.size.xxl,
+    fontSize: typography.text.pageTitle.fontSize,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
     textAlign: 'center',
   },
   heroSubtitle: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.mutedForeground,
     textAlign: 'center',
-    lineHeight: typography.size.md * typography.lineHeight.normal,
+    lineHeight: typography.text.body.fontSize * typography.lineHeight.normal,
   },
 
   // Sections
@@ -685,7 +685,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   sectionTitle: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
     flex: 1,
@@ -693,18 +693,18 @@ const styles = StyleSheet.create({
   optional: {
     fontWeight: typography.weight.regular,
     color: colors.mutedForeground,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
   },
   clearBtn: {
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
   },
   clearText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
   },
   fromEvent: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
   },
 
@@ -728,7 +728,7 @@ const styles = StyleSheet.create({
     backgroundColor: `${colors.primary}0D`,
   },
   eventTitle: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
@@ -736,12 +736,12 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   eventDate: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     marginTop: 2,
   },
   eventLocation: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     marginTop: 2,
   },
@@ -768,7 +768,7 @@ const styles = StyleSheet.create({
     backgroundColor: `${colors.primary}0D`,
   },
   optionLabel: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.mutedForeground,
     textAlign: 'center',
@@ -785,13 +785,13 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
     minHeight: 80,
     textAlignVertical: 'top',
   },
   charCount: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     textAlign: 'right',
   },
@@ -817,7 +817,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   generateBtnText: {
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.bold,
     color: colors.primaryForeground,
   },
@@ -835,9 +835,9 @@ const styles = StyleSheet.create({
   },
   errorText: {
     flex: 1,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.error,
-    lineHeight: typography.size.sm * typography.lineHeight.normal,
+    lineHeight: typography.text.bodySmall.fontSize * typography.lineHeight.normal,
   },
 
   // Result card
@@ -850,7 +850,7 @@ const styles = StyleSheet.create({
     gap: spacing.xl,
   },
   resultHeading: {
-    fontSize: typography.size.xl,
+    fontSize: typography.text.sheetTitle.fontSize,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
   },
@@ -866,10 +866,10 @@ const styles = StyleSheet.create({
   },
   suggestionText: {
     flex: 1,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontStyle: 'italic',
     color: colors.foreground,
-    lineHeight: typography.size.md * typography.lineHeight.loose,
+    lineHeight: typography.text.body.fontSize * typography.lineHeight.loose,
   },
   itemGrid: {
     flexDirection: 'row',
@@ -899,12 +899,12 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   itemName: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   itemCategory: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     textTransform: 'capitalize',
     marginTop: 2,
@@ -922,7 +922,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   saveBtnText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
   },
@@ -937,7 +937,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   retryBtnText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
   },
 
@@ -955,12 +955,12 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   modalTitle: {
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
   },
   modalSubtitle: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
   },
   modalInput: {
@@ -970,7 +970,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
   },
   modalActions: {
@@ -985,7 +985,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
   },
   modalCancelText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.mutedForeground,
   },
   modalSave: {
@@ -998,7 +998,7 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   modalSaveText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
   },

@@ -862,9 +862,9 @@ function IdleContent({ onPickImage }: { onPickImage: (src: 'camera' | 'library')
 const idleStyles = StyleSheet.create({
   container: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: spacing.md },
   subtitle: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
-    lineHeight: typography.size.sm * 1.5,
+    lineHeight: typography.text.bodySmall.fontSize * 1.5,
     marginBottom: spacing.xs,
   },
   option: {
@@ -888,12 +888,12 @@ const idleStyles = StyleSheet.create({
   },
   optionText: { flex: 1 },
   optionTitle: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   optionSub: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
     marginTop: 2,
   },
@@ -1024,11 +1024,11 @@ const scanStyles = StyleSheet.create({
   },
   statusBox: { alignItems: 'center', paddingVertical: spacing.lg, gap: spacing.md },
   statusTitle: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
-  statusSub: { fontSize: typography.size.sm, color: colors.mutedForeground },
+  statusSub: { fontSize: typography.text.bodySmall.fontSize, color: colors.mutedForeground },
   thumbRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1055,7 +1055,7 @@ const scanStyles = StyleSheet.create({
     flex: 1,
   },
   progressText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     minWidth: 32,
     textAlign: 'right',
@@ -1084,7 +1084,7 @@ const scanStyles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm + 40 + spacing.sm,
   },
-  stepLabel: { fontSize: typography.size.xs, color: colors.mutedForeground },
+  stepLabel: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
   stepLabelActive: { color: colors.primary, fontWeight: typography.weight.semibold },
 });
 
@@ -1185,9 +1185,9 @@ function PreExtractCard({
 const preExtractStyles = StyleSheet.create({
   container: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, gap: spacing.sm },
   hint: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
-    lineHeight: typography.size.sm * 1.5,
+    lineHeight: typography.text.bodySmall.fontSize * 1.5,
     marginBottom: spacing.xs,
   },
 });
@@ -1208,7 +1208,7 @@ const preExtractCardStyles = StyleSheet.create({
     gap: spacing.xs,
   },
   itemName: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
     fontWeight: typography.weight.medium,
   },
@@ -1256,9 +1256,9 @@ function ReviewList({
 const reviewStyles = StyleSheet.create({
   container: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, gap: spacing.sm },
   hint: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
-    lineHeight: typography.size.sm * 1.5,
+    lineHeight: typography.text.bodySmall.fontSize * 1.5,
     marginBottom: spacing.xs,
   },
 });
@@ -1474,11 +1474,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const fieldStyles = StyleSheet.create({
   container: { gap: spacing.xs },
   label: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    letterSpacing: typography.tracking.label,
   },
 });
 
@@ -1519,11 +1519,11 @@ const cardStyles = StyleSheet.create({
   },
   info: { flex: 1, gap: 3 },
   name: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
-  meta: { fontSize: typography.size.sm, color: colors.mutedForeground },
+  meta: { fontSize: typography.text.bodySmall.fontSize, color: colors.mutedForeground },
   editForm: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
@@ -1536,7 +1536,7 @@ const cardStyles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
     backgroundColor: colors.background,
   },
@@ -1552,7 +1552,7 @@ const cardStyles = StyleSheet.create({
   },
   pillActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   pillText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.foreground,
     fontWeight: typography.weight.medium,
   },
@@ -1582,7 +1582,7 @@ const styles = StyleSheet.create({
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   headerTitle: {
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
@@ -1604,7 +1604,7 @@ const styles = StyleSheet.create({
   },
   saveBtnBusy: { opacity: 0.7 },
   saveBtnText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
   },

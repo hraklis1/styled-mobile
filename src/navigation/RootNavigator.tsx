@@ -499,7 +499,7 @@ function AppTabNavigator() {
 
 const tabStyles = StyleSheet.create({
   tabLabel: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     lineHeight: 14,
     marginBottom: spacing.xs,
   },

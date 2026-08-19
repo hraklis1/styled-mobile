@@ -187,12 +187,12 @@ const styles = StyleSheet.create({
   header: { gap: spacing.xs },
   title: {
     color: colors.foreground,
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.bold,
   },
   subtitle: {
     color: colors.mutedForeground,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     lineHeight: 19,
   },
   options: { gap: spacing.sm },
@@ -226,12 +226,12 @@ const styles = StyleSheet.create({
   optionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   optionTitle: {
     color: colors.foreground,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
   },
   optionDescription: {
     color: colors.mutedForeground,
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     lineHeight: 17,
   },
   aiBadge: {
@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
   },
   aiBadgeText: {
     color: colors.primary,
-    fontSize: 9,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.bold,
   },
 });

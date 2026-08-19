@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
     backgroundColor: `${colors.primary}14`,
   },
   copy: { flex: 1, minWidth: 0, gap: 2 },
-  title: { color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
-  description: { color: colors.mutedForeground, fontSize: typography.size.xs, lineHeight: 17 },
-  meta: { color: colors.primary, fontSize: 11, fontWeight: typography.weight.semibold, letterSpacing: 0.2, marginTop: 1 },
+  title: { color: colors.foreground, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold },
+  description: { color: colors.mutedForeground, fontSize: typography.text.caption.fontSize, lineHeight: 17 },
+  meta: { ...typography.text.caption, color: colors.primary, fontWeight: typography.weight.semibold, marginTop: 1 },
 });

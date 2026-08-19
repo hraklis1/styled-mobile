@@ -34,7 +34,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   inner: { flex: 1, gap: 2 },
-  label: { fontSize: typography.size.xs, color: colors.mutedForeground },
-  value: { fontSize: typography.size.sm, color: colors.foreground, fontWeight: typography.weight.medium },
-  placeholder: { fontSize: typography.size.sm, color: colors.mutedForeground },
+  label: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
+  value: { fontSize: typography.text.bodySmall.fontSize, color: colors.foreground, fontWeight: typography.weight.medium },
+  placeholder: { fontSize: typography.text.bodySmall.fontSize, color: colors.mutedForeground },
 });

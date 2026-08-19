@@ -251,8 +251,8 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 40,
     paddingVertical: 0,
-    fontSize: typography.size.md,
-    lineHeight: typography.inputLineHeight(typography.size.md),
+    fontSize: typography.text.body.fontSize,
+    lineHeight: typography.inputLineHeight(typography.text.body.fontSize),
     color: colors.foreground,
   },
   geoBtn: {
@@ -305,8 +305,8 @@ const styles = StyleSheet.create({
   },
   suggestionText: {
     flex: 1,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.foreground,
-    lineHeight: typography.size.sm * 1.4,
+    lineHeight: typography.text.bodySmall.fontSize * 1.4,
   },
 });

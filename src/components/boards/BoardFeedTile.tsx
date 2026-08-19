@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   outfitName: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
   },
@@ -134,18 +134,18 @@ const styles = StyleSheet.create({
   },
   wishlistEyebrow: {
     color: colors.primary,
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
-    letterSpacing: 1,
+    letterSpacing: typography.tracking.unit,
     textTransform: 'uppercase',
   },
   wishlistLabel: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   wishlistBudget: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
   },
   selectionOverlay: {

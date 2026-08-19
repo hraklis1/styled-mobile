@@ -40,13 +40,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   message: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
     textAlign: 'center',
   },
   sub: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     textAlign: 'center',
     maxWidth: 220,
@@ -59,7 +59,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   btnText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
   },

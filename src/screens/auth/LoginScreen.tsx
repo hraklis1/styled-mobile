@@ -218,13 +218,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   subtitle: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.mutedForeground,
     marginBottom: spacing.xxl,
   },
   error: {
     color: colors.error,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     marginBottom: spacing.md,
     textAlign: 'center',
   },
@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
   },
   link: {
     color: colors.primary,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.medium,
   },
   dividerRow: {
@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
   dividerText: {
     marginHorizontal: spacing.md,
     color: colors.mutedForeground,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
   },
   appleButton: {
     height: 50,
@@ -266,8 +266,8 @@ const styles = StyleSheet.create({
   },
   appleButtonText: {
     color: '#fff',
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
-    letterSpacing: 0.2,
+    letterSpacing: typography.tracking.tight,
   },
 });

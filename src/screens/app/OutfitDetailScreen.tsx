@@ -801,11 +801,11 @@ const styles = StyleSheet.create({
   },
   generateErrorText: {
     flex: 1,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.error,
   },
   retryLabel: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primary,
   },
@@ -830,15 +830,12 @@ const styles = StyleSheet.create({
   },
   name: {
     flex: 1,
-    fontFamily: typography.family.display,
-    fontSize: typography.size.xxl,
-    lineHeight: 34,
+    ...typography.text.editorialTitle,
     color: colors.foreground,
-    letterSpacing: -0.3,
   },
   nameMeta: {
     marginTop: spacing.xs,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     lineHeight: 20,
     color: colors.inkSubtle,
   },
@@ -860,7 +857,7 @@ const styles = StyleSheet.create({
     borderCurve: 'continuous',
   },
   stylistButtonText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
   },
@@ -889,7 +886,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
   },
   utilityLabel: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
   },
@@ -907,7 +904,7 @@ const styles = StyleSheet.create({
   },
   compactRowLabel: {
     flex: 1,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
   },
 
@@ -931,8 +928,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   assignedEventBody: { flex: 1, gap: 2 },
-  assignedEventTitle: { color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
-  assignedEventMeta: { color: colors.mutedForeground, fontSize: typography.size.xs },
+  assignedEventTitle: { color: colors.foreground, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold },
+  assignedEventMeta: { color: colors.mutedForeground, fontSize: typography.text.caption.fontSize },
 
   // ── Pieces ──
   piecesGrid: {
@@ -946,12 +943,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   pieceName: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
   },
   pieceCategory: {
-    fontSize: 10,
+    ...typography.text.caption,
     color: colors.mutedForeground,
   },
   pieceGhost: {
@@ -976,7 +973,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   clearDeletedText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
   },
 
@@ -996,7 +993,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.muted,
   },
   tagChipText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.foreground,
     fontWeight: typography.weight.medium,
   },
@@ -1007,7 +1004,7 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     borderRadius: radii.full,
     paddingHorizontal: spacing.md,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.foreground,
   },
   addTagButton: {
@@ -1022,21 +1019,21 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   addTagText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.primary,
     fontWeight: typography.weight.medium,
   },
 
   // ── Notes ──
   notesText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     lineHeight: 23,
     color: colors.foreground,
   },
   notesTextArea: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
-    lineHeight: typography.size.md * 1.5,
+    lineHeight: typography.text.body.fontSize * 1.5,
     minHeight: 100,
     textAlignVertical: 'top',
   },
@@ -1054,7 +1051,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   notesSaveBtnLabel: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
   },
@@ -1064,7 +1061,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   notesSavedText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.primary,
     fontWeight: typography.weight.medium,
   },

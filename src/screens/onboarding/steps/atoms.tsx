@@ -65,22 +65,22 @@ export const s = StyleSheet.create({
   step: { gap: spacing.xl },
   field: { gap: spacing.sm },
   label: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    letterSpacing: typography.tracking.wide,
   },
   optional: {
     fontWeight: typography.weight.regular,
     color: colors.mutedForeground,
     textTransform: 'none',
-    letterSpacing: 0,
+    letterSpacing: typography.tracking.none,
   },
   hint: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
-    lineHeight: typography.size.xs * typography.lineHeight.normal,
+    lineHeight: typography.text.caption.fontSize * typography.lineHeight.normal,
     marginTop: -spacing.xs,
   },
   input: {
@@ -92,8 +92,8 @@ export const s = StyleSheet.create({
     backgroundColor: colors.surfaceElevated,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    fontSize: typography.size.md,
-    lineHeight: typography.inputLineHeight(typography.size.md),
+    fontSize: typography.text.body.fontSize,
+    lineHeight: typography.inputLineHeight(typography.text.body.fontSize),
     color: colors.foreground,
   },
 });

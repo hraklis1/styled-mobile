@@ -93,8 +93,8 @@ const styles = StyleSheet.create({
   handle: { backgroundColor: colors.border },
   content: { paddingBottom: spacing.xl },
   header: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
-  title: { fontFamily: typography.family.display, fontSize: typography.size.xxl, color: colors.foreground },
-  subtitle: { fontSize: typography.size.sm, color: colors.mutedForeground },
+  title: { ...typography.text.sheetTitle, color: colors.foreground },
+  subtitle: { fontSize: typography.text.bodySmall.fontSize, color: colors.mutedForeground },
   inputWrap: {
     minHeight: 48,
     flexDirection: 'row',
@@ -106,7 +106,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     backgroundColor: colors.card,
   },
-  input: { flex: 1, fontSize: typography.size.md, color: colors.foreground },
+  input: { flex: 1, fontSize: typography.text.body.fontSize, color: colors.foreground },
   row: {
     minHeight: 54,
     flexDirection: 'row',
@@ -117,5 +117,5 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   icon: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: colors.accent },
-  rowText: { flex: 1, fontSize: typography.size.md, color: colors.foreground },
+  rowText: { flex: 1, fontSize: typography.text.body.fontSize, color: colors.foreground },
 });

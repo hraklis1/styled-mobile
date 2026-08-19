@@ -67,18 +67,18 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   title: {
-    fontSize: typography.size.xl,
+    fontSize: typography.text.sheetTitle.fontSize,
     lineHeight: 25,
     color: colors.foreground,
   },
   summary: {
     color: colors.mutedForeground,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontVariant: ['tabular-nums'],
   },
   insight: {
     color: colors.mutedForeground,
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
   },
   palette: {
     flexDirection: 'row',

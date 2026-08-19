@@ -198,21 +198,21 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   heading: {
-    fontSize: typography.size.xl,
+    fontSize: typography.text.sheetTitle.fontSize,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
   },
   body: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
-    lineHeight: typography.size.sm * typography.lineHeight.normal,
+    lineHeight: typography.text.bodySmall.fontSize * typography.lineHeight.normal,
   },
   centered2: {
     textAlign: 'center',
   },
   error: {
     color: colors.error,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
   },
   field: {
     width: '100%',
@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   eyeIcon: {
-    fontSize: 16,
+    fontSize: typography.text.body.fontSize,
   },
   centeredContent: {
     alignItems: 'center',
@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
   },
   iconText: {
     color: colors.white,
-    fontSize: typography.size.xl,
+    fontSize: typography.text.sheetTitle.fontSize,
     fontWeight: typography.weight.bold,
   },
   actionButton: {

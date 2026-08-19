@@ -1311,7 +1311,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
   },
   autoLaunchTitle: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.mutedForeground,
   },
 
@@ -1327,18 +1327,18 @@ const styles = StyleSheet.create({
     minHeight: 52,
   },
   headerCancel: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.mutedForeground,
     minWidth: 44,
   },
   headerTitle: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
-    letterSpacing: 0.1,
+    letterSpacing: typography.tracking.whisper,
   },
   headerSave: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.bold,
     color: colors.primary,
     minWidth: 44,
@@ -1354,7 +1354,7 @@ const styles = StyleSheet.create({
     minWidth: 70,
   },
   backText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
   },
 
@@ -1363,11 +1363,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   label: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    letterSpacing: typography.tracking.wide,
     marginHorizontal: spacing.lg,
     marginTop: spacing.xl,
     marginBottom: spacing.sm,
@@ -1378,7 +1378,7 @@ const styles = StyleSheet.create({
   introText: {
     marginHorizontal: spacing.lg,
     marginBottom: spacing.md,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     lineHeight: 22,
     color: colors.mutedForeground,
   },
@@ -1403,7 +1403,7 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   datePillText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
   },
@@ -1426,11 +1426,11 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   selectedHeaderTitle: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primary,
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    letterSpacing: typography.tracking.wide,
   },
   selectedHeaderCount: {
     minWidth: 22,
@@ -1439,7 +1439,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     backgroundColor: colors.surfaceSelected,
     color: colors.primary,
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
@@ -1475,12 +1475,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   selectedName: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   selectedCat: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     textTransform: 'capitalize',
     marginTop: 2,
@@ -1502,12 +1502,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   detailsToggleTitle: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   detailsToggleSubtitle: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
   },
   detailsContent: {
@@ -1519,11 +1519,11 @@ const styles = StyleSheet.create({
   detailLabel: {
     marginTop: spacing.md,
     marginBottom: spacing.xs,
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    letterSpacing: typography.tracking.wide,
   },
   textFieldRow: {
     flexDirection: 'row',
@@ -1557,7 +1557,7 @@ const styles = StyleSheet.create({
   },
   textField: {
     flex: 1,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
     paddingVertical: 0,
   },
@@ -1580,7 +1580,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceElevated,
   },
   addItemsBtnText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primary,
   },
@@ -1589,7 +1589,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   addItemsBtnSubtext: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     lineHeight: 17,
     color: colors.mutedForeground,
   },
@@ -1612,8 +1612,8 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 38,
     paddingVertical: 0,
-    fontSize: typography.size.md,
-    lineHeight: typography.inputLineHeight(typography.size.md),
+    fontSize: typography.text.body.fontSize,
+    lineHeight: typography.inputLineHeight(typography.text.body.fontSize),
     color: colors.foreground,
   },
   pickerRow: {
@@ -1670,7 +1670,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pickerCardName: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
     marginTop: spacing.xs,
@@ -1685,15 +1685,15 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xxxl,
   },
   pickerEmptyTitle: {
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   pickerEmptySubtitle: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.mutedForeground,
     textAlign: 'center',
-    lineHeight: typography.size.md * 1.5,
+    lineHeight: typography.text.body.fontSize * 1.5,
   },
 
   // ── Scan button variant
@@ -1719,20 +1719,20 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   scanSummaryTitle: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   scanSummaryText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     marginTop: 2,
   },
   scanHint: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     marginBottom: spacing.md,
-    lineHeight: typography.size.xs * 1.5,
+    lineHeight: typography.text.caption.fontSize * 1.5,
   },
   scanCard: {
     backgroundColor: colors.surfaceElevated,
@@ -1767,12 +1767,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scanItemName: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   scanDetectedLabel: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     marginTop: 2,
     textTransform: 'capitalize',
@@ -1802,7 +1802,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.muted,
   },
   scanStatusText: {
-    fontSize: 10,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primary,
   },
@@ -1810,7 +1810,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   scanCandidatesLabel: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
@@ -1836,13 +1836,13 @@ const styles = StyleSheet.create({
   },
   scanCandidateName: {
     minHeight: 32,
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
     marginTop: spacing.xs,
   },
   scanCandidateUse: {
-    fontSize: 10,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primary,
     marginTop: 2,
@@ -1866,7 +1866,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   scanPrimaryButtonText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
     textAlign: 'center',
@@ -1883,7 +1883,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   scanSecondaryButtonText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primary,
   },
@@ -1895,11 +1895,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   scanGhostButtonText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
   },
   scanFailureText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.error,
   },
   scanFooterActions: {
@@ -1916,7 +1916,7 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
   },
   newItemEditorTitle: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
@@ -1928,7 +1928,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.card,
     paddingHorizontal: spacing.md,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.foreground,
   },
   newItemInputRow: {
@@ -1954,7 +1954,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   newItemCategoryText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.foreground,
   },
   newItemCategoryTextActive: {
@@ -1967,15 +1967,15 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xxxl,
   },
   scanEmptyTitle: {
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   scanEmptySubtitle: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.mutedForeground,
     textAlign: 'center',
-    lineHeight: typography.size.md * 1.5,
+    lineHeight: typography.text.body.fontSize * 1.5,
   },
 
   // ── "Add to wardrobe" footer in picker
@@ -1994,7 +1994,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   addToWardrobeBtnText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.primary,
   },

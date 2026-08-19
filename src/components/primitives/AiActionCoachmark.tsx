@@ -80,12 +80,12 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.background,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
   },
   body: {
     color: 'rgba(251,250,247,0.82)',
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     lineHeight: 17,
   },
   dismissButton: {
@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
   },
   dismissText: {
     color: colors.background,
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.bold,
     textDecorationLine: 'underline',
   },

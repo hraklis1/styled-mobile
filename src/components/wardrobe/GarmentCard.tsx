@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
     minHeight: 62,
   },
   name: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     lineHeight: 17,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,

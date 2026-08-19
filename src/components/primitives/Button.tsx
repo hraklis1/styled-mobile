@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
   },
   // Labels
   label: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
   },
   primaryLabel: {

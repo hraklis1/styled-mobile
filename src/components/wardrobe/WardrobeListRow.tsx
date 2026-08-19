@@ -174,12 +174,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   name: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   brand: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
   },
   meta: {
@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   metaText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
   },
   tags: {
@@ -204,11 +204,11 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   tagText: {
-    fontSize: 11,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
   },
   tagOverflow: {
-    fontSize: 11,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     alignSelf: 'center',
   },

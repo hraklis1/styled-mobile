@@ -73,11 +73,11 @@ export function MenuContent({
 const styles = StyleSheet.create({
   container: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: spacing.md },
   sectionLabel: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    letterSpacing: typography.tracking.wide,
     marginBottom: -spacing.xs,
   },
   option: {
@@ -100,12 +100,12 @@ const styles = StyleSheet.create({
   },
   optionText: { flex: 1 },
   optionTitle: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   optionSub: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
     marginTop: 2,
   },

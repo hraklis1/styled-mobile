@@ -247,15 +247,15 @@ const s = StyleSheet.create({
   },
   monthButton: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   monthLabel: {
-    fontSize: typography.size.xs, fontWeight: typography.weight.semibold,
-    color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 0.5,
+    fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold,
+    color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: typography.tracking.meta,
   },
   navRow: { flexDirection: 'row', alignItems: 'center' },
   todayBtn: {
     minHeight: 44, justifyContent: 'center',
     paddingHorizontal: spacing.sm,
   },
-  todayText: { fontSize: 11, fontWeight: typography.weight.semibold, color: colors.primary },
+  todayText: { ...typography.text.label, color: colors.primary },
   navBtn: {
     width: 44, height: 44,
     alignItems: 'center', justifyContent: 'center',
@@ -270,8 +270,8 @@ const s = StyleSheet.create({
   },
   dayBtnSel: { backgroundColor: colors.primary },
   dayBtnToday: { borderWidth: 1, borderColor: colors.primary },
-  dayAbbrev: { fontSize: 10, fontWeight: typography.weight.semibold, color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 0.3 },
-  dayNum: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.mutedForeground },
+  dayAbbrev: { ...typography.text.caption, fontWeight: typography.weight.semibold, color: colors.mutedForeground, textTransform: 'uppercase' },
+  dayNum: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.bold, color: colors.mutedForeground },
   dayTextSel: { color: colors.white },
   dayTextToday: { color: colors.primary },
   dot: { width: 7, height: 3, borderRadius: 2, backgroundColor: 'transparent' },
@@ -281,9 +281,9 @@ const s = StyleSheet.create({
   colHeaders: { flexDirection: 'row', marginBottom: 4 },
   colHeader: {
     flex: 1, textAlign: 'center',
-    fontSize: 10, fontWeight: typography.weight.semibold,
+    ...typography.text.caption, fontWeight: typography.weight.semibold,
     color: colors.mutedForeground, opacity: 0.5,
-    textTransform: 'uppercase', letterSpacing: 0.3,
+    textTransform: 'uppercase', letterSpacing: typography.tracking.subtle,
     paddingVertical: spacing.xs,
   },
   monthRow: { flexDirection: 'row', marginBottom: 2 },
@@ -295,7 +295,7 @@ const s = StyleSheet.create({
     borderCurve: 'continuous',
   },
   compactNum: {
-    fontSize: typography.size.sm, fontWeight: typography.weight.semibold,
+    fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
   },
 });

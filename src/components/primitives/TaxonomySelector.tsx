@@ -153,11 +153,11 @@ const styles = StyleSheet.create({
   container: { gap: spacing.md },
   section: { gap: spacing.xs },
   label: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    letterSpacing: typography.tracking.label,
     paddingHorizontal: 0,
   },
   pillRow: {
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
   },
   pillDisabled: { opacity: 0.5 },
   pillText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
   },

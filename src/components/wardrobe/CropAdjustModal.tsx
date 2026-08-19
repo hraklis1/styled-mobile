@@ -397,12 +397,12 @@ const s = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   title: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   subtitle: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     marginTop: 2,
   },
@@ -504,7 +504,7 @@ const s = StyleSheet.create({
     backgroundColor: colors.background,
   },
   cancelText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
   },
@@ -521,7 +521,7 @@ const s = StyleSheet.create({
     opacity: 0.5,
   },
   applyText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.primaryForeground,
   },

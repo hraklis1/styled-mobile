@@ -194,18 +194,17 @@ const styles = StyleSheet.create({
   },
   loadingBlock: { minHeight: 104, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   masthead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
-  label: { ...typography.eyebrow, color: colors.primary },
-  issue: { fontSize: typography.size.xs, color: colors.mutedForeground },
+  label: { ...typography.text.eyebrow, color: colors.primary },
+  issue: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
   // display.sm, not .md: at .md this matched the page's own masthead
   // ("Buy fewer, better pieces") one-for-one and the two competed. A step
   // down reads as the page's cover feature rather than a second title.
   headline: {
-    fontFamily: typography.family.display,
-    ...typography.display.sm,
+    ...typography.text.editorialCompact,
     color: colors.foreground,
   },
-  body: { fontSize: typography.size.sm, lineHeight: 20, color: colors.mutedForeground },
-  prioritiesLabel: { ...typography.eyebrow, color: colors.mutedForeground },
+  body: { ...typography.text.bodySmall, color: colors.inkSubtle },
+  prioritiesLabel: { ...typography.text.eyebrow, color: colors.mutedForeground },
   priorities: { paddingTop: spacing.sm },
   // Hairline-separated, not a white card inside a tinted one: the priority is
   // the reading, not a nested surface.
@@ -218,11 +217,11 @@ const styles = StyleSheet.create({
   priorityHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   priorityLabel: {
     flexShrink: 1,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
-  priorityUnlocks: { fontSize: 10, lineHeight: 15, fontWeight: typography.weight.medium, color: colors.primary },
+  priorityUnlocks: { ...typography.text.caption, fontWeight: typography.weight.medium, color: colors.primary },
   // Full width, unlike every other action on this card: it is the page's one
   // filled button, and stretching it across the foot is what makes it read as
   // the brief's conclusion rather than a fourth thing to consider.
@@ -238,7 +237,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   startLabel: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
   },
@@ -249,5 +248,5 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     gap: spacing.xs,
   },
-  textActionLabel: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.action },
+  textActionLabel: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.action },
 });

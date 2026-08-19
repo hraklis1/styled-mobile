@@ -147,7 +147,7 @@ export function SelectionGroup(props: Props) {
 
 const s = StyleSheet.create({
   caption: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     marginBottom: spacing.sm,
   },
@@ -192,7 +192,7 @@ const s = StyleSheet.create({
   cardCheck: { marginBottom: spacing.xs },
   cardText: { gap: 2 },
   label: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
   },
@@ -201,9 +201,9 @@ const s = StyleSheet.create({
     color: colors.primary,
   },
   description: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
-    lineHeight: typography.size.xs * typography.lineHeight.normal,
+    lineHeight: typography.text.caption.fontSize * typography.lineHeight.normal,
   },
   // A full five-stop stack, not one dot: the point of a palette is the
   // relationship between its colours.

@@ -686,13 +686,13 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     textAlign: 'center',
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
   },
   cancelText: {
     color: colors.primary,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.medium,
     flexShrink: 0,
   },
@@ -726,7 +726,7 @@ const styles = StyleSheet.create({
     borderColor: colors.hairline,
   },
   filterChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  filterText: { color: colors.mutedForeground, fontSize: typography.size.xs, fontWeight: typography.weight.medium, fontVariant: ['tabular-nums'] },
+  filterText: { color: colors.mutedForeground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.medium, fontVariant: ['tabular-nums'] },
   filterTextActive: { color: colors.primaryForeground, fontWeight: typography.weight.semibold },
   contextRow: {
     marginHorizontal: spacing.lg,
@@ -744,8 +744,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     backgroundColor: colors.accent,
   },
-  eventTitle: { flex: 1, color: colors.secondaryForeground, fontSize: typography.size.xs, fontWeight: typography.weight.semibold },
-  eventWhen: { color: colors.secondaryForeground, fontSize: typography.size.xs },
+  eventTitle: { flex: 1, color: colors.secondaryForeground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold },
+  eventWhen: { color: colors.secondaryForeground, fontSize: typography.text.caption.fontSize },
   styleBoardBtn: {
     minHeight: 38,
     paddingHorizontal: spacing.md,
@@ -758,11 +758,11 @@ const styles = StyleSheet.create({
   },
   styleBoardText: {
     color: colors.primaryForeground,
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
   },
   organizeBanner: { minHeight: 48, marginHorizontal: spacing.lg, marginBottom: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.accent },
-  organizeText: { flex: 1, color: colors.secondaryForeground, fontSize: typography.size.xs },
+  organizeText: { flex: 1, color: colors.secondaryForeground, fontSize: typography.text.caption.fontSize },
   filteredEmpty: { paddingTop: spacing.xxxl, alignItems: 'center', gap: spacing.xs },
   undoToast: {
     position: 'absolute',
@@ -779,9 +779,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  undoToastText: { flex: 1, color: colors.foreground, fontSize: typography.size.sm, fontWeight: typography.weight.medium },
+  undoToastText: { flex: 1, color: colors.foreground, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.medium },
   undoToastButton: { minWidth: 56, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  undoToastAction: { color: colors.primary, fontSize: typography.size.sm, fontWeight: typography.weight.bold },
+  undoToastAction: { color: colors.primary, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.bold },
   centered: {
     flex: 1,
     alignItems: 'center',
@@ -799,12 +799,12 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   emptyTitle: {
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
   },
   emptySub: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
     textAlign: 'center',
   },
@@ -821,6 +821,6 @@ const styles = StyleSheet.create({
   emptyBtnText: {
     color: colors.primaryForeground,
     fontWeight: typography.weight.semibold,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
   },
 });

@@ -56,12 +56,12 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.foreground,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     lineHeight: 20,
   },
   summary: {
     color: colors.mutedForeground,
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontVariant: ['tabular-nums'],
   },
 });

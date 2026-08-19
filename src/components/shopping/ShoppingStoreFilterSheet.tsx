@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
   sheetHandle: { backgroundColor: colors.border },
   listContent: { paddingBottom: spacing.xl },
   header: { gap: spacing.md, paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
-  title: { fontFamily: typography.family.display, fontSize: typography.size.xxl, color: colors.foreground },
+  title: { ...typography.text.sheetTitle, color: colors.foreground },
   searchField: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.card,
   },
-  searchInput: { flex: 1, fontSize: typography.size.md, color: colors.foreground },
+  searchInput: { flex: 1, fontSize: typography.text.body.fontSize, color: colors.foreground },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -195,10 +195,10 @@ const styles = StyleSheet.create({
   },
   rowNested: { minHeight: 44, paddingLeft: spacing.lg + spacing.md },
   rowCheck: { width: 20, alignItems: 'center' },
-  rowLabel: { flex: 1, fontSize: typography.size.md, color: colors.foreground },
-  rowLabelNested: { fontSize: typography.size.sm, color: colors.secondaryForeground },
+  rowLabel: { flex: 1, fontSize: typography.text.body.fontSize, color: colors.foreground },
+  rowLabelNested: { fontSize: typography.text.bodySmall.fontSize, color: colors.secondaryForeground },
   rowLabelSelected: { fontWeight: typography.weight.semibold, color: colors.primary },
-  rowCount: { fontSize: typography.size.xs, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
+  rowCount: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
   emptyState: { paddingHorizontal: spacing.lg, paddingVertical: spacing.xl },
-  emptyText: { fontSize: typography.size.sm, color: colors.mutedForeground },
+  emptyText: { fontSize: typography.text.bodySmall.fontSize, color: colors.mutedForeground },
 });

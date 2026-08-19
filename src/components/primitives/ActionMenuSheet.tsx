@@ -152,13 +152,13 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.foreground,
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.semibold,
   },
   subtitle: {
     marginTop: 2,
     color: colors.mutedForeground,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
   },
   options: { gap: spacing.sm, marginTop: spacing.lg },
   option: {
@@ -186,14 +186,14 @@ const styles = StyleSheet.create({
   optionCopy: { flex: 1, minWidth: 0 },
   optionTitle: {
     color: colors.foreground,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.medium,
   },
   optionTitleDestructive: { color: colors.destructive },
   optionSubtitle: {
     marginTop: 2,
     color: colors.mutedForeground,
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
   },
   cancelButton: {
     minHeight: 52,
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     color: colors.mutedForeground,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.medium,
   },
 });

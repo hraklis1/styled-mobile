@@ -140,9 +140,9 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, gap: spacing.md },
   header: { gap: spacing.xs },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  eyebrow: { color: colors.primary, fontSize: typography.size.xs, fontWeight: typography.weight.bold, letterSpacing: 1.3 },
-  title: { color: colors.foreground, fontFamily: typography.family.display, fontSize: typography.size.xxl, lineHeight: 32 },
-  subtitle: { color: colors.mutedForeground, fontSize: typography.size.sm, lineHeight: 20 },
+  eyebrow: { ...typography.text.eyebrow, color: colors.primary },
+  title: { ...typography.text.sheetTitle, color: colors.foreground },
+  subtitle: { ...typography.text.bodySmall, color: colors.inkSubtle },
   tabsPreview: {
     minHeight: 112,
     flexDirection: 'row',
@@ -164,9 +164,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceElevated,
     boxShadow: '0 1px 3px rgba(29, 27, 24, 0.08)',
   },
-  previewLabel: { color: colors.foreground, fontSize: typography.size.xs, fontWeight: typography.weight.semibold },
+  previewLabel: { color: colors.foreground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold },
   holdMark: { alignItems: 'center', gap: 2 },
-  holdLabel: { color: colors.primary, fontSize: 10, fontWeight: typography.weight.bold, letterSpacing: 0.7, textTransform: 'uppercase' },
+  holdLabel: { ...typography.text.eyebrow, color: colors.primary },
   primaryButton: {
     minHeight: 48,
     flexDirection: 'row',
@@ -176,8 +176,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     backgroundColor: colors.primary,
   },
-  primaryButtonText: { color: colors.primaryForeground, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+  primaryButtonText: { color: colors.primaryForeground, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold },
   secondaryButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  secondaryButtonText: { color: colors.action, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+  secondaryButtonText: { color: colors.action, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold },
 });
-

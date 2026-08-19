@@ -79,23 +79,23 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   heading: {
-    fontSize: typography.size.xl,
+    fontSize: typography.text.sheetTitle.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
     textAlign: 'center',
     marginTop: spacing.sm,
   },
   context: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.mutedForeground,
     textAlign: 'center',
   },
   detail: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
     textAlign: 'center',
-    lineHeight: typography.size.sm * typography.lineHeight.normal,
+    lineHeight: typography.text.bodySmall.fontSize * typography.lineHeight.normal,
     marginBottom: spacing.sm,
   },
   button: {
@@ -106,7 +106,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   buttonLabel: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
   },

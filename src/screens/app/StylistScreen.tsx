@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -7,8 +7,9 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { StylistChatView } from '../../components/stylist/StylistChatView';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { presentPaywall } from '../../lib/paywall';
-import { colors, radii, spacing, typography } from '../../theme';
+import { colors, radii, spacing } from '../../theme';
 import { ActionButton } from '../../components/primitives/Editorial';
+import { AppText } from '../../components/primitives/AppText';
 import type { AppTabParamList } from '../../navigation/types';
 import type { StylistMissingEssential } from '../../features/stylist/types';
 import type { ShoppingBriefReason } from '../../lib/shopDecisionWorkspace';
@@ -58,11 +59,11 @@ export function StylistScreen() {
       <View style={styles.mark}>
         <Ionicons name="sparkles" size={28} color={colors.primary} />
       </View>
-      <Text style={styles.eyebrow}>PRIVATE STYLING</Text>
-      <Text style={styles.title}>A stylist who already knows your wardrobe.</Text>
-      <Text style={styles.body}>
+      <AppText variant="eyebrowLarge" tone="brand" style={styles.eyebrow}>PRIVATE STYLING</AppText>
+      <AppText variant="editorialHero" tone="primary" style={styles.title}>A stylist who already knows your wardrobe.</AppText>
+      <AppText variant="body" tone="secondary" style={styles.body}>
         Build looks, plan for events, spot wardrobe gaps, and shop with more intention.
-      </Text>
+      </AppText>
       <ActionButton
         label={openingPaywall ? 'Opening...' : 'Meet your stylist'}
         icon="sparkles"
@@ -95,25 +96,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.surfaceSelected,
   },
-  eyebrow: {
-    marginTop: spacing.sm,
-    color: colors.primary,
-    fontSize: 11,
-    fontWeight: typography.weight.bold,
-    letterSpacing: 1.4,
-  },
+  eyebrow: { marginTop: spacing.sm },
   title: {
-    color: colors.foreground,
-    fontFamily: typography.family.display,
-    fontSize: 32,
-    lineHeight: 38,
     textAlign: 'center',
   },
   body: {
     maxWidth: 340,
-    color: colors.mutedForeground,
-    fontSize: typography.size.md,
-    lineHeight: 23,
     textAlign: 'center',
   },
   button: {

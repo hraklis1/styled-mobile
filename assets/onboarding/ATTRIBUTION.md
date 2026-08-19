@@ -43,3 +43,11 @@ Record the row above **before** the image is committed, and re-check the
 selection rules. JPEG, not WebP: `cwebp` is not installed on the build machine
 and macOS `sips` cannot encode WebP, so a WebP here would have to be produced
 by hand and would silently rot.
+
+## Newsreader typeface
+
+The app's editorial typeface is [Newsreader](https://github.com/productiontype/Newsreader),
+designed by Production Type and distributed under the [SIL Open Font License,
+Version 1.1](https://scripts.sil.org/OFL). It is bundled through
+`@expo-google-fonts/newsreader`; the package's complete font license is also
+kept in `assets/fonts/NEWSREADER-LICENSE.txt`.

@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Platform, type TextStyle } from 'react-native';
 
 // Translated from the web app's HSL CSS variables (index.css)
 export const colors = {
@@ -45,55 +45,30 @@ const weight = {
   bold:     '700' as const,
 };
 
+const editorialFamily = {
+  editorialRegular: 'Newsreader_400Regular',
+  editorialMedium: 'Newsreader_500Medium',
+} as const;
+
+const tracking = {
+  none: 0,
+  whisper: 0.1,
+  tight: 0.2,
+  subtle: 0.3,
+  compact: 0.4,
+  meta: 0.5,
+  label: 0.6,
+  relaxed: 0.7,
+  wide: 0.8,
+  spacious: 0.9,
+  unit: 1,
+  eyebrow: 1.1,
+  eyebrowLarge: 1.6,
+} as const;
+
 export const typography = {
-  family: {
-    display: 'BodoniModa_400Regular',
-  },
-  size: {
-    xs:   12,
-    sm:   13,
-    md:   15,
-    lg:   17,
-    xl:   20,
-    xxl:  28,
-    xxxl: 40,
-  },
-  /**
-   * The serif editorial face's own scale — mastheads, hero headlines, and the
-   * titles of pages that are read rather than operated. Sizes only: callers
-   * still apply `family.display` and a colour, because a display line set over
-   * photography needs different colour handling than one on the page ground.
-   *
-   * `lg` is a page masthead, `md` a section or card hero, `sm` a compact header
-   * title. Anything smaller belongs in `size`, set in the system face.
-   */
-  display: {
-    lg: { fontSize: 34, lineHeight: 39 },
-    md: { fontSize: 28, lineHeight: 33 },
-    sm: { fontSize: 22, lineHeight: 26 },
-  },
+  family: editorialFamily,
   weight,
-  /**
-   * The small letterspaced label above a title. Two sizes only — `eyebrow` sits
-   * over card and section titles, `eyebrowLarge` over a page masthead, where
-   * the wider tracking has room to read.
-   *
-   * Complete style objects rather than tokens: an eyebrow is always all four of
-   * these properties together, and the drift they replaced (four different
-   * letter-spacings across the app) came from setting them one at a time.
-   */
-  eyebrow: {
-    fontSize: 10,
-    fontWeight: weight.bold,
-    letterSpacing: 1.1,
-    textTransform: 'uppercase' as const,
-  },
-  eyebrowLarge: {
-    fontSize: 11,
-    fontWeight: weight.bold,
-    letterSpacing: 2.1,
-    textTransform: 'uppercase' as const,
-  },
   lineHeight: {
     tight:  1.2,
     normal: 1.5,
@@ -112,6 +87,97 @@ export const typography = {
    * tappable across — the whole search pill.
    */
   inputLineHeight: (fontSize: number) => Math.round(fontSize * 1.25),
+  /** Named tracking values for exceptional labels and display treatments. */
+  tracking,
+  /**
+   * Semantic text roles. Screens should choose a role rather than combining
+   * a raw size, weight, tracking value, and family independently. Editorial
+   * roles intentionally use a real static face for each weight; React Native
+   * must not synthesize a weight for a bundled custom font.
+   */
+  text: {
+    editorialHero: {
+      fontFamily: editorialFamily.editorialRegular,
+      fontSize: 34,
+      lineHeight: 40,
+    },
+    editorialTitle: {
+      fontFamily: editorialFamily.editorialMedium,
+      fontSize: 28,
+      lineHeight: 34,
+    },
+    editorialCompact: {
+      fontFamily: editorialFamily.editorialMedium,
+      fontSize: 22,
+      lineHeight: 28,
+    },
+    pageTitle: {
+      fontSize: 28,
+      lineHeight: 34,
+      fontWeight: weight.bold,
+    },
+    sheetTitle: {
+      fontSize: 20,
+      lineHeight: 26,
+      fontWeight: weight.semibold,
+    },
+    sectionTitle: {
+      fontSize: 17,
+      lineHeight: 22,
+      fontWeight: weight.semibold,
+    },
+    cardTitle: {
+      fontSize: 15,
+      lineHeight: 20,
+      fontWeight: weight.semibold,
+    },
+    body: {
+      fontSize: 15,
+      lineHeight: 22,
+      fontWeight: weight.regular,
+    },
+    bodySmall: {
+      fontSize: 13,
+      lineHeight: 19,
+      fontWeight: weight.regular,
+    },
+    label: {
+      fontSize: 13,
+      lineHeight: 18,
+      fontWeight: weight.semibold,
+    },
+    caption: {
+      fontSize: 12,
+      lineHeight: 16,
+      fontWeight: weight.regular,
+    },
+    eyebrow: {
+      fontSize: 11,
+      lineHeight: 14,
+      fontWeight: weight.bold,
+      letterSpacing: tracking.eyebrow,
+      textTransform: 'uppercase' as const,
+    },
+    eyebrowLarge: {
+      fontSize: 12,
+      lineHeight: 16,
+      fontWeight: weight.bold,
+      letterSpacing: tracking.eyebrowLarge,
+      textTransform: 'uppercase' as const,
+    },
+    data: {
+      fontSize: 15,
+      lineHeight: 20,
+      fontWeight: weight.medium,
+      fontVariant: ['tabular-nums'] as TextStyle['fontVariant'],
+    },
+    dataLarge: {
+      fontSize: 20,
+      lineHeight: 26,
+      fontWeight: weight.medium,
+      fontVariant: ['tabular-nums'] as TextStyle['fontVariant'],
+    },
+  } satisfies Record<string, TextStyle>,
 } as const;
 
 export const radii = {

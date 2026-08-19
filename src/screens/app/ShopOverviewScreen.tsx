@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ShoppingBriefCard } from '../../components/shopping/ShoppingBriefCard';
 import { ShortlistCarousel } from '../../components/shopping/ShortlistCarousel';
 import { EditorialSection, IconButton } from '../../components/primitives/Editorial';
+import { AppText } from '../../components/primitives/AppText';
 import { EditorialRow } from '../../components/primitives/EditorialRow';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useItems } from '../../hooks/useItems';
@@ -16,7 +17,7 @@ import { buildShoppingEditItems, mergeShoppingSnaps, type ShoppingEditItem } fro
 import { buildShortlistSpotlight } from '../../lib/shortlistSpotlight';
 import { track } from '../../lib/analytics';
 import { presentPaywall } from '../../lib/paywall';
-import { colors, spacing, typography } from '../../theme';
+import { colors, spacing } from '../../theme';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import type { ShopOverviewScreenProps } from '../../navigation/types';
 
@@ -111,8 +112,8 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
       >
         <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
           <View style={styles.headerCopy}>
-            <Text style={styles.eyebrow}>SHOP</Text>
-            <Text style={styles.headerTitle}>Buy fewer, better pieces</Text>
+            <AppText variant="eyebrowLarge" tone="brand">SHOP</AppText>
+            <AppText variant="editorialTitle" tone="primary">Buy fewer, better pieces</AppText>
           </View>
           <IconButton
             icon="camera-outline"
@@ -206,12 +207,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.lg,
   },
   headerCopy: { flex: 1, gap: spacing.sm },
-  eyebrow: { ...typography.eyebrowLarge, color: colors.primary },
-  headerTitle: {
-    fontFamily: typography.family.display,
-    ...typography.display.md,
-    color: colors.foreground,
-  },
   // The brief is the page's cover feature, not another department: a full-
   // width tinted ground breaks it out of the uniform gutter every other
   // section shares, so it reads as the one thing the page leads with.

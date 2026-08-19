@@ -141,10 +141,10 @@ const styles = StyleSheet.create({
   headerCopy: { flex: 1, gap: 2 },
   title: {
     color: colors.foreground,
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.semibold,
   },
-  subtitle: { color: colors.mutedForeground, fontSize: typography.size.sm },
+  subtitle: { color: colors.mutedForeground, fontSize: typography.text.bodySmall.fontSize },
   closeButton: {
     width: 36,
     height: 36,
@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surfaceElevated,
     color: colors.foreground,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     borderCurve: 'continuous',
   },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceElevated,
     borderCurve: 'continuous',
   },
-  cancelText: { color: colors.mutedForeground, fontSize: typography.size.md, fontWeight: typography.weight.medium },
+  cancelText: { color: colors.mutedForeground, fontSize: typography.text.body.fontSize, fontWeight: typography.weight.medium },
   submitButton: {
     flex: 1,
     minHeight: 50,
@@ -188,5 +188,5 @@ const styles = StyleSheet.create({
     borderCurve: 'continuous',
   },
   submitButtonDisabled: { opacity: 0.45 },
-  submitText: { color: colors.primaryForeground, fontSize: typography.size.md, fontWeight: typography.weight.semibold },
+  submitText: { color: colors.primaryForeground, fontSize: typography.text.body.fontSize, fontWeight: typography.weight.semibold },
 });

@@ -1509,18 +1509,18 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
 const styles = StyleSheet.create({
   boardListHeader: { paddingHorizontal: COL_GAP / 2, paddingBottom: spacing.lg, gap: spacing.md },
   boardSearchWrap: { minHeight: 46, paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.secondary, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  boardSearchInput: { flex: 1, minHeight: 46, color: colors.foreground, fontSize: typography.size.md, lineHeight: typography.inputLineHeight(typography.size.md) },
+  boardSearchInput: { flex: 1, minHeight: 46, color: colors.foreground, fontSize: typography.text.body.fontSize, lineHeight: typography.inputLineHeight(typography.text.body.fontSize) },
   boardSearchClear: { width: 36, height: 44, alignItems: 'center', justifyContent: 'center' },
   smartBoardHeading: { alignItems: 'flex-start' },
-  smartBoardTitle: { color: colors.mutedForeground, fontSize: typography.size.xs, fontWeight: typography.weight.semibold, letterSpacing: 0.9, textTransform: 'uppercase' },
+  smartBoardTitle: { color: colors.mutedForeground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, letterSpacing: typography.tracking.spacious, textTransform: 'uppercase' },
   smartBoardRow: { gap: spacing.sm, paddingRight: spacing.lg },
   smartBoardChip: { minHeight: 38, paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: 'transparent', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   emptyThemeChip: { marginBottom: spacing.sm },
   smartBoardChipDisabled: { backgroundColor: colors.secondary, borderColor: colors.secondary },
-  smartBoardChipText: { color: colors.secondaryForeground, fontSize: typography.size.xs, fontWeight: typography.weight.medium },
+  smartBoardChipText: { color: colors.secondaryForeground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.medium },
   smartBoardChipTextDisabled: { color: colors.mutedForeground },
   noBoardResults: { paddingVertical: spacing.xl, alignItems: 'center' },
-  emptyThemeLabel: { marginTop: spacing.lg, color: colors.mutedForeground, fontSize: typography.size.xs, fontWeight: typography.weight.semibold, letterSpacing: 0.9, textTransform: 'uppercase' },
+  emptyThemeLabel: { marginTop: spacing.lg, color: colors.mutedForeground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, letterSpacing: typography.tracking.spacious, textTransform: 'uppercase' },
   emptyThemeGrid: { marginTop: spacing.sm, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm },
   boardSkeletonGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: COL_GAP / 2 },
   boardSkeletonTitle: { marginTop: spacing.sm + 1 },
@@ -1562,18 +1562,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   primaryHeaderBtnText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
   },
   title: {
-    fontSize: typography.size.xxl,
+    fontSize: typography.text.pageTitle.fontSize,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
-    letterSpacing: 0,
+    letterSpacing: typography.tracking.none,
   },
   subtitle: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     marginTop: 2,
   },
@@ -1601,7 +1601,7 @@ const styles = StyleSheet.create({
     ...shadows.xs,
   },
   segmentLabel: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.mutedForeground,
   },
@@ -1645,8 +1645,8 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     height: 44,
-    fontSize: typography.size.sm,
-    lineHeight: typography.inputLineHeight(typography.size.sm),
+    fontSize: typography.text.bodySmall.fontSize,
+    lineHeight: typography.inputLineHeight(typography.text.bodySmall.fontSize),
     color: colors.foreground,
     paddingVertical: 0,
   },
@@ -1674,7 +1674,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   filterBadgeText: {
-    fontSize: 9,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.bold,
     color: colors.primaryForeground,
   },
@@ -1704,7 +1704,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   pillLabel: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.mutedForeground,
   },
@@ -1791,7 +1791,7 @@ const styles = StyleSheet.create({
     ...shadows.xs,
   },
   eventDateText: {
-    fontSize: 11,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
     fontVariant: ['tabular-nums'],
@@ -1813,7 +1813,7 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   outfitRowAssignmentText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
     fontVariant: ['tabular-nums'],
@@ -1824,7 +1824,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   itemName: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
@@ -1860,12 +1860,12 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   outfitName: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   outfitWorn: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
   },
   outfitMetaRow: {
@@ -1875,7 +1875,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   outfitDraftText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.primary,
     fontWeight: typography.weight.semibold,
   },
@@ -1921,13 +1921,13 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
   },
   bulkCancel: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
     fontWeight: typography.weight.medium,
     flexShrink: 0,
   },
   bulkSelectAll: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.primary,
     fontWeight: typography.weight.medium,
   },
@@ -1949,7 +1949,7 @@ const styles = StyleSheet.create({
     borderColor: `${colors.primary}30`,
   },
   bulkStylistBtnText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primary,
   },
@@ -1970,7 +1970,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEE2E2',
   },
   bulkBtnText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
   },
@@ -1997,13 +1997,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   emptyTitle: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
     textAlign: 'center',
   },
   emptySub: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     textAlign: 'center',
     maxWidth: 220,
@@ -2019,7 +2019,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   emptyBtnText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
   },

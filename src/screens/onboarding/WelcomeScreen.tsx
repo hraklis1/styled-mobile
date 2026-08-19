@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
     height: 33,
   },
   skipText: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
   },
   list: {
@@ -230,17 +230,13 @@ const styles = StyleSheet.create({
   // Serif display face — this is the first screen anyone sees, and it was the
   // one place setting the brand in a sans bold.
   title: {
-    fontFamily: typography.family.display,
-    fontSize: 34,
-    lineHeight: 40,
-    letterSpacing: -0.4,
+    ...typography.text.editorialHero,
     color: colors.foreground,
     marginBottom: spacing.md,
   },
   desc: {
-    fontSize: typography.size.md,
-    color: colors.mutedForeground,
-    lineHeight: typography.size.md * 1.65,
+    ...typography.text.body,
+    color: colors.inkSubtle,
     marginBottom: spacing.xl,
   },
   featureRow: {
@@ -261,7 +257,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   featureLabel: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
   },
@@ -294,7 +290,7 @@ const styles = StyleSheet.create({
     minHeight: 52,
   },
   ctaText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
   },

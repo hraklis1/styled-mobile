@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   buttonText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
     flex: 1,
     marginRight: spacing.xs,
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   sheetTitle: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
     paddingHorizontal: spacing.lg,
@@ -294,8 +294,8 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     height: 38,
-    fontSize: typography.size.md,
-    lineHeight: typography.inputLineHeight(typography.size.md),
+    fontSize: typography.text.body.fontSize,
+    lineHeight: typography.inputLineHeight(typography.text.body.fontSize),
     color: colors.foreground,
   },
   option: {
@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.muted,
   },
   optionText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
     flex: 1,
   },
@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   doneButtonText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
   },

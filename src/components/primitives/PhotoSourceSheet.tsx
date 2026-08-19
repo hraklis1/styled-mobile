@@ -211,12 +211,12 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   title: {
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   subtitle: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
     marginTop: 2,
   },
@@ -271,12 +271,12 @@ const styles = StyleSheet.create({
   },
   optionText: { flex: 1 },
   optionTitle: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
   optionSub: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
     marginTop: 2,
   },
@@ -287,7 +287,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   cancelText: {
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.mutedForeground,
   },

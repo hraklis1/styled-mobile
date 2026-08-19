@@ -3,6 +3,7 @@ import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-na
 import { StyleSheet, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNetInfo } from '@react-native-community/netinfo';
+import { typography } from '../../theme';
 
 const STRIP_HEIGHT = 36;
 
@@ -75,7 +76,7 @@ const styles = StyleSheet.create({
   },
   text: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: '600',
     paddingBottom: 8,
   },

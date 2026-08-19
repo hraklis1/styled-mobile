@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   badgeText: {
-    fontSize: 8,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },

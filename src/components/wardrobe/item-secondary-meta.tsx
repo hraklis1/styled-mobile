@@ -25,7 +25,7 @@ export function ItemSecondaryMeta({
 
 const styles = StyleSheet.create({
   meta: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     lineHeight: 16,
     color: colors.mutedForeground,
   },

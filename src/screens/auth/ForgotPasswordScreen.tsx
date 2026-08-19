@@ -150,14 +150,14 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   heading: {
-    fontSize: typography.size.xl,
+    fontSize: typography.text.sheetTitle.fontSize,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
   },
   body: {
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.mutedForeground,
-    lineHeight: typography.size.sm * typography.lineHeight.normal,
+    lineHeight: typography.text.bodySmall.fontSize * typography.lineHeight.normal,
   },
   bold: {
     fontWeight: typography.weight.semibold,
@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
   },
   error: {
     color: colors.error,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
   },
   field: {
     width: '100%',
@@ -184,7 +184,7 @@ const styles = StyleSheet.create({
   },
   checkMark: {
     color: colors.primaryForeground,
-    fontSize: typography.size.xl,
+    fontSize: typography.text.sheetTitle.fontSize,
     fontWeight: typography.weight.bold,
   },
   actionButton: {
@@ -199,11 +199,11 @@ const styles = StyleSheet.create({
   },
   backArrow: {
     color: colors.primary,
-    fontSize: typography.size.md,
+    fontSize: typography.text.body.fontSize,
   },
   backLink: {
     color: colors.primary,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.medium,
   },
 });

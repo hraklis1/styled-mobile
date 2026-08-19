@@ -189,11 +189,11 @@ const s = StyleSheet.create({
   eventButton: { gap: spacing.lg },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   upNext: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primary,
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    letterSpacing: typography.tracking.wide,
   },
   badge: {
     backgroundColor: `${colors.primary}15`,
@@ -201,7 +201,7 @@ const s = StyleSheet.create({
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: 2,
   },
-  badgeText: { fontSize: 11, fontWeight: typography.weight.semibold, color: colors.primary },
+  badgeText: { ...typography.text.label, color: colors.primary },
 
   mainRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   dateBlock: {
@@ -212,16 +212,16 @@ const s = StyleSheet.create({
     borderColor: colors.border,
     borderCurve: 'continuous',
   },
-  dateMonth: { fontSize: 9, color: colors.primary, fontWeight: typography.weight.bold, letterSpacing: 0.8 },
-  dateDay: { fontSize: typography.size.xxl, color: colors.foreground, fontWeight: typography.weight.semibold, fontVariant: ['tabular-nums'] },
+  dateMonth: { ...typography.text.eyebrow, color: colors.primary },
+  dateDay: { fontSize: typography.text.pageTitle.fontSize, color: colors.foreground, fontWeight: typography.weight.semibold, fontVariant: ['tabular-nums'] },
   body: { flex: 1, gap: 2 },
   title: {
-    fontSize: typography.size.lg,
+    fontSize: typography.text.sectionTitle.fontSize,
     fontWeight: typography.weight.bold,
     color: colors.foreground,
-    letterSpacing: 0,
+    letterSpacing: typography.tracking.none,
   },
-  meta: { fontSize: typography.size.sm, color: colors.mutedForeground, fontWeight: typography.weight.medium },
+  meta: { fontSize: typography.text.bodySmall.fontSize, color: colors.mutedForeground, fontWeight: typography.weight.medium },
 
   context: { gap: spacing.sm },
   contextLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 20 },
@@ -229,7 +229,7 @@ const s = StyleSheet.create({
   locationLine: { flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0 },
   detail: { flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0, flexShrink: 0 },
   detailText: {
-    fontSize: typography.size.xs, fontWeight: typography.weight.medium,
+    fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.medium,
     color: colors.mutedForeground, textTransform: 'capitalize',
     flexShrink: 1,
   },
@@ -273,18 +273,18 @@ const s = StyleSheet.create({
     backgroundColor: colors.background,
   },
   viewLookText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primary,
   },
   outfitStatus: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   outfitCopy: { flex: 1, minWidth: 0, gap: 1 },
   outfitReady: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.foreground,
   },
-  outfitHint: { fontSize: 10, color: colors.mutedForeground },
+  outfitHint: { ...typography.text.caption, color: colors.mutedForeground },
   planIcon: {
     width: 32, height: 32,
     borderRadius: radii.full,
@@ -300,5 +300,5 @@ const s = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   planBtnDisabled: { opacity: 0.72 },
-  planBtnText: { fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.white },
+  planBtnText: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, color: colors.white },
 });

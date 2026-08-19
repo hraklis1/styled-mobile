@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
   },
   label: {
     flexShrink: 1,
-    fontSize: typography.size.sm,
+    fontSize: typography.text.bodySmall.fontSize,
     color: colors.foreground,
     fontWeight: typography.weight.semibold,
   },
@@ -149,15 +149,14 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   tagText: {
-    fontSize: 10,
+    ...typography.text.caption,
     color: colors.primary,
     fontWeight: typography.weight.medium,
-    letterSpacing: 0.3,
   },
   context: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
-    lineHeight: typography.size.xs * 1.45,
+    lineHeight: typography.text.caption.fontSize * 1.45,
   },
   unlocksRow: {
     flexDirection: 'row',
@@ -166,15 +165,14 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   unlocksLabel: {
-    fontSize: 10,
+    ...typography.text.caption,
     color: colors.mutedForeground,
     fontWeight: typography.weight.medium,
     textTransform: 'uppercase',
-    letterSpacing: 0.4,
   },
   unlocksText: {
     flex: 1,
-    fontSize: 10,
+    ...typography.text.caption,
     color: colors.primary,
     fontWeight: typography.weight.medium,
   },
@@ -187,7 +185,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   ctaText: {
-    fontSize: typography.size.xs,
+    fontSize: typography.text.caption.fontSize,
     color: colors.primary,
     fontWeight: typography.weight.medium,
   },
