@@ -34,6 +34,25 @@ function normalizeEditorialCopy(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
 }
 
+export function shoppingPriorityGapStatement(label: string, context: string): string {
+  const normalizedLabel = normalizeEditorialCopy(label);
+  const normalizedContext = normalizeEditorialCopy(context);
+  const sentenceCasedLabel = normalizedLabel
+    ? normalizedLabel.charAt(0).toUpperCase() + normalizedLabel.slice(1)
+    : '';
+
+  if (!normalizedContext) return sentenceCasedLabel;
+  if (!sentenceCasedLabel) {
+    return normalizedContext.charAt(0).toUpperCase() + normalizedContext.slice(1);
+  }
+  if (/^[a-z]/.test(normalizedContext)) {
+    return `${sentenceCasedLabel} ${normalizedContext}`;
+  }
+
+  const separator = /[.!?]$/.test(sentenceCasedLabel) ? ' ' : '. ';
+  return `${sentenceCasedLabel}${separator}${normalizedContext}`;
+}
+
 export function shoppingPriorityEditDisplayHeadline(headline: string, priorityLabel: string): string {
   const candidate = normalizeEditorialCopy(headline);
   const wordCount = candidate ? candidate.split(' ').length : 0;

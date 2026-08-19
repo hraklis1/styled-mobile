@@ -1,4 +1,8 @@
-import { parseShoppingPriorityEdit, shoppingPriorityEditDisplayHeadline } from '../shoppingPriorityEdit';
+import {
+  parseShoppingPriorityEdit,
+  shoppingPriorityEditDisplayHeadline,
+  shoppingPriorityGapStatement,
+} from '../shoppingPriorityEdit';
 
 const priority = {
   label: 'Everyday trousers',
@@ -89,4 +93,28 @@ test('keeps concise display headlines and normalizes whitespace', () => {
 test('falls back to the priority label for verbose legacy headlines', () => {
   expect(shoppingPriorityEditDisplayHeadline('Formal shirt options for the test event', 'formal shirt or blouse')).toBe('Formal shirt or blouse');
   expect(shoppingPriorityEditDisplayHeadline('A very long but restrained editorial headline', 'lightweight coat')).toBe('Lightweight coat');
+});
+
+describe('shoppingPriorityGapStatement', () => {
+  test('joins a lowercase context fragment to the sentence-cased priority label', () => {
+    expect(shoppingPriorityGapStatement(
+      'formal shirt or blouse',
+      'to meet the formal dress code.',
+    )).toBe('Formal shirt or blouse to meet the formal dress code.');
+  });
+
+  test('separates a complete capitalized context without rewriting it', () => {
+    expect(shoppingPriorityGapStatement(
+      'everyday trousers',
+      'A dependable foundation would unlock more weekday combinations.',
+    )).toBe('Everyday trousers. A dependable foundation would unlock more weekday combinations.');
+  });
+
+  test('normalizes repeated whitespace and falls back to the label for empty context', () => {
+    expect(shoppingPriorityGapStatement(
+      '  formal   shirt or blouse ',
+      '  to   meet the formal   dress code. ',
+    )).toBe('Formal shirt or blouse to meet the formal dress code.');
+    expect(shoppingPriorityGapStatement('  everyday   trousers ', '   ')).toBe('Everyday trousers');
+  });
 });
