@@ -106,6 +106,11 @@ export const typography = {
       fontSize: 28,
       lineHeight: 34,
     },
+    editorialSection: {
+      fontFamily: editorialFamily.editorialMedium,
+      fontSize: 20,
+      lineHeight: 26,
+    },
     editorialCompact: {
       fontFamily: editorialFamily.editorialMedium,
       fontSize: 22,

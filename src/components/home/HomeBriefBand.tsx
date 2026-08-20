@@ -1,11 +1,12 @@
-import { StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { EditorialSection } from '../primitives/Editorial';
 import { PressableScale } from '../primitives/PressableScale';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useShoppingBrief } from '../../hooks/useShoppingBrief';
-import { colors, spacing, typography } from '../../theme';
+import { colors, spacing } from '../../theme';
+import { AppText } from '../primitives/AppText';
 
 type Props = {
   onPress: () => void;
@@ -36,8 +37,8 @@ export function HomeBriefBand({ onPress, style }: Props) {
   if (!brief || brief.status === 'insufficient_data') return null;
 
   return (
-    <EditorialSection variant="ruled" title="The Read" style={style}>
-      <Text style={styles.headline} numberOfLines={2}>{brief.headline}</Text>
+    <EditorialSection variant="ruled" headingStyle="editorial" title="The Read" style={style}>
+      <AppText variant="editorialCompact" tone="primary" style={styles.headline} numberOfLines={2}>{brief.headline}</AppText>
       <PressableScale
         haptic={false}
         contentStyle={styles.link}
@@ -45,7 +46,7 @@ export function HomeBriefBand({ onPress, style }: Props) {
         accessibilityRole="button"
         accessibilityLabel="Read your full shopping brief"
       >
-        <Text style={styles.linkText}>Read the brief</Text>
+        <AppText variant="label" tone="action">Read the brief</AppText>
         <Ionicons name="arrow-forward" size={13} color={colors.action} />
       </PressableScale>
     </EditorialSection>
@@ -54,9 +55,6 @@ export function HomeBriefBand({ onPress, style }: Props) {
 
 const styles = StyleSheet.create({
   headline: {
-    fontSize: typography.text.sheetTitle.fontSize,
-    lineHeight: 27,
-    color: colors.foreground,
     marginBottom: spacing.sm,
   },
   link: {
@@ -65,10 +63,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 5,
-  },
-  linkText: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.action,
   },
 });

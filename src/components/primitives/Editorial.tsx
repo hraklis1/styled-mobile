@@ -84,6 +84,7 @@ export function EditorialSection({
   actionLabel,
   onAction,
   variant = 'plain',
+  headingStyle = 'default',
   trailing,
   children,
   style,
@@ -99,17 +100,30 @@ export function EditorialSection({
    * eyebrow, for detail screens where sections stack continuously.
    */
   variant?: 'plain' | 'ruled';
+  /**
+   * `default` keeps the section's existing heading treatment.
+   * `editorial` promotes the heading for overview screens with a stronger
+   * scroll hierarchy, while preserving the ruled section structure.
+   */
+  headingStyle?: 'default' | 'editorial';
   /** Rendered in the header row in place of an action, e.g. a status badge. */
   trailing?: ReactNode;
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
   const ruled = variant === 'ruled';
+  const editorialHeading = headingStyle === 'editorial';
 
   return (
     <View style={[ruled ? styles.ruledSection : styles.section, style]}>
       <View style={[styles.sectionHeader, description ? styles.sectionHeaderTight : null]}>
-        <AppText variant={ruled ? 'eyebrow' : 'sectionTitle'} tone={ruled ? 'muted' : 'primary'} style={ruled ? styles.ruledSectionTitle : undefined}>{title}</AppText>
+        <AppText
+          variant={editorialHeading ? 'editorialSection' : ruled ? 'eyebrow' : 'sectionTitle'}
+          tone={editorialHeading || !ruled ? 'primary' : 'muted'}
+          style={editorialHeading ? styles.editorialSectionTitle : ruled ? styles.ruledSectionTitle : undefined}
+        >
+          {title}
+        </AppText>
         {trailing}
         {actionLabel && onAction ? (
           <PressableScale
@@ -380,6 +394,9 @@ const styles = StyleSheet.create({
   // A description carries its own gap to the content below it.
   sectionHeaderTight: { marginBottom: spacing.xs },
   ruledSectionTitle: {
+    flex: 1,
+  },
+  editorialSectionTitle: {
     flex: 1,
   },
   sectionDescription: {

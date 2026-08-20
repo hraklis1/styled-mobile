@@ -749,6 +749,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       {/* ── Featured outfit ────────────────────────────────────── */}
       <EditorialSection
         variant="ruled"
+        headingStyle="editorial"
         title={dailyLookPresentation.kind === 'priority' ? 'Today’s Priority' : 'Today’s Look'}
         actionLabel={dailyLookPresentation.kind === 'owned' || dailyLookPresentation.kind === 'ready' ? 'View all' : undefined}
         onAction={dailyLookPresentation.kind === 'owned' || dailyLookPresentation.kind === 'ready' ? () => navigation.navigate('Closet', {
@@ -950,6 +951,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       {/* ── On the Calendar ───────────────────────────────────────── */}
       <EditorialSection
         variant="ruled"
+        headingStyle="editorial"
         title="On the Calendar"
         actionLabel="View all"
         onAction={() => navigation.navigate('Calendar')}
@@ -1011,7 +1013,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
       {/* ── Your Week in Wear ─────────────────────────────────────── */}
       {logs.length > 0 && (
-        <EditorialSection variant="ruled" title="Your Week in Wear">
+        <EditorialSection variant="ruled" headingStyle="editorial" title="Your Week in Wear">
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -1111,8 +1113,8 @@ const styles = StyleSheet.create({
   },
   nextUpCopy: { flex: 1, gap: 2 },
   nextUpEyebrow: { ...typography.text.eyebrow, color: colors.primary },
-  nextUpTitle: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground },
-  nextUpSubtitle: { fontSize: typography.text.caption.fontSize, lineHeight: 17, color: colors.mutedForeground },
+  nextUpTitle: { ...typography.text.cardTitle, color: colors.foreground },
+  nextUpSubtitle: { ...typography.text.caption, color: colors.mutedForeground },
 
   // Greeting
   headerRow: {
@@ -1155,22 +1157,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 100,
+    ...shadows.xs,
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radii.full,
     borderWidth: 1,
-    borderColor: '#EBE7E0',
+    borderColor: colors.hairline,
     paddingHorizontal: spacing.lg,
-    paddingVertical: 14,
+    paddingVertical: spacing.md,
     marginBottom: spacing.lg,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.09,
-    shadowRadius: 14,
-    elevation: 5,
   },
   stylistPillText: {
+    ...typography.text.body,
     flex: 1,
-    fontSize: typography.text.body.fontSize,
     color: colors.mutedForeground,
   },
   // Flat and quiet, deliberately: the fashion imagery below is what should
@@ -1230,13 +1228,11 @@ const styles = StyleSheet.create({
     backgroundColor: `${colors.primary}0F`,
   },
   wardrobeActionTitle: {
-    fontSize: typography.text.body.fontSize,
-    fontWeight: typography.weight.semibold,
+    ...typography.text.cardTitle,
     color: colors.foreground,
   },
   wardrobeActionSubtitle: {
-    fontSize: typography.text.caption.fontSize,
-    lineHeight: 17,
+    ...typography.text.caption,
     color: colors.mutedForeground,
   },
   wardrobeActionDivider: {
@@ -1268,12 +1264,11 @@ const styles = StyleSheet.create({
   },
   nudgeText: { flex: 1, gap: 2 },
   nudgeTitle: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.semibold,
+    ...typography.text.label,
     color: colors.primary,
   },
   nudgeSub: {
-    fontSize: typography.text.caption.fontSize,
+    ...typography.text.caption,
     color: colors.mutedForeground,
   },
 
@@ -1296,12 +1291,12 @@ const styles = StyleSheet.create({
   },
   emptyText: { flex: 1, gap: 2 },
   emptyTitle: {
-    fontSize: typography.text.bodySmall.fontSize,
+    ...typography.text.bodySmall,
     fontWeight: typography.weight.medium,
     color: colors.mutedForeground,
   },
   emptySubtitle: {
-    fontSize: typography.text.caption.fontSize,
+    ...typography.text.caption,
     color: colors.mutedForeground,
     opacity: 0.7,
   },
@@ -1333,21 +1328,20 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   eventTitle: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.semibold,
+    ...typography.text.cardTitle,
     color: colors.foreground,
-    lineHeight: typography.text.bodySmall.fontSize * 1.35,
   },
   eventDate: {
-    fontSize: typography.text.caption.fontSize,
+    ...typography.text.caption,
     color: colors.mutedForeground,
   },
   eventDateToday: {
+    ...typography.text.caption,
     color: colors.primary,
     fontWeight: typography.weight.semibold,
   },
   eventOccasion: {
-    fontSize: typography.text.caption.fontSize,
+    ...typography.text.caption,
     color: colors.primary,
     textTransform: 'capitalize',
     marginTop: 2,
@@ -1374,8 +1368,8 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   generatedReason: {
+    ...typography.text.caption,
     color: colors.mutedForeground,
-    fontSize: typography.text.caption.fontSize,
   },
   saveLookControl: {
     minHeight: 44,
@@ -1385,9 +1379,8 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   saveLookLabel: {
+    ...typography.text.label,
     color: colors.primary,
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.semibold,
   },
   curatingPlaceholder: {
     minHeight: 120,
@@ -1398,8 +1391,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
   },
   curatingPlaceholderText: {
+    ...typography.text.bodySmall,
     color: colors.mutedForeground,
-    fontSize: typography.text.bodySmall.fontSize,
   },
   // Scrim + overlaid caption path — AI-generated flat lays only. See the
   // comment above where hasFeaturedAiImage is checked in the JSX.
@@ -1453,8 +1446,7 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
   },
   dailyLookExplanationText: {
-    fontSize: typography.text.bodySmall.fontSize,
-    lineHeight: 19,
+    ...typography.text.bodySmall,
     color: colors.mutedForeground,
   },
 
@@ -1472,17 +1464,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyOutfitTitle: {
-    fontSize: typography.text.bodySmall.fontSize,
+    ...typography.text.bodySmall,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
     textAlign: 'center',
   },
   emptyOutfitSub: {
-    fontSize: typography.text.caption.fontSize,
+    ...typography.text.caption,
     color: colors.mutedForeground,
     textAlign: 'center',
     maxWidth: 220,
-    lineHeight: typography.text.caption.fontSize * 1.5,
   },
   emptyOutfitButton: {
     minHeight: 40,
@@ -1493,7 +1484,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     backgroundColor: colors.primary,
   },
-  emptyOutfitButtonText: { color: colors.primaryForeground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold },
+  emptyOutfitButtonText: { ...typography.text.label, color: colors.primaryForeground },
 
   // Your Week in Wear — a diary rail, not a receipt list. Long-press a tile
   // to delete (see confirmDeleteLog); a swipe gesture would fight this
@@ -1503,7 +1494,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   weekTileDate: {
-    fontSize: typography.text.caption.fontSize,
+    ...typography.text.caption,
     fontWeight: typography.weight.medium,
     color: colors.mutedForeground,
   },
