@@ -1,7 +1,7 @@
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import type { StylistWardrobeAuditData } from '../../features/stylist/types';
+import type { StylistMissingEssential, StylistWardrobeAuditData } from '../../features/stylist/types';
 import type { Item } from '../../types/item';
 import { itemImageContentFit, itemImageUri } from '../../lib/itemImage';
 import { colors, radii, spacing, typography } from '../../theme';
@@ -11,7 +11,7 @@ type Props = {
   audit: StylistWardrobeAuditData;
   items: Item[];
   onStyleItem: (itemId: number) => void;
-  onNavigateToShop?: () => void;
+  onNavigateToShop?: (gap?: StylistMissingEssential) => void;
 };
 
 function ItemThumb({ item }: { item: Item }) {
@@ -126,7 +126,7 @@ export function WardrobeAuditCard({ audit, items, onStyleItem, onNavigateToShop 
             {[...audit.investments]
               .sort((a, b) => a.priority - b.priority)
               .map((investment, index) => (
-                <GapCard key={`${investment.label}_${index}`} item={investment} onPress={onNavigateToShop} />
+                <GapCard key={`${investment.label}_${index}`} item={investment} onPress={onNavigateToShop ? () => onNavigateToShop(investment) : undefined} />
               ))}
           </View>
         </View>

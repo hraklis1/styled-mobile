@@ -43,6 +43,7 @@ import { ScreenHeader } from '../../components/primitives/Editorial';
 import { ActionMenuSheet } from '../../components/primitives/ActionMenuSheet';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
+import { shoppingPriorityFromDailyLookGap } from '../../lib/dailyLookPresentation';
 import { ensureEntitled } from '../../lib/entitlementGate';
 import { useGlobalAIStylist, type StylistOpenSource } from '../../contexts/GlobalAIStylistContext';
 import { useGlobalOutfitLogger } from '../../contexts/GlobalOutfitLoggerContext';
@@ -511,16 +512,9 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
           },
         }),
         onNavigateToShop: (gap?: StylistMissingEssential) => {
-          if (!gap) return;
+          if (!gap?.label) return;
           navigation.navigate('Shop', { screen: 'ShoppingPriorityEdit', params: {
-            priority: {
-              label: gap.label,
-              category: gap.category,
-              reason: gap.reason === 'weather' || gap.reason === 'occasion' ? 'occasion' : gap.reason === 'ratio_imbalance' ? 'ratio_imbalance' : 'wardrobe_gap',
-              context: gap.context,
-              priority: gap.priority,
-              unlocks: gap.unlocks ?? [],
-            },
+            priority: shoppingPriorityFromDailyLookGap(gap),
           }});
         },
         context: {

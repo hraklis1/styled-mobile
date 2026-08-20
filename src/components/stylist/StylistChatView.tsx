@@ -1666,7 +1666,7 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
               <Text style={styles.responseSectionTitle}>Closet gaps</Text>
               {[...message.missingEssentials]
                 .sort((a, b) => a.priority - b.priority)
-                .map((item, i) => <GapCard key={i} item={item} onPress={onNavigateToShop} />)}
+                .map((item, i) => <GapCard key={i} item={item} onPress={onNavigateToShop ? () => onNavigateToShop(item) : undefined} />)}
             </View>
           )}
           <ItemDetailSheet item={detailItem} onClose={() => setDetailItem(null)} />

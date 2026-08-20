@@ -674,7 +674,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             params: { outfitId, returnTo: 'Home' },
           }),
           onNavigateToShop: (gap?: StylistMissingEssential) => {
-            if (!gap) return;
+            if (!gap?.label) return;
             navigation.navigate('Shop', { screen: 'ShoppingPriorityEdit', params: {
               priority: shoppingPriorityFromDailyLookGap(gap),
             }});

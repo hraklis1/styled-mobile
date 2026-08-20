@@ -66,7 +66,10 @@ export function GapCard({ item, onPress, ctaLabel = 'Shop', style }: GapCardProp
   return (
     <Container
       style={[styles.card, emphasized && styles.cardEmphasized, style]}
-      {...(onPress ? { onPress, activeOpacity: 0.78, accessibilityRole: 'button' as const } : {})}
+      // Wrapped rather than passed straight through: TouchableOpacity invokes
+      // its handler with the gesture event, and a caller whose handler takes a
+      // gap argument would silently receive that event instead.
+      {...(onPress ? { onPress: () => onPress(), activeOpacity: 0.78, accessibilityRole: 'button' as const } : {})}
     >
       <View style={[styles.iconWrap, emphasized && styles.iconWrapEmphasized]}>
         <Ionicons name={categoryIcon(item.category)} size={18} color={colors.primary} />
