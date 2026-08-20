@@ -4,7 +4,7 @@ import type { ShoppingPriorityTarget } from '../../lib/shoppingPriorityEdit';
 
 export type StylistRole = 'user' | 'assistant';
 
-export type StylistMode = 'from_closet' | 'event_plan' | 'shop_new' | 'shop_piece' | 'shop_list' | 'advice' | 'trip' | 'wardrobe_audit';
+export type StylistMode = 'from_closet' | 'event_plan' | 'shop_new' | 'shop_piece' | 'shop_list' | 'advice' | 'trip' | 'wardrobe_audit' | 'knowledge';
 
 export type StylistRenderType =
   | 'text'

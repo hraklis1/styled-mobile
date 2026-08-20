@@ -168,12 +168,28 @@ const CHIPS_AUDIT = [
   'How can I get more from what I own?',
 ];
 
+// Advice and knowledge both render as prose. Knowledge answers a clothing
+// question (care, sizing, dress codes) with no wardrobe attached; advice answers
+// one about the wardrobe. Neither is an editable outfit card, so they share a
+// render path — this predicate keeps the four dispatch sites in agreement.
+function isProseMode(mode: StylistMode | undefined): boolean {
+  return mode === 'advice' || mode === 'knowledge';
+}
+
+const CHIPS_KNOWLEDGE = [
+  'How should I store it?',
+  'Is it worth repairing?',
+  'Build an outfit around it',
+  "What's missing from my closet?",
+];
+
 function useContextualChips(lastMessage: ChatMessage | undefined, entryContext?: StylistEntryContext): string[] {
   return useMemo(() => {
     if (entryContext?.kind === 'shopping_brief_edit') return ['Which option is most versatile?', 'Make these more polished.', 'Keep this within my budget.'];
     if (!lastMessage || lastMessage.role !== 'assistant') return CHIPS_DEFAULT;
     if (lastMessage.wardrobeAudit || lastMessage.mode === 'wardrobe_audit') return CHIPS_AUDIT;
     if (lastMessage.tripPlan || lastMessage.mode === 'trip') return CHIPS_TRIP;
+    if (lastMessage.mode === 'knowledge') return CHIPS_KNOWLEDGE;
     if (lastMessage.mode === 'advice') return CHIPS_ADVICE;
     if (lastMessage.shopOutfit) return CHIPS_SHOP;
     if (lastMessage.suggestedItemIds?.length) return CHIPS_CLOSET;
@@ -216,7 +232,7 @@ function renderTypeForAssistantPayload(payload?: ServerMessagePayload | null): S
   if (payload?.wardrobeAudit) return 'wardrobe_audit';
   if (payload?.tripPlan) return 'trip_plan';
   if (payload?.shopOutfit) return 'shopping_outfit';
-  if (payload?.mode === 'advice') return 'advice';
+  if (isProseMode(payload?.mode)) return 'advice';
   if (payload?.itemIds?.length || payload?.eventPlan || payload?.readinessStatus === 'incomplete' || payload?.readinessStatus === 'needs_clarification') return 'closet_outfit';
   return 'text';
 }
@@ -232,7 +248,7 @@ function renderTypeForAssistantMessage(message: {
   if (message.wardrobeAudit) return 'wardrobe_audit';
   if (message.tripPlan) return 'trip_plan';
   if (message.shopOutfit) return 'shopping_outfit';
-  if (message.mode === 'advice') return 'advice';
+  if (isProseMode(message.mode)) return 'advice';
   if (message.suggestedItemIds?.length || message.readinessStatus === 'incomplete' || message.readinessStatus === 'needs_clarification') return 'closet_outfit';
   return 'text';
 }
@@ -661,7 +677,7 @@ export function StylistChatView({
             ? 'closet_outfit'
           : shopOutfit
             ? 'shopping_outfit'
-            : respMode === 'advice'
+            : isProseMode(respMode)
               ? 'advice'
               : itemIds?.length
                 ? 'closet_outfit'
@@ -1608,13 +1624,13 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
 
   // Advice / wardrobe audit — rich text (allows bullets) plus any referenced
   // wardrobe thumbnails and gap chips. Never an editable outfit card.
-  if (!isUser && message.mode === 'advice') {
+  if (!isUser && isProseMode(message.mode)) {
     return (
       <EditorialEntrance>
         <View style={styles.stylistNote}>
           <View style={styles.sectionEyebrow}>
             <Ionicons name="sparkles" size={13} color={colors.primary} />
-            <Text style={styles.sectionEyebrowText}>{message.boardAction === 'theme' ? 'Board direction' : message.boardAction === 'complete' ? 'Board edit' : 'My take'}</Text>
+            <Text style={styles.sectionEyebrowText}>{message.boardAction === 'theme' ? 'Board direction' : message.boardAction === 'complete' ? 'Board edit' : message.mode === 'knowledge' ? 'Good to know' : 'My take'}</Text>
           </View>
           <StylistRichText text={message.text} streaming={message.isStreaming} />
           {!!message.suggestedItemIds?.length && (
