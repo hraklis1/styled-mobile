@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { PressableScale } from '../primitives/PressableScale';
 import { garmentFriendlyContentFit } from '../../lib/shoppingPresentation';
-import { colors, radii, shadows, spacing, typography } from '../../theme';
+import { colors, radii, spacing, typography } from '../../theme';
 import type { ShoppingEditItem } from '../../lib/shoppingGallery';
 
 const THUMB_LIMIT = 3;
@@ -35,7 +35,6 @@ export function ShortlistDecisionCard({ items, storeNames, onPress, style }: Pro
       accessibilityRole="button"
       accessibilityLabel={`The shortlist. ${items.length} piece${items.length === 1 ? '' : 's'} waiting on a decision. Opens your shortlist`}
     >
-      <Text style={styles.eyebrow}>The shortlist</Text>
       <View style={styles.row}>
         <View style={[styles.stack, { width: 34 + (thumbs.length - 1) * 18 }]}>
           {thumbs.map((item, index) => (
@@ -64,26 +63,13 @@ export function ShortlistDecisionCard({ items, storeNames, onPress, style }: Pro
 }
 
 const styles = StyleSheet.create({
-  // Sits directly under Home's closet card, so it wears the same frame and
-  // takes its width from the page padding rather than adding its own margin.
+  // The flat tint block Home uses for every non-image container. Its
+  // "The Shortlist" label lives on the section header above it, not inside.
   card: {
     overflow: 'hidden',
     borderRadius: radii.xl,
     borderCurve: 'continuous',
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceElevated,
-    ...shadows.sm,
-  },
-  eyebrow: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xs,
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.semibold,
-    letterSpacing: typography.tracking.eyebrow,
-    textTransform: 'uppercase',
-    color: colors.primary,
+    backgroundColor: colors.surfaceSubtle,
   },
   row: {
     minHeight: 72,
@@ -103,10 +89,10 @@ const styles = StyleSheet.create({
     borderRadius: radii.sm,
     borderCurve: 'continuous',
     borderWidth: 1.5,
-    borderColor: colors.surfaceElevated,
-    backgroundColor: colors.surfaceSubtle,
+    borderColor: colors.surfaceSubtle,
+    backgroundColor: colors.muted,
   },
   copy: { flex: 1, gap: 2 },
-  title: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground },
-  subtitle: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
+  title: { ...typography.text.cardTitle, color: colors.foreground },
+  subtitle: { ...typography.text.caption, color: colors.mutedForeground },
 });

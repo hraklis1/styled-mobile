@@ -102,8 +102,11 @@ export function EditorialSection({
   variant?: 'plain' | 'ruled';
   /**
    * `default` keeps the section's existing heading treatment.
-   * `editorial` promotes the heading for overview screens with a stronger
-   * scroll hierarchy, while preserving the ruled section structure.
+   * `editorial` is the department-label treatment for overview screens: a
+   * small tracked uppercase label over a visible rule. It deliberately does
+   * *not* compete on size with the serif ledes inside the section — the
+   * label is findable because nothing else on the page looks like it, not
+   * because it is the biggest thing around.
    */
   headingStyle?: 'default' | 'editorial';
   /** Rendered in the header row in place of an action, e.g. a status badge. */
@@ -115,11 +118,18 @@ export function EditorialSection({
   const editorialHeading = headingStyle === 'editorial';
 
   return (
-    <View style={[ruled ? styles.ruledSection : styles.section, style]}>
-      <View style={[styles.sectionHeader, description ? styles.sectionHeaderTight : null]}>
+    <View style={[
+      editorialHeading ? styles.editorialSection : ruled ? styles.ruledSection : styles.section,
+      style,
+    ]}>
+      <View style={[
+        styles.sectionHeader,
+        editorialHeading ? styles.editorialSectionHeader : null,
+        description ? styles.sectionHeaderTight : null,
+      ]}>
         <AppText
-          variant={editorialHeading ? 'editorialSection' : ruled ? 'eyebrow' : 'sectionTitle'}
-          tone={editorialHeading || !ruled ? 'primary' : 'muted'}
+          variant={editorialHeading ? 'eyebrowLarge' : ruled ? 'eyebrow' : 'sectionTitle'}
+          tone={editorialHeading ? 'muted' : ruled ? 'muted' : 'primary'}
           style={editorialHeading ? styles.editorialSectionTitle : ruled ? styles.ruledSectionTitle : undefined}
         >
           {title}
@@ -383,6 +393,21 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xl,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.hairline,
+  },
+  // The editorial heading carries its own rule *under* the label, so the
+  // section takes none at the top — one line per boundary, not two. The
+  // asymmetric padding binds the label to the content it introduces.
+  editorialSection: {
+    paddingTop: spacing.xxl,
+    paddingBottom: spacing.lg,
+  },
+  editorialSectionHeader: {
+    minHeight: 22,
+    alignItems: 'flex-end',
+    paddingBottom: spacing.sm,
+    marginBottom: spacing.lg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   sectionHeader: {
     minHeight: 28,

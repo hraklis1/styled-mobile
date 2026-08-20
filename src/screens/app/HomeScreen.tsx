@@ -809,7 +809,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                 accessibilityLabel={candidateGap ? `Find ${candidateGap.label}, suggested and not in your closet` : 'Save look'}
                 accessibilityHint={candidateGap ? 'Open a shopping edit for this missing piece' : 'Save this curated look to your outfits'}
               >
-                <Ionicons name={candidateGap ? 'search-outline' : 'bookmark-outline'} size={17} color={colors.primary} />
+                <Ionicons name={candidateGap ? 'search-outline' : 'bookmark-outline'} size={17} color={colors.action} />
                 <Text style={styles.saveLookLabel}>{candidateGap ? `Find ${candidateGap.label.replaceAll('_', ' ')}` : 'Save look'}</Text>
               </PressableScale>
             </View>
@@ -899,7 +899,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         )}
         {featuredExplanation ? (
           <View style={styles.dailyLookExplanation} accessible accessibilityLabel={`Why this look: ${featuredExplanation}`}>
-            <Text style={styles.dailyLookExplanationLabel}>WHY THIS LOOK</Text>
+            <Text style={styles.dailyLookExplanationLabel}>Why this look</Text>
             <Text style={styles.dailyLookExplanationText} numberOfLines={3}>{featuredExplanation}</Text>
           </View>
         ) : null}
@@ -913,39 +913,43 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         }}
       />
 
-      {/* ── Next up ── */}
+      {/* ── The shortlist / Next up ──────────────────────────────
+          One slot, one section header. The card underneath carries no
+          label of its own — the section owns that job now. */}
       {shortlist.awaitingDecision.length > 0 ? (
-        <ShortlistDecisionCard
-          items={shortlist.awaitingDecision}
-          storeNames={shortlist.decisionStores}
-          style={styles.shortlistCard}
-          onPress={() => {
-            track('shop_section_opened', { section: 'home_shortlist' });
-            navigation.navigate('Shop', {
-              screen: 'ShoppingGallery',
-              params: { catalogFilter: 'active', returnTo: 'Home' },
-            });
-          }}
-        />
+        <EditorialSection variant="ruled" headingStyle="editorial" title="The Shortlist">
+          <ShortlistDecisionCard
+            items={shortlist.awaitingDecision}
+            storeNames={shortlist.decisionStores}
+            onPress={() => {
+              track('shop_section_opened', { section: 'home_shortlist' });
+              navigation.navigate('Shop', {
+                screen: 'ShoppingGallery',
+                params: { catalogFilter: 'active', returnTo: 'Home' },
+              });
+            }}
+          />
+        </EditorialSection>
       ) : showNextUpCard ? (
-        <PressableScale
-          contentStyle={styles.nextUpCard}
-          onPress={() => navigation.navigate('Calendar', { eventId: nextUpEvent!.id })}
-          accessibilityRole="button"
-          accessibilityLabel={`${nextUpEvent!.title}, ${formatEventDate(nextUpEvent!.date)}. Open in Calendar`}
-        >
-          <View style={styles.nextUpIcon}>
-            <Ionicons name="calendar-outline" size={18} color={colors.primary} />
-          </View>
-          <View style={styles.nextUpCopy}>
-            <Text style={styles.nextUpEyebrow}>Next up</Text>
-            <Text style={styles.nextUpTitle} numberOfLines={1}>{nextUpEvent!.title}</Text>
-            <Text style={styles.nextUpSubtitle}>
-              {nextUpEvent!.outfitId || (nextUpEvent!.itemIds?.length ?? 0) > 0 ? 'Your look is planned' : 'Plan a look for your next occasion'} · {formatEventDate(nextUpEvent!.date)}
-            </Text>
-          </View>
-          <Ionicons name="arrow-forward" size={17} color={colors.primary} />
-        </PressableScale>
+        <EditorialSection variant="ruled" headingStyle="editorial" title="Next Up">
+          <PressableScale
+            contentStyle={styles.nextUpCard}
+            onPress={() => navigation.navigate('Calendar', { eventId: nextUpEvent!.id })}
+            accessibilityRole="button"
+            accessibilityLabel={`${nextUpEvent!.title}, ${formatEventDate(nextUpEvent!.date)}. Open in Calendar`}
+          >
+            <View style={styles.nextUpIcon}>
+              <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+            </View>
+            <View style={styles.nextUpCopy}>
+              <Text style={styles.nextUpTitle} numberOfLines={1}>{nextUpEvent!.title}</Text>
+              <Text style={styles.nextUpSubtitle}>
+                {nextUpEvent!.outfitId || (nextUpEvent!.itemIds?.length ?? 0) > 0 ? 'Your look is planned' : 'Plan a look for your next occasion'} · {formatEventDate(nextUpEvent!.date)}
+              </Text>
+            </View>
+            <Ionicons name="arrow-forward" size={17} color={colors.primary} />
+          </PressableScale>
+        </EditorialSection>
       ) : null}
 
       {/* ── On the Calendar ───────────────────────────────────────── */}
@@ -997,11 +1001,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                     <Ionicons name={iconName} size={18} color={colors.primary} />
                   </View>
                   <Text style={styles.eventTitle} numberOfLines={2}>{event.title.trim()}</Text>
-                  <Text style={[styles.eventDate, isToday && styles.eventDateToday]}>
-                    {formatEventDate(event.date)}
-                  </Text>
-                  <Text style={styles.eventOccasion}>
-                    {event.occasion.replace('_', ' ')}
+                  <Text style={[styles.eventMeta, isToday && styles.eventMetaToday]} numberOfLines={1}>
+                    {formatEventDate(event.date)} · {event.occasion.replace('_', ' ')}
                   </Text>
                 </PressableScale>
               );
@@ -1092,12 +1093,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: SIDE_PAD,
     paddingBottom: spacing.xxxl * 2,
   },
-  shortlistCard: { marginBottom: spacing.xl },
   nextUpCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    marginBottom: spacing.xl,
     padding: spacing.md,
     borderRadius: radii.xl,
     borderCurve: 'continuous',
@@ -1112,7 +1111,6 @@ const styles = StyleSheet.create({
     backgroundColor: `${colors.primary}15`,
   },
   nextUpCopy: { flex: 1, gap: 2 },
-  nextUpEyebrow: { ...typography.text.eyebrow, color: colors.primary },
   nextUpTitle: { ...typography.text.cardTitle, color: colors.foreground },
   nextUpSubtitle: { ...typography.text.caption, color: colors.mutedForeground },
 
@@ -1177,7 +1175,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceSubtle,
     borderRadius: radii.xl,
     borderCurve: 'continuous',
-    marginBottom: spacing.xl,
     overflow: 'hidden',
   },
   wardrobeAction: {
@@ -1278,7 +1275,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
     backgroundColor: colors.surfaceSubtle,
-    borderRadius: radii.lg,
+    borderRadius: radii.xl,
+    borderCurve: 'continuous',
     padding: spacing.lg,
   },
   emptyIcon: {
@@ -1291,8 +1289,7 @@ const styles = StyleSheet.create({
   },
   emptyText: { flex: 1, gap: 2 },
   emptyTitle: {
-    ...typography.text.bodySmall,
-    fontWeight: typography.weight.medium,
+    ...typography.text.cardTitle,
     color: colors.mutedForeground,
   },
   emptySubtitle: {
@@ -1304,20 +1301,20 @@ const styles = StyleSheet.create({
   // Events carousel
   carousel: { marginHorizontal: -SIDE_PAD },
   carouselContent: { paddingHorizontal: SIDE_PAD, gap: COL_GAP },
+  // Flat tint, no border and no shadow: the same container the wardrobe
+  // actions and Next Up wear. Home has exactly two container shapes —
+  // full-bleed image, and this.
   eventCard: {
     width: 148,
-    height: 152,
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
+    height: 128,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radii.xl,
+    borderCurve: 'continuous',
     padding: spacing.md,
     gap: 4,
-    ...shadows.sm,
   },
   eventCardToday: {
-    borderColor: `${colors.primary}40`,
-    backgroundColor: `${colors.primary}05`,
+    backgroundColor: colors.surfaceSelected,
   },
   eventIcon: {
     width: 36,
@@ -1331,20 +1328,14 @@ const styles = StyleSheet.create({
     ...typography.text.cardTitle,
     color: colors.foreground,
   },
-  eventDate: {
+  eventMeta: {
     ...typography.text.caption,
     color: colors.mutedForeground,
+    textTransform: 'capitalize',
   },
-  eventDateToday: {
-    ...typography.text.caption,
+  eventMetaToday: {
     color: colors.primary,
     fontWeight: typography.weight.semibold,
-  },
-  eventOccasion: {
-    ...typography.text.caption,
-    color: colors.primary,
-    textTransform: 'capitalize',
-    marginTop: 2,
   },
 
   // Today's Look hero — full-bleed against the screen's own SIDE_PAD inset,
@@ -1380,7 +1371,7 @@ const styles = StyleSheet.create({
   },
   saveLookLabel: {
     ...typography.text.label,
-    color: colors.primary,
+    color: colors.action,
   },
   curatingPlaceholder: {
     minHeight: 120,
@@ -1391,7 +1382,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
   },
   curatingPlaceholderText: {
-    ...typography.text.bodySmall,
+    ...typography.text.caption,
     color: colors.mutedForeground,
   },
   // Scrim + overlaid caption path — AI-generated flat lays only. See the
@@ -1411,7 +1402,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   featuredEyebrowOverlay: {
-    ...typography.text.eyebrow,
+    ...typography.text.caption,
     color: colors.white,
   },
   featuredOutfitNameOverlay: {
@@ -1425,9 +1416,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: SIDE_PAD,
     paddingTop: spacing.md,
   },
+  // Sentence-case meta. Uppercase tracked type is reserved for section
+  // labels now, so it stays a reliable signal for "a new section starts here".
   featuredEyebrow: {
-    ...typography.text.eyebrow,
-    color: colors.primary,
+    ...typography.text.caption,
+    color: colors.mutedForeground,
   },
   featuredOutfitName: {
     ...typography.text.editorialTitle,
@@ -1442,12 +1435,12 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
   },
   dailyLookExplanationLabel: {
-    ...typography.text.eyebrow,
-    color: colors.mutedForeground,
+    ...typography.text.label,
+    color: colors.foreground,
   },
   dailyLookExplanationText: {
-    ...typography.text.bodySmall,
-    color: colors.mutedForeground,
+    ...typography.text.body,
+    color: colors.inkSubtle,
   },
 
   // Empty outfits
@@ -1464,8 +1457,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyOutfitTitle: {
-    ...typography.text.bodySmall,
-    fontWeight: typography.weight.medium,
+    ...typography.text.cardTitle,
     color: colors.foreground,
     textAlign: 'center',
   },

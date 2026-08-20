@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SplashScreen from 'expo-splash-screen';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  CommonActions,
   NavigationContainer,
   LinkingOptions,
   getFocusedRouteNameFromRoute,
@@ -11,6 +12,7 @@ import {
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import {
   createBottomTabNavigator,
+  type BottomTabNavigationProp,
   type BottomTabNavigationOptions,
 } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
@@ -276,6 +278,25 @@ function AppTabNavigator() {
     void markShortcutCoachSeen(userId);
   }, [userId]);
 
+  const openShopHome = useCallback((navigation: BottomTabNavigationProp<AppTabParamList>) => {
+    const shopRoute = navigation.getState().routes.find((route) => route.name === 'Shop');
+    const shopStackKey = shopRoute?.state?.key;
+
+    if (shopStackKey) {
+      navigation.dispatch({
+        ...CommonActions.reset({
+          index: 0,
+          routes: [{ name: 'ShopMain' }],
+        }),
+        target: shopStackKey,
+      });
+      navigation.navigate('Shop');
+      return;
+    }
+
+    navigation.navigate('Shop', { screen: 'ShopMain' });
+  }, []);
+
   // Once per signed-in session, migrate any legacy on-device wishlist to the server.
   useEffect(() => {
     void syncLocalWishlistToServer();
@@ -444,6 +465,10 @@ function AppTabNavigator() {
                 : baseTabBarStyle,
           })}
           listeners={({ navigation }) => ({
+            tabPress: (event) => {
+              event.preventDefault();
+              openShopHome(navigation);
+            },
             tabLongPress: () => {
               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               setQuickMenu({
@@ -452,9 +477,9 @@ function AppTabNavigator() {
                 options: [
                   {
                     key: 'overview',
-                    label: 'Shopping Brief',
+                    label: 'Shop home',
                     icon: 'bag-outline',
-                    onPress: () => navigation.navigate('Shop', { screen: 'ShopMain' }),
+                    onPress: () => openShopHome(navigation),
                   },
                   {
                     key: 'saved-looks',

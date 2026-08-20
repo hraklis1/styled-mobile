@@ -123,11 +123,18 @@ APP_PATH="$MOBILE_DIR/ios/build/Build/Products/Debug-iphonesimulator/$SCHEME.app
 # Make sure Metro is up before launching so the JS bundle loads.
 if ! curl -s -o /dev/null "http://localhost:8081/status"; then
   log "Starting Metro bundler in the background (logs: /tmp/styled-metro.log)"
-  ( nohup npm start >/tmp/styled-metro.log 2>&1 & )
+  # The simulator-launched binary uses Expo's default localhost dev-server
+  # URL. Keep Metro in localhost mode so the server and client agree on the
+  # address instead of starting LAN mode and then launching without its URL.
+  ( nohup npm start -- --localhost >/tmp/styled-metro.log 2>&1 & )
   for _ in $(seq 1 20); do
     curl -s -o /dev/null "http://localhost:8081/status" && break
     sleep 1
   done
+  if ! curl -s -o /dev/null "http://localhost:8081/status"; then
+    log "Metro did not become ready; see /tmp/styled-metro.log"
+    exit 1
+  fi
 fi
 
 log "Installing and launching $APP_BUNDLE_ID"
