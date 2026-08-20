@@ -53,6 +53,14 @@ export function shoppingPriorityGapStatement(label: string, context: string): st
   if (!sentenceCasedLabel) {
     return normalizedContext.charAt(0).toUpperCase() + normalizedContext.slice(1);
   }
+  const contextRemainder = normalizedContext.slice(normalizedLabel.length);
+  if (
+    normalizedLabel
+    && normalizedContext.toLocaleLowerCase().startsWith(normalizedLabel.toLocaleLowerCase())
+    && (contextRemainder.length === 0 || /^[\s.,:;!?—-]/.test(contextRemainder))
+  ) {
+    return normalizedContext;
+  }
   if (/^[a-z]/.test(normalizedContext)) {
     return `${sentenceCasedLabel} ${normalizedContext}`;
   }

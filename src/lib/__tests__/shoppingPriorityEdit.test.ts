@@ -110,6 +110,13 @@ test('falls back to the priority label for verbose legacy headlines', () => {
 });
 
 describe('shoppingPriorityGapStatement', () => {
+  test('does not repeat a label already included at the start of the context', () => {
+    expect(shoppingPriorityGapStatement(
+      'versatile mid-rise trousers',
+      'Versatile mid-rise trousers would create 72 new outfits from pieces you already own.',
+    )).toBe('Versatile mid-rise trousers would create 72 new outfits from pieces you already own.');
+  });
+
   test('joins a lowercase context fragment to the sentence-cased priority label', () => {
     expect(shoppingPriorityGapStatement(
       'formal shirt or blouse',
