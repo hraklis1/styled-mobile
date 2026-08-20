@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { useEventWeatherForecast, type WeatherCondition } from '../../hooks/useWeather';
+import { useEventWeatherForecast } from '../../hooks/useWeather';
 import type { StylingLocationContext } from '../../lib/stylingLocation';
 import { useTempUnit } from '../../hooks/useTempUnit';
 import { formatTempRange } from '../../lib/temperature';
@@ -24,16 +24,9 @@ import type { Item } from '../../types/item';
 import type { Event } from '../../types/event';
 import type { Outfit } from '../../types/outfit';
 import { getEventItemsActionLabel, getEventPlanActionLabel } from './calendarPlanning';
-import { presentCalendarEvent, presentEventNotes } from './calendar-presentation';
+import { presentCalendarEvent, presentEventNotes, WEATHER_ICONS } from './calendar-presentation';
 import { PressableScale } from '../primitives/PressableScale';
 import { ActionMenuSheet } from '../primitives/ActionMenuSheet';
-
-const WEATHER_ICONS: Record<WeatherCondition, keyof typeof Ionicons.glyphMap> = {
-  sunny: 'sunny-outline',
-  rainy: 'rainy-outline',
-  cold: 'snow-outline',
-  mild: 'partly-sunny-outline',
-};
 
 export function EventDetailModal({
   event,

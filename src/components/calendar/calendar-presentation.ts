@@ -1,10 +1,21 @@
+import type { Ionicons } from '@expo/vector-icons';
 import type { Event } from '../../types/event';
 import type { Item } from '../../types/item';
+import type { WeatherCondition } from '../../hooks/useWeather';
 import { itemCoverPresentation } from '../../lib/itemImage';
 import { getOutfitCategoryPriority } from '../outfits/outfitMosaic';
 
 const URL_PATTERN = /https?:\/\/[^\s]+/gi;
 const TRAILING_URL_PUNCTUATION = /[),.;!?]+$/;
+
+// Shared between NextEventHero and EventDetailModal so the two surfaces never
+// drift on which glyph a forecast condition gets.
+export const WEATHER_ICONS: Record<WeatherCondition, keyof typeof Ionicons.glyphMap> = {
+  sunny: 'sunny-outline',
+  rainy: 'rainy-outline',
+  cold: 'snow-outline',
+  mild: 'partly-sunny-outline',
+};
 
 export type EventSourceLink = {
   url: string;

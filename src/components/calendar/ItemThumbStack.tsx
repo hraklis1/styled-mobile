@@ -1,34 +1,46 @@
-import { View, TouchableOpacity, Image, Text, StyleSheet } from 'react-native';
-import { colors, typography } from '../../theme';
+import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { colors, typography, radii, editorial } from '../../theme';
 import type { Item } from '../../types/item';
-import { itemCoverPresentation } from '../../lib/itemImage';
+import { GarmentImage } from '../wardrobe/garment-image';
+
+// Portrait, not circular — a garment cropped into a circle loses its
+// silhouette, which is the one thing a thumbnail needs to convey.
+const THUMB_WIDTH = 26;
+const THUMB_HEIGHT = Math.round(THUMB_WIDTH / editorial.garmentAspectRatio);
 
 export function ItemThumbStack({
   itemIds,
-  allItems,
+  itemsById,
   onPress,
 }: {
   itemIds: number[];
-  allItems: Item[];
+  itemsById: Map<number, Item>;
   onPress?: () => void;
 }) {
-  const visible = itemIds
-    .map((id) => allItems.find((i) => i.id === id))
-    .filter(Boolean)
-    .slice(0, 3) as Item[];
+  const visible = itemIds.slice(0, 3);
   const overflow = itemIds.length - 3;
   if (visible.length === 0) return null;
+
   const content = (
     <>
       <View style={s.stack}>
-        {visible.map((item, idx) => {
-          const cover = itemCoverPresentation(item);
-          return (
-            <View key={item.id} style={[s.thumb, { marginLeft: idx === 0 ? 0 : -8, zIndex: visible.length - idx }]}>
-              {cover.uri
-                ? <Image source={{ uri: cover.uri }} style={s.thumbImg} resizeMode={cover.contentFit} />
-                : <View style={s.thumbFallback}><Text style={s.thumbInitials}>{item.name.slice(0, 2).toUpperCase()}</Text></View>
-              }
+        {visible.map((id, idx) => {
+          const item = itemsById.get(id);
+          const overlap = { marginLeft: idx === 0 ? 0 : -10, zIndex: visible.length - idx };
+          return item ? (
+            <GarmentImage
+              key={id}
+              item={item}
+              width={THUMB_WIDTH}
+              height={THUMB_HEIGHT}
+              borderRadius={radii.sm}
+              placeholderIconSize={13}
+              style={[s.thumbBorder, overlap]}
+            />
+          ) : (
+            <View key={id} style={[s.thumbFallback, s.thumbBorder, overlap, { width: THUMB_WIDTH, height: THUMB_HEIGHT, borderRadius: radii.sm }]}>
+              <Ionicons name="help-outline" size={13} color={colors.mutedForeground} />
             </View>
           );
         })}
@@ -51,16 +63,10 @@ export function ItemThumbStack({
 const s = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   stack: { flexDirection: 'row' },
-  thumb: {
-    width: 28, height: 28, borderRadius: 14,
-    borderWidth: 2, borderColor: colors.card,
-    overflow: 'hidden',
-  },
-  thumbImg: { width: '100%', height: '100%' },
+  thumbBorder: { borderWidth: 2, borderColor: colors.card },
   thumbFallback: {
-    width: '100%', height: '100%',
-    backgroundColor: colors.muted, alignItems: 'center', justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.muted,
   },
-  thumbInitials: { ...typography.text.caption, fontWeight: typography.weight.bold, color: colors.mutedForeground },
   overflow: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground, fontWeight: typography.weight.medium },
 });

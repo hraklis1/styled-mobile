@@ -2,7 +2,7 @@ jest.mock('../../../lib/api', () => ({
   API_BASE_URL: 'https://api.styled.test',
 }));
 
-import { presentCalendarEvent, presentEventLook, presentEventNotes } from '../calendar-presentation';
+import { presentCalendarEvent, presentEventLook, presentEventNotes, WEATHER_ICONS } from '../calendar-presentation';
 import type { Event } from '../../../types/event';
 import type { Item } from '../../../types/item';
 
@@ -31,6 +31,29 @@ describe('calendar presentation', () => {
       readinessLabel: 'Outfit planned',
       readinessShortLabel: 'Planned',
     }));
+  });
+
+  // NextEventHero and the list rows both render monthLabel/dayLabel directly,
+  // but nothing asserted their format before this — a midday UTC timestamp
+  // keeps the case timezone-safe across CI runners.
+  it('formats the hero date block as a short month and bare day number', () => {
+    expect(presentCalendarEvent({ ...baseEvent, date: '2026-10-11T15:00:00.000Z' })).toEqual(
+      expect.objectContaining({ monthLabel: 'OCT', dayLabel: '11' }),
+    );
+    expect(presentCalendarEvent({ ...baseEvent, date: '2026-01-05T15:00:00.000Z' })).toEqual(
+      expect.objectContaining({ monthLabel: 'JAN', dayLabel: '5' }),
+    );
+  });
+
+  // Shared between NextEventHero and EventDetailModal so the two surfaces
+  // can't silently drift on which glyph a forecast condition gets.
+  it('maps every weather condition to an icon', () => {
+    expect(WEATHER_ICONS).toEqual({
+      sunny: 'sunny-outline',
+      rainy: 'rainy-outline',
+      cold: 'snow-outline',
+      mild: 'partly-sunny-outline',
+    });
   });
 
   it('separates imported Google links from readable notes', () => {

@@ -1,6 +1,7 @@
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useEventWeatherForecast, type WeatherCondition } from '../../hooks/useWeather';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useEventWeatherForecast } from '../../hooks/useWeather';
 import type { StylingLocationContext } from '../../lib/stylingLocation';
 import { useTempUnit } from '../../hooks/useTempUnit';
 import { formatTempRange } from '../../lib/temperature';
@@ -11,20 +12,13 @@ import {
   formatCountdown,
   formatTime,
 } from './calendarUtils';
-import { colors, spacing, typography, radii } from '../../theme';
+import { colors, spacing, typography, radii, editorial } from '../../theme';
 import type { Item } from '../../types/item';
 import type { Event } from '../../types/event';
 import type { Outfit } from '../../types/outfit';
 import { getEventPlanActionLabel } from './calendarPlanning';
 import { presentCalendarEvent } from './calendar-presentation';
 import { PressableScale } from '../primitives/PressableScale';
-
-const WEATHER_ICONS: Record<WeatherCondition, keyof typeof Ionicons.glyphMap> = {
-  sunny: 'sunny-outline',
-  rainy: 'rainy-outline',
-  cold: 'snow-outline',
-  mild: 'partly-sunny-outline',
-};
 
 export function NextEventHero({
   event,
@@ -45,6 +39,9 @@ export function NextEventHero({
   onOpenOutfit: () => void;
   isPlanning: boolean;
 }) {
+  const { width: heroWidth } = useWindowDimensions();
+  const heroHeight = Math.round(heroWidth / editorial.lifestyleAspectRatio);
+
   const forecast = useEventWeatherForecast(
     event.location,
     weatherFallback,
@@ -54,105 +51,87 @@ export function NextEventHero({
 
   const d = new Date(event.date);
   const dayLabel = formatDayLabel(d);
-  const badge = formatCountdown(d) ?? (dayLabel === 'Today' || dayLabel === 'Tomorrow' ? dayLabel : null);
+  const countdown = formatCountdown(d) ?? (dayLabel === 'Today' || dayLabel === 'Tomorrow' ? dayLabel : null);
+  const eyebrowLine = countdown ? `Up next · ${countdown}` : 'Up next';
   const occasionMeta = OCCASIONS.find((o) => o.id === event.occasion);
   const presentation = presentCalendarEvent(event);
   const hasOutfit = presentation.hasOutfit;
   const pieceCount = event.itemIds?.length ?? 0;
+  // Only scrim a real photo — a flat mosaic (or the empty placeholder) has no
+  // depth for a dark-to-transparent ramp to sit against and it bands. Same
+  // rule Home's "Today's Look" hero uses.
+  const scrimmed = !!outfit?.aiGeneratedImageUrl;
+
+  const contextParts = [
+    occasionMeta?.label,
+    forecast.data ? formatTempRange(forecast.data, tempUnit) : null,
+    event.location,
+  ].filter((part): part is string => !!part);
+
+  const openOutfitLabel = `${event.outfitId == null ? 'View details' : 'View outfit'} for ${event.title}, ${presentation.readinessLabel}, ${pieceCount} ${pieceCount === 1 ? 'piece' : 'pieces'}`;
+  const openDetailLabel = `Next event: ${event.title}, ${presentation.readinessLabel}`;
 
   return (
     <View style={s.card}>
-      <TouchableOpacity
-        style={s.eventButton}
-        onPress={onPress}
-        activeOpacity={0.82}
+      {/*
+        Two independent tap targets, unlike Home's single-pressable hero:
+        the image opens the outfit (or the event, if none is planned yet)
+        while the caption below always opens the event's own detail sheet.
+      */}
+      <PressableScale
+        contentStyle={s.imageBand}
+        onPress={hasOutfit ? onOpenOutfit : onPress}
         accessibilityRole="button"
-        accessibilityLabel={`Next event: ${event.title}`}
+        accessibilityLabel={hasOutfit ? openOutfitLabel : openDetailLabel}
       >
-        <View style={s.topRow}>
-          <Text style={s.upNext}>Up next</Text>
-          {badge ? (
-            <View style={s.badge}>
-              <Text style={s.badgeText}>{badge}</Text>
-            </View>
-          ) : null}
-        </View>
-
-        <View style={s.mainRow}>
-          <View style={s.dateBlock}>
-            <Text style={s.dateMonth}>{presentation.monthLabel}</Text>
-            <Text style={s.dateDay}>{presentation.dayLabel}</Text>
-          </View>
-          <View style={s.body}>
-            <Text style={s.title} numberOfLines={2}>{event.title}</Text>
-            <Text style={s.meta}>
-              {d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · {formatTime(d)}
-            </Text>
-          </View>
-        </View>
-
-        {occasionMeta || event.location || forecast.data ? (
-          <View style={s.context}>
-            <View style={[s.contextLine, !occasionMeta && s.contextLineSolo]}>
-              {occasionMeta ? (
-                <View style={s.detail}>
-                  <Ionicons name="shirt-outline" size={13} color={colors.primary} />
-                  <Text style={[s.detailText, s.detailTextAccent]}>{occasionMeta.label}</Text>
-                </View>
-              ) : null}
-              {forecast.data ? (
-                <View style={s.detail}>
-                  <Ionicons name={WEATHER_ICONS[forecast.data.condition]} size={13} color={colors.mutedForeground} />
-                  <Text style={s.detailText}>{formatTempRange(forecast.data, tempUnit)}</Text>
-                </View>
-              ) : null}
-            </View>
-            {event.location ? (
-              <View style={s.locationLine}>
-                <Ionicons name="location-outline" size={13} color={colors.mutedForeground} />
-                <Text style={s.detailText} numberOfLines={1}>{event.location}</Text>
+        <View style={{ width: heroWidth, height: heroHeight }}>
+          <EventLookCollage
+            itemIds={event.itemIds ?? []}
+            allItems={allItems}
+            outfit={outfit}
+            size={heroWidth}
+            height={heroHeight}
+            borderRadius={0}
+          />
+          {scrimmed && (
+            <>
+              <LinearGradient
+                pointerEvents="none"
+                colors={['transparent', 'rgba(29,27,24,0.34)']}
+                style={s.heroScrim}
+              />
+              <View style={s.heroCaptionOverlay}>
+                <Text style={s.upNextOverlay} numberOfLines={1}>{eyebrowLine}</Text>
+                <Text style={s.titleOverlay} numberOfLines={2}>{event.title}</Text>
               </View>
-            ) : null}
-          </View>
-        ) : null}
-      </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </PressableScale>
 
-      {hasOutfit ? (
-        <PressableScale
-          contentStyle={s.lookPreview}
-          onPress={onOpenOutfit}
-          accessibilityRole="button"
-          accessibilityLabel={`${event.outfitId == null ? 'View details' : 'View outfit'} for ${event.title}, ${pieceCount} ${pieceCount === 1 ? 'piece' : 'pieces'}`}
-        >
-          <View style={s.lookCollage}>
-            <EventLookCollage
-              itemIds={event.itemIds ?? []}
-              allItems={allItems}
-              size={56}
-              borderRadius={radii.lg}
-              outfit={outfit}
-            />
-          </View>
-          <View style={s.outfitCopy}>
-            <Text style={s.outfitReady}>{event.outfitId == null ? 'Custom look' : 'Your look'}</Text>
-            <Text style={s.outfitHint}>{pieceCount} {pieceCount === 1 ? 'piece' : 'pieces'}</Text>
-          </View>
-          <View style={s.viewLookPill}>
-            <Text style={s.viewLookText}>{event.outfitId == null ? 'View details' : 'View outfit'}</Text>
-            <Ionicons name="arrow-forward" size={14} color={colors.primary} />
-          </View>
-        </PressableScale>
-      ) : (
-        <View style={s.actionRow}>
-          <View style={s.outfitStatus}>
-            <View style={s.planIcon}>
-              <Ionicons name="sparkles-outline" size={14} color={colors.primary} />
-            </View>
-            <View style={s.outfitCopy}>
-              <Text style={s.outfitReady}>Ready to style</Text>
-              <Text style={s.outfitHint}>Styled will build a look from your wardrobe</Text>
-            </View>
-          </View>
+      <PressableScale
+        contentStyle={s.captionBlock}
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={openDetailLabel}
+      >
+        {!scrimmed && (
+          <>
+            <Text style={s.upNext} numberOfLines={1}>{eyebrowLine}</Text>
+            <Text style={s.title} numberOfLines={2}>{event.title}</Text>
+          </>
+        )}
+        <Text style={s.meta}>
+          {d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · {formatTime(d)}
+        </Text>
+        {contextParts.length > 0 && (
+          <Text style={s.context} numberOfLines={1}>{contextParts.join(' · ')}</Text>
+        )}
+      </PressableScale>
+
+      {!hasOutfit && (
+        <View style={s.planRow}>
+          <Text style={s.planHint} numberOfLines={2}>Styled will build a look from your wardrobe</Text>
           <PressableScale
             contentStyle={[s.planBtn, isPlanning && s.planBtnDisabled]}
             onPress={onPlanOutfit}
@@ -177,119 +156,71 @@ export function NextEventHero({
 }
 
 const s = StyleSheet.create({
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: radii.xl,
-    padding: spacing.xl,
-    marginBottom: spacing.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    borderCurve: 'continuous',
+  card: { marginBottom: spacing.xl },
+
+  // Full-bleed against the screen's own side padding, at the app's landscape
+  // lifestyle ratio. No card chrome: it's meant to read as a photograph, not
+  // a container — the same treatment Home gives "Today's Look".
+  imageBand: { marginHorizontal: -spacing.lg },
+
+  heroScrim: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 120,
   },
-  eventButton: { gap: spacing.lg },
-  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  heroCaptionOverlay: {
+    position: 'absolute',
+    left: spacing.lg,
+    right: spacing.lg,
+    bottom: spacing.lg,
+    gap: 2,
+  },
+  upNextOverlay: {
+    ...typography.text.eyebrowLarge,
+    color: colors.white,
+  },
+  titleOverlay: {
+    ...typography.text.editorialCompact,
+    color: colors.white,
+  },
+
+  captionBlock: {
+    paddingTop: spacing.md,
+    gap: 3,
+  },
   upNext: {
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.semibold,
+    ...typography.text.eyebrowLarge,
     color: colors.primary,
-    textTransform: 'uppercase',
-    letterSpacing: typography.tracking.wide,
   },
-  badge: {
-    backgroundColor: `${colors.primary}15`,
-    borderRadius: radii.full,
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 2,
-  },
-  badgeText: { ...typography.text.label, color: colors.primary },
-
-  mainRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  dateBlock: {
-    width: 60, height: 64, borderRadius: radii.lg,
-    backgroundColor: colors.surfaceElevated,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    borderCurve: 'continuous',
-  },
-  dateMonth: { ...typography.text.eyebrow, color: colors.primary },
-  dateDay: { fontSize: typography.text.pageTitle.fontSize, color: colors.foreground, fontWeight: typography.weight.semibold, fontVariant: ['tabular-nums'] },
-  body: { flex: 1, gap: 2 },
   title: {
-    fontSize: typography.text.sectionTitle.fontSize,
-    fontWeight: typography.weight.bold,
+    ...typography.text.editorialCompact,
     color: colors.foreground,
-    letterSpacing: typography.tracking.none,
   },
-  meta: { fontSize: typography.text.bodySmall.fontSize, color: colors.mutedForeground, fontWeight: typography.weight.medium },
+  meta: {
+    fontSize: typography.text.bodySmall.fontSize,
+    color: colors.mutedForeground,
+    fontWeight: typography.weight.medium,
+  },
+  context: {
+    ...typography.text.caption,
+    color: colors.mutedForeground,
+    fontWeight: typography.weight.medium,
+    textTransform: 'capitalize',
+  },
 
-  context: { gap: spacing.sm },
-  contextLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 20 },
-  contextLineSolo: { justifyContent: 'flex-end' },
-  locationLine: { flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0 },
-  detail: { flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0, flexShrink: 0 },
-  detailText: {
-    fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.medium,
-    color: colors.mutedForeground, textTransform: 'capitalize',
-    flexShrink: 1,
-  },
-  detailTextAccent: { color: colors.primary },
-
-  actionRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    gap: spacing.sm,
-    paddingTop: spacing.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-  lookPreview: {
-    minHeight: 92,
+  planRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: spacing.md,
-    marginTop: spacing.lg,
-    paddingTop: spacing.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
+    marginTop: spacing.md,
   },
-  lookCollage: {
-    width: 72,
-    height: 72,
-    overflow: 'hidden',
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    borderCurve: 'continuous',
-  },
-  viewLookPill: {
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.full,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  viewLookText: {
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.primary,
-  },
-  outfitStatus: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  outfitCopy: { flex: 1, minWidth: 0, gap: 1 },
-  outfitReady: {
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  outfitHint: { ...typography.text.caption, color: colors.mutedForeground },
-  planIcon: {
-    width: 32, height: 32,
-    borderRadius: radii.full,
-    backgroundColor: colors.surfaceSelected,
-    alignItems: 'center', justifyContent: 'center',
+  planHint: {
+    flex: 1,
+    ...typography.text.caption,
+    color: colors.mutedForeground,
   },
   planBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
