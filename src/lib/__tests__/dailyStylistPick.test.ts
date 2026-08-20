@@ -1,4 +1,4 @@
-import { getDailyLookGenerationDecision, rankDailyStylistPicks, selectDailyStylistPick, toLocalDateKey, type DailyPickHistoryEntry } from '../dailyStylistPick';
+import { buildDailyLookExplanation, getDailyLookGenerationDecision, rankDailyStylistPicks, selectDailyStylistPick, toLocalDateKey, type DailyPickHistoryEntry } from '../dailyStylistPick';
 import type { Event } from '../../types/event';
 import type { Item } from '../../types/item';
 import type { Outfit } from '../../types/outfit';
@@ -247,6 +247,38 @@ describe('daily stylist pick', () => {
     expect(result?.outfit.id).toBe(2);
     expect(result?.scoreDetails.favorite).toBeGreaterThan(0);
     expect(result?.scoreDetails.rating).toBeGreaterThan(0);
+  });
+
+  it('explains the strongest local reasons for an owned daily look', () => {
+    const pick = select([
+      outfit(1, { isFavorite: true, lastWornAt: '2026-05-01T08:00:00.000Z' }),
+      outfit(2),
+    ], {
+      events: [event(1, 13, { occasion: 'business' })],
+      items: [
+        item(11, { category: 'top', occasions: ['business'], warmthRating: 5, seasons: ['winter'], sleeveLength: 'long' }),
+        item(12, { category: 'bottom', occasions: ['business'], warmthRating: 5, seasons: ['winter'] }),
+        item(13, { category: 'shoes', occasions: ['business'], warmthRating: 4, seasons: ['winter'] }),
+        item(21, { category: 'top' }),
+        item(22, { category: 'bottom' }),
+        item(23, { category: 'shoes' }),
+      ],
+      weather: {
+        current: { condition: 'cold', temperatureC: 2, temperatureF: 36, summary: 'Cold' },
+        forecast: { condition: 'cold', tempMaxC: 4, tempMinC: -2, tempMaxF: 39, tempMinF: 28 },
+      },
+    });
+
+    expect(pick).not.toBeNull();
+    expect(buildDailyLookExplanation({
+      pick: pick!,
+      weather: {
+        current: { condition: 'cold', temperatureC: 2, temperatureF: 36, summary: 'Cold' },
+        forecast: { condition: 'cold', tempMaxC: 4, tempMinC: -2, tempMaxF: 39, tempMinF: 28 },
+      },
+      event: event(1, 13, { occasion: 'business' }),
+      tempUnit: 'C',
+    })).toContain('business plans');
   });
 
   it('is deterministic for the same date', () => {

@@ -388,6 +388,55 @@ function reasonForPick(
   return outfit.event ? `Ready for ${formatOccasion(outfit.event)}` : 'Today’s edit';
 }
 
+export function buildDailyLookExplanation({
+  pick,
+  weather,
+  event,
+  tempUnit,
+}: {
+  pick: DailyStylistPick;
+  weather?: TodayWeather;
+  event?: Event;
+  tempUnit?: string | null;
+}): string {
+  const reasons: string[] = [];
+  const { scoreDetails } = pick;
+
+  if (scoreDetails.occasion > 0 && event?.occasion?.trim()) {
+    reasons.push(`matches your ${formatOccasion(event.occasion)} plans`);
+  }
+  if (scoreDetails.weather > 0 && weather) {
+    const temperature = formatTemp(weather.current, tempUnit);
+    if (weather.current.condition === 'rainy') {
+      reasons.push('is ready for today’s rain');
+    } else if (weather.current.temperatureC <= 8) {
+      reasons.push(`keeps you warm in ${temperature}`);
+    } else if (weather.current.temperatureC >= 24) {
+      reasons.push(`stays light for ${temperature}`);
+    } else {
+      reasons.push(`works comfortably for ${temperature}`);
+    }
+  }
+  if (scoreDetails.wearRotation >= 7) {
+    reasons.push('gives a less-worn look a turn');
+  }
+  if (scoreDetails.favorite > 0) {
+    reasons.push('brings back one of your favourites');
+  }
+  if (scoreDetails.rating > 0) {
+    reasons.push('builds on a look you have rated highly');
+  }
+
+  const selectedReasons = reasons.slice(0, 2);
+  if (selectedReasons.length === 0) {
+    return 'A considered edit from your wardrobe, chosen to lead today’s rotation.';
+  }
+  if (selectedReasons.length === 1) {
+    return `It ${selectedReasons[0]}.`;
+  }
+  return `It ${selectedReasons[0]} and ${selectedReasons[1]}.`;
+}
+
 export function rankDailyStylistPicks({
   outfits,
   items,

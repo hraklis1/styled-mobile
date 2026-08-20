@@ -51,8 +51,10 @@ import { formatTemp, resolveTempUnit } from '../../lib/temperature';
 import type { StylistMissingEssential } from '../../features/stylist/types';
 import {
   rankDailyStylistPicks,
+  buildDailyLookExplanation,
   getDailyLookGenerationDecision,
   isCompleteWearableOutfit,
+  selectDailyStylistPick,
   toLocalDateKey,
   type DailyPickHistoryEntry,
 } from '../../lib/dailyStylistPick';
@@ -428,6 +430,31 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     : null;
   const featuredOutfit = dailyLookPresentation.kind === 'owned' ? dailyLookPresentation.outfit : undefined;
   const featuredReason = dailyLookPresentation.kind === 'owned' ? dailyLookPresentation.reason : 'Today’s Look';
+  const featuredRankedPick = featuredOutfit
+    ? rankedDailyPicks.find((entry) => entry.outfit.id === featuredOutfit.id)
+    : generatedCandidate?.readinessStatus === 'ready'
+      ? selectDailyStylistPick({
+        outfits: [generatedPreviewOutfit(generatedCandidate)],
+        items,
+        events,
+        weather: weather.data,
+        logs,
+        date: dailyPickDate,
+        history: dailyPickHistory,
+        tempUnit,
+      })
+    : null;
+  const featuredEvent = dailyLookDecision.eventId
+    ? events.find((event) => event.id === dailyLookDecision.eventId)
+    : undefined;
+  const featuredExplanation = featuredRankedPick
+    ? buildDailyLookExplanation({
+      pick: featuredRankedPick,
+      weather: weather.data,
+      event: featuredEvent,
+      tempUnit,
+    })
+    : null;
   const candidateGap = dailyLookPresentation.kind === 'incomplete' || dailyLookPresentation.kind === 'priority'
     ? dailyLookPresentation.gap
     : undefined;
@@ -869,6 +896,12 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             )}
           </View>
         )}
+        {featuredExplanation ? (
+          <View style={styles.dailyLookExplanation} accessible accessibilityLabel={`Why this look: ${featuredExplanation}`}>
+            <Text style={styles.dailyLookExplanationLabel}>WHY THIS LOOK</Text>
+            <Text style={styles.dailyLookExplanationText} numberOfLines={3}>{featuredExplanation}</Text>
+          </View>
+        ) : null}
       </EditorialSection>
 
       {/* ── Wardrobe brief ── */}
@@ -1406,6 +1439,23 @@ const styles = StyleSheet.create({
   featuredOutfitName: {
     ...typography.text.editorialTitle,
     color: colors.foreground,
+  },
+  dailyLookExplanation: {
+    gap: spacing.xs,
+    marginHorizontal: SIDE_PAD,
+    marginTop: spacing.lg,
+    paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  dailyLookExplanationLabel: {
+    ...typography.text.eyebrow,
+    color: colors.mutedForeground,
+  },
+  dailyLookExplanationText: {
+    fontSize: typography.text.bodySmall.fontSize,
+    lineHeight: 19,
+    color: colors.mutedForeground,
   },
 
   // Empty outfits
