@@ -43,11 +43,17 @@ import { BrandAutocompleteInput } from '../primitives/BrandAutocompleteInput';
 import { TaxonomySelector } from '../primitives/TaxonomySelector';
 import { SizeProfileInput } from '../primitives/SizeProfileInput';
 import type { SizeProfile } from '../../lib/sizes';
-import { CropAdjustModal, type Bbox } from './CropAdjustModal';
+import { type Bbox } from './CropAdjustModal';
 import { CutoutReviewThumb } from './CutoutReviewThumb';
 import { cropImage } from '../../lib/cropImage';
 import { mapWithConcurrency } from '../../lib/asyncPool';
+import { track } from '../../lib/analytics';
+import { resolveExtractedIdentity } from '../../lib/scan-review';
 import * as Haptics from 'expo-haptics';
+import {
+  ScanReviewWorkspace,
+  type ScanReviewPiece,
+} from './scan-review-workspace';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -93,6 +99,8 @@ type PreExtractItemData = {
   previewBbox: Bbox | null;
   sourceImage: string;
   brandHint: string;
+  /** Prevent detail extraction from replacing a correction the user made. */
+  nameEdited: boolean;
 };
 
 type EditableItem = {
@@ -187,6 +195,7 @@ async function buildPreExtractItemFromPose(
     previewBbox,
     sourceImage,
     brandHint: '',
+    nameEdited: false,
   };
 }
 
@@ -201,19 +210,12 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
   const [failedItems, setFailedItems] = useState<PreExtractItemData[]>([]);
   const [extractionProgress, setExtractionProgress] = useState({ current: 0, total: 0 });
   const [extractedThumbs, setExtractedThumbs] = useState<string[]>([]);
-  const [cropAdjustTarget, setCropAdjustTarget] = useState<{
-    tempId: string;
-    sourceImage: string;
-    bbox: Bbox;
-    itemName: string;
-    scope: 'pre-extract' | 'review';
-    /** Carried so a re-crop can request a matching cutout for the new box. */
-    category: string | null;
-  } | null>(null);
   const sessionRef = useRef(0);
+  const reviewTrackedRef = useRef(false);
 
   const { user } = useAuth();
   const createItem = useCreateItem();
+  const brandSuggestions = useBrandSuggestions();
 
   const reset = useCallback(() => {
     sessionRef.current += 1;
@@ -224,7 +226,14 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
     setFailedItems([]);
     setExtractionProgress({ current: 0, total: 0 });
     setExtractedThumbs([]);
+    reviewTrackedRef.current = false;
   }, []);
+
+  useEffect(() => {
+    if (phase !== 'pre-extract' || reviewTrackedRef.current) return;
+    reviewTrackedRef.current = true;
+    track('closet_scan_review_started', { mode: 'batch', item_count: preExtractItems.length });
+  }, [phase, preExtractItems.length]);
 
   const handleClose = useCallback(() => {
     if (phase === 'processing' || phase === 'saving' || phase === 'extracting') return;
@@ -416,30 +425,40 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
             .map((o) => `${o.name} (${o.category})`)
             .join(', ');
 
-          const result = await scanItemDirect({
-            imageData,
-            outfitContext: otherItems || undefined,
-            brandHint: preItem.brandHint || undefined,
-            targetName: preItem.name || undefined,
-            targetCategory: preItem.category || undefined,
-          });
+          try {
+            const result = await scanItemDirect({
+              imageData,
+              outfitContext: otherItems || undefined,
+              brandHint: preItem.brandHint || undefined,
+              targetName: preItem.name || undefined,
+              targetCategory: preItem.category || undefined,
+              idempotencyKey: preItem.tempId,
+            });
 
-          if (sessionRef.current !== session) throw new Error('session_changed');
+            if (sessionRef.current !== session) throw new Error('session_changed');
 
-          completedCount += 1;
-          setExtractionProgress({ current: completedCount, total });
-          if (preItem.croppedImage) {
-            setExtractedThumbs((prev) => [...prev, preItem.croppedImage!]);
+            if (preItem.croppedImage) {
+              setExtractedThumbs((prev) => [...prev, preItem.croppedImage!]);
+            }
+
+            return {
+              tempId: preItem.tempId,
+              initialName: preItem.name,
+              nameEdited: preItem.nameEdited,
+              brandHint: preItem.brandHint,
+              result,
+              croppedImage: preItem.croppedImage,
+              cutoutImage: preItem.cutoutImage,
+              useCutout: preItem.useCutout,
+              bbox: preItem.bbox,
+              sourceImage: preItem.sourceImage,
+            };
+          } finally {
+            if (sessionRef.current === session) {
+              completedCount += 1;
+              setExtractionProgress({ current: completedCount, total });
+            }
           }
-
-          return {
-            result,
-            croppedImage: preItem.croppedImage,
-            cutoutImage: preItem.cutoutImage,
-            useCutout: preItem.useCutout,
-            bbox: preItem.bbox,
-            sourceImage: preItem.sourceImage,
-          };
         },
       );
 
@@ -452,11 +471,29 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
           failed.push(targets[idx]);
           return;
         }
-        const { result, croppedImage, cutoutImage, useCutout, bbox, sourceImage } = s.value;
+        const {
+          tempId,
+          initialName,
+          nameEdited,
+          brandHint,
+          result,
+          croppedImage,
+          cutoutImage,
+          useCutout,
+          bbox,
+          sourceImage,
+        } = s.value;
+        const identity = resolveExtractedIdentity({
+          initialName,
+          nameEdited,
+          brandHint,
+          extractedName: result.name,
+          extractedBrand: result.brand,
+        });
         extracted.push({
-          tempId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          name: result.name || 'Unknown Item',
-          brand: result.brand ?? null,
+          tempId,
+          name: identity.name,
+          brand: identity.brand,
           category: result.category ?? null,
           subcategory: result.subcategory ?? null,
           color: result.color ?? null,
@@ -527,7 +564,14 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
 
   const removeItem = useCallback((tempId: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setAllItems((prev) => prev.filter((it) => it.tempId !== tempId));
+    setAllItems((prev) => {
+      const next = prev.filter((it) => it.tempId !== tempId);
+      if (next.length === 0) {
+        setPhase('idle');
+        setPhotoJobs([]);
+      }
+      return next;
+    });
   }, []);
 
   const updatePreExtractItem = useCallback((tempId: string, patch: Partial<PreExtractItemData>) => {
@@ -548,42 +592,14 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
     });
   }, []);
 
-  const handleAdjustCrop = useCallback(
-    (tempId: string) => {
-      const item = allItems.find((it) => it.tempId === tempId);
-      if (!item?.sourceImage || !item.bbox) return;
-      setCropAdjustTarget({
-        tempId,
-        sourceImage: item.sourceImage,
-        bbox: item.bbox,
-        itemName: item.name,
-        scope: 'review',
-        category: item.category,
-      });
-    },
-    [allItems],
-  );
-
-  const handlePreExtractAdjustCrop = useCallback(
-    (tempId: string) => {
-      const item = preExtractItems.find((it) => it.tempId === tempId);
-      if (!item?.bbox) return;
-      setCropAdjustTarget({
-        tempId,
-        sourceImage: item.sourceImage,
-        bbox: item.bbox,
-        itemName: item.name,
-        scope: 'pre-extract',
-        category: item.category,
-      });
-    },
-    [preExtractItems],
-  );
-
-  const handleCropApply = useCallback(
-    async (newBbox: Bbox) => {
-      if (!cropAdjustTarget) return;
-      const { tempId, sourceImage, scope, category } = cropAdjustTarget;
+  const handleWorkspaceCropApply = useCallback(
+    async (tempId: string, newBbox: Bbox) => {
+      const reviewItem = allItems.find((item) => item.tempId === tempId);
+      const preExtractItem = preExtractItems.find((item) => item.tempId === tempId);
+      const scope = reviewItem ? 'review' : 'pre-extract';
+      const sourceImage = reviewItem?.sourceImage ?? preExtractItem?.sourceImage;
+      const category = reviewItem?.category ?? preExtractItem?.category ?? null;
+      if (!sourceImage) return;
       const newCrop = await cropImage(sourceImage, newBbox, { maxDim: 800 });
       if (newCrop) {
         // Drop the old cutout straight away — it was masked to the previous box,
@@ -609,9 +625,8 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
             else updateItem(tempId, { cutoutImage });
           });
       }
-      setCropAdjustTarget(null);
     },
-    [cropAdjustTarget, updatePreExtractItem, updateItem],
+    [allItems, preExtractItems, updatePreExtractItem, updateItem],
   );
 
 
@@ -701,6 +716,75 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
       setPhase('review');
     }
   }, [allItems, user, createItem, onItemsSaved, onClose]);
+
+  const workspacePieces = useMemo<ScanReviewPiece[]>(() => {
+    if (phase === 'review' || phase === 'saving') {
+      return allItems.map((item) => ({
+        id: item.tempId,
+        name: item.name,
+        brand: item.brand ?? '',
+        photo: item.croppedImage,
+        cutout: item.cutoutImage,
+        useCutout: item.useCutout,
+        canAdjustCrop: Boolean(item.sourceImage && item.bbox),
+        cropSource: item.sourceImage,
+        cropBbox: item.bbox,
+        category: item.category,
+        subcategory: item.subcategory,
+        color: item.color,
+        style: item.style,
+        seasons: item.seasons,
+        occasions: item.occasions,
+        material: item.material,
+        fit: item.fit,
+        sizeProfile: item.sizeProfile,
+        sleeveLength: item.sleeveLength,
+      }));
+    }
+    return preExtractItems.map((item) => ({
+      id: item.tempId,
+      name: item.name,
+      brand: item.brandHint,
+      photo: item.croppedImage,
+      cutout: item.cutoutImage,
+      useCutout: item.useCutout,
+      canAdjustCrop: Boolean(item.bbox),
+      cropSource: item.sourceImage,
+      cropBbox: item.bbox,
+      category: item.category,
+      subcategory: null,
+      color: null,
+      style: null,
+      seasons: [],
+      occasions: [],
+      material: null,
+      fit: null,
+      sizeProfile: null,
+      sleeveLength: null,
+    }));
+  }, [allItems, phase, preExtractItems]);
+
+  const handleWorkspaceUpdate = useCallback((tempId: string, patch: Partial<ScanReviewPiece>) => {
+    if (phase === 'pre-extract' || phase === 'extracting') {
+      updatePreExtractItem(tempId, {
+        ...(patch.name !== undefined ? { name: patch.name, nameEdited: true } : {}),
+        ...(patch.brand !== undefined ? { brandHint: patch.brand } : {}),
+      });
+      return;
+    }
+    updateItem(tempId, {
+      ...(patch.name !== undefined ? { name: patch.name } : {}),
+      ...(patch.brand !== undefined ? { brand: patch.brand || null } : {}),
+      ...(patch.category !== undefined ? { category: patch.category } : {}),
+      ...(patch.subcategory !== undefined ? { subcategory: patch.subcategory } : {}),
+      ...(patch.color !== undefined ? { color: patch.color } : {}),
+      ...(patch.style !== undefined ? { style: patch.style } : {}),
+      ...(patch.seasons !== undefined ? { seasons: patch.seasons } : {}),
+      ...(patch.material !== undefined ? { material: patch.material } : {}),
+      ...(patch.fit !== undefined ? { fit: patch.fit } : {}),
+      ...(patch.sizeProfile !== undefined ? { sizeProfile: patch.sizeProfile } : {}),
+    });
+  }, [phase, updateItem, updatePreExtractItem]);
 
   const renderBackdrop = useCallback(
     (props: any) => (
@@ -829,46 +913,59 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
             />
           )}
 
-          {phase === 'pre-extract' && preExtractItems.length > 0 && (
-            <PreExtractList
-              items={preExtractItems}
-              failedPhotoCount={errorCount}
-              onRetryPhotos={retryFailedPhotos}
-              onUpdateItem={updatePreExtractItem}
-              onRemoveItem={removePreExtractItem}
-              onAdjustCrop={handlePreExtractAdjustCrop}
-            />
-          )}
-
           {phase === 'extracting' && (
             <ExtractingContent
               progress={extractionProgress}
               thumbs={extractedThumbs}
             />
           )}
-
-          {(phase === 'review' || phase === 'saving') && allItems.length > 0 && (
-            <ReviewContent
-              items={allItems}
-              failedCount={failedItems.length}
-              onRetryFailed={retryFailedExtractions}
-              onUpdateItem={updateItem}
-              onRemoveItem={removeItem}
-              onAdjustCrop={handleAdjustCrop}
-              disabled={phase === 'saving'}
-            />
-          )}
         </BottomSheetScrollView>
       </BottomSheetModal>
 
-      <CropAdjustModal
-        visible={cropAdjustTarget !== null}
-        sourceImage={cropAdjustTarget?.sourceImage ?? ''}
-        initialBbox={cropAdjustTarget?.bbox ?? null}
-        itemName={cropAdjustTarget?.itemName ?? ''}
-        onApply={handleCropApply}
-        onCancel={() => setCropAdjustTarget(null)}
+      <ScanReviewWorkspace
+        visible={phase === 'pre-extract' || phase === 'extracting' || phase === 'review' || phase === 'saving'}
+        stage={phase === 'extracting' || phase === 'review' || phase === 'saving' ? phase : 'pre-extract'}
+        pieces={workspacePieces}
+        brandSuggestions={brandSuggestions}
+        extractionProgress={extractionProgress}
+        failure={phase === 'pre-extract' && errorCount > 0 ? {
+          message: errorCount === 1 ? "1 photo couldn't be scanned." : `${errorCount} photos couldn't be scanned.`,
+          onRetry: retryFailedPhotos,
+        } : phase === 'review' && failedItems.length > 0 ? {
+          message: failedItems.length === 1
+            ? "1 piece couldn't be enriched."
+            : `${failedItems.length} pieces couldn't be enriched.`,
+          onRetry: retryFailedExtractions,
+        } : null}
+        onUpdate={handleWorkspaceUpdate}
+        onToggleCutout={(tempId) => {
+          if (phase === 'review' || phase === 'saving') {
+            const item = allItems.find((candidate) => candidate.tempId === tempId);
+            if (item) updateItem(tempId, { useCutout: !item.useCutout });
+          } else {
+            const item = preExtractItems.find((candidate) => candidate.tempId === tempId);
+            if (item) updatePreExtractItem(tempId, { useCutout: !item.useCutout });
+          }
+        }}
+        onApplyCrop={handleWorkspaceCropApply}
+        onRemove={(tempId) => {
+          if (phase === 'review' || phase === 'saving') removeItem(tempId);
+          else removePreExtractItem(tempId);
+        }}
+        onExtract={(trigger, reviewedCount, brandCount) => {
+          track('closet_scan_extraction_started', {
+            mode: 'batch',
+            trigger,
+            reviewed_count: reviewedCount,
+            item_count: preExtractItems.length,
+            brand_count: brandCount,
+          });
+          runExtraction();
+        }}
+        onSave={() => { void handleSaveAll(); }}
+        onClose={handleClose}
       />
+
     </>
   );
 }

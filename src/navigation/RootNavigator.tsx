@@ -390,7 +390,7 @@ function AppTabNavigator() {
                   },
                   {
                     key: 'log-wear',
-                    label: 'What did you wear?',
+                    label: 'Log today’s outfit',
                     icon: 'checkmark-done',
                     iconColor: colors.primaryForeground,
                     iconBg: colors.primary,

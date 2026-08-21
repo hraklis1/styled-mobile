@@ -53,6 +53,7 @@ import { useProfile } from '../../hooks/useProfile';
 import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
 import { conversationLocation, type StylingLocationContext } from '../../lib/stylingLocation';
 import { resolveTempUnit } from '../../lib/temperature';
+import { sanitizeStylistResponseText } from '../../lib/stylistResponseText';
 import {
   useAcceptEventOutfitPlan,
   useCreateOutfit,
@@ -307,7 +308,7 @@ function mapServerMessages(rows: ServerMessage[]): ChatMessage[] {
       role: 'assistant',
       kind: 'assistant',
       renderType: renderTypeForAssistantPayload(p),
-      text: m.text,
+      text: sanitizeStylistResponseText(m.text),
       ...(typeof m.recId === 'number' ? { recId: m.recId } : {}),
       ...(p?.mode ? { mode: p.mode } : {}),
       ...(p?.readinessStatus ? { readinessStatus: p.readinessStatus } : {}),
@@ -486,6 +487,7 @@ export function StylistChatView({
   const messageLayoutsRef = useRef<Record<string, number>>({});
   const pendingFocusMessageIdRef = useRef<string | null>(null);
   const focusedRichMessageIdRef = useRef<string | null>(null);
+  const streamingAssistantTextRef = useRef<Record<string, string>>({});
   const player = useAudioPlayer(null);
   const playingFileRef = useRef<File | null>(null);
   const lastPromptRequestIdRef = useRef(0);
@@ -613,6 +615,7 @@ export function StylistChatView({
     abortCurrent: abortTransport,
   } = useStylistTransport({
     onAssistantStart: (assistantId) => {
+      streamingAssistantTextRef.current[assistantId] = '';
       setMessages((prev) => {
         if (prev.some((m) => m.id === assistantId)) return prev;
         return [
@@ -629,8 +632,10 @@ export function StylistChatView({
       });
     },
     onAssistantToken: (assistantId, token) => {
+      const rawText = (streamingAssistantTextRef.current[assistantId] ?? '') + token;
+      streamingAssistantTextRef.current[assistantId] = rawText;
       setMessages((prev) =>
-        prev.map((m) => (m.id === assistantId ? { ...m, text: m.text + token } : m)),
+        prev.map((m) => (m.id === assistantId ? { ...m, text: sanitizeStylistResponseText(rawText) } : m)),
       );
     },
     onAssistantDone: (assistantId, event) => {
@@ -682,7 +687,7 @@ export function StylistChatView({
               : itemIds?.length
                 ? 'closet_outfit'
                 : 'text',
-        text: responseText ?? '',
+        text: sanitizeStylistResponseText(responseText ?? ''),
         isStreaming: false,
         ...(readinessStatus ? { readinessStatus } : {}),
         ...(foundationItemIds?.length ? { foundationItemIds } : {}),
@@ -698,6 +703,7 @@ export function StylistChatView({
         ...(typeof recId === 'number' ? { recId } : {}),
         ...(boardAction ? { boardAction } : {}),
       };
+      delete streamingAssistantTextRef.current[assistantId];
 
       setMessages((prev) => {
         const withTranscript = prev.map((m) =>
@@ -740,6 +746,7 @@ export function StylistChatView({
       }
     },
     onError: ({ message, request }) => {
+      delete streamingAssistantTextRef.current[request.assistantMessageId];
       setErrorMessage(message);
       setFailedRequest(request.originalOptions ?? null);
       setMessages((prev) =>

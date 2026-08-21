@@ -26,6 +26,14 @@ type Props = {
   libraryHint?: string;
   manualLabel?: string;
   manualHint?: string;
+  /**
+   * Escape hatch for a user who opened the wrong sheet — rendered last and
+   * quietly, below the real options. Omit it and nothing extra is drawn.
+   */
+  escapeLabel?: string;
+  escapeHint?: string;
+  escapeIcon?: keyof typeof Ionicons.glyphMap;
+  onEscape?: () => void;
   onCamera: () => void;
   onLibrary: () => void;
   onManual?: () => void;
@@ -49,6 +57,10 @@ export function PhotoSourceSheet({
   libraryHint = 'Pick from your camera roll',
   manualLabel = 'Choose from your closet',
   manualHint = 'Select the pieces you wore yourself',
+  escapeLabel,
+  escapeHint,
+  escapeIcon = 'shirt-outline',
+  onEscape,
   onCamera,
   onLibrary,
   onManual,
@@ -170,6 +182,23 @@ export function PhotoSourceSheet({
               </View>
               <Ionicons name="chevron-forward" size={16} color={colors.border} />
             </TouchableOpacity>
+
+            {escapeLabel && onEscape ? (
+              <TouchableOpacity
+                style={styles.escapeOption}
+                onPress={() => select(onEscape)}
+                activeOpacity={0.75}
+                accessibilityRole="button"
+                accessibilityLabel={escapeLabel}
+              >
+                <Ionicons name={escapeIcon} size={17} color={colors.mutedForeground} />
+                <View style={styles.optionText}>
+                  <Text style={styles.escapeTitle}>{escapeLabel}</Text>
+                  {escapeHint ? <Text style={styles.optionSub}>{escapeHint}</Text> : null}
+                </View>
+                <Ionicons name="chevron-forward" size={15} color={colors.border} />
+              </TouchableOpacity>
+            ) : null}
           </View>
 
           <TouchableOpacity
@@ -260,6 +289,22 @@ const styles = StyleSheet.create({
   quickLibraryTitle: {
     color: colors.mutedForeground,
     fontWeight: typography.weight.medium,
+  },
+  // Not one of the options — a way out of the sheet for someone who meant to
+  // open the other flow. Deliberately borderless so it never reads as a
+  // fourth peer of the choices above it.
+  escapeOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  escapeTitle: {
+    fontSize: typography.text.bodySmall.fontSize,
+    fontWeight: typography.weight.medium,
+    color: colors.mutedForeground,
   },
   iconBox: {
     width: 44,

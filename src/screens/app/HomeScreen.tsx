@@ -248,15 +248,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const heroWidth = width;
   const heroHeight = Math.round(heroWidth / editorial.outfitAspectRatio);
 
-  // Tapping the row goes straight to the camera: photographing a piece is the
-  // overwhelmingly common intent, and the old menu made every capture cost an
-  // extra tap to answer a question it already knew. The other import routes stay
-  // one press away on the row's ⋯ control (or a long-press).
-  const handleQuickAddPhoto = useCallback(() => {
-    track('home_wardrobe_action_tapped', { action: 'add_clothes_camera' });
-    openScanItem('camera');
-  }, [openScanItem]);
-
   const handleAddToCloset = useCallback(() => {
     track('home_wardrobe_action_tapped', { action: 'add_clothes_menu' });
     openAddSheet({
@@ -267,7 +258,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   }, [openAddSheet, openBatchScan, openScanItem]);
 
   const handleRecordWear = useCallback(() => {
-    track('home_wardrobe_action_tapped', { action: 'record_wear' });
+    track('home_wardrobe_action_tapped', { action: 'record_wear', source: 'week_in_wear' });
     openLogger({ quickStart: true });
   }, [openLogger]);
 
@@ -691,55 +682,33 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         <Ionicons name="arrow-forward" size={16} color="#C2A68D" />
       </TouchableOpacity>
 
-      {/* ── Permanent wardrobe actions ─────────────────────────── */}
+      {/* ── Permanent wardrobe action ─────────────────────── */}
+      {/*
+        Deliberately one action, not a pair. Logging a worn outfit used to sit
+        here as a second row built from the same template, and users read the
+        two as variants of one thing — tapping the camera-badged log row when
+        they meant to add a garment. Logging now lives in the diary it feeds
+        ("Your Week in Wear" below), so the row in the add-things slot is the
+        one that adds things.
+      */}
       <View style={styles.wardrobeActions}>
         <PressableScale
           contentStyle={styles.wardrobeAction}
-          onPress={handleQuickAddPhoto}
-          onLongPress={handleAddToCloset}
+          onPress={handleAddToCloset}
           accessibilityRole="button"
-          accessibilityLabel="Add new clothes. Opens the camera to photograph a piece"
-          accessibilityHint="Long press for other ways to add clothes"
+          accessibilityLabel="Add to my closet"
+          accessibilityHint="Opens options to take a photo, choose from your library, or import several pieces"
         >
           <View style={styles.wardrobeActionVisual}>
-            <Ionicons name="shirt-outline" size={23} color={colors.primary} />
+            <Ionicons name="camera-outline" size={22} color={colors.primary} />
             <View style={styles.wardrobeActionBadge}>
               <Ionicons name="add" size={11} color={colors.primaryForeground} />
             </View>
           </View>
           <View style={styles.wardrobeActionCopy}>
-            <Text style={styles.wardrobeActionTitle}>Add new clothes</Text>
+            <Text style={styles.wardrobeActionTitle}>Add to my closet</Text>
             <Text style={styles.wardrobeActionSubtitle}>
-              Photograph a piece, or tap ⋯ to import
-            </Text>
-          </View>
-          <TouchableOpacity
-            onPress={handleAddToCloset}
-            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
-            style={styles.wardrobeActionMore}
-            accessibilityRole="button"
-            accessibilityLabel="More ways to add clothes"
-          >
-            <Ionicons name="ellipsis-horizontal" size={17} color={colors.primary} />
-          </TouchableOpacity>
-        </PressableScale>
-        <View style={styles.wardrobeActionDivider} />
-        <PressableScale
-          contentStyle={styles.wardrobeAction}
-          onPress={handleRecordWear}
-          accessibilityRole="button"
-          accessibilityLabel="What did you wear? Snap a photo to match your closet, or choose pieces yourself"
-        >
-          <View style={[styles.wardrobeActionVisual, styles.wardrobeActionVisualWear]}>
-            <Ionicons name="camera-outline" size={22} color={colors.primary} />
-            <View style={styles.wardrobeActionBadge}>
-              <Ionicons name="checkmark" size={10} color={colors.primaryForeground} />
-            </View>
-          </View>
-          <View style={styles.wardrobeActionCopy}>
-            <Text style={styles.wardrobeActionTitle}>What did you wear?</Text>
-            <Text style={styles.wardrobeActionSubtitle}>
-              Snap a photo to match your closet, or choose pieces yourself
+              Photograph or import pieces you own
             </Text>
           </View>
           <Ionicons name="arrow-forward" size={17} color={colors.primary} />
@@ -1013,8 +982,36 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       </EditorialSection>
 
       {/* ── Your Week in Wear ─────────────────────────────────────── */}
-      {logs.length > 0 && (
-        <EditorialSection variant="ruled" headingStyle="editorial" title="Your Week in Wear">
+      {/*
+        The section is the home of outfit logging now, so it renders even with
+        nothing in it — its header action and empty card are the only entry
+        points on this screen, and hiding them would leave first-run users with
+        no way to start a diary.
+      */}
+      <EditorialSection
+        variant="ruled"
+        headingStyle="editorial"
+        title="Your Week in Wear"
+        actionLabel="Log today"
+        onAction={handleRecordWear}
+      >
+        {logs.length === 0 ? (
+          <PressableScale
+            contentStyle={styles.emptyCard}
+            onPress={handleRecordWear}
+            accessibilityRole="button"
+            accessibilityLabel="Nothing logged yet. Tap to log today's outfit"
+          >
+            <View style={styles.emptyIcon}>
+              <Ionicons name="calendar-outline" size={18} color={colors.mutedForeground} />
+            </View>
+            <View style={styles.emptyText}>
+              <Text style={styles.emptyTitle}>Nothing logged yet</Text>
+              <Text style={styles.emptySubtitle}>Record what you wore from pieces in your closet</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={colors.border} />
+          </PressableScale>
+        ) : (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -1051,8 +1048,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             })}
             <View style={{ width: SIDE_PAD }} />
           </ScrollView>
-        </EditorialSection>
-      )}
+        )}
+      </EditorialSection>
 
     </ScrollView>
       <DailyLookDetailSheet
@@ -1196,9 +1193,6 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     position: 'relative',
   },
-  wardrobeActionVisualWear: {
-    backgroundColor: colors.accent,
-  },
   wardrobeActionBadge: {
     position: 'absolute',
     right: 5,
@@ -1216,14 +1210,6 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
-  wardrobeActionMore: {
-    width: 30,
-    height: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.full,
-    backgroundColor: `${colors.primary}0F`,
-  },
   wardrobeActionTitle: {
     ...typography.text.cardTitle,
     color: colors.foreground,
@@ -1231,11 +1217,6 @@ const styles = StyleSheet.create({
   wardrobeActionSubtitle: {
     ...typography.text.caption,
     color: colors.mutedForeground,
-  },
-  wardrobeActionDivider: {
-    height: StyleSheet.hairlineWidth,
-    marginLeft: spacing.lg + 50 + spacing.md,
-    backgroundColor: colors.border,
   },
 
   // Empty wardrobe nudge

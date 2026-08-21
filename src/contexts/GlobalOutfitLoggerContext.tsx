@@ -20,6 +20,14 @@ export type OpenLoggerOptions = {
 
 export type OutfitLoggerLaunch = 'camera' | 'library' | 'closet';
 
+/**
+ * What the Home quick-start sheet is waiting to do once it has finished
+ * dismissing. `add` is the bail-out: the user opened the log sheet meaning to
+ * put new clothes in their closet, so we hand them straight to the add flow
+ * instead of making them back out and hunt for the right button.
+ */
+type QuickStartPending = OutfitLoggerLaunch | 'add';
+
 type GlobalOutfitLoggerContextValue = {
   openLogger: (options?: OpenLoggerOptions) => void;
 };
@@ -45,7 +53,7 @@ export function GlobalOutfitLoggerProvider({ children }: Props) {
   const [initialLaunch, setInitialLaunch] = useState<OutfitLoggerLaunch | undefined>();
   const [initialView, setInitialView] = useState<'picker' | undefined>();
   const [initialImage, setInitialImage] = useState<CapturedImage | undefined>();
-  const [quickStartPending, setQuickStartPending] = useState<OutfitLoggerLaunch | undefined>();
+  const [quickStartPending, setQuickStartPending] = useState<QuickStartPending | undefined>();
   const launchCamera = useCameraLaunch();
   const launchLibrary = useLibraryLaunch();
   const { openAddSheet } = useGlobalAddSheet();
@@ -86,10 +94,26 @@ export function GlobalOutfitLoggerProvider({ children }: Props) {
     setQuickStartPending(launch);
     setQuickStartVisible(false);
   }, []);
+  // The misfire signal: someone reached the log sheet wanting to add clothes.
+  // Tracked separately so the rate is measurable rather than anecdotal.
+  const bailToAddClothes = useCallback(() => {
+    track('outfit_log_bailed_to_add_clothes', { entry_point: 'home' });
+    setQuickStartPending('add');
+    setQuickStartVisible(false);
+  }, []);
   const handleQuickStartDismissed = useCallback(async () => {
     const launch = quickStartPending;
     if (!launch) return;
     setQuickStartPending(undefined);
+
+    if (launch === 'add') {
+      openAddSheet({
+        onTakePhoto: () => openScanItem('camera'),
+        onFromLibrary: () => openScanItem('library'),
+        onBatchImport: openBatchScan,
+      });
+      return;
+    }
 
     if (launch === 'closet') {
       setInitialLaunch(undefined);
@@ -115,7 +139,7 @@ export function GlobalOutfitLoggerProvider({ children }: Props) {
       setInitialLaunch(undefined);
       setInitialImage(undefined);
     }
-  }, [launchCamera, launchLibrary, quickStartPending]);
+  }, [launchCamera, launchLibrary, openAddSheet, openBatchScan, openScanItem, quickStartPending]);
   const resumeLogger = useCallback(() => {
     detourPhase.current = 'idle';
     setVisible(true);
@@ -173,6 +197,9 @@ export function GlobalOutfitLoggerProvider({ children }: Props) {
         onCamera={() => launchQuickStart('camera')}
         onLibrary={() => launchQuickStart('library')}
         onManual={() => launchQuickStart('closet')}
+        escapeLabel="These aren’t in my closet yet"
+        escapeHint="Add new pieces to your closet instead"
+        onEscape={bailToAddClothes}
         onCancel={closeQuickStart}
         onDismiss={handleQuickStartDismissed}
       />

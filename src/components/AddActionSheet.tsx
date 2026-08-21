@@ -229,7 +229,7 @@ export function AddActionSheet({
   const headerTitle =
     view === 'manual' ? 'Add Manually'
       : view === 'saving' ? 'Adding to closet…'
-        : 'Add New Clothes';
+        : 'Add to My Closet';
 
   const renderBackdrop = useCallback(
     (props: any) => (
@@ -263,7 +263,7 @@ export function AddActionSheet({
       {view === 'menu' && (
         <BottomSheetView style={styles.sheetContent}>
           <View style={styles.header}>
-            <Text style={styles.headerTitle}>Add New Clothes</Text>
+            <Text style={styles.headerTitle}>Add to My Closet</Text>
             <TouchableOpacity
               onPress={handleClose}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}

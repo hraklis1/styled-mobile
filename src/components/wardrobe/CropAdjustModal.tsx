@@ -1,528 +1,293 @@
-import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import {
-  View,
-  Text,
-  Modal,
-  TouchableOpacity,
-  Image,
-  StyleSheet,
-  PanResponder,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, typography, radii } from '../../theme';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { colors, radii, spacing, typography } from '../../theme';
 
 export type Bbox = { x: number; y: number; width: number; height: number };
 
-const MIN_FRAC = 0.10;
+const MIN_FRAC = 0.1;
 const CORNER_HIT = 44;
 
-type Corner = 'tl' | 'tr' | 'bl' | 'br';
-type Mode = 'pan' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br' | 'pinch' | null;
-
-// ─── Pure math helpers ────────────────────────────────────────────────────────
-
-function computeDisplayBounds(cW: number, cH: number, natW: number, natH: number) {
-  const scale = Math.min(cW / natW, cH / natH);
-  const dw = natW * scale;
-  const dh = natH * scale;
-  return { x: (cW - dw) / 2, y: (cH - dh) / 2, w: dw, h: dh };
+function clamp(value: number, minimum: number, maximum: number) {
+  'worklet';
+  return Math.max(minimum, Math.min(maximum, value));
 }
 
-function clampCenter(cx: number, cy: number, wPx: number, hPx: number, natW: number, natH: number) {
-  return {
-    cx: Math.max(wPx / (2 * natW), Math.min(1 - wPx / (2 * natW), cx)),
-    cy: Math.max(hPx / (2 * natH), Math.min(1 - hPx / (2 * natH), cy)),
-  };
+function displayBounds(containerWidth: number, containerHeight: number, imageWidth: number, imageHeight: number) {
+  const scale = Math.min(containerWidth / imageWidth, containerHeight / imageHeight);
+  const width = imageWidth * scale;
+  const height = imageHeight * scale;
+  return { x: (containerWidth - width) / 2, y: (containerHeight - height) / 2, width, height };
 }
 
-function getFrameRect(
-  bounds: { x: number; y: number; w: number; h: number },
-  natW: number,
-  cx: number, cy: number,
-  wPx: number, hPx: number,
-) {
-  const scale = bounds.w / natW;
-  const fw = wPx * scale;
-  const fh = hPx * scale;
-  return {
-    left: bounds.x + cx * bounds.w - fw / 2,
-    top:  bounds.y + cy * bounds.h - fh / 2,
-    width: fw,
-    height: fh,
-  };
-}
-
-function hitCorner(
-  lx: number, ly: number,
-  frame: { left: number; top: number; width: number; height: number },
-): Corner | null {
-  const HALF = CORNER_HIT / 2;
-  const pts: Array<{ key: Corner; x: number; y: number }> = [
-    { key: 'tl', x: frame.left,               y: frame.top },
-    { key: 'tr', x: frame.left + frame.width,  y: frame.top },
-    { key: 'bl', x: frame.left,               y: frame.top + frame.height },
-    { key: 'br', x: frame.left + frame.width,  y: frame.top + frame.height },
-  ];
-  for (const { key, x, y } of pts) {
-    if (Math.abs(lx - x) <= HALF && Math.abs(ly - y) <= HALF) return key;
-  }
-  return null;
-}
-
-// ─── Component ────────────────────────────────────────────────────────────────
-
-interface Props {
-  visible: boolean;
+type Props = {
   sourceImage: string;
-  initialBbox: Bbox | null;
+  initialBbox: Bbox;
   itemName: string;
   onApply: (bbox: Bbox) => void;
   onCancel: () => void;
-}
+};
 
-export function CropAdjustModal({ visible, sourceImage, initialBbox, itemName, onApply, onCancel }: Props) {
+export function CropAdjustEditor({ sourceImage, initialBbox, itemName, onApply, onCancel }: Props) {
   const insets = useSafeAreaInsets();
+  const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
 
-  const [nat, setNat]             = useState<{ w: number; h: number } | null>(null);
-  const [containerW, setContainerW] = useState(0);
-  const [containerH, setContainerH] = useState(0);
-  const [bounds, setBounds]       = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  const [cx, setCx]               = useState(0.5);
-  const [cy, setCy]               = useState(0.5);
-  const [widthPx, setWidthPx]     = useState(0);
-  const [heightPx, setHeightPx]   = useState(0);
+  const centerX = useSharedValue(0.5);
+  const centerY = useSharedValue(0.5);
+  const cropWidth = useSharedValue(0.8);
+  const cropHeight = useSharedValue(0.8);
+  const startCenterX = useSharedValue(0.5);
+  const startCenterY = useSharedValue(0.5);
+  const startWidth = useSharedValue(0.8);
+  const startHeight = useSharedValue(0.8);
+  const startLeft = useSharedValue(0.1);
+  const startRight = useSharedValue(0.9);
+  const startTop = useSharedValue(0.1);
+  const startBottom = useSharedValue(0.9);
 
-  // Shadow refs — accessed inside PanResponder without closure staleness
-  const cxRef = useRef(0.5);
-  const cyRef = useRef(0.5);
-  const wRef  = useRef(0);
-  const hRef  = useRef(0);
-  const boundsRef = useRef<typeof bounds>(null);
-  const natRef    = useRef<typeof nat>(null);
-  const containerRef    = useRef<View>(null);
-  const containerOffset = useRef({ x: 0, y: 0 });
+  const resetCrop = useCallback(() => {
+    const width = clamp(initialBbox.width / 100, MIN_FRAC, 1);
+    const height = clamp(initialBbox.height / 100, MIN_FRAC, 1);
+    cropWidth.set(width);
+    cropHeight.set(height);
+    centerX.set(clamp((initialBbox.x + initialBbox.width / 2) / 100, width / 2, 1 - width / 2));
+    centerY.set(clamp((initialBbox.y + initialBbox.height / 2) / 100, height / 2, 1 - height / 2));
+  }, [centerX, centerY, cropHeight, cropWidth, initialBbox]);
 
-  cxRef.current     = cx;
-  cyRef.current     = cy;
-  wRef.current      = widthPx;
-  hRef.current      = heightPx;
-  boundsRef.current = bounds;
-  natRef.current    = nat;
+  useEffect(() => { resetCrop(); }, [resetCrop]);
 
-  const modeRef  = useRef<Mode>(null);
-  const startRef = useRef<{
-    cx?: number; cy?: number;
-    fixedX?: number; fixedY?: number;
-    dist?: number; wPx?: number; hPx?: number;
-  } | null>(null);
-
-  // Reset when closed
   useEffect(() => {
-    if (!visible) {
-      setNat(null); setBounds(null);
-      setCx(0.5); setCy(0.5); setWidthPx(0); setHeightPx(0);
-    }
-  }, [visible]);
+    if (!sourceImage) return;
+    Image.loadAsync(sourceImage)
+      .then((image) => setNaturalSize({ width: image.width, height: image.height }))
+      .catch(() => setNaturalSize(null));
+  }, [sourceImage]);
 
-  // Get natural dimensions when image/visibility changes
-  useEffect(() => {
-    if (!visible || !sourceImage) return;
-    Image.getSize(
-      sourceImage,
-      (w, h) => {
-        if (!w || !h) return;
-        setNat({ w, h });
-        const bbox = initialBbox ?? { x: 10, y: 10, width: 80, height: 80 };
-        const initCx = (bbox.x + bbox.width / 2) / 100;
-        const initCy = (bbox.y + bbox.height / 2) / 100;
-        const minW = Math.round(w * MIN_FRAC);
-        const minH = Math.round(h * MIN_FRAC);
-        const initW = Math.max(minW, Math.min(w, Math.round((bbox.width * w) / 100)));
-        const initH = Math.max(minH, Math.min(h, Math.round((bbox.height * h) / 100)));
-        const safe = clampCenter(initCx, initCy, initW, initH, w, h);
-        setCx(safe.cx); setCy(safe.cy);
-        setWidthPx(initW); setHeightPx(initH);
-      },
-      () => {},
-    );
-  }, [visible, sourceImage]); // eslint-disable-line react-hooks/exhaustive-deps
+  const bounds = useMemo(() => {
+    if (!naturalSize || canvasSize.width <= 0 || canvasSize.height <= 0) return null;
+    return displayBounds(canvasSize.width, canvasSize.height, naturalSize.width, naturalSize.height);
+  }, [canvasSize, naturalSize]);
 
-  // Recompute display bounds when container or image changes
-  useEffect(() => {
-    if (!nat || !containerW || !containerH) return;
-    setBounds(computeDisplayBounds(containerW, containerH, nat.w, nat.h));
-  }, [nat, containerW, containerH]);
+  const panGesture = useMemo(() => Gesture.Pan()
+    .onBegin(() => {
+      startCenterX.set(centerX.get());
+      startCenterY.set(centerY.get());
+    })
+    .onUpdate((event) => {
+      if (!bounds) return;
+      const halfWidth = cropWidth.get() / 2;
+      const halfHeight = cropHeight.get() / 2;
+      centerX.set(clamp(startCenterX.get() + event.translationX / bounds.width, halfWidth, 1 - halfWidth));
+      centerY.set(clamp(startCenterY.get() + event.translationY / bounds.height, halfHeight, 1 - halfHeight));
+    }), [bounds, centerX, centerY, cropHeight, cropWidth, startCenterX, startCenterY]);
 
-  const panResponder = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder:  () => true,
-    onPanResponderTerminationRequest: () => false,
+  const pinchGesture = useMemo(() => Gesture.Pinch()
+    .onBegin(() => {
+      startWidth.set(cropWidth.get());
+      startHeight.set(cropHeight.get());
+    })
+    .onUpdate((event) => {
+      const width = clamp(startWidth.get() * event.scale, MIN_FRAC, 1);
+      const height = clamp(startHeight.get() * event.scale, MIN_FRAC, 1);
+      cropWidth.set(width);
+      cropHeight.set(height);
+      centerX.set(clamp(centerX.get(), width / 2, 1 - width / 2));
+      centerY.set(clamp(centerY.get(), height / 2, 1 - height / 2));
+    }), [centerX, centerY, cropHeight, cropWidth, startHeight, startWidth]);
 
-    onPanResponderGrant: (evt, gestureState) => {
-      const touches = evt.nativeEvent.touches;
-      if (touches.length >= 2) {
-        const dx = touches[0].pageX - touches[1].pageX;
-        const dy = touches[0].pageY - touches[1].pageY;
-        modeRef.current  = 'pinch';
-        startRef.current = { dist: Math.sqrt(dx * dx + dy * dy), wPx: wRef.current, hPx: hRef.current };
-        return;
-      }
+  const frameGesture = useMemo(() => Gesture.Simultaneous(panGesture, pinchGesture), [panGesture, pinchGesture]);
 
-      const b = boundsRef.current;
-      const n = natRef.current;
-      if (!b || !n) { modeRef.current = null; return; }
+  const resizeGesture = useCallback((leftEdge: boolean, topEdge: boolean) => Gesture.Pan()
+    .onBegin(() => {
+      startLeft.set(centerX.get() - cropWidth.get() / 2);
+      startRight.set(centerX.get() + cropWidth.get() / 2);
+      startTop.set(centerY.get() - cropHeight.get() / 2);
+      startBottom.set(centerY.get() + cropHeight.get() / 2);
+    })
+    .onUpdate((event) => {
+      if (!bounds) return;
+      const left = leftEdge
+        ? clamp(startLeft.get() + event.translationX / bounds.width, 0, startRight.get() - MIN_FRAC)
+        : startLeft.get();
+      const right = leftEdge
+        ? startRight.get()
+        : clamp(startRight.get() + event.translationX / bounds.width, startLeft.get() + MIN_FRAC, 1);
+      const top = topEdge
+        ? clamp(startTop.get() + event.translationY / bounds.height, 0, startBottom.get() - MIN_FRAC)
+        : startTop.get();
+      const bottom = topEdge
+        ? startBottom.get()
+        : clamp(startBottom.get() + event.translationY / bounds.height, startTop.get() + MIN_FRAC, 1);
+      cropWidth.set(right - left);
+      cropHeight.set(bottom - top);
+      centerX.set((left + right) / 2);
+      centerY.set((top + bottom) / 2);
+    }), [bounds, centerX, centerY, cropHeight, cropWidth, startBottom, startLeft, startRight, startTop]);
 
-      const localX = gestureState.x0 - containerOffset.current.x;
-      const localY = gestureState.y0 - containerOffset.current.y;
-      const frame  = getFrameRect(b, n.w, cxRef.current, cyRef.current, wRef.current, hRef.current);
-      const corner = hitCorner(localX, localY, frame);
+  const topLeftGesture = useMemo(() => resizeGesture(true, true), [resizeGesture]);
+  const topRightGesture = useMemo(() => resizeGesture(false, true), [resizeGesture]);
+  const bottomLeftGesture = useMemo(() => resizeGesture(true, false), [resizeGesture]);
+  const bottomRightGesture = useMemo(() => resizeGesture(false, false), [resizeGesture]);
 
-      if (corner) {
-        const scale   = b.w / n.w;
-        const fw      = wRef.current * scale;
-        const fh      = hRef.current * scale;
-        const frameCx = b.x + cxRef.current * b.w;
-        const frameCy = b.y + cyRef.current * b.h;
-        modeRef.current  = `resize-${corner}` as Mode;
-        startRef.current = {
-          fixedX: (corner === 'tl' || corner === 'bl') ? frameCx + fw / 2 : frameCx - fw / 2,
-          fixedY: (corner === 'tl' || corner === 'tr') ? frameCy + fh / 2 : frameCy - fh / 2,
-        };
-      } else {
-        modeRef.current  = 'pan';
-        startRef.current = { cx: cxRef.current, cy: cyRef.current };
-      }
-    },
+  const frameStyle = useAnimatedStyle(() => {
+    if (!bounds) return { opacity: 0 };
+    const width = cropWidth.get() * bounds.width;
+    const height = cropHeight.get() * bounds.height;
+    return {
+      opacity: 1,
+      left: bounds.x + centerX.get() * bounds.width - width / 2,
+      top: bounds.y + centerY.get() * bounds.height - height / 2,
+      width,
+      height,
+    };
+  }, [bounds]);
 
-    onPanResponderMove: (evt, gestureState) => {
-      const touches = evt.nativeEvent.touches;
-      const b = boundsRef.current;
-      const n = natRef.current;
-      if (!b || !n) return;
-
-      if (touches.length >= 2) {
-        const dx   = touches[0].pageX - touches[1].pageX;
-        const dy   = touches[0].pageY - touches[1].pageY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (modeRef.current !== 'pinch') {
-          modeRef.current  = 'pinch';
-          startRef.current = { dist, wPx: wRef.current, hPx: hRef.current };
-          return;
-        }
-        const s = startRef.current;
-        if (!s?.dist) return;
-        const ratio = dist / s.dist;
-        const minW  = Math.round(n.w * MIN_FRAC);
-        const minH  = Math.round(n.h * MIN_FRAC);
-        const newW  = Math.max(minW, Math.min(n.w, Math.round((s.wPx ?? wRef.current) * ratio)));
-        const newH  = Math.max(minH, Math.min(n.h, Math.round((s.hPx ?? hRef.current) * ratio)));
-        const safe  = clampCenter(cxRef.current, cyRef.current, newW, newH, n.w, n.h);
-        setCx(safe.cx); setCy(safe.cy);
-        setWidthPx(newW); setHeightPx(newH);
-        return;
-      }
-
-      const mode = modeRef.current;
-      const s    = startRef.current;
-
-      if (mode === 'pan' && s) {
-        const newCx = (s.cx ?? cxRef.current) + gestureState.dx / b.w;
-        const newCy = (s.cy ?? cyRef.current) + gestureState.dy / b.h;
-        const safe  = clampCenter(newCx, newCy, wRef.current, hRef.current, n.w, n.h);
-        setCx(safe.cx); setCy(safe.cy);
-      } else if (mode?.startsWith('resize-') && s?.fixedX !== undefined && s.fixedY !== undefined) {
-        const localX = gestureState.moveX - containerOffset.current.x;
-        const localY = gestureState.moveY - containerOffset.current.y;
-        const scale  = b.w / n.w;
-        const absX   = Math.abs(localX - s.fixedX);
-        const absY   = Math.abs(localY - s.fixedY);
-        const minW   = Math.round(n.w * MIN_FRAC);
-        const minH   = Math.round(n.h * MIN_FRAC);
-        const newW   = Math.max(minW, Math.min(n.w, Math.round(absX / scale)));
-        const newH   = Math.max(minH, Math.min(n.h, Math.round(absY / scale)));
-        const signX  = localX >= s.fixedX ? 1 : -1;
-        const signY  = localY >= s.fixedY ? 1 : -1;
-        const newCx  = (s.fixedX + signX * newW * scale / 2 - b.x) / b.w;
-        const newCy  = (s.fixedY + signY * newH * scale / 2 - b.y) / b.h;
-        const safe   = clampCenter(newCx, newCy, newW, newH, n.w, n.h);
-        setCx(safe.cx); setCy(safe.cy);
-        setWidthPx(newW); setHeightPx(newH);
-      }
-    },
-
-    onPanResponderRelease:   () => { modeRef.current = null; startRef.current = null; },
-    onPanResponderTerminate: () => { modeRef.current = null; startRef.current = null; },
-  }), []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleZoom = useCallback((dir: 1 | -1) => {
-    const n = natRef.current;
-    if (!n) return;
-    const factor = 1 + dir * 0.10;
-    const minW   = Math.round(n.w * MIN_FRAC);
-    const minH   = Math.round(n.h * MIN_FRAC);
-    const newW   = Math.max(minW, Math.min(n.w, Math.round(wRef.current * factor)));
-    const newH   = Math.max(minH, Math.min(n.h, Math.round(hRef.current * factor)));
-    const safe   = clampCenter(cxRef.current, cyRef.current, newW, newH, n.w, n.h);
-    setCx(safe.cx); setCy(safe.cy);
-    setWidthPx(newW); setHeightPx(newH);
-  }, []);
+  const topDimStyle = useAnimatedStyle(() => ({
+    height: bounds ? bounds.y + (centerY.get() - cropHeight.get() / 2) * bounds.height : 0,
+  }), [bounds]);
+  const bottomDimStyle = useAnimatedStyle(() => ({
+    top: bounds ? bounds.y + (centerY.get() + cropHeight.get() / 2) * bounds.height : 0,
+  }), [bounds]);
+  const leftDimStyle = useAnimatedStyle(() => ({
+    top: bounds ? bounds.y + (centerY.get() - cropHeight.get() / 2) * bounds.height : 0,
+    height: bounds ? cropHeight.get() * bounds.height : 0,
+    width: bounds ? bounds.x + (centerX.get() - cropWidth.get() / 2) * bounds.width : 0,
+  }), [bounds]);
+  const rightDimStyle = useAnimatedStyle(() => ({
+    top: bounds ? bounds.y + (centerY.get() - cropHeight.get() / 2) * bounds.height : 0,
+    height: bounds ? cropHeight.get() * bounds.height : 0,
+    left: bounds ? bounds.x + (centerX.get() + cropWidth.get() / 2) * bounds.width : 0,
+  }), [bounds]);
 
   const handleApply = useCallback(() => {
-    const n = natRef.current;
-    if (!n || wRef.current <= 0 || hRef.current <= 0) return;
-    const hx = wRef.current / (2 * n.w);
-    const hy = hRef.current / (2 * n.h);
+    const width = cropWidth.get();
+    const height = cropHeight.get();
     onApply({
-      x:      Math.max(0, cxRef.current - hx) * 100,
-      y:      Math.max(0, cyRef.current - hy) * 100,
-      width:  (wRef.current / n.w) * 100,
-      height: (hRef.current / n.h) * 100,
+      x: (centerX.get() - width / 2) * 100,
+      y: (centerY.get() - height / 2) * 100,
+      width: width * 100,
+      height: height * 100,
     });
-  }, [onApply]);
-
-  // Render frame from reactive state
-  const frame = (bounds && nat && widthPx > 0 && heightPx > 0)
-    ? getFrameRect(bounds, nat.w, cx, cy, widthPx, heightPx)
-    : null;
-
-  const canApply = !!(nat && widthPx > 0 && heightPx > 0);
+  }, [centerX, centerY, cropHeight, cropWidth, onApply]);
 
   return (
-    <Modal visible={visible} animationType="fade" transparent={false} onRequestClose={onCancel}>
-      <View style={[s.root, { paddingTop: insets.top }]}>
-
-        {/* Header */}
-        <View style={s.header}>
-          <Text style={s.title}>Adjust crop</Text>
-          <Text style={s.subtitle}>Drag to move · corners to resize · pinch to zoom</Text>
+    <View style={styles.root} accessibilityViewIsModal>
+      <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
+        <TouchableOpacity style={styles.headerButton} onPress={onCancel} accessibilityLabel="Back to piece review">
+          <Ionicons name="chevron-back" size={24} color={colors.foreground} />
+        </TouchableOpacity>
+        <View style={styles.headerCopy}>
+          <Text style={styles.title}>Adjust crop</Text>
+          <Text style={styles.subtitle}>Drag to move · corners to resize · pinch to zoom</Text>
         </View>
-
-        {/* Canvas */}
-        <View
-          ref={containerRef}
-          style={s.canvas}
-          onLayout={(e) => {
-            const { width, height } = e.nativeEvent.layout;
-            setContainerW(width);
-            setContainerH(height);
-            containerRef.current?.measure((_x, _y, _w, _h, pageX, pageY) => {
-              containerOffset.current = { x: pageX, y: pageY };
-            });
-          }}
-          {...panResponder.panHandlers}
-        >
-          {/* Source image */}
-          {!!sourceImage && (
-            <Image
-              source={{ uri: sourceImage }}
-              style={[
-                s.image,
-                bounds
-                  ? { left: bounds.x, top: bounds.y, width: bounds.w, height: bounds.h }
-                  : { top: 0, left: 0, right: 0, bottom: 0 },
-              ]}
-              resizeMode="contain"
-              accessibilityLabel={itemName}
-            />
-          )}
-
-          {frame && (
-            <>
-              {/* Dim overlays */}
-              <View style={[s.dim, { top: 0, left: 0, right: 0, height: frame.top }]} />
-              <View style={[s.dim, { left: 0, right: 0, top: frame.top + frame.height, bottom: 0 }]} />
-              <View style={[s.dim, { left: 0, top: frame.top, width: frame.left, height: frame.height }]} />
-              <View style={[s.dim, { left: frame.left + frame.width, right: 0, top: frame.top, height: frame.height }]} />
-
-              {/* Crop frame */}
-              <View
-                pointerEvents="none"
-                style={[s.cropFrame, { left: frame.left, top: frame.top, width: frame.width, height: frame.height }]}
-              >
-                {/* Rule-of-thirds grid */}
-                <View style={s.gridV1} />
-                <View style={s.gridV2} />
-                <View style={s.gridH1} />
-                <View style={s.gridH2} />
-
-                {/* Corner handles (visual only — gestures are on the whole canvas) */}
-                <View style={[s.corner, s.cornerTL]}><View style={s.cornerDot} /></View>
-                <View style={[s.corner, s.cornerTR]}><View style={s.cornerDot} /></View>
-                <View style={[s.corner, s.cornerBL]}><View style={s.cornerDot} /></View>
-                <View style={[s.corner, s.cornerBR]}><View style={s.cornerDot} /></View>
-              </View>
-            </>
-          )}
-        </View>
-
-        {/* Footer */}
-        <View style={[s.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
-          <TouchableOpacity style={s.iconBtn} onPress={() => handleZoom(1)} accessibilityLabel="Zoom out">
-            <Ionicons name="remove" size={20} color={colors.mutedForeground} />
-          </TouchableOpacity>
-          <TouchableOpacity style={s.iconBtn} onPress={() => handleZoom(-1)} accessibilityLabel="Zoom in">
-            <Ionicons name="add" size={20} color={colors.mutedForeground} />
-          </TouchableOpacity>
-          <View style={{ flex: 1 }} />
-          <TouchableOpacity style={s.cancelBtn} onPress={onCancel}>
-            <Ionicons name="close" size={15} color={colors.foreground} />
-            <Text style={s.cancelText}>Cancel</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[s.applyBtn, !canApply && s.applyBtnDisabled]}
-            onPress={handleApply}
-            disabled={!canApply}
-          >
-            <Ionicons name="checkmark" size={15} color={colors.primaryForeground} />
-            <Text style={s.applyText}>Apply</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity style={styles.headerButton} onPress={resetCrop} accessibilityLabel="Reset crop">
+          <Ionicons name="refresh" size={21} color={colors.foreground} />
+        </TouchableOpacity>
       </View>
-    </Modal>
+
+      <View
+        style={styles.canvas}
+        onLayout={(event) => setCanvasSize(event.nativeEvent.layout)}
+        accessibilityLabel={`Crop ${itemName}`}
+      >
+        {bounds ? (
+          <Image
+            source={{ uri: sourceImage }}
+            style={[styles.image, { left: bounds.x, top: bounds.y, width: bounds.width, height: bounds.height }]}
+            contentFit="contain"
+            cachePolicy="memory-disk"
+            accessibilityLabel={`Original photo for ${itemName}`}
+          />
+        ) : null}
+
+        <Animated.View pointerEvents="none" style={[styles.dim, styles.topDim, topDimStyle]} />
+        <Animated.View pointerEvents="none" style={[styles.dim, styles.bottomDim, bottomDimStyle]} />
+        <Animated.View pointerEvents="none" style={[styles.dim, styles.leftDim, leftDimStyle]} />
+        <Animated.View pointerEvents="none" style={[styles.dim, styles.rightDim, rightDimStyle]} />
+
+        <GestureDetector gesture={frameGesture}>
+          <Animated.View style={[styles.cropFrame, frameStyle]}>
+            <View pointerEvents="none" style={styles.gridV1} />
+            <View pointerEvents="none" style={styles.gridV2} />
+            <View pointerEvents="none" style={styles.gridH1} />
+            <View pointerEvents="none" style={styles.gridH2} />
+            <CropCorner style={styles.cornerTopLeft} gesture={topLeftGesture} />
+            <CropCorner style={styles.cornerTopRight} gesture={topRightGesture} />
+            <CropCorner style={styles.cornerBottomLeft} gesture={bottomLeftGesture} />
+            <CropCorner style={styles.cornerBottomRight} gesture={bottomRightGesture} />
+          </Animated.View>
+        </GestureDetector>
+      </View>
+
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+        <TouchableOpacity style={styles.cancelButton} onPress={onCancel} accessibilityRole="button">
+          <Text style={styles.cancelText}>Cancel</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.applyButton} onPress={handleApply} accessibilityRole="button">
+          <Ionicons name="checkmark" size={18} color={colors.primaryForeground} />
+          <Text style={styles.applyText}>Apply crop</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+function CropCorner({ style, gesture }: { style: object; gesture: ReturnType<typeof Gesture.Pan> }) {
+  return (
+    <GestureDetector gesture={gesture}>
+      <Animated.View style={[styles.cornerHit, style]}>
+        <View style={styles.cornerDot} />
+      </Animated.View>
+    </GestureDetector>
+  );
+}
 
-const s = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.background },
   header: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    minHeight: 84, flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: spacing.md, paddingBottom: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline,
   },
-  title: {
-    fontSize: typography.text.body.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  subtitle: {
-    fontSize: typography.text.caption.fontSize,
-    color: colors.mutedForeground,
-    marginTop: 2,
-  },
-  canvas: {
-    flex: 1,
-    backgroundColor: colors.secondary,
-  },
-  image: {
-    position: 'absolute',
-  },
-  dim: {
-    position: 'absolute',
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
-  cropFrame: {
-    position: 'absolute',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.9)',
-  },
-  gridV1: {
-    position: 'absolute',
-    top: 0, bottom: 0,
-    left: '33.33%',
-    width: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-  },
-  gridV2: {
-    position: 'absolute',
-    top: 0, bottom: 0,
-    left: '66.67%',
-    width: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-  },
-  gridH1: {
-    position: 'absolute',
-    left: 0, right: 0,
-    top: '33.33%',
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-  },
-  gridH2: {
-    position: 'absolute',
-    left: 0, right: 0,
-    top: '66.67%',
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-  },
-  corner: {
-    position: 'absolute',
-    width: CORNER_HIT,
-    height: CORNER_HIT,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cornerTL: { top: 0, left: 0, transform: [{ translateX: -CORNER_HIT / 2 }, { translateY: -CORNER_HIT / 2 }] },
-  cornerTR: { top: 0, right: 0, transform: [{ translateX: CORNER_HIT / 2 }, { translateY: -CORNER_HIT / 2 }] },
-  cornerBL: { bottom: 0, left: 0, transform: [{ translateX: -CORNER_HIT / 2 }, { translateY: CORNER_HIT / 2 }] },
-  cornerBR: { bottom: 0, right: 0, transform: [{ translateX: CORNER_HIT / 2 }, { translateY: CORNER_HIT / 2 }] },
-  cornerDot: {
-    width: 20,
-    height: 20,
-    backgroundColor: colors.white,
-    borderRadius: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.4,
-    shadowRadius: 2,
-    elevation: 2,
-  },
+  headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  headerCopy: { flex: 1, alignItems: 'center', gap: 1 },
+  title: { ...typography.text.editorialCompact, color: colors.foreground },
+  subtitle: { ...typography.text.caption, color: colors.mutedForeground, textAlign: 'center' },
+  canvas: { flex: 1, overflow: 'hidden', backgroundColor: colors.secondary },
+  image: { position: 'absolute' },
+  dim: { position: 'absolute', backgroundColor: 'rgba(24,20,17,0.58)' },
+  topDim: { top: 0, left: 0, right: 0 },
+  bottomDim: { bottom: 0, left: 0, right: 0 },
+  leftDim: { left: 0 },
+  rightDim: { right: 0 },
+  cropFrame: { position: 'absolute', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.95)' },
+  gridV1: { position: 'absolute', top: 0, bottom: 0, left: '33.33%', width: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.28)' },
+  gridV2: { position: 'absolute', top: 0, bottom: 0, left: '66.67%', width: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.28)' },
+  gridH1: { position: 'absolute', left: 0, right: 0, top: '33.33%', height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.28)' },
+  gridH2: { position: 'absolute', left: 0, right: 0, top: '66.67%', height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.28)' },
+  cornerHit: { position: 'absolute', width: CORNER_HIT, height: CORNER_HIT, alignItems: 'center', justifyContent: 'center' },
+  cornerTopLeft: { left: -CORNER_HIT / 2, top: -CORNER_HIT / 2 },
+  cornerTopRight: { right: -CORNER_HIT / 2, top: -CORNER_HIT / 2 },
+  cornerBottomLeft: { left: -CORNER_HIT / 2, bottom: -CORNER_HIT / 2 },
+  cornerBottomRight: { right: -CORNER_HIT / 2, bottom: -CORNER_HIT / 2 },
+  cornerDot: { width: 18, height: 18, borderRadius: 3, backgroundColor: colors.white, boxShadow: '0 1px 4px rgba(0,0,0,0.35)' },
   footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    backgroundColor: colors.card,
-  },
-  iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    paddingHorizontal: spacing.lg, paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline,
     backgroundColor: colors.background,
   },
-  cancelBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
+  cancelButton: { minHeight: 52, minWidth: 96, alignItems: 'center', justifyContent: 'center' },
+  cancelText: { ...typography.text.label, color: colors.foreground },
+  applyButton: {
+    minHeight: 52, flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
+    borderRadius: radii.xl, borderCurve: 'continuous', backgroundColor: colors.primary,
   },
-  cancelText: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.medium,
-    color: colors.foreground,
-  },
-  applyBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.lg,
-    backgroundColor: colors.primary,
-  },
-  applyBtnDisabled: {
-    opacity: 0.5,
-  },
-  applyText: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.medium,
-    color: colors.primaryForeground,
-  },
+  applyText: { ...typography.text.sectionTitle, color: colors.primaryForeground },
 });

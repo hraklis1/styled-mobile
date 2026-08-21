@@ -82,6 +82,8 @@ function idempotencyHeaders(key?: string) {
 }
 
 /** Direct API call for parallel multi-item extraction (no hook — avoids shared mutation state). */
+export const ITEM_SCAN_TIMEOUT_MS = 120_000;
+
 export async function scanItemDirect(input: {
   imageData: string;
   brandHint?: string;
@@ -92,7 +94,13 @@ export async function scanItemDirect(input: {
 }): Promise<ScanResult> {
   const { idempotencyKey, ...body } = input;
   return api
-    .post<ScanResult>('/api/items/scan', body, { headers: idempotencyHeaders(idempotencyKey) })
+    .post<ScanResult>('/api/items/scan', body, {
+      // Attribute extraction is an LLM-backed operation. Keep the ordinary API
+      // default short, but allow this route to outlive the provider's 60s
+      // attempt deadline and a transient retry.
+      timeout: ITEM_SCAN_TIMEOUT_MS,
+      headers: idempotencyHeaders(idempotencyKey),
+    })
     .then((r) => r.data);
 }
 

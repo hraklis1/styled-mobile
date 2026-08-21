@@ -43,7 +43,7 @@ import { BrandAutocompleteInput } from '../primitives/BrandAutocompleteInput';
 import { TaxonomySelector } from '../primitives/TaxonomySelector';
 import { SizeProfileInput } from '../primitives/SizeProfileInput';
 import type { SizeProfile } from '../../lib/sizes';
-import { CropAdjustModal, type Bbox } from './CropAdjustModal';
+import { type Bbox } from './CropAdjustModal';
 import { CutoutReviewThumb } from './CutoutReviewThumb';
 import { cropImage } from '../../lib/cropImage';
 import { tryRequestCutout } from '../../lib/cutout';
@@ -52,7 +52,12 @@ import { uploadImageToR2 } from '../../lib/uploadImage';
 import { capturePhotoLocation } from '../../lib/photoLocation';
 import { AnimatedProgressBar } from '../primitives/AnimatedProgressBar';
 import { track } from '../../lib/analytics';
+import { resolveExtractedIdentity } from '../../lib/scan-review';
 import * as Haptics from 'expo-haptics';
+import {
+  ScanReviewWorkspace,
+  type ScanReviewPiece,
+} from './scan-review-workspace';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -108,6 +113,8 @@ type PreExtractItemData = {
   previewBbox: Bbox | null;
   sourceImage: string;
   brandHint: string;
+  /** Prevent detail extraction from replacing a correction the user made. */
+  nameEdited: boolean;
   /** Scene the server routed this photo to — decides the cutout mask model. */
   scene: string | null;
 };
@@ -177,6 +184,7 @@ async function buildPreExtractItemFromPose(
     previewBbox,
     sourceImage,
     brandHint: '',
+    nameEdited: false,
     scene: poseItem.scene ?? null,
   };
 }
@@ -188,24 +196,15 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
   const [phase, setPhase] = useState<Phase>('idle');
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [detectedItems, setDetectedItems] = useState<EditableItem[]>([]);
+  const [failedItems, setFailedItems] = useState<PreExtractItemData[]>([]);
   const [extractionProgress, setExtractionProgress] = useState({ current: 0, total: 0 });
   const [extractedThumbs, setExtractedThumbs] = useState<string[]>([]);
   const sessionRef = useRef(0);
+  const reviewTrackedRef = useRef(false);
   // Location derived from photo EXIF GPS (or device position as fallback).
   // Captured in parallel with scanning; applied to every item saved in the session.
   const photoLocationRef = useRef<string | null>(null);
   const [preExtractItems, setPreExtractItems] = useState<PreExtractItemData[]>([]);
-  const [cropAdjustTarget, setCropAdjustTarget] = useState<{
-    tempId: string;
-    sourceImage: string;
-    bbox: Bbox;
-    itemName: string;
-    scope: 'pre-extract' | 'review';
-    /** Carried so a re-crop can request a matching cutout for the new box. */
-    category: string | null;
-    scene: string | null;
-  } | null>(null);
-
   const { user } = useAuth();
   const poseScan = useScanVisionPose();
   const createItem = useCreateItem();
@@ -244,6 +243,13 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (phase === 'idle') reviewTrackedRef.current = false;
+    if (phase !== 'pre-extract' || reviewTrackedRef.current) return;
+    reviewTrackedRef.current = true;
+    track('closet_scan_review_started', { mode: 'single', item_count: preExtractItems.length });
+  }, [phase, preExtractItems.length]);
 
   // Save review state to AsyncStorage whenever the app backgrounds during review
   const phaseRef = useRef(phase);
@@ -296,7 +302,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
   const canClose = phase === 'idle' || phase === 'review' || phase === 'pre-extract';
 
   const headerTitle =
-    phase === 'idle' ? 'Add New Clothes'
+    phase === 'idle' ? 'Add to My Closet'
     : phase === 'scanning' ? 'Scanning outfit…'
     : phase === 'pre-extract'
       ? preExtractItems.length === 1
@@ -316,6 +322,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     AsyncStorage.removeItem(SCAN_DRAFT_KEY);
     poseScan.reset();
     setPreExtractItems([]);
+    setFailedItems([]);
     onClose();
   }, [poseScan, onClose]);
 
@@ -420,6 +427,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     preItems: PreExtractItemData[],
     fullImageDataUrl: string,
     session: number,
+    mode: 'initial' | 'retry' = 'initial',
   ) => {
     const total = preItems.length;
     setPhase('extracting');
@@ -440,42 +448,75 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
           .map((other) => `${other.name} (${other.category})`)
           .join(', ');
 
-        const result = await scanItemDirect({
-          imageData,
-          outfitContext: otherItems || undefined,
-          brandHint: preItem.brandHint || undefined,
-          targetName: preItem.name || undefined,
-          targetCategory: preItem.category || undefined,
-        });
+        try {
+          const result = await scanItemDirect({
+            imageData,
+            outfitContext: otherItems || undefined,
+            brandHint: preItem.brandHint || undefined,
+            targetName: preItem.name || undefined,
+            targetCategory: preItem.category || undefined,
+            // A manual retry can join the original server work or use its cached
+            // result instead of starting and billing another extraction.
+            idempotencyKey: preItem.tempId,
+          });
 
-        if (sessionRef.current !== session) throw new Error('session_changed');
+          if (sessionRef.current !== session) throw new Error('session_changed');
 
-        completedCount += 1;
-        setExtractionProgress({ current: completedCount, total });
-        if (preItem.croppedImage) {
-          setExtractedThumbs((prev) => [...prev, preItem.croppedImage!]);
+          if (preItem.croppedImage) {
+            setExtractedThumbs((prev) => [...prev, preItem.croppedImage!]);
+          }
+
+          return {
+            tempId: preItem.tempId,
+            initialName: preItem.name,
+            nameEdited: preItem.nameEdited,
+            brandHint: preItem.brandHint,
+            result,
+            croppedImage: preItem.croppedImage,
+            cutoutImage: preItem.cutoutImage,
+            useCutout: preItem.useCutout,
+            bbox: preItem.bbox,
+          };
+        } finally {
+          if (sessionRef.current === session) {
+            completedCount += 1;
+            setExtractionProgress({ current: completedCount, total });
+          }
         }
-
-        return {
-          result,
-          croppedImage: preItem.croppedImage,
-          cutoutImage: preItem.cutoutImage,
-          useCutout: preItem.useCutout,
-          bbox: preItem.bbox,
-        };
       },
     );
 
     if (sessionRef.current !== session) return;
 
     const extracted: EditableItem[] = [];
-    for (const s of settled) {
-      if (s.status !== 'fulfilled') continue;
-      const { result, croppedImage, cutoutImage, useCutout, bbox } = s.value;
+    const failed: PreExtractItemData[] = [];
+    settled.forEach((s, idx) => {
+      if (s.status !== 'fulfilled') {
+        failed.push(preItems[idx]);
+        return;
+      }
+      const {
+        tempId,
+        initialName,
+        nameEdited,
+        brandHint,
+        result,
+        croppedImage,
+        cutoutImage,
+        useCutout,
+        bbox,
+      } = s.value;
+      const identity = resolveExtractedIdentity({
+        initialName,
+        nameEdited,
+        brandHint,
+        extractedName: result.name,
+        extractedBrand: result.brand,
+      });
       extracted.push({
-        tempId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        name: result.name || 'Unknown Item',
-        brand: result.brand ?? null,
+        tempId,
+        name: identity.name,
+        brand: identity.brand,
         category: result.category ?? null,
         subcategory: result.subcategory ?? null,
         color: result.color ?? null,
@@ -502,19 +543,28 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
         sourceImage: fullImageDataUrl,
         purchaseLocation: photoLocationRef.current,
       });
-    }
+    });
 
-    if (extracted.length === 0) {
+    setFailedItems(failed);
+
+    if (mode === 'initial' && extracted.length === 0) {
       Alert.alert(
         'Extraction failed',
         "Couldn't extract details for any items. Please try again.",
-        [{ text: 'OK', onPress: () => { setPhase('idle'); setImageDataUrl(null); } }],
+        [{ text: 'OK', onPress: () => setPhase('pre-extract') }],
       );
       return;
     }
 
-    setDetectedItems(extracted);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (extracted.length > 0) {
+      setDetectedItems((current) => mode === 'retry' ? [...current, ...extracted] : extracted);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } else {
+      Alert.alert(
+        'Still unavailable',
+        "Couldn't extract those items — the service may be busy. Try again in a moment.",
+      );
+    }
     setPhase('review');
   };
 
@@ -524,6 +574,12 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     await runExtraction(preExtractItems, imageDataUrl, session);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preExtractItems, imageDataUrl]);
+
+  const retryFailedExtractions = useCallback(async () => {
+    if (failedItems.length === 0 || !imageDataUrl) return;
+    await runExtraction(failedItems, imageDataUrl, sessionRef.current, 'retry');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [failedItems, imageDataUrl]);
 
   const renderBackdrop = useCallback(
     (props: any) => (
@@ -611,6 +667,8 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
 
   const runPoseScan = async (sourceUri: string, displayDataUrl: string) => {
     const session = sessionRef.current;
+    setDetectedItems([]);
+    setFailedItems([]);
     setPhase('scanning');
 
     // Downscale to 512 px for pose detection — bounding boxes don't benefit from higher res
@@ -668,7 +726,14 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
 
   const removeItem = useCallback((tempId: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setDetectedItems((prev) => prev.filter((it) => it.tempId !== tempId));
+    setDetectedItems((prev) => {
+      const next = prev.filter((it) => it.tempId !== tempId);
+      if (next.length === 0) {
+        setPhase('idle');
+        setImageDataUrl(null);
+      }
+      return next;
+    });
   }, []);
 
   const updatePreExtractItem = useCallback((tempId: string, patch: Partial<PreExtractItemData>) => {
@@ -689,27 +754,14 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     });
   }, []);
 
-  const handleAdjustCrop = useCallback((tempId: string) => {
-    const item = detectedItems.find((it) => it.tempId === tempId);
-    if (!item?.sourceImage || !item.bbox) return;
-    setCropAdjustTarget({
-      tempId, sourceImage: item.sourceImage, bbox: item.bbox, itemName: item.name,
-      scope: 'review', category: item.category, scene: null,
-    });
-  }, [detectedItems]);
-
-  const handlePreExtractAdjustCrop = useCallback((tempId: string) => {
-    const item = preExtractItems.find((it) => it.tempId === tempId);
-    if (!item?.bbox) return;
-    setCropAdjustTarget({
-      tempId, sourceImage: item.sourceImage, bbox: item.bbox, itemName: item.name,
-      scope: 'pre-extract', category: item.category, scene: item.scene,
-    });
-  }, [preExtractItems]);
-
-  const handleCropApply = useCallback(async (newBbox: Bbox) => {
-    if (!cropAdjustTarget) return;
-    const { tempId, sourceImage, scope, category, scene } = cropAdjustTarget;
+  const handleWorkspaceCropApply = useCallback(async (tempId: string, newBbox: Bbox) => {
+    const reviewItem = detectedItems.find((item) => item.tempId === tempId);
+    const preExtractItem = preExtractItems.find((item) => item.tempId === tempId);
+    const scope = reviewItem ? 'review' : 'pre-extract';
+    const sourceImage = reviewItem?.sourceImage ?? preExtractItem?.sourceImage;
+    const category = reviewItem?.category ?? preExtractItem?.category ?? null;
+    const scene = preExtractItem?.scene ?? null;
+    if (!sourceImage) return;
     const newCrop = await cropImage(sourceImage, newBbox, { maxDim: 800 });
     if (newCrop) {
       // Drop the old cutout straight away — it was masked to the previous box,
@@ -740,8 +792,76 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
         else updateItem(tempId, { cutoutImage });
       });
     }
-    setCropAdjustTarget(null);
-  }, [cropAdjustTarget, updatePreExtractItem, updateItem]);
+  }, [detectedItems, preExtractItems, updatePreExtractItem, updateItem]);
+
+  const workspacePieces = useMemo<ScanReviewPiece[]>(() => {
+    if (phase === 'review' || phase === 'saving') {
+      return detectedItems.map((item) => ({
+        id: item.tempId,
+        name: item.name,
+        brand: item.brand ?? '',
+        photo: item.croppedImage,
+        cutout: item.cutoutImage,
+        useCutout: item.useCutout,
+        canAdjustCrop: Boolean(item.sourceImage && item.bbox),
+        cropSource: item.sourceImage,
+        cropBbox: item.bbox,
+        category: item.category,
+        subcategory: item.subcategory,
+        color: item.color,
+        style: item.style,
+        seasons: item.seasons,
+        occasions: item.occasions,
+        material: item.material,
+        fit: item.fit,
+        sizeProfile: item.sizeProfile,
+        sleeveLength: item.sleeveLength,
+      }));
+    }
+    return preExtractItems.map((item) => ({
+      id: item.tempId,
+      name: item.name,
+      brand: item.brandHint,
+      photo: item.croppedImage,
+      cutout: item.cutoutImage,
+      useCutout: item.useCutout,
+      canAdjustCrop: Boolean(item.bbox),
+      cropSource: item.sourceImage,
+      cropBbox: item.bbox,
+      category: item.category,
+      subcategory: null,
+      color: null,
+      style: null,
+      seasons: [],
+      occasions: [],
+      material: null,
+      fit: null,
+      sizeProfile: null,
+      sleeveLength: null,
+    }));
+  }, [detectedItems, phase, preExtractItems]);
+
+  const handleWorkspaceUpdate = useCallback((tempId: string, patch: Partial<ScanReviewPiece>) => {
+    if (phase === 'pre-extract' || phase === 'extracting') {
+      updatePreExtractItem(tempId, {
+        ...(patch.name !== undefined ? { name: patch.name, nameEdited: true } : {}),
+        ...(patch.brand !== undefined ? { brandHint: patch.brand } : {}),
+      });
+      return;
+    }
+    updateItem(tempId, {
+      ...(patch.name !== undefined ? { name: patch.name } : {}),
+      ...(patch.brand !== undefined ? { brand: patch.brand || null } : {}),
+      ...(patch.category !== undefined ? { category: patch.category } : {}),
+      ...(patch.subcategory !== undefined ? { subcategory: patch.subcategory } : {}),
+      ...(patch.color !== undefined ? { color: patch.color } : {}),
+      ...(patch.style !== undefined ? { style: patch.style } : {}),
+      ...(patch.seasons !== undefined ? { seasons: patch.seasons } : {}),
+      ...(patch.material !== undefined ? { material: patch.material } : {}),
+      ...(patch.fit !== undefined ? { fit: patch.fit } : {}),
+      ...(patch.sizeProfile !== undefined ? { sizeProfile: patch.sizeProfile } : {}),
+    });
+  }, [phase, updateItem, updatePreExtractItem]);
 
   return (
     <>
@@ -792,37 +912,50 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
             />
           )}
 
-          {phase === 'pre-extract' && preExtractItems.length > 0 && (
-            <PreExtractList
-              items={preExtractItems}
-              brandSuggestions={brandSuggestions}
-              onUpdateItem={updatePreExtractItem}
-              onRemoveItem={removePreExtractItem}
-              onAdjustCrop={handlePreExtractAdjustCrop}
-            />
-          )}
-
-          {(phase === 'review' || phase === 'saving') && detectedItems.length > 0 && (
-            <ReviewList
-              items={detectedItems}
-              brandSuggestions={brandSuggestions}
-              onUpdateItem={updateItem}
-              onRemoveItem={removeItem}
-              onAdjustCrop={handleAdjustCrop}
-              disabled={phase === 'saving'}
-            />
-          )}
         </BottomSheetScrollView>
       </BottomSheetModal>
 
-      <CropAdjustModal
-        visible={cropAdjustTarget !== null}
-        sourceImage={cropAdjustTarget?.sourceImage ?? ''}
-        initialBbox={cropAdjustTarget?.bbox ?? null}
-        itemName={cropAdjustTarget?.itemName ?? ''}
-        onApply={handleCropApply}
-        onCancel={() => setCropAdjustTarget(null)}
+      <ScanReviewWorkspace
+        visible={phase === 'pre-extract' || phase === 'extracting' || phase === 'review' || phase === 'saving'}
+        stage={phase === 'extracting' || phase === 'review' || phase === 'saving' ? phase : 'pre-extract'}
+        pieces={workspacePieces}
+        brandSuggestions={brandSuggestions}
+        extractionProgress={extractionProgress}
+        failure={phase === 'review' && failedItems.length > 0 ? {
+          message: failedItems.length === 1
+            ? "1 piece couldn't be enriched."
+            : `${failedItems.length} pieces couldn't be enriched.`,
+          onRetry: retryFailedExtractions,
+        } : null}
+        onUpdate={handleWorkspaceUpdate}
+        onToggleCutout={(tempId) => {
+          if (phase === 'review' || phase === 'saving') {
+            const item = detectedItems.find((candidate) => candidate.tempId === tempId);
+            if (item) updateItem(tempId, { useCutout: !item.useCutout });
+          } else {
+            const item = preExtractItems.find((candidate) => candidate.tempId === tempId);
+            if (item) updatePreExtractItem(tempId, { useCutout: !item.useCutout });
+          }
+        }}
+        onApplyCrop={handleWorkspaceCropApply}
+        onRemove={(tempId) => {
+          if (phase === 'review' || phase === 'saving') removeItem(tempId);
+          else removePreExtractItem(tempId);
+        }}
+        onExtract={(trigger, reviewedCount, brandCount) => {
+          track('closet_scan_extraction_started', {
+            mode: 'single',
+            trigger,
+            reviewed_count: reviewedCount,
+            item_count: preExtractItems.length,
+            brand_count: brandCount,
+          });
+          void handleStartExtraction();
+        }}
+        onSave={() => { void handleSaveAll(); }}
+        onClose={handleClose}
       />
+
     </>
   );
 }
