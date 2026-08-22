@@ -122,14 +122,27 @@ export function useBrandSuggestions(enabled = true): string[] {
   }, [wardrobeBrands]);
 }
 
+/**
+ * A pose scan is the heaviest call in the add-to-closet pipeline: SAM 3
+ * segmentation, then labelling and mask fetches, then per-garment cutouts.
+ * That routinely outlives the 15s axios default, and a client-side timeout
+ * does not cancel the server's work — it just abandons a scan the user has
+ * already been charged for. Bound it like the other model-backed routes
+ * (see ITEM_SCAN_TIMEOUT_MS and usePolishItem) instead.
+ */
+export const POSE_SCAN_TIMEOUT_MS = 120_000;
+
 export function useScanVisionPose() {
   return useMutation({
     mutationFn: ({ imageBase64, idempotencyKey }: { imageBase64: string; idempotencyKey: string }) =>
       api
         .post<{ items: PoseScanItem[] }>('/api/scan-vision-pose', { imageBase64 }, {
+          timeout: POSE_SCAN_TIMEOUT_MS,
           headers: idempotencyHeaders(idempotencyKey),
         })
         .then((r) => r.data),
+    // Reusing the caller's key lets a retry join the original in-flight scan
+    // server-side rather than paying for a second one.
     retry: (failureCount, error) => isNetworkError(error) && failureCount < 2,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
   });
@@ -139,6 +152,7 @@ export function useScanVisionPose() {
 export async function scanVisionPoseDirect(imageBase64: string): Promise<{ items: PoseScanItem[] }> {
   return api
     .post<{ items: PoseScanItem[] }>('/api/scan-vision-pose', { imageBase64 }, {
+      timeout: POSE_SCAN_TIMEOUT_MS,
       headers: idempotencyHeaders(),
     })
     .then((r) => r.data);
@@ -220,7 +234,14 @@ export type TagScanResult = {
 export function useScanTag() {
   return useMutation({
     mutationFn: ({ imageData }: { imageData: string }) =>
-      api.post<TagScanResult>('/api/items/scan-tag', { imageData }).then((r) => r.data),
+      api
+        .post<TagScanResult>('/api/items/scan-tag', { imageData }, {
+          // One low-detail OCR call, so far quicker than a full scan — but
+          // still model-backed, and the 15s default leaves no room for a
+          // slow provider response.
+          timeout: 60_000,
+        })
+        .then((r) => r.data),
   });
 }
 
