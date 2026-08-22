@@ -21,6 +21,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import Animated, {
   Easing,
+  runOnJS,
+  useAnimatedScrollHandler,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -86,9 +88,14 @@ type Props = {
   visible: boolean;
   stage: ScanReviewStage;
   // Only meaningful for `stage === 'scanning'` (the Detect hero has no
-  // per-piece photos yet). Optional so flows that never hit that stage,
-  // like BatchScanSheet, don't need to thread it through.
+  // per-piece photos yet): the single scan's source photo, or for a batch the
+  // photo currently being scanned. Optional so flows that never hit that
+  // stage don't need to thread it through.
   previewImage?: string | null;
+  // Batch scans walk several photos through the Detect stage, so the hero
+  // needs a "photo 2 of 5" of its own. Single-photo flows leave this at zero
+  // and the Detect stage reads exactly as it did before.
+  scanProgress?: { current: number; total: number };
   pieces: ScanReviewPiece[];
   brandSuggestions: string[];
   extractionProgress: { current: number; total: number };
@@ -112,6 +119,7 @@ export function ScanReviewWorkspace({
   visible,
   stage,
   previewImage = null,
+  scanProgress = { current: 0, total: 0 },
   pieces,
   brandSuggestions,
   extractionProgress,
@@ -135,6 +143,11 @@ export function ScanReviewWorkspace({
   const [mode, setMode] = useState<WorkspaceMode>({ kind: 'review' });
 
   const metrics = useMemo(() => reviewCarouselMetrics(width), [width]);
+  // The carousel offset drives the panel below it, so the hero and its
+  // fields read as one card sliding across rather than an image that moves
+  // and a form that catches up when the scroll finally settles.
+  const scrollX = useSharedValue(0);
+  const trackedIndex = useSharedValue(0);
   const isReviewStage = stage === 'review' || stage === 'saving';
   const heroHeight = reviewHeroHeight(height, isReviewStage);
   const pieceIds = useMemo(() => pieces.map((piece) => piece.id), [pieces]);
@@ -150,8 +163,12 @@ export function ScanReviewWorkspace({
     if (activeResolvedId === activeId) return;
     setActiveId(activeResolvedId);
     const index = pieceIds.indexOf(activeResolvedId ?? '');
-    if (index >= 0) carouselRef.current?.scrollToOffset({ offset: index * metrics.snapInterval, animated: false });
-  }, [activeId, activeResolvedId, metrics.snapInterval, pieceIds]);
+    if (index >= 0) {
+      trackedIndex.value = index;
+      scrollX.value = index * metrics.snapInterval;
+      carouselRef.current?.scrollToOffset({ offset: index * metrics.snapInterval, animated: false });
+    }
+  }, [activeId, activeResolvedId, metrics.snapInterval, pieceIds, scrollX, trackedIndex]);
 
   useEffect(() => {
     setReviewedIds((current) => new Set([...current].filter((id) => pieceIds.includes(id))));
@@ -167,11 +184,12 @@ export function ScanReviewWorkspace({
     const index = pieceIds.indexOf(id);
     if (index < 0) return;
     setActiveId(id);
+    trackedIndex.value = index;
     carouselRef.current?.scrollToOffset({
       offset: index * metrics.snapInterval,
       animated: reduceMotion ? false : animated,
     });
-  }, [metrics.snapInterval, pieceIds, reduceMotion]);
+  }, [metrics.snapInterval, pieceIds, reduceMotion, trackedIndex]);
 
   const requestClose = useCallback(() => {
     if (busy) return;
@@ -203,11 +221,49 @@ export function ScanReviewWorkspace({
     if (nextId) scrollToPiece(nextId);
   }, [activeResolvedId, extract, pieceIds, reviewedIds, scrollToPiece, stage]);
 
+  // The scroll handler already swaps the active piece at the halfway point;
+  // this is the backstop for offsets that never produce a crossing (a short
+  // drag that springs back, or a programmatic jump).
   const handleMomentumEnd = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const index = reviewCarouselIndex(event.nativeEvent.contentOffset.x, metrics.snapInterval, pieces.length);
     const piece = pieces[index];
     if (piece) setActiveId(piece.id);
   }, [metrics.snapInterval, pieces]);
+
+  const selectIndex = useCallback((index: number) => {
+    const piece = pieces[index];
+    if (piece) setActiveId(piece.id);
+  }, [pieces]);
+
+  const carouselScroll = useAnimatedScrollHandler(
+    {
+      onScroll: (event) => {
+        const offset = event.contentOffset.x;
+        scrollX.value = offset;
+        if (metrics.snapInterval <= 0 || pieces.length <= 0) return;
+        const index = Math.min(pieces.length - 1, Math.max(0, Math.round(offset / metrics.snapInterval)));
+        if (index !== trackedIndex.value) {
+          trackedIndex.value = index;
+          runOnJS(selectIndex)(index);
+        }
+      },
+    },
+    [metrics.snapInterval, pieces.length, selectIndex],
+  );
+
+  // Slide-and-dip tied to the carousel offset: the panel leaves with the
+  // outgoing hero, its contents swap at the halfway point where it is nearly
+  // invisible, and it settles back in under the incoming one.
+  const coupledPanelStyle = useAnimatedStyle(() => {
+    const half = Math.max(1, metrics.snapInterval / 2);
+    const delta = scrollX.value - trackedIndex.value * metrics.snapInterval;
+    const clamped = Math.max(-half, Math.min(half, delta));
+    if (reduceMotion) return { transform: [{ translateX: 0 }], opacity: 1 };
+    return {
+      transform: [{ translateX: -clamped * 0.5 }],
+      opacity: 1 - (Math.abs(clamped) / half) * 0.8,
+    };
+  }, [metrics.snapInterval, reduceMotion]);
 
   const toggleExpanded = useCallback((id: string) => {
     setExpandedIds((current) => {
@@ -284,7 +340,7 @@ export function ScanReviewWorkspace({
         ) : null}
 
         {stage === 'scanning' ? (
-          <DetectionState previewImage={previewImage} heroHeight={heroHeight} reduceMotion={reduceMotion} />
+          <DetectionState previewImage={previewImage} progress={scanProgress} heroHeight={heroHeight} reduceMotion={reduceMotion} />
         ) : stage === 'extracting' ? (
           <ExtractionState piece={activePiece} progress={extractionProgress} heroHeight={heroHeight} reduceMotion={reduceMotion} />
         ) : (
@@ -300,7 +356,7 @@ export function ScanReviewWorkspace({
               <Text style={styles.guidance}>Check each piece before we extract the details.</Text>
             ) : null}
 
-            <FlatList
+            <Animated.FlatList
               ref={carouselRef}
               data={pieces}
               keyExtractor={(item) => item.id}
@@ -313,6 +369,8 @@ export function ScanReviewWorkspace({
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ paddingHorizontal: metrics.sidePadding }}
               getItemLayout={(_, index) => ({ length: metrics.snapInterval, offset: metrics.snapInterval * index, index })}
+              onScroll={carouselScroll}
+              scrollEventThrottle={16}
               onMomentumScrollEnd={handleMomentumEnd}
               onScrollToIndexFailed={({ index }) => {
                 carouselRef.current?.scrollToOffset({ offset: index * metrics.snapInterval, animated: false });
@@ -329,14 +387,16 @@ export function ScanReviewWorkspace({
             />
 
             {activePiece ? (
-              <HeroUtilityRow
-                piece={activePiece}
-                stage={stage}
-                disabled={stage === 'saving'}
-                onToggleCutout={() => onToggleCutout(activePiece.id)}
-                onAdjustCrop={() => setMode({ kind: 'crop-editor', pieceId: activePiece.id })}
-                onRemove={() => setMode({ kind: 'confirm-remove', pieceId: activePiece.id })}
-              />
+              <Animated.View style={coupledPanelStyle}>
+                <HeroUtilityRow
+                  piece={activePiece}
+                  stage={stage}
+                  disabled={stage === 'saving'}
+                  onToggleCutout={() => onToggleCutout(activePiece.id)}
+                  onAdjustCrop={() => setMode({ kind: 'crop-editor', pieceId: activePiece.id })}
+                  onRemove={() => setMode({ kind: 'confirm-remove', pieceId: activePiece.id })}
+                />
+              </Animated.View>
             ) : null}
 
             {pieces.length > 3 ? (
@@ -351,16 +411,18 @@ export function ScanReviewWorkspace({
             ) : null}
 
             {activePiece ? (
-              <ActivePieceForm
-                piece={activePiece}
-                stage={stage}
-                disabled={stage === 'saving'}
-                detailsExpanded={expandedIds.has(activePiece.id)}
-                onToggleDetails={() => toggleExpanded(activePiece.id)}
-                onUpdate={(patch) => onUpdate(activePiece.id, patch)}
-                onOpenBrand={() => setMode({ kind: 'brand-search', pieceId: activePiece.id })}
-                onNameFocus={() => setTimeout(() => detailsScrollRef.current?.scrollToEnd({ animated: !reduceMotion }), 120)}
-              />
+              <Animated.View style={coupledPanelStyle}>
+                <ActivePieceForm
+                  piece={activePiece}
+                  stage={stage}
+                  disabled={stage === 'saving'}
+                  detailsExpanded={expandedIds.has(activePiece.id)}
+                  onToggleDetails={() => toggleExpanded(activePiece.id)}
+                  onUpdate={(patch) => onUpdate(activePiece.id, patch)}
+                  onOpenBrand={() => setMode({ kind: 'brand-search', pieceId: activePiece.id })}
+                  onNameFocus={() => setTimeout(() => detailsScrollRef.current?.scrollToEnd({ animated: !reduceMotion }), 120)}
+                />
+              </Animated.View>
             ) : null}
           </ScrollView>
         )}
@@ -833,8 +895,9 @@ function useCyclingScanStatus(): string {
 // per-item signal yet (pose-scan is a single non-streamed request), so this
 // is deliberately a choreographed effect rather than data-driven, same as
 // the cycling status copy above.
-function DetectionState({ previewImage, heroHeight, reduceMotion }: {
+function DetectionState({ previewImage, progress, heroHeight, reduceMotion }: {
   previewImage: string | null;
+  progress: { current: number; total: number };
   heroHeight: number;
   reduceMotion: boolean;
 }) {
@@ -878,7 +941,7 @@ function DetectionState({ previewImage, heroHeight, reduceMotion }: {
       </View>
       <Text style={styles.extractionTitle}>Detecting your pieces</Text>
       <Text style={styles.extractionCopy}>{statusMsg}</Text>
-      <ScanStepTrack stage="scanning" progress={{ current: 0, total: 0 }} reduceMotion={reduceMotion} />
+      <ScanStepTrack stage="scanning" progress={progress} reduceMotion={reduceMotion} />
     </View>
   );
 }
@@ -909,8 +972,11 @@ function ScanStepTrack({ stage, progress, reduceMotion }: {
   progress: { current: number; total: number };
   reduceMotion: boolean;
 }) {
+  // Detect owns the first half of the rule. A single-photo scan has no real
+  // signal inside it, so it sits at a token 0.1; a batch has one tick per
+  // photo and fills the half for real.
   const targetFraction = stage === 'scanning'
-    ? 0.1
+    ? (progress.total > 0 ? 0.1 + (progress.current / progress.total) * 0.4 : 0.1)
     : 0.5 + (progress.total > 0 ? (progress.current / progress.total) * 0.5 : 0);
 
   const fill = useSharedValue(targetFraction);
@@ -937,7 +1003,7 @@ function ScanStepTrack({ stage, progress, reduceMotion }: {
       <View style={styles.trackRule}>
         <Animated.View style={[styles.trackRuleFill, fillStyle]} />
       </View>
-      {stage === 'extracting' ? (
+      {stage === 'extracting' || progress.total > 1 ? (
         <Text style={styles.trackCount}>{progress.current}/{progress.total}</Text>
       ) : null}
     </View>

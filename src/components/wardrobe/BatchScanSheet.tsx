@@ -215,6 +215,12 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
   const [extractedThumbs, setExtractedThumbs] = useState<string[]>([]);
   const sessionRef = useRef(0);
   const reviewTrackedRef = useRef(false);
+  // Guards the handoff from the picker sheet to the full-screen scan
+  // workspace: set right before a programmatic `.dismiss()` so `handleDismiss`
+  // treats it as a no-op instead of tearing down the whole batch. Genuine user
+  // dismissals never set it.
+  const suppressNextDismissRef = useRef(false);
+  const hasStartedRef = useRef(false);
 
   const { user } = useAuth();
   const createItem = useCreateItem();
@@ -244,6 +250,18 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
   }, [phase]);
 
   const handleDismiss = useCallback(() => {
+    if (suppressNextDismissRef.current) {
+      suppressNextDismissRef.current = false;
+      return;
+    }
+    onClose();
+  }, [onClose]);
+
+  // The workspace's "Discard scan" has no sheet dismissal to ride on — the
+  // picker was dismissed the moment scanning began — so it ends the batch
+  // directly, cancelling anything still in flight.
+  const handleWorkspaceDiscard = useCallback(() => {
+    sessionRef.current += 1;
     onClose();
   }, [onClose]);
 
@@ -256,6 +274,15 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
   useEffect(() => {
     bottomSheetRef.current?.present();
   }, []);
+
+  // If the batch bounces back to `idle` after having started (nothing
+  // detected, last piece removed), re-present the picker — it was dismissed
+  // when scanning began and won't come back on its own.
+  useEffect(() => {
+    if (phase === 'idle' && hasStartedRef.current) {
+      bottomSheetRef.current?.present();
+    }
+  }, [phase]);
 
   const updateJob = (id: string, patch: Partial<PhotoJob>) => {
     setPhotoJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...patch } : j)));
@@ -346,6 +373,9 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
     }));
 
     setPhotoJobs(jobs);
+    hasStartedRef.current = true;
+    suppressNextDismissRef.current = true;
+    bottomSheetRef.current?.dismiss();
     setPhase('processing');
 
     // Photos used to be scanned strictly one at a time, because the Python
@@ -384,7 +414,13 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
     const failed = photoJobs.filter((j) => j.status === 'error');
     if (failed.length === 0) return;
     const session = sessionRef.current;
+    const failedIds = new Set(failed.map((j) => j.id));
 
+    // Put the failed jobs back to 'pending' so the Detect hero and its counter
+    // describe the retry in progress rather than a batch that already ended.
+    setPhotoJobs((prev) =>
+      prev.map((j) => (failedIds.has(j.id) ? { ...j, status: 'pending', errorMsg: null } : j)),
+    );
     setPhase('processing');
 
     const settled = await mapWithConcurrency(failed, PHOTO_SCAN_CONCURRENCY, (job) =>
@@ -855,6 +891,17 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
   const totalCount = photoJobs.length;
   const errorCount = photoJobs.filter((j) => j.status === 'error').length;
 
+  // The Detect hero shows whichever photo the scan is looking at right now —
+  // several run at once, so it's the first still-scanning job, falling back to
+  // the next one queued (or the last one finished, at the very end).
+  const scanningJob =
+    photoJobs.find((j) => j.status === 'scanning')
+    ?? photoJobs.find((j) => j.status === 'pending')
+    ?? photoJobs[photoJobs.length - 1];
+  const scanPreviewImage = scanningJob
+    ? scanningJob.thumbDataUrl || scanningJob.asset.uri
+    : null;
+
   const headerTitle =
     phase === 'idle' ? 'Batch Scan'
     : phase === 'processing' ? `Scanning ${doneCount}/${totalCount} photos…`
@@ -907,15 +954,6 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
           {/* Body */}
           {phase === 'idle' && <IdleContent onPickPhotos={pickPhotos} />}
 
-          {phase === 'processing' && (
-            <ProcessingContent
-              jobs={photoJobs}
-              doneCount={doneCount}
-              totalCount={totalCount}
-              errorCount={errorCount}
-            />
-          )}
-
           {phase === 'extracting' && (
             <ExtractingContent
               progress={extractionProgress}
@@ -926,8 +964,12 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
       </BottomSheetModal>
 
       <ScanReviewWorkspace
-        visible={phase === 'pre-extract' || phase === 'extracting' || phase === 'review' || phase === 'saving'}
-        stage={phase === 'extracting' || phase === 'review' || phase === 'saving' ? phase : 'pre-extract'}
+        visible={phase === 'processing' || phase === 'pre-extract' || phase === 'extracting' || phase === 'review' || phase === 'saving'}
+        stage={phase === 'processing'
+          ? 'scanning'
+          : phase === 'extracting' || phase === 'review' || phase === 'saving' ? phase : 'pre-extract'}
+        previewImage={scanPreviewImage}
+        scanProgress={{ current: doneCount, total: totalCount }}
         pieces={workspacePieces}
         brandSuggestions={brandSuggestions}
         extractionProgress={extractionProgress}
@@ -966,7 +1008,7 @@ export function BatchScanSheet({ visible, onClose, onItemsSaved }: BatchScanShee
           runExtraction();
         }}
         onSave={() => { void handleSaveAll(); }}
-        onClose={handleClose}
+        onClose={handleWorkspaceDiscard}
       />
 
     </>
@@ -1024,125 +1066,6 @@ const idleStyles = StyleSheet.create({
     fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
     textAlign: 'center',
-  },
-});
-
-// ─── ProcessingContent ────────────────────────────────────────────────────────
-
-function ProcessingContent({
-  jobs,
-  doneCount,
-  totalCount,
-  errorCount,
-}: {
-  jobs: PhotoJob[];
-  doneCount: number;
-  totalCount: number;
-  errorCount: number;
-}) {
-  const progressPct = totalCount > 0 ? (doneCount / totalCount) * 100 : 0;
-
-  return (
-    <View style={procStyles.container}>
-      <View style={procStyles.progressSection}>
-        <AnimatedProgressBar progress={progressPct} />
-        <Text style={procStyles.progressLabel}>
-          {doneCount} of {totalCount} photos
-          {errorCount > 0 ? ` · ${errorCount} failed` : ''}
-        </Text>
-      </View>
-
-      <View style={procStyles.photoGrid}>
-        {jobs.map((job) => (
-          <PhotoJobCard key={job.id} job={job} />
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function PhotoJobCard({ job }: { job: PhotoJob }) {
-  const statusIcon: Record<PhotoStatus, string> = {
-    pending: 'ellipse-outline',
-    scanning: 'search-outline',
-    done: 'checkmark-circle',
-    error: 'alert-circle',
-  };
-  const statusColor: Record<PhotoStatus, string> = {
-    pending: colors.mutedForeground,
-    scanning: colors.primary,
-    done: colors.primary,
-    error: colors.error,
-  };
-  const statusLabel: Record<PhotoStatus, string> = {
-    pending: 'Waiting…',
-    scanning: 'Scanning…',
-    done: job.itemCount === 0 ? 'No items' : `${job.itemCount} item${job.itemCount === 1 ? '' : 's'}`,
-    error: job.errorMsg ?? 'Failed',
-  };
-
-  return (
-    <View style={procStyles.photoCard}>
-      {job.thumbDataUrl ? (
-        <Image source={{ uri: job.thumbDataUrl }} style={procStyles.thumb} resizeMode="cover" />
-      ) : (
-        <View style={[procStyles.thumb, procStyles.thumbPlaceholder]}>
-          <ActivityIndicator size="small" color={colors.mutedForeground} />
-        </View>
-      )}
-      <View style={procStyles.photoStatus}>
-        {job.status === 'scanning' ? (
-          <ActivityIndicator size="small" color={colors.primary} />
-        ) : (
-          <Ionicons
-            name={statusIcon[job.status] as any}
-            size={16}
-            color={statusColor[job.status]}
-          />
-        )}
-        <Text style={[procStyles.statusText, { color: statusColor[job.status] }]} numberOfLines={1}>
-          {statusLabel[job.status]}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-const procStyles = StyleSheet.create({
-  container: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: spacing.lg },
-  progressSection: { gap: spacing.xs },
-  progressLabel: {
-    fontSize: typography.text.caption.fontSize,
-    color: colors.mutedForeground,
-    textAlign: 'right',
-  },
-  photoGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  photoCard: {
-    width: '30%',
-    gap: spacing.xs,
-  },
-  thumb: {
-    width: '100%',
-    aspectRatio: 1,
-    borderRadius: radii.md,
-    backgroundColor: colors.muted,
-  },
-  thumbPlaceholder: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  photoStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  statusText: {
-    fontSize: typography.text.caption.fontSize,
-    flex: 1,
   },
 });
 
