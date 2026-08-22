@@ -119,7 +119,8 @@ export function ScanReviewWorkspace({
   const [mode, setMode] = useState<WorkspaceMode>({ kind: 'review' });
 
   const metrics = useMemo(() => reviewCarouselMetrics(width), [width]);
-  const heroHeight = reviewHeroHeight(height);
+  const isReviewStage = stage === 'review' || stage === 'saving';
+  const heroHeight = reviewHeroHeight(height, isReviewStage);
   const pieceIds = useMemo(() => pieces.map((piece) => piece.id), [pieces]);
   const activeResolvedId = resolvedActivePieceId(pieceIds, activeId);
   const activeIndex = Math.max(0, pieceIds.indexOf(activeResolvedId ?? ''));
@@ -250,6 +251,7 @@ export function ScanReviewWorkspace({
           stage={stage}
           activeIndex={activeIndex}
           pieceCount={pieces.length}
+          showCounter={!(isReviewStage && pieces.length > 1)}
           busy={busy}
           topInset={insets.top}
           onClose={requestClose}
@@ -378,10 +380,11 @@ export function ScanReviewWorkspace({
   );
 }
 
-function WorkspaceHeader({ stage, activeIndex, pieceCount, busy, topInset, onClose }: {
+function WorkspaceHeader({ stage, activeIndex, pieceCount, showCounter, busy, topInset, onClose }: {
   stage: ScanReviewStage;
   activeIndex: number;
   pieceCount: number;
+  showCounter: boolean;
   busy: boolean;
   topInset: number;
   onClose: () => void;
@@ -392,9 +395,11 @@ function WorkspaceHeader({ stage, activeIndex, pieceCount, busy, topInset, onClo
         <Text style={styles.title} numberOfLines={1}>
           {stage === 'review' || stage === 'saving' ? 'Review details' : 'Review your pieces'}
         </Text>
-        <Text style={styles.counter} accessibilityLabel={`Piece ${activeIndex + 1} of ${pieceCount}`}>
-          {activeIndex + 1} of {pieceCount}
-        </Text>
+        {showCounter ? (
+          <Text style={styles.counter} accessibilityLabel={`Piece ${activeIndex + 1} of ${pieceCount}`}>
+            {activeIndex + 1} of {pieceCount}
+          </Text>
+        ) : null}
       </View>
       <TouchableOpacity
         style={styles.headerButton}
@@ -507,11 +512,11 @@ function Filmstrip({ pieces, stage, activeId, reviewedIds, disabled, onSelect }:
               onPress={() => onSelect(piece.id)}
               disabled={disabled}
               accessibilityRole="button"
-              accessibilityLabel={`View piece ${index + 1} of ${pieces.length}: ${piece.name}`}
+              accessibilityLabel={`View piece ${index + 1} of ${pieces.length}: ${piece.name}${reviewed ? ', reviewed' : ''}`}
               accessibilityState={{ selected }}
             >
-              {uri ? <Image source={{ uri }} style={styles.filmstripImage} contentFit="contain" cachePolicy="memory-disk" recyclingKey={`filmstrip-${piece.id}`} /> : <Ionicons name="shirt-outline" size={22} color={colors.mutedForeground} />}
-              {reviewed ? <View style={styles.reviewedBadge}><Ionicons name="checkmark" size={12} color={colors.primaryForeground} /></View> : null}
+              {uri ? <Image source={{ uri }} style={[styles.filmstripImage, !selected && styles.filmstripImageResting]} contentFit="contain" cachePolicy="memory-disk" recyclingKey={`filmstrip-${piece.id}`} /> : <Ionicons name="shirt-outline" size={24} color={colors.mutedForeground} />}
+              {reviewed ? <View style={styles.reviewedBadge}><Ionicons name="checkmark" size={11} color={colors.white} /></View> : null}
             </TouchableOpacity>
           );
         })}
@@ -765,7 +770,7 @@ const styles = StyleSheet.create({
   retryButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.sm },
   retryText: { ...typography.text.label, color: colors.action },
   mainScroll: { flex: 1 },
-  mainContent: { paddingTop: spacing.sm, paddingBottom: spacing.lg, gap: spacing.sm },
+  mainContent: { paddingTop: spacing.sm, paddingBottom: spacing.xxl, gap: spacing.sm },
   guidance: { ...typography.text.bodySmall, color: colors.mutedForeground, textAlign: 'center', paddingHorizontal: spacing.xl },
   hero: { overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card, borderRadius: radii.xl, borderCurve: 'continuous', boxShadow: '0 6px 20px rgba(61,48,38,0.08)' },
   heroImage: { width: '100%', height: '100%' },
@@ -776,12 +781,15 @@ const styles = StyleSheet.create({
   coverToggleTextActive: { color: colors.primaryForeground },
   cropButton: { position: 'absolute', bottom: spacing.md, right: spacing.md, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: 'rgba(255,252,247,0.94)' },
   cropButtonText: { ...typography.text.caption, fontWeight: typography.weight.semibold, color: colors.foreground },
-  filmstripFrame: { height: 92, flexShrink: 0, justifyContent: 'center' },
-  filmstrip: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
-  filmstripThumb: { width: 58, height: 72, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, borderCurve: 'continuous', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
-  filmstripThumbSelected: { borderWidth: 2, borderColor: colors.primary },
-  filmstripImage: { width: '100%', height: '100%' },
-  reviewedBadge: { position: 'absolute', right: 3, bottom: 3, width: 22, height: 22, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary },
+  filmstripFrame: { height: 110, flexShrink: 0, justifyContent: 'center' },
+  filmstrip: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+  // Selected reads as a lifted primary ring; reviewed reads as a green tick in
+  // the opposite corner — the two states must never be confusable.
+  filmstripThumb: { width: 68, height: 86, alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, borderCurve: 'continuous', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
+  filmstripThumbSelected: { borderWidth: 2, borderColor: colors.primary, backgroundColor: colors.surfaceElevated, boxShadow: '0 4px 12px rgba(61,48,38,0.16)' },
+  filmstripImage: { width: '100%', height: '100%', borderRadius: radii.md - 1 },
+  filmstripImageResting: { opacity: 0.78 },
+  reviewedBadge: { position: 'absolute', top: -5, right: -5, width: 20, height: 20, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.success, borderWidth: 2, borderColor: colors.background },
   formCard: { gap: spacing.md, marginHorizontal: spacing.lg, padding: spacing.md, backgroundColor: colors.surfaceElevated, borderRadius: radii.xl, borderCurve: 'continuous', borderWidth: 1, borderColor: colors.border },
   field: { gap: spacing.xs },
   fieldLabel: { ...typography.text.eyebrow, color: colors.mutedForeground },

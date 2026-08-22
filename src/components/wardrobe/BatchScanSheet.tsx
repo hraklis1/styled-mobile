@@ -172,11 +172,14 @@ async function buildPreExtractItemFromPose(
 ): Promise<PreExtractItemData> {
   const targetBbox = normalizePoseBbox(poseItem.targetBbox_pct ?? poseItem.bbox_pct);
   const previewBbox = normalizePoseBbox(poseItem.previewBbox_pct) ?? targetBbox;
+  // Crop locally from the full-resolution capture rather than the server's
+  // preview, which is cut from the 512px frame sent for pose detection and
+  // looks soft once stretched to fill the review hero.
   const serverPreview = poseItem.croppedWebP
     ? `data:image/webp;base64,${poseItem.croppedWebP}`
     : null;
-  const previewImage = serverPreview
-    ?? (previewBbox ? await cropImage(sourceImage, previewBbox, { maxDim: 800 }) : null);
+  const previewImage = (previewBbox ? await cropImage(sourceImage, previewBbox, { maxDim: 800 }) : null)
+    ?? serverPreview;
   const targetImage = targetBbox
     ? await cropImage(sourceImage, targetBbox, { maxDim: 800 })
     : previewImage;

@@ -868,8 +868,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         )}
         {featuredExplanation ? (
           <View style={styles.dailyLookExplanation} accessible accessibilityLabel={`Why this look: ${featuredExplanation}`}>
-            <Text style={styles.dailyLookExplanationLabel}>Why this look</Text>
-            <Text style={styles.dailyLookExplanationText} numberOfLines={3}>{featuredExplanation}</Text>
+            <Text style={styles.dailyLookExplanationText} numberOfLines={3}>
+              <Text style={styles.dailyLookExplanationLabel}>Why this look · </Text>
+              {featuredExplanation}
+            </Text>
           </View>
         ) : null}
       </EditorialSection>
@@ -1408,19 +1410,15 @@ const styles = StyleSheet.create({
     color: colors.foreground,
   },
   dailyLookExplanation: {
-    gap: spacing.xs,
     marginHorizontal: SIDE_PAD,
-    marginTop: spacing.lg,
-    paddingTop: spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
+    marginTop: spacing.sm,
   },
   dailyLookExplanationLabel: {
-    ...typography.text.label,
-    color: colors.foreground,
+    fontWeight: typography.weight.semibold,
+    color: colors.mutedForeground,
   },
   dailyLookExplanationText: {
-    ...typography.text.body,
+    ...typography.text.bodySmall,
     color: colors.inkSubtle,
   },
 

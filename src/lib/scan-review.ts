@@ -14,7 +14,10 @@ export function reviewCarouselMetrics(viewportWidth: number): ReviewCarouselMetr
   return { cardWidth, gap, sidePadding, snapInterval: cardWidth + gap };
 }
 
-export function reviewHeroHeight(viewportHeight: number): number {
+// The hero is the subject at pre-extract, where the job is judging the crop.
+// Once the job becomes form-filling it steps back so the fields get the room.
+export function reviewHeroHeight(viewportHeight: number, compact = false): number {
+  if (compact) return Math.round(Math.max(196, Math.min(248, viewportHeight * 0.24)));
   return Math.round(Math.max(248, Math.min(318, viewportHeight * 0.31)));
 }
 

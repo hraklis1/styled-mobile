@@ -74,6 +74,9 @@ describe('scan review helpers', () => {
     expect(reviewHeroHeight(667)).toBe(248);
     expect(reviewHeroHeight(852)).toBe(264);
     expect(reviewHeroHeight(1200)).toBe(318);
+    expect(reviewHeroHeight(667, true)).toBe(196);
+    expect(reviewHeroHeight(852, true)).toBe(204);
+    expect(reviewHeroHeight(1200, true)).toBe(248);
   });
 
   it('filters brands with prefix matches first and removes duplicates', () => {
