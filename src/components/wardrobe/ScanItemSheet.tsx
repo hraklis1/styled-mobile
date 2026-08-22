@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Image,
   StyleSheet,
   ScrollView,
   TextInput,
@@ -50,7 +49,6 @@ import { tryRequestCutout } from '../../lib/cutout';
 import { mapWithConcurrency } from '../../lib/asyncPool';
 import { uploadImageToR2 } from '../../lib/uploadImage';
 import { capturePhotoLocation } from '../../lib/photoLocation';
-import { AnimatedProgressBar } from '../primitives/AnimatedProgressBar';
 import { track } from '../../lib/analytics';
 import { resolveExtractedIdentity } from '../../lib/scan-review';
 import * as Haptics from 'expo-haptics';
@@ -201,9 +199,17 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
   const [detectedItems, setDetectedItems] = useState<EditableItem[]>([]);
   const [failedItems, setFailedItems] = useState<PreExtractItemData[]>([]);
   const [extractionProgress, setExtractionProgress] = useState({ current: 0, total: 0 });
-  const [extractedThumbs, setExtractedThumbs] = useState<string[]>([]);
   const sessionRef = useRef(0);
   const reviewTrackedRef = useRef(false);
+  // Guards the handoff from the idle picker sheet to the full-screen scan
+  // workspace: set right before a programmatic `.dismiss()` so `handleDismiss`
+  // (BottomSheetModal's onDismiss) treats it as a no-op instead of tearing
+  // down the whole scan. Genuine user dismissals never set this.
+  const suppressNextDismissRef = useRef(false);
+  // Once a scan has actually started, a mid-flow bounce back to `idle` (no
+  // items detected, scan failed, last piece removed) should re-show the
+  // picker sheet rather than leave a blank screen.
+  const hasStartedRef = useRef(false);
   // Location derived from photo EXIF GPS (or device position as fallback).
   // Captured in parallel with scanning; applied to every item saved in the session.
   const photoLocationRef = useRef<string | null>(null);
@@ -294,8 +300,6 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
         photoLocationRef.current = loc;
       });
       setImageDataUrl(captured.dataUrl);
-      setPhase('scanning');
-      bottomSheetRef.current?.present();
       await runPoseScan(captured.uri, captured.dataUrl);
     })();
     return () => { active = false; };
@@ -321,13 +325,39 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     bottomSheetRef.current?.dismiss();
   }, [phase]);
 
-  const handleDismiss = useCallback(() => {
+  // Shared teardown for actually ending the scan — used both when the idle
+  // picker sheet is dismissed (via handleDismiss below) and when the
+  // full-screen workspace's "Discard scan" is confirmed, where there's no
+  // bottom sheet dismiss animation to wait on since the sheet was already
+  // dismissed (or never presented) by the time scanning started.
+  const finishClose = useCallback(() => {
     AsyncStorage.removeItem(SCAN_DRAFT_KEY);
     poseScan.reset();
     setPreExtractItems([]);
     setFailedItems([]);
     onClose();
   }, [poseScan, onClose]);
+
+  const handleDismiss = useCallback(() => {
+    if (suppressNextDismissRef.current) {
+      suppressNextDismissRef.current = false;
+      return;
+    }
+    finishClose();
+  }, [finishClose]);
+
+  const handleWorkspaceDiscard = useCallback(() => {
+    finishClose();
+  }, [finishClose]);
+
+  // If the flow bounces back to `idle` after having started (no items
+  // detected, scan failed, last piece removed), re-present the picker sheet
+  // — it was dismissed when scanning began and won't come back on its own.
+  useEffect(() => {
+    if (phase === 'idle' && hasStartedRef.current) {
+      bottomSheetRef.current?.present();
+    }
+  }, [phase]);
 
 
   const handleSaveAll = async () => {
@@ -435,7 +465,6 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     const total = preItems.length;
     setPhase('extracting');
     setExtractionProgress({ current: 0, total });
-    setExtractedThumbs([]);
 
     let completedCount = 0;
 
@@ -464,10 +493,6 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
           });
 
           if (sessionRef.current !== session) throw new Error('session_changed');
-
-          if (preItem.croppedImage) {
-            setExtractedThumbs((prev) => [...prev, preItem.croppedImage!]);
-          }
 
           return {
             tempId: preItem.tempId,
@@ -672,6 +697,9 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     const session = sessionRef.current;
     setDetectedItems([]);
     setFailedItems([]);
+    hasStartedRef.current = true;
+    suppressNextDismissRef.current = true;
+    bottomSheetRef.current?.dismiss();
     setPhase('scanning');
 
     // Downscale to 512 px for pose detection — bounding boxes don't benefit from higher res
@@ -905,22 +933,13 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
 
           {/* Body */}
           {phase === 'idle' && <IdleContent onPickImage={pickImage} />}
-
-          {(phase === 'scanning' || phase === 'extracting') && (
-            <ScanProgress
-              phase={phase}
-              imageDataUrl={imageDataUrl}
-              extractionProgress={extractionProgress}
-              extractedThumbs={extractedThumbs}
-            />
-          )}
-
         </BottomSheetScrollView>
       </BottomSheetModal>
 
       <ScanReviewWorkspace
-        visible={phase === 'pre-extract' || phase === 'extracting' || phase === 'review' || phase === 'saving'}
-        stage={phase === 'extracting' || phase === 'review' || phase === 'saving' ? phase : 'pre-extract'}
+        visible={phase === 'scanning' || phase === 'pre-extract' || phase === 'extracting' || phase === 'review' || phase === 'saving'}
+        stage={phase === 'scanning' || phase === 'extracting' || phase === 'review' || phase === 'saving' ? phase : 'pre-extract'}
+        previewImage={imageDataUrl}
         pieces={workspacePieces}
         brandSuggestions={brandSuggestions}
         extractionProgress={extractionProgress}
@@ -956,7 +975,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
           void handleStartExtraction();
         }}
         onSave={() => { void handleSaveAll(); }}
-        onClose={handleClose}
+        onClose={handleWorkspaceDiscard}
       />
 
     </>
@@ -1033,195 +1052,6 @@ const idleStyles = StyleSheet.create({
     color: colors.mutedForeground,
     marginTop: 2,
   },
-});
-
-// ─── ScanProgress ─────────────────────────────────────────────────────────────
-
-const SCAN_MESSAGES = [
-  'Analyzing your outfit…',
-  'Identifying clothing items…',
-  'Detecting colors & patterns…',
-  'Reading style details…',
-  'Almost there…',
-];
-
-function useCyclingScanStatus(active: boolean): string {
-  const [idx, setIdx] = useState(0);
-  useEffect(() => {
-    if (!active) { setIdx(0); return; }
-    const id = setInterval(() => setIdx((i) => (i + 1) % SCAN_MESSAGES.length), 2500);
-    return () => clearInterval(id);
-  }, [active]);
-  return SCAN_MESSAGES[idx];
-}
-
-function ScanProgress({
-  phase,
-  imageDataUrl,
-  extractionProgress,
-  extractedThumbs,
-}: {
-  phase: 'scanning' | 'extracting';
-  imageDataUrl: string | null;
-  extractionProgress: { current: number; total: number };
-  extractedThumbs: string[];
-}) {
-  const statusMsg = useCyclingScanStatus(phase === 'scanning');
-  const progressNum =
-    extractionProgress.total > 0
-      ? Math.round((extractionProgress.current / extractionProgress.total) * 100)
-      : 0;
-
-  return (
-    <View style={scanStyles.container}>
-      {imageDataUrl && (
-        <View style={scanStyles.previewBox}>
-          <Image
-            source={{ uri: imageDataUrl }}
-            style={scanStyles.preview}
-            resizeMode="cover"
-          />
-          <View style={scanStyles.previewDim} />
-        </View>
-      )}
-
-      {phase === 'scanning' && (
-        <View style={scanStyles.statusBox}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={scanStyles.statusTitle}>Detecting items…</Text>
-          <Text style={scanStyles.statusSub}>{statusMsg}</Text>
-          <View style={scanStyles.stepRow}>
-            <View style={[scanStyles.stepDot, scanStyles.stepDotActive]} />
-            <View style={scanStyles.stepLine} />
-            <View style={scanStyles.stepDot} />
-          </View>
-          <View style={scanStyles.stepLabels}>
-            <Text style={[scanStyles.stepLabel, scanStyles.stepLabelActive]}>Detect</Text>
-            <Text style={scanStyles.stepLabel}>Extract</Text>
-          </View>
-        </View>
-      )}
-
-      {phase === 'extracting' && (
-        <View style={scanStyles.statusBox}>
-          {extractedThumbs.length > 0 ? (
-            <View style={scanStyles.thumbRow}>
-              {extractedThumbs.map((uri, idx) => (
-                <Image key={idx} source={{ uri }} style={scanStyles.thumb} resizeMode="cover" />
-              ))}
-            </View>
-          ) : (
-            <ActivityIndicator size="large" color={colors.primary} />
-          )}
-
-          <View style={scanStyles.progressContainer}>
-            <AnimatedProgressBar progress={progressNum} style={scanStyles.progressTrackFlex} />
-            <Text style={scanStyles.progressText}>
-              {extractionProgress.current} / {extractionProgress.total}
-            </Text>
-          </View>
-          <Text style={scanStyles.statusSub}>
-            {extractionProgress.current === 0
-              ? 'Analysing items in parallel…'
-              : extractionProgress.current < extractionProgress.total
-              ? 'Extracting styling details…'
-              : 'Wrapping up…'}
-          </Text>
-
-          <View style={scanStyles.stepRow}>
-            <View style={[scanStyles.stepDot, scanStyles.stepDotDone]}>
-              <Ionicons name="checkmark" size={10} color={colors.primaryForeground} />
-            </View>
-            <View style={[scanStyles.stepLine, scanStyles.stepLineDone]} />
-            <View style={[scanStyles.stepDot, scanStyles.stepDotActive]} />
-          </View>
-          <View style={scanStyles.stepLabels}>
-            <Text style={scanStyles.stepLabel}>Detect</Text>
-            <Text style={[scanStyles.stepLabel, scanStyles.stepLabelActive]}>Extract</Text>
-          </View>
-        </View>
-      )}
-    </View>
-  );
-}
-
-const scanStyles = StyleSheet.create({
-  container: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, gap: spacing.lg },
-  previewBox: {
-    borderRadius: radii.lg,
-    overflow: 'hidden',
-    height: 160,
-    backgroundColor: colors.muted,
-  },
-  preview: { width: '100%', height: '100%' },
-  previewDim: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0,0,0,0.25)',
-  },
-  statusBox: { alignItems: 'center', paddingVertical: spacing.lg, gap: spacing.md },
-  statusTitle: {
-    fontSize: typography.text.body.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  statusSub: { fontSize: typography.text.bodySmall.fontSize, color: colors.mutedForeground },
-  thumbRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    maxWidth: 280,
-  },
-  thumb: {
-    width: 60,
-    height: 60,
-    borderRadius: radii.md,
-    backgroundColor: colors.muted,
-    borderWidth: 2,
-    borderColor: colors.border,
-  },
-  progressContainer: {
-    width: '100%',
-    maxWidth: 240,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  progressTrackFlex: {
-    flex: 1,
-  },
-  progressText: {
-    fontSize: typography.text.caption.fontSize,
-    color: colors.mutedForeground,
-    minWidth: 32,
-    textAlign: 'right',
-  },
-  stepRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  stepDot: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.secondary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepDotActive: { borderColor: colors.primary, backgroundColor: colors.accent },
-  stepDotDone: { borderColor: colors.primary, backgroundColor: colors.primary },
-  stepLine: { width: 40, height: 2, backgroundColor: colors.border, borderRadius: 1 },
-  stepLineDone: { backgroundColor: colors.primary },
-  stepLabels: {
-    flexDirection: 'row',
-    gap: spacing.sm + 40 + spacing.sm,
-  },
-  stepLabel: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
-  stepLabelActive: { color: colors.primary, fontWeight: typography.weight.semibold },
 });
 
 // ─── PreExtractList ───────────────────────────────────────────────────────────

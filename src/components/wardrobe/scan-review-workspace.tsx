@@ -17,8 +17,17 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { useReducedMotion } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TaxonomySelector } from '../primitives/TaxonomySelector';
@@ -35,11 +44,13 @@ import {
   reviewHeroHeight,
   scanReviewPrimaryAction,
   scanReviewPrimaryLabel,
+  SCAN_MESSAGES,
+  type ScanReviewPrimaryAction,
 } from '../../lib/scan-review';
 import { colors, radii, spacing, typography } from '../../theme';
 import { SEASON_LABELS, SEASON_OPTIONS, type SleeveLength } from '../../types/item';
 
-export type ScanReviewStage = 'pre-extract' | 'extracting' | 'review' | 'saving';
+export type ScanReviewStage = 'scanning' | 'pre-extract' | 'extracting' | 'review' | 'saving';
 
 export type ScanReviewPiece = {
   id: string;
@@ -74,6 +85,10 @@ type WorkspaceMode =
 type Props = {
   visible: boolean;
   stage: ScanReviewStage;
+  // Only meaningful for `stage === 'scanning'` (the Detect hero has no
+  // per-piece photos yet). Optional so flows that never hit that stage,
+  // like BatchScanSheet, don't need to thread it through.
+  previewImage?: string | null;
   pieces: ScanReviewPiece[];
   brandSuggestions: string[];
   extractionProgress: { current: number; total: number };
@@ -96,6 +111,7 @@ function displayCount(count: number) {
 export function ScanReviewWorkspace({
   visible,
   stage,
+  previewImage = null,
   pieces,
   brandSuggestions,
   extractionProgress,
@@ -125,7 +141,7 @@ export function ScanReviewWorkspace({
   const activeResolvedId = resolvedActivePieceId(pieceIds, activeId);
   const activeIndex = Math.max(0, pieceIds.indexOf(activeResolvedId ?? ''));
   const activePiece = pieces[activeIndex] ?? pieces[0] ?? null;
-  const busy = stage === 'extracting' || stage === 'saving';
+  const busy = stage === 'scanning' || stage === 'extracting' || stage === 'saving';
   const modePiece = mode.kind === 'brand-search' || mode.kind === 'crop-editor' || mode.kind === 'confirm-remove'
     ? pieces.find((piece) => piece.id === mode.pieceId) ?? null
     : null;
@@ -236,8 +252,8 @@ export function ScanReviewWorkspace({
   }
 
   const preExtractLabel = scanReviewPrimaryLabel(pieceIds, reviewedIds, activeResolvedId);
-  const showExtractNow = stage === 'pre-extract'
-    && scanReviewPrimaryAction(pieceIds, reviewedIds, activeResolvedId) === 'next';
+  const primaryAction = scanReviewPrimaryAction(pieceIds, reviewedIds, activeResolvedId);
+  const showExtractNow = stage === 'pre-extract' && primaryAction === 'next';
 
   return (
     <Modal
@@ -251,7 +267,7 @@ export function ScanReviewWorkspace({
           stage={stage}
           activeIndex={activeIndex}
           pieceCount={pieces.length}
-          showCounter={!(isReviewStage && pieces.length > 1)}
+          showCounter={stage !== 'scanning' && !(isReviewStage && pieces.length > 1)}
           busy={busy}
           topInset={insets.top}
           onClose={requestClose}
@@ -267,8 +283,10 @@ export function ScanReviewWorkspace({
           </View>
         ) : null}
 
-        {stage === 'extracting' ? (
-          <ExtractionState piece={activePiece} progress={extractionProgress} heroHeight={heroHeight} />
+        {stage === 'scanning' ? (
+          <DetectionState previewImage={previewImage} heroHeight={heroHeight} reduceMotion={reduceMotion} />
+        ) : stage === 'extracting' ? (
+          <ExtractionState piece={activePiece} progress={extractionProgress} heroHeight={heroHeight} reduceMotion={reduceMotion} />
         ) : (
           <ScrollView
             ref={detailsScrollRef}
@@ -279,7 +297,7 @@ export function ScanReviewWorkspace({
             keyboardShouldPersistTaps="handled"
           >
             {stage === 'pre-extract' ? (
-              <Text style={styles.guidance}>Check each piece and add a brand if you know it—it can improve accuracy.</Text>
+              <Text style={styles.guidance}>Check each piece before we extract the details.</Text>
             ) : null}
 
             <FlatList
@@ -306,15 +324,22 @@ export function ScanReviewWorkspace({
                   width={metrics.cardWidth}
                   height={heroHeight}
                   gap={metrics.gap}
-                  disabled={stage === 'saving'}
-                  onToggleCutout={() => onToggleCutout(item.id)}
-                  onAdjustCrop={() => setMode({ kind: 'crop-editor', pieceId: item.id })}
-                  onOpenMenu={() => setMode({ kind: 'confirm-remove', pieceId: item.id })}
                 />
               )}
             />
 
-            {pieces.length > 1 ? (
+            {activePiece ? (
+              <HeroUtilityRow
+                piece={activePiece}
+                stage={stage}
+                disabled={stage === 'saving'}
+                onToggleCutout={() => onToggleCutout(activePiece.id)}
+                onAdjustCrop={() => setMode({ kind: 'crop-editor', pieceId: activePiece.id })}
+                onRemove={() => setMode({ kind: 'confirm-remove', pieceId: activePiece.id })}
+              />
+            ) : null}
+
+            {pieces.length > 3 ? (
               <Filmstrip
                 pieces={pieces}
                 stage={stage}
@@ -345,6 +370,7 @@ export function ScanReviewWorkspace({
           pieceCount={pieces.length}
           bottomInset={insets.bottom}
           preExtractLabel={preExtractLabel}
+          primaryAction={primaryAction}
           showExtractNow={showExtractNow}
           onPrimary={handlePrimary}
           onExtractNow={() => extract('extract_now', reviewedIds)}
@@ -390,10 +416,17 @@ function WorkspaceHeader({ stage, activeIndex, pieceCount, showCounter, busy, to
   onClose: () => void;
 }) {
   return (
-    <View style={[styles.header, { paddingTop: topInset + spacing.sm }]}>
+    <>
+      <View style={[styles.header, { paddingTop: topInset + spacing.sm }]}>
       <View style={styles.headerCopy}>
         <Text style={styles.title} numberOfLines={1}>
-          {stage === 'review' || stage === 'saving' ? 'Review details' : 'Review your pieces'}
+          {stage === 'review' || stage === 'saving'
+            ? 'Review details'
+            : stage === 'scanning'
+              ? 'Scanning outfit'
+              : stage === 'extracting'
+                ? 'Extracting details'
+                : 'Review your pieces'}
         </Text>
         {showCounter ? (
           <Text style={styles.counter} accessibilityLabel={`Piece ${activeIndex + 1} of ${pieceCount}`}>
@@ -410,27 +443,38 @@ function WorkspaceHeader({ stage, activeIndex, pieceCount, showCounter, busy, to
       >
         <Ionicons name="close" size={24} color={busy ? colors.border : colors.foreground} />
       </TouchableOpacity>
-    </View>
+      </View>
+      {/* Decorative twin of the "N of M" counter — the counter stays the
+          accessible source of truth, this just gives the flow a sense of
+          forward motion. */}
+      {showCounter && pieceCount > 1 ? (
+        <View style={styles.headerProgress} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <AnimatedProgressBar
+            progress={((activeIndex + 1) / pieceCount) * 100}
+            height={2}
+            trackColor={colors.hairline}
+            color={colors.primary}
+            style={styles.headerProgressBar}
+          />
+        </View>
+      ) : null}
+    </>
   );
 }
 
-function HeroCard({ piece, stage, width, height, gap, disabled, onToggleCutout, onAdjustCrop, onOpenMenu }: {
+function HeroCard({ piece, stage, width, height, gap }: {
   piece: ScanReviewPiece;
   stage: ScanReviewStage;
   width: number;
   height: number;
   gap: number;
-  disabled: boolean;
-  onToggleCutout: () => void;
-  onAdjustCrop: () => void;
-  onOpenMenu: () => void;
 }) {
-  const canChooseCover = stage === 'review' || stage === 'saving';
-  const showingCutout = canChooseCover && Boolean(piece.cutout && piece.useCutout);
+  const isReview = stage === 'review' || stage === 'saving';
+  const showingCutout = isReview && Boolean(piece.cutout && piece.useCutout);
   const imageUri = showingCutout ? piece.cutout : piece.photo;
 
   return (
-    <View style={[styles.hero, { width, height, marginRight: gap }]}>
+    <View style={[styles.hero, !isReview && styles.heroPreExtract, { width, height, marginRight: gap }]}>
       {imageUri ? (
         <Image
           source={{ uri: imageUri }}
@@ -445,45 +489,68 @@ function HeroCard({ piece, stage, width, height, gap, disabled, onToggleCutout, 
       ) : (
         <Ionicons name="shirt-outline" size={54} color={colors.mutedForeground} />
       )}
+    </View>
+  );
+}
 
-      <TouchableOpacity
-        style={styles.overflowButton}
-        onPress={onOpenMenu}
-        disabled={disabled}
-        accessibilityRole="button"
-        accessibilityLabel={`More options for ${piece.name}`}
-      >
-        <Ionicons name="ellipsis-horizontal" size={21} color={colors.foreground} />
-      </TouchableOpacity>
+// The hero's controls live beneath the image rather than floating on it: a
+// cream pill on a cream garment is unreadable, and this screen's whole job is
+// judging the photo. The row reads from the *active* piece, so it follows the
+// carousel instead of belonging to any one card.
+function HeroUtilityRow({ piece, stage, disabled, onToggleCutout, onAdjustCrop, onRemove }: {
+  piece: ScanReviewPiece;
+  stage: ScanReviewStage;
+  disabled: boolean;
+  onToggleCutout: () => void;
+  onAdjustCrop: () => void;
+  onRemove: () => void;
+}) {
+  const isReview = stage === 'review' || stage === 'saving';
+  const showingCutout = isReview && Boolean(piece.cutout && piece.useCutout);
+  const canAdjustCrop = piece.canAdjustCrop && Boolean(piece.cropSource) && Boolean(piece.cropBbox);
 
-      {canChooseCover && piece.cutout ? (
+  return (
+    <View style={styles.utilityRow}>
+      {canAdjustCrop ? (
         <TouchableOpacity
-          style={[styles.coverToggle, showingCutout && styles.coverToggleActive]}
+          style={styles.utilityButton}
+          onPress={onAdjustCrop}
+          disabled={disabled}
+          accessibilityRole="button"
+          accessibilityLabel={`Adjust crop for ${piece.name}`}
+        >
+          <Ionicons name="crop-outline" size={16} color={colors.foreground} />
+          <Text style={styles.utilityButtonText}>Adjust crop</Text>
+        </TouchableOpacity>
+      ) : null}
+
+      {isReview && piece.cutout ? (
+        <TouchableOpacity
+          style={[styles.utilityButton, showingCutout && styles.utilityButtonActive]}
           onPress={onToggleCutout}
           disabled={disabled}
           accessibilityRole="switch"
           accessibilityState={{ checked: showingCutout }}
           accessibilityLabel={showingCutout ? 'Using cutout cover' : 'Using photo cover'}
         >
-          <Ionicons name={showingCutout ? 'cut-outline' : 'image-outline'} size={14} color={showingCutout ? colors.primaryForeground : colors.foreground} />
-          <Text style={[styles.coverToggleText, showingCutout && styles.coverToggleTextActive]}>
+          <Ionicons name={showingCutout ? 'cut-outline' : 'image-outline'} size={16} color={showingCutout ? colors.primaryForeground : colors.foreground} />
+          <Text style={[styles.utilityButtonText, showingCutout && styles.utilityButtonTextActive]}>
             {showingCutout ? 'Cutout' : 'Photo'}
           </Text>
         </TouchableOpacity>
       ) : null}
 
-      {piece.canAdjustCrop && piece.cropSource && piece.cropBbox ? (
-        <TouchableOpacity
-          style={styles.cropButton}
-          onPress={onAdjustCrop}
-          disabled={disabled}
-          accessibilityRole="button"
-          accessibilityLabel={`Adjust crop for ${piece.name}`}
-        >
-          <Ionicons name="crop-outline" size={15} color={colors.foreground} />
-          <Text style={styles.cropButtonText}>Adjust crop</Text>
-        </TouchableOpacity>
-      ) : null}
+      <View style={styles.utilitySpacer} />
+
+      <TouchableOpacity
+        style={styles.removeButton}
+        onPress={onRemove}
+        disabled={disabled}
+        accessibilityRole="button"
+        accessibilityLabel={`Remove ${piece.name}`}
+      >
+        <Ionicons name="trash-outline" size={19} color={colors.action} />
+      </TouchableOpacity>
     </View>
   );
 }
@@ -561,7 +628,7 @@ function ActivePieceForm({ piece, stage, disabled, detailsExpanded, onToggleDeta
           <Text style={[styles.brandValue, !piece.brand && styles.brandPlaceholder]} numberOfLines={1}>
             {piece.brand || 'Search or enter a brand'}
           </Text>
-          <Ionicons name="search" size={19} color={colors.mutedForeground} />
+          <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
         </TouchableOpacity>
         {stage === 'pre-extract' ? <Text style={styles.fieldHint}>Adding a brand can improve detail accuracy. Not sure? Leave it blank.</Text> : null}
       </Field>
@@ -716,11 +783,12 @@ function ConfirmationPanel({ title, message, confirmLabel, destructive, bottomIn
   );
 }
 
-function WorkspaceFooter({ stage, pieceCount, bottomInset, preExtractLabel, showExtractNow, onPrimary, onExtractNow, onSave }: {
+function WorkspaceFooter({ stage, pieceCount, bottomInset, preExtractLabel, primaryAction, showExtractNow, onPrimary, onExtractNow, onSave }: {
   stage: ScanReviewStage;
   pieceCount: number;
   bottomInset: number;
   preExtractLabel: string;
+  primaryAction: ScanReviewPrimaryAction;
   showExtractNow: boolean;
   onPrimary: () => void;
   onExtractNow: () => void;
@@ -730,14 +798,18 @@ function WorkspaceFooter({ stage, pieceCount, bottomInset, preExtractLabel, show
     <View style={[styles.footer, { paddingBottom: Math.max(bottomInset, spacing.md) }]}>
       {stage === 'pre-extract' ? (
         <>
-          <TouchableOpacity style={styles.primaryButton} onPress={onPrimary} accessibilityRole="button"><Ionicons name="sparkles" size={19} color={colors.primaryForeground} /><Text style={styles.primaryButtonText}>{preExtractLabel}</Text></TouchableOpacity>
-          {showExtractNow ? <TouchableOpacity style={styles.secondaryButton} onPress={onExtractNow} accessibilityRole="button"><Text style={styles.secondaryButtonText}>Extract now</Text></TouchableOpacity> : null}
+          {/* The sparkle is reserved for the action that actually spends
+              credits; advancing the carousel gets a plain arrow. */}
+          <TouchableOpacity style={styles.primaryButton} onPress={onPrimary} accessibilityRole="button"><Ionicons name={primaryAction === 'extract' ? 'sparkles' : 'arrow-forward'} size={19} color={colors.primaryForeground} /><Text style={styles.primaryButtonText}>{preExtractLabel}</Text></TouchableOpacity>
+          {showExtractNow ? <TouchableOpacity style={styles.secondaryButton} onPress={onExtractNow} accessibilityRole="button"><Text style={styles.secondaryButtonText}>Skip ahead</Text></TouchableOpacity> : null}
         </>
       ) : stage === 'review' || stage === 'saving' ? (
         <TouchableOpacity style={[styles.primaryButton, stage === 'saving' && styles.primaryButtonDisabled]} onPress={onSave} disabled={stage === 'saving'} accessibilityRole="button">
           {stage === 'saving' ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Ionicons name="checkmark" size={20} color={colors.primaryForeground} />}
           <Text style={styles.primaryButtonText}>{stage === 'saving' ? 'Adding to closet…' : pieceCount === 1 ? 'Add to closet' : `Add all ${pieceCount} to closet`}</Text>
         </TouchableOpacity>
+      ) : stage === 'scanning' ? (
+        <View style={styles.extractingFooter}><ActivityIndicator size="small" color={colors.primary} /><Text style={styles.extractingFooterText}>Looking at your photo…</Text></View>
       ) : (
         <View style={styles.extractingFooter}><ActivityIndicator size="small" color={colors.primary} /><Text style={styles.extractingFooterText}>Extracting details for {displayCount(pieceCount)}…</Text></View>
       )}
@@ -745,15 +817,129 @@ function WorkspaceFooter({ stage, pieceCount, bottomInset, preExtractLabel, show
   );
 }
 
-function ExtractionState({ piece, progress, heroHeight }: { piece: ScanReviewPiece | null; progress: { current: number; total: number }; heroHeight: number }) {
+const SWEEP_BAND_HEIGHT = 90;
+
+function useCyclingScanStatus(): string {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setIdx((i) => (i + 1) % SCAN_MESSAGES.length), 2500);
+    return () => clearInterval(id);
+  }, []);
+  return SCAN_MESSAGES[idx];
+}
+
+// The hero's own detection animation — a warm sweep + soft pulse over the
+// photo, standing in for "the AI is looking at this." There's no real
+// per-item signal yet (pose-scan is a single non-streamed request), so this
+// is deliberately a choreographed effect rather than data-driven, same as
+// the cycling status copy above.
+function DetectionState({ previewImage, heroHeight, reduceMotion }: {
+  previewImage: string | null;
+  heroHeight: number;
+  reduceMotion: boolean;
+}) {
+  const statusMsg = useCyclingScanStatus();
+  const pulse = useSharedValue(0.08);
+  const sweep = useSharedValue(0);
+
+  useEffect(() => {
+    if (reduceMotion) {
+      pulse.set(0.16);
+      return;
+    }
+    pulse.set(withRepeat(withSequence(
+      withTiming(0.2, { duration: 900 }),
+      withTiming(0.08, { duration: 900 }),
+    ), -1, true));
+    sweep.set(withRepeat(
+      withTiming(1, { duration: 2200, easing: Easing.inOut(Easing.quad) }),
+      -1,
+      false,
+    ));
+  }, [reduceMotion, pulse, sweep]);
+
+  const scrimStyle = useAnimatedStyle(() => ({ opacity: pulse.get() }));
+  const sweepStyle = useAnimatedStyle(() => ({
+    opacity: reduceMotion ? 0 : 1,
+    transform: [{ translateY: -SWEEP_BAND_HEIGHT + sweep.get() * (heroHeight + SWEEP_BAND_HEIGHT) }],
+  }), [heroHeight, reduceMotion]);
+
+  return (
+    <View style={styles.extractionState} accessibilityLiveRegion="polite">
+      <View style={[styles.extractionHero, { height: heroHeight }]}>
+        {previewImage ? (
+          <Image source={{ uri: previewImage }} style={styles.heroImage} contentFit="contain" cachePolicy="memory-disk" />
+        ) : null}
+        <Animated.View style={[styles.detectScrim, scrimStyle]} pointerEvents="none" />
+        <Animated.View style={[styles.detectSweep, { height: SWEEP_BAND_HEIGHT }, sweepStyle]} pointerEvents="none">
+          <LinearGradient colors={[`${colors.accent}00`, `${colors.accent}CC`, `${colors.accent}00`]} style={StyleSheet.absoluteFill} />
+        </Animated.View>
+        <View style={styles.detectFrame} pointerEvents="none" />
+      </View>
+      <Text style={styles.extractionTitle}>Detecting your pieces</Text>
+      <Text style={styles.extractionCopy}>{statusMsg}</Text>
+      <ScanStepTrack stage="scanning" progress={{ current: 0, total: 0 }} reduceMotion={reduceMotion} />
+    </View>
+  );
+}
+
+function ExtractionState({ piece, progress, heroHeight, reduceMotion }: { piece: ScanReviewPiece | null; progress: { current: number; total: number }; heroHeight: number; reduceMotion: boolean }) {
   const uri = piece?.photo;
-  const fraction = progress.total > 0 ? progress.current / progress.total : 0;
   return (
     <View style={styles.extractionState} accessibilityLiveRegion="polite">
       <View style={[styles.extractionHero, { height: heroHeight }]}>{uri ? <Image source={{ uri }} style={styles.heroImage} contentFit="contain" cachePolicy="memory-disk" /> : null}</View>
       <Text style={styles.extractionTitle}>Refining your pieces</Text>
       <Text style={styles.extractionCopy}>Adding colour, material, fit, and styling details.</Text>
-      <View style={styles.progressRow}><View style={styles.progressBar}><AnimatedProgressBar progress={fraction} /></View><Text style={styles.progressCount}>{progress.current}/{progress.total}</Text></View>
+      <ScanStepTrack stage="extracting" progress={progress} reduceMotion={reduceMotion} />
+    </View>
+  );
+}
+
+const SCAN_TRACK_STEPS: { key: 'detect' | 'extract'; label: string }[] = [
+  { key: 'detect', label: 'Detect' },
+  { key: 'extract', label: 'Extract' },
+];
+
+// Replaces the old dot-circle-and-line tracker: a single ruled line whose
+// fill spans the whole Detect→Extract journey (0–50% during Detect, 50–100%
+// during Extract, the latter driven by real extraction progress) instead of
+// two disconnected per-step widgets.
+function ScanStepTrack({ stage, progress, reduceMotion }: {
+  stage: 'scanning' | 'extracting';
+  progress: { current: number; total: number };
+  reduceMotion: boolean;
+}) {
+  const targetFraction = stage === 'scanning'
+    ? 0.1
+    : 0.5 + (progress.total > 0 ? (progress.current / progress.total) * 0.5 : 0);
+
+  const fill = useSharedValue(targetFraction);
+  useEffect(() => {
+    fill.set(reduceMotion ? targetFraction : withTiming(targetFraction, { duration: 350 }));
+  }, [targetFraction, reduceMotion, fill]);
+
+  const fillStyle = useAnimatedStyle(() => ({ width: `${fill.get() * 100}%` }));
+
+  return (
+    <View style={styles.trackWrap}>
+      <View style={styles.trackLabelRow}>
+        {SCAN_TRACK_STEPS.map((step) => {
+          const isDone = stage === 'extracting' && step.key === 'detect';
+          const isActive = (stage === 'scanning' && step.key === 'detect') || (stage === 'extracting' && step.key === 'extract');
+          return (
+            <View key={step.key} style={styles.trackLabelItem}>
+              {isDone ? <Ionicons name="checkmark" size={11} color={colors.primary} /> : null}
+              <Text style={[styles.trackLabel, isActive && styles.trackLabelActive]}>{step.label}</Text>
+            </View>
+          );
+        })}
+      </View>
+      <View style={styles.trackRule}>
+        <Animated.View style={[styles.trackRuleFill, fillStyle]} />
+      </View>
+      {stage === 'extracting' ? (
+        <Text style={styles.trackCount}>{progress.current}/{progress.total}</Text>
+      ) : null}
     </View>
   );
 }
@@ -765,6 +951,8 @@ const styles = StyleSheet.create({
   title: { ...typography.text.editorialCompact, color: colors.foreground },
   counter: { ...typography.text.caption, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
   headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  headerProgress: { height: 2, backgroundColor: colors.background },
+  headerProgressBar: { borderRadius: 0 },
   failureBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, backgroundColor: colors.surfaceSelected },
   failureText: { ...typography.text.bodySmall, color: colors.inkSubtle, flex: 1 },
   retryButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.sm },
@@ -772,17 +960,20 @@ const styles = StyleSheet.create({
   mainScroll: { flex: 1 },
   mainContent: { paddingTop: spacing.sm, paddingBottom: spacing.xxl, gap: spacing.sm },
   guidance: { ...typography.text.bodySmall, color: colors.mutedForeground, textAlign: 'center', paddingHorizontal: spacing.xl },
-  hero: { overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card, borderRadius: radii.xl, borderCurve: 'continuous', boxShadow: '0 6px 20px rgba(61,48,38,0.08)' },
+  hero: { overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card, borderRadius: radii.xl, borderCurve: 'continuous', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, boxShadow: '0 6px 20px rgba(61,48,38,0.08)' },
+  // At pre-extract the plate steps away from the page ivory so the letterbox
+  // reads as the plate and the crop's own edges stay visible.
+  heroPreExtract: { backgroundColor: colors.surfaceSelected },
   heroImage: { width: '100%', height: '100%' },
-  overflowButton: { position: 'absolute', top: spacing.sm, right: spacing.sm, width: 44, height: 44, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,252,247,0.94)' },
-  coverToggle: { position: 'absolute', top: spacing.md, left: spacing.md, minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: 'rgba(255,252,247,0.94)' },
-  coverToggleActive: { backgroundColor: colors.primary },
-  coverToggleText: { ...typography.text.caption, fontWeight: typography.weight.semibold, color: colors.foreground },
-  coverToggleTextActive: { color: colors.primaryForeground },
-  cropButton: { position: 'absolute', bottom: spacing.md, right: spacing.md, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: 'rgba(255,252,247,0.94)' },
-  cropButtonText: { ...typography.text.caption, fontWeight: typography.weight.semibold, color: colors.foreground },
-  filmstripFrame: { height: 110, flexShrink: 0, justifyContent: 'center' },
-  filmstrip: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+  utilityRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginHorizontal: spacing.lg, minHeight: 44 },
+  utilitySpacer: { flex: 1 },
+  utilityButton: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, borderRadius: radii.full, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.surfaceElevated },
+  utilityButtonActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  utilityButtonText: { ...typography.text.caption, fontWeight: typography.weight.semibold, color: colors.foreground },
+  utilityButtonTextActive: { color: colors.primaryForeground },
+  removeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  filmstripFrame: { height: 92, flexShrink: 0, justifyContent: 'center' },
+  filmstrip: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   // Selected reads as a lifted primary ring; reviewed reads as a green tick in
   // the opposite corner — the two states must never be confusable.
   filmstripThumb: { width: 68, height: 86, alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, borderCurve: 'continuous', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
@@ -795,7 +986,9 @@ const styles = StyleSheet.create({
   fieldLabel: { ...typography.text.eyebrow, color: colors.mutedForeground },
   fieldHint: { ...typography.text.caption, color: colors.mutedForeground },
   input: { minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: radii.md, paddingHorizontal: spacing.md, fontSize: typography.text.body.fontSize, color: colors.foreground, backgroundColor: colors.background },
-  brandRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radii.md, backgroundColor: colors.background },
+  // Deliberately NOT styled like `input` — this row pushes a fullscreen brand
+  // search, so it borrows the app's "tap opens something" surface instead.
+  brandRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.md, backgroundColor: colors.surfaceSubtle },
   brandValue: { ...typography.text.body, color: colors.foreground, flex: 1 },
   brandPlaceholder: { color: colors.mutedForeground },
   categorySummary: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingHorizontal: spacing.md, borderRadius: radii.md, backgroundColor: colors.surfaceSubtle },
@@ -823,9 +1016,17 @@ const styles = StyleSheet.create({
   extractionHero: { width: '100%', overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderRadius: radii.xl, borderCurve: 'continuous', backgroundColor: colors.card },
   extractionTitle: { ...typography.text.editorialSection, color: colors.foreground },
   extractionCopy: { ...typography.text.bodySmall, color: colors.mutedForeground, textAlign: 'center' },
-  progressRow: { width: '100%', maxWidth: 300, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  progressBar: { flex: 1 },
-  progressCount: { ...typography.text.caption, color: colors.mutedForeground, minWidth: 36, textAlign: 'right', fontVariant: ['tabular-nums'] },
+  detectScrim: { ...StyleSheet.absoluteFill, backgroundColor: colors.primary },
+  detectSweep: { position: 'absolute', left: 0, right: 0, top: 0 },
+  detectFrame: { position: 'absolute', top: 10, left: 10, right: 10, bottom: 10, borderRadius: radii.lg, borderCurve: 'continuous', borderWidth: 1.5, borderColor: colors.primary, opacity: 0.3 },
+  trackWrap: { width: '100%', maxWidth: 300, gap: spacing.xs },
+  trackLabelRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  trackLabelItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  trackLabel: { ...typography.text.eyebrow, color: colors.mutedForeground },
+  trackLabelActive: { color: colors.primary },
+  trackRule: { height: 2, borderRadius: 1, backgroundColor: colors.border, overflow: 'hidden' },
+  trackRuleFill: { height: '100%', borderRadius: 1, backgroundColor: colors.primary },
+  trackCount: { ...typography.text.caption, color: colors.mutedForeground, textAlign: 'right', fontVariant: ['tabular-nums'] },
   brandSearchRoot: { flex: 1, backgroundColor: colors.background },
   brandSearchHeader: { minHeight: 84, flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline },
   brandSearchTitleWrap: { flex: 1, alignItems: 'center', gap: 1 },
