@@ -21,7 +21,8 @@ export type ShoppingBriefOpportunityKind =
   | 'occasion_coverage'
   | 'seasonal'
   | 'starter_capsule'
-  | 'replacement';
+  | 'replacement'
+  | 'occasion_ladder';
 
 export type ShoppingBriefPriority = {
   /** Stable server-side verified gap identity used to reconcile edits. */
