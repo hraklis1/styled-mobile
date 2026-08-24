@@ -1,3 +1,4 @@
+import { parseProductOffers, type ProductOffer } from '../types/commerce';
 import {
   parseShoppingBrief,
   type ShoppingBrief,
@@ -16,10 +17,14 @@ export type ShoppingPriorityTarget = {
   rationale: string;
   unlocks: string[];
   pairsWithItemIds: number[];
-  // Commerce seam — unpopulated until a product-matching layer (Sovrn
-  // Commerce) exists server-side. Field names match ShopOutfitItem in
-  // src/types/shop.ts. See ShoppingPriorityTargetCard for the tappable
-  // "Where to look" row this enables.
+  // Commerce seam — populated by server/commerce once a product source is
+  // configured. Real, buyable results for this target, best first; an empty
+  // list is the normal resting state, never an error.
+  offers?: ProductOffer[];
+  // Flat projection of offers[0], kept because ShoppingPriorityTargetCard
+  // reads these directly today. Field names match ShopOutfitItem in
+  // src/types/shop.ts.
+  // @deprecated Read `offers` instead; these go away with the offer carousel.
   imageUrl?: string;
   productUrl?: string;
   merchant?: string;
@@ -93,8 +98,8 @@ export function parseShoppingPriorityEdit(value: unknown): ShoppingPriorityEdit 
     || (edit.briefUpdated != null && typeof edit.briefUpdated !== 'boolean')
   ) throw new Error('Invalid Shopping Edit response');
   // Widened from an exact 3 to a range — matches the backend relaxation in
-  // server/shoppingPriorityEdit.ts, done ahead of real product results
-  // (Sovrn) making a fixed count impossible. Still always 3 today.
+  // server/shoppingPriorityEdit.ts, done ahead of real product results making
+  // a fixed count impossible. Still always 3 today.
   if (edit.status === 'ready' && (edit.targets.length < 1 || edit.targets.length > 5)) throw new Error('Invalid Shopping Edit response');
   if (edit.status === 'no_buy' && edit.targets.length !== 0) throw new Error('Invalid Shopping Edit response');
   const updatedBrief = edit.updatedBrief == null ? undefined : parseShoppingBrief(edit.updatedBrief);
@@ -102,8 +107,16 @@ export function parseShoppingPriorityEdit(value: unknown): ShoppingPriorityEdit 
     throw new Error('Invalid Shopping Edit response');
   }
   if (edit.briefUpdated !== true && updatedBrief) throw new Error('Invalid Shopping Edit response');
+  // Offers are validated per-row and bad rows are dropped rather than failing
+  // the edit — see parseProductOffers. A target with no offers still renders.
+  const targets = (edit.targets as ShoppingPriorityTarget[]).map((target) => {
+    const offers = parseProductOffers((target as { offers?: unknown }).offers);
+    return offers.length > 0 ? { ...target, offers } : target;
+  });
+
   return {
     ...edit,
+    targets,
     noBuyReason: edit.noBuyReason ?? null,
     ...(updatedBrief ? { updatedBrief } : {}),
   } as ShoppingPriorityEdit;

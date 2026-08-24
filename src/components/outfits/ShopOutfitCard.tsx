@@ -208,9 +208,9 @@ const styles = StyleSheet.create({
     letterSpacing: typography.tracking.label,
   },
   intro: {
-    fontSize: typography.text.sheetTitle.fontSize,
-    color: colors.foreground,
-    lineHeight: typography.text.sheetTitle.fontSize * 1.35,
+    fontSize: typography.text.body.fontSize,
+    color: colors.inkSubtle,
+    lineHeight: typography.text.body.fontSize * 1.6,
   },
   productRail: { gap: spacing.md, paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
   productCard: { height: 430, overflow: 'hidden', borderRadius: radii.lg, backgroundColor: colors.background },

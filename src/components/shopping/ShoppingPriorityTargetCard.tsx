@@ -8,6 +8,7 @@ import { getSwatchColor } from '../../lib/colorUtils';
 import { itemCoverPresentation } from '../../lib/itemImage';
 import { track } from '../../lib/analytics';
 import { PressableScale } from '../primitives/PressableScale';
+import { ShoppingOfferRail } from './ShoppingOfferRail';
 import { colors, cutoutScaleFor, radii, shadows, spacing, typography } from '../../theme';
 import type { ShoppingPriorityTarget } from '../../lib/shoppingPriorityEdit';
 import type { Item } from '../../types/item';
@@ -21,6 +22,9 @@ type Props = {
 export function ShoppingPriorityTargetCard({ target, index, wardrobe }: Props) {
   const swatch = getSwatchColor(target.color);
   const pairs = target.pairsWithItemIds.map((id) => ({ id, item: wardrobe.get(id) }));
+  // Absent whenever no product source is configured, which is the resting
+  // state — the target reads exactly as it always has in that case.
+  const offers = target.offers ?? [];
 
   return (
     <View style={styles.card}>
@@ -51,11 +55,11 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe }: Props) {
       <View style={styles.details}>
         <InlineDetail label="Silhouette" value={target.silhouette} />
         {target.retailerExamples.length > 0 ? (
-          // Tappable only once a product-matching layer populates
-          // productUrl (see the commerce-seam comment on
-          // ShoppingPriorityTarget) — until then this stays the same inert
-          // text it always was, since retailerExamples are "suitable places
-          // to look", never availability claims.
+          // Tappable only once a product-matching layer populates productUrl
+          // (see the commerce-seam comment on ShoppingPriorityTarget) — until
+          // then this stays the same inert text it always was, since
+          // retailerExamples are "suitable places to look", never
+          // availability claims.
           target.productUrl ? (
             <PressableScale
               haptic={false}
@@ -73,6 +77,10 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe }: Props) {
           )
         ) : null}
       </View>
+
+      {offers.length > 0 ? (
+        <ShoppingOfferRail offers={offers} targetKey={target.key} targetTitle={target.title} />
+      ) : null}
 
       {pairs.length > 0 ? (
         <View style={styles.pairsSection}>
