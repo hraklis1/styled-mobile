@@ -134,7 +134,7 @@ export function ShoppingBriefCard({
     <>
       <BriefMasthead />
       <Text style={styles.headline} numberOfLines={2}>{brief.headline}</Text>
-      <Text style={styles.body} numberOfLines={3}>{brief.summary}</Text>
+      <Text style={styles.body} numberOfLines={2}>{brief.summary}</Text>
 
       {/* "Balanced" with no priorities but a known next candidate — distinct
           from "well covered", where nothing was ever found. The summary
@@ -162,7 +162,6 @@ function PriorityList({ priorities }: { priorities: ShoppingBriefPriority[] }) {
   if (priorities.length === 0) return null;
   return (
     <View style={styles.priorities}>
-      <Text style={styles.prioritiesLabel}>Priorities</Text>
       {priorities.map((priority) => (
         <View key={`${priority.priority}-${priority.label}`} style={styles.priorityRow}>
           <View style={styles.priorityHead}>
@@ -211,7 +210,7 @@ const styles = StyleSheet.create({
   // space of one.
   card: {
     gap: spacing.sm,
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.md,
   },
   loadingBlock: { minHeight: 104, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   masthead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
@@ -227,13 +226,12 @@ const styles = StyleSheet.create({
   body: { ...typography.text.bodySmall, color: colors.inkSubtle },
   nextUpRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   nextUpLabel: { ...typography.text.caption, fontWeight: typography.weight.medium, color: colors.mutedForeground },
-  prioritiesLabel: { ...typography.text.eyebrow, color: colors.mutedForeground },
   priorities: { paddingTop: spacing.sm },
   // Hairline-separated, not a white card inside a tinted one: the priority is
   // the reading, not a nested surface.
   priorityRow: {
     gap: 5,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.hairline,
   },

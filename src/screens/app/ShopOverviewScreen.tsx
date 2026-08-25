@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ShoppingBriefCard } from '../../components/shopping/ShoppingBriefCard';
 import { ShortlistCarousel } from '../../components/shopping/ShortlistCarousel';
+import { SavedLookTile } from '../../components/outfits/SavedLookTile';
 import { EditorialSection, IconButton } from '../../components/primitives/Editorial';
 import { AppText } from '../../components/primitives/AppText';
 import { EditorialRow } from '../../components/primitives/EditorialRow';
@@ -58,6 +59,12 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
   );
   const spotlight = useMemo(() => buildShortlistSpotlight(shoppingItems), [shoppingItems]);
   const activeFinds = spotlight.awaitingDecision;
+  const savedPreviewEntries = useMemo(
+    () => [...savedShopping]
+      .sort((a, b) => Date.parse(b.savedAt) - Date.parse(a.savedAt))
+      .slice(0, 2),
+    [savedShopping],
+  );
 
   useEffect(() => {
     if (!brief.data) return;
@@ -102,6 +109,11 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
     navigation.navigate('ShoppingGallery', { focusGroupId: item.captureGroupId });
   }, [navigation]);
 
+  const openSavedShopping = useCallback((selectedId?: string) => {
+    track('shop_destination_opened', { destination: 'saved-shopping' });
+    navigation.navigate('SavedShopping', selectedId ? { selectedId } : undefined);
+  }, [navigation]);
+
   return (
     <View style={styles.root}>
       <ScrollView
@@ -118,7 +130,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
           <IconButton
             icon="camera-outline"
             label="Save a find"
-            variant="secondary"
+            variant="primary"
             onPress={openShoppingCamera}
             accessibilityLabel="Window shopping? Save items here to review before you buy"
           />
@@ -144,9 +156,10 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
 
         <EditorialSection
           variant="ruled"
+          headingStyle="editorial"
           style={[styles.section, styles.firstSection]}
-          title="01 · Your Shortlist"
-          description="Pieces you photographed while shopping, kept here until you price them and decide."
+          title="Your Shortlist"
+          description="Pieces you’re considering, kept until you decide."
           actionLabel={spotlight.itemCount > 0 ? 'See all' : undefined}
           onAction={() => openHistory({ catalogFilter: activeFinds.length > 0 ? 'active' : 'all' })}
         >
@@ -170,19 +183,36 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
           )}
         </EditorialSection>
 
-        <EditorialSection variant="ruled" style={styles.section} title="02 · Saved by Your Stylist">
-          <EditorialRow
-            icon="heart-outline"
-            title="From Your Stylist"
-            description="Looks, pieces, and lists your Stylist put aside for you."
-            meta={savedShopping.length > 0 ? `${savedShopping.length} saved` : 'Nothing saved yet'}
-            onPress={() => {
-              track('shop_destination_opened', { destination: 'saved-shopping' });
-              navigation.navigate('SavedShopping');
-            }}
-            accessibilityLabel="Open your saved Stylist picks"
-            accessibilityHint="Opens this Shop page"
-          />
+        <EditorialSection
+          variant="ruled"
+          headingStyle="editorial"
+          style={styles.section}
+          title="Saved by Your Stylist"
+          actionLabel={savedShopping.length > 0 ? `${savedShopping.length} saved` : undefined}
+          onAction={() => openSavedShopping()}
+        >
+          {savedPreviewEntries.length > 0 ? (
+            <View style={styles.savedPreviewGrid}>
+              {savedPreviewEntries.map((entry) => (
+                <SavedLookTile
+                  key={entry.id}
+                  entry={entry}
+                  style={savedPreviewEntries.length > 1 ? styles.savedPreviewTile : undefined}
+                  onPress={() => openSavedShopping(entry.id)}
+                />
+              ))}
+            </View>
+          ) : (
+            <EditorialRow
+              variant="filled"
+              icon="heart-outline"
+              title="Nothing saved yet"
+              description="Looks, pieces, and lists from your Stylist will appear here."
+              onPress={() => openSavedShopping()}
+              accessibilityLabel="Open your saved Stylist picks"
+              accessibilityHint="Opens saved looks, pieces, and lists"
+            />
+          )}
         </EditorialSection>
 
       </ScrollView>
@@ -213,10 +243,13 @@ const styles = StyleSheet.create({
   briefBand: {
     backgroundColor: colors.surfaceSubtle,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xl,
+    paddingTop: spacing.lg,
+    paddingBottom: 0,
   },
   section: { paddingHorizontal: spacing.lg },
-  // Extra air below the tinted band before the first numbered department,
+  savedPreviewGrid: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  savedPreviewTile: { width: undefined, flex: 1 },
+  // Extra air below the tinted band before the first editorial department,
   // stacked on top of ruledSection's own paddingVertical, so the shift back
   // to the page ground reads as a deliberate break rather than two sections
   // sharing one rule.

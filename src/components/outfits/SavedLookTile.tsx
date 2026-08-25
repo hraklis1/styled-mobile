@@ -1,50 +1,69 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { PressableScale } from '../primitives/PressableScale';
 import { WishlistOutfitPreview } from './WishlistOutfitPreview';
+import {
+  getWishlistAccessibilityLabel,
+  getWishlistContext,
+  getWishlistMeta,
+  getWishlistTitle,
+} from '../../lib/wishlistPresentation';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { WishlistEntry } from '../../lib/wishlist';
 
 /**
- * A saved look at history scale: two of these sit in the width the full
+ * A saved Stylist entry at history scale: two of these sit in the width the full
  * summary card used to take, which is the point — on Shop they are the last
  * thing on the page, not the first.
  */
-export function SavedLookTile({ entry, onPress }: { entry: WishlistEntry; onPress: () => void }) {
+export function SavedLookTile({
+  entry,
+  onPress,
+  style,
+}: {
+  entry: WishlistEntry;
+  onPress: () => void;
+  style?: StyleProp<ViewStyle>;
+}) {
   const { outfit, eventContext } = entry;
-  const context = eventContext?.title ?? outfit.city?.trim();
-  const itemCount = `${outfit.items.length} ${outfit.items.length === 1 ? 'item' : 'items'}`;
+  const context = getWishlistContext(entry);
+  const title = getWishlistTitle(entry);
+  const meta = getWishlistMeta(entry);
+  const savedEditHasImagery = outfit.shoppingBrief?.targets.some((target) => (
+    Boolean(target.imageUrl) || target.offers?.some((offer) => Boolean(offer.imageUrl))
+  )) ?? false;
+  const coverIsComplete = Boolean(outfit.shoppingBrief) && !savedEditHasImagery;
 
   return (
     <PressableScale
       scaleTo={0.98}
       // Width is layout, so it belongs on the outer pressable; the inner view
       // that scales stretches to fill it.
-      style={styles.tileLayout}
+      style={[styles.tileLayout, style]}
       contentStyle={styles.tile}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={[outfit.intro, itemCount, outfit.totalBudget, context].filter(Boolean).join(', ')}
-      accessibilityHint="Opens outfit details"
+      accessibilityLabel={getWishlistAccessibilityLabel(entry)}
+      accessibilityHint="Opens saved Stylist details"
     >
       <WishlistOutfitPreview entry={entry} style={styles.preview} />
-      <View style={styles.copy}>
-        <Text style={styles.title} numberOfLines={2}>{outfit.intro}</Text>
-        {context ? (
-          <View style={styles.contextRow}>
-            <Ionicons
-              name={eventContext ? 'calendar-outline' : 'location-outline'}
-              size={11}
-              color={colors.mutedForeground}
-            />
-            <Text style={styles.context} numberOfLines={1}>{context}</Text>
-          </View>
-        ) : null}
-        <Text style={styles.meta} numberOfLines={1}>
-          {[outfit.totalBudget, itemCount].filter(Boolean).join(' · ')}
-        </Text>
-      </View>
+      {!coverIsComplete ? (
+        <View style={styles.copy}>
+          <Text style={styles.title} numberOfLines={2}>{title}</Text>
+          {context ? (
+            <View style={styles.contextRow}>
+              <Ionicons
+                name={outfit.shoppingBrief ? 'sparkles-outline' : eventContext ? 'calendar-outline' : 'location-outline'}
+                size={11}
+                color={colors.mutedForeground}
+              />
+              <Text style={styles.context} numberOfLines={1}>{context}</Text>
+            </View>
+          ) : null}
+          <Text style={styles.meta} numberOfLines={1}>{meta}</Text>
+        </View>
+      ) : null}
     </PressableScale>
   );
 }
