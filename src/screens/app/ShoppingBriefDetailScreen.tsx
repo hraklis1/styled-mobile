@@ -67,8 +67,8 @@ export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScr
           onBack={goBack}
           style={styles.header}
         />
-        {notNowNotice ? <Text style={styles.notice}>We’ll hold this priority for now.</Text> : null}
-        {notNow.isError ? <Text style={styles.errorNotice}>Couldn’t update this priority. Tap “Not now” to retry.</Text> : null}
+        {notNowNotice ? <Text style={styles.notice}>Suggestion skipped for now.</Text> : null}
+        {notNow.isError ? <Text style={styles.errorNotice}>Couldn’t skip this suggestion. Tap “Skip this suggestion” to retry.</Text> : null}
         {data.priorities.length > 0 ? (
           <EditorialSection variant="ruled" title="Priorities">
             {data.priorities.map((priority) => (
@@ -83,44 +83,46 @@ export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScr
                 {priority.unlocks.length > 0 ? (
                   <Text style={styles.priorityUnlocks}>Unlocks {priority.unlocks.join(' · ')}</Text>
                 ) : null}
-                <PressableScale
-                  haptic={false}
-                  scaleTo={0.97}
-                  contentStyle={styles.askButton}
-                  onPress={() => {
-                    track('shopping_brief_priority_opened', { category: priority.category, reason: priority.reason, rank: priority.priority });
-                    navigation.navigate('ShoppingPriorityEdit', {
-                      priority,
-                      origin: 'shopping_brief',
-                      briefGeneratedAt: data.generatedAt,
-                    });
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel={`See options for ${priority.label}`}
-                >
-                  <Text style={styles.askText}>See options</Text>
-                  <Ionicons name="arrow-forward" size={14} color={colors.primaryForeground} />
-                </PressableScale>
-                <PressableScale
-                  haptic={false}
-                  contentStyle={styles.notNowButton}
-                  onPress={() => {
-                    if (!priority.recommendationKey || notNow.isPending) return;
-                    notNow.reset();
-                    notNow.mutate({
-                      recommendationKey: priority.recommendationKey,
-                      localDate: data.localDate ?? toLocalDateKey(new Date()),
-                    }, { onSuccess: () => {
-                      setNotNowNotice(true);
-                      track('shopping_brief_priority_not_now', { category: priority.category, reason: priority.reason, scope: priority.scope ?? 'general' });
-                    } });
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Not now for ${priority.label}`}
-                  disabled={!priority.recommendationKey || notNow.isPending}
-                >
-                  <Text style={styles.notNowText}>{notNow.isPending ? 'Updating…' : 'Not now'}</Text>
-                </PressableScale>
+                <View style={styles.priorityActions}>
+                  <PressableScale
+                    haptic={false}
+                    scaleTo={0.97}
+                    contentStyle={styles.askButton}
+                    onPress={() => {
+                      track('shopping_brief_priority_opened', { category: priority.category, reason: priority.reason, rank: priority.priority });
+                      navigation.navigate('ShoppingPriorityEdit', {
+                        priority,
+                        origin: 'shopping_brief',
+                        briefGeneratedAt: data.generatedAt,
+                      });
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Explore options for ${priority.label}`}
+                  >
+                    <Text style={styles.askText}>Explore options</Text>
+                    <Ionicons name="arrow-forward" size={14} color={colors.primary} />
+                  </PressableScale>
+                  <PressableScale
+                    haptic={false}
+                    contentStyle={styles.notNowButton}
+                    onPress={() => {
+                      if (!priority.recommendationKey || notNow.isPending) return;
+                      notNow.reset();
+                      notNow.mutate({
+                        recommendationKey: priority.recommendationKey,
+                        localDate: data.localDate ?? toLocalDateKey(new Date()),
+                      }, { onSuccess: () => {
+                        setNotNowNotice(true);
+                        track('shopping_brief_priority_not_now', { category: priority.category, reason: priority.reason, scope: priority.scope ?? 'general' });
+                      } });
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Skip ${priority.label} suggestion`}
+                    disabled={!priority.recommendationKey || notNow.isPending}
+                  >
+                    <Text style={styles.notNowText}>{notNow.isPending ? 'Skipping…' : 'Skip this suggestion'}</Text>
+                  </PressableScale>
+                </View>
               </View>
             ))}
           </EditorialSection>
@@ -134,7 +136,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
   scroll: { flex: 1 },
-  content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxxl },
+  content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxxl + spacing.xl },
   header: { marginHorizontal: -spacing.lg },
   notice: { ...typography.text.caption, color: colors.mutedForeground, paddingVertical: spacing.sm },
   errorNotice: { ...typography.text.caption, color: colors.destructive, paddingVertical: spacing.sm },
@@ -142,7 +144,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingVertical: spacing.xl,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.hairline,
   },
   priorityHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   priorityIconBadge: {
@@ -155,12 +157,13 @@ const styles = StyleSheet.create({
   },
   priorityLabel: {
     flexShrink: 1,
-    fontSize: typography.text.sectionTitle.fontSize,
-    fontWeight: typography.weight.semibold,
+    ...typography.text.sectionTitle,
+    fontWeight: typography.weight.medium,
     color: colors.foreground,
   },
   priorityContext: { fontSize: typography.text.bodySmall.fontSize, lineHeight: 20, color: colors.mutedForeground },
   priorityUnlocks: { ...typography.text.caption, fontWeight: typography.weight.medium, color: colors.mutedForeground },
+  priorityActions: { alignItems: 'flex-start', gap: spacing.xs, paddingTop: spacing.xs },
   askButton: {
     minHeight: 44,
     alignSelf: 'flex-start',
@@ -169,10 +172,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     paddingHorizontal: spacing.lg,
-    borderRadius: radii.full,
-    backgroundColor: colors.primary,
+    borderRadius: radii.lg,
+    borderCurve: 'continuous',
+    backgroundColor: colors.surfaceSelected,
   },
-  askText: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, color: colors.primaryForeground },
+  askText: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, color: colors.primary },
   notNowButton: { minHeight: 36, alignSelf: 'flex-start', justifyContent: 'center', paddingHorizontal: spacing.sm },
-  notNowText: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
+  notNowText: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.medium, color: colors.mutedForeground },
 });
