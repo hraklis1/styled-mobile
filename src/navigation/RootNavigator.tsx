@@ -45,6 +45,7 @@ import { SuggestionsScreen } from '../screens/app/SuggestionsScreen';
 import { SavedLooksScreen, SavedShoppingScreen } from '../screens/app/ShopScreen';
 import { ShopOverviewScreen } from '../screens/app/ShopOverviewScreen';
 import { ShoppingCameraScreen } from '../screens/app/ShoppingCameraScreen';
+import { ShoppingVisitReviewScreen } from '../screens/app/ShoppingVisitReviewScreen';
 import { ShoppingGalleryScreen } from '../screens/app/ShoppingGalleryScreen';
 import { ShoppingHaulDetailScreen } from '../screens/app/ShoppingHaulDetailScreen';
 import { ShoppingBriefDetailScreen } from '../screens/app/ShoppingBriefDetailScreen';
@@ -86,6 +87,7 @@ const linking: LinkingOptions<RootStackParamList> = {
               ShopMain: 'shop',
               SavedLooks: 'saved-looks',
               ShoppingCamera: 'shopping-camera',
+              ShoppingVisitReview: 'shopping-visit-review',
               ShoppingGallery: {
                 path: 'shopping-gallery',
                 alias: ['daily-finds'],
@@ -177,6 +179,7 @@ function ShopNavigator() {
         options={{ animation: 'fade', gestureEnabled: true }}
       />
       <ShopStack.Screen name="ShoppingCamera" component={ShoppingCameraScreen} />
+      <ShopStack.Screen name="ShoppingVisitReview" component={ShoppingVisitReviewScreen} />
     </ShopStack.Navigator>
   );
 }
@@ -460,7 +463,7 @@ function AppTabNavigator() {
             tabBarAccessibilityLabel: 'Shop. Press and hold for shortcuts.',
             tabBarButton: (props) => <QuickMenuTabButton {...props} pulseToken={shortcutCoachPulse} />,
             tabBarStyle:
-              ['ShoppingCamera', 'ShoppingPriorityEdit'].includes(getFocusedRouteNameFromRoute(route) ?? '')
+              ['ShoppingCamera', 'ShoppingVisitReview', 'ShoppingPriorityEdit'].includes(getFocusedRouteNameFromRoute(route) ?? '')
                 ? { ...baseTabBarStyle, display: 'none' }
                 : baseTabBarStyle,
           })}

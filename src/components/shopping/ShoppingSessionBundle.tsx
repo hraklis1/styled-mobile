@@ -105,6 +105,7 @@ export function ShoppingSessionBundle({
   onSelectCard,
   onLongPressCard,
   onAddStore,
+  onReviewGrouping,
 }: {
   group: ShoppingSessionGroup;
   /** Forced open (full grid) while selection mode is picking items across the whole card. */
@@ -124,6 +125,9 @@ export function ShoppingSessionBundle({
   /** Enters selection mode with this whole card selected. */
   onLongPressCard: () => void;
   onAddStore?: () => void;
+  /** Reopens this visit's photos in the organizer — the way back to a photo
+   * dump that was saved without being sorted. */
+  onReviewGrouping?: () => void;
 }) {
   const { width } = useWindowDimensions();
   // Every host insets the bundle by a page margin and the card pads its own
@@ -138,6 +142,9 @@ export function ShoppingSessionBundle({
   // narrower tile so the next find peeks in and invites the scroll.
   const tileWidth = group.itemCount >= 3 ? TILE_WIDTH : cardWidth;
   const overflowCount = group.itemCount - stripItems.length;
+  // Worth offering the organizer when there is something to correct: a photo
+  // the classifier never sorted, or an item holding more than one shot.
+  const needsGrouping = group.unsortedCount > 0 || group.photoCount > group.itemCount;
   const isStacked = !isOpen && group.itemCount > 1;
   const rows = group.items.reduce<ShoppingEditItem[][]>((accumulated, item, index) => {
     if (index % 2 === 0) accumulated.push([item]);
@@ -299,6 +306,21 @@ export function ShoppingSessionBundle({
           </ScrollView>
         )}
 
+        {needsGrouping && onReviewGrouping && !selectionMode && !previewOnly ? (
+          <TouchableOpacity
+            style={styles.reviewGrouping}
+            onPress={onReviewGrouping}
+            accessibilityLabel={`Review how this visit's ${group.photoCount} photos are grouped`}
+          >
+            <Ionicons name="albums-outline" size={14} color={colors.primary} />
+            <Text style={styles.reviewGroupingText} numberOfLines={1}>
+              {group.unsortedCount > 0
+                ? `Review grouping · ${group.unsortedCount} to sort`
+                : 'Review grouping'}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+
         <TouchableOpacity style={styles.footer} activeOpacity={0.75} onPress={handleChromePress} onLongPress={handleChromeLongPress}>
           <Text style={styles.footerHighlights} numberOfLines={1}>{highlights.join(' · ')}</Text>
           <View style={styles.footerAction}>
@@ -458,6 +480,23 @@ const styles = StyleSheet.create({
   overflowLabel: { ...typography.text.caption, letterSpacing: typography.tracking.compact, textTransform: 'uppercase', color: colors.mutedForeground },
   grid: { gap: spacing.sm, paddingTop: spacing.xs, paddingBottom: spacing.sm },
   gridRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.md },
+  reviewGrouping: {
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.md,
+    borderCurve: 'continuous',
+    backgroundColor: colors.accent,
+  },
+  reviewGroupingText: {
+    fontSize: typography.text.caption.fontSize,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
+  },
   footer: {
     minHeight: 44,
     flexDirection: 'row',

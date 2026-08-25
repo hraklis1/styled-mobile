@@ -199,7 +199,7 @@ describe('shoppingGallery', () => {
         { id: 'item-2', snapIds: ['detail'] },
       ],
       { synced: 'garment', detail: 'garment', tag: 'tag' },
-      { originalCaptureGroupId: 'group-synced', createGroupId: () => 'group-new' },
+      { reusableCaptureGroupIds: ['group-synced'], createGroupId: () => 'group-new' },
     );
 
     expect(updates).toEqual([
@@ -240,7 +240,7 @@ describe('shoppingGallery', () => {
         { id: 'item-2', snapIds: ['other'] },
       ],
       { synced: 'garment', tag: 'tag', other: 'garment' },
-      { originalCaptureGroupId: 'group-synced', createGroupId: () => 'group-new' },
+      { reusableCaptureGroupIds: ['group-synced'], createGroupId: () => 'group-new' },
     );
     const updateById = new Map(updates.map((update) => [update.snapId, update]));
     const reorganized = snaps.map((snap) => {

@@ -11,7 +11,7 @@ import { useItems } from '../../hooks/useItems';
 import { useShoppingPriorityEdit } from '../../hooks/useShoppingPriorityEdit';
 import { addOutfitToWishlist, useWishlist } from '../../hooks/useWishlist';
 import { track } from '../../lib/analytics';
-import { shoppingPriorityEditDisplayHeadline, shoppingPriorityGapStatement } from '../../lib/shoppingPriorityEdit';
+import { shoppingPriorityEditDisplayHeadline, shoppingPriorityGapNarrative, shoppingPriorityTargetDisplayTitle, splitPriceRange } from '../../lib/shoppingPriorityEdit';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { ShopOutfit } from '../../types/shop';
 import type { ShoppingPriorityEditScreenProps } from '../../navigation/types';
@@ -184,6 +184,27 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
   }
 
   const directionCount = data.targets.length;
+  // The gap blurb arrives as one string welding together the stylist's actual
+  // sentence, a noun phrase restating the label, and — on ladder candidates —
+  // step bookkeeping. Each gets its own slot rather than one long paragraph.
+  const gap = shoppingPriorityGapNarrative(priority.label, priority.context, {
+    // The stat below renders the same figure at 34pt, so the sentence should
+    // not spell it out a second time.
+    impactScore: priority.impactScore,
+  });
+  // Suppressed when the headline is already the label: shoppingPriorityEdit-
+  // DisplayHeadline falls back to it for verbose headlines, and the line would
+  // then be a literal repeat of the title two rows up.
+  const normalizedGapLabel = priority.label.replace(/\s+/g, ' ').trim();
+  const gapLabel = normalizedGapLabel.toLocaleLowerCase() === displayHeadline.toLocaleLowerCase()
+    || gap.voice.toLocaleLowerCase().startsWith(normalizedGapLabel.toLocaleLowerCase())
+    ? ''
+    : normalizedGapLabel.charAt(0).toUpperCase() + normalizedGapLabel.slice(1);
+  // Stated once for the whole edit rather than repeated on every card.
+  const priceCurrency = data.targets.reduce<string | null>(
+    (found, target) => found ?? splitPriceRange(target.priceRange).currency,
+    null,
+  );
   const compactProgress = currentDirectionIndex === null
     ? `${directionCount} curated directions`
     : `Direction ${formatDirectionNumber(currentDirectionIndex + 1)} of ${formatDirectionNumber(directionCount)}`;
@@ -207,8 +228,27 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
         </View>
         <View style={styles.priorityContext}>
           <View style={styles.priorityText}>
-            <Text style={styles.priorityEyebrow}>The wardrobe gap</Text>
-            <Text selectable style={styles.priorityStatement}>{shoppingPriorityGapStatement(priority.label, priority.context)}</Text>
+            <View style={styles.priorityEyebrowRow}>
+              <Text style={styles.priorityEyebrow}>The wardrobe gap</Text>
+              {gap.step ? (
+                // Ladder bookkeeping, lifted out of the sentence it used to
+                // trail. Only occasion_ladder candidates carry one.
+                <Text style={styles.priorityStep}>
+                  Step {gap.step.current} of {gap.step.total}
+                </Text>
+              ) : null}
+            </View>
+            {gapLabel ? <Text selectable style={styles.priorityLabel}>{gapLabel}</Text> : null}
+            {typeof priority.impactScore === 'number' && priority.impactScore > 0 ? (
+              // Only the wardrobe-multiplier candidates carry a count;
+              // structural and occasion gaps have nothing comparable, so the
+              // hero simply reads without a stat for those.
+              <View style={styles.impactRow} accessible accessibilityLabel={`Adds ${priority.impactScore} new outfits`}>
+                <Text style={styles.impactValue}>{priority.impactScore}</Text>
+                <Text style={styles.impactLabel}>new outfits</Text>
+              </View>
+            ) : null}
+            <Text selectable style={styles.priorityStatement}>{gap.voice}</Text>
             {priority.unlocks.length > 0 ? (
               <View style={styles.priorityUnlockRow}>
                 <Ionicons name="checkmark-circle-outline" size={16} color={colors.primary} />
@@ -217,19 +257,26 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
             ) : null}
           </View>
         </View>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionCount}>{formatDirectionNumber(directionCount)}</Text>
-          <Text style={styles.sectionLabel}>Curated directions</Text>
-        </View>
+        <View style={styles.directionsDivider} />
         {data.targets.map((target, index) => (
-          <View key={target.key} style={styles.targetCardWrap} onLayout={(event) => recordTargetOffset(index, event)}>
+          <Animated.View
+            key={target.key}
+            style={styles.targetCardWrap}
+            entering={reduceMotion ? undefined : FadeInUp.delay(index * 40).duration(220)}
+            onLayout={(event) => recordTargetOffset(index, event)}
+          >
             <ShoppingPriorityTargetCard
               target={target}
               index={index + 1}
               wardrobe={wearable}
+              displayTitle={shoppingPriorityTargetDisplayTitle(target.title, `${priority.label} ${displayHeadline}`)}
+              isLast={index === directionCount - 1}
             />
-          </View>
+          </Animated.View>
         ))}
+        {priceCurrency ? (
+          <Text style={styles.currencyNote}>Price ranges in {priceCurrency}</Text>
+        ) : null}
         <View style={styles.saveBand}>
           <Text selectable style={styles.saveBandCopy}>Keep these directions in Saved Shopping.</Text>
           <SaveEditAction saving={saving} isSaved={isSaved} onPress={saveEdit} />
@@ -306,17 +353,27 @@ const styles = StyleSheet.create({
   stateCopy: { textAlign: 'center', color: colors.mutedForeground, lineHeight: 20 },
   priorityContext: { marginHorizontal: -spacing.lg, paddingHorizontal: spacing.lg, paddingVertical: spacing.xl, backgroundColor: colors.surfaceSubtle, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   priorityText: { gap: spacing.md },
+  priorityEyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   priorityEyebrow: { ...typography.text.eyebrow, color: colors.primary },
-  priorityStatement: { maxWidth: 350, ...typography.text.editorialCompact, color: colors.foreground },
+  priorityStep: { ...typography.text.eyebrow, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
+  priorityLabel: { fontSize: typography.text.caption.fontSize, lineHeight: 16, color: colors.mutedForeground },
+  // The stylist's sentence, kept whole. Editorial *regular* rather than the
+  // medium display face: at 22/28 medium this paragraph outweighed the
+  // headline above it and ran six lines before the first direction appeared.
+  priorityStatement: { maxWidth: 360, ...typography.text.editorialBody, color: colors.foreground },
   priorityUnlockRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   priorityUnlocks: { flex: 1, fontSize: typography.text.caption.fontSize, lineHeight: 18, fontWeight: typography.weight.medium, color: colors.primary },
+  impactRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
+  impactValue: { ...typography.text.dataLarge, fontSize: 34, lineHeight: 38, color: colors.primary },
+  impactLabel: { fontSize: typography.text.caption.fontSize, lineHeight: 16, color: colors.mutedForeground },
   body: { fontSize: typography.text.bodySmall.fontSize, lineHeight: 20, color: colors.mutedForeground },
-  sectionHeader: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, marginTop: spacing.xxl, paddingTop: spacing.md, paddingBottom: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  sectionCount: { fontSize: typography.text.bodySmall.fontSize, lineHeight: 18, fontWeight: typography.weight.semibold, fontVariant: ['tabular-nums'], color: colors.primary },
-  sectionLabel: { ...typography.text.eyebrowLarge, color: colors.primary },
-  targetCardWrap: { paddingBottom: spacing.xl },
+  directionsDivider: { marginTop: spacing.xl, marginBottom: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  targetCardWrap: {},
+  currencyNote: { textAlign: 'right', paddingTop: spacing.sm, paddingBottom: spacing.lg, fontSize: typography.text.caption.fontSize, lineHeight: 16, color: colors.mutedForeground },
   saveBand: { marginHorizontal: -spacing.lg, paddingHorizontal: spacing.lg, paddingVertical: spacing.xl, gap: spacing.lg, backgroundColor: colors.surfaceElevated, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  saveBandCopy: { maxWidth: 330, ...typography.text.editorialCompact, color: colors.foreground },
+  // Functional copy introducing a button, not a headline — the same inversion
+  // the gap statement had. The pill is the loud element in this band.
+  saveBandCopy: { maxWidth: 330, fontSize: typography.text.bodySmall.fontSize, lineHeight: 19, color: colors.mutedForeground },
   noBuyCard: { padding: spacing.lg, gap: spacing.sm, borderRadius: radii.xl, borderCurve: 'continuous', backgroundColor: colors.surfaceElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   noBuyTitle: { fontSize: typography.text.sectionTitle.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground },
   primaryButton: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: radii.full, backgroundColor: colors.primary },

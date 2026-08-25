@@ -116,6 +116,17 @@ export const typography = {
       fontSize: 22,
       lineHeight: 28,
     },
+    /**
+     * Editorial prose — a whole sentence in the app's own voice, as opposed to
+     * a headline. Deliberately the *regular* face: the medium weights above
+     * read as display type and start to outweigh the headline they sit under
+     * once the copy runs past a line or two.
+     */
+    editorialBody: {
+      fontFamily: editorialFamily.editorialRegular,
+      fontSize: 19,
+      lineHeight: 28,
+    },
     pageTitle: {
       fontSize: 28,
       lineHeight: 34,

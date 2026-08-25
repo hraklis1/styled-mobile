@@ -32,7 +32,9 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useShoppingCaptureGrouping } from '../../hooks/useShoppingCaptureGrouping';
 import { useShoppingStoreLocations } from '../../hooks/useShoppingStoreLocations';
+import { CaptureStackRail, buildCaptureStacks } from '../../components/shopping/CaptureStackRail';
 import type { ShoppingCameraScreenProps } from '../../navigation/types';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import { processLocalOCR } from '../../lib/processLocalOCR';
@@ -153,9 +155,9 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
     total: number;
   } | null>(null);
   const [storeDraft, setStoreDraft] = useState('');
-  const [captureCount, setCaptureCount] = useState(0);
   const [resumePromptVisible, setResumePromptVisible] = useState(false);
   const [selectedPreviewId, setSelectedPreviewId] = useState<string | null>(null);
+  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
@@ -168,7 +170,6 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
   const recentSessions = useShoppingSessionStore((state) => state.recentSessions);
   const resumeVisit = useShoppingSessionStore((state) => state.resumeVisit);
   const pauseVisit = useShoppingSessionStore((state) => state.pauseVisit);
-  const endVisit = useShoppingSessionStore((state) => state.endVisit);
   const assignVisitStore = useShoppingSessionStore((state) => state.assignVisitStore);
   const updateShoppingSessionLocation = useShoppingSessionStore(
     (state) => state.updateShoppingSessionLocation,
@@ -180,16 +181,25 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
   const updateVisitPreview = useShoppingSessionStore((state) => state.updateVisitPreview);
   const removeVisitPreview = useShoppingSessionStore((state) => state.removeVisitPreview);
   const assignCaptureGroup = useShoppingSessionStore((state) => state.assignCaptureGroup);
-  const startNextCaptureGroup = useShoppingSessionStore((state) => state.startNextCaptureGroup);
-  const activeCaptureGroupId = useShoppingSessionStore((state) => state.activeCaptureGroupId);
-  const activeCapturePhotoCount = useShoppingSessionStore((state) => state.activeCapturePhotoCount);
-  const activeCaptureTagCount = useShoppingSessionStore((state) => state.activeCaptureTagCount);
+  const {
+    autoAttachTag,
+    attachLastToPrevious,
+    detachLast,
+    canAttachLast,
+    canDetachLast,
+  } = useShoppingCaptureGrouping(currentSession?.id ?? null);
   const visitPreviews = useMemo(
     () => allVisitPreviews
       .filter((preview) => preview.shoppingSessionId === currentSession?.id)
-      .sort((a, b) => a.captureSequence - b.captureSequence),
+      .sort((a, b) => a.timestamp - b.timestamp || a.captureSequence - b.captureSequence),
     [allVisitPreviews, currentSession?.id],
   );
+  const captureStacks = useMemo(() => buildCaptureStacks(visitPreviews), [visitPreviews]);
+  // "Same item" is the resting label — it is the action a shopper reaches for.
+  // The button only becomes "Separate" once the last photo is actually in a
+  // stack, so an empty camera never offers to undo something that never
+  // happened.
+  const showsDetach = !canAttachLast && canDetachLast;
   const selectedPreview = visitPreviews.find((preview) => preview.id === selectedPreviewId) ?? null;
   const snapPoints = useMemo(() => ['62%'], []);
   const storeSuggestions = useMemo(
@@ -215,11 +225,21 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
     ocrQueueRef.current = ocrQueueRef.current.then(async () => {
       try {
         const result = await processLocalOCR(localFileUri);
+        const captureRole = classifyShoppingCapture(result.rawOcrText, result.extractedPrice);
         useShoppingSessionStore.getState().updatePendingUploadOCR(id, {
           ...result,
-          captureRole: classifyShoppingCapture(result.rawOcrText, result.extractedPrice),
+          captureRole,
           ocrStatus: 'complete',
         });
+        useShoppingSessionStore.getState().updateVisitPreview(id, {
+          captureRole,
+          ocrStatus: 'complete',
+        });
+        // A price tag lands in its own group like everything else, then folds
+        // into the garment it belongs to once OCR can recognise it. Doing it
+        // here rather than at capture time means the shopper watches the two
+        // tiles become one stack, instead of trusting that they did.
+        autoAttachTag(id);
       } catch (ocrError: unknown) {
         console.warn('Shopping photo OCR failed', ocrError);
         useShoppingSessionStore.getState().updatePendingUploadOCR(id, {
@@ -228,9 +248,13 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
           captureRole: 'unknown',
           ocrStatus: 'failed',
         });
+        useShoppingSessionStore.getState().updateVisitPreview(id, {
+          captureRole: 'unknown',
+          ocrStatus: 'failed',
+        });
       }
     });
-  }, []);
+  }, [autoAttachTag]);
 
   useEffect(() => {
     if (permission && !permission.granted && permission.canAskAgain) {
@@ -263,7 +287,12 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
   }, []);
 
   useEffect(() => {
-    if (isFocused) reconcileVisit();
+    if (!isFocused) return;
+    // Closing is a one-way latch while the screen animates out; coming back
+    // has to clear it, or the camera returns from the visit review with its
+    // shutter and Done button permanently disabled.
+    setIsClosing(false);
+    reconcileVisit();
   }, [isFocused, reconcileVisit]);
 
   useEffect(() => {
@@ -437,7 +466,6 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
       }
 
       if (importedCount > 0) {
-        setCaptureCount((count) => count + importedCount);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
       if (importedCount < assets.length) {
@@ -479,26 +507,32 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
     }
   }, [isClosing, isFocused]);
 
-  const closeCamera = useCallback(() => {
-    pauseVisit();
+  const releaseCamera = useCallback(() => {
     setIsClosing(true);
     setCameraReady(false);
     storeSheetRef.current?.dismiss();
     void cameraRef.current?.pausePreview().catch(() => undefined);
-    requestAnimationFrame(() => {
-      navigation.goBack();
-    });
-  }, [navigation, pauseVisit]);
+  }, []);
 
-  const finishShopping = useCallback(() => {
-    visitPreviews.forEach((preview) => deleteShoppingPreview(preview.previewUri));
-    endVisit();
-    setIsClosing(true);
-    setCameraReady(false);
-    storeSheetRef.current?.dismiss();
-    void cameraRef.current?.pausePreview().catch(() => undefined);
-    requestAnimationFrame(() => navigation.navigate('ShopMain'));
-  }, [endVisit, navigation, visitPreviews]);
+  /**
+   * The one way out. There used to be two — an X that paused the visit and a
+   * Done that ended it — which looked identical and did different things.
+   *
+   * Leaving with photos in hand goes to the visit review, where the visit is
+   * actually ended; leaving with none just backs out, since there is nothing
+   * to review. The visit stays paused rather than ended either way, so
+   * returning to the camera resumes it.
+   */
+  const closeCamera = useCallback(() => {
+    const sessionId = currentSession?.id ?? null;
+    const hasCaptures = visitPreviews.length > 0;
+    pauseVisit();
+    releaseCamera();
+    requestAnimationFrame(() => {
+      if (sessionId && hasCaptures) navigation.navigate('ShoppingVisitReview', { sessionId });
+      else navigation.goBack();
+    });
+  }, [currentSession?.id, navigation, pauseVisit, releaseCamera, visitPreviews.length]);
 
   const confirmResumeVisit = useCallback(() => {
     resumeVisit();
@@ -631,7 +665,6 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
           .then((previewUri) => updateVisitPreview(id, { previewUri }))
           .catch(() => undefined);
       }
-      setCaptureCount((count) => count + 1);
 
       // Do not await OCR: the camera is released as soon as the durable local
       // file and queue record exist.
@@ -646,11 +679,23 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
     }
   }, [addPendingUpload, assignCaptureGroup, cameraReady, currentSession, isCapturing, recordVisitPreview, startBackgroundOCR, updateVisitPreview]);
 
-  const handleNextItem = useCallback(() => {
-    if (activeCapturePhotoCount === 0) return;
-    startNextCaptureGroup();
+  /**
+   * "Same item" folds the photo just taken into the one before it, and folds
+   * it back out when pressed again. It corrects something already on screen
+   * rather than asking the shopper to declare a boundary for photos that do
+   * not exist yet, which is what the old "Next item" button required.
+   */
+  const handleSameItem = useCallback(() => {
+    const changed = canAttachLast ? attachLastToPrevious() : detachLast();
+    if (!changed) return;
+    setExpandedGroupId(null);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  }, [activeCapturePhotoCount, startNextCaptureGroup]);
+  }, [attachLastToPrevious, canAttachLast, detachLast]);
+
+  const toggleStack = useCallback((groupId: string) => {
+    void Haptics.selectionAsync();
+    setExpandedGroupId((current) => (current === groupId ? null : groupId));
+  }, []);
 
   const previewToSnap = useCallback((preview: (typeof visitPreviews)[number]): ShoppingSnap => {
     const upload = pendingUploads.find((item) => item.id === preview.id);
@@ -687,7 +732,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
       isFavorite: upload?.isFavorite ?? false,
       catalogStatus: upload?.catalogStatus ?? 'considering',
     };
-  }, [currentSession, pendingUploads, visitPreviews]);
+  }, [currentSession, pendingUploads]);
 
   const confirmDeletePreview = useCallback((previewId: string) => {
     const preview = visitPreviews.find((candidate) => candidate.id === previewId);
@@ -753,14 +798,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
       />
 
       <View style={[styles.topControls, { paddingTop: insets.top + spacing.sm }]}>
-        <TouchableOpacity
-          style={styles.roundButton}
-          onPress={closeCamera}
-          disabled={isClosing}
-          accessibilityLabel="Close Shopping Mode"
-        >
-          <Ionicons name="close" size={25} color="#FFFFFF" />
-        </TouchableOpacity>
+        <View style={styles.roundButtonSpacer} />
 
         <TouchableOpacity
           style={styles.contextPill}
@@ -782,11 +820,13 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
 
         <TouchableOpacity
           style={styles.doneButton}
-          onPress={finishShopping}
+          onPress={closeCamera}
           disabled={isClosing}
-          accessibilityLabel="Done shopping and end this visit"
+          accessibilityLabel={visitPreviews.length > 0
+            ? `Done shopping and review ${captureStacks.length} item${captureStacks.length === 1 ? '' : 's'}`
+            : 'Close Shopping Mode'}
         >
-          <Text style={styles.doneButtonText}>Done</Text>
+          <Text style={styles.doneButtonText}>{visitPreviews.length > 0 ? 'Done' : 'Close'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -800,55 +840,16 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
       ) : null}
 
       <View style={[styles.bottomControls, { paddingBottom: insets.bottom + spacing.lg }]}>
-        {visitPreviews.length > 0 ? (
-          <ScrollView
-            ref={previewRailRef}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.previewRail}
-            accessibilityLabel={`${visitPreviews.length} photos in this shopping visit`}
-          >
-            {visitPreviews.map((preview, index) => {
-              const beginsGroup = index === 0
-                || visitPreviews[index - 1].captureGroupId !== preview.captureGroupId;
-              const isActiveGroup = preview.captureGroupId === activeCaptureGroupId;
-              return (
-                <View key={preview.id} style={styles.previewRailItemWrap}>
-                  {beginsGroup && index > 0 ? <View style={styles.previewGroupDivider} /> : null}
-                  <TouchableOpacity
-                    style={[styles.previewThumb, isActiveGroup && styles.previewThumbActive]}
-                    onPress={() => setSelectedPreviewId(preview.id)}
-                    accessibilityLabel={`Open ${preview.captureRole === 'tag' ? 'tag' : 'item'} photo ${index + 1}`}
-                  >
-                    <Image
-                      source={{ uri: preview.previewUri ?? preview.localFileUri }}
-                      style={StyleSheet.absoluteFill}
-                      contentFit="cover"
-                      recyclingKey={preview.id}
-                    />
-                    <View style={styles.previewBadge}>
-                      {preview.ocrStatus === 'processing' ? (
-                        <ActivityIndicator size="small" color="#FFFFFF" />
-                      ) : (
-                        <Ionicons
-                          name={preview.captureRole === 'tag' ? 'pricetag' : 'shirt-outline'}
-                          size={11}
-                          color="#FFFFFF"
-                        />
-                      )}
-                    </View>
-                    {preview.syncStatus === 'pending' ? <View style={styles.pendingDot} /> : null}
-                  </TouchableOpacity>
-                </View>
-              );
-            })}
-          </ScrollView>
-        ) : null}
+        <CaptureStackRail
+          railRef={previewRailRef}
+          stacks={captureStacks}
+          expandedGroupId={expandedGroupId}
+          onToggleStack={toggleStack}
+          onPressPhoto={setSelectedPreviewId}
+        />
         <Text style={styles.captureHint}>
-          {activeCapturePhotoCount > 0
-            ? `${activeCapturePhotoCount} in this item${activeCaptureTagCount > 0 ? ` · ${activeCaptureTagCount} tag${activeCaptureTagCount === 1 ? '' : 's'}` : ''}`
-            : captureCount > 0
-              ? `${captureCount} saved this session · start the next item`
+          {captureStacks.length > 0
+            ? `${captureStacks.length} item${captureStacks.length === 1 ? '' : 's'} · ${visitPreviews.length} photo${visitPreviews.length === 1 ? '' : 's'}`
             : 'Snap an item or price tag'}
         </Text>
         <View style={styles.captureActions}>
@@ -883,13 +884,19 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.nextItemButton, activeCapturePhotoCount === 0 && styles.nextItemButtonDisabled]}
-            onPress={handleNextItem}
-            disabled={activeCapturePhotoCount === 0 || isCapturing || isImporting}
-            accessibilityLabel="Finish this item and start the next item"
+            style={[styles.sameItemButton, !canAttachLast && !canDetachLast && styles.sameItemButtonDisabled]}
+            onPress={handleSameItem}
+            disabled={(!canAttachLast && !canDetachLast) || isCapturing || isImporting}
+            accessibilityLabel={showsDetach
+              ? 'Separate the photo you just took into its own item'
+              : 'Group the photo you just took with the previous one'}
           >
-            <Ionicons name="arrow-forward-circle-outline" size={25} color="#FFFFFF" />
-            <Text style={styles.galleryButtonText}>Next item</Text>
+            <Ionicons
+              name={showsDetach ? 'remove-circle-outline' : 'layers-outline'}
+              size={25}
+              color="#FFFFFF"
+            />
+            <Text style={styles.galleryButtonText}>{showsDetach ? 'Separate' : 'Same item'}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1097,6 +1104,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     backgroundColor: 'rgba(0, 0, 0, 0.48)',
   },
+  roundButtonSpacer: { width: 44, height: 44 },
   doneButton: {
     minWidth: 54,
     minHeight: 44,
@@ -1152,40 +1160,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xl,
     backgroundColor: 'rgba(0, 0, 0, 0.28)',
   },
-  previewRail: { alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
-  previewRailItemWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  previewGroupDivider: { width: 2, height: 42, borderRadius: 1, backgroundColor: 'rgba(255,255,255,0.58)' },
-  previewThumb: {
-    width: 54,
-    height: 54,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.4)',
-    borderRadius: 10,
-    borderCurve: 'continuous',
-    backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-  previewThumbActive: { borderColor: '#FFFFFF', transform: [{ scale: 1.05 }] },
-  previewBadge: {
-    position: 'absolute',
-    left: 3,
-    bottom: 3,
-    minWidth: 20,
-    minHeight: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-    backgroundColor: 'rgba(0,0,0,0.66)',
-  },
-  pendingDot: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: '#FFD166',
-  },
   captureHint: {
     fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.medium,
@@ -1214,7 +1188,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   captureActionPlaceholder: { width: 72, height: 58 },
-  nextItemButton: {
+  sameItemButton: {
     width: 72,
     minHeight: 58,
     alignItems: 'center',
@@ -1223,7 +1197,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
-  nextItemButtonDisabled: { opacity: 0.42 },
+  sameItemButtonDisabled: { opacity: 0.42 },
   shutterOuter: {
     width: 78,
     height: 78,

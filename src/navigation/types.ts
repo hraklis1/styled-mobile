@@ -81,6 +81,7 @@ export type ShopStackParamList = {
   } | undefined;
   ShoppingHaulDetail: { groupKey: string };
   ShoppingCamera: undefined;
+  ShoppingVisitReview: { sessionId: string };
   ShoppingBriefDetail: undefined;
   ShoppingPriorityEdit: {
     priority: ShoppingBriefPriority;
@@ -126,6 +127,7 @@ export type ShopOverviewScreenProps = CompositeScreenProps<
 export type SavedLooksScreenProps = NativeStackScreenProps<ShopStackParamList, 'SavedLooks'>;
 export type SavedShoppingScreenProps = NativeStackScreenProps<ShopStackParamList, 'SavedShopping'>;
 export type ShoppingCameraScreenProps = NativeStackScreenProps<ShopStackParamList, 'ShoppingCamera'>;
+export type ShoppingVisitReviewScreenProps = NativeStackScreenProps<ShopStackParamList, 'ShoppingVisitReview'>;
 export type ShoppingGalleryScreenProps = NativeStackScreenProps<ShopStackParamList, 'ShoppingGallery'>;
 export type ShoppingHaulDetailScreenProps = NativeStackScreenProps<ShopStackParamList, 'ShoppingHaulDetail'>;
 export type ShoppingBriefDetailScreenProps = CompositeScreenProps<

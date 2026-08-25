@@ -538,6 +538,9 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
             onSelectCard={() => toggleSelectGroup(group)}
             onLongPressCard={() => startSelection(group)}
             onAddStore={!group.storeName ? () => openStoreAssignment(group) : undefined}
+            onReviewGrouping={group.shoppingSessionId
+              ? () => navigation.navigate('ShoppingVisitReview', { sessionId: group.shoppingSessionId as string })
+              : undefined}
           />
         )}
         ListHeaderComponent={listHeader}

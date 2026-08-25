@@ -136,7 +136,7 @@ type ShoppingSessionState = {
     candidateGroupId: string,
     timestamp: number,
   ) => CaptureGroupAssignment;
-  startNextCaptureGroup: () => void;
+  applyCaptureRegroup: (updates: ShoppingSnapOrganizationUpdate[]) => void;
   regroupPendingUploads: (updates: ShoppingSnapOrganizationUpdate[]) => void;
   updatePendingGroupCatalog: (captureGroupId: string, patch: ShoppingFindCatalogPatch) => void;
   updatePendingUploadOCR: (id: string, patch: PendingUploadOCRPatch) => void;
@@ -250,13 +250,12 @@ export const useShoppingSessionStore = create<ShoppingSessionState>()(
           pausedAt: null,
           lastActivityAt: now,
         };
+        // The active group deliberately survives resume. Backgrounding the app
+        // mid-item — to answer a text, to check a price — used to split that
+        // item in two with nothing on screen to say so.
         return {
           currentSession,
           pendingVisitMetadata: upsertVisitMetadata(state.pendingVisitMetadata, currentSession),
-          activeCaptureGroupId: null,
-          activeCaptureGroupStartedAt: null,
-          activeCapturePhotoCount: 0,
-          activeCaptureTagCount: 0,
         };
       }),
 
@@ -285,10 +284,6 @@ export const useShoppingSessionStore = create<ShoppingSessionState>()(
         return {
           currentSession,
           pendingVisitMetadata: upsertVisitMetadata(state.pendingVisitMetadata, currentSession),
-          activeCaptureGroupId: null,
-          activeCaptureGroupStartedAt: null,
-          activeCapturePhotoCount: 0,
-          activeCaptureTagCount: 0,
         };
       }),
 
@@ -478,6 +473,14 @@ export const useShoppingSessionStore = create<ShoppingSessionState>()(
         pendingVisitMetadata: state.pendingVisitMetadata.filter((session) => session.id !== sessionId),
       })),
 
+      /**
+       * Every capture opens its own group. Grouping too much is the expensive
+       * mistake — merging two items is one tap, splitting one apart needs the
+       * organizer — so the shutter never silently absorbs a photo into
+       * whatever came before it. Photos are drawn back together deliberately,
+       * by `applyCaptureRegroup`: automatically for a price tag shot right
+       * after a garment, or by the user pressing "Same item".
+       */
       assignCaptureGroup: (sessionId, candidateGroupId, timestamp) => {
         let assignment: CaptureGroupAssignment = {
           groupId: candidateGroupId,
@@ -485,34 +488,55 @@ export const useShoppingSessionStore = create<ShoppingSessionState>()(
           sequence: 1,
         };
         set((state) => {
-          const canReuseActiveGroup = state.activeCaptureGroupId !== null
-            && state.activeCaptureSessionId === sessionId;
-          const groupId = canReuseActiveGroup ? state.activeCaptureGroupId! : candidateGroupId;
-          const groupStartedAt = canReuseActiveGroup
-            ? state.activeCaptureGroupStartedAt ?? timestamp
-            : timestamp;
           assignment = {
-            groupId,
-            groupStartedAt,
+            groupId: candidateGroupId,
+            groupStartedAt: timestamp,
             sequence: state.nextCaptureSequence,
           };
           return {
-            activeCaptureGroupId: groupId,
+            activeCaptureGroupId: candidateGroupId,
             activeCaptureSessionId: sessionId,
-            activeCaptureGroupStartedAt: groupStartedAt,
-            activeCapturePhotoCount: canReuseActiveGroup ? state.activeCapturePhotoCount + 1 : 1,
-            activeCaptureTagCount: canReuseActiveGroup ? state.activeCaptureTagCount : 0,
+            activeCaptureGroupStartedAt: timestamp,
+            activeCapturePhotoCount: 1,
+            activeCaptureTagCount: 0,
             nextCaptureSequence: state.nextCaptureSequence + 1,
           };
         });
         return assignment;
       },
 
-      startNextCaptureGroup: () => set({
-        activeCaptureGroupId: null,
-        activeCaptureGroupStartedAt: null,
-        activeCapturePhotoCount: 0,
-        activeCaptureTagCount: 0,
+      /**
+       * Applies a regroup to every local record of the affected captures —
+       * the queued upload and, when the visit is still open, the rail preview.
+       * Patching both is what lets the rail restack the instant a tag attaches
+       * rather than after a round trip.
+       */
+      applyCaptureRegroup: (updates) => set((state) => {
+        if (updates.length === 0) return state;
+        const updateById = new Map(updates.map((update) => [update.snapId, update]));
+        return {
+          pendingUploads: state.pendingUploads.map((upload) => {
+            const update = updateById.get(upload.id);
+            if (!update) return upload;
+            return {
+              ...upload,
+              captureGroupId: update.captureGroupId,
+              captureGroupStartedAt: update.captureGroupStartedAt,
+              captureSequence: update.captureSequence,
+              captureRole: update.captureRole,
+            };
+          }),
+          visitPreviews: state.visitPreviews.map((preview) => {
+            const update = updateById.get(preview.id);
+            if (!update) return preview;
+            return {
+              ...preview,
+              captureGroupId: update.captureGroupId,
+              captureSequence: update.captureSequence,
+              captureRole: update.captureRole,
+            };
+          }),
+        };
       }),
 
       regroupPendingUploads: (updates) => set((state) => {
@@ -526,6 +550,16 @@ export const useShoppingSessionStore = create<ShoppingSessionState>()(
               ...upload,
               captureGroupId: update.captureGroupId,
               captureGroupStartedAt: update.captureGroupStartedAt,
+              captureSequence: update.captureSequence,
+              captureRole: update.captureRole,
+            };
+          }),
+          visitPreviews: state.visitPreviews.map((preview) => {
+            const update = updateById.get(preview.id);
+            if (!update) return preview;
+            return {
+              ...preview,
+              captureGroupId: update.captureGroupId,
               captureSequence: update.captureSequence,
               captureRole: update.captureRole,
             };
