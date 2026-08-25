@@ -43,7 +43,7 @@ import { useDismissDailyLook, useResolveDailyLook, useSaveDailyLook, type DailyL
 import { DailyLookDetailSheet } from '../../components/home/DailyLookDetailSheet';
 import { DailyLookCandidateVisual } from '../../components/home/DailyLookCandidateVisual';
 import { StylingLocationSheet } from '../../components/home/StylingLocationSheet';
-import { HomeBriefBand } from '../../components/home/HomeBriefBand';
+import { HomeWardrobeEdit } from '../../components/home/HomeBriefBand';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { track } from '../../lib/analytics';
 import { itemCoverPresentation } from '../../lib/itemImage';
@@ -73,10 +73,12 @@ import {
 } from '../../lib/dailyPickHistory';
 import { colors, shadows, spacing, typography, radii, editorial } from '../../theme';
 import { PressableScale } from '../../components/primitives/PressableScale';
+import { ActionMenuSheet } from '../../components/primitives/ActionMenuSheet';
 import { ScreenHeader, EditorialSection } from '../../components/primitives/Editorial';
 import { AppText } from '../../components/primitives/AppText';
 import type { HomeScreenProps } from '../../navigation/types';
 import type { Outfit } from '../../types/outfit';
+import type { Item } from '../../types/item';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -159,13 +161,24 @@ function formatLogDate(dateStr: string): string {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
+function presentWearLog(log: OutfitLog, items: Item[]) {
+  const logItems = (log.itemIds ?? [])
+    .map((id) => items.find((item) => item.id === id))
+    .filter((item): item is Item => !!item);
+  const slots: ResolvedOutfitSlot[] = logItems.map((item) => {
+    const cover = itemCoverPresentation(item);
+    return { key: String(item.id), uri: cover.uri, contentFit: cover.contentFit };
+  });
+  return { slots, itemCount: logItems.length };
+}
+
 export function HomeScreen({ navigation }: HomeScreenProps) {
   const { user } = useAuth();
   const { isPremium } = useEntitlement();
   const { data: items = [], isLoading: itemsLoading, isError: itemsError, refetch: refetchItems } = useItems();
   const { data: outfits = [], isLoading: outfitsLoading, isError: outfitsError, refetch: refetchOutfits } = useOutfits();
-  const { data: events  = [] } = useEvents();
-  const { data: logs    = [] } = useOutfitLogs();
+  const { data: events = [], isLoading: eventsLoading } = useEvents();
+  const { data: logs = [], isLoading: logsLoading } = useOutfitLogs();
   const { data: shoppingSnaps = [] } = useShoppingSnaps();
   const pendingShoppingUploads = useShoppingSessionStore((state) => state.pendingUploads);
   const deleteLog = useDeleteOutfitLog();
@@ -173,6 +186,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const weather = useStylingWeatherToday(stylingLocation.activeLocation);
   const { data: profile } = useProfile();
   const [locationSheetVisible, setLocationSheetVisible] = useState(false);
+  const [wearLogMenuEntry, setWearLogMenuEntry] = useState<OutfitLog | null>(null);
 
   const { openLogger } = useGlobalOutfitLogger();
   const { openStylist } = useGlobalAIStylist();
@@ -263,9 +277,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   }, [openLogger]);
 
   // The rail's tiles are inside a horizontally-scrolling carousel, so a
-  // swipe-to-delete gesture would fight the carousel's own pan — long-press
-  // (already the row's other affordance elsewhere on this screen) plus a
-  // confirm keeps deletion intentional without that conflict.
+  // swipe-to-delete gesture would fight the carousel's own pan. A visible
+  // options control makes deletion discoverable; long-press remains a shortcut.
   const confirmDeleteLog = useCallback((log: OutfitLog) => {
     Alert.alert(
       'Delete this entry?',
@@ -414,6 +427,18 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     savedOutfit: savedDailyOutfit,
     savedReason: dailyLookQuery.data?.candidate?.reason,
   });
+  // Do not show a definitive empty state while the inputs that determine the
+  // recommendation are still hydrating. Apart from avoiding contradictory
+  // copy, matching the hero's height keeps the page from jumping when the look
+  // resolves a moment later.
+  const dailyLookIsPreparing = itemsLoading
+    || outfitsLoading
+    || eventsLoading
+    || logsLoading
+    || !dailyPickHistoryLoaded
+    || stylingLocation.isLoading
+    || weather.isLoading
+    || dailyLookPresentation.kind === 'loading';
   const generatedCandidate = dailyLookPresentation.kind === 'ready'
     || dailyLookPresentation.kind === 'incomplete'
     || dailyLookPresentation.kind === 'priority'
@@ -602,7 +627,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.screenRoot}>
     <ScrollView
       style={styles.root}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}
@@ -622,6 +647,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               style={styles.weatherLocationButton}
               onPress={() => setLocationSheetVisible(true)}
               activeOpacity={0.65}
+              hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
               accessibilityRole="button"
               accessibilityLabel={locationAccessibilityLabel}
             >
@@ -639,6 +665,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           style={styles.avatarBtn}
           onPress={() => navigation.navigate('Profile')}
           activeOpacity={0.7}
+          hitSlop={4}
           accessibilityRole="button"
           accessibilityLabel="Open profile and settings"
         >
@@ -675,11 +702,11 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         accessibilityRole="button"
         accessibilityLabel="Open AI Stylist"
       >
-        <Ionicons name="sparkles" size={16} color="#B08040" />
+        <Ionicons name="sparkles" size={16} color={colors.primary} />
         <Text style={styles.stylistPillText} numberOfLines={1}>
-          Ask your AI stylist... or type a question
+          Ask your stylist anything…
         </Text>
-        <Ionicons name="arrow-forward" size={16} color="#C2A68D" />
+        <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
       </TouchableOpacity>
 
       {/* ── Permanent wardrobe action ─────────────────────── */}
@@ -711,7 +738,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               Photograph or import pieces you own
             </Text>
           </View>
-          <Ionicons name="arrow-forward" size={17} color={colors.primary} />
+          <Ionicons name="chevron-forward" size={17} color={colors.primary} />
         </PressableScale>
       </View>
 
@@ -720,13 +747,22 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         variant="ruled"
         headingStyle="editorial"
         title={dailyLookPresentation.kind === 'priority' ? 'Today’s Priority' : 'Today’s Look'}
-        actionLabel={dailyLookPresentation.kind === 'owned' || dailyLookPresentation.kind === 'ready' ? 'View all' : undefined}
+        actionLabel={dailyLookPresentation.kind === 'owned' || dailyLookPresentation.kind === 'ready' ? 'All outfits' : undefined}
         onAction={dailyLookPresentation.kind === 'owned' || dailyLookPresentation.kind === 'ready' ? () => navigation.navigate('Closet', {
           screen: 'ClosetMain',
           params: { segment: 'outfits' },
         }) : undefined}
       >
-        {generatedCandidate ? (
+        {dailyLookIsPreparing ? (
+          <View
+            style={[styles.curatingPlaceholder, { height: heroHeight }]}
+            accessibilityLiveRegion="polite"
+            accessibilityLabel="Curating today’s look"
+          >
+            <Ionicons name="sparkles-outline" size={18} color={colors.primary} />
+            <Text style={styles.curatingPlaceholderText}>Curating today’s look…</Text>
+          </View>
+        ) : generatedCandidate ? (
           <Animated.View entering={FadeIn.duration(260)} exiting={FadeOut.duration(200)}>
           <View style={styles.featuredOutfit}>
             <PressableScale
@@ -759,7 +795,18 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               </View>
             </PressableScale>
             <View style={styles.generatedCaption}>
-              <View style={styles.generatedCaptionCopy}>
+              <PressableScale
+                style={styles.generatedCaptionCopy}
+                contentStyle={styles.generatedCaptionCopyInner}
+                haptic={false}
+                scaleTo={0.99}
+                onPress={() => {
+                  track('daily_look_detail_opened', { candidateId: generatedCandidate.id });
+                  setDailyLookSheetVisible(true);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${generatedCandidate.name}`}
+              >
                 <Text style={styles.featuredEyebrow} numberOfLines={1}>
                   {generatedCandidate.readinessStatus === 'incomplete'
                     ? 'One piece away'
@@ -769,7 +816,11 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                 </Text>
                 <Text style={styles.featuredOutfitName} numberOfLines={1}>{generatedCandidate.name}</Text>
                 <Text style={styles.generatedReason} numberOfLines={1}>{generatedCandidate.reason}</Text>
-              </View>
+                <View style={styles.openLookHint}>
+                  <Text style={styles.openLookHintText}>Open look</Text>
+                  <Ionicons name="chevron-forward" size={13} color={colors.action} />
+                </View>
+              </PressableScale>
               <PressableScale
                 contentStyle={styles.saveLookControl}
                 onPress={candidateGap ? handleDailyLookFindPiece : handleDailyLookSave}
@@ -817,6 +868,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                   <View style={styles.heroCaptionOverlay}>
                     <Text style={styles.featuredEyebrowOverlay} numberOfLines={1}>{featuredReason}</Text>
                     <Text style={styles.featuredOutfitNameOverlay} numberOfLines={1}>{featuredOutfit.name}</Text>
+                    <View style={styles.openLookHint}>
+                      <Text style={styles.openLookHintOverlayText}>Open look</Text>
+                      <Ionicons name="chevron-forward" size={13} color={colors.white} />
+                    </View>
                   </View>
                 </>
               )}
@@ -825,15 +880,14 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               <View style={styles.featuredOutfitInfo}>
                 <Text style={styles.featuredEyebrow} numberOfLines={1}>{featuredReason}</Text>
                 <Text style={styles.featuredOutfitName} numberOfLines={1}>{featuredOutfit.name}</Text>
+                <View style={styles.openLookHint}>
+                  <Text style={styles.openLookHintText}>Open look</Text>
+                  <Ionicons name="chevron-forward" size={13} color={colors.action} />
+                </View>
               </View>
             )}
           </PressableScale>
           </Animated.View>
-        ) : dailyLookPresentation.kind === 'loading' ? (
-          <View style={styles.curatingPlaceholder} accessibilityLiveRegion="polite">
-            <Ionicons name="sparkles-outline" size={18} color={colors.primary} />
-            <Text style={styles.curatingPlaceholderText}>Curating today’s look…</Text>
-          </View>
         ) : (
           <View style={styles.emptyOutfits}>
             <View style={[styles.emptyOutfitIcon, { backgroundColor: `${colors.primary}18` }]}>
@@ -876,53 +930,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         ) : null}
       </EditorialSection>
 
-      {/* ── Wardrobe brief ── */}
-      <HomeBriefBand
-        onPress={() => {
-          track('shop_section_opened', { section: 'home_brief' });
-          navigation.navigate('Shop', { screen: 'ShoppingBriefDetail' });
-        }}
-      />
-
-      {/* ── The shortlist / Next up ──────────────────────────────
-          One slot, one section header. The card underneath carries no
-          label of its own — the section owns that job now. */}
-      {shortlist.awaitingDecision.length > 0 ? (
-        <EditorialSection variant="ruled" headingStyle="editorial" title="The Shortlist">
-          <ShortlistDecisionCard
-            items={shortlist.awaitingDecision}
-            storeNames={shortlist.decisionStores}
-            onPress={() => {
-              track('shop_section_opened', { section: 'home_shortlist' });
-              navigation.navigate('Shop', {
-                screen: 'ShoppingGallery',
-                params: { catalogFilter: 'active', returnTo: 'Home' },
-              });
-            }}
-          />
-        </EditorialSection>
-      ) : showNextUpCard ? (
-        <EditorialSection variant="ruled" headingStyle="editorial" title="Next Up">
-          <PressableScale
-            contentStyle={styles.nextUpCard}
-            onPress={() => navigation.navigate('Calendar', { eventId: nextUpEvent!.id })}
-            accessibilityRole="button"
-            accessibilityLabel={`${nextUpEvent!.title}, ${formatEventDate(nextUpEvent!.date)}. Open in Calendar`}
-          >
-            <View style={styles.nextUpIcon}>
-              <Ionicons name="calendar-outline" size={18} color={colors.primary} />
-            </View>
-            <View style={styles.nextUpCopy}>
-              <Text style={styles.nextUpTitle} numberOfLines={1}>{nextUpEvent!.title}</Text>
-              <Text style={styles.nextUpSubtitle}>
-                {nextUpEvent!.outfitId || (nextUpEvent!.itemIds?.length ?? 0) > 0 ? 'Your look is planned' : 'Plan a look for your next occasion'} · {formatEventDate(nextUpEvent!.date)}
-              </Text>
-            </View>
-            <Ionicons name="arrow-forward" size={17} color={colors.primary} />
-          </PressableScale>
-        </EditorialSection>
-      ) : null}
-
       {/* ── On the Calendar ───────────────────────────────────────── */}
       <EditorialSection
         variant="ruled"
@@ -930,6 +937,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         title="On the Calendar"
         actionLabel="View all"
         onAction={() => navigation.navigate('Calendar')}
+        style={styles.compactEditorialSection}
       >
         {upcomingEvents.length === 0 ? (
           <PressableScale
@@ -947,40 +955,63 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             </View>
             <Ionicons name="chevron-forward" size={16} color={colors.border} />
           </PressableScale>
-        ) : carouselEvents.length > 0 ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.carousel}
-            contentContainerStyle={styles.carouselContent}
-          >
-            {carouselEvents.map((event) => {
-              const iconName = OCCASION_ICONS[event.occasion] ?? 'calendar-outline';
-              const isToday = formatEventDate(event.date) === 'Today';
-              return (
-                <PressableScale
-                  key={event.id}
-                  contentStyle={[styles.eventCard, isToday && styles.eventCardToday]}
-                  onPress={() => navigation.navigate('Calendar', { eventId: event.id })}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${event.title}, ${formatEventDate(event.date)}`}
-                >
-                  <View style={[
-                    styles.eventIcon,
-                    { backgroundColor: isToday ? `${colors.primary}28` : `${colors.primary}18` },
-                  ]}>
-                    <Ionicons name={iconName} size={18} color={colors.primary} />
-                  </View>
-                  <Text style={styles.eventTitle} numberOfLines={2}>{event.title.trim()}</Text>
-                  <Text style={[styles.eventMeta, isToday && styles.eventMetaToday]} numberOfLines={1}>
-                    {formatEventDate(event.date)} · {event.occasion.replace('_', ' ')}
+        ) : (
+          <View style={styles.calendarStack}>
+            {showNextUpCard ? (
+              <PressableScale
+                contentStyle={styles.nextUpCard}
+                onPress={() => navigation.navigate('Calendar', { eventId: nextUpEvent!.id })}
+                accessibilityRole="button"
+                accessibilityLabel={`${nextUpEvent!.title}, ${formatEventDate(nextUpEvent!.date)}. Open in Calendar`}
+              >
+                <View style={styles.nextUpIcon}>
+                  <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+                </View>
+                <View style={styles.nextUpCopy}>
+                  <Text style={styles.nextUpTitle} numberOfLines={1}>{nextUpEvent!.title}</Text>
+                  <Text style={styles.nextUpSubtitle}>
+                    {nextUpEvent!.outfitId || (nextUpEvent!.itemIds?.length ?? 0) > 0 ? 'Your look is planned' : 'Plan a look for your next occasion'} · {formatEventDate(nextUpEvent!.date)}
                   </Text>
-                </PressableScale>
-              );
-            })}
-            <View style={{ width: SIDE_PAD }} />
-          </ScrollView>
-        ) : null}
+                </View>
+                <Ionicons name="chevron-forward" size={17} color={colors.primary} />
+              </PressableScale>
+            ) : null}
+            {carouselEvents.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.carousel}
+                contentContainerStyle={styles.carouselContent}
+              >
+                {carouselEvents.map((event) => {
+                  const iconName = OCCASION_ICONS[event.occasion] ?? 'calendar-outline';
+                  const isToday = formatEventDate(event.date) === 'Today';
+                  return (
+                    <PressableScale
+                      key={event.id}
+                      contentStyle={[styles.eventCard, isToday && styles.eventCardToday]}
+                      onPress={() => navigation.navigate('Calendar', { eventId: event.id })}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${event.title}, ${formatEventDate(event.date)}`}
+                    >
+                      <View style={[
+                        styles.eventIcon,
+                        { backgroundColor: isToday ? `${colors.primary}28` : `${colors.primary}18` },
+                      ]}>
+                        <Ionicons name={iconName} size={18} color={colors.primary} />
+                      </View>
+                      <Text style={styles.eventTitle} numberOfLines={2}>{event.title.trim()}</Text>
+                      <Text style={[styles.eventMeta, isToday && styles.eventMetaToday]} numberOfLines={1}>
+                        {formatEventDate(event.date)} · {event.occasion.replace('_', ' ')}
+                      </Text>
+                    </PressableScale>
+                  );
+                })}
+                <View style={{ width: SIDE_PAD }} />
+              </ScrollView>
+            ) : null}
+          </View>
+        )}
       </EditorialSection>
 
       {/* ── Your Week in Wear ─────────────────────────────────────── */}
@@ -996,6 +1027,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         title="Your Week in Wear"
         actionLabel="Log today"
         onAction={handleRecordWear}
+        style={styles.compactEditorialSection}
       >
         {logs.length === 0 ? (
           <PressableScale
@@ -1013,7 +1045,37 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             </View>
             <Ionicons name="chevron-forward" size={16} color={colors.border} />
           </PressableScale>
-        ) : (
+        ) : logs.length === 1 ? (() => {
+          const log = logs[0];
+          const presentation = presentWearLog(log, items);
+          return (
+            <PressableScale
+              contentStyle={styles.weekSoloCard}
+              onPress={() => setWearLogMenuEntry(log)}
+              onLongPress={() => setWearLogMenuEntry(log)}
+              disabled={deleteLog.isPending}
+              accessibilityRole="button"
+              accessibilityLabel={`${formatLogDate(log.date)}, ${presentation.itemCount} item${presentation.itemCount === 1 ? '' : 's'}. Open entry options`}
+            >
+              <View style={styles.weekSoloImage}>
+                <ResolvedOutfitCollage
+                  slots={presentation.slots}
+                  size={WEEK_TILE_SIZE}
+                  height={WEEK_TILE_SIZE}
+                  borderRadius={radii.lg}
+                />
+              </View>
+              <View style={styles.weekSoloCopy}>
+                <Text style={styles.weekSoloEyebrow}>Most recent</Text>
+                <Text style={styles.weekSoloTitle}>{formatLogDate(log.date)}</Text>
+                <Text style={styles.weekSoloMeta}>
+                  {presentation.itemCount} piece{presentation.itemCount === 1 ? '' : 's'} from your closet
+                </Text>
+              </View>
+              <Ionicons name="ellipsis-horizontal" size={18} color={colors.mutedForeground} />
+            </PressableScale>
+          );
+        })() : (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -1021,31 +1083,38 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             contentContainerStyle={styles.carouselContent}
           >
             {logs.slice(0, 7).map((log) => {
-              const logItems = (log.itemIds ?? [])
-                .map((id) => items.find((it) => it.id === id))
-                .filter((it): it is NonNullable<typeof it> => !!it);
-              const slots: ResolvedOutfitSlot[] = logItems.map((item) => {
-                const cover = itemCoverPresentation(item);
-                return { key: String(item.id), uri: cover.uri, contentFit: cover.contentFit };
-              });
+              const presentation = presentWearLog(log, items);
               return (
-                <PressableScale
-                  key={log.id}
-                  contentStyle={styles.weekTile}
-                  onLongPress={() => confirmDeleteLog(log)}
-                  disabled={deleteLog.isPending}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${formatLogDate(log.date)}, ${logItems.length} item${logItems.length !== 1 ? 's' : ''}`}
-                  accessibilityHint="Long press to delete this entry"
-                >
-                  <ResolvedOutfitCollage
-                    slots={slots}
-                    size={WEEK_TILE_SIZE}
-                    height={WEEK_TILE_SIZE}
-                    borderRadius={radii.md}
-                  />
-                  <Text style={styles.weekTileDate} numberOfLines={1}>{formatLogDate(log.date)}</Text>
-                </PressableScale>
+                <View key={log.id} style={styles.weekTile}>
+                  <PressableScale
+                    contentStyle={styles.weekTileImage}
+                    onPress={() => setWearLogMenuEntry(log)}
+                    onLongPress={() => setWearLogMenuEntry(log)}
+                    disabled={deleteLog.isPending}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${formatLogDate(log.date)}, ${presentation.itemCount} item${presentation.itemCount === 1 ? '' : 's'}. Open entry options`}
+                  >
+                    <ResolvedOutfitCollage
+                      slots={presentation.slots}
+                      size={WEEK_TILE_SIZE}
+                      height={WEEK_TILE_SIZE}
+                      borderRadius={radii.md}
+                    />
+                  </PressableScale>
+                  <View style={styles.weekTileFooter}>
+                    <Text style={styles.weekTileDate} numberOfLines={1}>{formatLogDate(log.date)}</Text>
+                    <PressableScale
+                      contentStyle={styles.weekTileMenuButton}
+                      hitSlop={6}
+                      haptic={false}
+                      onPress={() => setWearLogMenuEntry(log)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Options for ${formatLogDate(log.date)}`}
+                    >
+                      <Ionicons name="ellipsis-horizontal" size={16} color={colors.mutedForeground} />
+                    </PressableScale>
+                  </View>
+                </View>
               );
             })}
             <View style={{ width: SIDE_PAD }} />
@@ -1053,7 +1122,33 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         )}
       </EditorialSection>
 
+      {/* ── Wardrobe intelligence ─────────────────────────────────── */}
+      <HomeWardrobeEdit
+        style={styles.compactEditorialSection}
+        onBriefPress={() => {
+          track('shop_section_opened', { section: 'home_brief' });
+          navigation.navigate('Shop', { screen: 'ShoppingBriefDetail' });
+        }}
+        shortlist={shortlist.awaitingDecision.length > 0 ? (
+          <ShortlistDecisionCard
+            items={shortlist.awaitingDecision}
+            storeNames={shortlist.decisionStores}
+            onPress={() => {
+              track('shop_section_opened', { section: 'home_shortlist' });
+              navigation.navigate('Shop', {
+                screen: 'ShoppingGallery',
+                params: { catalogFilter: 'active', returnTo: 'Home' },
+              });
+            }}
+          />
+        ) : undefined}
+      />
+
     </ScrollView>
+      <View
+        pointerEvents="none"
+        style={[styles.statusBarMask, { height: insets.top }]}
+      />
       <DailyLookDetailSheet
         visible={dailyLookSheetVisible && !!generatedCandidate}
         candidate={generatedCandidate}
@@ -1064,6 +1159,19 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         onSave={handleDailyLookSave}
         onDismiss={handleDailyLookDismiss}
         onFindPiece={handleDailyLookFindPiece}
+      />
+      <ActionMenuSheet
+        visible={wearLogMenuEntry !== null}
+        title="Wear entry"
+        subtitle={wearLogMenuEntry ? formatLogDate(wearLogMenuEntry.date) : undefined}
+        options={wearLogMenuEntry ? [{
+          label: 'Delete entry',
+          subtitle: 'Remove it from your week in wear',
+          icon: 'trash-outline',
+          destructive: true,
+          onPress: () => confirmDeleteLog(wearLogMenuEntry),
+        }] : []}
+        onClose={() => setWearLogMenuEntry(null)}
       />
       {locationSheetVisible && (
         <StylingLocationSheet
@@ -1087,10 +1195,23 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 // ── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
+  screenRoot: { flex: 1, backgroundColor: colors.background },
   root: { flex: 1, backgroundColor: colors.background },
+  statusBarMask: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 50,
+    backgroundColor: colors.background,
+  },
   content: {
     paddingHorizontal: SIDE_PAD,
     paddingBottom: spacing.xxxl * 2,
+  },
+  compactEditorialSection: {
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.md,
   },
   nextUpCard: {
     flexDirection: 'row',
@@ -1112,6 +1233,7 @@ const styles = StyleSheet.create({
   nextUpCopy: { flex: 1, gap: 2 },
   nextUpTitle: { ...typography.text.cardTitle, color: colors.foreground },
   nextUpSubtitle: { ...typography.text.caption, color: colors.mutedForeground },
+  calendarStack: { gap: spacing.md },
 
   // Greeting
   headerRow: {
@@ -1339,6 +1461,8 @@ const styles = StyleSheet.create({
   },
   generatedCaptionCopy: {
     flex: 1,
+  },
+  generatedCaptionCopyInner: {
     gap: 2,
   },
   generatedReason: {
@@ -1384,6 +1508,24 @@ const styles = StyleSheet.create({
     bottom: spacing.lg,
     gap: 2,
   },
+  openLookHint: {
+    minHeight: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 2,
+    paddingTop: 2,
+  },
+  openLookHintText: {
+    ...typography.text.caption,
+    color: colors.action,
+    fontWeight: typography.weight.semibold,
+  },
+  openLookHintOverlayText: {
+    ...typography.text.caption,
+    color: colors.white,
+    fontWeight: typography.weight.semibold,
+  },
   featuredEyebrowOverlay: {
     ...typography.text.caption,
     color: colors.white,
@@ -1410,15 +1552,20 @@ const styles = StyleSheet.create({
     color: colors.foreground,
   },
   dailyLookExplanation: {
-    marginHorizontal: SIDE_PAD,
-    marginTop: spacing.sm,
+    marginHorizontal: -SIDE_PAD,
+    marginTop: spacing.md,
+    paddingHorizontal: SIDE_PAD,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surfaceSubtle,
   },
   dailyLookExplanationLabel: {
-    fontWeight: typography.weight.semibold,
-    color: colors.mutedForeground,
+    fontFamily: typography.family.editorialMedium,
+    color: colors.foreground,
   },
   dailyLookExplanationText: {
-    ...typography.text.bodySmall,
+    fontFamily: typography.family.editorialRegular,
+    fontSize: typography.text.body.fontSize,
+    lineHeight: typography.text.body.lineHeight,
     color: colors.inkSubtle,
   },
 
@@ -1460,13 +1607,58 @@ const styles = StyleSheet.create({
   // Your Week in Wear — a diary rail, not a receipt list. Long-press a tile
   // to delete (see confirmDeleteLog); a swipe gesture would fight this
   // ScrollView's own horizontal pan.
+  weekSoloCard: {
+    minHeight: 128,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+    padding: spacing.md,
+    borderRadius: radii.xl,
+    borderCurve: 'continuous',
+    backgroundColor: colors.surfaceSubtle,
+  },
+  weekSoloImage: {
+    width: WEEK_TILE_SIZE,
+    height: WEEK_TILE_SIZE,
+    flexShrink: 0,
+  },
+  weekSoloCopy: { flex: 1, minWidth: 0, gap: 2 },
+  weekSoloEyebrow: {
+    ...typography.text.eyebrow,
+    color: colors.mutedForeground,
+  },
+  weekSoloTitle: {
+    ...typography.text.editorialSection,
+    color: colors.foreground,
+  },
+  weekSoloMeta: {
+    ...typography.text.caption,
+    color: colors.mutedForeground,
+  },
   weekTile: {
     width: WEEK_TILE_SIZE,
     gap: spacing.xs,
+  },
+  weekTileImage: {
+    width: WEEK_TILE_SIZE,
+    height: WEEK_TILE_SIZE,
+  },
+  weekTileFooter: {
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   weekTileDate: {
     ...typography.text.caption,
     fontWeight: typography.weight.medium,
     color: colors.mutedForeground,
+    flex: 1,
+  },
+  weekTileMenuButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.full,
   },
 });

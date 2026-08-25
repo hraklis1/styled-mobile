@@ -19,7 +19,7 @@ export function invalidateShoppingBriefQueries(queryClient: QueryClient): void {
 }
 
 /**
- * Shared by Shop and Home's `HomeBriefBand` under one query key, so whichever
+ * Shared by Shop and Home's `HomeWardrobeEdit` under one query key, so whichever
  * mounts first pays for the request and the other reads the same cache.
  * `enabled` is the caller's premium check — the endpoint is premium-gated.
  */

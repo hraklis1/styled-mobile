@@ -36,9 +36,9 @@ export function ShortlistDecisionCard({ items, storeNames, onPress, style }: Pro
       accessibilityLabel={`The shortlist. ${items.length} piece${items.length === 1 ? '' : 's'} waiting on a decision. Opens your shortlist`}
     >
       <View style={styles.row}>
-        <View style={[styles.stack, { width: 34 + (thumbs.length - 1) * 18 }]}>
+        <View style={[styles.stack, { width: 46 + (thumbs.length - 1) * 24 }]}>
           {thumbs.map((item, index) => (
-            <View key={item.id} style={[styles.thumb, { left: index * 18, zIndex: THUMB_LIMIT - index }]}>
+            <View key={item.id} style={[styles.thumb, { left: index * 24, zIndex: THUMB_LIMIT - index }]}>
               <Image
                 source={{ uri: item.primarySnap.imageUri }}
                 style={StyleSheet.absoluteFill}
@@ -56,7 +56,7 @@ export function ShortlistDecisionCard({ items, storeNames, onPress, style }: Pro
           </Text>
           <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>
         </View>
-        <Ionicons name="arrow-forward" size={17} color={colors.primary} />
+        <Ionicons name="chevron-forward" size={17} color={colors.primary} />
       </View>
     </PressableScale>
   );
@@ -64,7 +64,7 @@ export function ShortlistDecisionCard({ items, storeNames, onPress, style }: Pro
 
 const styles = StyleSheet.create({
   // The flat tint block Home uses for every non-image container. Its
-  // "The Shortlist" label lives on the section header above it, not inside.
+  // "The Shortlist" label lives in the surrounding editorial section, not inside.
   card: {
     overflow: 'hidden',
     borderRadius: radii.xl,
@@ -72,19 +72,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceSubtle,
   },
   row: {
-    minHeight: 72,
+    minHeight: 84,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
-  stack: { height: 42 },
+  stack: { height: 58 },
   thumb: {
     position: 'absolute',
     top: 0,
-    width: 34,
-    height: 42,
+    width: 46,
+    height: 58,
     overflow: 'hidden',
     borderRadius: radii.sm,
     borderCurve: 'continuous',
