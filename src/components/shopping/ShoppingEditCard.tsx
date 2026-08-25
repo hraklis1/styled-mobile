@@ -12,6 +12,7 @@ import {
   shoppingCatalogChips,
   shoppingItemBadges,
 } from '../../lib/shoppingPresentation';
+import { SHORTLIST_COPY } from '../../lib/shoppingVocabulary';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { ShoppingEditItem } from '../../lib/shoppingGallery';
 import type { ShoppingSnap } from '../../types/shoppingSnap';
@@ -48,7 +49,7 @@ export function ShoppingEditCard({
   const currencyCode = useCurrencyCode();
   const price = formatShoppingPrice(item.extractedPrice, currencyCode);
   const badges = shoppingItemBadges(item);
-  const title = showStore ? item.storeName ?? 'Store not set' : item.category;
+  const title = showStore ? item.storeName ?? SHORTLIST_COPY.needsStore : item.category;
   const catalogChips = shoppingCatalogChips(showStore ? item : { ...item, category: null });
   const accessibilityStateLabel = item.needsReview
     ? ', needs review'

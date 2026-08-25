@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -19,15 +18,21 @@ import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { CommonActions, usePreventRemove } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { FadeIn, FadeOut, useReducedMotion } from 'react-native-reanimated';
 
 import { ShoppingSessionBundle } from '../../components/shopping/ShoppingSessionBundle';
+import { ShortlistFilterRail, type ShortlistFilterOption } from '../../components/shopping/ShortlistFilterRail';
+import { ShortlistStoreRail } from '../../components/shopping/ShortlistStoreRail';
 import { ShoppingItemLightbox } from '../../components/shopping/ShoppingItemLightbox';
 import { ShoppingStoreFilterSheet } from '../../components/shopping/ShoppingStoreFilterSheet';
 import { ShoppingStoreAssignmentSheet } from '../../components/shopping/ShoppingStoreAssignmentSheet';
 import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
+import { AppText } from '../../components/primitives/AppText';
+import { ActionButton, FilterControl, IconButton } from '../../components/primitives/Editorial';
+import { OptionChips } from '../../components/primitives/EditAtoms';
 import { useAuth } from '../../contexts/AuthContext';
-import { SHOPPING_SNAPS_QUERY_KEY, useShoppingSnaps } from '../../hooks/useShoppingSnaps';
-import { queryClient } from '../../lib/queryClient';
+import { useShoppingSnaps } from '../../hooks/useShoppingSnaps';
+import { useAssignShoppingStore, type ShoppingStoreAssignmentTarget } from '../../hooks/useAssignShoppingStore';
 import {
   buildShoppingEditItems,
   filterShoppingEditItems,
@@ -52,7 +57,7 @@ import {
   SHOPPING_CATALOG_STATUS_OPTIONS,
   type ShoppingReviewReasonKey,
 } from '../../lib/shoppingPresentation';
-import { supabase } from '../../lib/supabase';
+import { SHORTLIST_COPY } from '../../lib/shoppingVocabulary';
 import { deleteShoppingSnaps as deleteShoppingSnapsService } from '../../lib/deleteShoppingSnaps';
 import type { ShoppingGalleryScreenProps } from '../../navigation/types';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
@@ -68,48 +73,45 @@ const DATE_OPTIONS: { value: ShoppingDateFilter; label: string }[] = [
   { value: '30d', label: 'Past 30 days' },
 ];
 
-const SYNC_OPTIONS: { value: ShoppingSyncFilter; label: string }[] = [
-  { value: 'all', label: 'All items' },
-  { value: 'pending', label: 'On this device' },
-  { value: 'synced', label: 'Synced' },
-];
-
-const REVIEW_OPTIONS: { value: ShoppingReviewFilter; label: string }[] = [
-  { value: 'all', label: 'Everything' },
-  { value: 'needs-review', label: 'Needs review' },
-];
+/** One axis for "what still needs doing", replacing three overlapping ones. */
+type ShortlistAttentionFilter = 'all' | ShoppingReviewReasonKey | 'on-this-phone';
 
 export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScreenProps) {
   const filterSheetRef = useRef<BottomSheetModal>(null);
   const storeSheetRef = useRef<BottomSheetModal>(null);
   const assignStoreSheetRef = useRef<BottomSheetModal>(null);
-  const storeSheetOpenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const storeChipScrollRef = useRef<ScrollView>(null);
-  const storeChipOffsetsRef = useRef<Record<string, number>>({});
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { data: remoteSnaps = [], isLoading, isRefetching, isError, refetch } = useShoppingSnaps();
   const pendingUploads = useShoppingSessionStore((state) => state.pendingUploads);
-  const assignVisitStore = useShoppingSessionStore((state) => state.assignVisitStore);
-  const assignCaptureStore = useShoppingSessionStore((state) => state.assignCaptureStore);
   const [storeFilter, setStoreFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState<ShoppingDateFilter>('all');
-  const [syncFilter, setSyncFilter] = useState<ShoppingSyncFilter>('all');
-  const [reviewFilter, setReviewFilter] = useState<ShoppingReviewFilter>('all');
-  const [reviewReasonFilter, setReviewReasonFilter] = useState<ShoppingReviewReasonKey | 'all'>('all');
+  const [attentionFilter, setAttentionFilter] = useState<ShortlistAttentionFilter>('all');
   const [catalogFilter, setCatalogFilter] = useState<ShoppingCatalogFilter>('all');
   const [lightboxItem, setLightboxItem] = useState<ShoppingEditItem | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(() => new Set());
   const [isDeletingSelection, setIsDeletingSelection] = useState(false);
   const [returningToTab, setReturningToTab] = useState(false);
-  const [storeAssignmentGroup, setStoreAssignmentGroup] = useState<ShoppingSessionGroup | null>(null);
+  const [storeAssignmentTarget, setStoreAssignmentTarget] = useState<ShoppingStoreAssignmentTarget | null>(null);
+  const assignShoppingStore = useAssignShoppingStore();
+  const [heroHeight, setHeroHeight] = useState(0);
+  const [showCompactHeader, setShowCompactHeader] = useState(false);
+  const reduceMotion = useReducedMotion();
 
   const allSnaps = useMemo(
     () => mergeShoppingSnaps(remoteSnaps, pendingUploads),
     [pendingUploads, remoteSnaps],
   );
   const allItems = useMemo(() => buildShoppingEditItems(allSnaps), [allSnaps]);
+
+  // The one attention axis fans back out into the three arguments
+  // filterShoppingEditItems already takes, so that library stays as it is.
+  const syncFilter: ShoppingSyncFilter = attentionFilter === 'on-this-phone' ? 'pending' : 'all';
+  const reviewFilter: ShoppingReviewFilter =
+    attentionFilter !== 'all' && attentionFilter !== 'on-this-phone' ? 'needs-review' : 'all';
+  const reviewReasonFilter: ShoppingReviewReasonKey | 'all' =
+    attentionFilter === 'all' || attentionFilter === 'on-this-phone' ? 'all' : attentionFilter;
 
   // Opened from another tab (Home): backing or swiping out should land there,
   // not on the Shop tab this screen happens to live in.
@@ -180,6 +182,18 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   );
   const summary = useMemo(() => summarizeShoppingEditItems(allItems), [allItems]);
   const reviewReasonOptions = useMemo(() => buildShoppingReviewReasonOptions(allItems), [allItems]);
+  // Counts come from every item, never the filtered list — a count badge that
+  // re-counted the filtered set would zero itself the moment you tapped it.
+  const attentionOptions = useMemo<ShortlistFilterOption<ShortlistAttentionFilter>[]>(() => {
+    const options: ShortlistFilterOption<ShortlistAttentionFilter>[] = [{ value: 'all', label: 'Everything' }];
+    for (const reason of reviewReasonOptions) {
+      options.push({ value: reason.key, label: reason.label, count: reason.count });
+    }
+    if (summary.pendingItemCount > 0) {
+      options.push({ value: 'on-this-phone', label: SHORTLIST_COPY.onThisPhone, count: summary.pendingItemCount });
+    }
+    return options;
+  }, [reviewReasonOptions, summary.pendingItemCount]);
   const baseFilteredItems = useMemo(
     () => filterShoppingEditItems(allItems, storeFilter, dateFilter, syncFilter, reviewFilter),
     [allItems, dateFilter, reviewFilter, storeFilter, syncFilter],
@@ -203,23 +217,20 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
     () => allItems.filter((item) => selectedItemIds.has(item.id)).flatMap((item) => item.snaps),
     [allItems, selectedItemIds],
   );
-  const pendingCount = pendingUploads.length;
-  const activeFilterCount = Number(storeFilter !== 'all') + Number(dateFilter !== 'all') + Number(syncFilter !== 'all') + Number(reviewFilter !== 'all') + Number(reviewReasonFilter !== 'all') + Number(catalogFilter !== 'all');
-
-  useEffect(() => () => {
-    if (storeSheetOpenTimerRef.current) clearTimeout(storeSheetOpenTimerRef.current);
-  }, []);
-
-  // A store picked in the sheet may sit off-screen in the chip rail — bring it into view.
+  // Resolving the last item a filter was pointing at empties the list, so the
+  // reward for fixing something is "No items match". When the filter's own
+  // chip disappears, step back to everything.
   useEffect(() => {
-    if (!activeQuickStoreValue) {
-      storeChipScrollRef.current?.scrollTo({ x: 0, animated: true });
-      return;
-    }
-    const offset = storeChipOffsetsRef.current[activeQuickStoreValue];
-    if (offset === undefined) return;
-    storeChipScrollRef.current?.scrollTo({ x: Math.max(0, offset - spacing.lg), animated: true });
-  }, [activeQuickStoreValue]);
+    if (attentionFilter === 'all') return;
+    if (attentionOptions.some((option) => option.value === attentionFilter)) return;
+    setAttentionFilter('all');
+  }, [attentionFilter, attentionOptions]);
+
+  // One filter, one count — picking "needs price" used to score two.
+  const activeFilterCount = Number(storeFilter !== 'all')
+    + Number(dateFilter !== 'all')
+    + Number(attentionFilter !== 'all')
+    + Number(catalogFilter !== 'all');
 
   const deleteSnaps = useCallback(async (snaps: ShoppingSnap[]) => {
     await deleteShoppingSnapsService(snaps, user?.id ?? null);
@@ -259,9 +270,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
     void Haptics.selectionAsync();
     setStoreFilter(STORE_FILTER_ALL);
     setDateFilter('all');
-    setSyncFilter('all');
-    setReviewFilter('all');
-    setReviewReasonFilter('all');
+    setAttentionFilter('all');
     setCatalogFilter('all');
   }, []);
 
@@ -271,68 +280,42 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   }, []);
 
   const openStoreAssignment = useCallback((group: ShoppingSessionGroup) => {
-    setStoreAssignmentGroup(group);
+    setStoreAssignmentTarget({
+      snaps: group.items.flatMap((item) => item.snaps),
+      shoppingSessionId: group.shoppingSessionId,
+    });
     requestAnimationFrame(() => assignStoreSheetRef.current?.present());
   }, []);
 
+  // From the item lightbox. A bottom sheet cannot appear above that full-screen
+  // modal, so the lightbox steps aside and the sheet takes over here. The store
+  // still lands on the whole visit, not just the item that was open.
+  const assignStoreForItem = useCallback((item: ShoppingEditItem) => {
+    const group = groups.find((candidate) => candidate.items.some((candidateItem) => candidateItem.id === item.id));
+    setStoreAssignmentTarget(group
+      ? { snaps: group.items.flatMap((groupItem) => groupItem.snaps), shoppingSessionId: group.shoppingSessionId }
+      : {
+        snaps: item.snaps,
+        shoppingSessionId: item.snaps.find((snap) => snap.shoppingSessionId)?.shoppingSessionId ?? null,
+      });
+    setLightboxItem(null);
+    requestAnimationFrame(() => assignStoreSheetRef.current?.present());
+  }, [groups]);
+
   const saveStoreAssignment = useCallback(async (storeName: string) => {
-    const group = storeAssignmentGroup;
-    if (!group) return;
-    const snaps = group.items.flatMap((item) => item.snaps);
-    const ids = snaps.map((snap) => snap.id);
-    const syncedIds = snaps.filter((snap) => snap.syncStatus === 'synced').map((snap) => snap.id);
-
-    assignCaptureStore(ids, storeName);
-    if (group.shoppingSessionId) assignVisitStore(group.shoppingSessionId, storeName);
-    try {
-      if (syncedIds.length > 0) {
-        if (!user) throw new Error('You need to be signed in to update synced photos.');
-        if (group.shoppingSessionId) {
-          const { error: sessionError } = await supabase
-            .from('shopping_sessions')
-            .update({ store_name: storeName })
-            .eq('id', group.shoppingSessionId)
-            .eq('user_id', user.id);
-          if (sessionError) throw sessionError;
-        }
-        const { error: snapsError } = await supabase
-          .from('shopping_snaps')
-          .update({ store_name: storeName })
-          .eq('user_id', user.id)
-          .in('id', syncedIds);
-        if (snapsError) throw snapsError;
-        await queryClient.invalidateQueries({ queryKey: SHOPPING_SNAPS_QUERY_KEY });
-      }
-      setStoreAssignmentGroup(null);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (error) {
-      Alert.alert('Could not add store', error instanceof Error ? error.message : 'Please try again.');
-    }
-  }, [assignCaptureStore, assignVisitStore, storeAssignmentGroup, user]);
-
-  // Two modals can't hand over instantly — dismiss the refine sheet, then present.
-  const openStorePickerFromFilters = useCallback(() => {
-    void Haptics.selectionAsync();
-    filterSheetRef.current?.dismiss();
-    if (storeSheetOpenTimerRef.current) clearTimeout(storeSheetOpenTimerRef.current);
-    storeSheetOpenTimerRef.current = setTimeout(() => storeSheetRef.current?.present(), 320);
-  }, []);
+    if (!storeAssignmentTarget) return;
+    const saved = await assignShoppingStore(storeAssignmentTarget, storeName);
+    if (saved) setStoreAssignmentTarget(null);
+  }, [assignShoppingStore, storeAssignmentTarget]);
 
   const toggleStoreChip = useCallback((value: string) => {
     void Haptics.selectionAsync();
     setStoreFilter((current) => (current === value ? STORE_FILTER_ALL : value));
   }, []);
 
-  const showMissingPriceItems = useCallback(() => {
+  const selectAttention = useCallback((value: ShortlistAttentionFilter) => {
     void Haptics.selectionAsync();
-    setReviewFilter('needs-review');
-    setReviewReasonFilter('missing-price');
-  }, []);
-
-  const showPendingItems = useCallback(() => {
-    void Haptics.selectionAsync();
-    setSyncFilter('pending');
-    setReviewReasonFilter('all');
+    setAttentionFilter(value);
   }, []);
 
   const confirmDeleteSelection = useCallback(() => {
@@ -380,137 +363,94 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
     setLightboxItem(item);
   }, []);
 
+  const filteredCount = filteredItems.length;
+  const countLine = selectionMode
+    ? `${selectedItemIds.size} selected`
+    : [
+      `${filteredCount === allItems.length ? filteredCount : `${filteredCount} of ${allItems.length}`} find${allItems.length === 1 ? '' : 's'}`,
+      `${summary.storeCount} store${summary.storeCount === 1 ? '' : 's'}`,
+    ].join('  ·  ');
+
+  // Once the masthead has scrolled away the rails go with it, so the compact
+  // bar's subtitle carries what is currently filtered. Costs no height, and
+  // FilterControl is right beside it as the way back.
+  const compactState = selectionMode
+    ? `${selectedItemIds.size} selected`
+    : [
+      attentionOptions.find((option) => option.value === attentionFilter)?.label ?? 'Everything',
+      storeFilterLabel,
+    ].join('  ·  ');
+
+  const headerActions = (
+    <View style={styles.heroActions}>
+      {selectionMode ? (
+        <ActionButton icon="close" label="Cancel" onPress={cancelSelection} variant="secondary" />
+      ) : (
+        <>
+          <FilterControl
+            count={activeFilterCount}
+            onPress={() => filterSheetRef.current?.present()}
+            label="Refine shortlist"
+          />
+          {allItems.length > 0 ? (
+            <IconButton
+              icon="checkmark-circle-outline"
+              label="Select shopping items"
+              onPress={() => startSelection()}
+              variant="secondary"
+            />
+          ) : null}
+          <ActionButton
+            icon="camera"
+            label="Add"
+            onPress={() => navigation.navigate('ShoppingCamera')}
+          />
+        </>
+      )}
+    </View>
+  );
+
   const listHeader = (
     <View>
-      <ShopSubpageHeader
-        title="Found, not yet yours."
-        subtitle="Pieces you photographed while shopping, kept here while you decide."
-        eyebrow="THE SHORTLIST"
-        onBack={goBack}
-        actions={(
-          <View style={styles.heroActions}>
-            {selectionMode ? (
-              <TouchableOpacity style={styles.headerTextButton} onPress={cancelSelection}>
-                <Text style={styles.headerTextButtonText} numberOfLines={1}>Cancel</Text>
-              </TouchableOpacity>
-            ) : (
-              <>
-                <TouchableOpacity
-                  style={styles.headerIcon}
-                  onPress={() => filterSheetRef.current?.present()}
-                  accessibilityLabel={`${activeFilterCount} active gallery filters`}
-                >
-                  <Ionicons name="options-outline" size={21} color={colors.foreground} />
-                  {activeFilterCount > 0 ? <View style={styles.filterDot} /> : null}
-                </TouchableOpacity>
-                {allItems.length > 0 ? (
-                  <TouchableOpacity
-                    style={styles.headerIcon}
-                    onPress={() => startSelection()}
-                    accessibilityLabel="Select shopping items"
-                  >
-                    <Ionicons name="checkmark-circle-outline" size={21} color={colors.foreground} />
-                  </TouchableOpacity>
-                ) : null}
-                <TouchableOpacity style={styles.cameraButton} onPress={() => navigation.navigate('ShoppingCamera')}>
-                  <Ionicons name="camera" size={18} color={colors.primaryForeground} />
-                  <Text style={styles.cameraButtonText}>Add</Text>
-                </TouchableOpacity>
-              </>
-            )}
+      {/* Measured so the sticky instance below knows when to take over. Guarded
+          because the rails and counts inside re-fire onLayout on every filter
+          change, which would otherwise loop. */}
+      <View onLayout={(event) => {
+        const next = event.nativeEvent.layout.height;
+        setHeroHeight((current) => (current === next ? current : next));
+      }}>
+        <ShopSubpageHeader
+          title="Found, not yet yours."
+          subtitle="Pieces you photographed while shopping, kept here while you decide."
+          eyebrow="THE SHORTLIST"
+          onBack={goBack}
+          actions={headerActions}
+          style={styles.heroHeader}
+        />
+        {allItems.length > 0 ? (
+          <View style={styles.summaryBlock}>
+            <Text style={styles.countLine}>{countLine}</Text>
           </View>
-        )}
-      />
-      <View style={styles.summaryBlock}>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryText}>
-            {selectionMode
-              ? `${selectedItemIds.size} selected`
-              : `${summary.itemCount} item${summary.itemCount === 1 ? '' : 's'}`}
-          </Text>
-          {pendingCount > 0 ? (
-            <View style={styles.localSummary}>
-              <View style={styles.localSummaryDot} />
-              <Text style={styles.localSummaryText}>{pendingCount} waiting to sync</Text>
-            </View>
-          ) : null}
-        </View>
-        <View style={styles.metricsStrip}>
-          <TouchableOpacity style={styles.metricCell} onPress={clearItemFilters} accessibilityLabel="Show all shopping items">
-            <Text style={styles.metricValue}>{summary.itemCount}</Text>
-            <Text style={styles.metricLabel}>Items</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.metricCell} onPress={openStorePicker} accessibilityLabel="Filter by store">
-            <Text style={styles.metricValue}>{summary.storeCount}</Text>
-            <Text style={styles.metricLabel}>Stores</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.metricCell} onPress={showMissingPriceItems} accessibilityLabel="Show items that need a price">
-            <Text style={[styles.metricValue, summary.missingPriceItemCount > 0 && styles.metricValueWarn]}>
-              {summary.missingPriceItemCount}
-            </Text>
-            <Text style={styles.metricLabel}>Needs price</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.metricCell} onPress={showPendingItems} accessibilityLabel="Show locally saved items">
-            <Text style={[styles.metricValue, summary.pendingItemCount > 0 && styles.metricValueWarn]}>
-              {summary.pendingItemCount}
-            </Text>
-            <Text style={styles.metricLabel}>Pending</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-      <View style={styles.storeFilterBlock}>
-        <ScrollView
-          ref={storeChipScrollRef}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.storeChipRow}
-          style={styles.storeChipScroll}
-        >
-          <TouchableOpacity
-            style={[styles.storeFilterChip, storeFilter === STORE_FILTER_ALL && styles.storeFilterChipActive]}
-            onPress={() => setStoreFilter(STORE_FILTER_ALL)}
-          >
-            <Text style={[styles.storeFilterText, storeFilter === STORE_FILTER_ALL && styles.storeFilterTextActive]}>All stores</Text>
-          </TouchableOpacity>
-          {quickStoreOptions.map((store) => {
-            const isActive = storeFilter === store.value
-              || store.locations.some((location) => location.value === storeFilter);
-            return (
-              <TouchableOpacity
-                key={store.value}
-                style={[styles.storeFilterChip, isActive && styles.storeFilterChipActive]}
-                onLayout={(event) => {
-                  storeChipOffsetsRef.current[store.value] = event.nativeEvent.layout.x;
-                }}
-                onPress={() => toggleStoreChip(store.value)}
-                onLongPress={store.locations.length > 0 ? openStorePicker : undefined}
-              >
-                <Text style={[styles.storeFilterText, isActive && styles.storeFilterTextActive]} numberOfLines={1}>
-                  {isActive ? storeFilterLabel : store.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-          {storeFilter === 'none' ? (
-            <TouchableOpacity
-              style={[styles.storeFilterChip, styles.storeFilterChipActive]}
-              onPress={() => setStoreFilter(STORE_FILTER_ALL)}
-            >
-              <Text style={[styles.storeFilterText, styles.storeFilterTextActive]}>Store not set</Text>
-            </TouchableOpacity>
-          ) : null}
-        </ScrollView>
-        <TouchableOpacity
-          style={styles.storePickerButton}
-          onPress={openStorePicker}
-          accessibilityLabel="Browse all stores"
-        >
-          <Ionicons name="storefront-outline" size={15} color={colors.foreground} />
-          <Text style={styles.storePickerText} numberOfLines={1}>
-            {summary.storeCount} store{summary.storeCount === 1 ? '' : 's'}
-          </Text>
-          <Ionicons name="chevron-down" size={13} color={colors.mutedForeground} />
-        </TouchableOpacity>
+        ) : null}
+        {allItems.length > 0 ? (
+          <View style={styles.railBlock}>
+            <ShortlistFilterRail
+              options={attentionOptions}
+              value={attentionFilter}
+              restingValue="all"
+              onSelect={selectAttention}
+              accessibilityLabel="Filter by what still needs doing"
+            />
+            <ShortlistStoreRail
+              options={quickStoreOptions}
+              storeFilter={storeFilter}
+              activeLabel={storeFilterLabel}
+              activeValue={activeQuickStoreValue}
+              onSelect={toggleStoreChip}
+              onBrowseAll={openStorePicker}
+            />
+          </View>
+        ) : null}
       </View>
 
       {isError ? (
@@ -527,10 +467,10 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
       <FlatList
         data={groups}
         keyExtractor={(group) => group.key}
-        renderItem={({ item: group }) => (
+        renderItem={({ item: group, index }) => (
           <ShoppingSessionBundle
             group={group}
-            expanded={selectionMode}
+            isLast={index === groups.length - 1}
             onOpenDetail={() => navigation.navigate('ShoppingHaulDetail', { groupKey: group.key })}
             selectionMode={selectionMode}
             isSelected={group.items.length > 0 && group.items.every((item) => selectedItemIds.has(item.id))}
@@ -546,12 +486,19 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
         ListHeaderComponent={listHeader}
         ListEmptyComponent={isLoading ? (
           <View style={styles.emptyState}><ActivityIndicator color={colors.primary} /></View>
+        ) : allItems.length > 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>No items match</Text>
+            <Text style={styles.emptyText}>Try clearing a filter to see more finds.</Text>
+            <TouchableOpacity style={styles.emptyButton} onPress={clearItemFilters}>
+              <Text style={styles.emptyButtonText}>Clear filters</Text>
+            </TouchableOpacity>
+          </View>
         ) : (
           <View style={styles.emptyState}>
-            <View style={styles.emptyMonogram}><Ionicons name="images-outline" size={34} color={colors.primary} /></View>
-            <Text style={styles.emptyTitle}>{allItems.length ? 'No items match' : 'Your shortlist starts here'}</Text>
+            <Text style={styles.emptyTitle}>Your shortlist starts here</Text>
             <Text style={styles.emptyText}>
-              {allItems.length ? 'Try clearing a filter to see more finds.' : 'Photograph pieces and price tags while you shop, or import them from your camera roll, and keep them here until you decide.'}
+              Photograph pieces and price tags while you shop, or import them from your camera roll, and keep them here until you decide.
             </Text>
             <TouchableOpacity style={styles.emptyButton} onPress={() => navigation.navigate('ShoppingCamera')}>
               <Ionicons name="camera-outline" size={18} color={colors.primaryForeground} />
@@ -559,16 +506,42 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
             </TouchableOpacity>
           </View>
         )}
+        onScroll={(event) => {
+          // The expanded header never changes size and the compact bar is not
+          // in this list's layout, so nothing here can move contentOffset —
+          // which is what broke the collapse on ShoppingBriefDetailScreen.
+          const compactHeaderHeight = insets.top + spacing.md + 52 + spacing.sm;
+          const next = event.nativeEvent.contentOffset.y >= Math.max(0, heroHeight - compactHeaderHeight);
+          setShowCompactHeader((current) => (current === next ? current : next));
+        }}
+        scrollEventThrottle={16}
         contentInsetAdjustmentBehavior="never"
         contentContainerStyle={[
           styles.listContent,
           selectionMode && styles.listContentSelecting,
-          groups.length === 0 && styles.listContentEmpty,
         ]}
         showsVerticalScrollIndicator={false}
         refreshing={isRefetching}
         onRefresh={() => void refetch()}
       />
+
+      {showCompactHeader ? (
+        <Animated.View
+          entering={reduceMotion ? undefined : FadeIn.duration(120)}
+          exiting={reduceMotion ? undefined : FadeOut.duration(90)}
+          style={styles.stickyHeader}
+        >
+          <ShopSubpageHeader
+            compact
+            title="Found, not yet yours."
+            subtitle={compactState}
+            eyebrow="THE SHORTLIST"
+            onBack={goBack}
+            actions={headerActions}
+            style={styles.stickyHeaderContent}
+          />
+        </Animated.View>
+      ) : null}
 
       {selectionMode ? (
         <View style={[styles.selectionBar, { paddingBottom: insets.bottom + spacing.md }]}>
@@ -598,121 +571,47 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
       <BottomSheetModal
         ref={filterSheetRef}
         index={0}
-        snapPoints={['82%']}
+        snapPoints={['70%']}
         backdropComponent={renderBackdrop}
         enablePanDownToClose
         backgroundStyle={styles.filterSheetBackground}
         handleIndicatorStyle={styles.filterSheetHandle}
       >
         <BottomSheetView style={styles.filterSheetContent}>
-          <Text style={styles.filterSheetTitle}>Refine your edit</Text>
-          <Text style={styles.filterGroupLabel}>STORE</Text>
-          <TouchableOpacity style={styles.storeFilterRow} onPress={openStorePickerFromFilters}>
-            <Ionicons name="storefront-outline" size={17} color={colors.foreground} />
-            <Text
-              style={[styles.storeFilterRowText, storeFilter !== STORE_FILTER_ALL && styles.storeFilterRowTextActive]}
-              numberOfLines={1}
-            >
-              {storeFilterLabel}
-            </Text>
-            <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
-          </TouchableOpacity>
-          <Text style={styles.filterGroupLabel}>DATE</Text>
-          <View style={styles.optionGrid}>
-            {DATE_OPTIONS.map((option) => (
-              <TouchableOpacity
-                key={option.value}
-                style={[styles.optionButton, dateFilter === option.value && styles.optionButtonActive]}
-                onPress={() => setDateFilter(option.value)}
-              >
-                <Text style={[styles.optionText, dateFilter === option.value && styles.optionTextActive]}>{option.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <Text style={styles.filterGroupLabel}>STATUS</Text>
-          <View style={styles.optionGrid}>
-            {SYNC_OPTIONS.map((option) => (
-              <TouchableOpacity
-                key={option.value}
-                style={[styles.optionButton, syncFilter === option.value && styles.optionButtonActive]}
-                onPress={() => setSyncFilter(option.value)}
-              >
-                <Text style={[styles.optionText, syncFilter === option.value && styles.optionTextActive]}>{option.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <Text style={styles.filterGroupLabel}>REVIEW</Text>
-          <View style={styles.optionGrid}>
-            {REVIEW_OPTIONS.map((option) => (
-              <TouchableOpacity
-                key={option.value}
-                style={[styles.optionButton, reviewFilter === option.value && styles.optionButtonActive]}
-                onPress={() => {
-                  setReviewFilter(option.value);
-                  if (option.value === 'all') setReviewReasonFilter('all');
-                }}
-              >
-                <Text style={[styles.optionText, reviewFilter === option.value && styles.optionTextActive]}>{option.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          {reviewReasonOptions.length > 0 ? (
-            <>
-              <Text style={styles.filterGroupLabel}>REVIEW QUEUE</Text>
-              <View style={styles.optionGrid}>
-                <TouchableOpacity
-                  style={[styles.optionButton, reviewReasonFilter === 'all' && styles.optionButtonActive]}
-                  onPress={() => setReviewReasonFilter('all')}
-                >
-                  <Text style={[styles.optionText, reviewReasonFilter === 'all' && styles.optionTextActive]}>Any reason</Text>
-                </TouchableOpacity>
-                {reviewReasonOptions.map((option) => (
-                  <TouchableOpacity
-                    key={option.key}
-                    style={[styles.optionButton, reviewReasonFilter === option.key && styles.optionButtonActive]}
-                    onPress={() => {
-                      setReviewFilter('needs-review');
-                      setReviewReasonFilter(option.key);
-                    }}
-                  >
-                    <Text style={[styles.optionText, reviewReasonFilter === option.key && styles.optionTextActive]}>
-                      {option.label} · {option.count}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </>
-          ) : null}
-          <Text style={styles.filterGroupLabel}>CATALOG</Text>
-          <View style={styles.optionGrid}>
-            <TouchableOpacity
-              style={[styles.optionButton, catalogFilter === 'all' && styles.optionButtonActive]}
-              onPress={() => setCatalogFilter('all')}
-            >
-              <Text style={[styles.optionText, catalogFilter === 'all' && styles.optionTextActive]}>All finds</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.optionButton, catalogFilter === 'active' && styles.optionButtonActive]}
-              onPress={() => setCatalogFilter('active')}
-            >
-              <Text style={[styles.optionText, catalogFilter === 'active' && styles.optionTextActive]}>Active decisions</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.optionButton, catalogFilter === 'favorite' && styles.optionButtonActive]}
-              onPress={() => setCatalogFilter('favorite')}
-            >
-              <Text style={[styles.optionText, catalogFilter === 'favorite' && styles.optionTextActive]}>Favorites</Text>
-            </TouchableOpacity>
-            {SHOPPING_CATALOG_STATUS_OPTIONS.map((option) => (
-              <TouchableOpacity
-                key={option.value}
-                style={[styles.optionButton, catalogFilter === option.value && styles.optionButtonActive]}
-                onPress={() => setCatalogFilter(option.value)}
-              >
-                <Text style={[styles.optionText, catalogFilter === option.value && styles.optionTextActive]}>{option.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <AppText variant="sheetTitle" tone="primary">Refine your edit</AppText>
+
+          <AppText variant="eyebrow" tone="muted" style={styles.filterGroupLabel}>WHEN</AppText>
+          <OptionChips
+            options={DATE_OPTIONS}
+            value={dateFilter}
+            onSelect={(value) => setDateFilter(value)}
+          />
+
+          <AppText variant="eyebrow" tone="muted" style={styles.filterGroupLabel}>NEEDS ATTENTION</AppText>
+          <OptionChips
+            options={attentionOptions.map((option) => ({
+              value: option.value,
+              label: option.count === undefined ? option.label : `${option.label} · ${option.count}`,
+            }))}
+            value={attentionFilter}
+            onSelect={(value) => setAttentionFilter(value)}
+          />
+
+          <AppText variant="eyebrow" tone="muted" style={styles.filterGroupLabel}>DECISION</AppText>
+          <OptionChips
+            options={[
+              { value: 'all' as ShoppingCatalogFilter, label: 'Everything' },
+              { value: 'active' as ShoppingCatalogFilter, label: 'Active decisions' },
+              { value: 'favorite' as ShoppingCatalogFilter, label: 'Favorites' },
+              ...SHOPPING_CATALOG_STATUS_OPTIONS.map((option) => ({
+                value: option.value as ShoppingCatalogFilter,
+                label: option.label,
+              })),
+            ]}
+            value={catalogFilter}
+            onSelect={(value) => setCatalogFilter(value)}
+          />
+
           <TouchableOpacity
             style={styles.doneButton}
             onPress={() => filterSheetRef.current?.dismiss()}
@@ -738,7 +637,11 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
       />
 
       {lightboxItem ? (
-        <ShoppingItemLightbox item={lightboxItem} onClose={() => setLightboxItem(null)} />
+        <ShoppingItemLightbox
+          item={lightboxItem}
+          onClose={() => setLightboxItem(null)}
+          onAssignStore={() => assignStoreForItem(lightboxItem)}
+        />
       ) : null}
     </View>
   );
@@ -748,52 +651,20 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   listContent: { paddingBottom: spacing.xxxl },
   listContentSelecting: { paddingBottom: 112 },
-  listContentEmpty: { flexGrow: 1 },
-  summaryBlock: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, backgroundColor: colors.card },
-  heroActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  headerIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: colors.surfaceElevated },
-  headerTextButton: { minHeight: 42, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.surfaceElevated },
-  headerTextButtonText: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground },
-  filterDot: { position: 'absolute', top: 8, right: 8, width: 7, height: 7, borderRadius: 4, backgroundColor: colors.primary },
-  cameraButton: { height: 42, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.primary },
-  cameraButtonText: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.primaryForeground },
-  eyebrow: { ...typography.text.eyebrowLarge, color: colors.primary },
-  heroTitle: { maxWidth: 330, paddingTop: spacing.sm, ...typography.text.editorialHero, color: colors.foreground },
-  heroDeck: { maxWidth: 330, paddingTop: spacing.sm, ...typography.text.bodySmall, color: colors.inkSubtle },
-  summaryRow: { minHeight: 24, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingTop: spacing.md },
-  summaryText: { fontSize: typography.text.bodySmall.fontSize, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
-  localSummary: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  localSummaryDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.primary },
-  localSummaryText: { fontSize: typography.text.caption.fontSize, color: colors.primary, fontVariant: ['tabular-nums'] },
-  metricsStrip: { flexDirection: 'row', gap: spacing.sm, paddingTop: spacing.lg },
-  metricCell: { flex: 1, minHeight: 58, justifyContent: 'center', gap: 2, paddingHorizontal: spacing.sm, borderRadius: radii.md, backgroundColor: colors.background },
-  metricValue: { fontSize: typography.text.sectionTitle.fontSize, fontWeight: typography.weight.bold, color: colors.foreground, fontVariant: ['tabular-nums'] },
-  metricValueWarn: { color: colors.primary },
-  metricLabel: { ...typography.text.eyebrow, color: colors.mutedForeground },
-  storeFilterBlock: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  storeChipScroll: { flex: 1 },
-  storeChipRow: { gap: spacing.sm, paddingLeft: spacing.lg, paddingRight: spacing.sm },
-  storeFilterChip: { maxWidth: 168, height: 36, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radii.full, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background },
-  storePickerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    height: 36,
-    marginRight: spacing.lg,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.full,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
+  heroHeader: { paddingBottom: spacing.lg, backgroundColor: colors.background },
+  summaryBlock: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
+  countLine: { fontSize: 12, lineHeight: 18, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
+  railBlock: { gap: spacing.sm, paddingBottom: spacing.lg },
+  stickyHeader: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
+  stickyHeaderContent: {
+    backgroundColor: colors.background,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
-  storePickerText: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.medium, color: colors.foreground, fontVariant: ['tabular-nums'] },
-  storeFilterChipActive: { borderColor: colors.foreground, backgroundColor: colors.foreground },
-  storeFilterText: { fontSize: typography.text.bodySmall.fontSize, color: colors.secondaryForeground },
-  storeFilterTextActive: { fontWeight: typography.weight.semibold, color: colors.primaryForeground },
+  heroActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   remoteError: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, backgroundColor: colors.accent },
   remoteErrorText: { flex: 1, fontSize: typography.text.caption.fontSize, color: colors.secondaryForeground },
-  emptyState: { flex: 1, minHeight: 420, alignItems: 'center', justifyContent: 'center', gap: spacing.md, paddingHorizontal: spacing.xl },
-  emptyMonogram: { width: 76, height: 76, alignItems: 'center', justifyContent: 'center', borderRadius: 38, backgroundColor: colors.accent },
+  emptyState: { minHeight: 320, alignItems: 'center', gap: spacing.md, paddingTop: spacing.xxl, paddingHorizontal: spacing.xl },
   emptyTitle: { ...typography.text.editorialCompact, textAlign: 'center', color: colors.foreground },
   emptyText: { maxWidth: 310, fontSize: typography.text.bodySmall.fontSize, lineHeight: 21, textAlign: 'center', color: colors.mutedForeground },
   emptyButton: { minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, borderRadius: radii.full, backgroundColor: colors.primary },
@@ -801,24 +672,7 @@ const styles = StyleSheet.create({
   filterSheetBackground: { backgroundColor: colors.background },
   filterSheetHandle: { backgroundColor: colors.border },
   filterSheetContent: { gap: spacing.md, paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
-  filterSheetTitle: { ...typography.text.sheetTitle, color: colors.foreground },
   filterGroupLabel: { paddingTop: spacing.sm, ...typography.text.eyebrow, color: colors.mutedForeground },
-  storeFilterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    minHeight: 48,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.md,
-    backgroundColor: colors.surfaceSubtle,
-  },
-  storeFilterRowText: { flex: 1, fontSize: typography.text.body.fontSize, color: colors.secondaryForeground },
-  storeFilterRowTextActive: { fontWeight: typography.weight.semibold, color: colors.foreground },
-  optionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  optionButton: { minHeight: 38, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.surfaceSubtle },
-  optionButtonActive: { backgroundColor: colors.foreground },
-  optionText: { fontSize: typography.text.bodySmall.fontSize, color: colors.secondaryForeground },
-  optionTextActive: { fontWeight: typography.weight.semibold, color: colors.primaryForeground },
   doneButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, backgroundColor: colors.primary },
   doneButtonText: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.primaryForeground, fontVariant: ['tabular-nums'] },
   selectionBar: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.background },

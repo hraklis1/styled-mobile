@@ -1,5 +1,6 @@
 import { dateGroupLabel, type ShoppingEditItem } from './shoppingGallery';
 import { formatShoppingPlaceLabel } from './shoppingLocations';
+import { SHORTLIST_COPY } from './shoppingVocabulary';
 
 /**
  * One shopping trip: everything photographed at a single store, on a single
@@ -23,7 +24,38 @@ export type ShoppingSessionGroup = {
   pendingCount: number;
   favoriteCount: number;
   unsortedCount: number;
+  /** Modal colorLabel across the visit's items, ties broken by the cover item.
+   *  Null when nothing in the visit has been classified — the card's spine then
+   *  renders unpainted rather than guessing at a colour. */
+  dominantColorLabel: string | null;
 };
+
+/** The colour the visit reads as: whichever label the most items share. */
+function dominantColorLabel(
+  items: ShoppingEditItem[],
+  coverItem: ShoppingEditItem,
+): string | null {
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    const label = item.colorLabel?.trim();
+    if (!label) continue;
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  if (counts.size === 0) return null;
+
+  const coverLabel = coverItem.colorLabel?.trim() || null;
+  let best: string | null = null;
+  let bestCount = 0;
+  for (const [label, count] of counts) {
+    // A tie goes to the cover item, so the spine matches the photo that
+    // represents the visit everywhere else.
+    if (count > bestCount || (count === bestCount && label === coverLabel)) {
+      best = label;
+      bestCount = count;
+    }
+  }
+  return best;
+}
 
 function itemPlaceLabel(item: ShoppingEditItem): string | null {
   const label = formatShoppingPlaceLabel(item);
@@ -79,9 +111,54 @@ export function buildShoppingSessionGroups(
         pendingCount: sorted.filter((item) => item.syncStatus === 'pending').length,
         favoriteCount: sorted.filter((item) => item.isFavorite).length,
         unsortedCount: sorted.filter((item) => item.reviewReasons.includes('Unsorted photo')).length,
+        dominantColorLabel: dominantColorLabel(sorted, coverItem),
       };
     })
     .sort((a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime());
+}
+
+export type ShoppingSessionAttentionKey =
+  | 'needs-store'
+  | 'on-this-phone'
+  | 'needs-price'
+  | 'unsorted'
+  | 'favorite'
+  | 'settled';
+
+export type ShoppingSessionAttention = {
+  key: ShoppingSessionAttentionKey;
+  label: string;
+};
+
+/**
+ * Everything about a trip that still wants attention, keyed and in priority
+ * order. The card renders the first one or two of these as a status line, but
+ * skips whichever it is already offering as a button — hence the keys: it must
+ * be able to drop 'needs-store' without matching on the English.
+ */
+export function shoppingSessionAttention(group: ShoppingSessionGroup): ShoppingSessionAttention[] {
+  const attention: ShoppingSessionAttention[] = [];
+
+  if (!group.storeName) {
+    attention.push({ key: 'needs-store', label: SHORTLIST_COPY.needsStore });
+  }
+  if (group.pendingCount > 0) {
+    attention.push({ key: 'on-this-phone', label: `${group.pendingCount} ${SHORTLIST_COPY.onThisPhone.toLowerCase()}` });
+  }
+  if (group.needsPriceCount > 0) {
+    attention.push({ key: 'needs-price', label: `${group.needsPriceCount} ${SHORTLIST_COPY.needsPrice.toLowerCase()}` });
+  }
+  if (group.unsortedCount > 0) {
+    attention.push({ key: 'unsorted', label: `${group.unsortedCount} ${SHORTLIST_COPY.unsorted.toLowerCase()}` });
+  }
+  if (group.favoriteCount > 0) {
+    attention.push({ key: 'favorite', label: `${group.favoriteCount} favorite` });
+  }
+  if (attention.length === 0) {
+    attention.push({ key: 'settled', label: SHORTLIST_COPY.allSettled });
+  }
+
+  return attention;
 }
 
 /**
@@ -89,14 +166,5 @@ export function buildShoppingSessionGroups(
  * so nothing is hidden by the bundle itself.
  */
 export function shoppingSessionHighlights(group: ShoppingSessionGroup): string[] {
-  const highlights: string[] = [];
-
-  if (!group.storeName) highlights.push('Add store location');
-  if (group.pendingCount > 0) highlights.push(`${group.pendingCount} saved locally`);
-  if (group.needsPriceCount > 0) highlights.push(`${group.needsPriceCount} needs price`);
-  if (group.unsortedCount > 0) highlights.push(`${group.unsortedCount} to sort`);
-  if (group.favoriteCount > 0) highlights.push(`${group.favoriteCount} favorite`);
-  if (highlights.length === 0) highlights.push('All catalogued');
-
-  return highlights.slice(0, 2);
+  return shoppingSessionAttention(group).map((entry) => entry.label).slice(0, 2);
 }

@@ -1,5 +1,5 @@
 import { buildShoppingEditItems } from '../shoppingGallery';
-import { buildShoppingSessionGroups, shoppingSessionHighlights } from '../shoppingSessionGroups';
+import { buildShoppingSessionGroups, shoppingSessionAttention, shoppingSessionHighlights } from '../shoppingSessionGroups';
 import type { ShoppingSnap } from '../../types/shoppingSnap';
 
 const snap: ShoppingSnap = {
@@ -86,12 +86,54 @@ describe('shoppingSessionGroups', () => {
     const groups = buildShoppingSessionGroups(items, now);
 
     expect(groups[0]).toMatchObject({ needsPriceCount: 1, pendingCount: 1, unsortedCount: 1, favoriteCount: 1 });
-    expect(shoppingSessionHighlights(groups[0])).toEqual(['1 saved locally', '1 needs price']);
+    expect(shoppingSessionHighlights(groups[0])).toEqual(['1 on this phone', '1 needs price']);
   });
 
   it('says a trip is settled when nothing is outstanding', () => {
     const groups = buildShoppingSessionGroups(buildShoppingEditItems([snap]), now);
 
-    expect(shoppingSessionHighlights(groups[0])).toEqual(['All catalogued']);
+    expect(shoppingSessionHighlights(groups[0])).toEqual(['All settled']);
+  });
+
+  it('reads a visit as the colour most of its items share', () => {
+    const items = buildShoppingEditItems([
+      { ...snap, colorLabel: 'navy' },
+      { ...snap, id: 'b', captureGroupId: 'group-b', colorLabel: 'navy' },
+      { ...snap, id: 'c', captureGroupId: 'group-c', colorLabel: 'olive' },
+    ]);
+
+    expect(buildShoppingSessionGroups(items, now)[0].dominantColorLabel).toBe('navy');
+  });
+
+  it('leaves the visit colour unset when nothing has been classified', () => {
+    const items = buildShoppingEditItems([
+      { ...snap, colorLabel: null },
+      { ...snap, id: 'b', captureGroupId: 'group-b', colorLabel: '   ' },
+    ]);
+
+    expect(buildShoppingSessionGroups(items, now)[0].dominantColorLabel).toBeNull();
+  });
+
+  it('keys every outstanding thing so the card can skip what it already offers as a button', () => {
+    const items = buildShoppingEditItems([
+      { ...snap, storeName: null, extractedPrice: null, rawOcrText: '', syncStatus: 'pending' },
+      { ...snap, id: 'b', storeName: null, captureGroupId: 'group-b', captureRole: 'unknown', isFavorite: true },
+    ]);
+
+    const groups = buildShoppingSessionGroups(items, now);
+
+    expect(shoppingSessionAttention(groups[0]).map((entry) => entry.key)).toEqual([
+      'needs-store',
+      'on-this-phone',
+      'needs-price',
+      'unsorted',
+      'favorite',
+    ]);
+  });
+
+  it('reports a single settled entry when a trip has nothing outstanding', () => {
+    const groups = buildShoppingSessionGroups(buildShoppingEditItems([snap]), now);
+
+    expect(shoppingSessionAttention(groups[0])).toEqual([{ key: 'settled', label: 'All settled' }]);
   });
 });

@@ -32,6 +32,7 @@ import {
   snapRoleLabel,
 } from '../../lib/shoppingPresentation';
 import type { ShoppingEditItem } from '../../lib/shoppingGallery';
+import { SHORTLIST_COPY } from '../../lib/shoppingVocabulary';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { ShoppingFindCatalog, ShoppingFindCatalogPatch } from '../../types/shoppingSnap';
 
@@ -73,6 +74,29 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+/**
+ * The one detail that is a question rather than a fact. Every other row here
+ * reports; this one asks, so it is the only one that can be tapped.
+ */
+function StoreDetailRow({ value, onPress }: { value: string | null; onPress?: () => void }) {
+  if (!onPress) return <DetailRow label="Store" value={value ?? SHORTLIST_COPY.needsStore} />;
+
+  return (
+    <TouchableOpacity
+      style={styles.detailRow}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={value ? `Store, ${value}. Change it.` : `${SHORTLIST_COPY.needsStore}. ${SHORTLIST_COPY.addStore}.`}
+    >
+      <Text style={styles.detailLabel}>Store</Text>
+      <Text style={[styles.detailValue, styles.detailValueAction]} numberOfLines={1}>
+        {value ?? SHORTLIST_COPY.addStore}
+      </Text>
+      <Ionicons name="chevron-forward" size={14} color={colors.action} />
+    </TouchableOpacity>
+  );
+}
+
 function CatalogField({
   label,
   value,
@@ -105,9 +129,14 @@ function CatalogField({
 export function ShoppingItemLightbox({
   item,
   onClose,
+  onAssignStore,
 }: {
   item: ShoppingEditItem;
   onClose: () => void;
+  /** Names the store for this item's whole visit. The host closes the lightbox
+   *  and presents its own sheet — a bottom sheet cannot render above the
+   *  full-screen modal this lives in. */
+  onAssignStore?: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -231,7 +260,7 @@ export function ShoppingItemLightbox({
   const locationSourceLabel = `${activePhoto.locationSource ? activePhoto.locationSource.replace('_', ' ') : 'Not captured'}${
     activePhoto.locationAccuracyMeters !== null ? ` · ~${Math.round(activePhoto.locationAccuracyMeters)} m` : ''
   }`;
-  const syncLabel = displayItem.syncStatus === 'pending' ? 'Saved locally' : 'Synced';
+  const syncLabel = displayItem.syncStatus === 'pending' ? SHORTLIST_COPY.onThisPhone : SHORTLIST_COPY.backedUp;
 
   return (
     <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
@@ -413,7 +442,7 @@ export function ShoppingItemLightbox({
             <View style={styles.divider} />
             <Text style={styles.detailsEyebrow}>DETAILS</Text>
             <View style={styles.detailRows}>
-              <DetailRow label="Store" value={displayItem.storeName ?? 'Store not set'} />
+              <StoreDetailRow value={displayItem.storeName} onPress={onAssignStore} />
               <DetailRow label="Captured" value={capturedLabel} />
               <DetailRow label="Role" value={itemRoleSummary(displayItem)} />
               <DetailRow label="Location" value={formatShoppingDetailLocation(displayItem)} />
@@ -598,6 +627,7 @@ const styles = StyleSheet.create({
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
   detailLabel: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, color: colors.mutedForeground },
   detailValue: { flex: 1, fontSize: typography.text.bodySmall.fontSize, textAlign: 'right', color: colors.foreground },
+  detailValueAction: { fontWeight: typography.weight.medium, color: colors.action },
   disclosureCard: {
     marginTop: spacing.sm,
     gap: spacing.sm,

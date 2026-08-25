@@ -26,26 +26,24 @@ export function ShopSubpageHeader({ title, subtitle, eyebrow = 'SHOP', onBack, a
   return (
     <View style={[styles.header, compact && styles.headerCompact, { paddingTop: insets.top + spacing.md }, style]}>
       <View style={[styles.topRow, compact && styles.topRowCompact]}>
-        <View style={compact ? styles.compactTitleRow : undefined}>
-          <PressableScale
-            contentStyle={styles.backButton}
-            onPress={onBack}
-            haptic={false}
-            accessibilityRole="button"
-            accessibilityLabel="Back to Shop"
-          >
-            <Ionicons name="chevron-back" size={23} color={colors.foreground} />
-          </PressableScale>
-          {compact && (
-            <View style={styles.compactTitleWrap}>
-              <AppText variant="eyebrow" tone="brand">{eyebrow}</AppText>
-              <AppText variant="sectionTitle" tone="primary" numberOfLines={1}>{title}</AppText>
-              {subtitle ? <AppText variant="caption" tone="muted" numberOfLines={1}>{subtitle}</AppText> : null}
-            </View>
-          )}
-        </View>
+        <PressableScale
+          contentStyle={styles.backButton}
+          onPress={onBack}
+          haptic={false}
+          accessibilityRole="button"
+          accessibilityLabel="Back to Shop"
+        >
+          <Ionicons name="chevron-back" size={23} color={colors.foreground} />
+        </PressableScale>
         <View style={styles.actions}>{actions}</View>
       </View>
+      {compact && (
+        <View style={styles.compactTitleWrap}>
+          <AppText variant="eyebrow" tone="brand">{eyebrow}</AppText>
+          <AppText variant="sectionTitle" tone="primary" numberOfLines={1}>{title}</AppText>
+          {subtitle ? <AppText variant="caption" tone="muted" numberOfLines={1}>{subtitle}</AppText> : null}
+        </View>
+      )}
       {!compact && (
         <>
           <AppText variant="eyebrowLarge" tone="brand">{eyebrow}</AppText>
@@ -59,17 +57,12 @@ export function ShopSubpageHeader({ title, subtitle, eyebrow = 'SHOP', onBack, a
 
 const styles = StyleSheet.create({
   header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, backgroundColor: colors.card },
-  headerCompact: { paddingBottom: spacing.sm },
+  headerCompact: { paddingBottom: spacing.md },
   topRow: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xl },
-  topRowCompact: { minHeight: 52, marginBottom: 0 },
-  compactTitleRow: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  compactTitleWrap: { flex: 1, minWidth: 0, gap: 1 },
-  compactEyebrow: {},
-  compactTitle: {},
-  compactSubtitle: {},
+  topRowCompact: { minHeight: 42, marginBottom: spacing.md },
+  compactTitleWrap: { gap: 1 },
   backButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: colors.surfaceElevated },
   actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  eyebrow: {},
   title: { maxWidth: 340, paddingTop: spacing.sm },
   subtitle: { maxWidth: 340, paddingTop: spacing.sm },
 });

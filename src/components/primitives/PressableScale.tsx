@@ -8,9 +8,11 @@ import {
   type ViewStyle,
 } from 'react-native';
 import Animated, {
+  Easing,
   useSharedValue,
   useAnimatedStyle,
   withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 
@@ -21,6 +23,10 @@ type Props = Omit<PressableProps, 'children'> & {
   contentStyle?: StyleProp<ViewStyle>;
   /** Scale target on press. Defaults to 0.96. */
   scaleTo?: number;
+  /** 'spring' (default) has a soft overshoot as it settles. 'crisp' eases in and
+   *  out with none — for dense controls like filter chips, where several
+   *  wobbling at once reads as noise rather than life. */
+  motion?: 'spring' | 'crisp';
   /** Fire a light haptic on press-in. Defaults to true. No-op on web. */
   haptic?: boolean;
   /** Reanimated layout transition. If not provided, it won't animate layout changes automatically. */
@@ -32,6 +38,7 @@ export function PressableScale({
   style,
   contentStyle,
   scaleTo = 0.96,
+  motion = 'spring',
   haptic = true,
   layout,
   onPressIn: onPressInProp,
@@ -45,27 +52,31 @@ export function PressableScale({
       if (haptic && Platform.OS !== 'web') {
         try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch { /* ignore */ }
       }
-      scale.value = withSpring(scaleTo, {
-        mass: 1,
-        damping: 15,
-        stiffness: 300,
-        overshootClamping: false,
-      });
+      scale.value = motion === 'crisp'
+        ? withTiming(scaleTo, { duration: 90, easing: Easing.out(Easing.quad) })
+        : withSpring(scaleTo, {
+          mass: 1,
+          damping: 15,
+          stiffness: 300,
+          overshootClamping: false,
+        });
       onPressInProp?.(e);
     },
-    [haptic, scale, scaleTo, onPressInProp],
+    [haptic, motion, scale, scaleTo, onPressInProp],
   );
 
   const handlePressOut = useCallback(
     (e: GestureResponderEvent) => {
-      scale.value = withSpring(1, {
-        mass: 1,
-        damping: 12,
-        stiffness: 250,
-      });
+      scale.value = motion === 'crisp'
+        ? withTiming(1, { duration: 130, easing: Easing.out(Easing.quad) })
+        : withSpring(1, {
+          mass: 1,
+          damping: 12,
+          stiffness: 250,
+        });
       onPressOutProp?.(e);
     },
-    [scale, onPressOutProp],
+    [motion, scale, onPressOutProp],
   );
 
   const animatedStyle = useAnimatedStyle(() => {

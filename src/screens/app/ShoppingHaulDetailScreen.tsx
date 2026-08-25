@@ -1,25 +1,33 @@
-import { useMemo, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ShoppingEditCard } from '../../components/shopping/ShoppingEditCard';
 import { ShoppingItemLightbox } from '../../components/shopping/ShoppingItemLightbox';
+import { ShoppingStoreAssignmentSheet } from '../../components/shopping/ShoppingStoreAssignmentSheet';
+import { useAssignShoppingStore } from '../../hooks/useAssignShoppingStore';
+import { buildShoppingStoreOptions } from '../../lib/shoppingStoreFilters';
 import { useCurrencyCode } from '../../hooks/useCurrencyCode';
 import { useShoppingSnaps } from '../../hooks/useShoppingSnaps';
 import { buildShoppingEditItems, mergeShoppingSnaps, type ShoppingEditItem } from '../../lib/shoppingGallery';
 import { formatShoppingPrice } from '../../lib/shoppingPresentation';
-import { buildShoppingSessionGroups, shoppingSessionHighlights } from '../../lib/shoppingSessionGroups';
+import { buildShoppingSessionGroups } from '../../lib/shoppingSessionGroups';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
-import { colors, spacing, typography } from '../../theme';
+import { AppText } from '../../components/primitives/AppText';
+import { PressableScale } from '../../components/primitives/PressableScale';
+import { SHORTLIST_COPY } from '../../lib/shoppingVocabulary';
+import { colors, radii, spacing } from '../../theme';
 import type { ShoppingHaulDetailScreenProps } from '../../navigation/types';
+import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 
 export function ShoppingHaulDetailScreen({ route, navigation }: ShoppingHaulDetailScreenProps) {
   const { groupKey } = route.params;
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const [lightboxItem, setLightboxItem] = useState<ShoppingEditItem | null>(null);
+  const assignStoreSheetRef = useRef<BottomSheetModal>(null);
+  const assignShoppingStore = useAssignShoppingStore();
 
   const { data: remoteSnaps = [] } = useShoppingSnaps();
   const pendingUploads = useShoppingSessionStore((state) => state.pendingUploads);
@@ -31,17 +39,37 @@ export function ShoppingHaulDetailScreen({ route, navigation }: ShoppingHaulDeta
     [pendingUploads, remoteSnaps],
   );
   const groups = useMemo(() => buildShoppingSessionGroups(allItems), [allItems]);
+  const storeOptions = useMemo(() => buildShoppingStoreOptions(allItems), [allItems]);
   const group = groups.find((candidate) => candidate.key === groupKey);
 
-  const cardWidth = (width - spacing.lg * 2 - spacing.sm) / 2;
+  const openStoreAssignment = useCallback(() => {
+    setLightboxItem(null);
+    requestAnimationFrame(() => assignStoreSheetRef.current?.present());
+  }, []);
+
+  const saveStoreAssignment = useCallback(async (storeName: string) => {
+    if (!group) return;
+    await assignShoppingStore({
+      snaps: group.items.flatMap((item) => item.snaps),
+      shoppingSessionId: group.shoppingSessionId,
+    }, storeName);
+  }, [assignShoppingStore, group]);
+
+  // A lone find in a two-column grid sits next to an empty slot, so give it the
+  // full width. Two still go side by side — one per screenful would trade the
+  // gap for scrolling, which is the worse deal.
+  const columns = (group?.itemCount ?? 0) === 1 ? 1 : 2;
+  const cardWidth = columns === 1
+    ? width - spacing.lg * 2
+    : (width - spacing.lg * 2 - spacing.sm) / 2;
   const rows = useMemo(() => {
     if (!group) return [];
     return group.items.reduce<ShoppingEditItem[][]>((accumulated, item, index) => {
-      if (index % 2 === 0) accumulated.push([item]);
+      if (index % columns === 0) accumulated.push([item]);
       else accumulated[accumulated.length - 1].push(item);
       return accumulated;
     }, []);
-  }, [group]);
+  }, [columns, group]);
 
   if (!group) {
     // The haul was deleted or fully re-filed out from under this screen.
@@ -50,38 +78,45 @@ export function ShoppingHaulDetailScreen({ route, navigation }: ShoppingHaulDeta
   }
 
   const spend = formatShoppingPrice(group.knownSpend, currencyCode);
-  const highlights = shoppingSessionHighlights(group);
+  const contextLine = [group.dateLabel, group.placeLabel].filter(Boolean).join(' · ');
 
   return (
     <View style={styles.screen}>
-      <Animated.View sharedTransitionTag={`haul-card-${group.key}`} style={styles.hero}>
-        <View style={[styles.heroInner, { paddingTop: insets.top + 56 }]}>
-          <Text style={styles.heroDate}>{group.dateLabel}</Text>
-          {group.storeName ? <Text style={styles.heroStore}>{group.storeName}</Text> : null}
-          {group.placeLabel ? <Text style={styles.heroPlace}>{group.placeLabel}</Text> : null}
-          <View style={styles.heroStatsRow}>
-            <Text style={styles.heroStats}>
-              {group.itemCount} item{group.itemCount === 1 ? '' : 's'} · {group.photoCount} photo{group.photoCount === 1 ? '' : 's'}
-            </Text>
-            {spend ? <Text style={styles.heroSpend}>{spend}</Text> : null}
+      <View style={styles.hero}>
+        <View style={[styles.heroInner, { paddingTop: insets.top + spacing.md }]}>
+          <View style={styles.heroTopRow}>
+            <PressableScale
+              contentStyle={styles.backButton}
+              onPress={() => navigation.goBack()}
+              accessibilityRole="button"
+              accessibilityLabel="Back"
+            >
+              <Ionicons name="arrow-back" size={22} color={colors.foreground} />
+            </PressableScale>
           </View>
-          {highlights.length > 0 ? (
-            <Text style={styles.heroHighlights} numberOfLines={2}>{highlights.join(' · ')}</Text>
-          ) : null}
+          {group.storeName ? (
+            <AppText variant="editorialCompact" tone="primary" numberOfLines={1}>{group.storeName}</AppText>
+          ) : (
+            <PressableScale
+              style={styles.heroStoreAction}
+              onPress={openStoreAssignment}
+              accessibilityRole="button"
+              accessibilityLabel={`${SHORTLIST_COPY.needsStore}. ${SHORTLIST_COPY.addStore} for this visit.`}
+            >
+              <AppText variant="editorialCompact" tone="action" numberOfLines={1}>
+                {SHORTLIST_COPY.needsStore}
+              </AppText>
+              <Ionicons name="add" size={18} color={colors.action} />
+            </PressableScale>
+          )}
+          {contextLine ? <AppText variant="caption" tone="muted">{contextLine}</AppText> : null}
+          {/* No item/photo counts and no status line here — the card that
+              pushed this screen said both, and every tile below repeats them. */}
+          {spend ? <AppText variant="dataLarge" tone="primary" style={styles.heroSpend}>{spend}</AppText> : null}
         </View>
-      </Animated.View>
+      </View>
 
-      <TouchableOpacity
-        style={[styles.backButton, { top: insets.top + spacing.sm }]}
-        onPress={() => navigation.goBack()}
-        accessibilityRole="button"
-        accessibilityLabel="Back"
-      >
-        <Ionicons name="arrow-back" size={22} color={colors.foreground} />
-      </TouchableOpacity>
-
-      <Animated.ScrollView
-        entering={FadeIn.duration(220).delay(80)}
+      <ScrollView
         contentContainerStyle={styles.grid}
         showsVerticalScrollIndicator={false}
       >
@@ -102,46 +137,45 @@ export function ShoppingHaulDetailScreen({ route, navigation }: ShoppingHaulDeta
             {row.length === 1 ? <View style={{ width: cardWidth }} /> : null}
           </View>
         ))}
-      </Animated.ScrollView>
+      </ScrollView>
 
       {lightboxItem ? (
-        <ShoppingItemLightbox item={lightboxItem} onClose={() => setLightboxItem(null)} />
+        <ShoppingItemLightbox
+          item={lightboxItem}
+          onClose={() => setLightboxItem(null)}
+          onAssignStore={openStoreAssignment}
+        />
       ) : null}
+
+      <ShoppingStoreAssignmentSheet
+        sheetRef={assignStoreSheetRef}
+        options={storeOptions}
+        onSelect={(storeName) => void saveStoreAssignment(storeName)}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
+  // Ivory, matching the list that pushes this screen — a white slab here read
+  // as a card the moment the rows behind it stopped being cards.
   hero: {
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: colors.background,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.hairline,
+    borderBottomColor: colors.border,
   },
   heroInner: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, gap: 2 },
-  heroDate: { ...typography.text.dataLarge, color: colors.foreground },
-  heroStore: { fontSize: typography.text.sectionTitle.fontSize, fontWeight: typography.weight.semibold, color: colors.primary },
-  heroPlace: { fontSize: typography.text.bodySmall.fontSize, color: colors.mutedForeground },
-  heroStatsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: spacing.sm,
-  },
-  heroStats: { fontSize: typography.text.bodySmall.fontSize, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
-  heroSpend: { fontSize: typography.text.sectionTitle.fontSize, fontWeight: typography.weight.bold, color: colors.foreground, fontVariant: ['tabular-nums'] },
-  heroHighlights: { marginTop: spacing.xs, fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
+  heroTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md, marginLeft: -spacing.sm },
+  heroSpend: { marginTop: spacing.sm },
+  heroStoreAction: { flexDirection: 'row', alignItems: 'center', gap: 2, alignSelf: 'flex-start' },
   backButton: {
-    position: 'absolute',
-    left: spacing.md,
-    zIndex: 20,
     width: 40,
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 20,
-    backgroundColor: 'rgba(251, 250, 247, 0.88)',
-    boxShadow: '0 2px 8px rgba(40, 35, 31, 0.12)',
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceSubtle,
   },
   grid: { gap: spacing.sm, padding: spacing.lg },
   gridRow: { flexDirection: 'row', gap: spacing.sm },

@@ -1,4 +1,5 @@
 import { DEFAULT_CURRENCY_CODE } from './currency';
+import { SHORTLIST_COPY } from './shoppingVocabulary';
 import type { ShoppingEditItem } from './shoppingGallery';
 import type { ShoppingCaptureRole, ShoppingFindCatalog, ShoppingFindCatalogStatus, ShoppingSnap } from '../types/shoppingSnap';
 
@@ -24,10 +25,10 @@ export const SHOPPING_CATALOG_STATUS_OPTIONS: { value: ShoppingFindCatalogStatus
 ];
 
 const REVIEW_REASON_LABELS: Record<ShoppingReviewReasonKey, string> = {
-  'missing-price': 'Needs price',
-  'missing-store': 'Needs store',
-  'unsorted-photo': 'Unsorted',
-  'text-needs-price-check': 'Check text',
+  'missing-price': SHORTLIST_COPY.needsPrice,
+  'missing-store': SHORTLIST_COPY.needsStore,
+  'unsorted-photo': SHORTLIST_COPY.unsorted,
+  'text-needs-price-check': SHORTLIST_COPY.checkTagText,
 };
 
 export function formatShoppingPrice(price: number | null, currencyCode: string = DEFAULT_CURRENCY_CODE): string | null {
@@ -98,19 +99,19 @@ export function shoppingItemBadges(item: ShoppingEditItem): ShoppingItemBadge[] 
     badges.push({ key: 'passed', label: 'Passed', tone: 'neutral' });
   }
   if (item.syncStatus === 'pending') {
-    badges.push({ key: 'pending', label: 'Saved locally', tone: 'attention' });
+    badges.push({ key: 'pending', label: SHORTLIST_COPY.onThisPhone, tone: 'attention' });
   }
   if (item.extractedPrice === null) {
-    badges.push({ key: 'missing-price', label: 'Needs price', tone: 'attention' });
+    badges.push({ key: 'missing-price', label: SHORTLIST_COPY.needsPrice, tone: 'attention' });
   }
   if (item.reviewReasons.includes('Missing store')) {
-    badges.push({ key: 'missing-store', label: 'Needs store', tone: 'attention' });
+    badges.push({ key: 'missing-store', label: SHORTLIST_COPY.needsStore, tone: 'attention' });
   }
   if (item.reviewReasons.includes('Unsorted photo')) {
-    badges.push({ key: 'unsorted', label: 'Sort photos', tone: 'neutral' });
+    badges.push({ key: 'unsorted', label: SHORTLIST_COPY.sortPhotos, tone: 'neutral' });
   }
   if (badges.length === 0) {
-    badges.push({ key: 'catalogued', label: 'Catalogued', tone: 'success' });
+    badges.push({ key: 'catalogued', label: SHORTLIST_COPY.settled, tone: 'success' });
   }
 
   return badges.slice(0, 2);
@@ -119,7 +120,7 @@ export function shoppingItemBadges(item: ShoppingEditItem): ShoppingItemBadge[] 
 export function snapRoleLabel(role: ShoppingCaptureRole): string {
   if (role === 'tag') return 'Tag';
   if (role === 'garment') return 'Garment';
-  return 'Unsorted';
+  return SHORTLIST_COPY.unsorted;
 }
 
 export function shoppingCatalogStatusLabel(status: ShoppingFindCatalogStatus): string {

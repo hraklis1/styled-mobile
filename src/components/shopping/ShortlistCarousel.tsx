@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { PressableScale } from '../primitives/PressableScale';
 import { useCurrencyCode } from '../../hooks/useCurrencyCode';
 import { formatShoppingPrice, shoppingCatalogChips } from '../../lib/shoppingPresentation';
+import { SHORTLIST_COPY } from '../../lib/shoppingVocabulary';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { ShoppingEditItem } from '../../lib/shoppingGallery';
 
@@ -137,7 +138,7 @@ function ShortlistFindCard({ item, onPress }: { item: ShoppingEditItem; onPress:
       </View>
 
       <View style={styles.copy}>
-        <Text style={styles.store} numberOfLines={1}>{item.storeName ?? 'Store not set'}</Text>
+        <Text style={styles.store} numberOfLines={1}>{item.storeName ?? SHORTLIST_COPY.needsStore}</Text>
         <View style={styles.placeRow}>
           <Ionicons name="location-outline" size={11} color={colors.mutedForeground} />
           <Text style={styles.place} numberOfLines={1}>{place || 'Location not set'}</Text>

@@ -161,11 +161,11 @@ describe('shoppingGallery', () => {
       { key: 'missing-price', label: 'Needs price', count: 1 },
       { key: 'missing-store', label: 'Needs store', count: 1 },
       { key: 'unsorted-photo', label: 'Unsorted', count: 1 },
-      { key: 'text-needs-price-check', label: 'Check text', count: 1 },
+      { key: 'text-needs-price-check', label: 'Check tag text', count: 1 },
     ]);
     expect(reviewItem ? itemRoleSummary(reviewItem) : null).toBe('1 unsorted');
     expect(reviewItem ? shoppingItemBadges(reviewItem) : []).toEqual([
-      { key: 'pending', label: 'Saved locally', tone: 'attention' },
+      { key: 'pending', label: 'On this phone', tone: 'attention' },
       { key: 'missing-price', label: 'Needs price', tone: 'attention' },
     ]);
   });
