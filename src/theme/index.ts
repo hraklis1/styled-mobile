@@ -197,6 +197,12 @@ export const typography = {
 } as const;
 
 export const radii = {
+  /**
+   * Photographs are flat plates. Rounding is a property of controls — chips,
+   * buttons, pills — so a garment image and the chip beside it never share a
+   * corner treatment. Just enough to take the hard pixel off the corner.
+   */
+  photo: 2,
   sm:   6,
   md:   8,
   lg:   12,

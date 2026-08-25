@@ -164,17 +164,15 @@ const styles = StyleSheet.create({
   // on one find must not leave the rail's bottom edge ragged.
   card: {
     flex: 1,
-    borderRadius: radii.lg,
-    borderCurve: 'continuous',
+    borderRadius: radii.photo,
     backgroundColor: colors.surfaceElevated,
     boxShadow: '0 2px 8px rgba(40, 35, 31, 0.06)',
   },
   imageFrame: {
     aspectRatio: 4 / 5,
     overflow: 'hidden',
-    borderTopLeftRadius: radii.lg,
-    borderTopRightRadius: radii.lg,
-    borderCurve: 'continuous',
+    borderTopLeftRadius: radii.photo,
+    borderTopRightRadius: radii.photo,
     backgroundColor: colors.surfaceSubtle,
   },
   imagePending: { opacity: 0 },
@@ -231,8 +229,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.md,
     padding: spacing.lg,
-    borderRadius: radii.lg,
-    borderCurve: 'continuous',
+    borderRadius: radii.photo,
     backgroundColor: colors.surfaceSubtle,
   },
   seeAllEmblem: {

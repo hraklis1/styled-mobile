@@ -107,7 +107,7 @@ export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitRe
         isSaving={isSavingOrganization || isFinishing}
         eyebrow={isLiveVisit ? 'THIS VISIT' : 'EARLIER VISIT'}
         title="Everything you photographed"
-        subtitle="Grouped for you. Tap a photo to see it big, hold to select or drag it — or just save."
+        subtitle="Grouped for you. Adjust anything, or just save."
         saveLabel="Save all"
         closeLabel={isLiveVisit ? 'Keep shooting' : 'Cancel'}
       />

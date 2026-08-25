@@ -272,8 +272,8 @@ export function FilterControl({
       accessibilityRole="button"
       accessibilityLabel={`${label}${active ? `, ${count} active` : ''}`}
     >
-      <Ionicons name="options-outline" size={18} color={active ? colors.primaryForeground : colors.foreground} />
-      {active ? <AppText variant="caption" tone="inverse" style={styles.filterCount}>{count}</AppText> : null}
+      <Ionicons name="options-outline" size={18} color={active ? colors.primary : colors.foreground} />
+      {active ? <AppText variant="caption" tone="brand" style={styles.filterCount}>{count}</AppText> : null}
     </PressableScale>
   );
 }
@@ -486,9 +486,12 @@ const styles = StyleSheet.create({
     gap: 3,
     paddingHorizontal: spacing.sm,
   },
+  // Active means "a filter is on", not "this is the primary action" — a solid
+  // fill here made it the visual equal of the one filled button a header is
+  // allowed. It states itself with a drawn edge instead.
   filterControlActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    borderWidth: 1,
+    borderColor: colors.foreground,
   },
   filterCount: { minWidth: 12, textAlign: 'center' },
   viewModeControl: {

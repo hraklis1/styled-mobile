@@ -171,8 +171,7 @@ export function ShoppingEditCard({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: radii.lg,
-    borderCurve: 'continuous',
+    borderRadius: radii.photo,
     backgroundColor: colors.surfaceElevated,
     boxShadow: '0 2px 8px rgba(40, 35, 31, 0.06)',
   },
@@ -186,15 +185,13 @@ const styles = StyleSheet.create({
     zIndex: 10,
     borderWidth: 3,
     borderColor: colors.primary,
-    borderRadius: radii.lg,
-    borderCurve: 'continuous',
+    borderRadius: radii.photo,
   },
   imageFrame: {
     aspectRatio: 4 / 5,
     overflow: 'hidden',
-    borderTopLeftRadius: radii.lg,
-    borderTopRightRadius: radii.lg,
-    borderCurve: 'continuous',
+    borderTopLeftRadius: radii.photo,
+    borderTopRightRadius: radii.photo,
     backgroundColor: colors.surfaceSubtle,
   },
   imageSkeleton: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: colors.surfaceSubtle },

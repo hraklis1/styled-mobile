@@ -26,7 +26,6 @@ import type { ShoppingEditItem } from '../../lib/shoppingGallery';
 import type { ShoppingSnap } from '../../types/shoppingSnap';
 
 const RAIL_WIDTH = 26;
-const BODY_INDENT = RAIL_WIDTH + spacing.md;
 const TILE_WIDTH = 96;
 const STRIP_LIMIT = 8;
 
@@ -211,7 +210,11 @@ export function ShoppingSessionBundle({
       layout={reduceMotion ? undefined : LinearTransition.duration(180).easing(Easing.out(Easing.quad))}
       style={[styles.row, isLast && styles.rowLast, isSelected && styles.rowSelected]}
     >
-      <View style={styles.heading}>
+      {/* Rail and content are siblings of the *whole* row, not just its
+          heading, so the spine's flex fills the row's real height — a visit
+          holding a dozen pieces draws a visibly longer line than one holding
+          a single piece. */}
+      <View style={styles.body}>
         <View style={styles.rail} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           {selectionMode ? (
             <View style={[styles.selectionMark, isSelected && styles.selectionMarkActive]}>
@@ -221,7 +224,7 @@ export function ShoppingSessionBundle({
           <ColorSpine label={group.dominantColorLabel} />
         </View>
 
-        <View style={styles.headingBody}>
+        <View style={styles.content}>
           {/* The strip is a horizontal scroller, so it stays outside this
               touchable — a parent press responder wrapping it steals the pan. */}
           <TouchableOpacity
@@ -247,60 +250,60 @@ export function ShoppingSessionBundle({
               {spend ? <Text style={styles.metaPrice} numberOfLines={1}>{spend}</Text> : null}
             </View>
           </TouchableOpacity>
-        </View>
-      </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.strip}
-        style={styles.stripScroll}
-      >
-        {stripItems.map((item) => (
-          <ShoppingSessionTile
-            key={item.id}
-            item={item}
-            selectionMode={selectionMode}
-            isSelected={isSelected}
-            onPress={() => handleItemPress(item, item.primarySnap)}
-            onLongPress={handleItemLongPress}
-          />
-        ))}
-      </ScrollView>
-
-      <View style={styles.footer}>
-        {canSortPhotos ? (
-          <PressableScale
-            motion="crisp"
-            style={styles.footerActionSlot}
-            onPress={onReviewGrouping}
-            accessibilityRole="button"
-            accessibilityLabel={`${SHORTLIST_COPY.sortPhotos} for this visit`}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.strip}
+            style={styles.stripScroll}
           >
-            <Text style={styles.footerAction}>
-              {group.unsortedCount > 0
-                ? `${SHORTLIST_COPY.sortPhotos} · ${group.unsortedCount}`
-                : SHORTLIST_COPY.sortPhotos}
-            </Text>
-          </PressableScale>
-        ) : (
-          <View style={styles.footerActionSlot}>
-            <Text style={styles.footerStatus} numberOfLines={1}>{status.join('  ·  ')}</Text>
+            {stripItems.map((item) => (
+              <ShoppingSessionTile
+                key={item.id}
+                item={item}
+                selectionMode={selectionMode}
+                isSelected={isSelected}
+                onPress={() => handleItemPress(item, item.primarySnap)}
+                onLongPress={handleItemLongPress}
+              />
+            ))}
+          </ScrollView>
+
+          <View style={styles.footer}>
+            {canSortPhotos ? (
+              <PressableScale
+                motion="crisp"
+                style={styles.footerActionSlot}
+                onPress={onReviewGrouping}
+                accessibilityRole="button"
+                accessibilityLabel={`${SHORTLIST_COPY.sortPhotos} for this visit`}
+              >
+                <Text style={styles.footerAction}>
+                  {group.unsortedCount > 0
+                    ? `${SHORTLIST_COPY.sortPhotos} · ${group.unsortedCount}`
+                    : SHORTLIST_COPY.sortPhotos}
+                </Text>
+              </PressableScale>
+            ) : (
+              <View style={styles.footerActionSlot}>
+                <Text style={styles.footerStatus} numberOfLines={1}>{status.join('  ·  ')}</Text>
+              </View>
+            )}
+            <PressableScale
+              motion="crisp"
+              style={styles.footerOpen}
+              contentStyle={styles.footerOpenContent}
+              onPress={handleChromePress}
+              accessibilityRole="button"
+            >
+              <Text style={styles.footerOpenText}>
+                {group.itemCount === 1 ? 'View item' : `View all ${group.itemCount}`}
+              </Text>
+              {/* Forward, not down — this pushes a screen, it does not disclose. */}
+              <Ionicons name="chevron-forward" size={14} color={colors.inkSubtle} />
+            </PressableScale>
           </View>
-        )}
-        <PressableScale
-          motion="crisp"
-          style={styles.footerOpen}
-          contentStyle={styles.footerOpenContent}
-          onPress={handleChromePress}
-          accessibilityRole="button"
-        >
-          <Text style={styles.footerOpenText}>
-            {group.itemCount === 1 ? 'View item' : `View all ${group.itemCount}`}
-          </Text>
-          {/* Forward, not down — this pushes a screen, it does not disclose. */}
-          <Ionicons name="chevron-forward" size={14} color={colors.primary} />
-        </PressableScale>
+        </View>
       </View>
     </Animated.View>
   );
@@ -318,10 +321,10 @@ const styles = StyleSheet.create({
   rowLast: { borderBottomWidth: 0 },
   rowSelected: { backgroundColor: colors.surfaceSelected },
 
-  heading: { flexDirection: 'row', alignItems: 'stretch', gap: spacing.md },
+  body: { flexDirection: 'row', alignItems: 'stretch', gap: spacing.md },
   rail: { width: RAIL_WIDTH, alignItems: 'center', gap: spacing.sm, paddingVertical: 2 },
   spine: {
-    width: 2,
+    width: 3,
     flex: 1,
     minHeight: 20,
     overflow: 'hidden',
@@ -342,7 +345,7 @@ const styles = StyleSheet.create({
   },
   selectionMarkActive: { borderColor: colors.primary, backgroundColor: colors.primary },
 
-  headingBody: { flex: 1, minWidth: 0, gap: spacing.sm },
+  content: { flex: 1, minWidth: 0 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   title: { ...typography.text.editorialCompact, color: colors.foreground },
   titleAction: { color: colors.action },
@@ -359,28 +362,27 @@ const styles = StyleSheet.create({
   metaPrice: {
     minWidth: 78,
     textAlign: 'right',
-    fontSize: 12,
+    fontSize: 14,
     lineHeight: 18,
-    color: colors.inkSubtle,
+    color: colors.foreground,
     fontVariant: ['tabular-nums'],
   },
 
   // Indented to the text column, then bleeding past the row's right padding so
   // the next find is clipped by the screen edge and invites the scroll.
-  stripScroll: { marginLeft: BODY_INDENT, marginRight: -spacing.lg, marginTop: spacing.md },
+  stripScroll: { marginRight: -spacing.lg, marginTop: spacing.md },
   strip: { gap: spacing.sm, paddingRight: spacing.lg, alignItems: 'flex-start' },
   tileColumn: { width: TILE_WIDTH },
   tile: {
     width: TILE_WIDTH,
     aspectRatio: 4 / 5,
     overflow: 'hidden',
-    borderRadius: radii.md,
-    borderCurve: 'continuous',
+    borderRadius: radii.photo,
     backgroundColor: colors.surfaceSubtle,
   },
   tileFallback: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center' },
   tileCaption: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingTop: spacing.xs },
-  tileCaptionText: { flex: 1, fontSize: 12, lineHeight: 16, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
+  tileCaptionText: { flex: 1, fontSize: 12, lineHeight: 16, color: colors.inkSubtle, fontVariant: ['tabular-nums'] },
   tileSelectionRing: {
     position: 'absolute',
     top: 0,
@@ -389,8 +391,7 @@ const styles = StyleSheet.create({
     left: 0,
     borderWidth: 3,
     borderColor: colors.primary,
-    borderRadius: radii.md,
-    borderCurve: 'continuous',
+    borderRadius: radii.photo,
   },
 
   footer: {
@@ -399,11 +400,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.sm,
-    paddingLeft: BODY_INDENT,
     paddingTop: spacing.md,
   },
   footerActionSlot: { flex: 1, minHeight: 36, justifyContent: 'center' },
-  // colors.action is reserved for interactive text, which is exactly this.
+  // Terracotta marks the outstanding task — the one thing this visit still
+  // needs. Ambient navigation out of the row stays quiet below, so the row
+  // only ever raises its voice for work.
   footerAction: { fontSize: 13, lineHeight: 18, fontWeight: typography.weight.medium, color: colors.action },
   footerStatus: { fontSize: 12, lineHeight: 18, color: colors.mutedForeground },
   footerOpen: { minHeight: 36 },
@@ -415,5 +417,5 @@ const styles = StyleSheet.create({
     paddingLeft: spacing.sm,
     borderRadius: radii.full,
   },
-  footerOpenText: { fontSize: 12, lineHeight: 18, color: colors.primary, fontVariant: ['tabular-nums'] },
+  footerOpenText: { fontSize: 12, lineHeight: 18, color: colors.inkSubtle, fontVariant: ['tabular-nums'] },
 });

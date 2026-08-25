@@ -8,6 +8,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-na
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DraggablePhotoGrid } from './DraggablePhotoGrid';
+import { AppText } from '../primitives/AppText';
 import { ShoppingPhotoViewer } from './ShoppingPhotoViewer';
 import { useCurrencyCode } from '../../hooks/useCurrencyCode';
 import { formatShoppingPrice, snapRoleLabel } from '../../lib/shoppingPresentation';
@@ -29,7 +30,7 @@ import type { ShoppingCaptureRole, ShoppingSnap } from '../../types/shoppingSnap
 
 const TILE_WIDTH = 92;
 const PHOTO_HEIGHT = 112;
-const CHIP_HEIGHT = 28;
+const CHIP_HEIGHT = 22;
 const TILE_INNER_GAP = spacing.xs;
 const TILE_HEIGHT = PHOTO_HEIGHT + TILE_INNER_GAP + CHIP_HEIGHT;
 const GRID_GAP = spacing.sm;
@@ -367,14 +368,20 @@ export function ShoppingPhotoOrganizer({
     const snap = snapById.get(snapId);
     if (!snap) return null;
     const role = rolesBySnapId[snapId] ?? snap.captureRole;
+    // A recognised role is a caption; only an unrecognised one is a job, and
+    // gets the pill. A pill under every photo made the word outweigh the
+    // garment it was labelling.
+    const unresolved = role === 'unknown';
     return (
       <TouchableOpacity
-        style={styles.roleChip}
+        style={[styles.roleChip, unresolved && styles.roleChipUnresolved]}
         onPress={() => cycleRole(snapId)}
         disabled={isSaving}
         accessibilityLabel={`Change photo role from ${snapRoleLabel(role)}`}
       >
-        <Text style={styles.roleText}>{snapRoleLabel(role)}</Text>
+        <Text style={[styles.roleText, unresolved && styles.roleTextUnresolved]} numberOfLines={1}>
+          {snapRoleLabel(role)}
+        </Text>
       </TouchableOpacity>
     );
   }, [cycleRole, isSaving, rolesBySnapId, snapById]);
@@ -398,15 +405,20 @@ export function ShoppingPhotoOrganizer({
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <View style={styles.headerCopy}>
-          <Text style={styles.eyebrow}>{eyebrow}</Text>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>{subtitle}</Text>
+          <AppText variant="eyebrow" tone="brand">{eyebrow}</AppText>
+          <AppText variant="editorialSection" tone="primary" style={styles.title}>{title}</AppText>
+          <AppText variant="bodySmall" tone="muted" style={styles.subtitle}>{subtitle}</AppText>
         </View>
         <TouchableOpacity style={styles.iconButton} onPress={onClose} disabled={isSaving} accessibilityLabel="Close organizer">
           <Ionicons name="close" size={22} color={colors.foreground} />
         </TouchableOpacity>
       </View>
 
+      {/* At rest this is a tally, not a toolbar. The grouping action only
+          exists once photos are selected — rendering it greyed out on arrival
+          put a dead button where the first photograph should be. Undo and
+          reset live here rather than beside the selection action, so taking a
+          grouping back does not depend on still being in selection mode. */}
       <View style={styles.toolbar}>
         {selectedIds.size > 0 ? (
           <TouchableOpacity
@@ -444,19 +456,21 @@ export function ShoppingPhotoOrganizer({
               <Ionicons name="refresh-outline" size={16} color={colors.secondaryForeground} />
             </TouchableOpacity>
           ) : null}
-          <TouchableOpacity
-            style={[styles.makeButton, action === 'none' && styles.makeButtonDisabled]}
-            onPress={runSelection}
-            disabled={action === 'none' || isSaving}
-            accessibilityLabel={actionLabel}
-          >
-            <Ionicons
-              name={action === 'pull-out' ? 'exit-outline' : 'albums-outline'}
-              size={16}
-              color={colors.primaryForeground}
-            />
-            <Text style={styles.makeText}>{actionLabel}</Text>
-          </TouchableOpacity>
+          {selectedIds.size > 0 ? (
+            <TouchableOpacity
+              style={[styles.makeButton, action === 'none' && styles.makeButtonDisabled]}
+              onPress={runSelection}
+              disabled={action === 'none' || isSaving}
+              accessibilityLabel={actionLabel}
+            >
+              <Ionicons
+                name={action === 'pull-out' ? 'exit-outline' : 'albums-outline'}
+                size={16}
+                color={colors.primaryForeground}
+              />
+              <Text style={styles.makeText}>{actionLabel}</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
 
@@ -473,7 +487,11 @@ export function ShoppingPhotoOrganizer({
                 if (node) stageRefs.current.set(stage.id, node);
                 else stageRefs.current.delete(stage.id);
               }}
-              style={[styles.pool, hovered && styles.poolHovered]}
+              style={[
+                styles.pool,
+                index === stages.length - 1 && styles.poolLast,
+                hovered && styles.poolHovered,
+              ]}
             >
               <View style={styles.sectionHeader}>
                 <View style={styles.sectionCopy}>
@@ -494,7 +512,7 @@ export function ShoppingPhotoOrganizer({
                     disabled={isSaving}
                     accessibilityLabel={`Split item ${index + 1} into one item per photo`}
                   >
-                    <Ionicons name="cut-outline" size={16} color={colors.primary} />
+                    <Ionicons name="cut-outline" size={16} color={colors.action} />
                     <Text style={styles.splitText}>Split all</Text>
                   </TouchableOpacity>
                 ) : null}
@@ -617,8 +635,8 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   headerCopy: { flex: 1 },
   eyebrow: { ...typography.text.eyebrow, color: colors.primary },
-  title: { paddingTop: 2, ...typography.text.sheetTitle, color: colors.foreground },
-  subtitle: { paddingTop: 2, fontSize: typography.text.bodySmall.fontSize, color: colors.mutedForeground },
+  title: { paddingTop: 2 },
+  subtitle: { paddingTop: spacing.xs },
   iconButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: colors.surfaceSubtle },
   toolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   toolbarCount: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
@@ -627,9 +645,25 @@ const styles = StyleSheet.create({
   toolbarClear: { fontSize: typography.text.caption.fontSize, color: colors.primary },
   toolbarActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   ghostButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, backgroundColor: colors.surfaceSubtle },
-  content: { gap: spacing.md, paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
-  pool: { gap: spacing.md, padding: spacing.md, borderRadius: radii.lg, borderWidth: 1, borderColor: 'transparent', backgroundColor: colors.card },
-  poolHovered: { borderColor: colors.primary, backgroundColor: colors.accent },
+  content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
+  // An item is a band of the page, separated by a hairline — the same shape
+  // the shortlist uses for a visit, so the two screens read as one product.
+  pool: {
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.hairline,
+  },
+  poolLast: { borderBottomWidth: 0 },
+  // A drop target has to be unmistakable mid-drag, so this is the one place
+  // the band is allowed to become a surface.
+  poolHovered: {
+    marginHorizontal: -spacing.sm,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.md,
+    borderBottomColor: 'transparent',
+    backgroundColor: colors.surfaceSelected,
+  },
   sectionHeader: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   sectionCopy: { flex: 1 },
   sectionTitle: { fontSize: typography.text.body.fontSize, fontWeight: typography.weight.bold, color: colors.foreground },
@@ -637,14 +671,18 @@ const styles = StyleSheet.create({
   makeButton: { minHeight: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radii.md, backgroundColor: colors.primary },
   makeButtonDisabled: { opacity: 0.45 },
   makeText: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, color: colors.primaryForeground },
-  splitButton: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm, borderRadius: radii.md, backgroundColor: colors.accent },
-  splitText: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, color: colors.primary },
-  photo: { width: TILE_WIDTH, height: PHOTO_HEIGHT, overflow: 'hidden', borderWidth: 2, borderColor: 'transparent', borderRadius: radii.md, backgroundColor: colors.surfaceSubtle },
+  // Text, not a filled chip: splitting is the blunt last resort, and a filled
+  // button on every item argued the opposite.
+  splitButton: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingLeft: spacing.sm },
+  splitText: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.medium, color: colors.action },
+  photo: { width: TILE_WIDTH, height: PHOTO_HEIGHT, overflow: 'hidden', borderWidth: 2, borderColor: 'transparent', borderRadius: radii.photo, backgroundColor: colors.surfaceSubtle },
   photoSelected: { borderColor: colors.primary },
   photoDragging: { borderColor: colors.primary },
   check: { position: 'absolute', top: 6, right: 6, width: 24, height: 24, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: colors.primary },
-  roleChip: { minHeight: CHIP_HEIGHT, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xs, borderRadius: radii.full, backgroundColor: colors.surfaceElevated },
-  roleText: { ...typography.text.caption, fontWeight: typography.weight.semibold, color: colors.secondaryForeground },
+  roleChip: { minHeight: CHIP_HEIGHT, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xs },
+  roleChipUnresolved: { borderRadius: radii.full, backgroundColor: colors.accent },
+  roleText: { ...typography.text.caption, color: colors.mutedForeground },
+  roleTextUnresolved: { fontWeight: typography.weight.semibold, color: colors.primary },
   dropZone: { position: 'absolute', left: spacing.lg, right: spacing.lg, height: DROP_ZONE_HEIGHT, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.primary, borderRadius: radii.lg, backgroundColor: colors.accent },
   dropZoneHovered: { borderStyle: 'solid', backgroundColor: colors.primary },
   dropZoneText: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.primary },

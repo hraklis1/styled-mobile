@@ -21,8 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeOut, useReducedMotion } from 'react-native-reanimated';
 
 import { ShoppingSessionBundle } from '../../components/shopping/ShoppingSessionBundle';
-import { ShortlistFilterRail, type ShortlistFilterOption } from '../../components/shopping/ShortlistFilterRail';
-import { ShortlistStoreRail } from '../../components/shopping/ShortlistStoreRail';
+import { ShortlistFilterBar, type ShortlistFilterOption } from '../../components/shopping/ShortlistFilterBar';
 import { ShoppingItemLightbox } from '../../components/shopping/ShoppingItemLightbox';
 import { ShoppingStoreFilterSheet } from '../../components/shopping/ShoppingStoreFilterSheet';
 import { ShoppingStoreAssignmentSheet } from '../../components/shopping/ShoppingStoreAssignmentSheet';
@@ -421,33 +420,27 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
       }}>
         <ShopSubpageHeader
           title="Found, not yet yours."
-          subtitle="Pieces you photographed while shopping, kept here while you decide."
+          subtitle={allItems.length > 0
+            ? `Pieces you photographed while shopping, kept here while you decide.  —  ${countLine}`
+            : 'Pieces you photographed while shopping, kept here while you decide.'}
           eyebrow="THE SHORTLIST"
           onBack={goBack}
           actions={headerActions}
           style={styles.heroHeader}
         />
         {allItems.length > 0 ? (
-          <View style={styles.summaryBlock}>
-            <Text style={styles.countLine}>{countLine}</Text>
-          </View>
-        ) : null}
-        {allItems.length > 0 ? (
           <View style={styles.railBlock}>
-            <ShortlistFilterRail
-              options={attentionOptions}
-              value={attentionFilter}
-              restingValue="all"
-              onSelect={selectAttention}
-              accessibilityLabel="Filter by what still needs doing"
-            />
-            <ShortlistStoreRail
-              options={quickStoreOptions}
+            <ShortlistFilterBar
+              attentionOptions={attentionOptions}
+              attentionValue={attentionFilter}
+              attentionRestingValue="all"
+              onSelectAttention={selectAttention}
+              storeOptions={quickStoreOptions}
               storeFilter={storeFilter}
-              activeLabel={storeFilterLabel}
-              activeValue={activeQuickStoreValue}
-              onSelect={toggleStoreChip}
-              onBrowseAll={openStorePicker}
+              storeActiveLabel={storeFilterLabel}
+              storeActiveValue={activeQuickStoreValue}
+              onSelectStore={toggleStoreChip}
+              onBrowseStores={openStorePicker}
             />
           </View>
         ) : null}
@@ -652,9 +645,7 @@ const styles = StyleSheet.create({
   listContent: { paddingBottom: spacing.xxxl },
   listContentSelecting: { paddingBottom: 112 },
   heroHeader: { paddingBottom: spacing.lg, backgroundColor: colors.background },
-  summaryBlock: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
-  countLine: { fontSize: 12, lineHeight: 18, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
-  railBlock: { gap: spacing.sm, paddingBottom: spacing.lg },
+  railBlock: { paddingBottom: spacing.lg },
   stickyHeader: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
   stickyHeaderContent: {
     backgroundColor: colors.background,
