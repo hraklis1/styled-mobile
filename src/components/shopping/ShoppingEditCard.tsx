@@ -74,7 +74,7 @@ export function ShoppingEditCard({
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         onLongPress();
       }}
-      accessibilityLabel={`${item.storeName ?? 'Shopping'} item${price ? `, ${price}` : ''}${accessibilityStateLabel}`}
+      accessibilityLabel={`${item.storeName ?? 'Shopping'} piece${price ? `, ${price}` : ''}${accessibilityStateLabel}`}
       accessibilityState={{ selected: isSelected }}
     >
       <View style={styles.imageFrame}>

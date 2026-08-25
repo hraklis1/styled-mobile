@@ -30,7 +30,7 @@ export function ShoppingSnapOrganizerModal({
         onSave={onSave}
         isSaving={isSaving}
         title="Group photos"
-        subtitle="Tap a photo to see it big. Hold to select it, or drag it out into its own find."
+        subtitle="Tap a photo to see it big. Hold to select it, or drag it out into its own piece."
       />
     </Modal>
   );

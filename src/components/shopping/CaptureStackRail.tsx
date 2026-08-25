@@ -161,7 +161,7 @@ export function CaptureStackRail({
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.rail}
-      accessibilityLabel={`${stacks.length} item${stacks.length === 1 ? '' : 's'} in this shopping visit`}
+            accessibilityLabel={`${stacks.length} piece${stacks.length === 1 ? '' : 's'} in this shopping visit`}
     >
       {stacks.map(renderStack)}
     </ScrollView>

@@ -268,6 +268,7 @@ export function FilterControl({
   return (
     <PressableScale
       contentStyle={[styles.filterControl, active && styles.filterControlActive]}
+      hitSlop={6}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${label}${active ? `, ${count} active` : ''}`}

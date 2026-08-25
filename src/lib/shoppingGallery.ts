@@ -5,6 +5,16 @@ import { buildShoppingLocationKey, normalizeStoreName, shoppingFilterKey } from 
 export type ShoppingDateFilter = 'all' | 'today' | '7d' | '30d';
 export type ShoppingSyncFilter = 'all' | 'pending' | 'synced';
 export type ShoppingReviewFilter = 'all' | 'needs-review';
+export type ShoppingCatalogStatusFilter = Set<ShoppingFindCatalogStatus>;
+
+/** Empty means all statuses. A set keeps the refine sheet's multi-select state
+ * explicit while preserving the four persisted catalog values. */
+export function matchesShoppingCatalogStatuses(
+  status: ShoppingFindCatalogStatus,
+  selectedStatuses: ShoppingCatalogStatusFilter,
+): boolean {
+  return selectedStatuses.size === 0 || selectedStatuses.has(status);
+}
 
 export type ShoppingEditItem = {
   id: string;

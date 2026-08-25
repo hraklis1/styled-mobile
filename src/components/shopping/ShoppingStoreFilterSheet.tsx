@@ -156,7 +156,7 @@ export function ShoppingStoreFilterSheet({
                 {row.label}
               </Text>
               <Text style={styles.rowCount}>
-                {row.itemCount} item{row.itemCount === 1 ? '' : 's'}
+                {row.itemCount} piece{row.itemCount === 1 ? '' : 's'}
               </Text>
             </TouchableOpacity>
           );

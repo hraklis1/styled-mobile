@@ -15,16 +15,15 @@ import type { ShoppingFindCatalogPatch, ShoppingSnap } from '../types/shoppingSn
 import { SHOPPING_SNAPS_QUERY_KEY, useShoppingSnaps } from './useShoppingSnaps';
 
 function catalogPatchPayload(patch: ShoppingFindCatalogPatch) {
-  return {
-    category: patch.category ?? null,
-    size_label: patch.sizeLabel ?? null,
-    color_label: patch.colorLabel ?? null,
-    material_label: patch.materialLabel ?? null,
-    notes: patch.notes ?? null,
-    is_favorite: patch.isFavorite ?? false,
-    catalog_status: patch.catalogStatus ?? 'considering',
-    updated_at: new Date().toISOString(),
-  };
+  const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (Object.prototype.hasOwnProperty.call(patch, 'category')) payload.category = patch.category ?? null;
+  if (Object.prototype.hasOwnProperty.call(patch, 'sizeLabel')) payload.size_label = patch.sizeLabel ?? null;
+  if (Object.prototype.hasOwnProperty.call(patch, 'colorLabel')) payload.color_label = patch.colorLabel ?? null;
+  if (Object.prototype.hasOwnProperty.call(patch, 'materialLabel')) payload.material_label = patch.materialLabel ?? null;
+  if (Object.prototype.hasOwnProperty.call(patch, 'notes')) payload.notes = patch.notes ?? null;
+  if (Object.prototype.hasOwnProperty.call(patch, 'isFavorite')) payload.is_favorite = patch.isFavorite ?? false;
+  if (Object.prototype.hasOwnProperty.call(patch, 'catalogStatus')) payload.catalog_status = patch.catalogStatus ?? 'considering';
+  return payload;
 }
 
 function applyCatalogPatchToSnap(snap: ShoppingSnap, patch: ShoppingFindCatalogPatch): ShoppingSnap {

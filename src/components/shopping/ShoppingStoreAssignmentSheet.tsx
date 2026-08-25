@@ -57,7 +57,7 @@ export function ShoppingStoreAssignmentSheet({
         ListHeaderComponent={(
           <View style={styles.header}>
             <Text style={styles.title}>Add Store Location</Text>
-            <Text style={styles.subtitle}>This will update every item from this visit.</Text>
+      <Text style={styles.subtitle}>This will update every piece from this visit.</Text>
             <View style={styles.inputWrap}>
               <Ionicons name="search" size={17} color={colors.mutedForeground} />
               <BottomSheetTextInput

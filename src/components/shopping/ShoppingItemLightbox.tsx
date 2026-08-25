@@ -17,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar, setStatusBarStyle } from 'expo-status-bar';
 
 import { ShoppingSnapOrganizerModal } from './ShoppingSnapOrganizerModal';
 import { useCurrencyCode } from '../../hooks/useCurrencyCode';
@@ -51,18 +52,6 @@ function catalogFromItem(item: ShoppingEditItem): ShoppingFindCatalog {
 function cleanText(value: string | null): string | null {
   const trimmed = value?.trim() ?? '';
   return trimmed.length > 0 ? trimmed : null;
-}
-
-function cleanCatalogPatch(value: ShoppingFindCatalog): ShoppingFindCatalogPatch {
-  return {
-    category: cleanText(value.category),
-    sizeLabel: cleanText(value.sizeLabel),
-    colorLabel: cleanText(value.colorLabel),
-    materialLabel: cleanText(value.materialLabel),
-    notes: cleanText(value.notes),
-    isFavorite: value.isFavorite,
-    catalogStatus: value.catalogStatus,
-  };
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
@@ -121,7 +110,7 @@ function CatalogField({
 }
 
 /**
- * The one immersive, editorial view of a shopping find — reached whether
+ * The one immersive, editorial view of a shopping piece — reached whether
  * you tap an item straight from the Shortlist or from a haul's full-screen
  * gallery. Catalog, Organize, Location, and Ask Stylist all live here now,
  * so there's no separate "edit mode" to hop into.
@@ -147,6 +136,10 @@ export function ShoppingItemLightbox({
   const [catalogEditing, setCatalogEditing] = useState(false);
   const [catalogDraft, setCatalogDraft] = useState<ShoppingFindCatalog>(() => catalogFromItem(item));
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [decisionError, setDecisionError] = useState<string | null>(null);
+  const [decisionSaving, setDecisionSaving] = useState(false);
+  const [showCaptureInfo, setShowCaptureInfo] = useState(false);
+  const [imageDimensions, setImageDimensions] = useState<Record<string, { width: number; height: number }>>({});
   const [organizerOpen, setOrganizerOpen] = useState(false);
 
   const {
@@ -164,13 +157,19 @@ export function ShoppingItemLightbox({
     setCatalogDraft(catalogFromItem(item));
     setCatalogEditing(false);
     setCatalogError(null);
+    setDecisionError(null);
+    setShowCaptureInfo(false);
   }, [item]);
+
+  useEffect(() => {
+    setStatusBarStyle('light');
+    return () => setStatusBarStyle('dark');
+  }, []);
 
   const photos = useMemo(
     () => [displayItem.primarySnap, ...displayItem.snaps.filter((snap) => snap.id !== displayItem.primarySnap.id)],
     [displayItem],
   );
-  const heroHeight = Math.min(height * 0.55, 560);
   const currencyCode = useCurrencyCode();
   const price = formatShoppingPrice(displayItem.extractedPrice, currencyCode);
   const meta = [displayItem.sizeLabel ? `Size ${displayItem.sizeLabel}` : null, displayItem.colorLabel, displayItem.materialLabel]
@@ -178,6 +177,11 @@ export function ShoppingItemLightbox({
     .join('   ·   ');
   const badges = shoppingItemBadges(displayItem);
   const activePhoto = photos[activeIndex] ?? displayItem.primarySnap;
+  const activeDimensions = imageDimensions[activePhoto.id];
+  const activeAspect = activeDimensions ? activeDimensions.width / activeDimensions.height : 0;
+  const heroHeight = activeAspect > 1.15
+    ? Math.min(height * 0.42, 380)
+    : Math.min(height * 0.55, 560);
   const canOrganize = displayItem.snaps.length > 1 || displayItem.snaps.some((snap) => snap.captureRole === 'unknown');
   const mapCoordinate = displayItem.primarySnap.latitude !== null && displayItem.primarySnap.longitude !== null
     ? { latitude: displayItem.primarySnap.latitude, longitude: displayItem.primarySnap.longitude }
@@ -217,7 +221,13 @@ export function ShoppingItemLightbox({
   };
 
   const handleSaveCatalog = () => {
-    const patch = cleanCatalogPatch(catalogDraft);
+    const patch = {
+      category: cleanText(catalogDraft.category),
+      sizeLabel: cleanText(catalogDraft.sizeLabel),
+      colorLabel: cleanText(catalogDraft.colorLabel),
+      materialLabel: cleanText(catalogDraft.materialLabel),
+      notes: cleanText(catalogDraft.notes),
+    } satisfies ShoppingFindCatalogPatch;
     setCatalogError(null);
     void saveCatalog(displayItem.captureGroupId, patch)
       .then(() => {
@@ -230,6 +240,22 @@ export function ShoppingItemLightbox({
       });
   };
 
+  const saveDecision = (patch: Pick<ShoppingFindCatalogPatch, 'catalogStatus' | 'isFavorite'>) => {
+    if (decisionSaving) return;
+    void Haptics.selectionAsync();
+    const previous = displayItem;
+    setDecisionSaving(true);
+    setDecisionError(null);
+    setDisplayItem((current) => ({ ...current, ...patch }));
+    void saveCatalog(displayItem.captureGroupId, patch)
+      .then(() => void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success))
+      .catch((error) => {
+        setDisplayItem(previous);
+        setDecisionError(error instanceof Error ? error.message : 'Could not save that decision.');
+      })
+      .finally(() => setDecisionSaving(false));
+  };
+
   const handleSaveOrganization = async (updates: Parameters<typeof saveOrganization>[0]) => {
     await saveOrganization(updates);
     setOrganizerOpen(false);
@@ -238,7 +264,7 @@ export function ShoppingItemLightbox({
   };
 
   const handleDelete = () => {
-    Alert.alert('Delete this find?', 'These shopping photos will be removed from your history.', [
+    Alert.alert('Delete this piece?', 'These shopping photos will be removed from your history.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -264,6 +290,7 @@ export function ShoppingItemLightbox({
 
   return (
     <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
+      <StatusBar style="light" />
       <View style={styles.root}>
         <ScrollView bounces={false} showsVerticalScrollIndicator={false}>
           <View style={[styles.hero, { height: heroHeight }]}>
@@ -287,6 +314,14 @@ export function ShoppingItemLightbox({
                     cachePolicy="memory-disk"
                     recyclingKey={photo.id}
                     transition={200}
+                    onLoad={(event) => {
+                      const source = event.source;
+                      if (source?.width && source?.height) {
+                        setImageDimensions((current) => current[photo.id]
+                          ? current
+                          : { ...current, [photo.id]: { width: source.width, height: source.height } });
+                      }
+                    }}
                   />
                 </View>
               ))}
@@ -319,10 +354,51 @@ export function ShoppingItemLightbox({
           <View style={[styles.content, { paddingBottom: insets.bottom + spacing.xxl }]}>
             <Text style={styles.eyebrow}>{itemRoleSummary(displayItem).toUpperCase()}</Text>
             <View style={styles.titleRow}>
-              <Text style={styles.title}>{displayItem.category ?? 'Shopping find'}</Text>
+              <Text style={styles.title}>{displayItem.category ?? 'Piece'}</Text>
               {price ? <Text style={styles.price}>{price}</Text> : <Text style={styles.priceMuted}>Price not found</Text>}
             </View>
             {meta ? <Text style={styles.meta}>{meta}</Text> : null}
+            <View style={styles.decisionSection}>
+              <View style={styles.decisionHeader}>
+                <Text style={styles.decisionLabel}>STATUS</Text>
+                <TouchableOpacity
+                  style={styles.favoriteButton}
+                  onPress={() => saveDecision({ isFavorite: !displayItem.isFavorite })}
+                  disabled={decisionSaving}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={displayItem.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                  accessibilityState={{ selected: displayItem.isFavorite, disabled: decisionSaving }}
+                >
+                  <Ionicons name={displayItem.isFavorite ? 'heart' : 'heart-outline'} size={21} color={colors.primary} />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.decisionChips}>
+                {SHOPPING_CATALOG_STATUS_OPTIONS.map((option) => {
+                  const active = displayItem.catalogStatus === option.value;
+                  return (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[styles.decisionChip, active && styles.decisionChipActive]}
+                      onPress={() => saveDecision({ catalogStatus: option.value })}
+                      disabled={decisionSaving || active}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: active, disabled: decisionSaving }}
+                    >
+                      <Text style={[styles.decisionChipText, active && styles.decisionChipTextActive]}>{option.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              {decisionError ? (
+                <View style={styles.inlineError}>
+                  <Text selectable style={styles.catalogError}>{decisionError}</Text>
+                  <TouchableOpacity onPress={() => saveDecision({ catalogStatus: displayItem.catalogStatus, isFavorite: displayItem.isFavorite })} disabled={decisionSaving}>
+                    <Text style={styles.retryText}>Retry</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+            </View>
             <View style={styles.divider} />
             {tagSpecs.length > 0 ? (
               <Text style={styles.specs}>
@@ -334,6 +410,7 @@ export function ShoppingItemLightbox({
             <View style={styles.actionRow}>
               <TouchableOpacity
                 style={[styles.actionPill, catalogEditing && styles.actionPillActive]}
+                hitSlop={4}
                 onPress={() => {
                   void Haptics.selectionAsync();
                   setCatalogDraft(catalogFromItem(displayItem));
@@ -343,12 +420,13 @@ export function ShoppingItemLightbox({
               >
                 <Ionicons name="pricetag-outline" size={14} color={catalogEditing ? colors.primaryForeground : colors.foreground} />
                 <Text style={[styles.actionPillText, catalogEditing && styles.actionPillTextActive]}>
-                  {catalogEditing ? 'Cancel' : 'Catalog'}
+                  {catalogEditing ? 'Cancel' : SHORTLIST_COPY.editDetails}
                 </Text>
               </TouchableOpacity>
               {canOrganize ? (
                 <TouchableOpacity
                   style={styles.actionPill}
+                  hitSlop={4}
                   onPress={() => {
                     void Haptics.selectionAsync();
                     setOrganizerOpen(true);
@@ -359,7 +437,7 @@ export function ShoppingItemLightbox({
                 </TouchableOpacity>
               ) : null}
               {mapCoordinate ? (
-                <TouchableOpacity style={styles.actionPill} onPress={openMap}>
+                <TouchableOpacity style={styles.actionPill} hitSlop={4} onPress={openMap}>
                   <Ionicons name="location-outline" size={14} color={colors.foreground} />
                   <Text style={styles.actionPillText}>Location</Text>
                 </TouchableOpacity>
@@ -373,25 +451,6 @@ export function ShoppingItemLightbox({
                   <CatalogField label="Size" value={catalogDraft.sizeLabel} onChange={(value) => setCatalogDraft((current) => ({ ...current, sizeLabel: value }))} />
                   <CatalogField label="Color" value={catalogDraft.colorLabel} onChange={(value) => setCatalogDraft((current) => ({ ...current, colorLabel: value }))} />
                   <CatalogField label="Material" value={catalogDraft.materialLabel} onChange={(value) => setCatalogDraft((current) => ({ ...current, materialLabel: value }))} />
-                </View>
-                <View style={styles.catalogStatusRow}>
-                  {SHOPPING_CATALOG_STATUS_OPTIONS.map((option) => (
-                    <TouchableOpacity
-                      key={option.value}
-                      style={[styles.catalogStatusChip, catalogDraft.catalogStatus === option.value && styles.catalogStatusChipActive]}
-                      onPress={() => setCatalogDraft((current) => ({ ...current, catalogStatus: option.value }))}
-                    >
-                      <Text style={[styles.catalogStatusText, catalogDraft.catalogStatus === option.value && styles.catalogStatusTextActive]}>
-                        {option.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                  <TouchableOpacity
-                    style={styles.catalogFavorite}
-                    onPress={() => setCatalogDraft((current) => ({ ...current, isFavorite: !current.isFavorite }))}
-                  >
-                    <Ionicons name={catalogDraft.isFavorite ? 'heart' : 'heart-outline'} size={16} color={colors.primary} />
-                  </TouchableOpacity>
                 </View>
                 <TextInput
                   value={catalogDraft.notes ?? ''}
@@ -413,14 +472,14 @@ export function ShoppingItemLightbox({
                   ) : (
                     <Ionicons name="checkmark" size={16} color={colors.primaryForeground} />
                   )}
-                  <Text style={styles.catalogSaveText}>Save catalog</Text>
+                  <Text style={styles.catalogSaveText}>Save details</Text>
                 </TouchableOpacity>
               </View>
             ) : null}
 
             <TouchableOpacity style={styles.stylistRow} onPress={handleAskStylist} accessibilityRole="button">
               <Ionicons name="sparkles" size={14} color={colors.primary} />
-              <Text style={styles.stylistRowText}>Ask the stylist about this</Text>
+              <Text style={styles.stylistRowText}>{SHORTLIST_COPY.askStylist}</Text>
               <Ionicons name="chevron-forward" size={13} color={colors.primary} />
             </TouchableOpacity>
 
@@ -444,13 +503,29 @@ export function ShoppingItemLightbox({
             <View style={styles.detailRows}>
               <StoreDetailRow value={displayItem.storeName} onPress={onAssignStore} />
               <DetailRow label="Captured" value={capturedLabel} />
-              <DetailRow label="Role" value={itemRoleSummary(displayItem)} />
               <DetailRow label="Location" value={formatShoppingDetailLocation(displayItem)} />
-              <DetailRow label="Location source" value={locationSourceLabel} />
-              <DetailRow label="Status" value={syncLabel} />
             </View>
 
-            {tagSections.length > 0 ? (
+            <View style={styles.disclosureCard}>
+              <TouchableOpacity
+                style={styles.disclosureToggle}
+                onPress={() => setShowCaptureInfo((current) => !current)}
+                accessibilityRole="button"
+                accessibilityLabel={showCaptureInfo ? `Hide ${SHORTLIST_COPY.captureInformation}` : `Show ${SHORTLIST_COPY.captureInformation}`}
+              >
+                <Text style={styles.disclosureLabel}>{SHORTLIST_COPY.captureInformation.toUpperCase()}</Text>
+                <Ionicons name={showCaptureInfo ? 'chevron-up' : 'chevron-down'} size={17} color={colors.mutedForeground} />
+              </TouchableOpacity>
+              {showCaptureInfo ? (
+                <View style={styles.detailRows}>
+                  <DetailRow label="Role" value={itemRoleSummary(displayItem)} />
+                  <DetailRow label="Location source" value={locationSourceLabel} />
+                  <DetailRow label="Backup" value={syncLabel} />
+                </View>
+              ) : null}
+            </View>
+
+            {tagOcrText.length > 0 ? (
               <View style={styles.disclosureCard}>
                 <TouchableOpacity
                   style={styles.disclosureToggle}
@@ -458,12 +533,12 @@ export function ShoppingItemLightbox({
                   accessibilityRole="button"
                   accessibilityLabel={showFullTag ? 'Hide tag text' : 'Show tag text'}
                 >
-                  <Text style={styles.disclosureLabel}>TAG TEXT</Text>
+                  <Text style={styles.disclosureLabel}>{SHORTLIST_COPY.tagDetails.toUpperCase()}</Text>
                   <Ionicons name={showFullTag ? 'chevron-up' : 'chevron-down'} size={17} color={colors.mutedForeground} />
                 </TouchableOpacity>
                 {showFullTag ? (
                   <View style={styles.tagTextBlock}>
-                    {tagSections.map((section, index) =>
+                    {tagSections.length > 0 ? tagSections.map((section, index) =>
                       section.type === 'header' ? (
                         <Text key={index} style={styles.tagHeader}>
                           {section.text}
@@ -478,7 +553,7 @@ export function ShoppingItemLightbox({
                           {section.text}
                         </Text>
                       ),
-                    )}
+                    ) : <Text selectable style={styles.tagText}>{tagOcrText}</Text>}
                   </View>
                 ) : null}
               </View>
@@ -494,7 +569,7 @@ export function ShoppingItemLightbox({
               {isDeleting ? (
                 <ActivityIndicator size="small" color={colors.error} />
               ) : (
-                <Text style={styles.deleteText}>Delete this find</Text>
+                <Text style={styles.deleteText}>Delete this piece</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -552,12 +627,23 @@ const styles = StyleSheet.create({
   price: { fontSize: typography.text.sheetTitle.fontSize, color: colors.foreground, fontVariant: ['tabular-nums'] },
   priceMuted: { fontSize: typography.text.sectionTitle.fontSize, color: colors.mutedForeground },
   meta: { fontSize: typography.text.bodySmall.fontSize, letterSpacing: typography.tracking.compact, textTransform: 'uppercase', color: colors.mutedForeground },
+  decisionSection: { gap: spacing.sm, paddingTop: spacing.sm },
+  decisionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  decisionLabel: { ...typography.text.eyebrow, color: colors.primary },
+  favoriteButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: colors.surfaceSubtle },
+  decisionChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  decisionChip: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.sm, borderRadius: radii.full, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background },
+  decisionChipActive: { borderColor: colors.foreground, backgroundColor: colors.foreground },
+  decisionChipText: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, color: colors.secondaryForeground },
+  decisionChipTextActive: { color: colors.primaryForeground },
+  inlineError: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  retryText: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, color: colors.action },
   divider: { height: StyleSheet.hairlineWidth, marginVertical: spacing.sm, backgroundColor: colors.hairline },
   specs: { fontSize: typography.text.caption.fontSize, letterSpacing: typography.tracking.subtle, color: colors.secondaryForeground, fontVariant: ['tabular-nums'] },
   notes: { fontSize: typography.text.body.fontSize, lineHeight: 24, fontStyle: 'italic', color: colors.secondaryForeground },
   actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.xs },
   actionPill: {
-    minHeight: 34,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -580,12 +666,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  catalogStatusRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.xs },
-  catalogStatusChip: { minHeight: 30, justifyContent: 'center', paddingHorizontal: spacing.sm, borderRadius: radii.full, backgroundColor: colors.surfaceSubtle },
-  catalogStatusChipActive: { backgroundColor: colors.foreground },
-  catalogStatusText: { ...typography.text.label, color: colors.secondaryForeground },
-  catalogStatusTextActive: { color: colors.primaryForeground },
-  catalogFavorite: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: colors.surfaceSubtle },
   catalogNotesInput: {
     minHeight: 64,
     fontSize: typography.text.bodySmall.fontSize,
@@ -610,7 +690,7 @@ const styles = StyleSheet.create({
   catalogSaveText: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, color: colors.primaryForeground },
   stylistRow: {
     marginTop: spacing.xs,
-    minHeight: 32,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,

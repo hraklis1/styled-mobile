@@ -3,6 +3,7 @@ import {
   filterShoppingEditItems,
   filterShoppingSnaps,
   mergeShoppingSnaps,
+  matchesShoppingCatalogStatuses,
   summarizeShoppingEditItems,
 } from '../shoppingGallery';
 import {
@@ -11,9 +12,12 @@ import {
   shoppingCatalogChips,
   shoppingCatalogStatusLabel,
   shoppingItemBadges,
+  formatShoppingPrice,
+  shoppingPieceLabel,
+  shoppingVisitLabel,
 } from '../shoppingPresentation';
 import { buildShoppingSnapOrganizationUpdates } from '../shoppingSnapOrganizer';
-import type { ShoppingSnap } from '../../types/shoppingSnap';
+import type { ShoppingFindCatalogStatus, ShoppingSnap } from '../../types/shoppingSnap';
 
 const synced: ShoppingSnap = {
   id: 'synced', imageUri: 'https://example.com/synced.jpg', storagePath: 'user/synced.jpg', storeName: 'Aritzia',
@@ -28,6 +32,31 @@ const synced: ShoppingSnap = {
 };
 
 describe('shoppingGallery', () => {
+  it('treats an empty status set as all and supports single and multi-select status filters', () => {
+    expect(matchesShoppingCatalogStatuses('considering', new Set())).toBe(true);
+    expect(matchesShoppingCatalogStatuses('wishlist', new Set(['wishlist']))).toBe(true);
+    expect(matchesShoppingCatalogStatuses('closet', new Set(['wishlist']))).toBe(false);
+    expect(matchesShoppingCatalogStatuses('wishlist', new Set(['considering', 'wishlist']))).toBe(true);
+    expect(matchesShoppingCatalogStatuses('passed', new Set(['considering', 'wishlist']))).toBe(false);
+  });
+
+  it('maps the active deep link to considering and wishlist', () => {
+    const active = new Set(['considering', 'wishlist'] as const);
+    const statuses: ShoppingFindCatalogStatus[] = ['considering', 'wishlist', 'closet', 'passed'];
+    expect(statuses.filter((status) => matchesShoppingCatalogStatuses(status, active)))
+      .toEqual(['considering', 'wishlist']);
+  });
+
+  it('formats shortlist prices without unnecessary cents', () => {
+    expect(formatShoppingPrice(120, 'USD')).toBe('$120');
+    expect(formatShoppingPrice(120.5, 'USD')).toBe('$120.50');
+    expect(formatShoppingPrice(120, 'JPY')).toBe('¥120');
+    expect(formatShoppingPrice(null, 'USD')).toBeNull();
+    expect(shoppingPieceLabel(1)).toBe('1 piece');
+    expect(shoppingPieceLabel(2)).toBe('2 pieces');
+    expect(shoppingVisitLabel(1)).toBe('1 visit');
+  });
+
   it('merges pending uploads ahead of remote history', () => {
     const result = mergeShoppingSnaps([synced], [{
       id: 'pending', localFileUri: 'file:///pending.jpg', storeName: 'COS',
@@ -99,7 +128,7 @@ describe('shoppingGallery', () => {
     });
     expect(shoppingCatalogChips(result[0])).toEqual(['T-shirt', 'Size M', 'Heather blue', 'Cotton blend']);
     expect(shoppingCatalogStatusLabel(result[0].catalogStatus)).toBe('Wishlist');
-    expect(shoppingItemBadges(result[0])[0]).toEqual({ key: 'favorite', label: 'Favorite', tone: 'success' });
+    expect(shoppingItemBadges(result[0])).toEqual([]);
   });
 
   it('summarizes item, store, missing price, and pending counts', () => {

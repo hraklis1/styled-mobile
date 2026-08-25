@@ -18,10 +18,10 @@ export type ShoppingItemBadge = {
 };
 
 export const SHOPPING_CATALOG_STATUS_OPTIONS: { value: ShoppingFindCatalogStatus; label: string }[] = [
-  { value: 'considering', label: 'Deciding' },
-  { value: 'wishlist', label: 'Wishlist' },
-  { value: 'closet', label: 'Closet' },
-  { value: 'passed', label: 'Passed' },
+  { value: 'considering', label: SHORTLIST_COPY.considering },
+  { value: 'wishlist', label: SHORTLIST_COPY.wishlist },
+  { value: 'closet', label: SHORTLIST_COPY.inCloset },
+  { value: 'passed', label: SHORTLIST_COPY.passed },
 ];
 
 const REVIEW_REASON_LABELS: Record<ShoppingReviewReasonKey, string> = {
@@ -33,10 +33,14 @@ const REVIEW_REASON_LABELS: Record<ShoppingReviewReasonKey, string> = {
 
 export function formatShoppingPrice(price: number | null, currencyCode: string = DEFAULT_CURRENCY_CODE): string | null {
   if (price === null) return null;
+  const currencyDigits = new Intl.NumberFormat(undefined, { style: 'currency', currency: currencyCode })
+    .resolvedOptions().minimumFractionDigits;
+  const maximumFractionDigits = currencyDigits === 0 ? 0 : 2;
   return new Intl.NumberFormat(undefined, {
     style: 'currency',
     currency: currencyCode,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: Number.isInteger(price) ? 0 : maximumFractionDigits,
+    maximumFractionDigits,
   }).format(price);
 }
 
@@ -86,18 +90,6 @@ export function itemRoleSummary(item: ShoppingEditItem): string {
 export function shoppingItemBadges(item: ShoppingEditItem): ShoppingItemBadge[] {
   const badges: ShoppingItemBadge[] = [];
 
-  if (item.isFavorite) {
-    badges.push({ key: 'favorite', label: 'Favorite', tone: 'success' });
-  }
-  if (item.catalogStatus === 'wishlist') {
-    badges.push({ key: 'wishlist', label: 'Wishlist', tone: 'success' });
-  }
-  if (item.catalogStatus === 'closet') {
-    badges.push({ key: 'closet', label: 'In closet', tone: 'success' });
-  }
-  if (item.catalogStatus === 'passed') {
-    badges.push({ key: 'passed', label: 'Passed', tone: 'neutral' });
-  }
   if (item.syncStatus === 'pending') {
     badges.push({ key: 'pending', label: SHORTLIST_COPY.onThisPhone, tone: 'attention' });
   }
@@ -110,10 +102,6 @@ export function shoppingItemBadges(item: ShoppingEditItem): ShoppingItemBadge[] 
   if (item.reviewReasons.includes('Unsorted photo')) {
     badges.push({ key: 'unsorted', label: SHORTLIST_COPY.sortPhotos, tone: 'neutral' });
   }
-  if (badges.length === 0) {
-    badges.push({ key: 'catalogued', label: SHORTLIST_COPY.settled, tone: 'success' });
-  }
-
   return badges.slice(0, 2);
 }
 
@@ -124,7 +112,15 @@ export function snapRoleLabel(role: ShoppingCaptureRole): string {
 }
 
 export function shoppingCatalogStatusLabel(status: ShoppingFindCatalogStatus): string {
-  return SHOPPING_CATALOG_STATUS_OPTIONS.find((option) => option.value === status)?.label ?? 'Deciding';
+  return SHOPPING_CATALOG_STATUS_OPTIONS.find((option) => option.value === status)?.label ?? SHORTLIST_COPY.considering;
+}
+
+export function shoppingPieceLabel(count: number): string {
+  return `${count} ${count === 1 ? SHORTLIST_COPY.piece : SHORTLIST_COPY.pieces}`;
+}
+
+export function shoppingVisitLabel(count: number): string {
+  return `${count} ${count === 1 ? SHORTLIST_COPY.visit : SHORTLIST_COPY.visits}`;
 }
 
 export function shoppingCatalogChips(value: ShoppingFindCatalog): string[] {

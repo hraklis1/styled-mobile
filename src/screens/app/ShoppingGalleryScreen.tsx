@@ -21,13 +21,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeOut, useReducedMotion } from 'react-native-reanimated';
 
 import { ShoppingSessionBundle } from '../../components/shopping/ShoppingSessionBundle';
-import { ShortlistFilterBar, type ShortlistFilterOption } from '../../components/shopping/ShortlistFilterBar';
+import { ShortlistFilterBar, type ShortlistAppliedFilter } from '../../components/shopping/ShortlistFilterBar';
 import { ShoppingItemLightbox } from '../../components/shopping/ShoppingItemLightbox';
 import { ShoppingStoreFilterSheet } from '../../components/shopping/ShoppingStoreFilterSheet';
 import { ShoppingStoreAssignmentSheet } from '../../components/shopping/ShoppingStoreAssignmentSheet';
 import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
 import { AppText } from '../../components/primitives/AppText';
-import { ActionButton, FilterControl, IconButton } from '../../components/primitives/Editorial';
+import { ActionButton, FilterControl } from '../../components/primitives/Editorial';
 import { OptionChips } from '../../components/primitives/EditAtoms';
 import { useAuth } from '../../contexts/AuthContext';
 import { useShoppingSnaps } from '../../hooks/useShoppingSnaps';
@@ -35,6 +35,7 @@ import { useAssignShoppingStore, type ShoppingStoreAssignmentTarget } from '../.
 import {
   buildShoppingEditItems,
   filterShoppingEditItems,
+  matchesShoppingCatalogStatuses,
   mergeShoppingSnaps,
   summarizeShoppingEditItems,
   type ShoppingDateFilter,
@@ -46,7 +47,6 @@ import { buildShoppingSessionGroups, type ShoppingSessionGroup } from '../../lib
 import {
   buildShoppingStoreOptions,
   countItemsWithoutStore,
-  quickShoppingStoreOptions,
   shoppingStoreFilterLabel,
   STORE_FILTER_ALL,
 } from '../../lib/shoppingStoreFilters';
@@ -62,8 +62,6 @@ import type { ShoppingGalleryScreenProps } from '../../navigation/types';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { ShoppingFindCatalogStatus, ShoppingSnap } from '../../types/shoppingSnap';
-
-type ShoppingCatalogFilter = 'all' | 'active' | 'favorite' | ShoppingFindCatalogStatus;
 
 const DATE_OPTIONS: { value: ShoppingDateFilter; label: string }[] = [
   { value: 'all', label: 'All time' },
@@ -86,7 +84,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   const [storeFilter, setStoreFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState<ShoppingDateFilter>('all');
   const [attentionFilter, setAttentionFilter] = useState<ShortlistAttentionFilter>('all');
-  const [catalogFilter, setCatalogFilter] = useState<ShoppingCatalogFilter>('all');
+  const [catalogStatuses, setCatalogStatuses] = useState<Set<ShoppingFindCatalogStatus>>(() => new Set());
   const [lightboxItem, setLightboxItem] = useState<ShoppingEditItem | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(() => new Set());
@@ -152,7 +150,11 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
 
   useEffect(() => {
     const requestedFilter = route.params?.catalogFilter;
-    if (requestedFilter) setCatalogFilter(requestedFilter);
+    if (requestedFilter) {
+      setCatalogStatuses(requestedFilter === 'active'
+        ? new Set<ShoppingFindCatalogStatus>(['considering', 'wishlist'])
+        : new Set());
+    }
     const focusGroupId = route.params?.focusGroupId;
     if (focusGroupId) {
       const focused = allItems.find((item) => item.captureGroupId === focusGroupId);
@@ -164,27 +166,16 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   }, [allItems, navigation, route.params?.catalogFilter, route.params?.focusGroupId]);
   const storeOptions = useMemo(() => buildShoppingStoreOptions(allItems), [allItems]);
   const unassignedStoreCount = useMemo(() => countItemsWithoutStore(allItems), [allItems]);
-  const quickStoreOptions = useMemo(
-    () => quickShoppingStoreOptions(storeOptions, storeFilter),
-    [storeFilter, storeOptions],
-  );
   const storeFilterLabel = useMemo(
     () => shoppingStoreFilterLabel(storeOptions, storeFilter),
     [storeFilter, storeOptions],
-  );
-  const activeQuickStoreValue = useMemo(
-    () => quickStoreOptions.find(
-      (store) => store.value === storeFilter
-        || store.locations.some((location) => location.value === storeFilter),
-    )?.value ?? null,
-    [quickStoreOptions, storeFilter],
   );
   const summary = useMemo(() => summarizeShoppingEditItems(allItems), [allItems]);
   const reviewReasonOptions = useMemo(() => buildShoppingReviewReasonOptions(allItems), [allItems]);
   // Counts come from every item, never the filtered list — a count badge that
   // re-counted the filtered set would zero itself the moment you tapped it.
-  const attentionOptions = useMemo<ShortlistFilterOption<ShortlistAttentionFilter>[]>(() => {
-    const options: ShortlistFilterOption<ShortlistAttentionFilter>[] = [{ value: 'all', label: 'Everything' }];
+  const attentionOptions = useMemo<{ value: ShortlistAttentionFilter; label: string; count?: number }[]>(() => {
+    const options: { value: ShortlistAttentionFilter; label: string; count?: number }[] = [{ value: 'all', label: 'Everything' }];
     for (const reason of reviewReasonOptions) {
       options.push({ value: reason.key, label: reason.label, count: reason.count });
     }
@@ -202,14 +193,9 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
       const reviewFiltered = reviewReasonFilter === 'all'
         ? baseFilteredItems
         : baseFilteredItems.filter((item) => itemHasShoppingReviewReason(item, reviewReasonFilter));
-      if (catalogFilter === 'all') return reviewFiltered;
-      if (catalogFilter === 'active') {
-        return reviewFiltered.filter((item) => item.catalogStatus === 'considering' || item.catalogStatus === 'wishlist');
-      }
-      if (catalogFilter === 'favorite') return reviewFiltered.filter((item) => item.isFavorite);
-      return reviewFiltered.filter((item) => item.catalogStatus === catalogFilter);
+      return reviewFiltered.filter((item) => matchesShoppingCatalogStatuses(item.catalogStatus, catalogStatuses));
     },
-    [baseFilteredItems, catalogFilter, reviewReasonFilter],
+    [baseFilteredItems, catalogStatuses, reviewReasonFilter],
   );
   const groups = useMemo(() => buildShoppingSessionGroups(filteredItems), [filteredItems]);
   const selectedBulkSnaps = useMemo(
@@ -229,7 +215,44 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   const activeFilterCount = Number(storeFilter !== 'all')
     + Number(dateFilter !== 'all')
     + Number(attentionFilter !== 'all')
-    + Number(catalogFilter !== 'all');
+    + catalogStatuses.size;
+
+  const appliedFilters = useMemo<ShortlistAppliedFilter[]>(() => {
+    const filters: ShortlistAppliedFilter[] = [];
+    if (dateFilter !== 'all') {
+      filters.push({
+        key: `date:${dateFilter}`,
+        label: DATE_OPTIONS.find((option) => option.value === dateFilter)?.label ?? dateFilter,
+        onRemove: () => setDateFilter('all'),
+      });
+    }
+    if (attentionFilter !== 'all') {
+      filters.push({
+        key: `attention:${attentionFilter}`,
+        label: attentionOptions.find((option) => option.value === attentionFilter)?.label ?? attentionFilter,
+        onRemove: () => setAttentionFilter('all'),
+      });
+    }
+    for (const status of catalogStatuses) {
+      filters.push({
+        key: `status:${status}`,
+        label: SHOPPING_CATALOG_STATUS_OPTIONS.find((option) => option.value === status)?.label ?? status,
+        onRemove: () => setCatalogStatuses((current) => {
+          const next = new Set(current);
+          next.delete(status);
+          return next;
+        }),
+      });
+    }
+    if (storeFilter !== STORE_FILTER_ALL) {
+      filters.push({
+        key: `store:${storeFilter}`,
+        label: storeFilterLabel,
+        onRemove: () => setStoreFilter(STORE_FILTER_ALL),
+      });
+    }
+    return filters;
+  }, [attentionFilter, attentionOptions, catalogStatuses, dateFilter, storeFilter, storeFilterLabel]);
 
   const deleteSnaps = useCallback(async (snaps: ShoppingSnap[]) => {
     await deleteShoppingSnapsService(snaps, user?.id ?? null);
@@ -270,12 +293,13 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
     setStoreFilter(STORE_FILTER_ALL);
     setDateFilter('all');
     setAttentionFilter('all');
-    setCatalogFilter('all');
+    setCatalogStatuses(new Set());
   }, []);
 
   const openStorePicker = useCallback(() => {
     void Haptics.selectionAsync();
-    storeSheetRef.current?.present();
+    filterSheetRef.current?.dismiss();
+    requestAnimationFrame(() => storeSheetRef.current?.present());
   }, []);
 
   const openStoreAssignment = useCallback((group: ShoppingSessionGroup) => {
@@ -307,14 +331,14 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
     if (saved) setStoreAssignmentTarget(null);
   }, [assignShoppingStore, storeAssignmentTarget]);
 
-  const toggleStoreChip = useCallback((value: string) => {
+  const toggleCatalogStatus = useCallback((value: ShoppingFindCatalogStatus) => {
     void Haptics.selectionAsync();
-    setStoreFilter((current) => (current === value ? STORE_FILTER_ALL : value));
-  }, []);
-
-  const selectAttention = useCallback((value: ShortlistAttentionFilter) => {
-    void Haptics.selectionAsync();
-    setAttentionFilter(value);
+    setCatalogStatuses((current) => {
+      const next = new Set(current);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
   }, []);
 
   const confirmDeleteSelection = useCallback(() => {
@@ -322,7 +346,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
     const itemCount = selectedItemIds.size;
     const count = selectedBulkSnaps.length;
     Alert.alert(
-      `Delete ${itemCount} item${itemCount === 1 ? '' : 's'}?`,
+      `Delete ${itemCount} ${itemCount === 1 ? 'piece' : 'pieces'}?`,
       `${count} shopping photo${count === 1 ? '' : 's'} will be removed from your history.`,
       [
         { text: 'Cancel', style: 'cancel' },
@@ -366,19 +390,18 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   const countLine = selectionMode
     ? `${selectedItemIds.size} selected`
     : [
-      `${filteredCount === allItems.length ? filteredCount : `${filteredCount} of ${allItems.length}`} find${allItems.length === 1 ? '' : 's'}`,
+      `${filteredCount === allItems.length ? filteredCount : `${filteredCount} of ${allItems.length}`} ${filteredCount === 1 ? 'piece' : 'pieces'}`,
       `${summary.storeCount} store${summary.storeCount === 1 ? '' : 's'}`,
     ].join('  ·  ');
 
-  // Once the masthead has scrolled away the rails go with it, so the compact
-  // bar's subtitle carries what is currently filtered. Costs no height, and
-  // FilterControl is right beside it as the way back.
+  // Once the masthead has scrolled away, the compact bar carries active state.
+  // At rest it shows the useful piece/store summary instead of spelling out
+  // invisible defaults such as "Everything" and "All stores".
   const compactState = selectionMode
     ? `${selectedItemIds.size} selected`
-    : [
-      attentionOptions.find((option) => option.value === attentionFilter)?.label ?? 'Everything',
-      storeFilterLabel,
-    ].join('  ·  ');
+    : appliedFilters.length > 0
+      ? appliedFilters.map((filter) => filter.label).join('  ·  ')
+      : countLine;
 
   const headerActions = (
     <View style={styles.heroActions}>
@@ -392,9 +415,9 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
             label="Refine shortlist"
           />
           {allItems.length > 0 ? (
-            <IconButton
+            <ActionButton
               icon="checkmark-circle-outline"
-              label="Select shopping items"
+              label="Select"
               onPress={() => startSelection()}
               variant="secondary"
             />
@@ -412,8 +435,8 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   const listHeader = (
     <View>
       {/* Measured so the sticky instance below knows when to take over. Guarded
-          because the rails and counts inside re-fire onLayout on every filter
-          change, which would otherwise loop. */}
+          because filter state inside can re-fire onLayout, which would
+          otherwise loop. */}
       <View onLayout={(event) => {
         const next = event.nativeEvent.layout.height;
         setHeroHeight((current) => (current === next ? current : next));
@@ -428,22 +451,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
           actions={headerActions}
           style={styles.heroHeader}
         />
-        {allItems.length > 0 ? (
-          <View style={styles.railBlock}>
-            <ShortlistFilterBar
-              attentionOptions={attentionOptions}
-              attentionValue={attentionFilter}
-              attentionRestingValue="all"
-              onSelectAttention={selectAttention}
-              storeOptions={quickStoreOptions}
-              storeFilter={storeFilter}
-              storeActiveLabel={storeFilterLabel}
-              storeActiveValue={activeQuickStoreValue}
-              onSelectStore={toggleStoreChip}
-              onBrowseStores={openStorePicker}
-            />
-          </View>
-        ) : null}
+        {allItems.length > 0 ? <ShortlistFilterBar filters={appliedFilters} /> : null}
       </View>
 
       {isError ? (
@@ -481,8 +489,8 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
           <View style={styles.emptyState}><ActivityIndicator color={colors.primary} /></View>
         ) : allItems.length > 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>No items match</Text>
-            <Text style={styles.emptyText}>Try clearing a filter to see more finds.</Text>
+            <Text style={styles.emptyTitle}>No pieces match</Text>
+            <Text style={styles.emptyText}>Try clearing a filter to see more pieces.</Text>
             <TouchableOpacity style={styles.emptyButton} onPress={clearItemFilters}>
               <Text style={styles.emptyButtonText}>Clear filters</Text>
             </TouchableOpacity>
@@ -571,7 +579,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
         handleIndicatorStyle={styles.filterSheetHandle}
       >
         <BottomSheetView style={styles.filterSheetContent}>
-          <AppText variant="sheetTitle" tone="primary">Refine your edit</AppText>
+          <AppText variant="sheetTitle" tone="primary">Refine your shortlist</AppText>
 
           <AppText variant="eyebrow" tone="muted" style={styles.filterGroupLabel}>WHEN</AppText>
           <OptionChips
@@ -590,26 +598,30 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
             onSelect={(value) => setAttentionFilter(value)}
           />
 
-          <AppText variant="eyebrow" tone="muted" style={styles.filterGroupLabel}>DECISION</AppText>
+          <AppText variant="eyebrow" tone="muted" style={styles.filterGroupLabel}>STATUS</AppText>
           <OptionChips
-            options={[
-              { value: 'all' as ShoppingCatalogFilter, label: 'Everything' },
-              { value: 'active' as ShoppingCatalogFilter, label: 'Active decisions' },
-              { value: 'favorite' as ShoppingCatalogFilter, label: 'Favorites' },
-              ...SHOPPING_CATALOG_STATUS_OPTIONS.map((option) => ({
-                value: option.value as ShoppingCatalogFilter,
-                label: option.label,
-              })),
-            ]}
-            value={catalogFilter}
-            onSelect={(value) => setCatalogFilter(value)}
+            options={SHOPPING_CATALOG_STATUS_OPTIONS.map((option) => ({
+              value: option.value,
+              label: option.label,
+            }))}
+            multi
+            multiValue={[...catalogStatuses]}
+            onMultiToggle={(value) => toggleCatalogStatus(value as ShoppingFindCatalogStatus)}
           />
 
-          <TouchableOpacity
-            style={styles.doneButton}
-            onPress={() => filterSheetRef.current?.dismiss()}
-          >
-            <Text style={styles.doneButtonText}>View {filteredItems.length} item{filteredItems.length === 1 ? '' : 's'}</Text>
+          <AppText variant="eyebrow" tone="muted" style={styles.filterGroupLabel}>STORE</AppText>
+          <TouchableOpacity style={styles.storePickerButton} onPress={openStorePicker}>
+            <Text style={styles.storePickerText}>{storeFilter === STORE_FILTER_ALL ? 'All stores' : storeFilterLabel}</Text>
+            <Ionicons name="chevron-forward" size={17} color={colors.mutedForeground} />
+          </TouchableOpacity>
+
+          {activeFilterCount > 0 ? (
+            <TouchableOpacity style={styles.clearFiltersButton} onPress={clearItemFilters}>
+              <Text style={styles.clearFiltersText}>Clear filters</Text>
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity style={styles.doneButton} onPress={() => filterSheetRef.current?.dismiss()}>
+            <Text style={styles.doneButtonText}>Show {filteredItems.length} piece{filteredItems.length === 1 ? '' : 's'}</Text>
           </TouchableOpacity>
         </BottomSheetView>
       </BottomSheetModal>
@@ -645,7 +657,6 @@ const styles = StyleSheet.create({
   listContent: { paddingBottom: spacing.xxxl },
   listContentSelecting: { paddingBottom: 112 },
   heroHeader: { paddingBottom: spacing.lg, backgroundColor: colors.background },
-  railBlock: { paddingBottom: spacing.lg },
   stickyHeader: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
   stickyHeaderContent: {
     backgroundColor: colors.background,
@@ -666,6 +677,10 @@ const styles = StyleSheet.create({
   filterGroupLabel: { paddingTop: spacing.sm, ...typography.text.eyebrow, color: colors.mutedForeground },
   doneButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, backgroundColor: colors.primary },
   doneButtonText: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.primaryForeground, fontVariant: ['tabular-nums'] },
+  clearFiltersButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  clearFiltersText: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.action },
+  storePickerButton: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, borderRadius: radii.md, backgroundColor: colors.surfaceSubtle },
+  storePickerText: { flex: 1, fontSize: typography.text.bodySmall.fontSize, color: colors.foreground },
   selectionBar: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.background },
   selectionBarButton: { minHeight: 48, justifyContent: 'center', paddingHorizontal: spacing.md },
   selectionBarCancel: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.secondaryForeground },

@@ -27,6 +27,7 @@ import {
 } from '../../lib/shoppingSnapOrganizer';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { ShoppingCaptureRole, ShoppingSnap } from '../../types/shoppingSnap';
+import { SHORTLIST_COPY } from '../../lib/shoppingVocabulary';
 
 const TILE_WIDTH = 92;
 const PHOTO_HEIGHT = 112;
@@ -84,7 +85,7 @@ export function ShoppingPhotoOrganizer({
   isSaving,
   eyebrow = 'ORGANIZE',
   title = 'Group photos',
-  subtitle = 'Tap a photo to see it big. Hold to select it, or drag it into another item.',
+  subtitle = 'Tap a photo to see it big. Hold to select it, or drag it into another piece.',
   saveLabel = 'Save',
   closeLabel = 'Cancel',
 }: {
@@ -351,7 +352,7 @@ export function ShoppingPhotoOrganizer({
     return (
       <View
         style={[styles.photo, selected && styles.photoSelected, dragging && styles.photoDragging]}
-        accessibilityLabel={`${snapRoleLabel(role)} photo, tap to select, hold to drag into another item`}
+      accessibilityLabel={`${snapRoleLabel(role)} photo, tap to select, hold to drag into another piece`}
         accessibilityState={{ selected }}
       >
         <Image source={{ uri: snap.imageUri }} style={StyleSheet.absoluteFill} contentFit="cover" />
@@ -432,7 +433,7 @@ export function ShoppingPhotoOrganizer({
           </TouchableOpacity>
         ) : (
           <Text style={styles.toolbarCount}>
-            {stages.length} item{stages.length === 1 ? '' : 's'} · {snaps.length} photo{snaps.length === 1 ? '' : 's'}
+            {stages.length} {stages.length === 1 ? SHORTLIST_COPY.piece : SHORTLIST_COPY.pieces} · {snaps.length} {SHORTLIST_COPY.photos}
           </Text>
         )}
         <View style={styles.toolbarActions}>
@@ -495,7 +496,9 @@ export function ShoppingPhotoOrganizer({
             >
               <View style={styles.sectionHeader}>
                 <View style={styles.sectionCopy}>
-                  <Text style={styles.sectionTitle}>Item {index + 1}</Text>
+                  <Text style={styles.sectionTitle}>
+                    {snapsWithStagedRoles.find((snap) => stage.snapIds.includes(snap.id))?.category ?? `Piece ${index + 1}`}
+                  </Text>
                   <Text style={styles.sectionMeta}>
                     {hovered
                       ? 'Release to add this photo'
@@ -510,10 +513,10 @@ export function ShoppingPhotoOrganizer({
                     style={styles.splitButton}
                     onPress={() => splitAll(stage.id)}
                     disabled={isSaving}
-                    accessibilityLabel={`Split item ${index + 1} into one item per photo`}
+                    accessibilityLabel={`Separate photos in piece ${index + 1}`}
                   >
                     <Ionicons name="cut-outline" size={16} color={colors.action} />
-                    <Text style={styles.splitText}>Split all</Text>
+                    <Text style={styles.splitText}>{SHORTLIST_COPY.separatePhotos}</Text>
                   </TouchableOpacity>
                 ) : null}
               </View>
@@ -552,7 +555,7 @@ export function ShoppingPhotoOrganizer({
         <ShoppingPhotoViewer
           snaps={viewerSnaps}
           initialSnapId={viewerSnapId}
-          itemLabel={`Item ${viewerStageIndex + 1}`}
+            itemLabel={`Piece ${viewerStageIndex + 1}`}
           roleFor={(snapId) => rolesBySnapId[snapId] ?? snapById.get(snapId)?.captureRole ?? 'unknown'}
           onCycleRole={cycleRole}
           onSelect={selectFromViewer}
@@ -624,7 +627,7 @@ function NewItemDropZone({
         color={hovered ? colors.primaryForeground : colors.primary}
       />
       <Text style={[styles.dropZoneText, hovered && styles.dropZoneTextHovered]}>
-        {hovered ? 'Release to make a new item' : 'Drag here to make a new item'}
+        {hovered ? 'Release to make a new piece' : 'Drag here to make a new piece'}
       </Text>
     </Animated.View>
   );

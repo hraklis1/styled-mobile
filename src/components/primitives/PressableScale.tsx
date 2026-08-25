@@ -29,6 +29,8 @@ type Props = Omit<PressableProps, 'children'> & {
   motion?: 'spring' | 'crisp';
   /** Fire a light haptic on press-in. Defaults to true. No-op on web. */
   haptic?: boolean;
+  /** Expand the effective touch target without changing the visual layout. */
+  hitSlop?: PressableProps['hitSlop'];
   /** Reanimated layout transition. If not provided, it won't animate layout changes automatically. */
   layout?: any;
 };
@@ -40,6 +42,7 @@ export function PressableScale({
   scaleTo = 0.96,
   motion = 'spring',
   haptic = true,
+  hitSlop,
   layout,
   onPressIn: onPressInProp,
   onPressOut: onPressOutProp,
@@ -88,6 +91,7 @@ export function PressableScale({
   return (
     <Pressable
       style={style}
+      hitSlop={hitSlop}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       {...rest}

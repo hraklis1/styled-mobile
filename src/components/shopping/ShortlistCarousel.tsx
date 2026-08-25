@@ -103,8 +103,8 @@ function ShortlistFindCard({ item, onPress }: { item: ShoppingEditItem; onPress:
       contentStyle={styles.card}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={[item.storeName ?? 'Shopping find', place, price, description].filter(Boolean).join(', ')}
-      accessibilityHint="Opens this find in your shortlist"
+      accessibilityLabel={[item.storeName ?? 'Shopping piece', place, price, description].filter(Boolean).join(', ')}
+      accessibilityHint="Opens this piece in your shortlist"
     >
       <View style={styles.imageFrame}>
         {!imageFailed ? (

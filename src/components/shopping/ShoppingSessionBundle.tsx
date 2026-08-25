@@ -70,7 +70,7 @@ function ShoppingSessionTile({
       activeOpacity={0.85}
       onPress={onPress}
       onLongPress={onLongPress}
-      accessibilityLabel={`${item.storeName ?? 'Shopping'} item${price ? `, ${price}` : `, ${SHORTLIST_COPY.needsPrice}`}`}
+      accessibilityLabel={`${item.storeName ?? 'Shopping'} piece${price ? `, ${price}` : `, ${SHORTLIST_COPY.needsPrice}`}`}
     >
       <View style={styles.tile}>
         {failed ? (
@@ -161,7 +161,7 @@ export function ShoppingSessionBundle({
   const metaSegments = [
     group.dateLabel,
     group.placeLabel ?? group.locationHint,
-    `${group.itemCount} item${group.itemCount === 1 ? '' : 's'}`,
+    `${group.itemCount} ${group.itemCount === 1 ? SHORTLIST_COPY.piece : SHORTLIST_COPY.pieces}`,
   ].filter((segment): segment is string => Boolean(segment));
 
   // Selection is all-or-nothing per visit — every touch target below routes
@@ -297,7 +297,7 @@ export function ShoppingSessionBundle({
               accessibilityRole="button"
             >
               <Text style={styles.footerOpenText}>
-                {group.itemCount === 1 ? 'View item' : `View all ${group.itemCount}`}
+                {group.itemCount === 1 ? 'View piece' : `View all ${group.itemCount} pieces`}
               </Text>
               {/* Forward, not down — this pushes a screen, it does not disclose. */}
               <Ionicons name="chevron-forward" size={14} color={colors.inkSubtle} />

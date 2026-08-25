@@ -11,6 +11,22 @@
  * 'Store not set' verbatim. Those literals must never be rewired to this table.
  */
 export const SHORTLIST_COPY = {
+  piece: 'piece',
+  pieces: 'pieces',
+  visit: 'visit',
+  visits: 'visits',
+  photos: 'photos',
+  editDetails: 'Edit details',
+  askStylist: 'Ask the stylist about this',
+  captureInformation: 'Capture information',
+  tagDetails: 'Tag details',
+  considering: 'Considering',
+  wishlist: 'Wishlist',
+  inCloset: 'In closet',
+  passed: 'Passed',
+  allPieces: 'All pieces',
+  showPieces: 'Show pieces',
+  separatePhotos: 'Separate photos',
   /** Captured on the device, not uploaded yet. Never "pending" or "sync". */
   onThisPhone: 'On this phone',
   /** Uploaded. Only appears in the item lightbox. */
