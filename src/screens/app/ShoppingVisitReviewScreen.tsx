@@ -1,52 +1,58 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, View, StyleSheet, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { Alert, View, StyleSheet } from 'react-native';
+import * as Haptics from 'expo-haptics';
 
 import { ShoppingPhotoOrganizer } from '../../components/shopping/ShoppingPhotoOrganizer';
+import { useAuth } from '../../contexts/AuthContext';
 import { useShoppingItemActions } from '../../hooks/useShoppingItemActions';
 import { useShoppingSnaps } from '../../hooks/useShoppingSnaps';
+import { deleteShoppingSnaps } from '../../lib/deleteShoppingSnaps';
 import { deleteShoppingPreview } from '../../lib/shoppingPreviews';
-import { applyShoppingPreviewUris, buildShoppingEditItems, mergeShoppingSnaps } from '../../lib/shoppingGallery';
+import { applyShoppingPreviewUris, mergeShoppingSnaps } from '../../lib/shoppingGallery';
 import type { ShoppingSnapOrganizationUpdate } from '../../lib/shoppingSnapOrganizer';
+import { buildVisitReviewHeader } from '../../lib/shoppingVisitReview';
 import type { ShoppingVisitReviewScreenProps } from '../../navigation/types';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
-import { colors, radii, spacing, typography } from '../../theme';
+import { colors } from '../../theme';
 
 /**
  * Where a shopping visit ends. The camera now closes into this screen instead
  * of dropping the shopper back on the Shop tab, because the moment they stop
  * shooting is the only moment they still remember which photos were which.
  *
- * Photos arrive grouped by the item selected in the camera, so
- * the primary action is to accept it. Correcting it is optional and costs one
- * tap; that is the whole point of landing here rather than being asked to
- * sort a photo dump days later.
+ * The organizer is the review. Photos arrive grouped by the item selected in
+ * the camera, so the primary action is to accept that as it stands; but the
+ * tools to regroup, relabel or remove a photo are on screen from the start
+ * rather than behind an extra step, because a wrong shot is cheapest to fix
+ * while the rack is still in front of you.
  */
 export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitReviewScreenProps) {
-  const insets = useSafeAreaInsets();
-  const [organizing, setOrganizing] = useState(false);
   const { sessionId } = route.params;
+  const { user } = useAuth();
   const { data: remoteSnaps = [], isLoading } = useShoppingSnaps();
   const pendingUploads = useShoppingSessionStore((state) => state.pendingUploads);
   const visitPreviews = useShoppingSessionStore((state) => state.visitPreviews);
-  const currentSessionId = useShoppingSessionStore((state) => state.currentSession?.id ?? null);
+  const currentSession = useShoppingSessionStore((state) => state.currentSession);
+  const pendingVisitMetadata = useShoppingSessionStore((state) => state.pendingVisitMetadata);
   const endVisit = useShoppingSessionStore((state) => state.endVisit);
   const { saveOrganization, isSavingOrganization } = useShoppingItemActions();
   const [isFinishing, setIsFinishing] = useState(false);
   // Reached from the camera this screen closes a trip in progress; reached
   // from the shortlist it is just an organizer over an old one. The copy has
   // to follow, or "Keep shooting" offers a camera that is not there.
-  const isLiveVisit = currentSessionId === sessionId;
+  const isLiveVisit = currentSession?.id === sessionId;
 
-  const snaps = useMemo(() => applyShoppingPreviewUris(
-    mergeShoppingSnaps(remoteSnaps, pendingUploads)
-      .filter((snap) => snap.shoppingSessionId === sessionId)
-      .sort((a, b) => new Date(a.capturedAt).getTime() - new Date(b.capturedAt).getTime()
-        || a.captureSequence - b.captureSequence),
-    visitPreviews,
-    pendingUploads,
-  ), [pendingUploads, remoteSnaps, sessionId, visitPreviews]);
+  // The raw snaps keep the full-size local file as `imageUri`; the displayed
+  // ones swap in the small preview. Deletion has to go through the raw snap,
+  // or it would remove the preview and orphan the photo it stands for.
+  const rawSnaps = useMemo(() => mergeShoppingSnaps(remoteSnaps, pendingUploads)
+    .filter((snap) => snap.shoppingSessionId === sessionId)
+    .sort((a, b) => new Date(a.capturedAt).getTime() - new Date(b.capturedAt).getTime()
+      || a.captureSequence - b.captureSequence), [pendingUploads, remoteSnaps, sessionId]);
+  const snaps = useMemo(
+    () => applyShoppingPreviewUris(rawSnaps, visitPreviews, pendingUploads),
+    [pendingUploads, rawSnaps, visitPreviews],
+  );
 
   /**
    * Ends the visit and releases the rail's preview files. Cleanup lives here
@@ -77,6 +83,7 @@ export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitRe
     setIsFinishing(true);
     try {
       await saveOrganization(updates);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       finish();
     } catch (error) {
       Alert.alert(
@@ -98,6 +105,39 @@ export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitRe
     navigation.goBack();
   }, [navigation]);
 
+  const removeSnaps = useCallback(async (snapIds: string[]) => {
+    const ids = new Set(snapIds);
+    const targets = rawSnaps.filter((snap) => ids.has(snap.id));
+    if (targets.length === 0) return;
+    // Read the previews before deleting: markCaptureDeleted drops them from
+    // the store, but only this screen knows to remove the files behind them.
+    const previews = useShoppingSessionStore.getState().visitPreviews.filter((preview) => ids.has(preview.id));
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      await deleteShoppingSnaps(targets, user?.id ?? null);
+      previews.forEach((preview) => deleteShoppingPreview(preview.previewUri));
+    } catch (error) {
+      Alert.alert(
+        'Could not remove photos',
+        error instanceof Error ? error.message : 'Please try again.',
+      );
+    }
+  }, [rawSnaps, user?.id]);
+
+  const confirmRemove = useCallback((snapIds: string[]) => {
+    const count = snapIds.length;
+    Alert.alert(
+      count === 1 ? 'Remove this photo?' : `Remove ${count} photos?`,
+      // Deleting reseeds the organizer from what is left, which discards any
+      // regrouping not yet saved. Say so rather than let it look like a bug.
+      'It will be deleted from this visit. Unsaved grouping changes will be reset.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => void removeSnaps(snapIds) },
+      ],
+    );
+  }, [removeSnaps]);
+
   // Nothing was photographed — there is no review to do, so close the visit
   // out rather than parking on an empty organizer.
   useEffect(() => {
@@ -106,72 +146,26 @@ export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitRe
 
   if (snaps.length === 0) return <View style={styles.root} />;
 
-  // Preserve the camera's item order, even when an earlier item gets another photo.
-  const groupOrder = [...new Set(snaps.map((snap) => snap.captureGroupId))];
-  const pieces = buildShoppingEditItems(snaps).sort((a, b) =>
-    groupOrder.indexOf(a.captureGroupId) - groupOrder.indexOf(b.captureGroupId));
-  if (!organizing) return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
-      <ScrollView contentContainerStyle={styles.summaryContent}>
-        <Text style={styles.eyebrow}>{isLiveVisit ? 'THIS VISIT' : 'EARLIER VISIT'}</Text>
-        <Text style={styles.title}>Your photos, together</Text>
-        <Text style={styles.summaryCount}>
-          {pieces.length} {pieces.length === 1 ? 'item' : 'items'} · {snaps.length} {snaps.length === 1 ? 'photo' : 'photos'}
-        </Text>
-        <Text style={styles.subtitle}>A quick look at what you captured. You can adjust the grouping now or come back later.</Text>
-        {pieces.map((piece, index) => (
-          <View key={piece.id} style={styles.itemCard}>
-            <View style={styles.itemHeading}>
-              <Text style={styles.itemTitle}>Item {index + 1}</Text>
-              <Text style={styles.photoCount}>{piece.photoCount} {piece.photoCount === 1 ? 'photo' : 'photos'}</Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={piece.photoCount > 2} contentContainerStyle={styles.photoStrip}>
-              {piece.snaps.map((snap, photoIndex) => (
-                <View key={snap.id} style={styles.photoTile}>
-                  <Image
-                    source={{ uri: snap.imageUri }}
-                    style={styles.photo}
-                    contentFit="contain"
-                    recyclingKey={snap.id}
-                    accessible
-                    accessibilityLabel={`Item ${index + 1}, photo ${photoIndex + 1}${snap.captureRole === 'tag' ? ', tag' : ''}`}
-                  />
-                  <Text style={styles.photoLabel}>{snap.captureRole === 'tag' ? 'Tag' : `Photo ${photoIndex + 1}`}</Text>
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-        ))}
-      </ScrollView>
-      <View style={[styles.summaryActions, { paddingBottom: insets.bottom + spacing.md }]}>
-        <TouchableOpacity style={styles.doneButton} onPress={finish} accessibilityRole="button">
-          <Text style={styles.doneButtonText}>Done</Text>
-        </TouchableOpacity>
-        <View style={styles.secondaryActions}>
-          <TouchableOpacity style={styles.secondaryButton} onPress={() => setOrganizing(true)} accessibilityRole="button">
-            <Text style={styles.adjustText}>Adjust grouping</Text>
-          </TouchableOpacity>
-          {isLiveVisit ? (
-            <TouchableOpacity style={styles.secondaryButton} onPress={handleClose} accessibilityRole="button">
-              <Text style={styles.keepShootingText}>Keep shooting</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      </View>
-    </View>
-  );
+  const header = buildVisitReviewHeader(snaps, {
+    isLiveVisit,
+    fallbackStoreName: isLiveVisit
+      ? currentSession?.storeName
+      : pendingVisitMetadata.find((session) => session.id === sessionId)?.storeName,
+  });
+
   return (
     <View style={styles.root}>
       <ShoppingPhotoOrganizer
         snaps={snaps}
-        onClose={() => setOrganizing(false)}
+        onClose={handleClose}
         onSave={handleSave}
+        onRemove={confirmRemove}
         isSaving={isSavingOrganization || isFinishing}
-        eyebrow={isLiveVisit ? 'THIS VISIT' : 'EARLIER VISIT'}
-        title="Everything you photographed"
-        subtitle="Grouped for you. Adjust anything, or just save."
-        saveLabel="Done"
-        closeLabel={isLiveVisit ? 'Keep shooting' : 'Cancel'}
+        eyebrow={header.eyebrow}
+        title={header.title}
+        subtitle={header.meta}
+        saveLabel={isLiveVisit ? 'Finish visit' : 'Done'}
+        closeLabel={isLiveVisit ? 'Keep shooting' : 'Back'}
       />
     </View>
   );
@@ -179,24 +173,4 @@ export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitRe
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
-  summaryContent: { padding: spacing.lg, gap: spacing.md },
-  eyebrow: { ...typography.text.caption, fontWeight: typography.weight.bold, letterSpacing: 1.5, color: colors.primary },
-  title: { ...typography.text.editorialTitle, color: colors.foreground },
-  summaryCount: { ...typography.text.body, fontWeight: typography.weight.semibold, color: colors.foreground },
-  subtitle: { ...typography.text.bodySmall, color: colors.mutedForeground, lineHeight: 22, marginBottom: spacing.sm },
-  itemCard: { padding: spacing.md, gap: spacing.md, borderRadius: radii.lg, backgroundColor: colors.surfaceSubtle, borderWidth: 1, borderColor: colors.border },
-  itemHeading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.xs },
-  itemTitle: { ...typography.text.body, fontWeight: typography.weight.semibold, color: colors.foreground },
-  photoCount: { ...typography.text.caption, color: colors.mutedForeground },
-  photoStrip: { gap: spacing.sm, paddingBottom: spacing.xs },
-  photoTile: { width: 112, gap: spacing.xs },
-  photo: { width: 112, height: 140, borderRadius: radii.sm, backgroundColor: colors.background },
-  photoLabel: { ...typography.text.caption, textAlign: 'center', color: colors.mutedForeground },
-  summaryActions: { padding: spacing.lg, gap: spacing.xs, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.background },
-  doneButton: { minHeight: 48, padding: spacing.md, borderRadius: radii.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary },
-  doneButtonText: { ...typography.text.body, fontWeight: typography.weight.semibold, color: colors.primaryForeground },
-  secondaryActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-around' },
-  secondaryButton: { minHeight: 44, padding: spacing.sm, alignItems: 'center', justifyContent: 'center' },
-  adjustText: { ...typography.text.bodySmall, color: colors.action, fontWeight: typography.weight.medium },
-  keepShootingText: { ...typography.text.bodySmall, color: colors.foreground, fontWeight: typography.weight.medium },
 });

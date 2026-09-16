@@ -88,6 +88,7 @@ export function ShoppingPhotoOrganizer({
   subtitle = 'Tap a photo to see it big. Hold to select it, or drag it into another piece.',
   saveLabel = 'Save',
   closeLabel = 'Cancel',
+  onRemove,
 }: {
   snaps: ShoppingSnap[];
   onClose: () => void;
@@ -98,6 +99,11 @@ export function ShoppingPhotoOrganizer({
   subtitle?: string;
   saveLabel?: string;
   closeLabel?: string;
+  /**
+   * Offered as a toolbar action on the selection when present. The caller
+   * confirms and deletes; the organizer reseeds itself when `snaps` shrinks.
+   */
+  onRemove?: (snapIds: string[]) => void;
 }) {
   const insets = useSafeAreaInsets();
   const [stages, setStages] = useState<ShoppingOrganizerStage[]>([]);
@@ -436,6 +442,16 @@ export function ShoppingPhotoOrganizer({
           </Text>
         )}
         <View style={styles.toolbarActions}>
+          {selectedIds.size > 0 && onRemove ? (
+            <TouchableOpacity
+              style={styles.ghostButton}
+              onPress={() => onRemove([...selectedIds])}
+              disabled={isSaving}
+              accessibilityLabel={`Remove ${selectedIds.size} selected photos`}
+            >
+              <Ionicons name="trash-outline" size={16} color={colors.error} />
+            </TouchableOpacity>
+          ) : null}
           {history.length > 0 ? (
             <TouchableOpacity
               style={styles.ghostButton}
