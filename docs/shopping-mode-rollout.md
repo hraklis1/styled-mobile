@@ -6,7 +6,7 @@ Implemented September 16, 2026. Changes are uncommitted on `main` in the mobile 
 
 - Original-currency purchase details, editable corrections separate from raw OCR, price suggestions, product links and cover selection.
 - Account-scoped metadata, capture queues, ordered idempotent mutations, conflict choices, and immediate local editing/decisions/grouping. Unsynced originals stay outside the bounded 250 MB per-account preview cache.
-- Persistent “Add photo to this piece” mode, capture-ID-based automatic tag attachment with undo, optional store identification, and immediate visit completion.
+- Item-first camera: photos and library selections stay with the current item until “Next item”; the current item and photo count remain visible. “Review” opens visit organization, and “Cancel” confirms discarding all photos from the current visit. Optional store identification and adding photos to earlier items remain available.
 - Pieces/Visits shortlist, search, Favorites, category/store/date/decision/currency-specific price filters, newest/oldest sorting, item selection and comparison.
 - Considering/Bought/Passed labels with legacy storage compatibility. Optional wardrobe handoff retains form drafts, uses the existing item-create entitlement path, copies a garment image into wardrobe storage and enforces one source find per user.
 - Shopping/stylist context carries original currencies. Comparison remains usable without AI. Shopping analytics use event counts/outcomes, excluding photos, OCR, notes and precise location.

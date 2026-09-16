@@ -11,14 +11,14 @@ import type { ShoppingVisitReviewScreenProps } from '../../navigation/types';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { colors, spacing, typography } from '../../theme';
+import { colors, radii, spacing, typography } from '../../theme';
 
 /**
  * Where a shopping visit ends. The camera now closes into this screen instead
  * of dropping the shopper back on the Shop tab, because the moment they stop
  * shooting is the only moment they still remember which photos were which.
  *
- * The grouping arrives already made — one item per shot, tags folded in — so
+ * Photos arrive grouped by the item selected in the camera, so
  * the primary action is to accept it. Correcting it is optional and costs one
  * tap; that is the whole point of landing here rather than being asked to
  * sort a photo dump days later.
@@ -102,16 +102,59 @@ export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitRe
 
   if (snaps.length === 0) return <View style={styles.root} />;
 
-  const pieces = buildShoppingEditItems(snaps);
+  // Preserve the camera's item order, even when an earlier item gets another photo.
+  const groupOrder = [...new Set(snaps.map((snap) => snap.captureGroupId))];
+  const pieces = buildShoppingEditItems(snaps).sort((a, b) =>
+    groupOrder.indexOf(a.captureGroupId) - groupOrder.indexOf(b.captureGroupId));
   if (!organizing) return (
-    <ScrollView style={styles.root} contentContainerStyle={{ padding: spacing.xl, paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.xl }}>
-      <Text style={{ ...typography.text.editorialTitle, color: colors.foreground }}>{pieces.length} {pieces.length === 1 ? 'piece' : 'pieces'} saved</Text>
-      <Text style={{ ...typography.text.body, marginVertical: spacing.lg, color: colors.mutedForeground }}>Your photos are saved on this phone. Revisit them whenever you’re ready.</Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>{pieces.map((piece) => <Image key={piece.id} source={{ uri: piece.primarySnap.imageUri }} style={{ width: '46%', aspectRatio: 0.8, backgroundColor: colors.surfaceSubtle }} contentFit="contain" />)}</View>
-      <TouchableOpacity style={{ marginTop: spacing.xl, padding: spacing.lg, backgroundColor: colors.primary, borderRadius: 8 }} onPress={finish}><Text style={{ color: colors.primaryForeground, textAlign: 'center' }}>Done</Text></TouchableOpacity>
-      <TouchableOpacity style={{ padding: spacing.lg }} onPress={() => setOrganizing(true)}><Text style={{ color: colors.action, textAlign: 'center' }}>Adjust grouping</Text></TouchableOpacity>
-      {isLiveVisit ? <TouchableOpacity style={{ padding: spacing.lg }} onPress={handleClose}><Text style={{ color: colors.foreground, textAlign: 'center' }}>Keep shooting</Text></TouchableOpacity> : null}
-    </ScrollView>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
+      <ScrollView contentContainerStyle={styles.summaryContent}>
+        <Text style={styles.eyebrow}>{isLiveVisit ? 'THIS VISIT' : 'EARLIER VISIT'}</Text>
+        <Text style={styles.title}>Your photos, together</Text>
+        <Text style={styles.summaryCount}>
+          {pieces.length} {pieces.length === 1 ? 'item' : 'items'} · {snaps.length} {snaps.length === 1 ? 'photo' : 'photos'}
+        </Text>
+        <Text style={styles.subtitle}>A quick look at what you captured. You can adjust the grouping now or come back later.</Text>
+        {pieces.map((piece, index) => (
+          <View key={piece.id} style={styles.itemCard}>
+            <View style={styles.itemHeading}>
+              <Text style={styles.itemTitle}>Item {index + 1}</Text>
+              <Text style={styles.photoCount}>{piece.photoCount} {piece.photoCount === 1 ? 'photo' : 'photos'}</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={piece.photoCount > 2} contentContainerStyle={styles.photoStrip}>
+              {piece.snaps.map((snap, photoIndex) => (
+                <View key={snap.id} style={styles.photoTile}>
+                  <Image
+                    source={{ uri: snap.imageUri }}
+                    style={styles.photo}
+                    contentFit="contain"
+                    recyclingKey={snap.id}
+                    accessible
+                    accessibilityLabel={`Item ${index + 1}, photo ${photoIndex + 1}${snap.captureRole === 'tag' ? ', tag' : ''}`}
+                  />
+                  <Text style={styles.photoLabel}>{snap.captureRole === 'tag' ? 'Tag' : `Photo ${photoIndex + 1}`}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        ))}
+      </ScrollView>
+      <View style={[styles.summaryActions, { paddingBottom: insets.bottom + spacing.md }]}>
+        <TouchableOpacity style={styles.doneButton} onPress={finish} accessibilityRole="button">
+          <Text style={styles.doneButtonText}>Done</Text>
+        </TouchableOpacity>
+        <View style={styles.secondaryActions}>
+          <TouchableOpacity style={styles.secondaryButton} onPress={() => setOrganizing(true)} accessibilityRole="button">
+            <Text style={styles.adjustText}>Adjust grouping</Text>
+          </TouchableOpacity>
+          {isLiveVisit ? (
+            <TouchableOpacity style={styles.secondaryButton} onPress={handleClose} accessibilityRole="button">
+              <Text style={styles.keepShootingText}>Keep shooting</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      </View>
+    </View>
   );
   return (
     <View style={styles.root}>
@@ -132,4 +175,24 @@ export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitRe
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
+  summaryContent: { padding: spacing.lg, gap: spacing.md },
+  eyebrow: { ...typography.text.caption, fontWeight: typography.weight.bold, letterSpacing: 1.5, color: colors.primary },
+  title: { ...typography.text.editorialTitle, color: colors.foreground },
+  summaryCount: { ...typography.text.body, fontWeight: typography.weight.semibold, color: colors.foreground },
+  subtitle: { ...typography.text.bodySmall, color: colors.mutedForeground, lineHeight: 22, marginBottom: spacing.sm },
+  itemCard: { padding: spacing.md, gap: spacing.md, borderRadius: radii.lg, backgroundColor: colors.surfaceSubtle, borderWidth: 1, borderColor: colors.border },
+  itemHeading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.xs },
+  itemTitle: { ...typography.text.body, fontWeight: typography.weight.semibold, color: colors.foreground },
+  photoCount: { ...typography.text.caption, color: colors.mutedForeground },
+  photoStrip: { gap: spacing.sm, paddingBottom: spacing.xs },
+  photoTile: { width: 112, gap: spacing.xs },
+  photo: { width: 112, height: 140, borderRadius: radii.sm, backgroundColor: colors.background },
+  photoLabel: { ...typography.text.caption, textAlign: 'center', color: colors.mutedForeground },
+  summaryActions: { padding: spacing.lg, gap: spacing.xs, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.background },
+  doneButton: { minHeight: 48, padding: spacing.md, borderRadius: radii.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary },
+  doneButtonText: { ...typography.text.body, fontWeight: typography.weight.semibold, color: colors.primaryForeground },
+  secondaryActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-around' },
+  secondaryButton: { minHeight: 44, padding: spacing.sm, alignItems: 'center', justifyContent: 'center' },
+  adjustText: { ...typography.text.bodySmall, color: colors.action, fontWeight: typography.weight.medium },
+  keepShootingText: { ...typography.text.bodySmall, color: colors.foreground, fontWeight: typography.weight.medium },
 });

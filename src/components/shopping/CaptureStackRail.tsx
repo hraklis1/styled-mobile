@@ -1,265 +1,95 @@
-import { useCallback } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useRef } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
-
+import { useReducedMotion } from 'react-native-reanimated';
 import type { ShoppingVisitPreview } from '../../stores/useShoppingSessionStore';
-import { radii, spacing, typography } from '../../theme';
 
-export type CaptureStack = {
-  groupId: string;
-  previews: ShoppingVisitPreview[];
-};
+export type CaptureStack = { groupId: string; previews: ShoppingVisitPreview[] };
 
-/**
- * One entry per capture group, in the order the groups were started. The rail
- * shows items, not photos: a stack of three angles reads as a single find with
- * a "3" on it, which is the fact the shopper needs while the camera is still
- * up. The previous rail drew every photo separately with a 2px rule between
- * groups — information that was present but unreadable at thumbnail size.
- */
 export function buildCaptureStacks(previews: ShoppingVisitPreview[]): CaptureStack[] {
   const stacks: CaptureStack[] = [];
   const byGroup = new Map<string, CaptureStack>();
-
   for (const preview of previews) {
     const existing = byGroup.get(preview.captureGroupId);
-    if (existing) {
-      existing.previews.push(preview);
-      continue;
+    if (existing) existing.previews.push(preview);
+    else {
+      const stack = { groupId: preview.captureGroupId, previews: [preview] };
+      byGroup.set(stack.groupId, stack);
+      stacks.push(stack);
     }
-    const stack: CaptureStack = { groupId: preview.captureGroupId, previews: [preview] };
-    byGroup.set(preview.captureGroupId, stack);
-    stacks.push(stack);
   }
-
   return stacks;
 }
 
-/** The photo that represents a stack: its garment shot, else its first photo. */
 export function stackCover(stack: CaptureStack): ShoppingVisitPreview {
   return stack.previews.find((preview) => preview.captureRole === 'garment') ?? stack.previews[0];
 }
 
-function PreviewTile({
-  preview,
-  count,
-  isNewest,
-  onPress,
-  accessibilityLabel,
-}: {
-  preview: ShoppingVisitPreview;
-  count: number;
-  isNewest: boolean;
-  onPress: () => void;
-  accessibilityLabel: string;
-}) {
-  return (
-    <View style={styles.tileWrap}>
-      {count > 1 ? <View style={styles.stackEdgeBack} /> : null}
-      {count > 1 ? <View style={styles.stackEdgeFront} /> : null}
-      <TouchableOpacity
-        style={[styles.thumb, isNewest && styles.thumbNewest]}
-        onPress={onPress}
-        accessibilityLabel={accessibilityLabel}
-      >
-        <Image
-          source={{ uri: preview.previewUri ?? preview.localFileUri }}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          recyclingKey={preview.id}
-        />
-        {count > 1 ? (
-          <View style={styles.countBadge}>
-            <Text style={styles.countText}>{count}</Text>
-          </View>
-        ) : (
-          <View style={styles.roleBadge}>
-            {preview.ocrStatus === 'processing' ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Ionicons
-                name={preview.captureRole === 'tag' ? 'pricetag' : 'shirt-outline'}
-                size={11}
-                color="#FFFFFF"
-              />
-            )}
-          </View>
-        )}
-        {preview.syncStatus === 'pending' ? <View style={styles.pendingDot} /> : null}
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-export function CaptureStackRail({
-  stacks,
-  expandedGroupId,
-  onToggleStack,
-  onPressPhoto,
-  railRef,
-}: {
+export function CaptureStackRail({ stacks, activeGroupId, showEmptyItem, disabled, onSelect }: {
   stacks: CaptureStack[];
-  expandedGroupId: string | null;
-  onToggleStack: (groupId: string) => void;
-  onPressPhoto: (previewId: string) => void;
-  railRef?: React.Ref<ScrollView>;
+  activeGroupId: string | null;
+  showEmptyItem: boolean;
+  disabled: boolean;
+  onSelect: (groupId: string | null) => void;
 }) {
-  const renderStack = useCallback((stack: CaptureStack, index: number) => {
-    const isExpanded = stack.groupId === expandedGroupId;
-    const isNewest = index === stacks.length - 1;
-    const position = `Item ${index + 1} of ${stacks.length}`;
-
-    // An expanded stack fans out in place so a mis-attached tag can be found
-    // and pulled back out without leaving the camera.
-    if (isExpanded) {
-      return (
-        <View key={stack.groupId} style={styles.expandedGroup}>
-          {stack.previews.map((preview) => (
-            <PreviewTile
-              key={preview.id}
-              preview={preview}
-              count={1}
-              isNewest={false}
-              onPress={() => onPressPhoto(preview.id)}
-              accessibilityLabel={`${position}, ${preview.captureRole === 'tag' ? 'tag' : 'garment'} photo, open`}
-            />
-          ))}
-          <TouchableOpacity
-            style={styles.collapseButton}
-            onPress={() => onToggleStack(stack.groupId)}
-            accessibilityLabel={`Collapse ${position}`}
-          >
-            <Ionicons name="chevron-back" size={16} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-      );
-    }
-
-    const cover = stackCover(stack);
-    return (
-      <PreviewTile
-        key={stack.groupId}
-        preview={cover}
-        count={stack.previews.length}
-        isNewest={isNewest}
-        onPress={() => (stack.previews.length > 1
-          ? onToggleStack(stack.groupId)
-          : onPressPhoto(cover.id))}
-        accessibilityLabel={stack.previews.length > 1
-          ? `${position}, ${stack.previews.length} photos, expand`
-          : `${position}, 1 photo, open`}
-      />
-    );
-  }, [expandedGroupId, onPressPhoto, onToggleStack, stacks.length]);
-
-  if (stacks.length === 0) return null;
+  const rail = useRef<ScrollView>(null);
+  const positions = useRef(new Map<string, number>());
+  const reducedMotion = useReducedMotion();
+  const activeKey = stacks.some((stack) => stack.groupId === activeGroupId) ? activeGroupId! : 'empty';
+  const revealActive = useCallback(() => rail.current?.scrollTo({
+    x: Math.max(0, (positions.current.get(activeKey) ?? 0) - 16), animated: !reducedMotion,
+  }), [activeKey, reducedMotion]);
+  useEffect(() => {
+    const frame = requestAnimationFrame(revealActive);
+    return () => cancelAnimationFrame(frame);
+  }, [revealActive]);
 
   return (
-    <ScrollView
-      ref={railRef}
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.rail}
-            accessibilityLabel={`${stacks.length} piece${stacks.length === 1 ? '' : 's'} in this shopping visit`}
-    >
-      {stacks.map(renderStack)}
+    <ScrollView ref={rail} horizontal showsHorizontalScrollIndicator={false}
+      style={styles.viewport} contentContainerStyle={styles.rail} onContentSizeChange={revealActive}>
+      {stacks.map((stack, index) => {
+        const active = stack.groupId === activeGroupId;
+        const cover = stackCover(stack);
+        return (
+          <TouchableOpacity key={stack.groupId} disabled={disabled} onPress={() => onSelect(stack.groupId)}
+            onLayout={(event) => positions.current.set(stack.groupId, event.nativeEvent.layout.x)}
+            style={styles.item} accessibilityRole="button" accessibilityState={{ selected: active, disabled }}
+            accessibilityLabel={`Item ${index + 1}, ${stack.previews.length} photos`}
+            accessibilityHint="Select this item to add photos">
+            <View style={[styles.frame, active && styles.activeFrame]}>
+              <Image source={{ uri: cover.previewUri ?? cover.localFileUri }} style={styles.cover} contentFit="cover" />
+            </View>
+            <Text style={[styles.label, active && styles.activeLabel]}>Item {index + 1}</Text>
+            <Text style={styles.count}>{stack.previews.length} photo{stack.previews.length === 1 ? '' : 's'}</Text>
+          </TouchableOpacity>
+        );
+      })}
+      {showEmptyItem && (
+        <TouchableOpacity disabled={disabled} onPress={() => onSelect(null)} style={styles.item}
+          onLayout={(event) => positions.current.set('empty', event.nativeEvent.layout.x)}
+          accessibilityRole="button" accessibilityState={{ selected: activeKey === 'empty', disabled }}
+          accessibilityLabel={`New item ${stacks.length + 1}, no photos`}>
+          <View style={[styles.frame, styles.emptyFrame, activeKey === 'empty' && styles.activeFrame]}>
+            <Text style={styles.plus}>+</Text>
+          </View>
+          <Text style={styles.label}>Item {stacks.length + 1}</Text>
+          <Text style={styles.count}>New</Text>
+        </TouchableOpacity>
+      )}
     </ScrollView>
   );
 }
 
-const THUMB = 54;
-
 const styles = StyleSheet.create({
-  rail: { alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md },
-  expandedGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.xs,
-    paddingVertical: spacing.xs,
-    borderRadius: radii.md,
-    borderCurve: 'continuous',
-    backgroundColor: 'rgba(255,255,255,0.18)',
-  },
-  tileWrap: { width: THUMB, height: THUMB, justifyContent: 'center' },
-  // Two offset edges behind the cover read as depth — the count badge says how
-  // many, these say "there is more than one" before the number is even read.
-  stackEdgeBack: {
-    position: 'absolute',
-    left: 6,
-    top: 5,
-    right: -6,
-    bottom: 5,
-    borderRadius: 10,
-    borderCurve: 'continuous',
-    backgroundColor: 'rgba(255,255,255,0.28)',
-  },
-  stackEdgeFront: {
-    position: 'absolute',
-    left: 3,
-    top: 2.5,
-    right: -3,
-    bottom: 2.5,
-    borderRadius: 10,
-    borderCurve: 'continuous',
-    backgroundColor: 'rgba(255,255,255,0.5)',
-  },
-  thumb: {
-    width: THUMB,
-    height: THUMB,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.4)',
-    borderRadius: 10,
-    borderCurve: 'continuous',
-    backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-  thumbNewest: { borderColor: '#FFFFFF', transform: [{ scale: 1.05 }] },
-  countBadge: {
-    position: 'absolute',
-    left: 3,
-    bottom: 3,
-    minWidth: 20,
-    minHeight: 20,
-    paddingHorizontal: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-    backgroundColor: 'rgba(0,0,0,0.72)',
-  },
-  countText: {
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.bold,
-    color: '#FFFFFF',
-    fontVariant: ['tabular-nums'],
-  },
-  roleBadge: {
-    position: 'absolute',
-    left: 3,
-    bottom: 3,
-    minWidth: 20,
-    minHeight: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-    backgroundColor: 'rgba(0,0,0,0.66)',
-  },
-  pendingDot: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: '#FFD166',
-  },
-  collapseButton: {
-    width: 28,
-    height: THUMB,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.sm,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
+  viewport: { width: '100%', flexGrow: 0 },
+  rail: { flexGrow: 1, justifyContent: 'center', alignItems: 'flex-start', gap: 12, paddingHorizontal: 20, paddingVertical: 6 },
+  item: { alignItems: 'center', gap: 2, minWidth: 68 },
+  frame: { width: 60, height: 60, padding: 3, borderWidth: 1.5, borderColor: 'transparent', borderRadius: 12, borderCurve: 'continuous' },
+  activeFrame: { borderColor: '#FFFFFF', backgroundColor: 'rgba(255,255,255,0.12)', boxShadow: '0 0 8px 2px rgba(255,255,255,0.18)' },
+  cover: { width: '100%', height: '100%', borderRadius: 7 },
+  emptyFrame: { alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.08)' },
+  plus: { color: '#FFFFFF', fontSize: 28, fontWeight: '300' },
+  label: { color: 'rgba(255,255,255,0.75)', fontSize: 12, lineHeight: 16, fontWeight: '500', fontVariant: ['tabular-nums'] },
+  activeLabel: { color: '#FFFFFF', fontWeight: '600' },
+  count: { color: 'rgba(255,255,255,0.6)', fontSize: 11, lineHeight: 15, fontVariant: ['tabular-nums'] },
 });
