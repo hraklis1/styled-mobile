@@ -3,6 +3,9 @@ import TestRenderer, { act } from 'react-test-renderer';
 import { Text, TouchableOpacity } from 'react-native';
 
 jest.mock('react-native-reanimated', () => ({
+  __esModule: true,
+  default: { View: 'AnimatedView' },
+  ZoomIn: { duration: () => ({}) },
   useReducedMotion: () => false,
 }));
 
@@ -65,12 +68,15 @@ describe('CaptureStackRail', () => {
   it('renders multiple items with one active selection and an empty item affordance', () => {
     const renderer = renderRail();
     const buttons = railButtons(renderer);
-    const labels = renderer.root.findAllByType(Text).map((node) => node.props.children);
+    const labels = renderer.root.findAllByType(Text).map((node) => String(node.props.children));
 
     expect(buttons).toHaveLength(3);
     expect(buttons[0].props.accessibilityState).toEqual({ selected: true, disabled: false });
     expect(buttons[1].props.accessibilityState).toEqual({ selected: false, disabled: false });
-    expect(labels).toContain('Empty');
+    expect(buttons[2].props.accessibilityLabel).toMatch(/empty/i);
+    // Number badges for every tile, and a count pill only on the multi-photo stack.
+    expect(labels).toEqual(expect.arrayContaining(['1', '2', '3']));
+    expect(labels.filter((label) => label === '2')).toHaveLength(2);
   });
 
   it('marks the empty item as active when no group is selected', () => {

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
-import { useReducedMotion } from 'react-native-reanimated';
+import Animated, { ZoomIn, useReducedMotion } from 'react-native-reanimated';
 import type { ShoppingVisitPreview } from '../../stores/useShoppingSessionStore';
-import { cameraColors, radii, spacing, typography } from '../../theme';
+import { cameraColors, colors, radii, spacing, typography } from '../../theme';
 
 export type CaptureStack = { groupId: string; previews: ShoppingVisitPreview[] };
 
@@ -26,6 +26,9 @@ export function stackCover(stack: CaptureStack): ShoppingVisitPreview {
   return stack.previews.find((preview) => preview.captureRole === 'garment') ?? stack.previews[0];
 }
 
+// Tiles carry their own metadata (number badge, photo count, stacked-card
+// offset) instead of caption lines beneath them, so the rail stays one
+// thumbnail tall and the viewfinder above keeps the space.
 export function CaptureStackRail({ stacks, activeGroupId, showEmptyItem, disabled, onSelect }: {
   stacks: CaptureStack[];
   activeGroupId: string | null;
@@ -51,18 +54,27 @@ export function CaptureStackRail({ stacks, activeGroupId, showEmptyItem, disable
       {stacks.map((stack, index) => {
         const active = stack.groupId === activeGroupId;
         const cover = stackCover(stack);
+        const multi = stack.previews.length > 1;
         return (
-          <TouchableOpacity key={stack.groupId} disabled={disabled} onPress={() => onSelect(stack.groupId)}
-            onLayout={(event) => positions.current.set(stack.groupId, event.nativeEvent.layout.x)}
-            style={styles.item} accessibilityRole="button" accessibilityState={{ selected: active, disabled }}
-            accessibilityLabel={`Item ${index + 1}, ${stack.previews.length} photos`}
-            accessibilityHint="Select this item to add photos">
-            <View style={[styles.frame, active && styles.activeFrame]}>
-              <Image source={{ uri: cover.previewUri ?? cover.localFileUri }} style={styles.cover} contentFit="cover" />
-            </View>
-            <Text style={[styles.label, active && styles.activeLabel]}>Item {index + 1}</Text>
-            <Text style={styles.count}>{stack.previews.length} photo{stack.previews.length === 1 ? '' : 's'}</Text>
-          </TouchableOpacity>
+          <Animated.View key={stack.groupId} entering={reducedMotion ? undefined : ZoomIn.duration(220)}>
+            <TouchableOpacity disabled={disabled} onPress={() => onSelect(stack.groupId)}
+              onLayout={(event) => positions.current.set(stack.groupId, event.nativeEvent.layout.x)}
+              style={styles.item} accessibilityRole="button" accessibilityState={{ selected: active, disabled }}
+              accessibilityLabel={`Item ${index + 1}, ${stack.previews.length} photo${stack.previews.length === 1 ? '' : 's'}`}
+              accessibilityHint="Select this item to add photos">
+              {multi ? <View style={[styles.card, styles.cardBack]} /> : null}
+              {multi ? <View style={[styles.card, styles.cardMid]} /> : null}
+              <View style={[styles.frame, active && styles.activeFrame]}>
+                <Image source={{ uri: cover.previewUri ?? cover.localFileUri }} style={styles.cover} contentFit="cover" />
+                {multi ? (
+                  <View style={styles.countPill}><Text style={styles.countText}>{stack.previews.length}</Text></View>
+                ) : null}
+              </View>
+              <View style={[styles.numBadge, active && styles.numBadgeActive]}>
+                <Text style={[styles.numText, active && styles.numTextActive]}>{index + 1}</Text>
+              </View>
+            </TouchableOpacity>
+          </Animated.View>
         );
       })}
       {showEmptyItem && (
@@ -73,24 +85,36 @@ export function CaptureStackRail({ stacks, activeGroupId, showEmptyItem, disable
           <View style={[styles.frame, styles.emptyFrame, activeKey === 'empty' && styles.activeFrame]}>
             <Text style={styles.plus}>+</Text>
           </View>
-          <Text style={styles.label}>Item {stacks.length + 1}</Text>
-          <Text style={styles.count}>Empty</Text>
+          <View style={[styles.numBadge, activeKey === 'empty' && styles.numBadgeActive]}>
+            <Text style={[styles.numText, activeKey === 'empty' && styles.numTextActive]}>{stacks.length + 1}</Text>
+          </View>
         </TouchableOpacity>
       )}
     </ScrollView>
   );
 }
 
+const FRAME_W = 52;
+const FRAME_H = 68;
+
 const styles = StyleSheet.create({
   viewport: { width: '100%', flexGrow: 0 },
   rail: { flexGrow: 1, justifyContent: 'center', alignItems: 'flex-start', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
-  item: { alignItems: 'center', gap: spacing.xs / 2, minWidth: 64 },
-  frame: { width: 60, height: 80, borderWidth: 1.5, borderColor: 'transparent', borderRadius: radii.photo, borderCurve: 'continuous' },
+  // Padding leaves room for the number badge (top-left) and the offset cards
+  // (top-right) so neither is clipped by the scroll view.
+  item: { paddingTop: 6, paddingLeft: 6, paddingRight: 6, position: 'relative' },
+  frame: { width: FRAME_W, height: FRAME_H, borderWidth: 1.5, borderColor: 'transparent', borderRadius: radii.photo, borderCurve: 'continuous', overflow: 'hidden' },
   activeFrame: { borderColor: cameraColors.selection, backgroundColor: cameraColors.selectionSubtle },
-  cover: { width: '100%', height: '100%', borderRadius: radii.photo },
+  cover: { width: '100%', height: '100%' },
+  card: { position: 'absolute', top: 6, left: 6, width: FRAME_W, height: FRAME_H, borderRadius: radii.photo, borderCurve: 'continuous' },
+  cardMid: { transform: [{ translateX: 3 }, { translateY: -3 }], backgroundColor: 'rgba(255, 252, 247, 0.30)' },
+  cardBack: { transform: [{ translateX: 6 }, { translateY: -6 }], backgroundColor: 'rgba(255, 252, 247, 0.14)' },
   emptyFrame: { alignItems: 'center', justifyContent: 'center', backgroundColor: cameraColors.controlSubtle },
   plus: { color: cameraColors.onCamera, fontSize: 28, fontWeight: '300' },
-  label: { ...typography.text.caption, color: cameraColors.onCameraMuted, fontWeight: typography.weight.medium, fontVariant: ['tabular-nums'] },
-  activeLabel: { color: cameraColors.onCamera, fontWeight: typography.weight.semibold },
-  count: { ...typography.text.caption, color: cameraColors.onCameraMuted, fontSize: 11, lineHeight: 15, fontVariant: ['tabular-nums'] },
+  numBadge: { position: 'absolute', top: 0, left: 0, minWidth: 18, height: 18, paddingHorizontal: 5, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: cameraColors.onCamera },
+  numBadgeActive: { backgroundColor: colors.primary },
+  numText: { ...typography.text.caption, fontSize: 11, lineHeight: 13, fontWeight: typography.weight.semibold, color: cameraColors.backdrop, fontVariant: ['tabular-nums'] },
+  numTextActive: { color: cameraColors.onCamera },
+  countPill: { position: 'absolute', right: 3, bottom: 3, height: 16, paddingHorizontal: 5, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: cameraColors.control },
+  countText: { ...typography.text.caption, fontSize: 10, lineHeight: 12, fontWeight: typography.weight.semibold, color: cameraColors.onCamera, fontVariant: ['tabular-nums'] },
 });

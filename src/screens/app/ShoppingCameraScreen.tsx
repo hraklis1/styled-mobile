@@ -34,7 +34,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useReducedMotion } from 'react-native-reanimated';
+import Animated, { ZoomIn, useReducedMotion, useSharedValue, useAnimatedStyle, withSequence, withTiming } from 'react-native-reanimated';
 
 import { useShoppingStoreLocations } from '../../hooks/useShoppingStoreLocations';
 import { CaptureStackRail, buildCaptureStacks } from '../../components/shopping/CaptureStackRail';
@@ -110,10 +110,12 @@ async function persistShoppingPhoto(
   temporaryUri: string,
   id: string,
   dimensions?: { width: number; height: number },
+  crop?: { originX: number; originY: number; width: number; height: number },
 ): Promise<string> {
   CAPTURE_DIRECTORY.create({ intermediates: true, idempotent: true });
 
   const actions: ImageManipulator.Action[] = [];
+  if (crop) actions.push({ crop });
   if (dimensions && (dimensions.width > SHOPPING_PHOTO_MAX_DIM || dimensions.height > SHOPPING_PHOTO_MAX_DIM)) {
     actions.push(
       dimensions.width >= dimensions.height
@@ -132,6 +134,31 @@ async function persistShoppingPhoto(
   return destination.uri;
 }
 
+type GuideRect = { x: number; y: number; width: number; height: number };
+
+/**
+ * Maps the on-screen framing guide to source pixels. The preview fills the
+ * window ("cover"), so the photo is scaled by the larger axis ratio and
+ * centred; anything the guide covers is the same region in the capture.
+ */
+function guideToCrop(
+  guide: GuideRect,
+  window: { width: number; height: number },
+  photo: { width: number; height: number },
+) {
+  const scale = Math.max(window.width / photo.width, window.height / photo.height);
+  const offsetX = (photo.width * scale - window.width) / 2;
+  const offsetY = (photo.height * scale - window.height) / 2;
+  const originX = Math.max(0, Math.round((guide.x + offsetX) / scale));
+  const originY = Math.max(0, Math.round((guide.y + offsetY) / scale));
+  return {
+    originX,
+    originY,
+    width: Math.min(photo.width - originX, Math.round(guide.width / scale)),
+    height: Math.min(photo.height - originY, Math.round(guide.height / scale)),
+  };
+}
+
 export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) {
   const cameraRef = useRef<CameraView>(null);
   const storeSheetRef = useRef<BottomSheetModal>(null);
@@ -143,7 +170,6 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
   const reducedMotion = useReducedMotion();
   const deletingRef = useRef(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [hasEmptyItem, setHasEmptyItem] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraReady, setCameraReady] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -160,6 +186,11 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
   const attachGroupId = useShoppingSessionStore((state) => state.captureAttachmentGroupId);
   const setAttachGroupId = useCallback((value: string | null) => useShoppingSessionStore.setState({ captureAttachmentGroupId: value }), []);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [torchOn, setTorchOn] = useState(false);
+  const [topBarHeight, setTopBarHeight] = useState(0);
+  const [dockHeight, setDockHeight] = useState(0);
+  const flashOpacity = useSharedValue(0);
+  const flashStyle = useAnimatedStyle(() => ({ opacity: flashOpacity.value }));
   useEffect(() => {
     void CameraView.isAvailableAsync().then((available) => {
       if (!available) setCameraError('Camera unavailable. Use Library to add photos.');
@@ -167,7 +198,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
   }, []);
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { user } = useAuth();
   const { data: visitedStoreLocations = [] } = useShoppingStoreLocations();
 
@@ -195,7 +226,6 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
     [allVisitPreviews, currentSession?.id],
   );
   const captureStacks = useMemo(() => buildCaptureStacks(visitPreviews), [visitPreviews]);
-  const targetPreview = visitPreviews.find((preview) => preview.captureGroupId === attachGroupId);
   const activeItemIndex = captureStacks.findIndex((stack) => stack.groupId === attachGroupId);
   const activeItemNumber = activeItemIndex < 0 ? captureStacks.length + 1 : activeItemIndex + 1;
   const activePhotoCount = activeItemIndex < 0 ? 0 : captureStacks[activeItemIndex].previews.length;
@@ -224,7 +254,6 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
     return () => cancelAnimationFrame(frame);
   }, [activePhotoCount, attachGroupId, reducedMotion]);
 
-  useEffect(() => setHasEmptyItem(false), [currentSession?.id]);
 
   const startBackgroundOCR = useCallback((id: string, localFileUri: string) => {
     // Apple Vision/CoreML can be unstable when many large library photos are
@@ -470,7 +499,6 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
               .then((previewUri) => updateVisitPreview(id, { previewUri }))
               .catch(() => undefined);
           }
-          if (!useShoppingSessionStore.getState().captureAttachmentGroupId) setHasEmptyItem(false);
           setAttachGroupId(captureGroup.groupId);
           startBackgroundOCR(id, localFileUri);
           importedCount += 1;
@@ -599,6 +627,29 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
     void importFromGallery(currentSession);
   }, [currentSession, importFromGallery]);
 
+  const cameraActive = isFocused && !isImporting && !isClosing && !resumePromptVisible && !selectedPreview;
+  // iOS drops the torch whenever the session pauses; keep the toggle honest.
+  useEffect(() => {
+    if (!cameraActive) setTorchOn(false);
+  }, [cameraActive]);
+
+  // 3:4 framing guide, centred in the strip of viewfinder that no chrome
+  // covers. Measured from layout so it tracks the photo rail appearing.
+  const guideRect = useMemo<GuideRect | null>(() => {
+    if (cameraError || !topBarHeight || !dockHeight) return null;
+    const freeTop = topBarHeight + spacing.sm;
+    const freeBottom = windowHeight - dockHeight - spacing.sm;
+    const width = Math.floor(Math.min(windowWidth - spacing.xxl * 2, (freeBottom - freeTop) * 3 / 4));
+    if (width < 120) return null;
+    const height = Math.round(width * 4 / 3);
+    return { x: Math.round((windowWidth - width) / 2), y: Math.round(freeTop + (freeBottom - freeTop - height) / 2), width, height };
+  }, [cameraError, dockHeight, topBarHeight, windowHeight, windowWidth]);
+
+  const toggleTorch = useCallback(() => {
+    void Haptics.selectionAsync();
+    setTorchOn((value) => !value);
+  }, []);
+
   const takePhoto = useCallback(async () => {
     if (!cameraRef.current || !cameraReady || isCapturing) return;
 
@@ -612,7 +663,15 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
         quality: 0.9,
         shutterSound: false,
       });
-      const localFileUri = await persistShoppingPhoto(photo.uri, id, { width: photo.width, height: photo.height });
+      if (!reducedMotion) {
+        flashOpacity.value = withSequence(withTiming(0.85, { duration: 40 }), withTiming(0, { duration: 140 }));
+      }
+      const crop = guideRect
+        ? guideToCrop(guideRect, { width: windowWidth, height: windowHeight }, { width: photo.width, height: photo.height })
+        : undefined;
+      const localFileUri = await persistShoppingPhoto(
+        photo.uri, id, crop ? { width: crop.width, height: crop.height } : { width: photo.width, height: photo.height }, crop,
+      );
       const timestamp = Date.now();
       const captureGroup = assignCaptureGroup(
         capturedSession?.id ?? null,
@@ -671,7 +730,6 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
           .catch(() => undefined);
       }
 
-      if (!attachGroupId) setHasEmptyItem(false);
       setAttachGroupId(captureGroup.groupId);
 
       // Do not await OCR: the camera is released as soon as the durable local
@@ -685,24 +743,26 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
     } finally {
       setIsCapturing(false);
     }
-  }, [attachGroupId, addPendingUpload, assignCaptureGroup, cameraReady, currentSession, isCapturing, recordVisitPreview, setAttachGroupId, startBackgroundOCR, updateVisitPreview]);
+  }, [attachGroupId, addPendingUpload, assignCaptureGroup, cameraReady, currentSession, flashOpacity, guideRect, isCapturing, recordVisitPreview, reducedMotion, setAttachGroupId, startBackgroundOCR, updateVisitPreview, windowHeight, windowWidth]);
 
   const startNextItem = useCallback(() => {
     if (captureBusy) return;
     setAttachGroupId(null);
-    setHasEmptyItem(true);
     void Haptics.selectionAsync();
     AccessibilityInfo.announceForAccessibility('New item. Add your first photo.');
   }, [captureBusy, setAttachGroupId]);
 
   const selectStack = useCallback((groupId: string | null) => {
     if (captureBusy || deletingRef.current) return;
-    if (!targetPreview) setHasEmptyItem(true);
+    if (groupId === null) {
+      startNextItem();
+      return;
+    }
     setAttachGroupId(groupId);
     void Haptics.selectionAsync();
     const index = captureStacks.findIndex((stack) => stack.groupId === groupId);
     AccessibilityInfo.announceForAccessibility(`Item ${index < 0 ? captureStacks.length + 1 : index + 1} selected`);
-  }, [captureBusy, captureStacks, setAttachGroupId, targetPreview]);
+  }, [captureBusy, captureStacks, setAttachGroupId, startNextItem]);
 
   const previewToSnap = useCallback((preview: (typeof visitPreviews)[number]): ShoppingSnap => {
     const upload = pendingUploads.find((item) => item.id === preview.id);
@@ -762,10 +822,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
               deleteShoppingPreview(preview.previewUri);
               removeVisitPreview(preview.id);
               setSelectedPreviewId(null);
-              if (lastInGroup) {
-                setAttachGroupId(null);
-                setHasEmptyItem(true);
-              }
+              if (lastInGroup) setAttachGroupId(null);
               AccessibilityInfo.announceForAccessibility('Photo deleted');
             })
             .catch((error) => {
@@ -848,7 +905,8 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
       <CameraView
         ref={cameraRef}
         style={StyleSheet.absoluteFill}
-        active={isFocused && !isImporting && !isClosing && !resumePromptVisible && !selectedPreview}
+        active={cameraActive}
+        enableTorch={torchOn}
         facing="back"
         mode="picture"
         onCameraReady={() => setCameraReady(true)}
@@ -867,8 +925,17 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
         locations={[0, 1]}
         style={styles.bottomScrim}
       />
+      <Animated.View pointerEvents="none" style={[styles.captureFlash, flashStyle]} />
 
-      <View style={[styles.topControls, { paddingTop: insets.top + spacing.sm }]}>
+      {guideRect ? (
+        <View pointerEvents="none" style={[styles.guide, { left: guideRect.x, top: guideRect.y, width: guideRect.width, height: guideRect.height }]}>
+          <View style={styles.guideThirdsVertical} />
+          <View style={styles.guideThirdsHorizontal} />
+        </View>
+      ) : null}
+
+      <View style={[styles.topControls, { paddingTop: insets.top + spacing.xs }]}
+        onLayout={(event) => setTopBarHeight(event.nativeEvent.layout.height)}>
         <TouchableOpacity style={[styles.doneButton, styles.cancelButton]} onPress={cancelCamera} disabled={captureBusy} accessibilityRole="button" accessibilityLabel="Cancel shopping visit">
           <Text style={styles.doneButtonText}>Cancel</Text>
         </TouchableOpacity>
@@ -881,32 +948,26 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
             ? `Current store ${currentStoreName}, ${sessionPlaceLabel(currentSession)}, tap to change`
             : 'Tap to add store'}
         >
-          <Text style={styles.contextPillText} numberOfLines={1}>
-            <Ionicons name="location-outline" size={16} color={cameraColors.onCamera} />{' '}{currentStoreName ?? 'Add store'}
-          </Text>
-          {currentSession ? (
-            <Text style={styles.contextPillSubtext} numberOfLines={1}>
-              {sessionPlaceLabel(currentSession)}
-            </Text>
-          ) : null}
+          <Ionicons name="location-outline" size={15} color={cameraColors.onCamera} />
+          <Text style={styles.contextPillText} numberOfLines={1}>{currentStoreName ?? 'Add store'}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.doneButton, styles.reviewButton, (captureBusy || visitPreviews.length === 0) && styles.sameItemButtonDisabled]}
+          style={[styles.doneButton, visitPreviews.length > 0 ? styles.reviewButton : styles.reviewButtonEmpty, captureBusy && styles.sameItemButtonDisabled]}
           onPress={closeCamera}
           disabled={captureBusy || visitPreviews.length === 0}
           accessibilityLabel={visitPreviews.length > 0
             ? `Review ${captureStacks.length} item${captureStacks.length === 1 ? '' : 's'}`
             : 'Take a photo to review items'}
         >
-          <Text style={styles.doneButtonText}>
-            {isDiscarding ? 'Wait…' : `Review${captureStacks.length > 0 ? ` (${captureStacks.length})` : ''}`}
+          <Text style={[styles.doneButtonText, visitPreviews.length === 0 && styles.doneButtonTextMuted]}>
+            {isDiscarding ? 'Wait…' : `Review${captureStacks.length > 0 ? ` · ${captureStacks.length}` : ''}`}
           </Text>
         </TouchableOpacity>
       </View>
 
       {galleryImportProgress ? (
-        <View style={[styles.importStatusPill, { top: insets.top + 66 }]}>
+        <View style={[styles.importStatusPill, { top: insets.top + 54 }]}>
           <ActivityIndicator color={cameraColors.onCamera} size="small" />
           <Text style={styles.importStatusText}>
             Adding {galleryImportProgress.imported}/{galleryImportProgress.total} photos to this item
@@ -924,28 +985,28 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
         </View>
       ) : null}
 
-      <View style={styles.bottomDock} pointerEvents="box-none">
+      <View style={styles.bottomDock} pointerEvents="box-none"
+        onLayout={(event) => setDockHeight(event.nativeEvent.layout.height)}>
         {activePhotos.length > 0 ? (
           <View style={styles.activePhotosRail}>
             <ScrollView ref={photoRailRef} horizontal showsHorizontalScrollIndicator={false}
               style={styles.photoViewport} contentContainerStyle={styles.photoRail}
               onContentSizeChange={() => photoRailRef.current?.scrollToEnd({ animated: !reducedMotion })}>
               {activePhotos.map((photo, index) => (
-                <View key={photo.id} style={styles.photoEntry}>
+                <Animated.View key={photo.id} entering={reducedMotion ? undefined : ZoomIn.duration(220)}>
                   <TouchableOpacity onPress={() => setSelectedPreviewId(photo.id)} disabled={captureBusy}
                     style={styles.photoButton}
-                    accessibilityRole="button" accessibilityLabel={`Open photo ${index + 1} of item ${activeItemNumber}`}>
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open photo ${index + 1} of item ${activeItemNumber}${photo.captureRole === 'tag' ? ', price tag' : ''}`}
+                    accessibilityHint="Opens the photo. Delete from there.">
                     <Image source={{ uri: photo.previewUri ?? photo.localFileUri }} contentFit="cover" style={styles.photoThumbnail} />
+                    {photo.captureRole === 'tag' ? (
+                      <View style={styles.roleGlyph}>
+                        <Ionicons name="pricetag" size={10} color={cameraColors.backdrop} />
+                      </View>
+                    ) : null}
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => confirmDeletePreview(photo.id)} disabled={captureBusy}
-                    style={styles.deletePhotoButton} accessibilityRole="button"
-                    accessibilityLabel={`Delete photo ${index + 1} of item ${activeItemNumber}`}
-                    accessibilityState={{ disabled: captureBusy }}>
-                    <View style={styles.deletePhotoBadge}>
-                      <Ionicons name="trash-outline" size={15} color={cameraColors.destructive} />
-                    </View>
-                  </TouchableOpacity>
-                </View>
+                </Animated.View>
               ))}
             </ScrollView>
           </View>
@@ -954,7 +1015,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
           <CaptureStackRail
             stacks={captureStacks}
             activeGroupId={attachGroupId}
-            showEmptyItem={hasEmptyItem || !targetPreview}
+            showEmptyItem
             disabled={captureBusy}
             onSelect={selectStack}
           />
@@ -984,14 +1045,15 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.sameItemButton, !targetPreview && styles.sameItemButtonDisabled]}
-              onPress={startNextItem}
-              disabled={!targetPreview || captureBusy}
-              accessibilityLabel="New item"
-              accessibilityHint="Start a separate item with your next photo"
+              style={[styles.sameItemButton, Boolean(cameraError) && styles.sameItemButtonDisabled]}
+              onPress={toggleTorch}
+              disabled={Boolean(cameraError) || captureBusy}
+              accessibilityRole="switch"
+              accessibilityLabel="Torch"
+              accessibilityState={{ checked: torchOn, disabled: Boolean(cameraError) || captureBusy }}
             >
-              <Ionicons name="add-circle-outline" size={25} color={cameraColors.onCamera} />
-              <Text style={styles.galleryButtonText}>New item</Text>
+              <Ionicons name={torchOn ? 'flashlight' : 'flashlight-outline'} size={25} color={cameraColors.onCamera} />
+              <Text style={styles.galleryButtonText}>Torch</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1150,7 +1212,35 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
 
 const styles = StyleSheet.create({
   topScrim: { position: 'absolute', top: 0, left: 0, right: 0, height: 156 },
-  bottomScrim: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 420 },
+  bottomScrim: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 300 },
+  captureFlash: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: cameraColors.onCamera },
+  guide: {
+    position: 'absolute',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 252, 247, 0.55)',
+    borderRadius: radii.sm,
+    borderCurve: 'continuous',
+  },
+  guideThirdsVertical: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: '33.33%',
+    width: '33.33%',
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255, 252, 247, 0.25)',
+  },
+  guideThirdsHorizontal: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: '33.33%',
+    height: '33.33%',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255, 252, 247, 0.25)',
+  },
   bottomDock: {
     position: 'absolute',
     left: 0,
@@ -1160,17 +1250,15 @@ const styles = StyleSheet.create({
   },
   activePhotosRail: {
     width: '100%',
-    minHeight: 80,
+    minHeight: 68,
     justifyContent: 'flex-end',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.sm,
   },
   photoViewport: { width: '100%', flexGrow: 0 },
-  photoRail: { alignItems: 'center', gap: spacing.sm, paddingTop: spacing.md, paddingHorizontal: spacing.lg, minHeight: 80 },
-  photoEntry: { width: 54, height: 68, position: 'relative', alignItems: 'center', justifyContent: 'center' },
+  photoRail: { flexGrow: 1, justifyContent: 'flex-end', alignItems: 'center', gap: spacing.sm, paddingTop: spacing.xs, paddingHorizontal: spacing.lg, minHeight: 68 },
   photoButton: { width: 52, height: 68, borderRadius: radii.sm, borderCurve: 'continuous', overflow: 'hidden' },
   photoThumbnail: { width: '100%', height: '100%', borderRadius: radii.sm, borderCurve: 'continuous' },
-  deletePhotoButton: { position: 'absolute', top: -10, right: -12, width: 44, height: 44, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
-  deletePhotoBadge: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: radii.full, borderWidth: StyleSheet.hairlineWidth, borderColor: cameraColors.onCameraMuted, backgroundColor: cameraColors.control },
+  roleGlyph: { position: 'absolute', right: 4, bottom: 4, width: 18, height: 18, alignItems: 'center', justifyContent: 'center', borderRadius: 9, backgroundColor: cameraColors.onCamera },
   root: { flex: 1, backgroundColor: cameraColors.backdrop },
   permissionRoot: {
     flex: 1,
@@ -1237,12 +1325,16 @@ const styles = StyleSheet.create({
   },
   cancelButton: { backgroundColor: 'transparent' },
   reviewButton: { backgroundColor: colors.primary },
+  reviewButtonEmpty: { backgroundColor: cameraColors.control },
   doneButtonText: { ...typography.text.label, color: cameraColors.onCamera },
+  doneButtonTextMuted: { color: cameraColors.onCameraMuted },
   contextPill: {
-    flex: 1,
-    marginHorizontal: spacing.xs,
-    minHeight: 46,
-    justifyContent: 'center',
+    flexShrink: 1,
+    maxWidth: '55%',
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs + 2,
     paddingHorizontal: spacing.md,
     borderRadius: radii.full,
     backgroundColor: cameraColors.control,
@@ -1250,15 +1342,10 @@ const styles = StyleSheet.create({
     borderColor: cameraColors.selectionSubtle,
   },
   contextPillText: {
+    flexShrink: 1,
     fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
     color: cameraColors.onCamera,
-  },
-  contextPillSubtext: {
-    paddingTop: 1,
-    ...typography.text.caption,
-    fontWeight: typography.weight.medium,
-    color: cameraColors.onCameraMuted,
   },
   importStatusPill: {
     position: 'absolute',
@@ -1279,15 +1366,12 @@ const styles = StyleSheet.create({
   bottomControls: {
     width: '100%',
     alignItems: 'center',
-    gap: spacing.lg,
-    paddingTop: spacing.xl,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: cameraColors.selectionSubtle,
-    backgroundColor: cameraColors.overlayStrong,
+    gap: spacing.md,
+    paddingTop: spacing.sm,
   },
   cameraUnavailableState: {
     position: 'absolute',
-    top: '41%',
+    top: '36%',
     left: spacing.xl,
     right: spacing.xl,
     alignItems: 'center',
