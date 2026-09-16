@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Dimensions, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+
+import { nearestFrameIndex, type PieceFrame, type PieceLayout } from '../../lib/shoppingPieceLayout';
 
 function arrayMove<T>(list: T[], from: number, to: number): T[] {
   const next = [...list];
@@ -16,10 +18,11 @@ function triggerHaptic() {
 }
 
 /**
- * A flex-wrap-style photo grid where tiles can be picked up with a long
- * press and dragged to a new slot. Positions are computed in JS (not
- * flexbox) so a tile's rest position can be animated independently while
- * it's being dragged.
+ * A photo grid whose slots are handed in as frames, where tiles can be picked
+ * up with a long press and dragged to a new slot. Positions come from the
+ * `layout` function rather than flexbox so a tile can animate between slots
+ * of different sizes — the hero plate and a side tile — while another is
+ * being dragged.
  *
  * The hold is one gesture with two endings, which is what lets a plain tap
  * mean something else entirely: hold and move to reorder or hand the tile
@@ -32,32 +35,24 @@ function triggerHaptic() {
  */
 export function DraggablePhotoGrid({
   ids,
+  layout,
   onReorder,
   onTap,
   renderPhoto,
-  renderChip,
   disabled,
-  tileWidth,
-  tileHeight,
-  photoHeight,
-  innerGap,
-  gap,
   onDragStart,
   onHold,
   onDragMove,
   onDragDrop,
 }: {
   ids: string[];
+  /** Slot geometry for `count` photos in a grid `width` wide. */
+  layout: (count: number, width: number) => PieceLayout;
   onReorder: (nextIds: string[]) => void;
   onTap?: (id: string) => void;
-  renderPhoto: (id: string) => ReactNode;
-  renderChip: (id: string) => ReactNode;
+  /** Fills its slot; the grid sizes the wrapper. */
+  renderPhoto: (id: string, index: number) => ReactNode;
   disabled?: boolean;
-  tileWidth: number;
-  tileHeight: number;
-  photoHeight: number;
-  innerGap: number;
-  gap: number;
   /** A tile was picked up. Fires before any movement. */
   onDragStart?: (id: string) => void;
   /** A tile was held and released on the spot, without being dragged. */
@@ -67,12 +62,8 @@ export function DraggablePhotoGrid({
   /** The drag ended. `escaped` is false when it stayed inside this grid. */
   onDragDrop?: (id: string, windowX: number, windowY: number, escaped: boolean) => void;
 }) {
-  const [containerWidth, setContainerWidth] = useState(
-    () => Math.max(tileWidth, Dimensions.get('window').width - 96),
-  );
-  const columns = Math.max(1, Math.floor((containerWidth + gap) / (tileWidth + gap)));
-  const rows = Math.max(1, Math.ceil(ids.length / columns));
-  const gridHeight = rows * tileHeight + (rows - 1) * gap;
+  const [containerWidth, setContainerWidth] = useState(() => Dimensions.get('window').width - 40);
+  const { frames, height } = useMemo(() => layout(ids.length, containerWidth), [containerWidth, ids.length, layout]);
 
   const handleMove = useCallback(
     (from: number, to: number) => {
@@ -84,48 +75,43 @@ export function DraggablePhotoGrid({
 
   return (
     <View style={{ width: '100%' }} onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}>
-      <View style={{ height: gridHeight }}>
-        {ids.map((id, index) => (
-          <DraggableTile
-            key={id}
-            id={id}
-            index={index}
-            count={ids.length}
-            columns={columns}
-            tileWidth={tileWidth}
-            tileHeight={tileHeight}
-            photoHeight={photoHeight}
-            innerGap={innerGap}
-            gap={gap}
-            disabled={Boolean(disabled)}
-            gridHeight={gridHeight}
-            onMove={handleMove}
-            onTap={onTap}
-            onDragStart={onDragStart}
-            onHold={onHold}
-            onDragMove={onDragMove}
-            onDragDrop={onDragDrop}
-            photo={renderPhoto(id)}
-            chip={renderChip(id)}
-          />
-        ))}
+      <View style={{ height }}>
+        {ids.map((id, index) => {
+          const frame = frames[index];
+          if (!frame) return null;
+          return (
+            <DraggableTile
+              key={id}
+              id={id}
+              index={index}
+              frame={frame}
+              frames={frames}
+              gridHeight={height}
+              disabled={Boolean(disabled)}
+              onMove={handleMove}
+              onTap={onTap}
+              onDragStart={onDragStart}
+              onHold={onHold}
+              onDragMove={onDragMove}
+              onDragDrop={onDragDrop}
+              photo={renderPhoto(id, index)}
+            />
+          );
+        })}
       </View>
     </View>
   );
 }
 
+const SETTLE = { duration: 220 };
+
 function DraggableTile({
   id,
   index,
-  count,
-  columns,
-  tileWidth,
-  tileHeight,
-  photoHeight,
-  innerGap,
-  gap,
-  disabled,
+  frame,
+  frames,
   gridHeight,
+  disabled,
   onMove,
   onTap,
   onDragStart,
@@ -133,19 +119,13 @@ function DraggableTile({
   onDragMove,
   onDragDrop,
   photo,
-  chip,
 }: {
   id: string;
   index: number;
-  count: number;
-  columns: number;
-  tileWidth: number;
-  tileHeight: number;
-  photoHeight: number;
-  innerGap: number;
-  gap: number;
-  disabled: boolean;
+  frame: PieceFrame;
+  frames: PieceFrame[];
   gridHeight: number;
+  disabled: boolean;
   onMove: (from: number, to: number) => void;
   onTap?: (id: string) => void;
   onDragStart?: (id: string) => void;
@@ -153,29 +133,35 @@ function DraggableTile({
   onDragMove?: (id: string, windowX: number, windowY: number) => void;
   onDragDrop?: (id: string, windowX: number, windowY: number, escaped: boolean) => void;
   photo: ReactNode;
-  chip: ReactNode;
 }) {
-  const restX = (index % columns) * (tileWidth + gap);
-  const restY = Math.floor(index / columns) * (tileHeight + gap);
-
-  const translateX = useSharedValue(restX);
-  const translateY = useSharedValue(restY);
+  const translateX = useSharedValue(frame.x);
+  const translateY = useSharedValue(frame.y);
+  const width = useSharedValue(frame.width);
+  const height = useSharedValue(frame.height);
   const scale = useSharedValue(1);
   const isActive = useSharedValue(false);
   const hasEscaped = useSharedValue(false);
   const hasMoved = useSharedValue(false);
-  const startX = useSharedValue(restX);
-  const startY = useSharedValue(restY);
+  const startX = useSharedValue(frame.x);
+  const startY = useSharedValue(frame.y);
   const currentIndex = useSharedValue(index);
+  // The frames are read on the UI thread mid-drag; a shared value keeps them
+  // current without re-creating the gesture on every layout.
+  const slots = useSharedValue(frames);
 
   useEffect(() => {
     currentIndex.value = index;
+    slots.value = frames;
+    // A tile changing slot also changes size, so the plate a photo moves into
+    // grows or shrinks with it rather than snapping.
+    width.value = withTiming(frame.width, SETTLE);
+    height.value = withTiming(frame.height, SETTLE);
     if (!isActive.value) {
-      translateX.value = withTiming((index % columns) * (tileWidth + gap), { duration: 220 });
-      translateY.value = withTiming(Math.floor(index / columns) * (tileHeight + gap), { duration: 220 });
+      translateX.value = withTiming(frame.x, SETTLE);
+      translateY.value = withTiming(frame.y, SETTLE);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, columns, tileWidth, tileHeight, gap]);
+  }, [index, frame.x, frame.y, frame.width, frame.height, frames]);
 
   const tap = Gesture.Tap()
     .enabled(!disabled && Boolean(onTap))
@@ -183,10 +169,6 @@ function DraggableTile({
     .onEnd((_event, success) => {
       if (success && onTap) runOnJS(onTap)(id);
     });
-
-  // How far past the grid's own edges a tile has to travel before it stops
-  // being a reorder and starts being a hand-off to whoever owns this grid.
-  const escapeMargin = tileHeight * 0.5;
 
   const pan = Gesture.Pan()
     .enabled(!disabled)
@@ -197,7 +179,7 @@ function DraggableTile({
       hasMoved.value = false;
       startX.value = translateX.value;
       startY.value = translateY.value;
-      scale.value = withTiming(1.06, { duration: 120 });
+      scale.value = withTiming(1.04, { duration: 120 });
       runOnJS(triggerHaptic)();
       if (onDragStart) runOnJS(onDragStart)(id);
     })
@@ -211,23 +193,21 @@ function DraggableTile({
         hasMoved.value = true;
       }
 
-      // Outside its own grid the tile is on its way to another item, so it
-      // must not keep shuffling the item it is leaving.
-      const escaped = translateY.value < -escapeMargin
-        || translateY.value > gridHeight - tileHeight + escapeMargin;
+      // How far past the grid's own edges the tile's centre has to travel
+      // before it stops being a reorder and starts being a hand-off to
+      // whoever owns this grid.
+      const centerX = translateX.value + width.value / 2;
+      const centerY = translateY.value + height.value / 2;
+      const escapeMargin = height.value * 0.35;
+      const escaped = centerY < -escapeMargin || centerY > gridHeight + escapeMargin;
       hasEscaped.value = escaped;
 
-      if (escaped) {
-        if (onDragMove) runOnJS(onDragMove)(id, event.absoluteX, event.absoluteY);
-        return;
-      }
-
-      const col = Math.min(columns - 1, Math.max(0, Math.round(translateX.value / (tileWidth + gap))));
-      const row = Math.max(0, Math.round(translateY.value / (tileHeight + gap)));
-      const targetIndex = Math.min(count - 1, row * columns + col);
-
       if (onDragMove) runOnJS(onDragMove)(id, event.absoluteX, event.absoluteY);
+      // Outside its own grid the tile is on its way to another item, so it
+      // must not keep shuffling the item it is leaving.
+      if (escaped) return;
 
+      const targetIndex = nearestFrameIndex(slots.value, centerX, centerY);
       if (targetIndex !== currentIndex.value) {
         const from = currentIndex.value;
         currentIndex.value = targetIndex;
@@ -238,10 +218,11 @@ function DraggableTile({
     .onEnd((event) => {
       isActive.value = false;
       scale.value = withTiming(1, { duration: 150 });
-      const col = currentIndex.value % columns;
-      const row = Math.floor(currentIndex.value / columns);
-      translateX.value = withTiming(col * (tileWidth + gap), { duration: 180 });
-      translateY.value = withTiming(row * (tileHeight + gap), { duration: 180 });
+      const slot = slots.value[currentIndex.value] ?? slots.value[0];
+      if (slot) {
+        translateX.value = withTiming(slot.x, { duration: 180 });
+        translateY.value = withTiming(slot.y, { duration: 180 });
+      }
       // The drop always reports, so the owner can clear its drag state; a
       // hold that never moved simply has nowhere to have been dropped.
       if (onDragDrop) {
@@ -255,19 +236,16 @@ function DraggableTile({
 
   const wrapStyle = useAnimatedStyle(() => ({
     position: 'absolute',
-    width: tileWidth,
-    gap: innerGap,
+    width: width.value,
+    height: height.value,
     zIndex: isActive.value ? 10 : 0,
     elevation: isActive.value ? 6 : 0,
     transform: [{ translateX: translateX.value }, { translateY: translateY.value }, { scale: scale.value }],
   }));
 
   return (
-    <Animated.View style={wrapStyle}>
-      <GestureDetector gesture={composed}>
-        <Animated.View style={{ width: tileWidth, height: photoHeight }}>{photo}</Animated.View>
-      </GestureDetector>
-      {chip}
-    </Animated.View>
+    <GestureDetector gesture={composed}>
+      <Animated.View style={wrapStyle}>{photo}</Animated.View>
+    </GestureDetector>
   );
 }

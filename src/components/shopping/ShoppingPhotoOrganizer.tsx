@@ -1,15 +1,34 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ActionSheetIOS,
+  ActivityIndicator,
+  Alert,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { Image } from 'expo-image';
 import * as Crypto from 'expo-crypto';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  LinearTransition,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DraggablePhotoGrid } from './DraggablePhotoGrid';
 import { AppText } from '../primitives/AppText';
 import { ShoppingPhotoViewer } from './ShoppingPhotoViewer';
+import { dismissOrganizerHint, isOrganizerHintDismissed } from '../../lib/shoppingOrganizerHint';
+import { heroPieceLayout } from '../../lib/shoppingPieceLayout';
 import { formatShoppingPrice, snapRoleLabel } from '../../lib/shoppingPresentation';
 import {
   applySelection,
@@ -28,13 +47,9 @@ import { colors, radii, spacing, typography } from '../../theme';
 import type { ShoppingCaptureRole, ShoppingSnap } from '../../types/shoppingSnap';
 import { SHORTLIST_COPY } from '../../lib/shoppingVocabulary';
 
-const TILE_WIDTH = 92;
-const PHOTO_HEIGHT = 112;
-const CHIP_HEIGHT = 22;
-const TILE_INNER_GAP = spacing.xs;
-const TILE_HEIGHT = PHOTO_HEIGHT + TILE_INNER_GAP + CHIP_HEIGHT;
 const GRID_GAP = spacing.sm;
 const DROP_ZONE_HEIGHT = 64;
+const SAVE_BAR_HEIGHT = 80;
 
 type Rect = { x: number; y: number; width: number; height: number };
 /** Where a dragged photo would land if it were released right now. */
@@ -66,17 +81,27 @@ function sameTarget(a: DropTarget | null, b: DropTarget | null): boolean {
   return a.kind !== 'stage' || b.kind !== 'stage' || a.stageId === b.stageId;
 }
 
+function pieceLayout(count: number, width: number) {
+  return heroPieceLayout(count, width, GRID_GAP);
+}
+
 /**
  * The organizer always shows a complete partition of the photos — one section
  * per item, never a loose "unassigned" pool. Opening it on a visit therefore
  * shows the grouping the camera already produced, and the work is corrective.
  *
+ * Each item is laid out as a garment with its paperwork: the first photo is
+ * the hero plate, the tag and detail shots sit beside it. That is the shape
+ * the shortlist tile will take, so what the shopper accepts here is what they
+ * will see there.
+ *
  * The gestures follow the phone's own photo grids, so none of them has to be
- * taught: tap opens the photo full size, hold-and-release starts selecting,
- * hold-and-drag carries the photo into another item or onto the new-item
- * strip. Only once photos are selected does the toolbar offer to pull them
- * out or group them as one. Splitting an item into single photos is still
- * there, but it is now the blunt last resort rather than the only tool.
+ * taught beyond a one-time hint: tap opens the photo full size, hold-and-
+ * release starts selecting, hold-and-drag carries the photo into another item
+ * or onto the new-item strip. Only once photos are selected does a toolbar
+ * appear to pull them out or group them as one. Splitting an item into single
+ * photos and removing a whole item live behind the item's own menu — the
+ * blunt tools, out of the way until asked for.
  */
 export function ShoppingPhotoOrganizer({
   snaps,
@@ -85,8 +110,11 @@ export function ShoppingPhotoOrganizer({
   isSaving,
   eyebrow = 'ORGANIZE',
   title = 'Group photos',
-  subtitle = 'Tap a photo to see it big. Hold to select it, or drag it into another piece.',
+  titleIsPlaceholder = false,
+  onPressTitle,
+  subtitle,
   saveLabel = 'Save',
+  countInSaveLabel = false,
   closeLabel = 'Cancel',
   onRemove,
 }: {
@@ -96,11 +124,18 @@ export function ShoppingPhotoOrganizer({
   isSaving: boolean;
   eyebrow?: string;
   title?: string;
+  /** The title stands in for a value not yet given ("Add store"); drawn as an action, not a name. */
+  titleIsPlaceholder?: boolean;
+  /** Makes the title tappable. */
+  onPressTitle?: () => void;
+  /** Short — it shares a line with the piece and photo tally. */
   subtitle?: string;
   saveLabel?: string;
+  /** Appends the piece count to the save label: "Finish visit · 3 pieces". */
+  countInSaveLabel?: boolean;
   closeLabel?: string;
   /**
-   * Offered as a toolbar action on the selection when present. The caller
+   * Offered on the selection and in each item's menu when present. The caller
    * confirms and deletes; the organizer reseeds itself when `snaps` shrinks.
    */
   onRemove?: (snapIds: string[]) => void;
@@ -115,6 +150,7 @@ export function ShoppingPhotoOrganizer({
   const [viewerSnapId, setViewerSnapId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  const [hintVisible, setHintVisible] = useState(false);
 
   // Mirrors of the two pieces of state the gesture handlers read and write
   // mid-drag. A drop resolves and commits inside one callback, which is a
@@ -131,11 +167,18 @@ export function ShoppingPhotoOrganizer({
     () => snaps.map((snap) => ({ ...snap, captureRole: rolesBySnapId[snap.id] ?? snap.captureRole })),
     [rolesBySnapId, snaps],
   );
-  const seeded = useMemo(() => seedStages(snaps), [snaps]);
+  const seededKey = useMemo(() => partitionKey(seedStages(snaps)), [snaps]);
   const reusableCaptureGroupIds = useMemo(
     () => [...new Set(snaps.map((snap) => snap.captureGroupId))],
     [snaps],
   );
+  // What each section header says, computed once per change rather than
+  // twice per section per render — this is the tree that re-renders on
+  // every drag frame.
+  const stageSummaries = useMemo(() => stages.map((stage, index) => ({
+    title: snapsWithStagedRoles.find((snap) => stage.snapIds.includes(snap.id))?.category ?? `Piece ${index + 1}`,
+    price: stagePrice(snapsWithStagedRoles, stage.snapIds),
+  })), [snapsWithStagedRoles, stages]);
 
   const applyStages = useCallback((next: ShoppingOrganizerStage[]) => {
     stagesRef.current = next;
@@ -153,12 +196,29 @@ export function ShoppingPhotoOrganizer({
     setSaveError(null);
   }, [applyStages, snaps]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void isOrganizerHintDismissed().then((dismissed) => {
+      if (!cancelled && !dismissed) setHintVisible(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  /** The hint has been read — or made redundant by the gesture it describes. */
+  const retireHint = useCallback(() => {
+    setHintVisible((visible) => {
+      if (visible) void dismissOrganizerHint();
+      return false;
+    });
+  }, []);
+
   const hasRoleChanges = snaps.some(
     (snap) => rolesBySnapId[snap.id] && rolesBySnapId[snap.id] !== snap.captureRole,
   );
-  const hasGroupChanges = partitionKey(stages) !== partitionKey(seeded);
+  const hasGroupChanges = partitionKey(stages) !== seededKey;
   const hasChanges = hasRoleChanges || hasGroupChanges;
   const action = selectionAction(stages, selectedIds);
+  const selecting = selectedIds.size > 0;
 
   /**
    * Every structural edit goes through here, so each one is undoable. Regret
@@ -223,8 +283,9 @@ export function ShoppingPhotoOrganizer({
   const handleHold = useCallback((snapId: string) => {
     setSelectionMode(true);
     toggleSelected(snapId);
+    retireHint();
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }, [toggleSelected]);
+  }, [retireHint, toggleSelected]);
 
   const selectFromViewer = useCallback((snapId: string) => {
     setViewerSnapId(null);
@@ -262,6 +323,46 @@ export function ShoppingPhotoOrganizer({
     clearSelection();
   }, [clearSelection, commitStages]);
 
+  /**
+   * The item's own menu: the operations that act on the whole item rather
+   * than on chosen photos. A native sheet, because both are blunt and one is
+   * destructive — they deserve the pause a sheet imposes.
+   */
+  const openStageMenu = useCallback((stage: ShoppingOrganizerStage, index: number) => {
+    const options: { label: string; destructive?: boolean; run: () => void }[] = [];
+    if (stage.snapIds.length > 1) {
+      options.push({ label: SHORTLIST_COPY.separatePhotos, run: () => splitAll(stage.id) });
+    }
+    if (onRemove) {
+      options.push({ label: SHORTLIST_COPY.removePiece, destructive: true, run: () => onRemove(stage.snapIds) });
+    }
+    if (options.length === 0) return;
+    void Haptics.selectionAsync();
+    const title = `Piece ${index + 1}`;
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title,
+          options: [...options.map((option) => option.label), 'Cancel'],
+          cancelButtonIndex: options.length,
+          destructiveButtonIndex: options.findIndex((option) => option.destructive) >= 0
+            ? options.findIndex((option) => option.destructive)
+            : undefined,
+        },
+        (chosen) => options[chosen]?.run(),
+      );
+      return;
+    }
+    Alert.alert(title, undefined, [
+      ...options.map((option) => ({
+        text: option.label,
+        style: option.destructive ? ('destructive' as const) : ('default' as const),
+        onPress: option.run,
+      })),
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }, [onRemove, splitAll]);
+
   const resetStages = useCallback(() => {
     commitStages(() => seedStages(snaps));
     void Haptics.selectionAsync();
@@ -278,6 +379,7 @@ export function ShoppingPhotoOrganizer({
   const handleDragStart = useCallback((snapId: string) => {
     setDraggingId(snapId);
     setDropTarget(null);
+    retireHint();
     stageRects.current.clear();
     dropZoneRect.current = null;
     stageRefs.current.forEach((node, stageId) => {
@@ -288,7 +390,7 @@ export function ShoppingPhotoOrganizer({
     dropZoneRef.current?.measureInWindow((x, y, width, height) => {
       dropZoneRect.current = { x, y, width, height };
     });
-  }, []);
+  }, [retireHint]);
 
   const resolveTarget = useCallback((snapId: string, windowX: number, windowY: number): DropTarget | null => {
     // The strip floats over the list, so it wins any overlap.
@@ -348,19 +450,41 @@ export function ShoppingPhotoOrganizer({
     });
   }, [hasChanges, onSave, reusableCaptureGroupIds, rolesBySnapId, snaps, stages]);
 
-  const renderPhotoTile = useCallback((snapId: string) => {
+  /**
+   * The photo fills whatever slot the grid gives it. Its role is a mark on
+   * the photo, not a caption under it: a garment carries nothing, because
+   * that is the default and the picture says so; a tag gets a small corner
+   * badge; only an unsorted photo is a job, and gets the accent pill.
+   */
+  const renderPhotoTile = useCallback((snapId: string, index: number) => {
     const snap = snapById.get(snapId);
     if (!snap) return null;
     const role = rolesBySnapId[snapId] ?? snap.captureRole;
     const selected = selectedIds.has(snapId);
     const dragging = draggingId === snapId;
+    const hero = index === 0;
     return (
       <View
-        style={[styles.photo, selected && styles.photoSelected, dragging && styles.photoDragging]}
-      accessibilityLabel={`${snapRoleLabel(role)} photo, tap to select, hold to drag into another piece`}
+        style={[styles.photo, (selected || dragging) && styles.photoActive]}
+        accessibilityLabel={`${snapRoleLabel(role)} photo, tap to see it big, hold to select or drag`}
         accessibilityState={{ selected }}
       >
-        <Image source={{ uri: snap.imageUri }} style={StyleSheet.absoluteFill} contentFit="cover" />
+        <Image
+          source={{ uri: snap.imageUri }}
+          style={StyleSheet.absoluteFill}
+          // The hero shows the whole garment; the paperwork beside it can crop.
+          contentFit={hero ? 'contain' : 'cover'}
+        />
+        {role === 'tag' ? (
+          <View pointerEvents="none" style={styles.tagBadge}>
+            <Text style={styles.tagBadgeText}>{snapRoleLabel(role)}</Text>
+          </View>
+        ) : null}
+        {role === 'unknown' ? (
+          <View pointerEvents="none" style={styles.unsortedBadge}>
+            <Text style={styles.unsortedBadgeText}>{snapRoleLabel(role)}</Text>
+          </View>
+        ) : null}
         {selected ? (
           <View style={styles.check}>
             <Ionicons name="checkmark" size={15} color={colors.primaryForeground} />
@@ -369,28 +493,6 @@ export function ShoppingPhotoOrganizer({
       </View>
     );
   }, [draggingId, rolesBySnapId, selectedIds, snapById]);
-
-  const renderRoleChip = useCallback((snapId: string) => {
-    const snap = snapById.get(snapId);
-    if (!snap) return null;
-    const role = rolesBySnapId[snapId] ?? snap.captureRole;
-    // A recognised role is a caption; only an unrecognised one is a job, and
-    // gets the pill. A pill under every photo made the word outweigh the
-    // garment it was labelling.
-    const unresolved = role === 'unknown';
-    return (
-      <TouchableOpacity
-        style={[styles.roleChip, unresolved && styles.roleChipUnresolved]}
-        onPress={() => cycleRole(snapId)}
-        disabled={isSaving}
-        accessibilityLabel={`Change photo role from ${snapRoleLabel(role)}`}
-      >
-        <Text style={[styles.roleText, unresolved && styles.roleTextUnresolved]} numberOfLines={1}>
-          {snapRoleLabel(role)}
-        </Text>
-      </TouchableOpacity>
-    );
-  }, [cycleRole, isSaving, rolesBySnapId, snapById]);
 
   const viewerStageIndex = viewerSnapId === null
     ? -1
@@ -407,51 +509,48 @@ export function ShoppingPhotoOrganizer({
       ? `Pull ${selectedIds.size} out`
       : 'Group as one';
 
+  const tally = `${stages.length} ${stages.length === 1 ? SHORTLIST_COPY.piece : SHORTLIST_COPY.pieces} · ${snaps.length} ${SHORTLIST_COPY.photos}`;
+  const finishLabel = countInSaveLabel
+    ? `${saveLabel} · ${stages.length} ${stages.length === 1 ? SHORTLIST_COPY.piece : SHORTLIST_COPY.pieces}`
+    : saveLabel;
+  const bottomInset = insets.bottom + SAVE_BAR_HEIGHT;
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
+      {/* One header block, one hairline. The tally used to have a band of
+          its own below this, which left an edgeless bar for the list to
+          scroll under; it now shares the meta line. Undo and reset sit with
+          the close button so taking a grouping back never depends on still
+          being in selection mode. */}
       <View style={styles.header}>
         <View style={styles.headerCopy}>
           <AppText variant="eyebrow" tone="brand">{eyebrow}</AppText>
-          <AppText variant="editorialSection" tone="primary" style={styles.title}>{title}</AppText>
-          <AppText variant="bodySmall" tone="muted" style={styles.subtitle}>{subtitle}</AppText>
-        </View>
-        <TouchableOpacity style={styles.iconButton} onPress={onClose} disabled={isSaving} accessibilityLabel="Close organizer">
-          <Ionicons name="close" size={22} color={colors.foreground} />
-        </TouchableOpacity>
-      </View>
-
-      {/* At rest this is a tally, not a toolbar. The grouping action only
-          exists once photos are selected — rendering it greyed out on arrival
-          put a dead button where the first photograph should be. Undo and
-          reset live here rather than beside the selection action, so taking a
-          grouping back does not depend on still being in selection mode. */}
-      <View style={styles.toolbar}>
-        {selectedIds.size > 0 ? (
-          <TouchableOpacity
-            style={styles.toolbarCountButton}
-            onPress={clearSelection}
-            disabled={isSaving}
-            accessibilityLabel={`Clear ${selectedIds.size} selected photos`}
-          >
-            <Text style={styles.toolbarCountStrong}>{selectedIds.size} selected</Text>
-            <Text style={styles.toolbarClear}>Clear</Text>
-          </TouchableOpacity>
-        ) : (
-          <Text style={styles.toolbarCount}>
-            {stages.length} {stages.length === 1 ? SHORTLIST_COPY.piece : SHORTLIST_COPY.pieces} · {snaps.length} {SHORTLIST_COPY.photos}
-          </Text>
-        )}
-        <View style={styles.toolbarActions}>
-          {selectedIds.size > 0 && onRemove ? (
+          {onPressTitle ? (
             <TouchableOpacity
-              style={styles.ghostButton}
-              onPress={() => onRemove([...selectedIds])}
+              style={styles.titleButton}
+              onPress={onPressTitle}
               disabled={isSaving}
-              accessibilityLabel={`Remove ${selectedIds.size} selected photos`}
+              accessibilityRole="button"
+              accessibilityLabel={titleIsPlaceholder ? title : `Change store, currently ${title}`}
             >
-              <Ionicons name="trash-outline" size={16} color={colors.error} />
+              <AppText
+                variant="editorialSection"
+                tone={titleIsPlaceholder ? 'action' : 'primary'}
+                style={styles.title}
+                numberOfLines={1}
+              >
+                {title}
+              </AppText>
+              <Ionicons name="pencil-outline" size={16} color={colors.action} style={styles.titleIcon} />
             </TouchableOpacity>
-          ) : null}
+          ) : (
+            <AppText variant="editorialSection" tone="primary" style={styles.title} numberOfLines={1}>{title}</AppText>
+          )}
+          <Text style={styles.meta} numberOfLines={1}>
+            {[subtitle, tally].filter(Boolean).join(' · ')}
+          </Text>
+        </View>
+        <View style={styles.headerActions}>
           {history.length > 0 ? (
             <TouchableOpacity
               style={styles.ghostButton}
@@ -472,7 +571,37 @@ export function ShoppingPhotoOrganizer({
               <Ionicons name="refresh-outline" size={16} color={colors.secondaryForeground} />
             </TouchableOpacity>
           ) : null}
-          {selectedIds.size > 0 ? (
+          <TouchableOpacity style={styles.iconButton} onPress={onClose} disabled={isSaving} accessibilityLabel="Close organizer">
+            <Ionicons name="close" size={22} color={colors.foreground} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* The selection toolbar exists only while photos are selected. At
+          rest there is nothing here — a greyed-out grouping button on
+          arrival put a dead control where the first photograph should be. */}
+      {selecting ? (
+        <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.toolbar}>
+          <TouchableOpacity
+            style={styles.toolbarCountButton}
+            onPress={clearSelection}
+            disabled={isSaving}
+            accessibilityLabel={`Clear ${selectedIds.size} selected photos`}
+          >
+            <Text style={styles.toolbarCountStrong}>{selectedIds.size} selected</Text>
+            <Text style={styles.toolbarClear}>Clear</Text>
+          </TouchableOpacity>
+          <View style={styles.toolbarActions}>
+            {onRemove ? (
+              <TouchableOpacity
+                style={styles.ghostButton}
+                onPress={() => onRemove([...selectedIds])}
+                disabled={isSaving}
+                accessibilityLabel={`Remove ${selectedIds.size} selected photos`}
+              >
+                <Ionicons name="trash-outline" size={16} color={colors.error} />
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity
               style={[styles.makeButton, action === 'none' && styles.makeButtonDisabled]}
               onPress={runSelection}
@@ -486,91 +615,94 @@ export function ShoppingPhotoOrganizer({
               />
               <Text style={styles.makeText}>{actionLabel}</Text>
             </TouchableOpacity>
-          ) : null}
-        </View>
-      </View>
+          </View>
+        </Animated.View>
+      ) : null}
 
       <ScrollView
         scrollEnabled={draggingId === null}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 96 + DROP_ZONE_HEIGHT }]}
+        contentContainerStyle={[styles.content, { paddingBottom: bottomInset + DROP_ZONE_HEIGHT + spacing.md }]}
       >
+        {hintVisible && !selecting ? (
+          <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} layout={LinearTransition} style={styles.hint}>
+            <Ionicons name="hand-left-outline" size={18} color={colors.primary} />
+            <Text style={styles.hintText}>
+              Hold a photo to select it. Drag it into another piece, or down to start a new one.
+            </Text>
+            <TouchableOpacity onPress={retireHint} hitSlop={8} accessibilityLabel="Dismiss hint">
+              <Ionicons name="close" size={15} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          </Animated.View>
+        ) : null}
+
         {stages.map((stage, index) => {
           const hovered = dropTarget?.kind === 'stage' && dropTarget.stageId === stage.id;
+          const summary = stageSummaries[index];
+          const hasMenu = stage.snapIds.length > 1 || Boolean(onRemove);
           return (
-            <View
-              key={stage.id}
-              ref={(node) => {
-                if (node) stageRefs.current.set(stage.id, node);
-                else stageRefs.current.delete(stage.id);
-              }}
-              style={[
-                styles.pool,
-                index === stages.length - 1 && styles.poolLast,
-                hovered && styles.poolHovered,
-              ]}
-            >
-              <View style={styles.sectionHeader}>
-                <View style={styles.sectionCopy}>
-                  <Text style={styles.sectionTitle}>
-                    {snapsWithStagedRoles.find((snap) => stage.snapIds.includes(snap.id))?.category ?? `Piece ${index + 1}`}
-                  </Text>
-                  <Text style={styles.sectionMeta}>
-                    {hovered
-                      ? 'Release to add this photo'
-                      : `${stage.snapIds.length} photo${stage.snapIds.length === 1 ? '' : 's'}${
-                        stagePrice(snapsWithStagedRoles, stage.snapIds)
-                          ? ` · ${stagePrice(snapsWithStagedRoles, stage.snapIds)}`
-                          : ''}`}
-                  </Text>
+            // The outer view animates the band into place when a split or
+            // merge changes the list; the inner one is what gets measured
+            // as a drop target, and stays a plain View so measureInWindow
+            // reads the settled frame.
+            <Animated.View key={stage.id} layout={LinearTransition.duration(220)} entering={FadeIn.duration(180)}>
+              <View
+                ref={(node) => {
+                  if (node) stageRefs.current.set(stage.id, node);
+                  else stageRefs.current.delete(stage.id);
+                }}
+                style={[
+                  styles.pool,
+                  index === stages.length - 1 && styles.poolLast,
+                  hovered && styles.poolHovered,
+                ]}
+              >
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionCopy}>
+                    <Text style={styles.sectionTitle}>{summary?.title}</Text>
+                    <Text style={styles.sectionMeta}>
+                      {hovered
+                        ? 'Release to add this photo'
+                        : `${stage.snapIds.length} photo${stage.snapIds.length === 1 ? '' : 's'}${
+                          summary?.price ? ` · ${summary.price}` : ''}`}
+                    </Text>
+                  </View>
+                  {hasMenu ? (
+                    <TouchableOpacity
+                      style={styles.menuButton}
+                      onPress={() => openStageMenu(stage, index)}
+                      disabled={isSaving}
+                      hitSlop={6}
+                      accessibilityLabel={`More options for piece ${index + 1}`}
+                    >
+                      <Ionicons name="ellipsis-horizontal" size={18} color={colors.mutedForeground} />
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
-                {stage.snapIds.length > 1 ? (
-                  <TouchableOpacity
-                    style={styles.splitButton}
-                    onPress={() => splitAll(stage.id)}
-                    disabled={isSaving}
-                    accessibilityLabel={`Separate photos in piece ${index + 1}`}
-                  >
-                    <Ionicons name="cut-outline" size={16} color={colors.action} />
-                    <Text style={styles.splitText}>{SHORTLIST_COPY.separatePhotos}</Text>
-                  </TouchableOpacity>
-                ) : null}
+                <DraggablePhotoGrid
+                  ids={stage.snapIds}
+                  layout={pieceLayout}
+                  onReorder={(nextIds) => applyStages(stagesRef.current.map((item) => (
+                    item.id === stage.id ? { ...item, snapIds: nextIds } : item
+                  )))}
+                  onTap={handleTap}
+                  onHold={handleHold}
+                  renderPhoto={renderPhotoTile}
+                  disabled={isSaving}
+                  onDragStart={handleDragStart}
+                  onDragMove={handleDragMove}
+                  onDragDrop={handleDragDrop}
+                />
               </View>
-              <DraggablePhotoGrid
-                ids={stage.snapIds}
-                onReorder={(nextIds) => applyStages(stagesRef.current.map((item) => (
-                  item.id === stage.id ? { ...item, snapIds: nextIds } : item
-                )))}
-                onTap={handleTap}
-                onHold={handleHold}
-                renderPhoto={renderPhotoTile}
-                renderChip={renderRoleChip}
-                disabled={isSaving}
-                tileWidth={TILE_WIDTH}
-                tileHeight={TILE_HEIGHT}
-                photoHeight={PHOTO_HEIGHT}
-                innerGap={TILE_INNER_GAP}
-                gap={GRID_GAP}
-                onDragStart={handleDragStart}
-                onDragMove={handleDragMove}
-                onDragDrop={handleDragDrop}
-              />
-            </View>
+            </Animated.View>
           );
         })}
-
-        {saveError ? (
-          <View style={styles.error}>
-            <Ionicons name="alert-circle-outline" size={17} color={colors.error} />
-            <Text selectable style={styles.errorText}>{saveError}</Text>
-          </View>
-        ) : null}
       </ScrollView>
 
       {viewerSnapId !== null && viewerSnaps.length > 0 ? (
         <ShoppingPhotoViewer
           snaps={viewerSnaps}
           initialSnapId={viewerSnapId}
-            itemLabel={`Piece ${viewerStageIndex + 1}`}
+          itemLabel={stageSummaries[viewerStageIndex]?.title ?? `Piece ${viewerStageIndex + 1}`}
           roleFor={(snapId) => rolesBySnapId[snapId] ?? snapById.get(snapId)?.captureRole ?? 'unknown'}
           onCycleRole={cycleRole}
           onSelect={selectFromViewer}
@@ -582,21 +714,29 @@ export function ShoppingPhotoOrganizer({
         ref={dropZoneRef}
         visible={draggingId !== null}
         hovered={dropTarget?.kind === 'new'}
-        bottom={insets.bottom + 76}
+        bottom={bottomInset + spacing.sm}
       />
 
       <View style={[styles.saveBar, { paddingBottom: insets.bottom + spacing.md }]}>
-        <TouchableOpacity style={styles.cancelButton} onPress={onClose} disabled={isSaving}>
-          <Text style={styles.cancelText}>{closeLabel}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.saveButton, (isSaving || snaps.length === 0) && styles.saveButtonDisabled]}
-          onPress={save}
-          disabled={isSaving || snaps.length === 0}
-        >
-          {isSaving ? <ActivityIndicator color={colors.primaryForeground} /> : <Ionicons name="checkmark" size={18} color={colors.primaryForeground} />}
-          <Text style={styles.saveText}>{saveLabel}</Text>
-        </TouchableOpacity>
+        {saveError ? (
+          <View style={styles.error}>
+            <Ionicons name="alert-circle-outline" size={17} color={colors.error} />
+            <Text selectable style={styles.errorText}>{saveError}</Text>
+          </View>
+        ) : null}
+        <View style={styles.saveRow}>
+          <TouchableOpacity style={styles.cancelButton} onPress={onClose} disabled={isSaving}>
+            <Text style={styles.cancelText}>{closeLabel}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.saveButton, (isSaving || snaps.length === 0) && styles.saveButtonDisabled]}
+            onPress={save}
+            disabled={isSaving || snaps.length === 0}
+          >
+            {isSaving ? <ActivityIndicator color={colors.primaryForeground} /> : <Ionicons name="checkmark" size={18} color={colors.primaryForeground} />}
+            <Text style={styles.saveText}>{finishLabel}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -650,24 +790,27 @@ function NewItemDropZone({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   headerCopy: { flex: 1 },
-  eyebrow: { ...typography.text.eyebrow, color: colors.primary },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingTop: spacing.xs },
   title: { paddingTop: 2 },
-  subtitle: { paddingTop: spacing.xs },
+  titleButton: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'flex-start' },
+  titleIcon: { marginTop: 4 },
+  meta: { paddingTop: spacing.xs, fontSize: typography.text.caption.fontSize, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
   iconButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: colors.surfaceSubtle },
-  toolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
-  toolbarCount: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
+  toolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, backgroundColor: colors.surfaceSubtle },
   toolbarCountButton: { flexShrink: 1, minHeight: 38, justifyContent: 'center' },
   toolbarCountStrong: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground, fontVariant: ['tabular-nums'] },
   toolbarClear: { fontSize: typography.text.caption.fontSize, color: colors.primary },
   toolbarActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   ghostButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, backgroundColor: colors.surfaceSubtle },
-  content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
+  content: { paddingHorizontal: spacing.lg },
+  hint: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.md, backgroundColor: colors.surfaceSubtle },
+  hintText: { flex: 1, fontSize: typography.text.caption.fontSize, lineHeight: 17, color: colors.mutedForeground },
   // An item is a band of the page, separated by a hairline — the same shape
   // the shortlist uses for a visit, so the two screens read as one product.
   pool: {
-    gap: spacing.md,
+    gap: spacing.sm,
     paddingVertical: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.hairline,
@@ -682,32 +825,29 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
     backgroundColor: colors.surfaceSelected,
   },
-  sectionHeader: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  sectionHeader: { minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   sectionCopy: { flex: 1 },
-  sectionTitle: { fontSize: typography.text.body.fontSize, fontWeight: typography.weight.bold, color: colors.foreground },
+  sectionTitle: { fontSize: typography.text.body.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground },
   sectionMeta: { paddingTop: 2, fontSize: typography.text.caption.fontSize, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
+  menuButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   makeButton: { minHeight: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radii.md, backgroundColor: colors.primary },
   makeButtonDisabled: { opacity: 0.45 },
   makeText: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, color: colors.primaryForeground },
-  // Text, not a filled chip: splitting is the blunt last resort, and a filled
-  // button on every item argued the opposite.
-  splitButton: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingLeft: spacing.sm },
-  splitText: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.medium, color: colors.action },
-  photo: { width: TILE_WIDTH, height: PHOTO_HEIGHT, overflow: 'hidden', borderWidth: 2, borderColor: 'transparent', borderRadius: radii.photo, backgroundColor: colors.surfaceSubtle },
-  photoSelected: { borderColor: colors.primary },
-  photoDragging: { borderColor: colors.primary },
+  photo: { flex: 1, overflow: 'hidden', borderWidth: 2, borderColor: 'transparent', borderRadius: radii.photo, backgroundColor: colors.surfaceSubtle },
+  photoActive: { borderColor: colors.primary },
   check: { position: 'absolute', top: 6, right: 6, width: 24, height: 24, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: colors.primary },
-  roleChip: { minHeight: CHIP_HEIGHT, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xs },
-  roleChipUnresolved: { borderRadius: radii.full, backgroundColor: colors.accent },
-  roleText: { ...typography.text.caption, color: colors.mutedForeground },
-  roleTextUnresolved: { fontWeight: typography.weight.semibold, color: colors.primary },
+  tagBadge: { position: 'absolute', top: 6, left: 6, paddingHorizontal: 7, paddingVertical: 2, borderRadius: radii.full, backgroundColor: colors.foreground },
+  tagBadgeText: { fontSize: 11, fontWeight: typography.weight.medium, letterSpacing: 0.2, color: colors.primaryForeground },
+  unsortedBadge: { position: 'absolute', left: 6, right: 6, bottom: 6, alignItems: 'center', paddingVertical: 3, borderRadius: radii.full, backgroundColor: colors.accent },
+  unsortedBadgeText: { fontSize: 11, fontWeight: typography.weight.semibold, color: colors.primary },
   dropZone: { position: 'absolute', left: spacing.lg, right: spacing.lg, height: DROP_ZONE_HEIGHT, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.primary, borderRadius: radii.lg, backgroundColor: colors.accent },
   dropZoneHovered: { borderStyle: 'solid', backgroundColor: colors.primary },
   dropZoneText: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.primary },
   dropZoneTextHovered: { color: colors.primaryForeground },
-  error: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, padding: spacing.md, borderRadius: radii.md, backgroundColor: '#FBEDEA' },
+  error: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, padding: spacing.md, marginBottom: spacing.md, borderRadius: radii.md, backgroundColor: '#FBEDEA' },
   errorText: { flex: 1, fontSize: typography.text.bodySmall.fontSize, lineHeight: 20, color: colors.error },
-  saveBar: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.background },
+  saveBar: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: spacing.lg, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.background },
+  saveRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   cancelButton: { minHeight: 48, justifyContent: 'center', paddingHorizontal: spacing.md },
   cancelText: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.secondaryForeground },
   saveButton: { flex: 1, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radii.md, backgroundColor: colors.primary },

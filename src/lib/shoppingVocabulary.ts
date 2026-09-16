@@ -27,6 +27,8 @@ export const SHORTLIST_COPY = {
   allPieces: 'All pieces',
   showPieces: 'Show pieces',
   separatePhotos: 'Separate photos',
+  /** Deletes every photo of one piece, from the organizer's piece menu. */
+  removePiece: 'Remove piece',
   /** Captured on the device, not uploaded yet. Never "pending" or "sync". */
   onThisPhone: 'On this phone',
   /** Uploaded. Only appears in the item lightbox. */

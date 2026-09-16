@@ -1,14 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, View, StyleSheet } from 'react-native';
+import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 import * as Haptics from 'expo-haptics';
 
 import { ShoppingPhotoOrganizer } from '../../components/shopping/ShoppingPhotoOrganizer';
+import { ShoppingStoreAssignmentSheet } from '../../components/shopping/ShoppingStoreAssignmentSheet';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAssignShoppingStore } from '../../hooks/useAssignShoppingStore';
 import { useShoppingItemActions } from '../../hooks/useShoppingItemActions';
 import { useShoppingSnaps } from '../../hooks/useShoppingSnaps';
 import { deleteShoppingSnaps } from '../../lib/deleteShoppingSnaps';
 import { deleteShoppingPreview } from '../../lib/shoppingPreviews';
-import { applyShoppingPreviewUris, mergeShoppingSnaps } from '../../lib/shoppingGallery';
+import { applyShoppingPreviewUris, buildShoppingEditItems, mergeShoppingSnaps } from '../../lib/shoppingGallery';
+import { buildShoppingStoreOptions } from '../../lib/shoppingStoreFilters';
+import { SHORTLIST_COPY } from '../../lib/shoppingVocabulary';
 import type { ShoppingSnapOrganizationUpdate } from '../../lib/shoppingSnapOrganizer';
 import { buildVisitReviewHeader } from '../../lib/shoppingVisitReview';
 import type { ShoppingVisitReviewScreenProps } from '../../navigation/types';
@@ -36,6 +41,8 @@ export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitRe
   const pendingVisitMetadata = useShoppingSessionStore((state) => state.pendingVisitMetadata);
   const endVisit = useShoppingSessionStore((state) => state.endVisit);
   const { saveOrganization, isSavingOrganization } = useShoppingItemActions();
+  const assignShoppingStore = useAssignShoppingStore();
+  const storeSheetRef = useRef<BottomSheetModal>(null);
   const [isFinishing, setIsFinishing] = useState(false);
   // Reached from the camera this screen closes a trip in progress; reached
   // from the shortlist it is just an organizer over an old one. The copy has
@@ -45,10 +52,13 @@ export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitRe
   // The raw snaps keep the full-size local file as `imageUri`; the displayed
   // ones swap in the small preview. Deletion has to go through the raw snap,
   // or it would remove the preview and orphan the photo it stands for.
-  const rawSnaps = useMemo(() => mergeShoppingSnaps(remoteSnaps, pendingUploads)
+  const allSnaps = useMemo(() => mergeShoppingSnaps(remoteSnaps, pendingUploads), [pendingUploads, remoteSnaps]);
+  const rawSnaps = useMemo(() => allSnaps
     .filter((snap) => snap.shoppingSessionId === sessionId)
     .sort((a, b) => new Date(a.capturedAt).getTime() - new Date(b.capturedAt).getTime()
-      || a.captureSequence - b.captureSequence), [pendingUploads, remoteSnaps, sessionId]);
+      || a.captureSequence - b.captureSequence), [allSnaps, sessionId]);
+  // Stores the shopper has used before, offered first in the store sheet.
+  const storeOptions = useMemo(() => buildShoppingStoreOptions(buildShoppingEditItems(allSnaps)), [allSnaps]);
   const snaps = useMemo(
     () => applyShoppingPreviewUris(rawSnaps, visitPreviews, pendingUploads),
     [pendingUploads, rawSnaps, visitPreviews],
@@ -79,22 +89,32 @@ export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitRe
     });
   }, [endVisit, navigation, sessionId]);
 
+  // A failure is rethrown for the organizer to show inline, beside the
+  // button that caused it; an alert on top of that told the shopper twice.
   const handleSave = useCallback(async (updates: ShoppingSnapOrganizationUpdate[]) => {
     setIsFinishing(true);
     try {
       await saveOrganization(updates);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       finish();
-    } catch (error) {
-      Alert.alert(
-        'Could not save grouping',
-        error instanceof Error ? error.message : 'Please try again.',
-      );
-      throw error;
     } finally {
       setIsFinishing(false);
     }
   }, [finish, saveOrganization]);
+
+  /**
+   * The store is asked for here because this is the last moment the shopper
+   * is certain to still be standing in it. It lands on every photo of the
+   * visit and on the visit itself, the same write the shortlist does later.
+   */
+  const openStoreSheet = useCallback(() => {
+    void Haptics.selectionAsync();
+    storeSheetRef.current?.present();
+  }, []);
+
+  const saveStore = useCallback((storeName: string) => {
+    void assignShoppingStore({ snaps: rawSnaps, shoppingSessionId: sessionId }, storeName);
+  }, [assignShoppingStore, rawSnaps, sessionId]);
 
   /**
    * Backing out keeps the visit open and the grouping as it stands, so the
@@ -162,10 +182,18 @@ export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitRe
         onRemove={confirmRemove}
         isSaving={isSavingOrganization || isFinishing}
         eyebrow={header.eyebrow}
-        title={header.title}
+        title={header.storeName ?? SHORTLIST_COPY.addStore}
+        titleIsPlaceholder={header.storeName === null}
+        onPressTitle={openStoreSheet}
         subtitle={header.meta}
         saveLabel={isLiveVisit ? 'Finish visit' : 'Done'}
+        countInSaveLabel={isLiveVisit}
         closeLabel={isLiveVisit ? 'Keep shooting' : 'Back'}
+      />
+      <ShoppingStoreAssignmentSheet
+        sheetRef={storeSheetRef}
+        options={storeOptions}
+        onSelect={saveStore}
       />
     </View>
   );

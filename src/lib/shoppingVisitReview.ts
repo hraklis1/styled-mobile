@@ -9,6 +9,8 @@ export type ShoppingVisitReviewHeader = {
   eyebrow: string;
   /** The store, or a date-based stand-in when no snap carries one. */
   title: string;
+  /** Null when no store is known — the review offers to add one. */
+  storeName: string | null;
   /** "Today · 4:10 PM" — the day label the shortlist already uses, plus the time. */
   meta: string;
 };
@@ -35,6 +37,7 @@ export function buildVisitReviewHeader(
   return {
     eyebrow: isLiveVisit ? 'THIS VISIT' : 'EARLIER VISIT',
     title: storeName ?? (dayLabel === 'Today' ? "Today's visit" : 'Earlier visit'),
+    storeName,
     meta: `${dayLabel} · ${time}`,
   };
 }
