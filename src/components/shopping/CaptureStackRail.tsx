@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-nati
 import { Image } from 'expo-image';
 import { useReducedMotion } from 'react-native-reanimated';
 import type { ShoppingVisitPreview } from '../../stores/useShoppingSessionStore';
+import { cameraColors, radii, spacing, typography } from '../../theme';
 
 export type CaptureStack = { groupId: string; previews: ShoppingVisitPreview[] };
 
@@ -68,12 +69,12 @@ export function CaptureStackRail({ stacks, activeGroupId, showEmptyItem, disable
         <TouchableOpacity disabled={disabled} onPress={() => onSelect(null)} style={styles.item}
           onLayout={(event) => positions.current.set('empty', event.nativeEvent.layout.x)}
           accessibilityRole="button" accessibilityState={{ selected: activeKey === 'empty', disabled }}
-          accessibilityLabel={`New item ${stacks.length + 1}, no photos`}>
+          accessibilityLabel={`New item ${stacks.length + 1}, empty`}>
           <View style={[styles.frame, styles.emptyFrame, activeKey === 'empty' && styles.activeFrame]}>
             <Text style={styles.plus}>+</Text>
           </View>
           <Text style={styles.label}>Item {stacks.length + 1}</Text>
-          <Text style={styles.count}>New</Text>
+          <Text style={styles.count}>Empty</Text>
         </TouchableOpacity>
       )}
     </ScrollView>
@@ -82,14 +83,14 @@ export function CaptureStackRail({ stacks, activeGroupId, showEmptyItem, disable
 
 const styles = StyleSheet.create({
   viewport: { width: '100%', flexGrow: 0 },
-  rail: { flexGrow: 1, justifyContent: 'center', alignItems: 'flex-start', gap: 12, paddingHorizontal: 20, paddingVertical: 6 },
-  item: { alignItems: 'center', gap: 2, minWidth: 68 },
-  frame: { width: 60, height: 60, padding: 3, borderWidth: 1.5, borderColor: 'transparent', borderRadius: 12, borderCurve: 'continuous' },
-  activeFrame: { borderColor: '#FFFFFF', backgroundColor: 'rgba(255,255,255,0.12)', boxShadow: '0 0 8px 2px rgba(255,255,255,0.18)' },
-  cover: { width: '100%', height: '100%', borderRadius: 7 },
-  emptyFrame: { alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.08)' },
-  plus: { color: '#FFFFFF', fontSize: 28, fontWeight: '300' },
-  label: { color: 'rgba(255,255,255,0.75)', fontSize: 12, lineHeight: 16, fontWeight: '500', fontVariant: ['tabular-nums'] },
-  activeLabel: { color: '#FFFFFF', fontWeight: '600' },
-  count: { color: 'rgba(255,255,255,0.6)', fontSize: 11, lineHeight: 15, fontVariant: ['tabular-nums'] },
+  rail: { flexGrow: 1, justifyContent: 'center', alignItems: 'flex-start', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+  item: { alignItems: 'center', gap: spacing.xs / 2, minWidth: 64 },
+  frame: { width: 60, height: 80, borderWidth: 1.5, borderColor: 'transparent', borderRadius: radii.photo, borderCurve: 'continuous' },
+  activeFrame: { borderColor: cameraColors.selection, backgroundColor: cameraColors.selectionSubtle },
+  cover: { width: '100%', height: '100%', borderRadius: radii.photo },
+  emptyFrame: { alignItems: 'center', justifyContent: 'center', backgroundColor: cameraColors.controlSubtle },
+  plus: { color: cameraColors.onCamera, fontSize: 28, fontWeight: '300' },
+  label: { ...typography.text.caption, color: cameraColors.onCameraMuted, fontWeight: typography.weight.medium, fontVariant: ['tabular-nums'] },
+  activeLabel: { color: cameraColors.onCamera, fontWeight: typography.weight.semibold },
+  count: { ...typography.text.caption, color: cameraColors.onCameraMuted, fontSize: 11, lineHeight: 15, fontVariant: ['tabular-nums'] },
 });

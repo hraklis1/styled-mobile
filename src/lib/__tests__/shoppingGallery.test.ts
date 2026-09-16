@@ -1,4 +1,5 @@
 import {
+  applyShoppingPreviewUris,
   buildShoppingEditItems,
   filterShoppingEditItems,
   filterShoppingSnaps,
@@ -71,6 +72,29 @@ describe('shoppingGallery', () => {
 
     expect(result.map((snap) => snap.id)).toEqual(['pending', 'synced']);
     expect(result[0].syncStatus).toBe('pending');
+  });
+
+  it('uses visit previews for pending photos when building review thumbnails', () => {
+    const snaps = [
+      { ...synced, id: 'photo-1', imageUri: 'https://example.com/photo-1.jpg' },
+      { ...synced, id: 'photo-2', imageUri: 'file:///missing/photo-2.jpg' },
+      { ...synced, id: 'photo-3', imageUri: 'file:///missing/photo-3.jpg' },
+    ];
+
+    const result = applyShoppingPreviewUris(
+      snaps,
+      [{ id: 'photo-2', localFileUri: 'file:///photo-2.jpg', previewUri: 'file:///preview-2.jpg' }],
+      [
+        { id: 'photo-2', localFileUri: 'file:///photo-2.jpg', previewUri: null },
+        { id: 'photo-3', localFileUri: 'file:///photo-3.jpg', previewUri: null },
+      ],
+    );
+
+    expect(result.map((snap) => snap.imageUri)).toEqual([
+      'https://example.com/photo-1.jpg',
+      'file:///preview-2.jpg',
+      'file:///photo-3.jpg',
+    ]);
   });
 
   it('filters by store, date, and sync state', () => {

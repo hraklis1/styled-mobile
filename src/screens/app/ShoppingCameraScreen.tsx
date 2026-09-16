@@ -31,6 +31,7 @@ import * as Crypto from 'expo-crypto';
 import * as Haptics from 'expo-haptics';
 import { StatusBar, setStatusBarStyle } from 'expo-status-bar';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useReducedMotion } from 'react-native-reanimated';
@@ -54,7 +55,7 @@ import {
   type ShoppingStoreSuggestion,
 } from '../../lib/shoppingLocations';
 import type { ShoppingSessionContext } from '../../stores/useShoppingSessionStore';
-import { colors, radii, spacing, typography } from '../../theme';
+import { cameraColors, colors, radii, spacing, typography } from '../../theme';
 
 const CAPTURE_DIRECTORY = new Directory(Paths.document, 'shopping-snaps');
 
@@ -854,8 +855,21 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
         onMountError={() => setCameraError('Camera unavailable. You can still add photos from your library.')}
       />
 
+      <LinearGradient
+        pointerEvents="none"
+        colors={[cameraColors.overlayStrong, 'transparent']}
+        locations={[0, 1]}
+        style={styles.topScrim}
+      />
+      <LinearGradient
+        pointerEvents="none"
+        colors={['transparent', cameraColors.overlayStrong]}
+        locations={[0, 1]}
+        style={styles.bottomScrim}
+      />
+
       <View style={[styles.topControls, { paddingTop: insets.top + spacing.sm }]}>
-        <TouchableOpacity style={styles.doneButton} onPress={cancelCamera} disabled={captureBusy} accessibilityRole="button" accessibilityLabel="Cancel shopping visit">
+        <TouchableOpacity style={[styles.doneButton, styles.cancelButton]} onPress={cancelCamera} disabled={captureBusy} accessibilityRole="button" accessibilityLabel="Cancel shopping visit">
           <Text style={styles.doneButtonText}>Cancel</Text>
         </TouchableOpacity>
 
@@ -868,7 +882,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
             : 'Tap to add store'}
         >
           <Text style={styles.contextPillText} numberOfLines={1}>
-            <Ionicons name="location-outline" size={16} color="white" />{' '}{currentStoreName ?? 'Add store'}
+            <Ionicons name="location-outline" size={16} color={cameraColors.onCamera} />{' '}{currentStoreName ?? 'Add store'}
           </Text>
           {currentSession ? (
             <Text style={styles.contextPillSubtext} numberOfLines={1}>
@@ -878,7 +892,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.doneButton, (captureBusy || visitPreviews.length === 0) && styles.sameItemButtonDisabled]}
+          style={[styles.doneButton, styles.reviewButton, (captureBusy || visitPreviews.length === 0) && styles.sameItemButtonDisabled]}
           onPress={closeCamera}
           disabled={captureBusy || visitPreviews.length === 0}
           accessibilityLabel={visitPreviews.length > 0
@@ -893,24 +907,29 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
 
       {galleryImportProgress ? (
         <View style={[styles.importStatusPill, { top: insets.top + 66 }]}>
-          <ActivityIndicator color="#FFFFFF" size="small" />
+          <ActivityIndicator color={cameraColors.onCamera} size="small" />
           <Text style={styles.importStatusText}>
             Adding {galleryImportProgress.imported}/{galleryImportProgress.total} photos to this item
           </Text>
         </View>
       ) : null}
 
-      <View style={[styles.bottomControls, { paddingBottom: insets.bottom + spacing.lg }]}>
-        {cameraError ? (
-          <View style={styles.cameraUnavailable} accessibilityRole="alert">
-            <Ionicons name="camera-outline" size={16} color="#FFFFFF" />
-            <Text selectable style={styles.cameraUnavailableText}>Camera isn’t available</Text>
+      {cameraError ? (
+        <View style={styles.cameraUnavailableState} accessibilityRole="alert">
+          <View style={styles.cameraUnavailableIcon}>
+            <Ionicons name="camera-outline" size={20} color={cameraColors.onCamera} />
           </View>
-        ) : null}
+          <Text style={styles.cameraUnavailableTitle}>Camera unavailable</Text>
+          <Text selectable style={styles.cameraUnavailableText}>Choose photos from your library to continue.</Text>
+        </View>
+      ) : null}
+
+      <View style={[styles.bottomControls, { paddingBottom: insets.bottom + spacing.lg }]}>
         <View style={styles.activePhotosSection}>
-          <Text style={styles.activePhotosTitle} accessibilityLiveRegion="polite">
-            Item {activeItemNumber} · {activePhotoCount} photo{activePhotoCount === 1 ? '' : 's'}
-          </Text>
+          <View style={styles.activePhotosHeader} accessibilityLiveRegion="polite">
+            <Text style={styles.activePhotosEyebrow}>Item {String(activeItemNumber).padStart(2, '0')}</Text>
+            <Text selectable style={styles.activePhotosCount}>{activePhotoCount} photo{activePhotoCount === 1 ? '' : 's'}</Text>
+          </View>
           <ScrollView ref={photoRailRef} horizontal showsHorizontalScrollIndicator={false}
             style={styles.photoViewport} contentContainerStyle={styles.photoRail}
             onContentSizeChange={() => photoRailRef.current?.scrollToEnd({ animated: !reducedMotion })}>
@@ -919,6 +938,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
             ) : activePhotos.map((photo, index) => (
               <View key={photo.id} style={styles.photoEntry}>
                 <TouchableOpacity onPress={() => setSelectedPreviewId(photo.id)} disabled={captureBusy}
+                  style={styles.photoButton}
                   accessibilityRole="button" accessibilityLabel={`Open photo ${index + 1} of item ${activeItemNumber}`}>
                   <Image source={{ uri: photo.previewUri ?? photo.localFileUri }} contentFit="cover" style={styles.photoThumbnail} />
                 </TouchableOpacity>
@@ -926,7 +946,9 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
                   style={styles.deletePhotoButton} accessibilityRole="button"
                   accessibilityLabel={`Delete photo ${index + 1} of item ${activeItemNumber}`}
                   accessibilityState={{ disabled: captureBusy }}>
-                  <Ionicons name="trash-outline" size={20} color="#FF7474" />
+                  <View style={styles.deletePhotoBadge}>
+                    <Ionicons name="trash-outline" size={15} color={cameraColors.destructive} />
+                  </View>
                 </TouchableOpacity>
               </View>
             ))}
@@ -951,7 +973,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
                 ? `Import photos from your library for ${currentStoreName}`
                 : 'Import photos from your library'}
             >
-              {isImporting ? <ActivityIndicator color="#FFFFFF" /> : <Ionicons name="images-outline" size={25} color="#FFFFFF" />}
+              {isImporting ? <ActivityIndicator color={cameraColors.onCamera} /> : <Ionicons name="images-outline" size={25} color={cameraColors.onCamera} />}
               <Text style={styles.galleryButtonText}>Library</Text>
             </TouchableOpacity>
           )}
@@ -963,7 +985,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
               disabled={captureBusy}
               accessibilityLabel={`Choose photos for item ${activeItemNumber}`}
             >
-              {isImporting ? <ActivityIndicator color="#111111" /> : <Ionicons name="images-outline" size={24} color="#111111" />}
+              {isImporting ? <ActivityIndicator color={cameraColors.ctaForeground} /> : <Ionicons name="images-outline" size={24} color={cameraColors.ctaForeground} />}
               <Text style={styles.choosePhotosText}>Choose photos</Text>
             </TouchableOpacity>
           ) : (
@@ -974,7 +996,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
               activeOpacity={0.8}
               accessibilityLabel={`Take photo for item ${activeItemNumber}`}
             >
-              {isCapturing ? <ActivityIndicator color="#111111" /> : <View style={styles.shutterInner} />}
+              {isCapturing ? <ActivityIndicator color={cameraColors.ctaForeground} /> : <View style={styles.shutterInner} />}
             </TouchableOpacity>
           )}
 
@@ -985,7 +1007,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
             accessibilityLabel="New item"
             accessibilityHint="Start a separate item with your next photo"
           >
-            <Ionicons name="add-circle-outline" size={25} color="#FFFFFF" />
+            <Ionicons name="add-circle-outline" size={25} color={cameraColors.onCamera} />
             <Text style={styles.galleryButtonText}>New item</Text>
           </TouchableOpacity>
         </View>
@@ -1097,7 +1119,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
               onPress={() => setSelectedPreviewId(null)}
               accessibilityLabel="Close photo preview"
             >
-              <Ionicons name="close" size={25} color="#FFFFFF" />
+              <Ionicons name="close" size={25} color={cameraColors.onCamera} />
             </TouchableOpacity>
             <Text style={styles.viewerCount}>
               {Math.max(1, activePhotos.findIndex((preview) => preview.id === selectedPreviewId) + 1)} / {activePhotos.length}
@@ -1108,7 +1130,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
               disabled={captureBusy}
               accessibilityLabel="Delete this photo"
             >
-              <Ionicons name="trash-outline" size={22} color="#FF7474" />
+              <Ionicons name="trash-outline" size={22} color={cameraColors.destructive} />
             </TouchableOpacity>
           </View>
           {selectedPreview ? (
@@ -1143,16 +1165,22 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
 }
 
 const styles = StyleSheet.create({
-  activePhotosSection: { width: '100%', gap: 8 },
-  activePhotosTitle: { color: '#FFFFFF', fontSize: 13, lineHeight: 18, fontWeight: '500', paddingHorizontal: 24, fontVariant: ['tabular-nums'] },
+  topScrim: { position: 'absolute', top: 0, left: 0, right: 0, height: 156 },
+  bottomScrim: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 420 },
+  activePhotosSection: { width: '100%', gap: spacing.sm },
+  activePhotosHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: spacing.lg },
+  activePhotosEyebrow: { ...typography.text.eyebrow, color: cameraColors.onCamera, letterSpacing: typography.tracking.eyebrowLarge },
+  activePhotosCount: { ...typography.text.caption, color: cameraColors.onCameraMuted, fontVariant: ['tabular-nums'] },
   photoViewport: { width: '100%', flexGrow: 0 },
-  photoRail: { flexGrow: 1, alignItems: 'center', gap: 12, paddingHorizontal: 24, minHeight: 76 },
-  photoEntry: { flexDirection: 'row', alignItems: 'center' },
-  photoThumbnail: { width: 62, height: 76, borderRadius: 8 },
-  deletePhotoButton: { width: 44, height: 48, alignItems: 'center', justifyContent: 'center' },
-  emptyPhotos: { minHeight: 76, flex: 1, justifyContent: 'center', alignItems: 'center', borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.05)' },
-  emptyPhotosText: { color: 'rgba(255,255,255,0.55)', fontSize: 13 },
-  root: { flex: 1, backgroundColor: '#000000' },
+  photoRail: { flexGrow: 1, alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, minHeight: 84 },
+  photoEntry: { width: 64, height: 84, position: 'relative', alignItems: 'center', justifyContent: 'center' },
+  photoButton: { width: 60, height: 80, borderRadius: radii.photo, overflow: 'hidden' },
+  photoThumbnail: { width: '100%', height: '100%', borderRadius: radii.photo },
+  deletePhotoButton: { position: 'absolute', top: -8, right: -12, width: 44, height: 44, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
+  deletePhotoBadge: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: radii.full, borderWidth: StyleSheet.hairlineWidth, borderColor: cameraColors.onCameraMuted, backgroundColor: cameraColors.control },
+  emptyPhotos: { minHeight: 84, flex: 1, justifyContent: 'center', alignItems: 'center', borderRadius: radii.md, borderWidth: StyleSheet.hairlineWidth, borderColor: cameraColors.selectionSubtle, backgroundColor: cameraColors.controlSubtle },
+  emptyPhotosText: { ...typography.text.bodySmall, color: cameraColors.onCameraMuted },
+  root: { flex: 1, backgroundColor: cameraColors.backdrop },
   permissionRoot: {
     flex: 1,
     alignItems: 'center',
@@ -1202,7 +1230,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 22,
-    backgroundColor: 'rgba(0, 0, 0, 0.48)',
+    backgroundColor: cameraColors.control,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: cameraColors.selectionSubtle,
   },
   doneButton: {
     minWidth: 54,
@@ -1211,9 +1241,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.sm,
     borderRadius: radii.full,
-    backgroundColor: 'rgba(0, 0, 0, 0.58)',
+    backgroundColor: cameraColors.control,
+    borderCurve: 'continuous',
   },
-  doneButtonText: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.bold, color: '#FFFFFF' },
+  cancelButton: { backgroundColor: 'transparent' },
+  reviewButton: { backgroundColor: colors.primary },
+  doneButtonText: { ...typography.text.label, color: cameraColors.onCamera },
   contextPill: {
     flex: 1,
     marginHorizontal: spacing.xs,
@@ -1221,18 +1254,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
     borderRadius: radii.full,
-    backgroundColor: 'rgba(0, 0, 0, 0.58)',
+    backgroundColor: cameraColors.control,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: cameraColors.selectionSubtle,
   },
   contextPillText: {
     fontSize: typography.text.bodySmall.fontSize,
     fontWeight: typography.weight.semibold,
-    color: '#FFFFFF',
+    color: cameraColors.onCamera,
   },
   contextPillSubtext: {
     paddingTop: 1,
     ...typography.text.caption,
     fontWeight: typography.weight.medium,
-    color: 'rgba(255, 255, 255, 0.76)',
+    color: cameraColors.onCameraMuted,
   },
   importStatusPill: {
     position: 'absolute',
@@ -1243,12 +1278,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderRadius: radii.full,
-    backgroundColor: 'rgba(0, 0, 0, 0.68)',
+    backgroundColor: cameraColors.control,
   },
   importStatusText: {
     fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
-    color: '#FFFFFF',
+    color: cameraColors.onCamera,
   },
   bottomControls: {
     position: 'absolute',
@@ -1256,20 +1291,32 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.lg,
     paddingTop: spacing.xl,
-    backgroundColor: 'rgba(0, 0, 0, 0.28)',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: cameraColors.selectionSubtle,
+    backgroundColor: cameraColors.overlayStrong,
   },
-  cameraUnavailable: {
-    minHeight: 32,
-    flexDirection: 'row',
+  cameraUnavailableState: {
+    position: 'absolute',
+    top: '41%',
+    left: spacing.xl,
+    right: spacing.xl,
     alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.full,
-    backgroundColor: 'rgba(0,0,0,0.68)',
+    gap: spacing.sm,
   },
-  cameraUnavailableText: { ...typography.text.bodySmall, fontWeight: typography.weight.medium, color: '#FFFFFF' },
+  cameraUnavailableIcon: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.full,
+    backgroundColor: cameraColors.controlSubtle,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: cameraColors.selectionSubtle,
+  },
+  cameraUnavailableTitle: { ...typography.text.editorialCompact, color: cameraColors.onCamera, textAlign: 'center' },
+  cameraUnavailableText: { ...typography.text.bodySmall, color: cameraColors.onCameraMuted, textAlign: 'center' },
   captureActions: {
     width: '100%',
     flexDirection: 'row',
@@ -1284,12 +1331,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 2,
     borderRadius: radii.md,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: cameraColors.control,
   },
   galleryButtonText: {
     fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
-    color: '#FFFFFF',
+    color: cameraColors.onCamera,
     textAlign: 'center',
   },
   captureActionPlaceholder: { width: 80, height: 58 },
@@ -1301,9 +1348,11 @@ const styles = StyleSheet.create({
     gap: 3,
     paddingHorizontal: spacing.sm,
     borderRadius: radii.full,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: cameraColors.ctaBackground,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: cameraColors.selectionSubtle,
   },
-  choosePhotosText: { ...typography.text.caption, fontWeight: typography.weight.semibold, color: '#111111', textAlign: 'center' },
+  choosePhotosText: { ...typography.text.label, color: cameraColors.ctaForeground, textAlign: 'center' },
   sameItemButton: {
     width: 80,
     minHeight: 58,
@@ -1311,9 +1360,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 2,
     borderRadius: radii.md,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: cameraColors.control,
   },
-  sameItemButtonDisabled: { opacity: 0.42 },
+  sameItemButtonDisabled: { opacity: 0.5 },
   shutterOuter: {
     width: 78,
     height: 78,
@@ -1321,10 +1370,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 39,
     borderWidth: 4,
-    borderColor: '#FFFFFF',
-    backgroundColor: 'rgba(255, 255, 255, 0.24)',
+    borderColor: cameraColors.onCamera,
+    backgroundColor: cameraColors.selectionSubtle,
   },
-  shutterInner: { width: 62, height: 62, borderRadius: 31, backgroundColor: '#FFFFFF' },
+  shutterInner: { width: 62, height: 62, borderRadius: 31, backgroundColor: cameraColors.onCamera },
   shutterDisabled: { opacity: 0.58 },
   sheetBackground: { backgroundColor: colors.background },
   sheetHandle: { backgroundColor: colors.border },
@@ -1391,7 +1440,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing.xl,
-    backgroundColor: 'rgba(0,0,0,0.64)',
+    backgroundColor: cameraColors.overlayStrong,
   },
   resumeCard: {
     width: '100%',
@@ -1424,7 +1473,7 @@ const styles = StyleSheet.create({
   resumePrimaryText: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.bold, color: colors.primaryForeground },
   resumeSecondary: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.lg },
   resumeSecondaryText: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground },
-  previewViewer: { flex: 1, backgroundColor: '#000000' },
+  previewViewer: { flex: 1, backgroundColor: cameraColors.backdropDeep },
   viewerHeader: {
     position: 'absolute',
     zIndex: 2,
@@ -1436,7 +1485,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
   },
-  viewerCount: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
+  viewerCount: { ...typography.text.bodySmall, fontWeight: typography.weight.semibold, color: cameraColors.onCamera, fontVariant: ['tabular-nums'] },
   viewerPage: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   viewerImage: { width: '100%', height: '100%' },
 });

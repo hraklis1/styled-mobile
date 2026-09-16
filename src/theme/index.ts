@@ -28,6 +28,27 @@ export const colors = {
   white:               '#FFFFFF',
 } as const;
 
+/**
+ * Camera surfaces keep the full-bleed capture experience dark while carrying
+ * the same warm, quiet contrast as the rest of the app. Keep these values in
+ * the theme so the camera screen and its rails don't grow a second palette.
+ */
+export const cameraColors = {
+  backdrop: '#1D1B18',
+  backdropDeep: '#12100F',
+  overlay: 'rgba(29, 27, 24, 0.34)',
+  overlayStrong: 'rgba(29, 27, 24, 0.86)',
+  control: 'rgba(29, 27, 24, 0.76)',
+  controlSubtle: 'rgba(255, 252, 247, 0.08)',
+  onCamera: colors.primaryForeground,
+  onCameraMuted: 'rgba(255, 252, 247, 0.68)',
+  selection: colors.primaryForeground,
+  selectionSubtle: 'rgba(255, 252, 247, 0.12)',
+  destructive: colors.destructive,
+  ctaBackground: colors.primaryForeground,
+  ctaForeground: colors.foreground,
+} as const;
+
 export const spacing = {
   xs:  4,
   sm:  8,

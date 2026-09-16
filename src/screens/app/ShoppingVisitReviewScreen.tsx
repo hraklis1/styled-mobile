@@ -5,7 +5,7 @@ import { ShoppingPhotoOrganizer } from '../../components/shopping/ShoppingPhotoO
 import { useShoppingItemActions } from '../../hooks/useShoppingItemActions';
 import { useShoppingSnaps } from '../../hooks/useShoppingSnaps';
 import { deleteShoppingPreview } from '../../lib/shoppingPreviews';
-import { buildShoppingEditItems, mergeShoppingSnaps } from '../../lib/shoppingGallery';
+import { applyShoppingPreviewUris, buildShoppingEditItems, mergeShoppingSnaps } from '../../lib/shoppingGallery';
 import type { ShoppingSnapOrganizationUpdate } from '../../lib/shoppingSnapOrganizer';
 import type { ShoppingVisitReviewScreenProps } from '../../navigation/types';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
@@ -29,6 +29,7 @@ export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitRe
   const { sessionId } = route.params;
   const { data: remoteSnaps = [], isLoading } = useShoppingSnaps();
   const pendingUploads = useShoppingSessionStore((state) => state.pendingUploads);
+  const visitPreviews = useShoppingSessionStore((state) => state.visitPreviews);
   const currentSessionId = useShoppingSessionStore((state) => state.currentSession?.id ?? null);
   const endVisit = useShoppingSessionStore((state) => state.endVisit);
   const { saveOrganization, isSavingOrganization } = useShoppingItemActions();
@@ -38,11 +39,14 @@ export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitRe
   // to follow, or "Keep shooting" offers a camera that is not there.
   const isLiveVisit = currentSessionId === sessionId;
 
-  const snaps = useMemo(() => mergeShoppingSnaps(remoteSnaps, pendingUploads)
-    .filter((snap) => snap.shoppingSessionId === sessionId)
-    .sort((a, b) => new Date(a.capturedAt).getTime() - new Date(b.capturedAt).getTime()
-      || a.captureSequence - b.captureSequence),
-  [pendingUploads, remoteSnaps, sessionId]);
+  const snaps = useMemo(() => applyShoppingPreviewUris(
+    mergeShoppingSnaps(remoteSnaps, pendingUploads)
+      .filter((snap) => snap.shoppingSessionId === sessionId)
+      .sort((a, b) => new Date(a.capturedAt).getTime() - new Date(b.capturedAt).getTime()
+        || a.captureSequence - b.captureSequence),
+    visitPreviews,
+    pendingUploads,
+  ), [pendingUploads, remoteSnaps, sessionId, visitPreviews]);
 
   /**
    * Ends the visit and releases the rail's preview files. Cleanup lives here

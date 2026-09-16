@@ -1,4 +1,4 @@
-import type { PendingShoppingUpload } from '../stores/useShoppingSessionStore';
+import type { PendingShoppingUpload, ShoppingVisitPreview } from '../stores/useShoppingSessionStore';
 import type { ShoppingPurchaseDetails, ShoppingFindCatalogStatus, ShoppingSnap } from '../types/shoppingSnap';
 import { purchaseDetails } from './shoppingCatalog';
 import { buildShoppingLocationKey, normalizeStoreName, shoppingFilterKey } from './shoppingLocations';
@@ -52,6 +52,40 @@ export type ShoppingEditSummary = {
   missingPricePhotoCount: number;
   pendingPhotoCount: number;
 };
+
+type ShoppingPreviewImageSource = Pick<
+  PendingShoppingUpload | ShoppingVisitPreview,
+  'id' | 'localFileUri' | 'previewUri'
+>;
+
+/**
+ * Uses the durable visit preview when one is available for a snap. Pending
+ * uploads can still be waiting on the network when review opens, so their
+ * preview is the same local-first source the capture rail renders. The
+ * original snap URI remains the fallback for older visits without preview
+ * metadata and for already-synced photos.
+ */
+export function applyShoppingPreviewUris(
+  snaps: ShoppingSnap[],
+  visitPreviews: ShoppingPreviewImageSource[] = [],
+  pendingUploads: ShoppingPreviewImageSource[] = [],
+): ShoppingSnap[] {
+  const displayUris = new Map<string, string>();
+
+  for (const source of [...pendingUploads, ...visitPreviews]) {
+    const uri = source.previewUri ?? source.localFileUri;
+    // Prefer an actual preview over a local-file fallback when both store
+    // records are present for the same pending upload.
+    if (uri && (!displayUris.has(source.id) || source.previewUri)) {
+      displayUris.set(source.id, uri);
+    }
+  }
+
+  return snaps.map((snap) => {
+    const imageUri = displayUris.get(snap.id);
+    return imageUri ? { ...snap, imageUri } : snap;
+  });
+}
 
 function choosePrimarySnap(snaps: ShoppingSnap[]): ShoppingSnap {
   return [...snaps].sort((a, b) => {
