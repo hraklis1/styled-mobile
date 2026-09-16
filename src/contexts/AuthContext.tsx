@@ -1,3 +1,4 @@
+import { setShoppingAccount } from '../stores/useShoppingSessionStore';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
@@ -72,6 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Hydrate isPremium from SecureStore immediately so the UI renders without flash,
     // then refresh from RC in the background.
     supabase.auth.getSession().then(async ({ data: { session } }) => {
+      setShoppingAccount(session?.user.id ?? null);
       if (session) {
         const mapped = mapSupabaseUser(session.user);
         const cached = await getDeviceValue(IS_PREMIUM_CACHE_KEY).catch(() => null);
@@ -101,6 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const mapped = session ? mapSupabaseUser(session.user) : null;
+      setShoppingAccount(mapped?.id ?? null);
 
       if (event === 'SIGNED_IN' && mapped) {
         await clearUserQueryCache();

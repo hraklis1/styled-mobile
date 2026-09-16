@@ -211,8 +211,10 @@ export type StylistEntryContext =
       /** A server-resolved board action; item membership is never trusted from the client. */
       action?: 'outfit' | 'complete' | 'capsule' | 'theme';
     }
+  | { kind: 'shopping_comparison'; finds: { captureGroupId: string; name: string; storeName: string | null; price: number | null; currencyCode: string | null; category: string | null; color: string | null; material: string | null; notes: string | null }[] }
   | {
       kind: 'shopping_find';
+      currencyCode?: string | null;
       captureGroupId: string;
       storeName?: string | null;
       price?: number | null;

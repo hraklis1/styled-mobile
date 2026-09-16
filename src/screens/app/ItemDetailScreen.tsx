@@ -1,3 +1,4 @@
+import { formatShoppingPrice } from '../../lib/shoppingPresentation';
 import { useState, useRef, useEffect, type ReactNode } from 'react';
 import {
   View,
@@ -572,12 +573,12 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     wearHistoryRows.push({ label: 'Last worn', value: formatDate(viewItem.lastWornAt) });
   }
   if (viewItem.purchasePrice != null) {
-    wearHistoryRows.push({ label: 'Paid', value: `$${viewItem.purchasePrice.toFixed(2)}`, numeric: true });
+    wearHistoryRows.push({ label: 'Paid', value: viewItem.sourceShoppingFindId ? formatShoppingPrice(viewItem.purchasePrice, viewItem.purchaseCurrency ?? null)! : `$${viewItem.purchasePrice.toFixed(2)}`, numeric: true });
   }
   if (viewItem.wearCount > 0 && viewItem.purchasePrice != null) {
     wearHistoryRows.push({
       label: 'Cost per wear',
-      value: `$${(viewItem.purchasePrice / viewItem.wearCount).toFixed(2)}`,
+      value: viewItem.sourceShoppingFindId ? formatShoppingPrice(viewItem.purchasePrice / viewItem.wearCount, viewItem.purchaseCurrency ?? null)! : `$${(viewItem.purchasePrice / viewItem.wearCount).toFixed(2)}`,
       numeric: true,
     });
   }

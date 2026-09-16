@@ -1,3 +1,4 @@
+import { shoppingPriceCandidates } from '../../lib/shoppingPrices';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -27,7 +28,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Crypto from 'expo-crypto';
 import * as Haptics from 'expo-haptics';
-import { StatusBar } from 'expo-status-bar';
+import { StatusBar, setStatusBarStyle } from 'expo-status-bar';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -157,6 +158,15 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
   const [storeDraft, setStoreDraft] = useState('');
   const [resumePromptVisible, setResumePromptVisible] = useState(false);
   const [selectedPreviewId, setSelectedPreviewId] = useState<string | null>(null);
+  const attachGroupId = useShoppingSessionStore((state) => state.captureAttachmentGroupId);
+  const setAttachGroupId = useCallback((value: string | null) => useShoppingSessionStore.setState({ captureAttachmentGroupId: value }), []);
+  const [autoAttachedId, setAutoAttachedId] = useState<string | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  useEffect(() => {
+    void CameraView.isAvailableAsync().then((available) => {
+      if (!available) setCameraError('Camera unavailable. Add photos with Library below.');
+    }).catch(() => setCameraError('Camera unavailable. Add photos with Library below.'));
+  }, []);
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
@@ -183,10 +193,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
   const assignCaptureGroup = useShoppingSessionStore((state) => state.assignCaptureGroup);
   const {
     autoAttachTag,
-    attachLastToPrevious,
-    detachLast,
-    canAttachLast,
-    canDetachLast,
+    regroup,
   } = useShoppingCaptureGrouping(currentSession?.id ?? null);
   const visitPreviews = useMemo(
     () => allVisitPreviews
@@ -196,10 +203,13 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
   );
   const captureStacks = useMemo(() => buildCaptureStacks(visitPreviews), [visitPreviews]);
   // "Same item" is the resting label — it is the action a shopper reaches for.
-  // The button only becomes "Separate" once the last photo is actually in a
-  // stack, so an empty camera never offers to undo something that never
-  // happened.
-  const showsDetach = !canAttachLast && canDetachLast;
+  const lastPreview = visitPreviews[visitPreviews.length - 1];
+  const targetPreview = visitPreviews.find((preview) => preview.captureGroupId === attachGroupId);
+  useEffect(() => { setAutoAttachedId(null); }, [currentSession?.id]);
+  useEffect(() => {
+    if (isFocused) setStatusBarStyle('light');
+    return () => setStatusBarStyle('dark');
+  }, [isFocused]);
   const selectedPreview = visitPreviews.find((preview) => preview.id === selectedPreviewId) ?? null;
   const snapPoints = useMemo(() => ['62%'], []);
   const storeSuggestions = useMemo(
@@ -218,13 +228,18 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
     requestAnimationFrame(() => previewRailRef.current?.scrollToEnd({ animated: true }));
   }, [visitPreviews.length]);
 
-  const startBackgroundOCR = useCallback((id: string, localFileUri: string) => {
+  const startBackgroundOCR = useCallback((id: string, localFileUri: string, allowAuto = true) => {
     // Apple Vision/CoreML can be unstable when many large library photos are
     // submitted concurrently. Keep capture non-blocking, but process OCR one
     // image at a time in the background.
     ocrQueueRef.current = ocrQueueRef.current.then(async () => {
       try {
         const result = await processLocalOCR(localFileUri);
+        const pending = useShoppingSessionStore.getState().pendingUploads.find((upload) => upload.id === id);
+        const candidates = shoppingPriceCandidates(result.rawOcrText, pending?.countryCode);
+        if (pending && !pending.currencyCode && candidates.length === 1 && candidates[0].currencyCode) {
+          useShoppingSessionStore.getState().updatePendingGroupCatalog(pending.captureGroupId, { currencyCode: candidates[0].currencyCode });
+        }
         const captureRole = classifyShoppingCapture(result.rawOcrText, result.extractedPrice);
         useShoppingSessionStore.getState().updatePendingUploadOCR(id, {
           ...result,
@@ -239,7 +254,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
         // into the garment it belongs to once OCR can recognise it. Doing it
         // here rather than at capture time means the shopper watches the two
         // tiles become one stack, instead of trusting that they did.
-        autoAttachTag(id);
+        if (allowAuto && autoAttachTag(id)) setAutoAttachedId(id);
       } catch (ocrError: unknown) {
         console.warn('Shopping photo OCR failed', ocrError);
         useShoppingSessionStore.getState().updatePendingUploadOCR(id, {
@@ -457,7 +472,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
               .then((previewUri) => updateVisitPreview(id, { previewUri }))
               .catch(() => undefined);
           }
-          startBackgroundOCR(id, localFileUri);
+          startBackgroundOCR(id, localFileUri, false);
           importedCount += 1;
           setGalleryImportProgress({ imported: importedCount, total: assets.length });
         } catch (assetError) {
@@ -613,7 +628,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
       const timestamp = Date.now();
       const captureGroup = assignCaptureGroup(
         capturedSession?.id ?? null,
-        Crypto.randomUUID(),
+        attachGroupId ?? Crypto.randomUUID(),
         timestamp,
       );
 
@@ -621,6 +636,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
       // background OCR begins.
       addPendingUpload({
         id,
+        groupingExplicit: Boolean(attachGroupId),
         localFileUri,
         previewUri: null,
             storeName: capturedSession?.storeName ?? null,
@@ -650,6 +666,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
       if (capturedSession) {
         recordVisitPreview({
           id,
+          groupingExplicit: Boolean(attachGroupId),
           shoppingSessionId: capturedSession.id,
           captureGroupId: captureGroup.groupId,
           captureSequence: captureGroup.sequence,
@@ -677,20 +694,13 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
     } finally {
       setIsCapturing(false);
     }
-  }, [addPendingUpload, assignCaptureGroup, cameraReady, currentSession, isCapturing, recordVisitPreview, startBackgroundOCR, updateVisitPreview]);
+  }, [attachGroupId, addPendingUpload, assignCaptureGroup, cameraReady, currentSession, isCapturing, recordVisitPreview, startBackgroundOCR, updateVisitPreview]);
 
-  /**
-   * "Same item" folds the photo just taken into the one before it, and folds
-   * it back out when pressed again. It corrects something already on screen
-   * rather than asking the shopper to declare a boundary for photos that do
-   * not exist yet, which is what the old "Next item" button required.
-   */
+  // The explicit target remains selected until the shopper starts a new piece.
   const handleSameItem = useCallback(() => {
-    const changed = canAttachLast ? attachLastToPrevious() : detachLast();
-    if (!changed) return;
-    setExpandedGroupId(null);
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  }, [attachLastToPrevious, canAttachLast, detachLast]);
+    setAttachGroupId(attachGroupId ? null : lastPreview?.captureGroupId ?? null);
+    void Haptics.selectionAsync();
+  }, [attachGroupId, lastPreview?.captureGroupId, setAttachGroupId]);
 
   const toggleStack = useCallback((groupId: string) => {
     void Haptics.selectionAsync();
@@ -786,7 +796,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
 
   return (
     <View style={styles.root}>
-      <StatusBar style="light" />
+      {isFocused ? <StatusBar style="light" /> : null}
       <CameraView
         ref={cameraRef}
         style={StyleSheet.absoluteFill}
@@ -794,7 +804,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
         facing="back"
         mode="picture"
         onCameraReady={() => setCameraReady(true)}
-        onMountError={(event) => Alert.alert('Camera unavailable', event.message)}
+        onMountError={() => setCameraError('Camera unavailable. You can still add photos from your library.')}
       />
 
       <View style={[styles.topControls, { paddingTop: insets.top + spacing.sm }]}>
@@ -809,7 +819,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
             : 'Tap to add store'}
         >
           <Text style={styles.contextPillText} numberOfLines={1}>
-            {currentStoreName ? `📍 ${currentStoreName}` : '📍 Tap to add store'}
+            <Ionicons name="location-outline" size={16} color="white" />{' '}{currentStoreName ?? 'Add store'}
           </Text>
           {currentSession ? (
             <Text style={styles.contextPillSubtext} numberOfLines={1}>
@@ -840,6 +850,9 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
       ) : null}
 
       <View style={[styles.bottomControls, { paddingBottom: insets.bottom + spacing.lg }]}>
+        {cameraError ? <Text style={styles.captureHint}>{cameraError}</Text> : null}
+        {autoAttachedId ? <TouchableOpacity accessibilityLabel="Undo automatic tag grouping" onPress={() => { regroup(autoAttachedId, Crypto.randomUUID()); updateVisitPreview(autoAttachedId, { groupingExplicit: true }); setAutoAttachedId(null); }}><Text style={styles.captureHint}>Tag added to this piece · Undo</Text></TouchableOpacity> : null}
+        {targetPreview ? <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 }}><Image source={{ uri: targetPreview.previewUri ?? targetPreview.localFileUri }} style={{ width: 40, height: 50 }} contentFit="contain" /><Text style={styles.captureHint}>Adding photos to this piece</Text></View> : null}
         <CaptureStackRail
           railRef={previewRailRef}
           stacks={captureStacks}
@@ -884,19 +897,13 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.sameItemButton, !canAttachLast && !canDetachLast && styles.sameItemButtonDisabled]}
+            style={[styles.sameItemButton, !lastPreview && styles.sameItemButtonDisabled]}
             onPress={handleSameItem}
-            disabled={(!canAttachLast && !canDetachLast) || isCapturing || isImporting}
-            accessibilityLabel={showsDetach
-              ? 'Separate the photo you just took into its own item'
-              : 'Group the photo you just took with the previous one'}
+            disabled={(!lastPreview) || isCapturing || isImporting}
+            accessibilityLabel={attachGroupId ? 'New piece' : 'Add photo to this piece'}
           >
-            <Ionicons
-              name={showsDetach ? 'remove-circle-outline' : 'layers-outline'}
-              size={25}
-              color="#FFFFFF"
-            />
-            <Text style={styles.galleryButtonText}>{showsDetach ? 'Separate' : 'Same item'}</Text>
+            <Ionicons name={attachGroupId ? 'add-circle-outline' : 'layers-outline'} size={25} color="#FFFFFF" />
+            <Text style={styles.galleryButtonText}>{attachGroupId ? 'New piece' : 'Add photo to this piece'}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1000,7 +1007,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
         onRequestClose={() => setSelectedPreviewId(null)}
       >
         <View style={styles.previewViewer}>
-          <StatusBar style="light" />
+          {isFocused ? <StatusBar style="light" /> : null}
           <View style={[styles.viewerHeader, { paddingTop: insets.top + spacing.sm }]}>
             <TouchableOpacity
               style={styles.roundButton}

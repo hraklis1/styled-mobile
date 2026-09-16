@@ -8,10 +8,8 @@ import { ShoppingItemLightbox } from '../../components/shopping/ShoppingItemLigh
 import { ShoppingStoreAssignmentSheet } from '../../components/shopping/ShoppingStoreAssignmentSheet';
 import { useAssignShoppingStore } from '../../hooks/useAssignShoppingStore';
 import { buildShoppingStoreOptions } from '../../lib/shoppingStoreFilters';
-import { useCurrencyCode } from '../../hooks/useCurrencyCode';
 import { useShoppingSnaps } from '../../hooks/useShoppingSnaps';
 import { buildShoppingEditItems, mergeShoppingSnaps, type ShoppingEditItem } from '../../lib/shoppingGallery';
-import { formatShoppingPrice } from '../../lib/shoppingPresentation';
 import { buildShoppingSessionGroups } from '../../lib/shoppingSessionGroups';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import { AppText } from '../../components/primitives/AppText';
@@ -31,7 +29,6 @@ export function ShoppingHaulDetailScreen({ route, navigation }: ShoppingHaulDeta
 
   const { data: remoteSnaps = [] } = useShoppingSnaps();
   const pendingUploads = useShoppingSessionStore((state) => state.pendingUploads);
-  const currencyCode = useCurrencyCode();
   // Unfiltered on purpose — the immersive gallery shows the whole haul
   // regardless of whatever store/date filters are active back on the list.
   const allItems = useMemo(
@@ -77,7 +74,6 @@ export function ShoppingHaulDetailScreen({ route, navigation }: ShoppingHaulDeta
     return null;
   }
 
-  const spend = formatShoppingPrice(group.knownSpend, currencyCode);
   const contextLine = [group.dateLabel, group.placeLabel].filter(Boolean).join(' · ');
 
   return (
@@ -112,7 +108,7 @@ export function ShoppingHaulDetailScreen({ route, navigation }: ShoppingHaulDeta
           {contextLine ? <AppText variant="caption" tone="muted">{contextLine}</AppText> : null}
           {/* No item/photo counts and no status line here — the card that
               pushed this screen said both, and every tile below repeats them. */}
-          {spend ? <AppText variant="dataLarge" tone="primary" style={styles.heroSpend}>{spend}</AppText> : null}
+          <AppText variant="caption" tone="muted">{group.itemCount} pieces</AppText>
         </View>
       </View>
 

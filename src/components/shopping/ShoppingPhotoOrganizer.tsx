@@ -10,7 +10,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DraggablePhotoGrid } from './DraggablePhotoGrid';
 import { AppText } from '../primitives/AppText';
 import { ShoppingPhotoViewer } from './ShoppingPhotoViewer';
-import { useCurrencyCode } from '../../hooks/useCurrencyCode';
 import { formatShoppingPrice, snapRoleLabel } from '../../lib/shoppingPresentation';
 import {
   applySelection,
@@ -47,12 +46,13 @@ function nextRole(role: ShoppingCaptureRole): ShoppingCaptureRole {
   return 'unknown';
 }
 
-function stagePrice(snaps: ShoppingSnap[], snapIds: string[], currencyCode: string): string | null {
+function stagePrice(snaps: ShoppingSnap[], snapIds: string[]): string | null {
   const snapSet = new Set(snapIds);
-  const price = snaps.find((snap) => snapSet.has(snap.id) && snap.captureRole === 'tag' && snap.extractedPrice !== null)?.extractedPrice
+  const price = snaps.find((snap) => snapSet.has(snap.id) && snap.priceOverride != null)?.priceOverride
+    ?? snaps.find((snap) => snapSet.has(snap.id) && snap.captureRole === 'tag' && snap.extractedPrice !== null)?.extractedPrice
     ?? snaps.find((snap) => snapSet.has(snap.id) && snap.extractedPrice !== null)?.extractedPrice
     ?? null;
-  return formatShoppingPrice(price, currencyCode);
+  return formatShoppingPrice(price, snaps.find((snap) => snapSet.has(snap.id) && snap.currencyCode)?.currencyCode ?? null);
 }
 
 function containsPoint(rect: Rect | null, x: number, y: number): boolean {
@@ -100,7 +100,6 @@ export function ShoppingPhotoOrganizer({
   closeLabel?: string;
 }) {
   const insets = useSafeAreaInsets();
-  const currencyCode = useCurrencyCode();
   const [stages, setStages] = useState<ShoppingOrganizerStage[]>([]);
   const [history, setHistory] = useState<ShoppingOrganizerStage[][]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
@@ -503,8 +502,8 @@ export function ShoppingPhotoOrganizer({
                     {hovered
                       ? 'Release to add this photo'
                       : `${stage.snapIds.length} photo${stage.snapIds.length === 1 ? '' : 's'}${
-                        stagePrice(snapsWithStagedRoles, stage.snapIds, currencyCode)
-                          ? ` · ${stagePrice(snapsWithStagedRoles, stage.snapIds, currencyCode)}`
+                        stagePrice(snapsWithStagedRoles, stage.snapIds)
+                          ? ` · ${stagePrice(snapsWithStagedRoles, stage.snapIds)}`
                           : ''}`}
                   </Text>
                 </View>

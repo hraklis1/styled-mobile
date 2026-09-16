@@ -1,3 +1,4 @@
+import { useShoppingOfflineStore } from '../stores/useShoppingOfflineStore';
 import { File } from 'expo-file-system';
 
 import { queryClient } from './queryClient';
@@ -35,6 +36,19 @@ export async function deleteShoppingSnaps(
       await queryClient.invalidateQueries({ queryKey: SHOPPING_SNAPS_QUERY_KEY });
     }
 
+    if (userId) {
+      const account = useShoppingOfflineStore.getState().accounts[userId];
+      const ids = new Set(snaps.map((snap) => snap.id));
+      if (account) {
+        const remaining = account.snaps.filter((snap) => !ids.has(snap.id));
+        for (const operation of account.operations) {
+          if (operation.kind === 'catalog' && !remaining.some((snap) => snap.captureGroupId === operation.groupId)) useShoppingOfflineStore.getState().remove(userId, operation.id);
+          else if (operation.updates) useShoppingOfflineStore.getState().update(userId, operation.id, { updates: operation.updates.filter((update) => !ids.has(update.snapId)) });
+        }
+        useShoppingOfflineStore.getState().cache(userId, remaining);
+        queryClient.setQueryData([...SHOPPING_SNAPS_QUERY_KEY, userId], remaining);
+      }
+    }
     for (const snap of snaps.filter((item) => item.syncStatus === 'pending')) {
       try {
         const file = new File(snap.imageUri);

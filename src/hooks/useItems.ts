@@ -45,6 +45,8 @@ function invalidateItemQueries(qc: ReturnType<typeof useQueryClient>) {
 }
 
 export type CreateItemInput = {
+  sourceShoppingFindId?: string | null;
+  purchaseCurrency?: string | null;
   name: string;
   brand?: string | null;
   category?: ItemCategory | null;

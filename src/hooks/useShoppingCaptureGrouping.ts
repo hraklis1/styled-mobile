@@ -22,9 +22,10 @@ function toCandidate(preview: ShoppingVisitPreview): CaptureGroupingCandidate {
 }
 
 function currentCandidates(sessionId: string | null): CaptureGroupingCandidate[] {
-  return useShoppingSessionStore.getState().visitPreviews
-    .filter((preview) => preview.shoppingSessionId === sessionId)
-    .map(toCandidate);
+  const state = useShoppingSessionStore.getState();
+  const candidates = new Map(state.pendingUploads.filter((upload) => upload.shoppingSessionId === sessionId).map((upload) => [upload.id, { id: upload.id, shoppingSessionId: upload.shoppingSessionId, captureGroupId: upload.captureGroupId, captureRole: upload.captureRole, captureSequence: upload.captureSequence, timestamp: upload.timestamp }]));
+  for (const preview of state.visitPreviews.filter((preview) => preview.shoppingSessionId === sessionId)) candidates.set(preview.id, toCandidate(preview));
+  return [...candidates.values()];
 }
 
 /**
@@ -45,12 +46,12 @@ export function useShoppingCaptureGrouping(sessionId: string | null) {
     const updates = buildRegroupUpdates(currentCandidates(sessionId), captureId, targetGroupId);
     if (updates.length === 0) return false;
 
-    applyCaptureRegroup(updates);
     void saveOrganization(updates).catch((error: unknown) => {
       // The local regroup stands; the sync manager re-sends group membership
       // with the upload, so a failure here costs a retry, not the grouping.
       console.warn('Shopping capture regroup did not persist', error);
     });
+    applyCaptureRegroup(updates);
     return true;
   }, [applyCaptureRegroup, saveOrganization, sessionId]);
 
@@ -60,6 +61,8 @@ export function useShoppingCaptureGrouping(sessionId: string | null) {
    * visit arrives at review already sorted.
    */
   const autoAttachTag = useCallback((captureId: string): boolean => {
+    const state = useShoppingSessionStore.getState();
+    if (state.visitPreviews.find((p) => p.id === captureId)?.groupingExplicit || state.pendingUploads.find((p) => p.id === captureId)?.groupingExplicit) return false;
     const candidates = currentCandidates(sessionId);
     const capture = candidates.find((candidate) => candidate.id === captureId);
     const previous = findPreviousCapture(candidates, captureId);
@@ -101,6 +104,7 @@ export function useShoppingCaptureGrouping(sessionId: string | null) {
   }, [lastCapture, regroup]);
 
   return {
+    regroup,
     autoAttachTag,
     attachLastToPrevious,
     detachLast,

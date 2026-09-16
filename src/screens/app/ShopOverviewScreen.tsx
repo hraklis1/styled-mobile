@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ShoppingBriefCard } from '../../components/shopping/ShoppingBriefCard';
 import { ShortlistCarousel } from '../../components/shopping/ShortlistCarousel';
 import { SavedLookTile } from '../../components/outfits/SavedLookTile';
-import { EditorialSection, IconButton } from '../../components/primitives/Editorial';
+import { EditorialSection, ActionButton } from '../../components/primitives/Editorial';
 import { AppText } from '../../components/primitives/AppText';
 import { EditorialRow } from '../../components/primitives/EditorialRow';
 import { useEntitlement } from '../../hooks/useEntitlement';
@@ -127,15 +127,12 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
             <AppText variant="eyebrowLarge" tone="brand">SHOP</AppText>
             <AppText variant="editorialTitle" tone="primary">Buy fewer, better pieces</AppText>
           </View>
-          <IconButton
-            icon="camera-outline"
-            label="Save a find"
-            variant="primary"
-            onPress={openShoppingCamera}
-            accessibilityLabel="Window shopping? Save items here to review before you buy"
-          />
         </View>
 
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.lg }}>
+          <ActionButton icon="camera-outline" label="Shopping Mode" onPress={openShoppingCamera} />
+          <ActionButton icon="images-outline" label="View shortlist" variant="secondary" onPress={() => navigation.navigate('ShoppingGallery')} />
+        </View>
         <View style={styles.briefBand}>
           <ShoppingBriefCard
             isPremium={isPremium}

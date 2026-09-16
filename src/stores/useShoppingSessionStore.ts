@@ -4,7 +4,7 @@ import { createJSONStorage, persist, type StateStorage } from 'zustand/middlewar
 
 import type { ShoppingCaptureRole } from '../lib/classifyShoppingCapture';
 import type { ShoppingSnapOrganizationUpdate } from '../lib/shoppingSnapOrganizer';
-import type { ShoppingFindCatalogPatch, ShoppingFindCatalogStatus } from '../types/shoppingSnap';
+import type { ShoppingPurchaseDetails, ShoppingFindCatalogPatch, ShoppingFindCatalogStatus } from '../types/shoppingSnap';
 
 const MAX_RECENT_STORES = 5;
 
@@ -34,6 +34,7 @@ export type ShoppingSessionContext = {
 };
 
 export type ShoppingVisitPreview = {
+  groupingExplicit?: boolean;
   id: string;
   shoppingSessionId: string;
   captureGroupId: string;
@@ -47,7 +48,9 @@ export type ShoppingVisitPreview = {
   timestamp: number;
 };
 
-export type PendingShoppingUpload = {
+export type PendingShoppingUpload = ShoppingPurchaseDetails & {
+  groupingExplicit?: boolean;
+  uploadError?: string;
   id: string;
   localFileUri: string;
   previewUri?: string | null;
@@ -104,6 +107,7 @@ type ShoppingSessionState = {
   pendingVisitMetadata: ShoppingSessionContext[];
   visitPreviews: ShoppingVisitPreview[];
   deletedCaptureIds: string[];
+  captureAttachmentGroupId: string | null;
   activeCaptureGroupId: string | null;
   activeCaptureSessionId: string | null;
   activeCaptureGroupStartedAt: number | null;
@@ -191,6 +195,7 @@ export const useShoppingSessionStore = create<ShoppingSessionState>()(
       pendingVisitMetadata: [],
       visitPreviews: [],
       deletedCaptureIds: [],
+      captureAttachmentGroupId: null,
       activeCaptureGroupId: null,
       activeCaptureSessionId: null,
       activeCaptureGroupStartedAt: null,
@@ -219,7 +224,8 @@ export const useShoppingSessionStore = create<ShoppingSessionState>()(
           : state.recentSessions,
         pendingVisitMetadata: upsertVisitMetadata(state.pendingVisitMetadata, session),
         ...(state.activeCaptureSessionId !== session.id ? {
-          activeCaptureGroupId: null,
+          captureAttachmentGroupId: null,
+      activeCaptureGroupId: null,
           activeCaptureSessionId: session.id,
           activeCaptureGroupStartedAt: null,
           activeCapturePhotoCount: 0,
@@ -234,7 +240,8 @@ export const useShoppingSessionStore = create<ShoppingSessionState>()(
           currentSession: session,
           pendingVisitMetadata: upsertVisitMetadata(state.pendingVisitMetadata, session),
           activeCaptureSessionId: session.id,
-          activeCaptureGroupId: null,
+          captureAttachmentGroupId: null,
+      activeCaptureGroupId: null,
           activeCaptureGroupStartedAt: null,
           activeCapturePhotoCount: 0,
           activeCaptureTagCount: 0,
@@ -268,7 +275,8 @@ export const useShoppingSessionStore = create<ShoppingSessionState>()(
           return {
             currentStoreName: null,
             currentSession: null,
-            activeCaptureGroupId: null,
+            captureAttachmentGroupId: null,
+      activeCaptureGroupId: null,
             activeCaptureSessionId: null,
             activeCaptureGroupStartedAt: null,
             activeCapturePhotoCount: 0,
@@ -299,7 +307,8 @@ export const useShoppingSessionStore = create<ShoppingSessionState>()(
           pendingVisitMetadata: ended
             ? upsertVisitMetadata(state.pendingVisitMetadata, ended)
             : state.pendingVisitMetadata,
-          activeCaptureGroupId: null,
+          captureAttachmentGroupId: null,
+      activeCaptureGroupId: null,
           activeCaptureSessionId: null,
           activeCaptureGroupStartedAt: null,
           activeCapturePhotoCount: 0,
@@ -419,7 +428,8 @@ export const useShoppingSessionStore = create<ShoppingSessionState>()(
       clearStoreName: () => set({
         currentStoreName: null,
         currentSession: null,
-        activeCaptureGroupId: null,
+        captureAttachmentGroupId: null,
+      activeCaptureGroupId: null,
         activeCaptureSessionId: null,
         activeCaptureGroupStartedAt: null,
         activeCapturePhotoCount: 0,
@@ -548,6 +558,7 @@ export const useShoppingSessionStore = create<ShoppingSessionState>()(
             if (!update) return upload;
             return {
               ...upload,
+              groupingExplicit: true,
               captureGroupId: update.captureGroupId,
               captureGroupStartedAt: update.captureGroupStartedAt,
               captureSequence: update.captureSequence,
@@ -559,6 +570,7 @@ export const useShoppingSessionStore = create<ShoppingSessionState>()(
             if (!update) return preview;
             return {
               ...preview,
+              groupingExplicit: true,
               captureGroupId: update.captureGroupId,
               captureSequence: update.captureSequence,
               captureRole: update.captureRole,
@@ -607,7 +619,12 @@ export const useShoppingSessionStore = create<ShoppingSessionState>()(
     }),
     {
       name: 'shopping-session-v1',
-      version: 2,
+      version: 3,
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        // The previous process cannot complete its OCR callbacks after restart.
+        state.pendingUploads = state.pendingUploads.map((upload) => upload.ocrStatus === 'processing' ? { ...upload, ocrStatus: 'failed' as const } : upload);
+      },
       storage: createJSONStorage(() => shoppingSessionStorage),
       migrate: (persistedState: unknown) => {
         const state = (persistedState ?? {}) as Partial<ShoppingSessionState>;
@@ -644,6 +661,7 @@ export const useShoppingSessionStore = create<ShoppingSessionState>()(
         pendingVisitMetadata,
         visitPreviews,
         deletedCaptureIds,
+        captureAttachmentGroupId,
         activeCaptureGroupId,
         activeCaptureSessionId,
         activeCaptureGroupStartedAt,
@@ -660,6 +678,7 @@ export const useShoppingSessionStore = create<ShoppingSessionState>()(
         pendingVisitMetadata,
         visitPreviews,
         deletedCaptureIds,
+        captureAttachmentGroupId,
         activeCaptureGroupId,
         activeCaptureSessionId,
         activeCaptureGroupStartedAt,
@@ -677,3 +696,24 @@ function upsertVisitMetadata(
 ): ShoppingSessionContext[] {
   return [...metadata.filter((item) => item.id !== session.id), session];
 }
+
+let shoppingAccountId: string | null = null;
+/** Switch before publishing the auth user: no frame or upload sees another account's queue. */
+export function setShoppingAccount(userId: string | null) {
+  if (shoppingAccountId === userId) return;
+  if (userId && !shoppingSessionMMKV.getString('shopping-legacy-owner')) {
+    shoppingSessionMMKV.set('shopping-legacy-owner', userId);
+    const legacy = shoppingSessionMMKV.getString('shopping-session-v1');
+    if (legacy && !shoppingSessionMMKV.getString(`shopping-session:${userId}`)) shoppingSessionMMKV.set(`shopping-session:${userId}`, legacy);
+  }
+  shoppingAccountId = userId;
+  useShoppingSessionStore.persist.setOptions({ name: `shopping-session:${userId ?? 'signed-out'}` });
+  // setState persists, so preserve the target snapshot before resetting memory.
+  const saved = shoppingSessionMMKV.getString(`shopping-session:${userId ?? 'signed-out'}`);
+  useShoppingSessionStore.setState(useShoppingSessionStore.getInitialState(), true);
+  if (saved && userId) {
+    shoppingSessionMMKV.set(`shopping-session:${userId}`, saved);
+    void useShoppingSessionStore.persist.rehydrate();
+  }
+}
+export function getShoppingAccount() { return shoppingAccountId; }

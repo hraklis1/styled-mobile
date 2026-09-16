@@ -1,3 +1,8 @@
+import { useReducedMotion } from 'react-native-reanimated';
+import { purchaseDetails, validateShoppingPatch } from '../../lib/shoppingCatalog';
+import { parseShoppingAmount, shoppingPriceCandidates, suggestedShoppingCurrency } from '../../lib/shoppingPrices';
+import { ShoppingWardrobeForm } from './ShoppingWardrobeForm';
+import { ShoppingSyncNotice } from './ShoppingSyncNotice';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -39,6 +44,7 @@ import type { ShoppingFindCatalog, ShoppingFindCatalogPatch } from '../../types/
 
 function catalogFromItem(item: ShoppingEditItem): ShoppingFindCatalog {
   return {
+    ...purchaseDetails(item),
     category: item.category,
     sizeLabel: item.sizeLabel,
     colorLabel: item.colorLabel,
@@ -102,6 +108,9 @@ function CatalogField({
         value={value ?? ''}
         onChangeText={onChange}
         placeholder={label}
+        accessibilityLabel={label}
+        keyboardType={label === 'Price' ? 'decimal-pad' : label === 'Purchase link' ? 'url' : 'default'}
+        autoCapitalize={label === 'Purchase link' ? 'none' : 'sentences'}
         placeholderTextColor={colors.mutedForeground}
         style={styles.catalogFieldInput}
       />
@@ -128,6 +137,7 @@ export function ShoppingItemLightbox({
   onAssignStore?: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const reducedMotion = useReducedMotion();
   const { width, height } = useWindowDimensions();
   const scrollRef = useRef<ScrollView>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -140,6 +150,8 @@ export function ShoppingItemLightbox({
   const [decisionSaving, setDecisionSaving] = useState(false);
   const [showCaptureInfo, setShowCaptureInfo] = useState(false);
   const [imageDimensions, setImageDimensions] = useState<Record<string, { width: number; height: number }>>({});
+  const [wardrobeOpen, setWardrobeOpen] = useState(false);
+  const [priceDraft, setPriceDraft] = useState(item.extractedPrice?.toString() ?? '');
   const [organizerOpen, setOrganizerOpen] = useState(false);
 
   const {
@@ -171,7 +183,8 @@ export function ShoppingItemLightbox({
     [displayItem],
   );
   const currencyCode = useCurrencyCode();
-  const price = formatShoppingPrice(displayItem.extractedPrice, currencyCode);
+  const price = formatShoppingPrice(displayItem.extractedPrice, displayItem.currencyCode ?? null);
+  const priceCandidates = shoppingPriceCandidates(displayItem.snaps.map((snap) => snap.rawOcrText).join('\n'), displayItem.primarySnap.countryCode);
   const meta = [displayItem.sizeLabel ? `Size ${displayItem.sizeLabel}` : null, displayItem.colorLabel, displayItem.materialLabel]
     .filter(Boolean)
     .join('   ·   ');
@@ -221,17 +234,29 @@ export function ShoppingItemLightbox({
   };
 
   const handleSaveCatalog = () => {
-    const patch = {
+    const details = {
+      productName: cleanText(catalogDraft.productName ?? null),
+      brand: cleanText(catalogDraft.brand ?? null),
+      productCode: cleanText(catalogDraft.productCode ?? null),
+      purchaseUrl: cleanText(catalogDraft.purchaseUrl ?? null),
+      priceOverride: priceDraft.trim() ? (parseShoppingAmount(priceDraft) ?? NaN) : null,
+      currencyCode: cleanText(catalogDraft.currencyCode?.toUpperCase() ?? null),
       category: cleanText(catalogDraft.category),
       sizeLabel: cleanText(catalogDraft.sizeLabel),
       colorLabel: cleanText(catalogDraft.colorLabel),
       materialLabel: cleanText(catalogDraft.materialLabel),
       notes: cleanText(catalogDraft.notes),
     } satisfies ShoppingFindCatalogPatch;
+    const original = catalogFromItem(displayItem);
+    const patch = Object.fromEntries(Object.entries(details).filter(([key, value]) => {
+      if (key === 'priceOverride' && priceDraft === (displayItem.extractedPrice?.toString() ?? '')) return false;
+      return value !== (original[key as keyof ShoppingFindCatalog] ?? null);
+    })) as ShoppingFindCatalogPatch;
     setCatalogError(null);
-    void saveCatalog(displayItem.captureGroupId, patch)
+    try { validateShoppingPatch(patch); } catch (error) { setCatalogError(error instanceof Error ? error.message : 'Check the details.'); return; }
+    void saveCatalog(displayItem.captureGroupId, patch, original)
       .then(() => {
-        setDisplayItem((current) => ({ ...current, ...patch }));
+        setDisplayItem((current) => ({ ...current, ...patch, extractedPrice: patch.priceOverride ?? current.extractedPrice }));
         setCatalogEditing(false);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       })
@@ -248,7 +273,10 @@ export function ShoppingItemLightbox({
     setDecisionError(null);
     setDisplayItem((current) => ({ ...current, ...patch }));
     void saveCatalog(displayItem.captureGroupId, patch)
-      .then(() => void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success))
+      .then(() => {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        if (patch.catalogStatus === 'closet' && !displayItem.wardrobeItemId) Alert.alert('Marked as bought', 'Add this piece to your wardrobe now or come back later.', [{ text: 'Later', style: 'cancel' }, { text: 'Add to wardrobe', onPress: () => setWardrobeOpen(true) }]);
+      })
       .catch((error) => {
         setDisplayItem(previous);
         setDecisionError(error instanceof Error ? error.message : 'Could not save that decision.');
@@ -289,7 +317,7 @@ export function ShoppingItemLightbox({
   const syncLabel = displayItem.syncStatus === 'pending' ? SHORTLIST_COPY.onThisPhone : SHORTLIST_COPY.backedUp;
 
   return (
-    <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
+    <Modal visible animationType={reducedMotion ? 'none' : 'slide'} presentationStyle="fullScreen" onRequestClose={onClose}>
       <StatusBar style="light" />
       <View style={styles.root}>
         <ScrollView bounces={false} showsVerticalScrollIndicator={false}>
@@ -352,12 +380,13 @@ export function ShoppingItemLightbox({
           ) : null}
 
           <View style={[styles.content, { paddingBottom: insets.bottom + spacing.xxl }]}>
-            <Text style={styles.eyebrow}>{itemRoleSummary(displayItem).toUpperCase()}</Text>
+            <Text style={styles.eyebrow}>{[displayItem.brand, displayItem.storeName].filter(Boolean).join(' · ')}</Text>
             <View style={styles.titleRow}>
-              <Text style={styles.title}>{displayItem.category ?? 'Piece'}</Text>
+              <Text style={styles.title}>{displayItem.productName || displayItem.category || 'Saved piece'}</Text>
               {price ? <Text style={styles.price}>{price}</Text> : <Text style={styles.priceMuted}>Price not found</Text>}
             </View>
             {meta ? <Text style={styles.meta}>{meta}</Text> : null}
+            <ShoppingSyncNotice />
             <View style={styles.decisionSection}>
               <View style={styles.decisionHeader}>
                 <Text style={styles.decisionLabel}>STATUS</Text>
@@ -413,6 +442,7 @@ export function ShoppingItemLightbox({
                 hitSlop={4}
                 onPress={() => {
                   void Haptics.selectionAsync();
+                  setPriceDraft(displayItem.extractedPrice?.toString() ?? '');
                   setCatalogDraft(catalogFromItem(displayItem));
                   setCatalogError(null);
                   setCatalogEditing((editing) => !editing);
@@ -447,11 +477,19 @@ export function ShoppingItemLightbox({
             {catalogEditing ? (
               <View style={styles.catalogEditor}>
                 <View style={styles.catalogFieldGrid}>
+                  <CatalogField label="Product name" value={catalogDraft.productName ?? null} onChange={(value) => setCatalogDraft((current) => ({ ...current, productName: value }))} />
+                  <CatalogField label="Brand" value={catalogDraft.brand ?? null} onChange={(value) => setCatalogDraft((current) => ({ ...current, brand: value }))} />
+                  <CatalogField label="Product code" value={catalogDraft.productCode ?? null} onChange={(value) => setCatalogDraft((current) => ({ ...current, productCode: value }))} />
+                  <CatalogField label="Purchase link" value={catalogDraft.purchaseUrl ?? null} onChange={(value) => setCatalogDraft((current) => ({ ...current, purchaseUrl: value }))} />
+                  <CatalogField label="Price" value={priceDraft} onChange={setPriceDraft} />
+                  <CatalogField label="Currency (CAD, EUR…)" value={catalogDraft.currencyCode ?? null} onChange={(value) => setCatalogDraft((current) => ({ ...current, currencyCode: value.toUpperCase() }))} />
                   <CatalogField label="Category" value={catalogDraft.category} onChange={(value) => setCatalogDraft((current) => ({ ...current, category: value }))} />
                   <CatalogField label="Size" value={catalogDraft.sizeLabel} onChange={(value) => setCatalogDraft((current) => ({ ...current, sizeLabel: value }))} />
                   <CatalogField label="Color" value={catalogDraft.colorLabel} onChange={(value) => setCatalogDraft((current) => ({ ...current, colorLabel: value }))} />
                   <CatalogField label="Material" value={catalogDraft.materialLabel} onChange={(value) => setCatalogDraft((current) => ({ ...current, materialLabel: value }))} />
                 </View>
+                {!catalogDraft.currencyCode ? <TouchableOpacity style={{ minHeight: 44, justifyContent: 'center' }} onPress={() => setCatalogDraft((current) => ({ ...current, currencyCode: suggestedShoppingCurrency(displayItem.primarySnap.countryCode, currencyCode) }))}><Text style={{ color: colors.action }}>Use {suggestedShoppingCurrency(displayItem.primarySnap.countryCode, currencyCode)} currency</Text></TouchableOpacity> : null}
+                {priceCandidates.length > 0 ? <View style={{ gap: 8 }}><Text style={styles.detailLabel}>Prices read from your tags — choose one</Text>{priceCandidates.map((candidate, index) => <TouchableOpacity key={index} style={{ minHeight: 44, justifyContent: 'center' }} onPress={() => { setPriceDraft(String(candidate.amount)); setCatalogDraft((current) => ({ ...current, currencyCode: candidate.currencyCode ?? current.currencyCode })); }}><Text style={{ color: colors.action }}>{candidate.label}{candidate.currencyCode ? ` · ${candidate.currencyCode}` : ' · confirm currency'}</Text></TouchableOpacity>)}</View> : null}
                 <TextInput
                   value={catalogDraft.notes ?? ''}
                   onChangeText={(value) => setCatalogDraft((current) => ({ ...current, notes: value }))}
@@ -477,6 +515,10 @@ export function ShoppingItemLightbox({
               </View>
             ) : null}
 
+            <TouchableOpacity style={styles.stylistRow} onPress={() => void saveCatalog(displayItem.captureGroupId, { coverPhotoId: activePhoto.id }).then(() => setDisplayItem((current) => ({ ...current, primarySnap: activePhoto, coverPhotoId: activePhoto.id }))).catch((error) => Alert.alert('Could not save cover', error.message))}><Text style={styles.stylistRowText}>Use this photo as cover</Text></TouchableOpacity>
+            {displayItem.purchaseUrl ? <TouchableOpacity style={styles.stylistRow} onPress={() => { try { validateShoppingPatch({ purchaseUrl: displayItem.purchaseUrl }); void Linking.openURL(displayItem.purchaseUrl!).catch(() => Alert.alert('Could not open link')); } catch { Alert.alert('Edit the purchase link first.'); } }}><Text style={styles.stylistRowText}>Open purchase link</Text></TouchableOpacity> : null}
+            {displayItem.catalogStatus === 'closet' ? <TouchableOpacity style={styles.stylistRow} onPress={() => { if (displayItem.wardrobeItemId) { onClose(); void Linking.openURL(`styled://wardrobe-item/${displayItem.wardrobeItemId}`); } else setWardrobeOpen(true); }}><Text style={styles.stylistRowText}>{displayItem.wardrobeItemId ? 'View in wardrobe' : 'Add to wardrobe'}</Text></TouchableOpacity> : null}
+            {wardrobeOpen ? <ShoppingWardrobeForm item={displayItem} onClose={() => setWardrobeOpen(false)} onSaved={(id) => { setWardrobeOpen(false); setDisplayItem((current) => ({ ...current, wardrobeItemId: id })); }} /> : null}
             <TouchableOpacity style={styles.stylistRow} onPress={handleAskStylist} accessibilityRole="button">
               <Ionicons name="sparkles" size={14} color={colors.primary} />
               <Text style={styles.stylistRowText}>{SHORTLIST_COPY.askStylist}</Text>

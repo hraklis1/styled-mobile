@@ -2,7 +2,18 @@ export type ShoppingSnapSyncStatus = 'pending' | 'synced';
 export type ShoppingCaptureRole = 'garment' | 'tag' | 'unknown';
 export type ShoppingFindCatalogStatus = 'considering' | 'wishlist' | 'closet' | 'passed';
 
-export type ShoppingFindCatalog = {
+export type ShoppingPurchaseDetails = {
+  productName?: string | null;
+  brand?: string | null;
+  productCode?: string | null;
+  purchaseUrl?: string | null;
+  priceOverride?: number | null;
+  currencyCode?: string | null;
+  coverPhotoId?: string | null;
+  wardrobeItemId?: number | null;
+};
+
+export type ShoppingFindCatalog = ShoppingPurchaseDetails & {
   category: string | null;
   sizeLabel: string | null;
   colorLabel: string | null;
@@ -14,9 +25,10 @@ export type ShoppingFindCatalog = {
 
 export type ShoppingFindCatalogPatch = Partial<ShoppingFindCatalog>;
 
-export type ShoppingSnap = {
+export type ShoppingSnap = ShoppingPurchaseDetails & {
   id: string;
   imageUri: string;
+  remoteImageUri?: string;
   storagePath: string | null;
   storeName: string | null;
   storeLocationId: string | null;
@@ -61,6 +73,7 @@ export type RemoteShoppingSnapRow = {
   raw_ocr_text: string | null;
   captured_at: string;
   shopping_capture_groups: {
+    purchase_details?: ShoppingPurchaseDetails | null;
     category: string | null;
     size_label: string | null;
     color_label: string | null;
@@ -69,6 +82,7 @@ export type RemoteShoppingSnapRow = {
     is_favorite: boolean | null;
     catalog_status: ShoppingFindCatalogStatus | null;
   } | {
+    purchase_details?: ShoppingPurchaseDetails | null;
     category: string | null;
     size_label: string | null;
     color_label: string | null;

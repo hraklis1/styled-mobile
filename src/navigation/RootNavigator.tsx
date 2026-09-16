@@ -82,6 +82,7 @@ const linking: LinkingOptions<RootStackParamList> = {
       } as any,
       App: {
         screens: {
+          Closet: { screens: { ItemDetail: { path: 'wardrobe-item/:itemId', parse: { itemId: Number } } } },
           Shop: {
             screens: {
               ShopMain: 'shop',

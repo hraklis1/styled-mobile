@@ -5,39 +5,16 @@ import { useAuth } from '../contexts/AuthContext';
 import { useGlobalAIStylist } from '../contexts/GlobalAIStylistContext';
 import { track } from '../lib/analytics';
 import { deleteShoppingSnaps } from '../lib/deleteShoppingSnaps';
-import { queryClient } from '../lib/queryClient';
 import { buildShopStylistLaunch } from '../lib/shopDecisionWorkspace';
 import { mergeShoppingSnaps, type ShoppingEditItem } from '../lib/shoppingGallery';
 import type { ShoppingSnapOrganizationUpdate } from '../lib/shoppingSnapOrganizer';
-import { supabase } from '../lib/supabase';
+import * as Crypto from 'expo-crypto';
+import { overlayShoppingOperations, remapPendingCatalogOperations, useShoppingOfflineStore } from '../stores/useShoppingOfflineStore';
+import { syncShoppingMutations } from '../lib/shoppingMutationSync';
+import { validateShoppingPatch } from '../lib/shoppingCatalog';
 import { useShoppingSessionStore } from '../stores/useShoppingSessionStore';
-import type { ShoppingFindCatalogPatch, ShoppingSnap } from '../types/shoppingSnap';
-import { SHOPPING_SNAPS_QUERY_KEY, useShoppingSnaps } from './useShoppingSnaps';
-
-function catalogPatchPayload(patch: ShoppingFindCatalogPatch) {
-  const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  if (Object.prototype.hasOwnProperty.call(patch, 'category')) payload.category = patch.category ?? null;
-  if (Object.prototype.hasOwnProperty.call(patch, 'sizeLabel')) payload.size_label = patch.sizeLabel ?? null;
-  if (Object.prototype.hasOwnProperty.call(patch, 'colorLabel')) payload.color_label = patch.colorLabel ?? null;
-  if (Object.prototype.hasOwnProperty.call(patch, 'materialLabel')) payload.material_label = patch.materialLabel ?? null;
-  if (Object.prototype.hasOwnProperty.call(patch, 'notes')) payload.notes = patch.notes ?? null;
-  if (Object.prototype.hasOwnProperty.call(patch, 'isFavorite')) payload.is_favorite = patch.isFavorite ?? false;
-  if (Object.prototype.hasOwnProperty.call(patch, 'catalogStatus')) payload.catalog_status = patch.catalogStatus ?? 'considering';
-  return payload;
-}
-
-function applyCatalogPatchToSnap(snap: ShoppingSnap, patch: ShoppingFindCatalogPatch): ShoppingSnap {
-  return {
-    ...snap,
-    category: Object.prototype.hasOwnProperty.call(patch, 'category') ? patch.category ?? null : snap.category,
-    sizeLabel: Object.prototype.hasOwnProperty.call(patch, 'sizeLabel') ? patch.sizeLabel ?? null : snap.sizeLabel,
-    colorLabel: Object.prototype.hasOwnProperty.call(patch, 'colorLabel') ? patch.colorLabel ?? null : snap.colorLabel,
-    materialLabel: Object.prototype.hasOwnProperty.call(patch, 'materialLabel') ? patch.materialLabel ?? null : snap.materialLabel,
-    notes: Object.prototype.hasOwnProperty.call(patch, 'notes') ? patch.notes ?? null : snap.notes,
-    isFavorite: Object.prototype.hasOwnProperty.call(patch, 'isFavorite') ? patch.isFavorite ?? false : snap.isFavorite,
-    catalogStatus: Object.prototype.hasOwnProperty.call(patch, 'catalogStatus') ? patch.catalogStatus ?? 'considering' : snap.catalogStatus,
-  };
-}
+import type { ShoppingFindCatalogPatch } from '../types/shoppingSnap';
+import { useShoppingSnaps } from './useShoppingSnaps';
 
 /**
  * Shopping-find mutations (catalog, organize, delete, ask-stylist) live here
@@ -59,48 +36,22 @@ export function useShoppingItemActions() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSavingOrganization, setIsSavingOrganization] = useState(false);
 
-  const saveCatalog = useCallback(async (captureGroupId: string, patch: ShoppingFindCatalogPatch) => {
-    const groupSnaps = allSnaps.filter((snap) => snap.captureGroupId === captureGroupId);
-    if (groupSnaps.length === 0) return;
-    const syncedSnaps = groupSnaps.filter((snap) => snap.syncStatus === 'synced');
-    const pendingSnaps = groupSnaps.filter((snap) => snap.syncStatus === 'pending');
-
+  const saveCatalog = useCallback(async (captureGroupId: string, patch: ShoppingFindCatalogPatch, expectedBase?: ShoppingFindCatalogPatch) => {
+    if (!user) throw new Error('Sign in to save this piece.');
+    const account = useShoppingOfflineStore.getState().accounts[user.id];
+    const current = overlayShoppingOperations(mergeShoppingSnaps(account?.snaps ?? allSnaps, useShoppingSessionStore.getState().pendingUploads), account?.operations ?? []);
+    const snap = current.find((s) => s.captureGroupId === captureGroupId);
+    if (snap?.catalogStatus === 'wishlist') patch = { catalogStatus: 'considering', isFavorite: true, ...patch };
+    validateShoppingPatch(patch);
+    if (!snap) throw new Error('This piece is no longer available.');
     setIsSavingCatalog(true);
     try {
-      if (syncedSnaps.length > 0) {
-        if (!user) throw new Error('You need to be signed in to save catalog details.');
-        const firstSnap = [...syncedSnaps].sort((a, b) => (
-          a.captureSequence - b.captureSequence
-          || new Date(a.capturedAt).getTime() - new Date(b.capturedAt).getTime()
-        ))[0];
-        const { error } = await supabase
-          .from('shopping_capture_groups')
-          .upsert({
-            id: captureGroupId,
-            user_id: user.id,
-            shopping_session_id: firstSnap.shoppingSessionId ?? null,
-            started_at: new Date(firstSnap.capturedAt).toISOString(),
-            ...catalogPatchPayload(patch),
-          }, { onConflict: 'id' });
-        if (error) throw error;
-      }
-
-      if (pendingSnaps.length > 0) {
-        updatePendingGroupCatalog(captureGroupId, patch);
-      }
-
-      if (syncedSnaps.length > 0 && user) {
-        queryClient.setQueryData<ShoppingSnap[]>(
-          [...SHOPPING_SNAPS_QUERY_KEY, user.id],
-          (current) => current?.map((snap) => snap.captureGroupId === captureGroupId
-            ? applyCatalogPatchToSnap(snap, patch)
-            : snap),
-        );
-        await queryClient.invalidateQueries({ queryKey: SHOPPING_SNAPS_QUERY_KEY });
-      }
-    } finally {
-      setIsSavingCatalog(false);
-    }
+      const base = Object.fromEntries(Object.keys(patch).map((key) => [key, (expectedBase ?? snap)[key as keyof typeof patch] ?? null]));
+      useShoppingOfflineStore.getState().enqueue(user.id, { id: Crypto.randomUUID(), kind: 'catalog', groupId: captureGroupId, patch, base });
+      updatePendingGroupCatalog(captureGroupId, patch);
+      track('shopping_details_saved', { decision_changed: Boolean(patch.catalogStatus), favorite_changed: patch.isFavorite !== undefined });
+      void syncShoppingMutations(user.id).catch(() => undefined);
+    } finally { setIsSavingCatalog(false); }
   }, [allSnaps, updatePendingGroupCatalog, user]);
 
   const deleteItem = useCallback(async (item: ShoppingEditItem) => {
@@ -113,53 +64,36 @@ export function useShoppingItemActions() {
   }, [user?.id]);
 
   const saveOrganization = useCallback(async (updates: ShoppingSnapOrganizationUpdate[]) => {
-    if (updates.length === 0) return;
-    const snapById = new Map(allSnaps.map((snap) => [snap.id, snap]));
-    const syncedUpdates = updates.filter((update) => snapById.get(update.snapId)?.syncStatus === 'synced');
-    const pendingUpdates = updates.filter((update) => snapById.get(update.snapId)?.syncStatus === 'pending');
-
+    if (!updates.length) return;
+    if (!user) throw new Error('Sign in to organize your pieces.');
     setIsSavingOrganization(true);
     try {
-      if (syncedUpdates.length > 0) {
-        if (!user) throw new Error('You need to be signed in to organize synced photos.');
-        const groupPayloads = [...new Map(syncedUpdates.map((update) => {
-          const snap = snapById.get(update.snapId);
-          return [update.captureGroupId, {
-            id: update.captureGroupId,
-            user_id: user.id,
-            shopping_session_id: snap?.shoppingSessionId ?? null,
-            started_at: new Date(update.captureGroupStartedAt).toISOString(),
-          }];
-        })).values()];
-        const { error: groupError } = await supabase
-          .from('shopping_capture_groups')
-          .upsert(groupPayloads, { onConflict: 'id' });
-        if (groupError) throw groupError;
-
-        for (const update of syncedUpdates) {
-          const { error: rowError } = await supabase
-            .from('shopping_snaps')
-            .update({
-              capture_group_id: update.captureGroupId,
-              capture_role: update.captureRole,
-              capture_sequence: update.captureSequence,
-            })
-            .eq('user_id', user.id)
-            .eq('id', update.snapId);
-          if (rowError) throw rowError;
-        }
-      }
-
-      if (pendingUpdates.length > 0) {
-        regroupPendingUploads(pendingUpdates);
-      }
-      if (syncedUpdates.length > 0) {
-        await queryClient.invalidateQueries({ queryKey: SHOPPING_SNAPS_QUERY_KEY });
-      }
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } finally {
-      setIsSavingOrganization(false);
-    }
+      const account = useShoppingOfflineStore.getState().accounts[user.id];
+      const current = overlayShoppingOperations(mergeShoppingSnaps(account?.snaps ?? allSnaps, useShoppingSessionStore.getState().pendingUploads), account?.operations ?? []);
+      const pending = useShoppingSessionStore.getState().pendingUploads;
+      const pendingIds = new Set(pending.map((upload) => upload.id));
+      const changedPendingIds = new Set(updates.filter((update) => pendingIds.has(update.snapId)).map((update) => update.snapId));
+      const previous = (account?.operations ?? []).flatMap((operation) => {
+        if (operation.kind !== 'organization') return [operation];
+        const remaining = operation.updates?.filter((update) => !changedPendingIds.has(update.snapId)) ?? [];
+        return remaining.length ? [{ ...operation, updates: remaining }] : [];
+      });
+      const operations = remapPendingCatalogOperations(previous, pending, account?.snaps ?? [], updates, Crypto.randomUUID);
+      const pendingGroups = new Set(pending.map((upload) => upload.captureGroupId));
+      const deferredIds = new Set(previous.filter((operation) => operation.kind === 'catalog' && pendingGroups.has(operation.groupId!) && !account?.snaps.some((snap) => snap.captureGroupId === operation.groupId)).map((operation) => operation.id));
+      const originalIds = new Set(previous.map((operation) => operation.id));
+      const deferred = operations.filter((operation) => deferredIds.has(operation.id) || !originalIds.has(operation.id));
+      const deferredSet = new Set(deferred.map((operation) => operation.id));
+      const rows = updates.map((update) => ({ ...update, baseGroupId: pendingIds.has(update.snapId) ? undefined : current.find((snap) => snap.id === update.snapId)?.captureGroupId }));
+      // Membership creates any new destination before its deferred catalog edits.
+      useShoppingOfflineStore.setState((state) => ({ accounts: { ...state.accounts, [user.id]: {
+        ...(state.accounts[user.id] ?? { snaps: [], view: 'pieces' as const }),
+        operations: [...operations.filter((operation) => !deferredSet.has(operation.id)), { id: Crypto.randomUUID(), kind: 'organization' as const, updates: rows }, ...deferred],
+      } } }));
+      regroupPendingUploads(updates);
+      track('shopping_grouping_corrected', { photo_count: updates.length });
+      void syncShoppingMutations(user.id).catch(() => undefined);
+    } finally { setIsSavingOrganization(false); }
   }, [allSnaps, regroupPendingUploads, user]);
 
   const askStylistAboutItem = useCallback((item: ShoppingEditItem) => {
@@ -172,6 +106,7 @@ export function useShoppingItemActions() {
         captureGroupId: item.captureGroupId,
         storeName: item.storeName,
         price: item.extractedPrice,
+        currencyCode: item.currencyCode ?? null,
         category: item.category,
         color: item.colorLabel,
         material: item.materialLabel,

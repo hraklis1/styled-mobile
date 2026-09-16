@@ -1,5 +1,7 @@
+import { touchShoppingImage } from '../../lib/shoppingImageCache';
 import { useState } from 'react';
 import {
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,7 +14,6 @@ import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 
 import { PressableScale } from '../primitives/PressableScale';
-import { useCurrencyCode } from '../../hooks/useCurrencyCode';
 import { getSwatchColor } from '../../lib/colorUtils';
 import { formatShoppingPrice } from '../../lib/shoppingPresentation';
 import {
@@ -61,8 +62,7 @@ function ShoppingSessionTile({
   onLongPress: () => void;
 }) {
   const [failed, setFailed] = useState(false);
-  const currencyCode = useCurrencyCode();
-  const price = formatShoppingPrice(item.extractedPrice, currencyCode);
+  const price = formatShoppingPrice(item.extractedPrice, item.currencyCode ?? null);
 
   return (
     <TouchableOpacity
@@ -70,7 +70,7 @@ function ShoppingSessionTile({
       activeOpacity={0.85}
       onPress={onPress}
       onLongPress={onLongPress}
-      accessibilityLabel={`${item.storeName ?? 'Shopping'} piece${price ? `, ${price}` : `, ${SHORTLIST_COPY.needsPrice}`}`}
+      accessibilityLabel={`${item.storeName ?? 'Shopping'} piece${price ? `, ${price}` : ''}`}
     >
       <View style={styles.tile}>
         {failed ? (
@@ -81,9 +81,9 @@ function ShoppingSessionTile({
           <Image
             source={{ uri: item.primarySnap.imageUri }}
             style={StyleSheet.absoluteFill}
-            contentFit="cover"
+            contentFit="contain"
             contentPosition="center"
-            cachePolicy="memory-disk"
+            cachePolicy="memory-disk" onLoad={() => touchShoppingImage(item.primarySnap.imageUri)}
             recyclingKey={item.primarySnap.id}
             transition={200}
             onError={() => setFailed(true)}
@@ -138,12 +138,10 @@ export function ShoppingSessionBundle({
   onReviewGrouping?: () => void;
 }) {
   const reduceMotion = useReducedMotion();
-  const currencyCode = useCurrencyCode();
-  const spend = formatShoppingPrice(group.knownSpend, currencyCode);
   const stripItems = group.items.slice(0, STRIP_LIMIT);
   // Worth offering the organizer when there is something to correct: a photo
   // the classifier never sorted, or an item holding more than one shot.
-  const needsGrouping = group.unsortedCount > 0 || group.photoCount > group.itemCount;
+  const needsGrouping = group.unsortedCount > 0;
 
   // The row offers at most one action of its own, and whichever it offers is
   // dropped from the status line so the same nag never appears twice.
@@ -232,7 +230,7 @@ export function ShoppingSessionBundle({
             onPress={canAddStore ? onAddStore : handleChromePress}
             onLongPress={handleChromeLongPress}
             accessibilityRole="button"
-            accessibilityLabel={canAddStore
+            accessibilityLabel={selectionMode ? `Select entire visit, ${group.itemCount} pieces` : canAddStore
               ? `${SHORTLIST_COPY.needsStore}. ${SHORTLIST_COPY.addStore} for this visit.`
               : `${group.storeName}, ${metaSegments.join(', ')}`}
           >
@@ -246,8 +244,7 @@ export function ShoppingSessionBundle({
               {canAddStore ? <Ionicons name="add" size={17} color={colors.action} /> : null}
             </View>
             <View style={styles.metaRow}>
-              <Text style={styles.metaText} numberOfLines={1}>{metaSegments.join('  ·  ')}</Text>
-              {spend ? <Text style={styles.metaPrice} numberOfLines={1}>{spend}</Text> : null}
+              <Text style={styles.metaText}>{metaSegments.join('  ·  ')}</Text>
             </View>
           </TouchableOpacity>
 
@@ -286,7 +283,7 @@ export function ShoppingSessionBundle({
               </PressableScale>
             ) : (
               <View style={styles.footerActionSlot}>
-                <Text style={styles.footerStatus} numberOfLines={1}>{status.join('  ·  ')}</Text>
+                {onReviewGrouping ? <TouchableOpacity onPress={() => Alert.alert('Visit options', undefined, [{ text: 'Cancel', style: 'cancel' }, { text: 'Adjust grouping', onPress: onReviewGrouping }])} accessibilityLabel="Visit options" style={{ minHeight: 44, justifyContent: 'center' }}><Ionicons name="ellipsis-horizontal" size={20} color={colors.mutedForeground} /></TouchableOpacity> : <Text style={styles.footerStatus}>{status.join(' · ')}</Text>}
               </View>
             )}
             <PressableScale

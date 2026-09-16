@@ -1,8 +1,17 @@
+import { ShoppingPieceTile } from '../../components/shopping/ShoppingPieceTile';
+import { ShoppingCompare } from '../../components/shopping/ShoppingCompare';
+import { ShoppingSyncNotice } from '../../components/shopping/ShoppingSyncNotice';
+import { useShoppingItemActions } from '../../hooks/useShoppingItemActions';
+import { useShoppingOfflineStore, emptyShoppingAccount } from '../../stores/useShoppingOfflineStore';
+import { browseShoppingItems } from '../../lib/shoppingSearch';
+import { track } from '../../lib/analytics';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
+  TextInput,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -79,12 +88,23 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   const assignStoreSheetRef = useRef<BottomSheetModal>(null);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const account = useShoppingOfflineStore((state) => state.accounts[user?.id ?? ''] ?? emptyShoppingAccount);
+  const viewMode = account.view;
+  const { saveCatalog } = useShoppingItemActions();
+  const [query, setQuery] = useState('');
+  const [favorites, setFavorites] = useState(false);
+  const [category, setCategory] = useState('');
+  const [currency, setCurrency] = useState('');
+  const [minimum, setMinimum] = useState('');
+  const [maximum, setMaximum] = useState('');
+  const [oldest, setOldest] = useState(false);
+  const [comparison, setComparison] = useState<ShoppingEditItem[] | null>(null);
   const { data: remoteSnaps = [], isLoading, isRefetching, isError, refetch } = useShoppingSnaps();
   const pendingUploads = useShoppingSessionStore((state) => state.pendingUploads);
   const [storeFilter, setStoreFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState<ShoppingDateFilter>('all');
   const [attentionFilter, setAttentionFilter] = useState<ShortlistAttentionFilter>('all');
-  const [catalogStatuses, setCatalogStatuses] = useState<Set<ShoppingFindCatalogStatus>>(() => new Set());
+  const [catalogStatuses, setCatalogStatuses] = useState<Set<ShoppingFindCatalogStatus>>(() => new Set(['considering']));
   const [lightboxItem, setLightboxItem] = useState<ShoppingEditItem | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(() => new Set());
@@ -193,11 +213,11 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
       const reviewFiltered = reviewReasonFilter === 'all'
         ? baseFilteredItems
         : baseFilteredItems.filter((item) => itemHasShoppingReviewReason(item, reviewReasonFilter));
-      return reviewFiltered.filter((item) => matchesShoppingCatalogStatuses(item.catalogStatus, catalogStatuses));
+      return browseShoppingItems(reviewFiltered.filter((item) => matchesShoppingCatalogStatuses(item.catalogStatus, catalogStatuses)), { query, favorites, category, currency, min: minimum, max: maximum, oldest });
     },
-    [baseFilteredItems, catalogStatuses, reviewReasonFilter],
+    [baseFilteredItems, catalogStatuses, reviewReasonFilter, query, favorites, category, currency, minimum, maximum, oldest],
   );
-  const groups = useMemo(() => buildShoppingSessionGroups(filteredItems), [filteredItems]);
+  const groups = useMemo(() => { const visits = buildShoppingSessionGroups(filteredItems); return oldest ? visits.reverse() : visits; }, [filteredItems, oldest]);
   const selectedBulkSnaps = useMemo(
     () => allItems.filter((item) => selectedItemIds.has(item.id)).flatMap((item) => item.snaps),
     [allItems, selectedItemIds],
@@ -215,7 +235,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   const activeFilterCount = Number(storeFilter !== 'all')
     + Number(dateFilter !== 'all')
     + Number(attentionFilter !== 'all')
-    + catalogStatuses.size;
+    + catalogStatuses.size + Number(Boolean(category)) + Number(Boolean(currency)) + Number(Boolean(minimum || maximum)) + Number(oldest);
 
   const appliedFilters = useMemo<ShortlistAppliedFilter[]>(() => {
     const filters: ShortlistAppliedFilter[] = [];
@@ -251,8 +271,12 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
         onRemove: () => setStoreFilter(STORE_FILTER_ALL),
       });
     }
+    if (category) filters.push({ key: 'category', label: category, onRemove: () => setCategory('') });
+    if (currency) filters.push({ key: 'currency', label: currency, onRemove: () => { setCurrency(''); setMinimum(''); setMaximum(''); } });
+    if (minimum || maximum) filters.push({ key: 'price', label: `${minimum || '0'}–${maximum || 'any'}`, onRemove: () => { setMinimum(''); setMaximum(''); } });
+    if (oldest) filters.push({ key: 'sort', label: 'Oldest first', onRemove: () => setOldest(false) });
     return filters;
-  }, [attentionFilter, attentionOptions, catalogStatuses, dateFilter, storeFilter, storeFilterLabel]);
+  }, [category, currency, minimum, maximum, oldest, attentionFilter, attentionOptions, catalogStatuses, dateFilter, storeFilter, storeFilterLabel]);
 
   const deleteSnaps = useCallback(async (snaps: ShoppingSnap[]) => {
     await deleteShoppingSnapsService(snaps, user?.id ?? null);
@@ -289,6 +313,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   }, []);
 
   const clearItemFilters = useCallback(() => {
+    setCategory(''); setCurrency(''); setMinimum(''); setMaximum(''); setOldest(false); setFavorites(false); setQuery('');
     void Haptics.selectionAsync();
     setStoreFilter(STORE_FILTER_ALL);
     setDateFilter('all');
@@ -417,14 +442,14 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
           {allItems.length > 0 ? (
             <ActionButton
               icon="checkmark-circle-outline"
-              label="Select"
+              label={viewMode === 'visits' ? 'Select visits' : 'Select'}
               onPress={() => startSelection()}
               variant="secondary"
             />
           ) : null}
           <ActionButton
             icon="camera"
-            label="Add"
+            label="Add piece"
             onPress={() => navigation.navigate('ShoppingCamera')}
           />
         </>
@@ -442,15 +467,22 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
         setHeroHeight((current) => (current === next ? current : next));
       }}>
         <ShopSubpageHeader
-          title="Found, not yet yours."
+          title="Your shortlist"
+          compact={allItems.length > 0}
           subtitle={allItems.length > 0
-            ? `Pieces you photographed while shopping, kept here while you decide.  —  ${countLine}`
+            ? countLine
             : 'Pieces you photographed while shopping, kept here while you decide.'}
           eyebrow="THE SHORTLIST"
           onBack={goBack}
           actions={headerActions}
           style={styles.heroHeader}
         />
+        <View style={{ paddingHorizontal: 16, paddingBottom: 12, gap: 12 }}>
+          <OptionChips options={[{ value: 'pieces', label: 'Pieces' }, { value: 'visits', label: 'Visits' }]} value={viewMode} onSelect={(value) => { if (user) useShoppingOfflineStore.getState().view(user.id, value as 'pieces' | 'visits'); cancelSelection(); }} />
+          <TextInput value={query} onChangeText={setQuery} placeholder="Search pieces, brands, stores, notes…" accessibilityLabel="Search shortlist" returnKeyType="search" onSubmitEditing={() => track('shopping_search_used', { result_count: filteredItems.length })} style={{ minHeight: 44, paddingHorizontal: 16, borderRadius: 8, backgroundColor: colors.surfaceSubtle, color: colors.foreground }} />
+          <TouchableOpacity accessibilityRole="checkbox" accessibilityState={{ checked: favorites }} onPress={() => setFavorites((value) => !value)} style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8 }}><Ionicons name={favorites ? 'heart' : 'heart-outline'} size={18} color={colors.primary} /><Text style={{ color: colors.foreground }}>Favorites</Text></TouchableOpacity>
+          <ShoppingSyncNotice />
+        </View>
         {allItems.length > 0 ? <ShortlistFilterBar filters={appliedFilters} /> : null}
       </View>
 
@@ -465,7 +497,22 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
 
   return (
     <View style={styles.root}>
-      <FlatList
+      {viewMode === 'pieces' ? <FlatList
+        data={filteredItems}
+        numColumns={2}
+        key="pieces"
+        keyExtractor={(item) => item.id}
+        columnWrapperStyle={{ gap: 12, paddingHorizontal: 16 }}
+        ListHeaderComponent={listHeader}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        contentContainerStyle={{ paddingBottom: selectionMode ? 180 : 32 }}
+        refreshing={isRefetching}
+        onRefresh={() => void refetch()}
+        ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyTitle}>{allItems.length ? 'No matching pieces' : 'Your next find starts here'}</Text><Text style={styles.emptyText}>Photograph a piece or import photos to consider later.</Text><ActionButton icon="add" label={allItems.length ? 'Clear filters' : 'Add piece'} onPress={() => { if (allItems.length) { setQuery(''); setFavorites(false); setCategory(''); setCurrency(''); setMinimum(''); setMaximum(''); setCatalogStatuses(new Set()); clearItemFilters(); } else navigation.navigate('ShoppingCamera'); }} /></View>}
+        renderItem={({ item }) => <ShoppingPieceTile item={item} selected={selectedItemIds.has(item.id)} selecting={selectionMode} onPress={() => { if (selectionMode) setSelectedItemIds((ids) => { const next = new Set(ids); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; }); else setLightboxItem(item); }} onLongPress={() => { setSelectionMode(true); setSelectedItemIds(new Set([item.id])); }} onFavorite={() => void saveCatalog(item.captureGroupId, { isFavorite: !item.isFavorite }).catch((error) => Alert.alert('Could not save', error.message))} />}
+      /> : <FlatList
+        key="visits"
         data={groups}
         keyExtractor={(group) => group.key}
         renderItem={({ item: group, index }) => (
@@ -524,9 +571,11 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
         showsVerticalScrollIndicator={false}
         refreshing={isRefetching}
         onRefresh={() => void refetch()}
-      />
+      />}
 
-      {showCompactHeader ? (
+      {comparison ? <ShoppingCompare items={comparison} onClose={() => setComparison(null)} /> : null}
+
+      {viewMode === 'visits' && showCompactHeader ? (
         <Animated.View
           entering={reduceMotion ? undefined : FadeIn.duration(120)}
           exiting={reduceMotion ? undefined : FadeOut.duration(90)}
@@ -534,7 +583,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
         >
           <ShopSubpageHeader
             compact
-            title="Found, not yet yours."
+            title="Your shortlist"
             subtitle={compactState}
             eyebrow="THE SHORTLIST"
             onBack={goBack}
@@ -545,7 +594,9 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
       ) : null}
 
       {selectionMode ? (
-        <View style={[styles.selectionBar, { paddingBottom: insets.bottom + spacing.md }]}>
+        <View style={[styles.selectionBar, { flexWrap: 'wrap' }, { paddingBottom: insets.bottom + spacing.md }]}>
+          <ActionButton icon="git-compare-outline" label="Compare" variant="secondary" onPress={() => { const selected = allItems.filter((item) => selectedItemIds.has(item.id)); if (selected.length < 2 || selected.length > 3) { Alert.alert('Choose two or three pieces', 'Adjust your selection to compare.'); return; } track('shopping_comparison_opened', { piece_count: selected.length }); setComparison(selected); }} />
+          {SHOPPING_CATALOG_STATUS_OPTIONS.map((option) => <TouchableOpacity key={option.value} style={styles.selectionBarButton} onPress={() => { void Promise.all([...selectedItemIds].map((id) => saveCatalog(id, { catalogStatus: option.value }))).then(cancelSelection).catch((error) => Alert.alert('Could not save', error.message)); }}><Text style={{ color: colors.primary }}>{option.label}</Text></TouchableOpacity>)}
           <TouchableOpacity style={styles.selectionBarButton} onPress={cancelSelection} disabled={isDeletingSelection}>
             <Text style={styles.selectionBarCancel} numberOfLines={1}>Cancel</Text>
           </TouchableOpacity>
@@ -578,9 +629,15 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
         backgroundStyle={styles.filterSheetBackground}
         handleIndicatorStyle={styles.filterSheetHandle}
       >
-        <BottomSheetView style={styles.filterSheetContent}>
+        <BottomSheetView style={{ flex: 1 }}><ScrollView contentContainerStyle={styles.filterSheetContent} keyboardShouldPersistTaps="handled">
           <AppText variant="sheetTitle" tone="primary">Refine your shortlist</AppText>
 
+          <AppText variant="eyebrow" tone="muted">CATEGORY</AppText>
+          <OptionChips options={[{ value: '', label: 'All categories' }, ...[...new Set(allItems.map((item) => item.category).filter((value): value is string => Boolean(value)))].map((value) => ({ value, label: value }))]} value={category} onSelect={setCategory} />
+          <AppText variant="eyebrow" tone="muted">PRICE AND CURRENCY</AppText>
+          <TextInput value={currency} onChangeText={(value) => setCurrency(value.toUpperCase())} autoCapitalize="characters" maxLength={3} placeholder="Currency, e.g. CAD" accessibilityLabel="Price filter currency" style={{ minHeight: 44, color: colors.foreground }} />
+          <View style={{ flexDirection: 'row', gap: 12 }}>{[{ value: minimum, set: setMinimum, label: 'Minimum' }, { value: maximum, set: setMaximum, label: 'Maximum' }].map((field) => <TextInput key={field.label} value={field.value} onChangeText={field.set} editable={currency.length === 3} keyboardType="decimal-pad" placeholder={field.label} accessibilityLabel={field.label + ' price'} style={{ flex: 1, minHeight: 44, color: colors.foreground }} />)}</View>
+          <OptionChips options={[{ value: 'newest', label: 'Newest first' }, { value: 'oldest', label: 'Oldest first' }]} value={oldest ? 'oldest' : 'newest'} onSelect={(value) => setOldest(value === 'oldest')} />
           <AppText variant="eyebrow" tone="muted" style={styles.filterGroupLabel}>WHEN</AppText>
           <OptionChips
             options={DATE_OPTIONS}
@@ -623,7 +680,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
           <TouchableOpacity style={styles.doneButton} onPress={() => filterSheetRef.current?.dismiss()}>
             <Text style={styles.doneButtonText}>Show {filteredItems.length} piece{filteredItems.length === 1 ? '' : 's'}</Text>
           </TouchableOpacity>
-        </BottomSheetView>
+        </ScrollView></BottomSheetView>
       </BottomSheetModal>
 
       <ShoppingStoreFilterSheet

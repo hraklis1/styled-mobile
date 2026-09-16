@@ -124,10 +124,10 @@ describe('shoppingGallery', () => {
       materialLabel: 'Cotton blend',
       notes: 'Good with black shorts.',
       isFavorite: true,
-      catalogStatus: 'wishlist',
+      catalogStatus: 'considering',
     });
     expect(shoppingCatalogChips(result[0])).toEqual(['T-shirt', 'Size M', 'Heather blue', 'Cotton blend']);
-    expect(shoppingCatalogStatusLabel(result[0].catalogStatus)).toBe('Wishlist');
+    expect(shoppingCatalogStatusLabel(result[0].catalogStatus)).toBe('Considering');
     expect(shoppingItemBadges(result[0])).toEqual([]);
   });
 
@@ -166,7 +166,7 @@ describe('shoppingGallery', () => {
     );
 
     expect(result.map((item) => item.id)).toEqual(['group-review']);
-    expect(result[0].reviewReasons).toEqual(['Missing price', 'Missing store', 'Text needs price check']);
+    expect(result[0].reviewReasons).toEqual(['Text needs price check']);
   });
 
   it('builds item-level review reason chips and presentation badges', () => {
@@ -187,15 +187,13 @@ describe('shoppingGallery', () => {
     const reviewItem = items.find((item) => item.id === 'group-review');
 
     expect(buildShoppingReviewReasonOptions(items)).toEqual([
-      { key: 'missing-price', label: 'Needs price', count: 1 },
-      { key: 'missing-store', label: 'Needs store', count: 1 },
       { key: 'unsorted-photo', label: 'Unsorted', count: 1 },
       { key: 'text-needs-price-check', label: 'Check tag text', count: 1 },
     ]);
     expect(reviewItem ? itemRoleSummary(reviewItem) : null).toBe('1 unsorted');
     expect(reviewItem ? shoppingItemBadges(reviewItem) : []).toEqual([
       { key: 'pending', label: 'On this phone', tone: 'attention' },
-      { key: 'missing-price', label: 'Needs price', tone: 'attention' },
+      { key: 'unsorted', label: 'Sort photos', tone: 'neutral' },
     ]);
   });
 

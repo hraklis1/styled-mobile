@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, View, StyleSheet } from 'react-native';
+import { Alert, View, StyleSheet, Text, ScrollView, TouchableOpacity } from 'react-native';
 
 import { ShoppingPhotoOrganizer } from '../../components/shopping/ShoppingPhotoOrganizer';
 import { useShoppingItemActions } from '../../hooks/useShoppingItemActions';
 import { useShoppingSnaps } from '../../hooks/useShoppingSnaps';
 import { deleteShoppingPreview } from '../../lib/shoppingPreviews';
-import { mergeShoppingSnaps } from '../../lib/shoppingGallery';
+import { buildShoppingEditItems, mergeShoppingSnaps } from '../../lib/shoppingGallery';
 import type { ShoppingSnapOrganizationUpdate } from '../../lib/shoppingSnapOrganizer';
 import type { ShoppingVisitReviewScreenProps } from '../../navigation/types';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
-import { colors } from '../../theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
+import { colors, spacing, typography } from '../../theme';
 
 /**
  * Where a shopping visit ends. The camera now closes into this screen instead
@@ -22,8 +24,10 @@ import { colors } from '../../theme';
  * sort a photo dump days later.
  */
 export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitReviewScreenProps) {
+  const insets = useSafeAreaInsets();
+  const [organizing, setOrganizing] = useState(false);
   const { sessionId } = route.params;
-  const { data: remoteSnaps = [] } = useShoppingSnaps();
+  const { data: remoteSnaps = [], isLoading } = useShoppingSnaps();
   const pendingUploads = useShoppingSessionStore((state) => state.pendingUploads);
   const currentSessionId = useShoppingSessionStore((state) => state.currentSession?.id ?? null);
   const endVisit = useShoppingSessionStore((state) => state.endVisit);
@@ -93,22 +97,33 @@ export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitRe
   // Nothing was photographed — there is no review to do, so close the visit
   // out rather than parking on an empty organizer.
   useEffect(() => {
-    if (snaps.length === 0) finish();
-  }, [finish, snaps.length]);
+    if (!isLoading && snaps.length === 0) finish();
+  }, [finish, isLoading, snaps.length]);
 
   if (snaps.length === 0) return <View style={styles.root} />;
 
+  const pieces = buildShoppingEditItems(snaps);
+  if (!organizing) return (
+    <ScrollView style={styles.root} contentContainerStyle={{ padding: spacing.xl, paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.xl }}>
+      <Text style={{ ...typography.text.editorialTitle, color: colors.foreground }}>{pieces.length} {pieces.length === 1 ? 'piece' : 'pieces'} saved</Text>
+      <Text style={{ ...typography.text.body, marginVertical: spacing.lg, color: colors.mutedForeground }}>Your photos are saved on this phone. Revisit them whenever you’re ready.</Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>{pieces.map((piece) => <Image key={piece.id} source={{ uri: piece.primarySnap.imageUri }} style={{ width: '46%', aspectRatio: 0.8, backgroundColor: colors.surfaceSubtle }} contentFit="contain" />)}</View>
+      <TouchableOpacity style={{ marginTop: spacing.xl, padding: spacing.lg, backgroundColor: colors.primary, borderRadius: 8 }} onPress={finish}><Text style={{ color: colors.primaryForeground, textAlign: 'center' }}>Done</Text></TouchableOpacity>
+      <TouchableOpacity style={{ padding: spacing.lg }} onPress={() => setOrganizing(true)}><Text style={{ color: colors.action, textAlign: 'center' }}>Adjust grouping</Text></TouchableOpacity>
+      {isLiveVisit ? <TouchableOpacity style={{ padding: spacing.lg }} onPress={handleClose}><Text style={{ color: colors.foreground, textAlign: 'center' }}>Keep shooting</Text></TouchableOpacity> : null}
+    </ScrollView>
+  );
   return (
     <View style={styles.root}>
       <ShoppingPhotoOrganizer
         snaps={snaps}
-        onClose={handleClose}
+        onClose={() => setOrganizing(false)}
         onSave={handleSave}
         isSaving={isSavingOrganization || isFinishing}
         eyebrow={isLiveVisit ? 'THIS VISIT' : 'EARLIER VISIT'}
         title="Everything you photographed"
         subtitle="Grouped for you. Adjust anything, or just save."
-        saveLabel="Save all"
+        saveLabel="Done"
         closeLabel={isLiveVisit ? 'Keep shooting' : 'Cancel'}
       />
     </View>

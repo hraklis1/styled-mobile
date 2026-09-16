@@ -19,8 +19,7 @@ export type ShoppingItemBadge = {
 
 export const SHOPPING_CATALOG_STATUS_OPTIONS: { value: ShoppingFindCatalogStatus; label: string }[] = [
   { value: 'considering', label: SHORTLIST_COPY.considering },
-  { value: 'wishlist', label: SHORTLIST_COPY.wishlist },
-  { value: 'closet', label: SHORTLIST_COPY.inCloset },
+  { value: 'closet', label: 'Bought' },
   { value: 'passed', label: SHORTLIST_COPY.passed },
 ];
 
@@ -31,8 +30,9 @@ const REVIEW_REASON_LABELS: Record<ShoppingReviewReasonKey, string> = {
   'text-needs-price-check': SHORTLIST_COPY.checkTagText,
 };
 
-export function formatShoppingPrice(price: number | null, currencyCode: string = DEFAULT_CURRENCY_CODE): string | null {
+export function formatShoppingPrice(price: number | null, currencyCode: string | null = DEFAULT_CURRENCY_CODE): string | null {
   if (price === null) return null;
+  if (!currencyCode) return `${price.toLocaleString()} · currency needed`;
   const currencyDigits = new Intl.NumberFormat(undefined, { style: 'currency', currency: currencyCode })
     .resolvedOptions().minimumFractionDigits;
   const maximumFractionDigits = currencyDigits === 0 ? 0 : 2;
@@ -93,12 +93,6 @@ export function shoppingItemBadges(item: ShoppingEditItem): ShoppingItemBadge[] 
   if (item.syncStatus === 'pending') {
     badges.push({ key: 'pending', label: SHORTLIST_COPY.onThisPhone, tone: 'attention' });
   }
-  if (item.extractedPrice === null) {
-    badges.push({ key: 'missing-price', label: SHORTLIST_COPY.needsPrice, tone: 'attention' });
-  }
-  if (item.reviewReasons.includes('Missing store')) {
-    badges.push({ key: 'missing-store', label: SHORTLIST_COPY.needsStore, tone: 'attention' });
-  }
   if (item.reviewReasons.includes('Unsorted photo')) {
     badges.push({ key: 'unsorted', label: SHORTLIST_COPY.sortPhotos, tone: 'neutral' });
   }
@@ -132,8 +126,8 @@ export function shoppingCatalogChips(value: ShoppingFindCatalog): string[] {
   ].filter((chip): chip is string => Boolean(chip));
 }
 
-export function garmentFriendlyContentFit(snap: ShoppingSnap): 'cover' | 'contain' {
-  return snap.captureRole === 'garment' ? 'contain' : 'cover';
+export function garmentFriendlyContentFit(_snap: ShoppingSnap): 'cover' | 'contain' {
+  return 'contain';
 }
 
 export type ShoppingTagField = { label: string; value: string };

@@ -96,6 +96,8 @@ export type ScanResult = {
 };
 
 export type Item = {
+  sourceShoppingFindId?: string | null;
+  purchaseCurrency?: string | null;
   id: number;
   name: string;
   userId: number;

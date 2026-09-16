@@ -1,5 +1,6 @@
 import type { PendingShoppingUpload } from '../stores/useShoppingSessionStore';
-import type { ShoppingFindCatalogStatus, ShoppingSnap } from '../types/shoppingSnap';
+import type { ShoppingPurchaseDetails, ShoppingFindCatalogStatus, ShoppingSnap } from '../types/shoppingSnap';
+import { purchaseDetails } from './shoppingCatalog';
 import { buildShoppingLocationKey, normalizeStoreName, shoppingFilterKey } from './shoppingLocations';
 
 export type ShoppingDateFilter = 'all' | 'today' | '7d' | '30d';
@@ -16,7 +17,7 @@ export function matchesShoppingCatalogStatuses(
   return selectedStatuses.size === 0 || selectedStatuses.has(status);
 }
 
-export type ShoppingEditItem = {
+export type ShoppingEditItem = ShoppingPurchaseDetails & {
   id: string;
   captureGroupId: string;
   snaps: ShoppingSnap[];
@@ -63,10 +64,9 @@ function choosePrimarySnap(snaps: ShoppingSnap[]): ShoppingSnap {
   })[0];
 }
 
-function itemReviewReasons(snaps: ShoppingSnap[], price: number | null, storeName: string | null): string[] {
+function itemReviewReasons(snaps: ShoppingSnap[]): string[] {
   const reasons: string[] = [];
-  if (price === null) reasons.push('Missing price');
-  if (!storeName) reasons.push('Missing store');
+
   if (snaps.some((snap) => snap.captureRole === 'unknown')) reasons.push('Unsorted photo');
   if (snaps.some((snap) => snap.rawOcrText.trim().length > 0 && snap.extractedPrice === null)) {
     reasons.push('Text needs price check');
@@ -88,7 +88,8 @@ export function buildShoppingEditItems(snaps: ShoppingSnap[]): ShoppingEditItem[
         a.captureSequence - b.captureSequence
         || new Date(a.capturedAt).getTime() - new Date(b.capturedAt).getTime()
       ));
-      const primarySnap = choosePrimarySnap(sortedSnaps);
+      const coverId = sortedSnaps.find((snap) => snap.coverPhotoId)?.coverPhotoId;
+      const primarySnap = sortedSnaps.find((snap) => snap.id === coverId) ?? choosePrimarySnap(sortedSnaps);
       const priceSnap = sortedSnaps.find((snap) => snap.captureRole === 'tag' && snap.extractedPrice !== null)
         ?? sortedSnaps.find((snap) => snap.extractedPrice !== null);
       const storeSnap = sortedSnaps.find((snap) => snap.storeName);
@@ -96,7 +97,8 @@ export function buildShoppingEditItems(snaps: ShoppingSnap[]): ShoppingEditItem[
       const newestSnap = [...sortedSnaps].sort(
         (a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime(),
       )[0];
-      const extractedPrice = priceSnap?.extractedPrice ?? null;
+      const corrected = sortedSnaps.find((snap) => snap.priceOverride != null);
+      const extractedPrice = corrected?.priceOverride ?? priceSnap?.extractedPrice ?? null;
       const storeName = storeSnap?.storeName ?? null;
       const catalogSnap = sortedSnaps.find((snap) => (
         snap.category
@@ -107,12 +109,14 @@ export function buildShoppingEditItems(snaps: ShoppingSnap[]): ShoppingEditItem[
         || snap.isFavorite
         || snap.catalogStatus !== 'considering'
       )) ?? primarySnap;
-      const reviewReasons = itemReviewReasons(sortedSnaps, extractedPrice, storeName);
+      const reviewReasons = itemReviewReasons(sortedSnaps);
       const syncStatus: ShoppingEditItem['syncStatus'] = sortedSnaps.some((snap) => snap.syncStatus === 'pending')
         ? 'pending'
         : 'synced';
 
       return {
+        ...purchaseDetails(catalogSnap),
+        currencyCode: catalogSnap.currencyCode ?? corrected?.currencyCode ?? priceSnap?.currencyCode ?? null,
         id: captureGroupId,
         captureGroupId,
         snaps: sortedSnaps,
@@ -135,8 +139,8 @@ export function buildShoppingEditItems(snaps: ShoppingSnap[]): ShoppingEditItem[
         colorLabel: catalogSnap.colorLabel,
         materialLabel: catalogSnap.materialLabel,
         notes: catalogSnap.notes,
-        isFavorite: catalogSnap.isFavorite,
-        catalogStatus: catalogSnap.catalogStatus,
+        isFavorite: catalogSnap.isFavorite || catalogSnap.catalogStatus === 'wishlist',
+        catalogStatus: catalogSnap.catalogStatus === 'wishlist' ? 'considering' : catalogSnap.catalogStatus,
       };
     })
     .sort((a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime());
@@ -171,6 +175,7 @@ export function mergeShoppingSnaps(
 
   for (const upload of pendingUploads) {
     merged.set(upload.id, {
+      ...purchaseDetails(upload),
       id: upload.id,
       imageUri: upload.localFileUri,
       storagePath: null,
