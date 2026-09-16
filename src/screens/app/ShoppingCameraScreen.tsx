@@ -962,43 +962,29 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
           onSelect={selectStack}
         />
         <View style={styles.captureActions}>
-          {cameraError ? (
-            <View style={styles.captureActionPlaceholder} />
-          ) : (
-            <TouchableOpacity
-              style={styles.galleryButton}
-              onPress={openGallery}
-              disabled={captureBusy}
-              accessibilityLabel={currentStoreName
-                ? `Import photos from your library for ${currentStoreName}`
-                : 'Import photos from your library'}
-            >
-              {isImporting ? <ActivityIndicator color={cameraColors.onCamera} /> : <Ionicons name="images-outline" size={25} color={cameraColors.onCamera} />}
-              <Text style={styles.galleryButtonText}>Library</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={styles.galleryButton}
+            onPress={openGallery}
+            disabled={captureBusy}
+            accessibilityLabel={currentStoreName
+              ? `Import photos from your library for ${currentStoreName}`
+              : 'Import photos from your library'}
+          >
+            {isImporting ? <ActivityIndicator color={cameraColors.onCamera} /> : <Ionicons name="images-outline" size={25} color={cameraColors.onCamera} />}
+            <Text style={styles.galleryButtonText}>Library</Text>
+          </TouchableOpacity>
 
-          {cameraError ? (
-            <TouchableOpacity
-              style={[styles.choosePhotosButton, captureBusy && styles.shutterDisabled]}
-              onPress={openGallery}
-              disabled={captureBusy}
-              accessibilityLabel={`Choose photos for item ${activeItemNumber}`}
-            >
-              {isImporting ? <ActivityIndicator color={cameraColors.ctaForeground} /> : <Ionicons name="images-outline" size={24} color={cameraColors.ctaForeground} />}
-              <Text style={styles.choosePhotosText}>Choose photos</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[styles.shutterOuter, (!cameraReady || isCapturing) && styles.shutterDisabled]}
-              onPress={() => void takePhoto()}
-              disabled={!cameraReady || captureBusy}
-              activeOpacity={0.8}
-              accessibilityLabel={`Take photo for item ${activeItemNumber}`}
-            >
-              {isCapturing ? <ActivityIndicator color={cameraColors.ctaForeground} /> : <View style={styles.shutterInner} />}
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={[styles.shutterOuter, (!cameraReady || cameraError || isCapturing) && styles.shutterDisabled]}
+            onPress={() => void takePhoto()}
+            disabled={!cameraReady || Boolean(cameraError) || captureBusy}
+            activeOpacity={0.8}
+            accessibilityLabel={cameraError ? 'Camera unavailable' : `Take photo for item ${activeItemNumber}`}
+            accessibilityHint={cameraError ? 'Use the Library button to add photos' : undefined}
+            accessibilityState={{ disabled: !cameraReady || Boolean(cameraError) || captureBusy }}
+          >
+            {isCapturing ? <ActivityIndicator color={cameraColors.ctaForeground} /> : <View style={styles.shutterInner} />}
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.sameItemButton, !targetPreview && styles.sameItemButtonDisabled]}
@@ -1339,20 +1325,6 @@ const styles = StyleSheet.create({
     color: cameraColors.onCamera,
     textAlign: 'center',
   },
-  captureActionPlaceholder: { width: 80, height: 58 },
-  choosePhotosButton: {
-    width: 112,
-    minHeight: 64,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radii.full,
-    backgroundColor: cameraColors.ctaBackground,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: cameraColors.selectionSubtle,
-  },
-  choosePhotosText: { ...typography.text.label, color: cameraColors.ctaForeground, textAlign: 'center' },
   sameItemButton: {
     width: 80,
     minHeight: 58,
