@@ -924,78 +924,76 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
         </View>
       ) : null}
 
-      <View style={[styles.bottomControls, { paddingBottom: insets.bottom + spacing.lg }]}>
-        <View style={styles.activePhotosSection}>
-          <View style={styles.activePhotosHeader} accessibilityLiveRegion="polite">
-            <Text style={styles.activePhotosEyebrow}>Item {String(activeItemNumber).padStart(2, '0')}</Text>
-            <Text selectable style={styles.activePhotosCount}>{activePhotoCount} photo{activePhotoCount === 1 ? '' : 's'}</Text>
+      <View style={styles.bottomDock} pointerEvents="box-none">
+        {activePhotos.length > 0 ? (
+          <View style={styles.activePhotosRail}>
+            <ScrollView ref={photoRailRef} horizontal showsHorizontalScrollIndicator={false}
+              style={styles.photoViewport} contentContainerStyle={styles.photoRail}
+              onContentSizeChange={() => photoRailRef.current?.scrollToEnd({ animated: !reducedMotion })}>
+              {activePhotos.map((photo, index) => (
+                <View key={photo.id} style={styles.photoEntry}>
+                  <TouchableOpacity onPress={() => setSelectedPreviewId(photo.id)} disabled={captureBusy}
+                    style={styles.photoButton}
+                    accessibilityRole="button" accessibilityLabel={`Open photo ${index + 1} of item ${activeItemNumber}`}>
+                    <Image source={{ uri: photo.previewUri ?? photo.localFileUri }} contentFit="cover" style={styles.photoThumbnail} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => confirmDeletePreview(photo.id)} disabled={captureBusy}
+                    style={styles.deletePhotoButton} accessibilityRole="button"
+                    accessibilityLabel={`Delete photo ${index + 1} of item ${activeItemNumber}`}
+                    accessibilityState={{ disabled: captureBusy }}>
+                    <View style={styles.deletePhotoBadge}>
+                      <Ionicons name="trash-outline" size={15} color={cameraColors.destructive} />
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
           </View>
-          <ScrollView ref={photoRailRef} horizontal showsHorizontalScrollIndicator={false}
-            style={styles.photoViewport} contentContainerStyle={styles.photoRail}
-            onContentSizeChange={() => photoRailRef.current?.scrollToEnd({ animated: !reducedMotion })}>
-            {activePhotos.length === 0 ? (
-              <View style={styles.emptyPhotos}><Text style={styles.emptyPhotosText}>Add your first photo</Text></View>
-            ) : activePhotos.map((photo, index) => (
-              <View key={photo.id} style={styles.photoEntry}>
-                <TouchableOpacity onPress={() => setSelectedPreviewId(photo.id)} disabled={captureBusy}
-                  style={styles.photoButton}
-                  accessibilityRole="button" accessibilityLabel={`Open photo ${index + 1} of item ${activeItemNumber}`}>
-                  <Image source={{ uri: photo.previewUri ?? photo.localFileUri }} contentFit="cover" style={styles.photoThumbnail} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => confirmDeletePreview(photo.id)} disabled={captureBusy}
-                  style={styles.deletePhotoButton} accessibilityRole="button"
-                  accessibilityLabel={`Delete photo ${index + 1} of item ${activeItemNumber}`}
-                  accessibilityState={{ disabled: captureBusy }}>
-                  <View style={styles.deletePhotoBadge}>
-                    <Ionicons name="trash-outline" size={15} color={cameraColors.destructive} />
-                  </View>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-        <CaptureStackRail
-          stacks={captureStacks}
-          activeGroupId={attachGroupId}
-          showEmptyItem={hasEmptyItem || !targetPreview}
-          disabled={captureBusy}
-          onSelect={selectStack}
-        />
-        <View style={styles.captureActions}>
-          <TouchableOpacity
-            style={styles.galleryButton}
-            onPress={openGallery}
+        ) : null}
+        <View style={[styles.bottomControls, { paddingBottom: insets.bottom + spacing.lg }]}>
+          <CaptureStackRail
+            stacks={captureStacks}
+            activeGroupId={attachGroupId}
+            showEmptyItem={hasEmptyItem || !targetPreview}
             disabled={captureBusy}
-            accessibilityLabel={currentStoreName
-              ? `Import photos from your library for ${currentStoreName}`
-              : 'Import photos from your library'}
-          >
-            {isImporting ? <ActivityIndicator color={cameraColors.onCamera} /> : <Ionicons name="images-outline" size={25} color={cameraColors.onCamera} />}
-            <Text style={styles.galleryButtonText}>Library</Text>
-          </TouchableOpacity>
+            onSelect={selectStack}
+          />
+          <View style={styles.captureActions}>
+            <TouchableOpacity
+              style={styles.galleryButton}
+              onPress={openGallery}
+              disabled={captureBusy}
+              accessibilityLabel={currentStoreName
+                ? `Import photos from your library for ${currentStoreName}`
+                : 'Import photos from your library'}
+            >
+              {isImporting ? <ActivityIndicator color={cameraColors.onCamera} /> : <Ionicons name="images-outline" size={25} color={cameraColors.onCamera} />}
+              <Text style={styles.galleryButtonText}>Library</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.shutterOuter, (!cameraReady || cameraError || isCapturing) && styles.shutterDisabled]}
-            onPress={() => void takePhoto()}
-            disabled={!cameraReady || Boolean(cameraError) || captureBusy}
-            activeOpacity={0.8}
-            accessibilityLabel={cameraError ? 'Camera unavailable' : `Take photo for item ${activeItemNumber}`}
-            accessibilityHint={cameraError ? 'Use the Library button to add photos' : undefined}
-            accessibilityState={{ disabled: !cameraReady || Boolean(cameraError) || captureBusy }}
-          >
-            {isCapturing ? <ActivityIndicator color={cameraColors.ctaForeground} /> : <View style={styles.shutterInner} />}
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.shutterOuter, (!cameraReady || cameraError || isCapturing) && styles.shutterDisabled]}
+              onPress={() => void takePhoto()}
+              disabled={!cameraReady || Boolean(cameraError) || captureBusy}
+              activeOpacity={0.8}
+              accessibilityLabel={cameraError ? 'Camera unavailable' : `Take photo for item ${activeItemNumber}`}
+              accessibilityHint={cameraError ? 'Use the Library button to add photos' : undefined}
+              accessibilityState={{ disabled: !cameraReady || Boolean(cameraError) || captureBusy }}
+            >
+              {isCapturing ? <ActivityIndicator color={cameraColors.ctaForeground} /> : <View style={styles.shutterInner} />}
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.sameItemButton, !targetPreview && styles.sameItemButtonDisabled]}
-            onPress={startNextItem}
-            disabled={!targetPreview || captureBusy}
-            accessibilityLabel="New item"
-            accessibilityHint="Start a separate item with your next photo"
-          >
-            <Ionicons name="add-circle-outline" size={25} color={cameraColors.onCamera} />
-            <Text style={styles.galleryButtonText}>New item</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.sameItemButton, !targetPreview && styles.sameItemButtonDisabled]}
+              onPress={startNextItem}
+              disabled={!targetPreview || captureBusy}
+              accessibilityLabel="New item"
+              accessibilityHint="Start a separate item with your next photo"
+            >
+              <Ionicons name="add-circle-outline" size={25} color={cameraColors.onCamera} />
+              <Text style={styles.galleryButtonText}>New item</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -1153,19 +1151,26 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
 const styles = StyleSheet.create({
   topScrim: { position: 'absolute', top: 0, left: 0, right: 0, height: 156 },
   bottomScrim: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 420 },
-  activePhotosSection: { width: '100%', gap: spacing.sm },
-  activePhotosHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: spacing.lg },
-  activePhotosEyebrow: { ...typography.text.eyebrow, color: cameraColors.onCamera, letterSpacing: typography.tracking.eyebrowLarge },
-  activePhotosCount: { ...typography.text.caption, color: cameraColors.onCameraMuted, fontVariant: ['tabular-nums'] },
+  bottomDock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+  },
+  activePhotosRail: {
+    width: '100%',
+    minHeight: 80,
+    justifyContent: 'flex-end',
+    marginBottom: spacing.lg,
+  },
   photoViewport: { width: '100%', flexGrow: 0 },
-  photoRail: { flexGrow: 1, alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, minHeight: 84 },
-  photoEntry: { width: 64, height: 84, position: 'relative', alignItems: 'center', justifyContent: 'center' },
-  photoButton: { width: 60, height: 80, borderRadius: radii.photo, overflow: 'hidden' },
-  photoThumbnail: { width: '100%', height: '100%', borderRadius: radii.photo },
-  deletePhotoButton: { position: 'absolute', top: -8, right: -12, width: 44, height: 44, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
+  photoRail: { alignItems: 'center', gap: spacing.sm, paddingTop: spacing.md, paddingHorizontal: spacing.lg, minHeight: 80 },
+  photoEntry: { width: 54, height: 68, position: 'relative', alignItems: 'center', justifyContent: 'center' },
+  photoButton: { width: 52, height: 68, borderRadius: radii.sm, borderCurve: 'continuous', overflow: 'hidden' },
+  photoThumbnail: { width: '100%', height: '100%', borderRadius: radii.sm, borderCurve: 'continuous' },
+  deletePhotoButton: { position: 'absolute', top: -10, right: -12, width: 44, height: 44, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
   deletePhotoBadge: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: radii.full, borderWidth: StyleSheet.hairlineWidth, borderColor: cameraColors.onCameraMuted, backgroundColor: cameraColors.control },
-  emptyPhotos: { minHeight: 84, flex: 1, justifyContent: 'center', alignItems: 'center', borderRadius: radii.md, borderWidth: StyleSheet.hairlineWidth, borderColor: cameraColors.selectionSubtle, backgroundColor: cameraColors.controlSubtle },
-  emptyPhotosText: { ...typography.text.bodySmall, color: cameraColors.onCameraMuted },
   root: { flex: 1, backgroundColor: cameraColors.backdrop },
   permissionRoot: {
     flex: 1,
@@ -1272,10 +1277,7 @@ const styles = StyleSheet.create({
     color: cameraColors.onCamera,
   },
   bottomControls: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
+    width: '100%',
     alignItems: 'center',
     gap: spacing.lg,
     paddingTop: spacing.xl,
