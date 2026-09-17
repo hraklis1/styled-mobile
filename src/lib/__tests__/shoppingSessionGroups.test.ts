@@ -114,6 +114,17 @@ describe('shoppingSessionGroups', () => {
     expect(buildShoppingSessionGroups(items, now)[0].dominantColorLabel).toBeNull();
   });
 
+  it('stamps each visit with the clock time of its latest capture', () => {
+    const items = buildShoppingEditItems([
+      { ...snap, storeName: null },
+      { ...snap, id: 'b', captureGroupId: 'group-b', storeName: null, capturedAt: '2026-06-20T13:00:00.000Z' },
+    ]);
+
+    const [group] = buildShoppingSessionGroups(items, now);
+    const expected = new Date('2026-06-20T13:00:00.000Z').toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    expect(group.timeLabel).toBe(expected);
+  });
+
   it('keys every outstanding thing so the card can skip what it already offers as a button', () => {
     const items = buildShoppingEditItems([
       { ...snap, storeName: null, extractedPrice: null, rawOcrText: '', syncStatus: 'pending' },

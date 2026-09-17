@@ -30,13 +30,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeOut, useReducedMotion } from 'react-native-reanimated';
 
 import { ShoppingSessionBundle } from '../../components/shopping/ShoppingSessionBundle';
-import { ShortlistFilterBar, type ShortlistAppliedFilter } from '../../components/shopping/ShortlistFilterBar';
+import { ShortlistFilterBar, ShortlistToggleChip, type ShortlistAppliedFilter } from '../../components/shopping/ShortlistFilterBar';
 import { ShoppingItemLightbox } from '../../components/shopping/ShoppingItemLightbox';
 import { ShoppingStoreFilterSheet } from '../../components/shopping/ShoppingStoreFilterSheet';
 import { ShoppingStoreAssignmentSheet } from '../../components/shopping/ShoppingStoreAssignmentSheet';
 import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
 import { AppText } from '../../components/primitives/AppText';
-import { ActionButton, FilterControl } from '../../components/primitives/Editorial';
+import { ActionButton, FilterControl, IconButton, SegmentedControl } from '../../components/primitives/Editorial';
+import { ActionMenuSheet, type ActionMenuOption } from '../../components/primitives/ActionMenuSheet';
 import { OptionChips } from '../../components/primitives/EditAtoms';
 import { useAuth } from '../../contexts/AuthContext';
 import { useShoppingSnaps } from '../../hooks/useShoppingSnaps';
@@ -92,6 +93,10 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   const viewMode = account.view;
   const { saveCatalog } = useShoppingItemActions();
   const [query, setQuery] = useState('');
+  // Search hides behind a magnifier until asked for; a typed query keeps the
+  // field open so the results can't be narrowed by something invisible.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [menuGroup, setMenuGroup] = useState<ShoppingSessionGroup | null>(null);
   const [favorites, setFavorites] = useState(false);
   const [category, setCategory] = useState('');
   const [currency, setCurrency] = useState('');
@@ -398,6 +403,58 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
     );
   }, [cancelSelection, deleteSnaps, selectedBulkSnaps, selectedItemIds.size]);
 
+  const confirmDeleteGroup = useCallback((group: ShoppingSessionGroup) => {
+    const snaps = group.items.flatMap((item) => item.snaps);
+    Alert.alert(
+      `Delete ${group.itemCount} ${group.itemCount === 1 ? 'piece' : 'pieces'}?`,
+      `${snaps.length} shopping photo${snaps.length === 1 ? '' : 's'} will be removed from your history.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void deleteSnaps(snaps).catch((error) => {
+              Alert.alert('Could not delete photos', error instanceof Error ? error.message : 'Please try again.');
+            });
+          },
+        },
+      ],
+    );
+  }, [deleteSnaps]);
+
+  // Everything a visit can do, in one place. Options only appear when they
+  // apply, so a stored, sorted visit offers just select and delete.
+  const menuOptions = useMemo<ActionMenuOption[]>(() => {
+    if (!menuGroup) return [];
+    const group = menuGroup;
+    const options: ActionMenuOption[] = [];
+    if (group.shoppingSessionId) {
+      const sessionId = group.shoppingSessionId;
+      if (group.unsortedCount > 0) {
+        options.push({
+          label: `Sort photos · ${group.unsortedCount}`,
+          icon: 'albums-outline',
+          onPress: () => navigation.navigate('ShoppingVisitReview', { sessionId }),
+        });
+      }
+      options.push({
+        label: 'Adjust grouping',
+        icon: 'git-branch-outline',
+        onPress: () => navigation.navigate('ShoppingVisitReview', { sessionId }),
+      });
+    }
+    if (!group.storeName) {
+      options.push({ label: SHORTLIST_COPY.addStore, icon: 'storefront-outline', onPress: () => openStoreAssignment(group) });
+      // The row's heading is spoken for (it asks for the store), so the way
+      // into the visit lives here instead.
+      options.push({ label: 'Open visit', icon: 'images-outline', onPress: () => navigation.navigate('ShoppingHaulDetail', { groupKey: group.key }) });
+    }
+    options.push({ label: 'Select visit', icon: 'checkmark-circle-outline', onPress: () => startSelection(group) });
+    options.push({ label: 'Delete visit', icon: 'trash-outline', destructive: true, onPress: () => confirmDeleteGroup(group) });
+    return options;
+  }, [confirmDeleteGroup, menuGroup, navigation, openStoreAssignment, startSelection]);
+
   const renderBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => (
       <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />
@@ -434,19 +491,19 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
         <ActionButton icon="close" label="Cancel" onPress={cancelSelection} variant="secondary" />
       ) : (
         <>
+          {/* Selection has no button — long-pressing any visit or piece enters
+              it, as in the closet. */}
+          <IconButton
+            icon={query ? 'search' : 'search-outline'}
+            label="Search shortlist"
+            variant={query ? 'primary' : 'secondary'}
+            onPress={() => setSearchOpen((open) => !open || Boolean(query))}
+          />
           <FilterControl
             count={activeFilterCount}
             onPress={() => filterSheetRef.current?.present()}
             label="Refine shortlist"
           />
-          {allItems.length > 0 ? (
-            <ActionButton
-              icon="checkmark-circle-outline"
-              label={viewMode === 'visits' ? 'Select visits' : 'Select'}
-              onPress={() => startSelection()}
-              variant="secondary"
-            />
-          ) : null}
           <ActionButton
             icon="camera"
             label="Add piece"
@@ -472,18 +529,59 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
           subtitle={allItems.length > 0
             ? countLine
             : 'Pieces you photographed while shopping, kept here while you decide.'}
-          eyebrow="THE SHORTLIST"
+          eyebrow={null}
           onBack={goBack}
           actions={headerActions}
           style={styles.heroHeader}
         />
-        <View style={{ paddingHorizontal: 16, paddingBottom: 12, gap: 12 }}>
-          <OptionChips options={[{ value: 'pieces', label: 'Pieces' }, { value: 'visits', label: 'Visits' }]} value={viewMode} onSelect={(value) => { if (user) useShoppingOfflineStore.getState().view(user.id, value as 'pieces' | 'visits'); cancelSelection(); }} />
-          <TextInput value={query} onChangeText={setQuery} placeholder="Search pieces, brands, stores, notes…" accessibilityLabel="Search shortlist" returnKeyType="search" onSubmitEditing={() => track('shopping_search_used', { result_count: filteredItems.length })} style={{ minHeight: 44, paddingHorizontal: 16, borderRadius: 8, backgroundColor: colors.surfaceSubtle, color: colors.foreground }} />
-          <TouchableOpacity accessibilityRole="checkbox" accessibilityState={{ checked: favorites }} onPress={() => setFavorites((value) => !value)} style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8 }}><Ionicons name={favorites ? 'heart' : 'heart-outline'} size={18} color={colors.primary} /><Text style={{ color: colors.foreground }}>Favorites</Text></TouchableOpacity>
-          <ShoppingSyncNotice />
+        <View style={styles.controls}>
+          {/* Mode on the left, the one always-on filter on the right: a single
+              row instead of a rail that held nothing but Favorites at rest. */}
+          <View style={styles.modeRow}>
+            <SegmentedControl
+              value={viewMode}
+              options={[{ value: 'pieces', label: 'Pieces' }, { value: 'visits', label: 'Visits' }]}
+              onChange={(value) => { if (user) useShoppingOfflineStore.getState().view(user.id, value); cancelSelection(); }}
+            />
+            {allItems.length > 0 ? (
+              <ShortlistToggleChip
+                label="Favorites"
+                icon="heart-outline"
+                activeIcon="heart"
+                active={favorites}
+                onPress={() => setFavorites((value) => !value)}
+              />
+            ) : null}
+          </View>
+          {searchOpen || query ? (
+            <View style={styles.searchField}>
+              <Ionicons name="search-outline" size={16} color={colors.mutedForeground} />
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                autoFocus
+                placeholder="Search pieces, brands, stores, notes…"
+                placeholderTextColor={colors.mutedForeground}
+                accessibilityLabel="Search shortlist"
+                returnKeyType="search"
+                onSubmitEditing={() => track('shopping_search_used', { result_count: filteredItems.length })}
+                style={styles.searchInput}
+              />
+              <TouchableOpacity
+                onPress={() => { setQuery(''); setSearchOpen(false); }}
+                accessibilityRole="button"
+                accessibilityLabel="Close search"
+                hitSlop={8}
+              >
+                <Ionicons name="close-circle" size={18} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            </View>
+          ) : null}
         </View>
         {allItems.length > 0 ? <ShortlistFilterBar filters={appliedFilters} /> : null}
+        {/* Carries its own padding only when it has something to say, so an
+            idle notice adds no gap above the first visit. */}
+        <View style={styles.syncNotice}><ShoppingSyncNotice /></View>
       </View>
 
       {isError ? (
@@ -529,6 +627,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
             onReviewGrouping={group.shoppingSessionId
               ? () => navigation.navigate('ShoppingVisitReview', { sessionId: group.shoppingSessionId as string })
               : undefined}
+            onOpenMenu={() => setMenuGroup(group)}
           />
         )}
         ListHeaderComponent={listHeader}
@@ -575,6 +674,14 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
 
       {comparison ? <ShoppingCompare items={comparison} onClose={() => setComparison(null)} /> : null}
 
+      <ActionMenuSheet
+        visible={menuGroup !== null}
+        title={menuGroup?.storeName ?? SHORTLIST_COPY.needsStore}
+        subtitle={menuGroup ? `${menuGroup.dateLabel}  ·  ${menuGroup.itemCount} ${menuGroup.itemCount === 1 ? SHORTLIST_COPY.piece : SHORTLIST_COPY.pieces}` : undefined}
+        options={menuOptions}
+        onClose={() => setMenuGroup(null)}
+      />
+
       {viewMode === 'visits' && showCompactHeader ? (
         <Animated.View
           entering={reduceMotion ? undefined : FadeIn.duration(120)}
@@ -585,7 +692,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
             compact
             title="Your shortlist"
             subtitle={compactState}
-            eyebrow="THE SHORTLIST"
+            eyebrow={null}
             onBack={goBack}
             actions={headerActions}
             style={styles.stickyHeaderContent}
@@ -721,6 +828,19 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   heroActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  controls: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md, gap: spacing.md },
+  modeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  syncNotice: { paddingHorizontal: spacing.lg },
+  searchField: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  searchInput: { flex: 1, minHeight: 44, color: colors.foreground },
   remoteError: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, backgroundColor: colors.accent },
   remoteErrorText: { flex: 1, fontSize: typography.text.caption.fontSize, color: colors.secondaryForeground },
   emptyState: { minHeight: 320, alignItems: 'center', gap: spacing.md, paddingTop: spacing.xxl, paddingHorizontal: spacing.xl },

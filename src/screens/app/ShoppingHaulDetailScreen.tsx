@@ -13,6 +13,7 @@ import { buildShoppingEditItems, mergeShoppingSnaps, type ShoppingEditItem } fro
 import { buildShoppingSessionGroups } from '../../lib/shoppingSessionGroups';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import { AppText } from '../../components/primitives/AppText';
+import { ActionButton } from '../../components/primitives/Editorial';
 import { PressableScale } from '../../components/primitives/PressableScale';
 import { SHORTLIST_COPY } from '../../lib/shoppingVocabulary';
 import { colors, radii, spacing } from '../../theme';
@@ -87,28 +88,22 @@ export function ShoppingHaulDetailScreen({ route, navigation }: ShoppingHaulDeta
               accessibilityRole="button"
               accessibilityLabel="Back"
             >
-              <Ionicons name="arrow-back" size={22} color={colors.foreground} />
+              <Ionicons name="chevron-back" size={23} color={colors.foreground} />
             </PressableScale>
           </View>
-          {group.storeName ? (
-            <AppText variant="editorialCompact" tone="primary" numberOfLines={1}>{group.storeName}</AppText>
-          ) : (
-            <PressableScale
-              style={styles.heroStoreAction}
-              onPress={openStoreAssignment}
-              accessibilityRole="button"
-              accessibilityLabel={`${SHORTLIST_COPY.needsStore}. ${SHORTLIST_COPY.addStore} for this visit.`}
-            >
-              <AppText variant="editorialCompact" tone="action" numberOfLines={1}>
-                {SHORTLIST_COPY.needsStore}
-              </AppText>
-              <Ionicons name="add" size={18} color={colors.action} />
-            </PressableScale>
+          <AppText variant="editorialCompact" tone={group.storeName ? 'primary' : 'action'} numberOfLines={1}>
+            {group.storeName ?? SHORTLIST_COPY.needsStore}
+          </AppText>
+          {/* One line: when, where, how many. The row that pushed this screen
+              said the same, so nothing here needs a second line. */}
+          <AppText variant="caption" tone="muted" numberOfLines={1}>
+            {[contextLine, `${group.itemCount} ${group.itemCount === 1 ? 'piece' : 'pieces'}`].filter(Boolean).join('  ·  ')}
+          </AppText>
+          {group.storeName ? null : (
+            <View style={styles.heroStoreAction}>
+              <ActionButton icon="add" label={SHORTLIST_COPY.addStore} variant="secondary" onPress={openStoreAssignment} />
+            </View>
           )}
-          {contextLine ? <AppText variant="caption" tone="muted">{contextLine}</AppText> : null}
-          {/* No item/photo counts and no status line here — the card that
-              pushed this screen said both, and every tile below repeats them. */}
-          <AppText variant="caption" tone="muted">{group.itemCount} pieces</AppText>
         </View>
       </View>
 
@@ -164,7 +159,7 @@ const styles = StyleSheet.create({
   heroInner: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, gap: 2 },
   heroTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md, marginLeft: -spacing.sm },
   heroSpend: { marginTop: spacing.sm },
-  heroStoreAction: { flexDirection: 'row', alignItems: 'center', gap: 2, alignSelf: 'flex-start' },
+  heroStoreAction: { alignSelf: 'flex-start', marginTop: spacing.sm },
   backButton: {
     width: 40,
     height: 40,

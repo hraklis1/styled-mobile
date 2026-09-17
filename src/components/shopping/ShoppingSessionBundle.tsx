@@ -1,7 +1,6 @@
 import { touchShoppingImage } from '../../lib/shoppingImageCache';
 import { useState } from 'react';
 import {
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,39 +13,15 @@ import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 
 import { PressableScale } from '../primitives/PressableScale';
-import { getSwatchColor } from '../../lib/colorUtils';
 import { formatShoppingPrice } from '../../lib/shoppingPresentation';
-import {
-  shoppingSessionAttention,
-  type ShoppingSessionAttentionKey,
-  type ShoppingSessionGroup,
-} from '../../lib/shoppingSessionGroups';
+import { type ShoppingSessionGroup } from '../../lib/shoppingSessionGroups';
 import { SHORTLIST_COPY } from '../../lib/shoppingVocabulary';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { ShoppingEditItem } from '../../lib/shoppingGallery';
 import type { ShoppingSnap } from '../../types/shoppingSnap';
 
-const RAIL_WIDTH = 26;
 const TILE_WIDTH = 96;
 const STRIP_LIMIT = 8;
-
-/**
- * The visit's colour, as a rule down the left of the row. Its length is a
- * function of the row's height, so a trip holding a dozen pieces draws a
- * visibly longer line than one holding a single piece.
- */
-function ColorSpine({ label }: { label: string | null }) {
-  // getSwatchColor('') resolves to black — every key contains the empty string —
-  // so an unclassified visit must never reach it.
-  const swatch = label?.trim() ? getSwatchColor(label) : null;
-
-  return (
-    <View style={styles.spine}>
-      {swatch ? <View style={[styles.spineHalf, { backgroundColor: swatch.primary }]} /> : null}
-      {swatch?.secondary ? <View style={[styles.spineHalf, { backgroundColor: swatch.secondary }]} /> : null}
-    </View>
-  );
-}
 
 function ShoppingSessionTile({
   item,
@@ -93,18 +68,21 @@ function ShoppingSessionTile({
       </View>
       {/* Nothing is written on the photograph. The price sits beneath it, where
           it shares a baseline with every other tile and can be read down the
-          strip instead of hunted for on each image. */}
+          strip instead of hunted for on each image. The caption keeps its
+          height when there is nothing to say, so rails line up across visits
+          instead of an unpriced strip sitting higher than a priced one. */}
       <View style={styles.tileCaption}>
         {item.isFavorite ? <Ionicons name="heart" size={11} color={colors.primary} /> : null}
-        <Text style={styles.tileCaptionText} numberOfLines={1}>{price ?? '—'}</Text>
+        {price ? <Text style={styles.tileCaptionText} numberOfLines={1}>{price}</Text> : null}
       </View>
     </TouchableOpacity>
   );
 }
 
 /**
- * One shopping trip, as a row: the visit's colour, its store, when and where,
- * what was found, and the single next thing it needs.
+ * One shopping trip, as a band of the page: its store, when and where, what
+ * was found, and the single next thing it needs. The heading is the way in;
+ * everything else the visit can do lives behind its overflow menu.
  */
 export function ShoppingSessionBundle({
   group,
@@ -117,11 +95,12 @@ export function ShoppingSessionBundle({
   onLongPressCard,
   onAddStore,
   onReviewGrouping,
+  onOpenMenu,
 }: {
   group: ShoppingSessionGroup;
   /** Suppresses the divider so the list ends on white space, not a rule. */
   isLast?: boolean;
-  /** Tapping the row outside selection mode opens the full-screen haul gallery. */
+  /** Tapping the heading outside selection mode opens the full-screen haul gallery. */
   onOpenDetail: () => void;
   selectionMode: boolean;
   /** Whether every item in this visit is part of the current selection. */
@@ -136,28 +115,25 @@ export function ShoppingSessionBundle({
   /** Reopens this visit's photos in the organizer — the way back to a photo
    * dump that was saved without being sorted. */
   onReviewGrouping?: () => void;
+  /** Opens the visit's overflow menu. Absent when the visit has nothing to offer. */
+  onOpenMenu?: () => void;
 }) {
   const reduceMotion = useReducedMotion();
   const stripItems = group.items.slice(0, STRIP_LIMIT);
+  const overflowCount = group.items.length - stripItems.length;
   // Worth offering the organizer when there is something to correct: a photo
   // the classifier never sorted, or an item holding more than one shot.
   const needsGrouping = group.unsortedCount > 0;
 
-  // The row offers at most one action of its own, and whichever it offers is
-  // dropped from the status line so the same nag never appears twice.
   const canAddStore = !group.storeName && Boolean(onAddStore) && !selectionMode;
   const canSortPhotos = needsGrouping && Boolean(onReviewGrouping) && !selectionMode;
-  const spokenFor: ShoppingSessionAttentionKey[] = [
-    ...(canAddStore ? (['needs-store'] as const) : []),
-    ...(canSortPhotos ? (['unsorted'] as const) : []),
-  ];
-  const status = shoppingSessionAttention(group)
-    .filter((entry) => !spokenFor.includes(entry.key))
-    .slice(0, 2)
-    .map((entry) => entry.label);
+  const showMenu = Boolean(onOpenMenu) && !selectionMode;
 
+  // A store-less visit has no name to tell it apart from the next one, so its
+  // capture time does that job instead.
+  const when = group.storeName ? group.dateLabel : `${group.dateLabel}, ${group.timeLabel}`;
   const metaSegments = [
-    group.dateLabel,
+    when,
     group.placeLabel ?? group.locationHint,
     `${group.itemCount} ${group.itemCount === 1 ? SHORTLIST_COPY.piece : SHORTLIST_COPY.pieces}`,
   ].filter((segment): segment is string => Boolean(segment));
@@ -208,129 +184,152 @@ export function ShoppingSessionBundle({
       layout={reduceMotion ? undefined : LinearTransition.duration(180).easing(Easing.out(Easing.quad))}
       style={[styles.row, isLast && styles.rowLast, isSelected && styles.rowSelected]}
     >
-      {/* Rail and content are siblings of the *whole* row, not just its
-          heading, so the spine's flex fills the row's real height — a visit
-          holding a dozen pieces draws a visibly longer line than one holding
-          a single piece. */}
-      <View style={styles.body}>
-        <View style={styles.rail} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          {selectionMode ? (
-            <View style={[styles.selectionMark, isSelected && styles.selectionMarkActive]}>
-              {isSelected ? <Ionicons name="checkmark" size={13} color={colors.primaryForeground} /> : null}
-            </View>
-          ) : null}
-          <ColorSpine label={group.dominantColorLabel} />
-        </View>
-
-        <View style={styles.content}>
-          {/* The strip is a horizontal scroller, so it stays outside this
-              touchable — a parent press responder wrapping it steals the pan. */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={canAddStore ? onAddStore : handleChromePress}
-            onLongPress={handleChromeLongPress}
-            accessibilityRole="button"
-            accessibilityLabel={selectionMode ? `Select entire visit, ${group.itemCount} pieces` : canAddStore
-              ? `${SHORTLIST_COPY.needsStore}. ${SHORTLIST_COPY.addStore} for this visit.`
-              : `${group.storeName}, ${metaSegments.join(', ')}`}
-          >
-            {/* Where the store name would be, the row asks for one — and
-                tapping it is what supplies it. Anywhere else on the row still
-                opens the visit. */}
-            <View style={styles.titleRow}>
-              <Text style={[styles.title, canAddStore && styles.titleAction]} numberOfLines={1}>
-                {group.storeName ?? SHORTLIST_COPY.needsStore}
-              </Text>
-              {canAddStore ? <Ionicons name="add" size={17} color={colors.action} /> : null}
-            </View>
-            <View style={styles.metaRow}>
-              <Text style={styles.metaText}>{metaSegments.join('  ·  ')}</Text>
-            </View>
-          </TouchableOpacity>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.strip}
-            style={styles.stripScroll}
-          >
-            {stripItems.map((item) => (
-              <ShoppingSessionTile
-                key={item.id}
-                item={item}
-                selectionMode={selectionMode}
-                isSelected={isSelected}
-                onPress={() => handleItemPress(item, item.primarySnap)}
-                onLongPress={handleItemLongPress}
-              />
-            ))}
-          </ScrollView>
-
-          <View style={styles.footer}>
+      <View style={styles.headerRow}>
+        {/* The strip is a horizontal scroller, so it stays outside this
+            touchable — a parent press responder wrapping it steals the pan. */}
+        <TouchableOpacity
+          style={styles.heading}
+          activeOpacity={0.7}
+          onPress={canAddStore ? onAddStore : handleChromePress}
+          onLongPress={handleChromeLongPress}
+          accessibilityRole="button"
+          accessibilityLabel={selectionMode ? `Select entire visit, ${group.itemCount} pieces` : canAddStore
+            ? `${SHORTLIST_COPY.needsStore}. ${SHORTLIST_COPY.addStore} for this visit.`
+            : `${group.storeName}, ${metaSegments.join(', ')}`}
+        >
+          {/* Where the store name would be, the row asks for one — and
+              tapping it is what supplies it. Anywhere else on the row still
+              opens the visit. */}
+          <View style={styles.titleRow}>
+            <Text style={[styles.title, canAddStore && styles.titleAction]} numberOfLines={1}>
+              {group.storeName ?? SHORTLIST_COPY.needsStore}
+            </Text>
+            {canAddStore
+              ? <Ionicons name="add" size={17} color={colors.action} />
+              : <Ionicons name="chevron-forward" size={15} color={colors.inkSubtle} style={styles.titleChevron} />}
+          </View>
+          <View style={styles.metaRow}>
+            <Text style={styles.metaText}>{metaSegments.join('  ·  ')}</Text>
+            {/* Terracotta marks the outstanding task — the one thing this visit
+                still needs. Navigation stays quiet, so the row only ever
+                raises its voice for work. */}
             {canSortPhotos ? (
               <PressableScale
                 motion="crisp"
-                style={styles.footerActionSlot}
                 onPress={onReviewGrouping}
                 accessibilityRole="button"
-                accessibilityLabel={`${SHORTLIST_COPY.sortPhotos} for this visit`}
+                accessibilityLabel={`Sort ${group.unsortedCount} photos`}
+                hitSlop={8}
               >
-                <Text style={styles.footerAction}>
-                  {group.unsortedCount > 0
-                    ? `${SHORTLIST_COPY.sortPhotos} · ${group.unsortedCount}`
-                    : SHORTLIST_COPY.sortPhotos}
-                </Text>
+                <Text style={styles.metaAction}>Sort photos · {group.unsortedCount}</Text>
               </PressableScale>
-            ) : (
-              <View style={styles.footerActionSlot}>
-                {onReviewGrouping ? <TouchableOpacity onPress={() => Alert.alert('Visit options', undefined, [{ text: 'Cancel', style: 'cancel' }, { text: 'Adjust grouping', onPress: onReviewGrouping }])} accessibilityLabel="Visit options" style={{ minHeight: 44, justifyContent: 'center' }}><Ionicons name="ellipsis-horizontal" size={20} color={colors.mutedForeground} /></TouchableOpacity> : <Text style={styles.footerStatus}>{status.join(' · ')}</Text>}
-              </View>
-            )}
-            <PressableScale
-              motion="crisp"
-              style={styles.footerOpen}
-              contentStyle={styles.footerOpenContent}
-              onPress={handleChromePress}
-              accessibilityRole="button"
-            >
-              <Text style={styles.footerOpenText}>
-                {group.itemCount === 1 ? 'View piece' : `View all ${group.itemCount} pieces`}
-              </Text>
-              {/* Forward, not down — this pushes a screen, it does not disclose. */}
-              <Ionicons name="chevron-forward" size={14} color={colors.inkSubtle} />
-            </PressableScale>
+            ) : null}
           </View>
-        </View>
+        </TouchableOpacity>
+
+        {selectionMode ? (
+          <TouchableOpacity
+            onPress={onSelectCard}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: isSelected }}
+            accessibilityLabel="Select visit"
+            style={styles.trailingSlot}
+          >
+            <View style={[styles.selectionMark, isSelected && styles.selectionMarkActive]}>
+              {isSelected ? <Ionicons name="checkmark" size={13} color={colors.primaryForeground} /> : null}
+            </View>
+          </TouchableOpacity>
+        ) : showMenu ? (
+          <TouchableOpacity
+            onPress={onOpenMenu}
+            accessibilityRole="button"
+            accessibilityLabel="Visit options"
+            style={styles.trailingSlot}
+            hitSlop={6}
+          >
+            <Ionicons name="ellipsis-horizontal" size={20} color={colors.mutedForeground} />
+          </TouchableOpacity>
+        ) : null}
       </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.strip}
+        style={styles.stripScroll}
+      >
+        {stripItems.map((item) => (
+          <ShoppingSessionTile
+            key={item.id}
+            item={item}
+            selectionMode={selectionMode}
+            isSelected={isSelected}
+            onPress={() => handleItemPress(item, item.primarySnap)}
+            onLongPress={handleItemLongPress}
+          />
+        ))}
+        {/* What the strip cannot hold is counted at its end, and that count
+            is the way to the rest. */}
+        {overflowCount > 0 ? (
+          <TouchableOpacity
+            style={styles.tileColumn}
+            activeOpacity={0.85}
+            onPress={handleChromePress}
+            onLongPress={handleChromeLongPress}
+            accessibilityRole="button"
+            accessibilityLabel={`View all ${group.itemCount} pieces`}
+          >
+            <View style={[styles.tile, styles.overflowTile]}>
+              <Text style={styles.overflowText}>+{overflowCount}</Text>
+            </View>
+            <View style={styles.tileCaption} />
+          </TouchableOpacity>
+        ) : null}
+      </ScrollView>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  // No card: a visit is a band of the page, separated by a hairline. Never add
+  // No card and no indent: a visit is a full-width band of the page, set
+  // apart by breathing room above and a hairline below. Never add
   // overflow:'hidden' here — it would clip the strip's bleed to the edge.
   row: {
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.lg,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.hairline,
   },
   rowLast: { borderBottomWidth: 0 },
   rowSelected: { backgroundColor: colors.surfaceSelected },
 
-  body: { flexDirection: 'row', alignItems: 'stretch', gap: spacing.md },
-  rail: { width: RAIL_WIDTH, alignItems: 'center', gap: spacing.sm, paddingVertical: 2 },
-  spine: {
-    width: 3,
-    flex: 1,
+  headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  heading: { flex: 1, minWidth: 0 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  title: { ...typography.text.editorialCompact, color: colors.foreground, flexShrink: 1 },
+  titleAction: { color: colors.action },
+  titleChevron: { marginTop: 2 },
+  metaRow: {
     minHeight: 20,
-    overflow: 'hidden',
-    borderRadius: radii.full,
-    backgroundColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: spacing.md,
+    paddingTop: spacing.xs,
   },
-  spineHalf: { flex: 1 },
-  // Sits where the rail's number would, so it lands at a constant x down the
-  // whole list. The spine keeps carrying colour, never selection.
+  metaText: { flexShrink: 1, minWidth: 0, fontSize: 12, lineHeight: 18, color: colors.mutedForeground },
+  metaAction: { fontSize: 13, lineHeight: 18, fontWeight: typography.weight.medium, color: colors.action },
+
+  // Sits on the title's baseline row so the mark or menu reads as part of the
+  // heading rather than floating in the band's corner.
+  trailingSlot: {
+    width: 32,
+    height: 32,
+    marginTop: -3,
+    marginRight: -spacing.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   selectionMark: {
     width: 22,
     height: 22,
@@ -342,31 +341,8 @@ const styles = StyleSheet.create({
   },
   selectionMarkActive: { borderColor: colors.primary, backgroundColor: colors.primary },
 
-  content: { flex: 1, minWidth: 0 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  title: { ...typography.text.editorialCompact, color: colors.foreground },
-  titleAction: { color: colors.action },
-  metaRow: {
-    minHeight: 20,
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: spacing.sm,
-    paddingTop: spacing.xs,
-  },
-  metaText: { flex: 1, minWidth: 0, fontSize: 12, lineHeight: 18, color: colors.mutedForeground },
-  // Fixed column so prices line up down the page rather than floating after
-  // whatever length the date and place happened to be.
-  metaPrice: {
-    minWidth: 78,
-    textAlign: 'right',
-    fontSize: 14,
-    lineHeight: 18,
-    color: colors.foreground,
-    fontVariant: ['tabular-nums'],
-  },
-
-  // Indented to the text column, then bleeding past the row's right padding so
-  // the next find is clipped by the screen edge and invites the scroll.
+  // Bleeds past the row's right padding so the next find is clipped by the
+  // screen edge and invites the scroll.
   stripScroll: { marginRight: -spacing.lg, marginTop: spacing.md },
   strip: { gap: spacing.sm, paddingRight: spacing.lg, alignItems: 'flex-start' },
   tileColumn: { width: TILE_WIDTH },
@@ -378,7 +354,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceSubtle,
   },
   tileFallback: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center' },
-  tileCaption: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingTop: spacing.xs },
+  tileCaption: { height: 20, flexDirection: 'row', alignItems: 'center', gap: 4, paddingTop: spacing.xs },
   tileCaptionText: { flex: 1, fontSize: 12, lineHeight: 16, color: colors.inkSubtle, fontVariant: ['tabular-nums'] },
   tileSelectionRing: {
     position: 'absolute',
@@ -390,29 +366,6 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     borderRadius: radii.photo,
   },
-
-  footer: {
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-    paddingTop: spacing.md,
-  },
-  footerActionSlot: { flex: 1, minHeight: 36, justifyContent: 'center' },
-  // Terracotta marks the outstanding task — the one thing this visit still
-  // needs. Ambient navigation out of the row stays quiet below, so the row
-  // only ever raises its voice for work.
-  footerAction: { fontSize: 13, lineHeight: 18, fontWeight: typography.weight.medium, color: colors.action },
-  footerStatus: { fontSize: 12, lineHeight: 18, color: colors.mutedForeground },
-  footerOpen: { minHeight: 36 },
-  footerOpenContent: {
-    minHeight: 36,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingLeft: spacing.sm,
-    borderRadius: radii.full,
-  },
-  footerOpenText: { fontSize: 12, lineHeight: 18, color: colors.inkSubtle, fontVariant: ['tabular-nums'] },
+  overflowTile: { alignItems: 'center', justifyContent: 'center' },
+  overflowText: { ...typography.text.editorialCompact, color: colors.inkSubtle, fontVariant: ['tabular-nums'] },
 });

@@ -11,6 +11,9 @@ export type ShoppingSessionGroup = {
   key: string;
   shoppingSessionId: string | null;
   dateLabel: string;
+  /** Clock time of the latest capture ("2:14 pm"). Lets two store-less
+   *  visits from the same day read as different trips on the shortlist. */
+  timeLabel: string;
   storeName: string | null;
   placeLabel: string | null;
   locationHint: string | null;
@@ -96,6 +99,7 @@ export function buildShoppingSessionGroups(
         key,
         shoppingSessionId,
         dateLabel: dateGroupLabel(new Date(sorted[0].capturedAt), now),
+        timeLabel: new Date(sorted[0].capturedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
         storeName: sorted.find((item) => item.storeName)?.storeName ?? null,
         placeLabel: sorted.some((item) => item.storeName) ? itemPlaceLabel(sorted[0]) : null,
         locationHint: sorted.find((item) => item.locationHint)?.locationHint ?? null,

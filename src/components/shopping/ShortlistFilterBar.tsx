@@ -13,6 +13,40 @@ export type ShortlistAppliedFilter = {
 };
 
 /**
+ * A persistent on/off filter (Favorites) in the same capsule as the applied
+ * filters, so it reads as one of them wherever it sits.
+ */
+export function ShortlistToggleChip({
+  label,
+  icon,
+  activeIcon,
+  active,
+  onPress,
+}: {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  activeIcon?: keyof typeof Ionicons.glyphMap;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <PressableScale
+      motion="crisp"
+      scaleTo={0.98}
+      contentStyle={[styles.chip, styles.toggleChip, active && styles.toggleChipActive]}
+      onPress={onPress}
+      hitSlop={8}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: active }}
+      accessibilityLabel={label}
+    >
+      <Ionicons name={active ? (activeIcon ?? icon) : icon} size={14} color={colors.primary} />
+      <AppText variant="caption" tone="primary" numberOfLines={1}>{label}</AppText>
+    </PressableScale>
+  );
+}
+
+/**
  * A state indicator, not a second filter interface. At rest it renders
  * nothing, letting the photographs begin immediately. Once Refine narrows the
  * shortlist, each active choice appears as a removable capsule.
@@ -57,7 +91,7 @@ export function ShortlistFilterBar({ filters }: { filters: ShortlistAppliedFilte
 }
 
 const styles = StyleSheet.create({
-  container: { paddingBottom: spacing.lg },
+  container: { paddingBottom: spacing.md },
   row: { gap: spacing.sm, alignItems: 'center', paddingHorizontal: spacing.lg },
   chip: {
     maxWidth: 200,
@@ -72,6 +106,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surfaceSubtle,
   },
+  toggleChip: { paddingRight: spacing.md, gap: 6 },
+  toggleChipActive: { backgroundColor: colors.surfaceSelected, borderColor: colors.border },
   removeIcon: {
     width: 20,
     height: 20,

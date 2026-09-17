@@ -10,7 +10,8 @@ import { colors, spacing } from '../../theme';
 type Props = {
   title: string;
   subtitle?: string;
-  eyebrow?: string;
+  /** Pass null to drop the eyebrow — for a title that already says it all. */
+  eyebrow?: string | null;
   onBack: () => void;
   actions?: ReactNode;
   compact?: boolean;
@@ -39,14 +40,14 @@ export function ShopSubpageHeader({ title, subtitle, eyebrow = 'SHOP', onBack, a
       </View>
       {compact && (
         <View style={styles.compactTitleWrap}>
-          <AppText variant="eyebrow" tone="brand">{eyebrow}</AppText>
+          {eyebrow ? <AppText variant="eyebrow" tone="brand">{eyebrow}</AppText> : null}
           <AppText variant="sectionTitle" tone="primary" numberOfLines={1}>{title}</AppText>
           {subtitle ? <AppText variant="caption" tone="muted" numberOfLines={1}>{subtitle}</AppText> : null}
         </View>
       )}
       {!compact && (
         <>
-          <AppText variant="eyebrowLarge" tone="brand">{eyebrow}</AppText>
+          {eyebrow ? <AppText variant="eyebrowLarge" tone="brand">{eyebrow}</AppText> : null}
           <AppText variant="editorialHero" tone="primary" style={styles.title} numberOfLines={titleNumberOfLines}>{title}</AppText>
           {subtitle ? <AppText variant="bodySmall" tone="secondary" style={styles.subtitle} numberOfLines={subtitleNumberOfLines}>{subtitle}</AppText> : null}
         </>
