@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, radii, shadows, spacing } from '../../theme';
+import { colors, radii, shadows, spacing, typography } from '../../theme';
 import { PressableScale } from './PressableScale';
 import { AppText } from './AppText';
 
@@ -273,8 +273,8 @@ export function FilterControl({
       accessibilityRole="button"
       accessibilityLabel={`${label}${active ? `, ${count} active` : ''}`}
     >
-      <Ionicons name="options-outline" size={18} color={active ? colors.primary : colors.foreground} />
-      {active ? <AppText variant="caption" tone="brand" style={styles.filterCount}>{count}</AppText> : null}
+      <Ionicons name="options-outline" size={18} color={colors.foreground} />
+      {active ? <AppText variant="caption" tone="inverse" style={styles.filterCount}>{count}</AppText> : null}
     </PressableScale>
   );
 }
@@ -475,17 +475,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   filterControl: {
-    minWidth: 44,
+    width: 44,
     height: 44,
     borderRadius: radii.full,
     backgroundColor: colors.surfaceElevated,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
-    paddingHorizontal: spacing.sm,
   },
   // Active means "a filter is on", not "this is the primary action" — a solid
   // fill here made it the visual equal of the one filled button a header is
@@ -494,7 +491,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.foreground,
   },
-  filterCount: { minWidth: 12, textAlign: 'center' },
+  // A corner badge, so the control keeps its 44pt circle instead of stretching
+  // into a pill the moment a filter is on.
+  filterCount: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 3,
+    borderRadius: radii.full,
+    overflow: 'hidden',
+    backgroundColor: colors.primary,
+    fontSize: 10,
+    lineHeight: 16,
+    fontWeight: typography.weight.semibold,
+    textAlign: 'center',
+  },
   viewModeControl: {
     height: 44,
     flexDirection: 'row',

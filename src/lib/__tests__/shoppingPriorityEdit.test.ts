@@ -2,6 +2,7 @@ import {
   humanizeInlineTokens,
   parseShoppingPriorityEdit,
   shoppingPriorityEditDisplayHeadline,
+  shoppingPriorityGapFigure,
   shoppingPriorityGapNarrative,
   shoppingPriorityGapStatement,
   shoppingPriorityTargetDisplayTitle,
@@ -310,5 +311,26 @@ describe('targetOutfitIdeas', () => {
   it('returns nothing when a target carries neither shape', () => {
     const bare = { ...target('a'), outfitIdeas: undefined, pairsWithItemIds: undefined };
     expect(targetOutfitIdeas(bare as unknown as ShoppingPriorityTarget)).toEqual([]);
+  });
+});
+
+describe('shoppingPriorityGapFigure', () => {
+  it('keeps the figure and the sentence when the sentence never states the count', () => {
+    expect(shoppingPriorityGapFigure('Your wardrobe is thin for night out occasions.', 9))
+      .toEqual({ figure: 9, statement: 'Your wardrobe is thin for night out occasions.' });
+  });
+
+  it('lets the sentence continue from the figure in the multiplier shape', () => {
+    expect(shoppingPriorityGapFigure('Versatile mid-rise trousers would create 80 new outfits from pieces you already own.', 80))
+      .toEqual({ figure: 80, statement: 'new outfits from pieces you already own.' });
+  });
+
+  it('drops the figure when the count sits mid-sentence', () => {
+    const voice = 'Adding 9 new outfits to your rotation would help on nights out.';
+    expect(shoppingPriorityGapFigure(voice, 9)).toEqual({ figure: null, statement: voice });
+  });
+
+  it('shows no figure without a score', () => {
+    expect(shoppingPriorityGapFigure('Anything.', undefined)).toEqual({ figure: null, statement: 'Anything.' });
   });
 });

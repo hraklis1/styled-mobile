@@ -129,11 +129,12 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
           </View>
         </View>
 
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.lg }}>
+        {/* One action under the masthead. The shortlist has its own door — the
+            section's "See all" — so a second pill here only made a toolbar. */}
+        <View style={styles.mastheadActions}>
           <ActionButton icon="camera-outline" label="Shopping Mode" onPress={openShoppingCamera} />
-          <ActionButton icon="images-outline" label="View shortlist" variant="secondary" onPress={() => navigation.navigate('ShoppingGallery')} />
         </View>
-        <View style={styles.briefBand}>
+        <View style={styles.briefSection}>
           <ShoppingBriefCard
             isPremium={isPremium}
             brief={brief.data}
@@ -154,10 +155,9 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
         <EditorialSection
           variant="ruled"
           headingStyle="editorial"
-          style={[styles.section, styles.firstSection]}
+          style={styles.section}
           title="Your Shortlist"
-          description="Pieces you’re considering, kept until you decide."
-          actionLabel={spotlight.itemCount > 0 ? 'See all' : undefined}
+          actionLabel={spotlight.itemCount > 0 ? `See all ${spotlight.itemCount}` : undefined}
           onAction={() => openHistory({ catalogFilter: activeFinds.length > 0 ? 'active' : 'all' })}
         >
           {spotlight.itemCount > 0 ? (
@@ -194,7 +194,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
                 <SavedLookTile
                   key={entry.id}
                   entry={entry}
-                  style={savedPreviewEntries.length > 1 ? styles.savedPreviewTile : undefined}
+                  style={savedPreviewEntries.length === 1 ? styles.savedPreviewSingle : undefined}
                   onPress={() => openSavedShopping(entry.id)}
                 />
               ))}
@@ -234,22 +234,23 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.lg,
   },
   headerCopy: { flex: 1, gap: spacing.sm },
-  // The brief is the page's cover feature, not another department: a full-
-  // width tinted ground breaks it out of the uniform gutter every other
-  // section shares, so it reads as the one thing the page leads with.
-  briefBand: {
-    backgroundColor: colors.surfaceSubtle,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: 0,
+  mastheadActions: { flexDirection: 'row', paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
+  // Ruled like the sections below it, not a tinted plate: surfaceSubtle on
+  // the page ground was a 1.02:1 difference with no edge, and the only
+  // change of surface on the page. One hairline, the same grammar as
+  // "Your Shortlist", and the brief still leads because it comes first.
+  briefSection: {
+    marginHorizontal: spacing.lg,
+    paddingTop: spacing.xl,
+    // The card's own text action carries 44pt of foot; a hair more is all the
+    // section needs before the next rule.
+    paddingBottom: spacing.xs,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
   },
   section: { paddingHorizontal: spacing.lg },
   savedPreviewGrid: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  savedPreviewTile: { width: undefined, flex: 1 },
-  // Extra air below the tinted band before the first editorial department,
-  // stacked on top of ruledSection's own paddingVertical, so the shift back
-  // to the page ground reads as a deliberate break rather than two sections
-  // sharing one rule.
-  firstSection: { marginTop: spacing.sm },
+  // A lone tile keeps to half the row rather than swelling to a full-width plate.
+  savedPreviewSingle: { flex: 0, width: '48%' },
   safeAreaScrim: { position: 'absolute', zIndex: 20, top: 0, left: 0, right: 0, backgroundColor: colors.background },
 });

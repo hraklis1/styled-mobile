@@ -380,6 +380,8 @@ async function syncReadyUploads(userId: string): Promise<void> {
     try {
       const didSync = await uploadShoppingSnap(userId, upload);
       syncedAny = didSync || syncedAny;
+      // A stale failure message must not outlive the attempt that cleared it.
+      if (upload.uploadError && getShoppingAccount() === userId) useShoppingSessionStore.setState((state) => ({ pendingUploads: state.pendingUploads.map((value) => value.id === upload.id ? { ...value, uploadError: undefined } : value) }));
     } catch (error) {
       // Keep the item locally. A later connectivity/store change retries it.
       if (getShoppingAccount() === userId) useShoppingSessionStore.setState((state) => ({ pendingUploads: state.pendingUploads.map((value) => value.id === upload.id ? { ...value, uploadError: error instanceof Error && error.message.startsWith('This photo is missing') ? error.message : 'Photo backup is paused. Your original is safe on this phone. Retry when connected.' } : value) }));

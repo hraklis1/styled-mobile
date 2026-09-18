@@ -3,16 +3,14 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { PressableScale } from '../primitives/PressableScale';
-import { categoryIcon } from '../stylist/GapCard';
+import { ShoppingPriorityRow, sentenceCase } from './ShoppingPriorityRow';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { ShoppingBrief, ShoppingBriefPriority } from '../../lib/shopDecisionWorkspace';
 
 /** Two is a strategy; five is a shopping list. The rest live behind "View plan". */
 const PRIORITY_LIMIT = 2;
 
-/** Priority labels arrive lowercase ("formal trousers") but read as chip titles
- *  here and on ShoppingBriefDetailScreen — exported for that reuse. */
-export const sentenceCase = (label: string) => label.charAt(0).toUpperCase() + label.slice(1);
+export { sentenceCase };
 
 /** "Your shopping brief" paired with an issue line, e.g. "August brief" — so
  *  the card reads as something issued this month rather than computed live. */
@@ -133,8 +131,10 @@ export function ShoppingBriefCard({
   return shell(
     <>
       <BriefMasthead />
+      {/* The headline is the hook; the summary it used to trail here is the
+          deck on ShoppingBriefDetailScreen, where it appears once, in full,
+          instead of clipped to two lines and then repeated. */}
       <Text style={styles.headline} numberOfLines={2}>{brief.headline}</Text>
-      <Text style={styles.body} numberOfLines={2}>{brief.summary}</Text>
 
       {/* "Balanced" with no priorities but a known next candidate — distinct
           from "well covered", where nothing was ever found. The summary
@@ -162,18 +162,14 @@ function PriorityList({ priorities }: { priorities: ShoppingBriefPriority[] }) {
   if (priorities.length === 0) return null;
   return (
     <View style={styles.priorities}>
-      {priorities.map((priority) => (
-        <View key={`${priority.priority}-${priority.label}`} style={styles.priorityRow}>
-          <View style={styles.priorityHead}>
-            <Ionicons name={categoryIcon(priority.category)} size={15} color={colors.primary} />
-            <Text style={styles.priorityLabel} numberOfLines={1}>{sentenceCase(priority.label)}</Text>
-          </View>
-          {priority.unlocks.length > 0 ? (
-            <Text style={styles.priorityUnlocks} numberOfLines={2}>
-              Unlocks {priority.unlocks.join(' · ')}
-            </Text>
-          ) : null}
-        </View>
+      {priorities.map((priority, index) => (
+        <ShoppingPriorityRow
+          key={`${priority.priority}-${priority.label}`}
+          compact
+          index={index + 1}
+          priority={priority}
+          isLast={index === priorities.length - 1}
+        />
       ))}
     </View>
   );
@@ -204,13 +200,12 @@ function TextAction({
 }
 
 const styles = StyleSheet.create({
-  // No fill and no hairline of its own: the card sits inside Shop's tinted
-  // brief band (ShopOverviewScreen's `briefBand`), whose own edge is the
+  // No fill and no hairline of its own: the card sits in Shop's ruled brief
+  // section (ShopOverviewScreen's `briefSection`), whose top rule is the
   // boundary — a rule here on top of that would read as two dividers in the
   // space of one.
   card: {
     gap: spacing.sm,
-    paddingVertical: spacing.md,
   },
   loadingBlock: { minHeight: 104, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   masthead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
@@ -219,39 +214,26 @@ const styles = StyleSheet.create({
   // display.sm, not .md: at .md this matched the page's own masthead
   // ("Buy fewer, better pieces") one-for-one and the two competed. A step
   // down reads as the page's cover feature rather than a second title.
+  // Capped short of the column so a two-line headline breaks at a phrase
+  // rather than stranding its last word on the second line.
   headline: {
     ...typography.text.editorialCompact,
+    maxWidth: 320,
     color: colors.foreground,
   },
   body: { ...typography.text.bodySmall, color: colors.inkSubtle },
-  nextUpRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  nextUpRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   nextUpLabel: { ...typography.text.caption, fontWeight: typography.weight.medium, color: colors.mutedForeground },
-  priorities: { paddingTop: spacing.sm },
-  // Hairline-separated, not a white card inside a tinted one: the priority is
-  // the reading, not a nested surface.
-  priorityRow: {
-    gap: 5,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.hairline,
-  },
-  priorityHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  priorityLabel: {
-    flexShrink: 1,
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  priorityUnlocks: { ...typography.text.caption, fontWeight: typography.weight.medium, color: colors.primary },
+  priorities: { paddingTop: spacing.xs },
   // Full width, unlike every other action on this card: it is the page's one
   // filled button, and stretching it across the foot is what makes it read as
   // the brief's conclusion rather than a fourth thing to consider.
   startButton: {
-    minHeight: 46,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: spacing.xs,
     marginTop: spacing.xs,
     paddingHorizontal: spacing.lg,
     borderRadius: radii.full,

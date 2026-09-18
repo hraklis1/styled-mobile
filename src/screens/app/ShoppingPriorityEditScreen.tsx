@@ -11,7 +11,7 @@ import { useItems } from '../../hooks/useItems';
 import { useShoppingPriorityEdit } from '../../hooks/useShoppingPriorityEdit';
 import { addOutfitToWishlist, useWishlist } from '../../hooks/useWishlist';
 import { track } from '../../lib/analytics';
-import { shoppingPriorityEditDisplayHeadline, shoppingPriorityGapNarrative, shoppingPriorityTargetDisplayTitle, splitPriceRange } from '../../lib/shoppingPriorityEdit';
+import { shoppingPriorityEditDisplayHeadline, shoppingPriorityGapFigure, shoppingPriorityGapNarrative, shoppingPriorityTargetDisplayTitle, splitPriceRange } from '../../lib/shoppingPriorityEdit';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { ShopOutfit } from '../../types/shop';
 import type { ShoppingPriorityEditScreenProps } from '../../navigation/types';
@@ -188,10 +188,12 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
   // sentence, a noun phrase restating the label, and — on ladder candidates —
   // step bookkeeping. Each gets its own slot rather than one long paragraph.
   const gap = shoppingPriorityGapNarrative(priority.label, priority.context, {
-    // The stat below renders the same figure at 34pt, so the sentence should
-    // not spell it out a second time.
+    // The deck sets the same figure at 44pt, so a severable tail that spells
+    // it out again is dropped here…
     impactScore: priority.impactScore,
   });
+  // …and when the figure *is* the sentence, the sentence continues from it.
+  const deck = shoppingPriorityGapFigure(gap.voice, priority.impactScore);
   // Suppressed when the headline is already the label: shoppingPriorityEdit-
   // DisplayHeadline falls back to it for verbose headlines, and the line would
   // then be a literal repeat of the title two rows up.
@@ -220,44 +222,35 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
         <View onLayout={(event) => setHeroHeight(event.nativeEvent.layout.height)}>
           <ShopSubpageHeader
             eyebrow="SHOPPING EDIT"
+            // Ladder bookkeeping and the direction count are label-level
+            // facts, so they sit on the eyebrow line rather than in the deck.
+            eyebrowTrailing={gap.step
+              ? `Step ${gap.step.current} of ${gap.step.total}`
+              : `${formatDirectionNumber(directionCount)} directions`}
             title={displayHeadline}
             titleNumberOfLines={2}
             onBack={goBack}
             style={[styles.fullBleedHeader, styles.readyHeader]}
           />
-        </View>
-        <View style={styles.priorityContext}>
-          <View style={styles.priorityText}>
-            <View style={styles.priorityEyebrowRow}>
-              <Text style={styles.priorityEyebrow}>The wardrobe gap</Text>
-              {gap.step ? (
-                // Ladder bookkeeping, lifted out of the sentence it used to
-                // trail. Only occasion_ladder candidates carry one.
-                <Text style={styles.priorityStep}>
-                  Step {gap.step.current} of {gap.step.total}
-                </Text>
-              ) : null}
-            </View>
-            {gapLabel ? <Text selectable style={styles.priorityLabel}>{gapLabel}</Text> : null}
-            {typeof priority.impactScore === 'number' && priority.impactScore > 0 ? (
+          {/* One deck under the hero, on the page ground: the figure, the
+              stylist's sentence, then what it unlocks — and a single rule
+              before the directions. The earlier tinted band with its own two
+              rules and a 34pt sans stat was a second masthead under the
+              first. */}
+          <View style={styles.deck}>
+            {gapLabel ? <Text selectable style={styles.deckLabel}>{gapLabel}</Text> : null}
+            {deck.figure !== null ? (
               // Only the wardrobe-multiplier candidates carry a count;
               // structural and occasion gaps have nothing comparable, so the
-              // hero simply reads without a stat for those.
-              <View style={styles.impactRow} accessible accessibilityLabel={`Adds ${priority.impactScore} new outfits`}>
-                <Text style={styles.impactValue}>{priority.impactScore}</Text>
-                <Text style={styles.impactLabel}>new outfits</Text>
-              </View>
+              // deck simply reads without a figure for those.
+              <Text style={styles.figure} accessibilityLabel={`Adds ${deck.figure} new outfits`}>{deck.figure}</Text>
             ) : null}
-            <Text selectable style={styles.priorityStatement}>{gap.voice}</Text>
+            <Text selectable style={styles.deckStatement}>{deck.statement}</Text>
             {priority.unlocks.length > 0 ? (
-              <View style={styles.priorityUnlockRow}>
-                <Ionicons name="checkmark-circle-outline" size={16} color={colors.primary} />
-                <Text selectable style={styles.priorityUnlocks}>Unlocks {priority.unlocks.join(' · ')}</Text>
-              </View>
+              <Text selectable style={styles.deckMeta}>Unlocks {priority.unlocks.join(' · ')}</Text>
             ) : null}
           </View>
         </View>
-        <View style={styles.directionsDivider} />
         {data.targets.map((target, index) => (
           <Animated.View
             key={target.key}
@@ -345,32 +338,31 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   content: { paddingHorizontal: spacing.lg },
   fullBleedHeader: { marginHorizontal: -spacing.lg },
-  readyHeader: { paddingBottom: spacing.xl, backgroundColor: colors.background },
+  readyHeader: { paddingBottom: spacing.lg },
   stateContent: { flexGrow: 1, paddingHorizontal: spacing.lg, gap: spacing.xl },
   stateCard: { flex: 1, minHeight: 260, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl, borderRadius: radii.xl, borderCurve: 'continuous', backgroundColor: colors.surfaceElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   loadingText: { color: colors.mutedForeground, fontSize: typography.text.bodySmall.fontSize },
   stateTitle: { fontSize: typography.text.sectionTitle.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground },
   stateCopy: { textAlign: 'center', color: colors.mutedForeground, lineHeight: 20 },
-  priorityContext: { marginHorizontal: -spacing.lg, paddingHorizontal: spacing.lg, paddingVertical: spacing.xl, backgroundColor: colors.surfaceSubtle, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
-  priorityText: { gap: spacing.md },
-  priorityEyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  priorityEyebrow: { ...typography.text.eyebrow, color: colors.primary },
-  priorityStep: { ...typography.text.eyebrow, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
-  priorityLabel: { fontSize: typography.text.caption.fontSize, lineHeight: 16, color: colors.mutedForeground },
-  // The stylist's sentence, kept whole. Editorial *regular* rather than the
-  // medium display face: at 22/28 medium this paragraph outweighed the
-  // headline above it and ran six lines before the first direction appeared.
-  priorityStatement: { maxWidth: 360, ...typography.text.editorialBody, color: colors.foreground },
-  priorityUnlockRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  priorityUnlocks: { flex: 1, fontSize: typography.text.caption.fontSize, lineHeight: 18, fontWeight: typography.weight.medium, color: colors.primary },
-  impactRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
-  impactValue: { ...typography.text.dataLarge, fontSize: 34, lineHeight: 38, color: colors.primary },
-  impactLabel: { fontSize: typography.text.caption.fontSize, lineHeight: 16, color: colors.mutedForeground },
+  deck: {
+    gap: spacing.sm,
+    paddingBottom: spacing.xl,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.hairline,
+  },
+  deckLabel: { ...typography.text.meta, color: colors.mutedForeground },
+  // Serif figure in ink, not a sans stat in taupe: it belongs to the same
+  // typographic family as the hero two lines up. The sentence beneath is
+  // its label.
+  figure: { ...typography.text.editorialFigure, color: colors.foreground },
+  // The stylist's sentence, kept whole, in the regular editorial face so it
+  // reads as a deck under the headline rather than a second one.
+  deckStatement: { maxWidth: 360, ...typography.text.editorialBody, color: colors.foreground },
+  deckMeta: { ...typography.text.meta, color: colors.mutedForeground },
   body: { fontSize: typography.text.bodySmall.fontSize, lineHeight: 20, color: colors.mutedForeground },
-  directionsDivider: { marginTop: spacing.xl, marginBottom: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   targetCardWrap: {},
   currencyNote: { textAlign: 'right', paddingTop: spacing.sm, paddingBottom: spacing.lg, fontSize: typography.text.caption.fontSize, lineHeight: 16, color: colors.mutedForeground },
-  saveBand: { marginHorizontal: -spacing.lg, paddingHorizontal: spacing.lg, paddingVertical: spacing.xl, gap: spacing.lg, backgroundColor: colors.surfaceElevated, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  saveBand: { marginHorizontal: -spacing.lg, paddingHorizontal: spacing.lg, paddingVertical: spacing.xl, gap: spacing.lg, backgroundColor: colors.surfaceElevated, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
   // Functional copy introducing a button, not a headline — the same inversion
   // the gap statement had. The pill is the loud element in this band.
   saveBandCopy: { maxWidth: 330, fontSize: typography.text.bodySmall.fontSize, lineHeight: 19, color: colors.mutedForeground },
@@ -383,7 +375,7 @@ const styles = StyleSheet.create({
   saveActionSaved: { backgroundColor: colors.primary },
   saveActionText: { color: colors.primaryForeground, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold },
   stickyHeader: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
-  stickyHeaderContent: { backgroundColor: colors.background, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  stickyHeaderContent: { backgroundColor: colors.background, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline },
   saveToast: { position: 'absolute', left: spacing.lg, right: spacing.lg, minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.lg, borderCurve: 'continuous', backgroundColor: colors.surfaceElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, boxShadow: '0 4px 14px rgba(40, 35, 31, 0.12)', zIndex: 20 },
   saveToastText: { flex: 1, color: colors.foreground, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.medium },
 });

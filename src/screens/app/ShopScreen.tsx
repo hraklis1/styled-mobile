@@ -1,17 +1,24 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
   Keyboard,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 import { useFocusEffect } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { buildShopStylistLaunch } from '../../lib/shopDecisionWorkspace';
@@ -84,7 +91,6 @@ type SavedShoppingContentProps = {
 };
 
 function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShoppingContentProps) {
-  const insets = useSafeAreaInsets();
   const { openStylist } = useGlobalAIStylist();
   const { data: entries = [], isLoading: loading, refetch } = useWishlist();
   const { mutate: removeItem } = useRemoveFromWishlist();
@@ -100,6 +106,7 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
   const [selectedEntry, setSelectedEntry] = useState<WishlistEntry | null>(null);
   const [menuEntry, setMenuEntry] = useState<WishlistEntry | null>(null);
   const [boardTarget, setBoardTarget] = useState<BoardEntryRef | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -187,20 +194,18 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
     setMenuEntry(entry);
   }, []);
 
-  if (loading) {
-    return (
-      <View style={[styles.centered, { paddingTop: insets.top }]}>
-        <ActivityIndicator color={colors.primary} />
-      </View>
-    );
-  }
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  }, [refetch]);
 
   return (
     <View style={styles.root}>
       <ShopSubpageHeader
+        compact
         eyebrow="SHOP"
         title="From your Stylist"
-        subtitle={`${savedCounts.looks} look${savedCounts.looks === 1 ? '' : 's'} · ${savedCounts.pieces} piece${savedCounts.pieces === 1 ? '' : 's'} · ${savedCounts.lists} list${savedCounts.lists === 1 ? '' : 's'}`}
         onBack={() => (navigation.canGoBack() ? navigation.goBack() : navigation.replace('ShopMain'))}
         actions={(
           <>
@@ -226,7 +231,7 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
         <SegmentedControl
           value={activeTab}
           variant="tabs"
-          options={TABS.map(({ value, label }) => ({ value, label }))}
+          options={TABS.map(({ value, label }) => ({ value, label: `${label} ${savedCounts[value]}` }))}
           onChange={(value) => {
             setActiveTab(value);
             clearAllSearchAndFilters();
@@ -234,7 +239,9 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
         />
       </View>
 
-      {tabEntries.length === 0 ? (
+      {loading ? (
+        <SavedListSkeleton />
+      ) : tabEntries.length === 0 ? (
         <View style={styles.emptyState}>
           <View style={styles.emptyIconCircle}>
             <Ionicons name="bag-handle-outline" size={36} color={colors.primary} />
@@ -289,6 +296,7 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
             keyboardDismissMode="on-drag"
             keyboardShouldPersistTaps="handled"
             contentInsetAdjustmentBehavior="automatic"
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.primary} />}
             contentContainerStyle={[styles.listContent, filteredEntries.length === 0 && styles.listContentEmpty]}
             showsVerticalScrollIndicator={false}
             renderItem={({ item }) => (
@@ -363,6 +371,38 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
   );
 }
 
+/**
+ * Three rows in the summary row's own geometry, breathing at 0.55–1 opacity,
+ * so the list arrives in place rather than after a centred spinner.
+ */
+function SavedListSkeleton() {
+  const reduceMotion = useReducedMotion();
+  const pulse = useSharedValue(1);
+
+  useEffect(() => {
+    if (reduceMotion) return;
+    pulse.value = withRepeat(withTiming(0.55, { duration: 900, easing: Easing.inOut(Easing.ease) }), -1, true);
+  }, [pulse, reduceMotion]);
+
+  const pulseStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
+
+  return (
+    <View style={styles.skeleton} accessibilityLabel="Loading saved picks" accessibilityRole="progressbar">
+      {[0, 1, 2].map((row) => (
+        <Animated.View key={row} style={[styles.skeletonRow, pulseStyle]}>
+          <View style={styles.skeletonPlate} />
+          <View style={styles.skeletonCopy}>
+            <View style={[styles.skeletonBar, { width: 72 }]} />
+            <View style={[styles.skeletonBar, styles.skeletonBarTitle]} />
+            <View style={[styles.skeletonBar, { width: 140 }]} />
+            <View style={[styles.skeletonBar, styles.skeletonBarFigure]} />
+          </View>
+        </Animated.View>
+      ))}
+    </View>
+  );
+}
+
 export function SavedShoppingScreen({ navigation, route }: SavedShoppingScreenProps) {
   return (
     <SavedShoppingContent
@@ -386,19 +426,17 @@ export function SavedLooksScreen({ navigation, route }: SavedLooksScreenProps) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
-  centered: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' },
-  browseControls: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xs,
-    paddingBottom: spacing.md,
-    gap: spacing.md,
-  },
-  tabControls: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },
+  // The header above is compact, so the working controls get the rhythm the
+  // masthead used to: tabs, then a full step down to the search row.
+  tabControls: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.md },
+  browseControls: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   headerIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: colors.surfaceElevated },
+  // Same height and edge as the FilterControl beside it, so the row reads as
+  // one control set. `border`, not `hairline`: white-on-ivory needs a drawn edge.
   searchBox: {
     flex: 1,
-    minHeight: 42,
+    height: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
@@ -406,18 +444,32 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     borderCurve: 'continuous',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
+    borderColor: colors.border,
     backgroundColor: colors.surfaceElevated,
   },
   searchInput: {
     flex: 1,
-    height: 42,
+    height: 44,
     paddingVertical: 0,
     fontSize: typography.text.bodySmall.fontSize,
     lineHeight: typography.inputLineHeight(typography.text.bodySmall.fontSize),
     color: colors.foreground,
   },
-  listContent: { paddingHorizontal: spacing.lg, paddingTop: spacing.xs, gap: spacing.lg, paddingBottom: spacing.xxxl },
+  // Rows carry their own rule and vertical padding.
+  listContent: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxxl },
+  skeleton: { paddingHorizontal: spacing.lg },
+  skeletonRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    paddingVertical: spacing.lg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.hairline,
+  },
+  skeletonPlate: { width: 88, aspectRatio: 4 / 5, borderRadius: radii.photo, backgroundColor: colors.surfaceSubtle },
+  skeletonCopy: { flex: 1, gap: spacing.sm, paddingTop: spacing.xs },
+  skeletonBar: { height: 12, borderRadius: radii.sm, backgroundColor: colors.surfaceSubtle },
+  skeletonBarTitle: { height: 16, width: '85%' },
+  skeletonBarFigure: { width: 96, marginTop: spacing.xs },
   listContentEmpty: { flexGrow: 1 },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, gap: spacing.lg },
   emptyIconCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: `${colors.primary}18`, alignItems: 'center', justifyContent: 'center' },

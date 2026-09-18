@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
@@ -15,7 +15,7 @@ import { itemCoverPresentation } from '../../lib/itemImage';
 import { track } from '../../lib/analytics';
 import { PressableScale } from '../primitives/PressableScale';
 import { ShoppingOfferRail } from './ShoppingOfferRail';
-import { colors, cutoutScaleFor, radii, spacing, typography } from '../../theme';
+import { colors, cutoutScaleFor, editorial, radii, spacing, typography } from '../../theme';
 import {
   humanizeInlineTokens,
   splitPriceRange,
@@ -39,12 +39,12 @@ type Props = {
 };
 
 const cardSpring = LinearTransition.springify().damping(16).stiffness(200);
-// A touch lighter than mutedForeground — the expand affordance should be
-// legible, not a competing focal point at the foot of the number rail.
-const toggleColor = `${colors.mutedForeground}B3`;
-/** Width of the number rail. Wide enough for a tabular "01" at caption size,
- *  narrow enough that the text column still owns the card. */
+/** Width of the number rail. Wide enough for a tabular "01" in the editorial
+ *  numeral, narrow enough that the text column still owns the card. Shared
+ *  with ShoppingPriorityRow so the brief and the edit number on one grid. */
 const RAIL_WIDTH = 26;
+/** Contact-sheet tile width in the looks strip. */
+const TILE_WIDTH = 64;
 
 /**
  * One curated direction, collapsed to a decision unit.
@@ -55,11 +55,11 @@ const RAIL_WIDTH = 26;
  * real but secondary, and open in place rather than competing for the same
  * glance.
  *
- * The sequence number, the direction's colour and the expand affordance live
- * together in a left rail rather than as an eyebrow and a right-hand chevron.
- * That keeps the right margin flush — which is what lets the price sit in its
- * own column across all three cards — and reads as a numbered edit rather than
- * a list of rows to configure.
+ * The sequence number and the direction's colour live together in a left
+ * rail; the expand affordance is a chevron at the foot of the text column,
+ * under the price. That keeps the right margin flush — which is what lets the
+ * price sit in its own column across all three cards — and reads as a
+ * numbered edit rather than a list of rows to configure.
  */
 export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTitle, isLast }: Props) {
   const [expanded, setExpanded] = useState(false);
@@ -120,7 +120,6 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTit
           >
             <Text style={styles.railNumber}>{String(index).padStart(2, '0')}</Text>
             <ColorSpine primary={swatch.primary} secondary={swatch.secondary} />
-            <Ionicons name={expanded ? 'remove' : 'add'} size={12} color={toggleColor} />
           </View>
 
           <View style={styles.headingBody}>
@@ -133,10 +132,19 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTit
             <Text style={styles.rationale} numberOfLines={expanded ? undefined : 4}>{rationale}</Text>
 
             <View style={styles.metaRow}>
-              <Text style={styles.metaText} numberOfLines={1}>{metaSegments.join('  ·  ')}</Text>
+              <Text style={styles.metaText} numberOfLines={1}>{metaSegments.join(' · ')}</Text>
               {price.compact ? (
                 <Text style={styles.metaPrice} numberOfLines={1}>{price.compact}</Text>
               ) : null}
+            </View>
+            <View style={styles.disclosureRow}>
+              <Text style={styles.disclosureLabel}>{expanded ? 'Less' : 'Details'}</Text>
+              <Ionicons
+                name="chevron-down"
+                size={14}
+                color={colors.mutedForeground}
+                style={{ transform: [{ rotate: expanded ? '180deg' : '0deg' }] }}
+              />
             </View>
           </View>
         </View>
@@ -188,11 +196,13 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTit
                 {looks.length === 1 ? 'A look this unlocks' : 'Looks this unlocks'}
               </Text>
               {looks.map((look, lookIndex) => (
-                <OutfitIdea
+                <UnlockedLook
                   key={`${look.label}-${lookIndex}`}
                   look={look}
+                  newPiece={title}
                   targetTitle={target.title}
                   wardrobe={wardrobe}
+                  swatch={swatch}
                 />
               ))}
             </View>
@@ -233,21 +243,27 @@ function InlineDetail({ label, value, linked }: { label: string; value: string; 
 }
 
 /**
- * One complete look, read as a recipe: a name, the pieces, then the pieces
- * spelled out.
+ * One complete look as a contact sheet: the look's name, then a strip of
+ * tiles with a caption under each — the piece you'd buy first, as an empty
+ * frame holding only its colour, then the pieces you already own.
  *
- * Thumbnails are a fixed width rather than flexed, so a two-piece look does
- * not blow its images up to fill the row — the group's size should say how
- * many pieces it takes, not how much space is going spare.
+ * Tiles are a fixed width rather than flexed, so a two-piece look does not
+ * blow its images up to fill the row — the group's size should say how many
+ * pieces it takes, not how much space is going spare. Past four the strip
+ * scrolls rather than wrapping.
  */
-function OutfitIdea({
+function UnlockedLook({
   look,
+  newPiece,
   targetTitle,
   wardrobe,
+  swatch,
 }: {
   look: ShoppingPriorityOutfitIdea;
+  newPiece: string;
   targetTitle: string;
   wardrobe: ReadonlyMap<number, Item>;
+  swatch: { primary: string; secondary?: string };
 }) {
   const pieces = look.itemIds.map((id) => ({ id, item: wardrobe.get(id) }));
   const names = pieces.map(({ item }) => item?.name ?? 'a piece no longer in your closet');
@@ -259,14 +275,25 @@ function OutfitIdea({
       accessibilityLabel={`${look.label || 'Look'} with ${targetTitle}: ${names.join(', ')}`}
     >
       {look.label ? <Text style={styles.lookLabel}>{look.label}</Text> : null}
-      <View style={styles.lookRow}>
-        {pieces.map(({ id, item }) => (
-          <View key={id} style={styles.lookThumb}>
+      <ScrollView
+        horizontal
+        bounces={false}
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.lookStrip}
+      >
+        <View style={styles.tile}>
+          <View style={styles.ghostFrame}>
+            <View style={[styles.ghostSwatch, { backgroundColor: swatch.primary }]} />
+          </View>
+          <Text style={styles.tileCaption} numberOfLines={2}>{newPiece}</Text>
+        </View>
+        {pieces.map(({ id, item }, pieceIndex) => (
+          <View key={id} style={styles.tile}>
             <WardrobeThumbnail item={item} />
+            <Text style={styles.tileCaption} numberOfLines={2}>{names[pieceIndex]}</Text>
           </View>
         ))}
-      </View>
-      <Text style={styles.lookPieces} numberOfLines={2}>{names.join('  +  ')}</Text>
+      </ScrollView>
     </View>
   );
 }
@@ -314,91 +341,85 @@ function WardrobeThumbnail({ item }: { item?: Item }) {
 }
 
 const styles = StyleSheet.create({
+  // No horizontal padding of its own: the screen's content gutter is the
+  // margin, so the numeral rail lines up with the hero and the deck above.
   card: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.xl,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.hairline,
   },
   cardLast: { borderBottomWidth: 0 },
   heading: { flexDirection: 'row', alignItems: 'stretch', gap: spacing.md },
-  rail: { width: RAIL_WIDTH, alignItems: 'center', gap: spacing.sm, paddingVertical: 2 },
-  railNumber: {
-    ...typography.text.caption,
-    color: colors.mutedForeground,
-    fontVariant: ['tabular-nums'],
-  },
+  rail: { width: RAIL_WIDTH, alignItems: 'center', gap: spacing.sm, paddingTop: 4, paddingBottom: 2 },
+  railNumber: { ...typography.text.editorialNumeral, color: colors.mutedForeground },
   spine: {
-    width: 2,
+    width: 3,
     flex: 1,
-    minHeight: 20,
+    minHeight: 24,
     overflow: 'hidden',
     borderRadius: radii.full,
-    backgroundColor: colors.surfaceSubtle,
+    backgroundColor: colors.hairline,
   },
   spineHalf: { flex: 1 },
   headingBody: { flex: 1, minWidth: 0, gap: spacing.sm },
   title: { ...typography.text.editorialCompact, color: colors.foreground },
-  rationale: { fontSize: typography.text.body.fontSize, lineHeight: 22, color: colors.inkSubtle },
+  rationale: { ...typography.text.body, color: colors.inkSubtle },
   metaRow: {
-    minHeight: 20,
     flexDirection: 'row',
     alignItems: 'baseline',
-    gap: spacing.sm,
+    gap: spacing.md,
     paddingTop: spacing.xs,
   },
-  metaText: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: typography.text.caption.fontSize,
-    lineHeight: 18,
-    color: colors.mutedForeground,
-  },
+  // One grey for the descriptors, ink for the number: the price is the axis
+  // the three directions are compared on, so it is the one thing in the row
+  // set in the foreground colour.
+  metaText: { flex: 1, minWidth: 0, ...typography.text.meta, color: colors.mutedForeground },
   // Fixed width so the three directions' prices stack into one column rather
   // than drifting with the length of the colour name beside them.
-  metaPrice: {
-    minWidth: 78,
-    textAlign: 'right',
-    fontSize: typography.text.caption.fontSize,
-    lineHeight: 18,
-    color: colors.inkSubtle,
-    fontVariant: ['tabular-nums'],
-  },
+  metaPrice: { minWidth: 78, textAlign: 'right', ...typography.text.data, color: colors.foreground },
+  disclosureRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4, minHeight: 24 },
+  disclosureLabel: { ...typography.text.caption, color: colors.mutedForeground },
   // Indented to the text column so the rail keeps reading as one spine down
   // the whole card, open or closed.
-  body: { gap: spacing.lg, paddingTop: spacing.lg, paddingLeft: RAIL_WIDTH + spacing.md },
+  body: { gap: spacing.xl, paddingTop: spacing.md, paddingLeft: RAIL_WIDTH + spacing.md },
   details: { gap: spacing.md },
-  detailRow: { gap: 2 },
-  detailLabel: { fontSize: typography.text.caption.fontSize, lineHeight: 16, color: colors.mutedForeground },
+  detailRow: { gap: 3 },
+  detailLabel: { ...typography.text.meta, color: colors.mutedForeground },
   detailValueRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  detailValue: { fontSize: typography.text.bodySmall.fontSize, lineHeight: 20, color: colors.inkSubtle },
+  detailValue: { ...typography.text.bodySmall, lineHeight: 20, color: colors.inkSubtle },
   detailValueLinked: { color: colors.action, fontWeight: typography.weight.medium },
   looksSection: { gap: spacing.lg },
-  looksLabel: { fontSize: typography.text.caption.fontSize, lineHeight: 16, color: colors.mutedForeground },
+  looksLabel: { ...typography.text.meta, color: colors.mutedForeground },
   look: { gap: spacing.sm },
-  lookLabel: {
-    fontSize: typography.text.bodySmall.fontSize,
-    lineHeight: 18,
-    fontWeight: typography.weight.medium,
-    color: colors.foreground,
-  },
-  lookRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
-  // Reference marks under a look name, not hero imagery — at 64 they claimed
-  // more attention than the mixed source photos can carry, and left a wide
-  // dead gap at the right of a two-piece row.
-  lookThumb: { width: 48 },
-  lookPieces: { fontSize: typography.text.caption.fontSize, lineHeight: 16, color: colors.mutedForeground },
+  lookLabel: { ...typography.text.label, color: colors.foreground },
+  lookStrip: { flexDirection: 'row', gap: spacing.md, paddingRight: spacing.lg },
+  tile: { width: TILE_WIDTH, gap: 6 },
+  // Reference marks under a look name, not hero imagery: a contact-sheet
+  // frame, flat plate, hairline edge, no rounding beyond `photo`. Rounded
+  // corners are for controls, and these are photographs.
   thumbnail: {
     width: '100%',
-    aspectRatio: 4 / 5,
+    aspectRatio: editorial.garmentAspectRatio,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radii.md,
-    borderCurve: 'continuous',
-    // No border: on one shared ground the tiles already read as a set, and an
-    // outline only re-emphasises how differently each source image is framed.
+    borderRadius: radii.photo,
     backgroundColor: colors.surfaceSubtle,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
   },
   catalogThumbnail: { padding: spacing.xs },
+  // The piece you'd buy: the same frame, empty, holding only its colour.
+  ghostFrame: {
+    width: '100%',
+    aspectRatio: editorial.garmentAspectRatio,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.photo,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.border,
+  },
+  ghostSwatch: { width: 10, height: 10, borderRadius: radii.full },
+  tileCaption: { fontSize: 11, lineHeight: 14, color: colors.mutedForeground },
 });

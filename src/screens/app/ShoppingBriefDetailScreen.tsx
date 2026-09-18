@@ -1,16 +1,14 @@
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Animated, { FadeOut, useReducedMotion } from 'react-native-reanimated';
 
 import { EditorialSection } from '../../components/primitives/Editorial';
-import { PressableScale } from '../../components/primitives/PressableScale';
 import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
-import { sentenceCase } from '../../components/shopping/ShoppingBriefCard';
-import { categoryIcon } from '../../components/stylist/GapCard';
+import { ShoppingPriorityRow } from '../../components/shopping/ShoppingPriorityRow';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useNotNowShoppingPriority, useShoppingBrief } from '../../hooks/useShoppingBrief';
 import { toLocalDateKey } from '../../lib/dailyStylistPick';
-import { colors, radii, spacing, typography } from '../../theme';
+import { colors, spacing, typography } from '../../theme';
 import { track } from '../../lib/analytics';
 import type { ShoppingBriefDetailScreenProps } from '../../navigation/types';
 
@@ -36,6 +34,10 @@ export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScr
   const brief = useShoppingBrief(isPremium);
   const notNow = useNotNowShoppingPriority();
   const [notNowNotice, setNotNowNotice] = useState(false);
+  // Skipped rows leave the list rather than lingering with a "skipped" label:
+  // the brief cache is only refreshed on the next day's fetch.
+  const [skippedKeys, setSkippedKeys] = useState<string[]>([]);
+  const reduceMotion = useReducedMotion();
 
   const goBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -56,10 +58,15 @@ export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScr
   }
 
   const { data } = brief;
+  const visiblePriorities = data.priorities.filter(
+    (priority) => !priority.recommendationKey || !skippedKeys.includes(priority.recommendationKey),
+  );
 
   return (
     <View style={styles.screen}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* The one place the summary appears in full — the card on Shop
+            stops at the headline, and the edit moves on to the gap itself. */}
         <ShopSubpageHeader
           eyebrow="YOUR SHOPPING BRIEF"
           title={data.headline}
@@ -68,26 +75,20 @@ export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScr
           style={styles.header}
         />
         {notNowNotice ? <Text style={styles.notice}>Suggestion skipped for now.</Text> : null}
-        {notNow.isError ? <Text style={styles.errorNotice}>Couldn’t skip this suggestion. Tap “Skip this suggestion” to retry.</Text> : null}
-        {data.priorities.length > 0 ? (
+        {notNow.isError ? <Text style={styles.errorNotice}>Couldn’t skip this suggestion. Tap “Not for me” to retry.</Text> : null}
+        {visiblePriorities.length > 0 ? (
           <EditorialSection variant="ruled" title="Priorities">
-            {data.priorities.map((priority) => (
-              <View key={`${priority.priority}-${priority.label}`} style={styles.priorityRow}>
-                <View style={styles.priorityHead}>
-                  <View style={styles.priorityIconBadge}>
-                    <Ionicons name={categoryIcon(priority.category)} size={16} color={colors.primary} />
-                  </View>
-                  <Text style={styles.priorityLabel}>{sentenceCase(priority.label)}</Text>
-                </View>
-                <Text style={styles.priorityContext}>{priority.context}</Text>
-                {priority.unlocks.length > 0 ? (
-                  <Text style={styles.priorityUnlocks}>Unlocks {priority.unlocks.join(' · ')}</Text>
-                ) : null}
-                <View style={styles.priorityActions}>
-                  <PressableScale
-                    haptic={false}
-                    scaleTo={0.97}
-                    contentStyle={styles.askButton}
+            {visiblePriorities.map((priority, index) => {
+              const skipping = notNow.isPending && notNow.variables?.recommendationKey === priority.recommendationKey;
+              return (
+                <Animated.View
+                  key={`${priority.priority}-${priority.label}`}
+                  exiting={reduceMotion ? undefined : FadeOut.duration(160)}
+                >
+                  <ShoppingPriorityRow
+                    index={index + 1}
+                    priority={priority}
+                    isLast={index === visiblePriorities.length - 1}
                     onPress={() => {
                       track('shopping_brief_priority_opened', { category: priority.category, reason: priority.reason, rank: priority.priority });
                       navigation.navigate('ShoppingPriorityEdit', {
@@ -96,35 +97,24 @@ export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScr
                         briefGeneratedAt: data.generatedAt,
                       });
                     }}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Explore options for ${priority.label}`}
-                  >
-                    <Text style={styles.askText}>Explore options</Text>
-                    <Ionicons name="arrow-forward" size={14} color={colors.primary} />
-                  </PressableScale>
-                  <PressableScale
-                    haptic={false}
-                    contentStyle={styles.notNowButton}
-                    onPress={() => {
-                      if (!priority.recommendationKey || notNow.isPending) return;
+                    onSkip={priority.recommendationKey ? () => {
+                      if (notNow.isPending) return;
+                      const recommendationKey = priority.recommendationKey!;
                       notNow.reset();
                       notNow.mutate({
-                        recommendationKey: priority.recommendationKey,
+                        recommendationKey,
                         localDate: data.localDate ?? toLocalDateKey(new Date()),
                       }, { onSuccess: () => {
+                        setSkippedKeys((keys) => [...keys, recommendationKey]);
                         setNotNowNotice(true);
                         track('shopping_brief_priority_not_now', { category: priority.category, reason: priority.reason, scope: priority.scope ?? 'general' });
                       } });
-                    }}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Skip ${priority.label} suggestion`}
-                    disabled={!priority.recommendationKey || notNow.isPending}
-                  >
-                    <Text style={styles.notNowText}>{notNow.isPending ? 'Skipping…' : 'Skip this suggestion'}</Text>
-                  </PressableScale>
-                </View>
-              </View>
-            ))}
+                    } : undefined}
+                    skipping={skipping}
+                  />
+                </Animated.View>
+              );
+            })}
           </EditorialSection>
         ) : null}
       </ScrollView>
@@ -140,43 +130,4 @@ const styles = StyleSheet.create({
   header: { marginHorizontal: -spacing.lg },
   notice: { ...typography.text.caption, color: colors.mutedForeground, paddingVertical: spacing.sm },
   errorNotice: { ...typography.text.caption, color: colors.destructive, paddingVertical: spacing.sm },
-  priorityRow: {
-    gap: spacing.sm,
-    paddingVertical: spacing.xl,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.hairline,
-  },
-  priorityHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  priorityIconBadge: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.full,
-    backgroundColor: colors.surfaceSelected,
-  },
-  priorityLabel: {
-    flexShrink: 1,
-    ...typography.text.sectionTitle,
-    fontWeight: typography.weight.medium,
-    color: colors.foreground,
-  },
-  priorityContext: { fontSize: typography.text.bodySmall.fontSize, lineHeight: 20, color: colors.mutedForeground },
-  priorityUnlocks: { ...typography.text.caption, fontWeight: typography.weight.medium, color: colors.mutedForeground },
-  priorityActions: { alignItems: 'flex-start', gap: spacing.xs, paddingTop: spacing.xs },
-  askButton: {
-    minHeight: 44,
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.lg,
-    borderCurve: 'continuous',
-    backgroundColor: colors.surfaceSelected,
-  },
-  askText: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, color: colors.primary },
-  notNowButton: { minHeight: 36, alignSelf: 'flex-start', justifyContent: 'center', paddingHorizontal: spacing.sm },
-  notNowText: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.medium, color: colors.mutedForeground },
 });

@@ -58,7 +58,9 @@ export function syncShoppingMutations(userId: string): Promise<void> {
       if (error || data?.conflicts) {
         state.update(userId, op.id, {
           error: error
-            ? 'Changes are saved on this phone. Tap Retry to back them up.'
+            ? (error as { code?: string }).code === 'PGRST202'
+              ? "Changes are saved on this phone. Backup isn't available yet."
+              : 'Changes are saved on this phone. Tap Retry to back them up.'
             : 'This piece changed on another device.',
           conflicts: data?.conflicts,
         });

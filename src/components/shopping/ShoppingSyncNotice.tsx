@@ -1,5 +1,6 @@
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import { requestShoppingSync } from '../../hooks/useShoppingSyncManager';
+import { useState } from 'react';
 import { Text, View, TouchableOpacity, Alert } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import {
@@ -20,7 +21,14 @@ export function ShoppingSyncNotice() {
       state.pendingUploads.find((upload) => upload.uploadError)?.uploadError,
   );
   const issue = account.operations.find((operation) => operation.error);
+  const [busy, setBusy] = useState(false);
   if (!user) return null;
+  const retry = () => {
+    setBusy(true);
+    void syncShoppingMutations(user.id)
+      .catch(() => undefined)
+      .finally(() => setBusy(false));
+  };
   if (!issue)
     return uploadError ? (
       <View style={{ padding: 12, backgroundColor: colors.surfaceSubtle }}>
@@ -58,7 +66,7 @@ export function ShoppingSyncNotice() {
           conflicts: undefined,
           error: undefined,
         });
-      void syncShoppingMutations(user.id).catch(() => undefined);
+      retry();
       return;
     }
     const base = { ...issue.base } as Record<string, unknown>;
@@ -79,7 +87,7 @@ export function ShoppingSyncNotice() {
         conflicts: undefined,
         error: undefined,
       });
-    void syncShoppingMutations(user.id).catch(() => undefined);
+    retry();
   };
   return (
     <View
@@ -90,6 +98,7 @@ export function ShoppingSyncNotice() {
       </Text>
       <TouchableOpacity
         style={{ minHeight: 44, justifyContent: 'center' }}
+        disabled={busy}
         onPress={() => {
           if (issue.conflicts)
             Alert.alert(
@@ -105,11 +114,11 @@ export function ShoppingSyncNotice() {
                 { text: 'Keep my changes', onPress: () => resolve(true) },
               ],
             );
-          else void syncShoppingMutations(user.id).catch(() => undefined);
+          else retry();
         }}
       >
-        <Text style={{ color: colors.action }}>
-          {issue.conflicts ? 'Review changes' : 'Retry'}
+        <Text style={{ color: busy ? colors.mutedForeground : colors.action }}>
+          {busy ? 'Backing up…' : issue.conflicts ? 'Review changes' : 'Retry'}
         </Text>
       </TouchableOpacity>
     </View>

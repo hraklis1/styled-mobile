@@ -148,6 +148,24 @@ export const typography = {
       fontSize: 19,
       lineHeight: 28,
     },
+    /**
+     * A single number set as editorial type — the "80" that leads a deck.
+     * Regular face and tabular figures so it sits with the hero above it
+     * rather than competing as a second, sans, display size.
+     */
+    editorialFigure: {
+      fontFamily: editorialFamily.editorialRegular,
+      fontSize: 44,
+      lineHeight: 48,
+      fontVariant: ['tabular-nums'] as TextStyle['fontVariant'],
+    },
+    /** Sequence numerals in a rail ("01", "02") beside editorial titles. */
+    editorialNumeral: {
+      fontFamily: editorialFamily.editorialRegular,
+      fontSize: 17,
+      lineHeight: 20,
+      fontVariant: ['tabular-nums'] as TextStyle['fontVariant'],
+    },
     pageTitle: {
       fontSize: 28,
       lineHeight: 34,
@@ -200,6 +218,18 @@ export const typography = {
       lineHeight: 16,
       fontWeight: weight.bold,
       letterSpacing: tracking.eyebrowLarge,
+      textTransform: 'uppercase' as const,
+    },
+    /**
+     * Small tracked metadata under a title — colour, count, section labels.
+     * Medium, not bold, and tracked a step under the eyebrows: a caption that
+     * reads as line-sheet detail rather than a heading.
+     */
+    meta: {
+      fontSize: 11,
+      lineHeight: 14,
+      fontWeight: weight.medium,
+      letterSpacing: tracking.label,
       textTransform: 'uppercase' as const,
     },
     data: {

@@ -12,6 +12,9 @@ type Props = {
   subtitle?: string;
   /** Pass null to drop the eyebrow — for a title that already says it all. */
   eyebrow?: string | null;
+  /** Quiet counterpart at the right end of the eyebrow line ("03 directions",
+   *  "Step 2 of 4") — bookkeeping that belongs with the label, not the deck. */
+  eyebrowTrailing?: string;
   onBack: () => void;
   actions?: ReactNode;
   compact?: boolean;
@@ -21,7 +24,7 @@ type Props = {
 };
 
 /** Consistent in-app header for Shop stack pages (the native header is hidden). */
-export function ShopSubpageHeader({ title, subtitle, eyebrow = 'SHOP', onBack, actions, compact = false, titleNumberOfLines, subtitleNumberOfLines, style }: Props) {
+export function ShopSubpageHeader({ title, subtitle, eyebrow = 'SHOP', eyebrowTrailing, onBack, actions, compact = false, titleNumberOfLines, subtitleNumberOfLines, style }: Props) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -47,7 +50,12 @@ export function ShopSubpageHeader({ title, subtitle, eyebrow = 'SHOP', onBack, a
       )}
       {!compact && (
         <>
-          {eyebrow ? <AppText variant="eyebrowLarge" tone="brand">{eyebrow}</AppText> : null}
+          {eyebrow ? (
+            <View style={styles.eyebrowRow}>
+              <AppText variant="eyebrowLarge" tone="brand">{eyebrow}</AppText>
+              {eyebrowTrailing ? <AppText variant="meta" tone="muted">{eyebrowTrailing}</AppText> : null}
+            </View>
+          ) : null}
           <AppText variant="editorialHero" tone="primary" style={styles.title} numberOfLines={titleNumberOfLines}>{title}</AppText>
           {subtitle ? <AppText variant="bodySmall" tone="secondary" style={styles.subtitle} numberOfLines={subtitleNumberOfLines}>{subtitle}</AppText> : null}
         </>
@@ -57,13 +65,19 @@ export function ShopSubpageHeader({ title, subtitle, eyebrow = 'SHOP', onBack, a
 }
 
 const styles = StyleSheet.create({
-  header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, backgroundColor: colors.card },
+  // Page ground, not a tinted plate: Shop's subpages are one continuous
+  // sheet, sectioned by single hairlines rather than by changes of surface.
+  header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, backgroundColor: colors.background },
   headerCompact: { paddingBottom: spacing.md },
   topRow: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xl },
-  topRowCompact: { minHeight: 42, marginBottom: spacing.md },
+  topRowCompact: { minHeight: 42, marginBottom: spacing.sm },
   compactTitleWrap: { gap: 1 },
-  backButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: colors.surfaceElevated },
+  // Outlined, not filled: on the page ground a white disc had nothing to sit
+  // against, and a tinted one vanished. A hairline ring reads as a control
+  // without adding a surface.
+  backButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.background },
   actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  eyebrowRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
   title: { maxWidth: 340, paddingTop: spacing.sm },
   subtitle: { maxWidth: 340, paddingTop: spacing.sm },
 });

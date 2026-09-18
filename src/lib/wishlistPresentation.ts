@@ -91,3 +91,18 @@ export function getWishlistTypeLabel(entry: WishlistEntry): string {
   const type = getWishlistRecommendationType(entry);
   return type === 'piece' ? 'Saved piece' : type === 'list' ? 'Saved list' : 'Saved look';
 }
+
+/**
+ * A short "Next best purchase:" style lead-in the stylist sometimes opens an
+ * intro with. At card scale it eats the one line a title gets before the
+ * actual recommendation starts, so the row reads without it.
+ */
+const TITLE_LEAD_IN = /^[^:.!?]{1,32}:\s+(?=\S)/;
+
+/** Card-scale title: `getWishlistTitle` with any short lead-in phrase dropped. */
+export function getWishlistCardTitle(entry: WishlistEntry): string {
+  const title = getWishlistTitle(entry);
+  const stripped = title.replace(TITLE_LEAD_IN, '').trim();
+  if (!stripped) return title;
+  return stripped.charAt(0).toLocaleUpperCase() + stripped.slice(1);
+}

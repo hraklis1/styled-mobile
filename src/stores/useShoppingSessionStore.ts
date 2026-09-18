@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 
 import type { ShoppingCaptureRole } from '../lib/classifyShoppingCapture';
+import { relocateLocalUris } from '../lib/relocateLocalUri';
 import type { ShoppingSnapOrganizationUpdate } from '../lib/shoppingSnapOrganizer';
 import type { ShoppingPurchaseDetails, ShoppingFindCatalogPatch, ShoppingFindCatalogStatus } from '../types/shoppingSnap';
 
@@ -626,6 +627,7 @@ export const useShoppingSessionStore = create<ShoppingSessionState>()(
         state.pendingUploads = state.pendingUploads.map((upload) => upload.ocrStatus === 'processing' ? { ...upload, ocrStatus: 'failed' as const } : upload);
       },
       storage: createJSONStorage(() => shoppingSessionStorage),
+      merge: (persisted, current) => ({ ...current, ...relocateLocalUris(persisted as Partial<ShoppingSessionState>) }),
       migrate: (persistedState: unknown) => {
         const state = (persistedState ?? {}) as Partial<ShoppingSessionState>;
         const normalizeSession = (session: ShoppingSessionContext | null | undefined) => {

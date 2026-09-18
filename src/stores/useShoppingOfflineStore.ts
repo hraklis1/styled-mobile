@@ -6,6 +6,7 @@ import type {
   ShoppingSnap,
 } from '../types/shoppingSnap';
 import type { ShoppingSnapOrganizationUpdate } from '../lib/shoppingSnapOrganizer';
+import { relocateLocalUris } from '../lib/relocateLocalUri';
 
 export type ShoppingOperation = {
   id: string;
@@ -121,6 +122,10 @@ export const useShoppingOfflineStore = create<{
     {
       name: 'shopping-offline-v1',
       version: 1,
+      merge: (persisted, current) => ({
+        ...current,
+        ...relocateLocalUris(persisted as { accounts?: Record<string, Account> }),
+      }),
       storage: createJSONStorage(() => ({
         getItem: (key) => mmkv.getString(key) ?? null,
         setItem: (key, value) => mmkv.set(key, value),

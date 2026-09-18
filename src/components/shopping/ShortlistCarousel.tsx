@@ -1,17 +1,20 @@
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
+import { AppText } from '../primitives/AppText';
 import { PressableScale } from '../primitives/PressableScale';
 import { formatShoppingPrice, shoppingCatalogChips } from '../../lib/shoppingPresentation';
 import { SHORTLIST_COPY } from '../../lib/shoppingVocabulary';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { ShoppingEditItem } from '../../lib/shoppingGallery';
 
-/** Wide enough for the photograph to carry the card, narrow enough that the next one peeks. */
-const CARD_WIDTH = 224;
+/** Wide enough for the photograph to carry the card, narrow enough that the
+ *  next one peeks by a third: a rail that fills the viewport stops reading as a
+ *  rail. */
+const CARD_WIDTH = 196;
 
 /**
  * One place, not a trail of them. The gallery's two-part label ("San Francisco ·
@@ -68,7 +71,7 @@ export function ShortlistCarousel({
           <View style={styles.seeAllEmblem}>
             <Ionicons name="arrow-forward" size={20} color={colors.action} />
           </View>
-          <Text style={styles.seeAllLabel}>See all {totalCount} pieces</Text>
+          <AppText variant="label" tone="action" style={styles.seeAllLabel}>See all {totalCount} pieces</AppText>
         </PressableScale>
       ) : null}
     </ScrollView>
@@ -83,9 +86,10 @@ function ShortlistFindCard({ item, onPress }: { item: ShoppingEditItem; onPress:
   const catalogChips = shoppingCatalogChips(item);
   // What the piece is, in the user's own terms — never the photo bookkeeping the
   // gallery falls back to, which tells you nothing about whether to buy it.
+  // Nothing known means no line: a placeholder row is not information.
   const description = catalogChips.length > 0
     ? catalogChips.join(' · ')
-    : item.notes?.trim() || 'No details yet';
+    : item.notes?.trim() || '';
 
   useEffect(() => {
     setImageLoaded(false);
@@ -129,23 +133,27 @@ function ShortlistFindCard({ item, onPress }: { item: ShoppingEditItem; onPress:
         ) : null}
         {item.photoCount > 1 ? (
           <View style={styles.photoCountPill}>
-            <Ionicons name="albums-outline" size={13} color="#FFFFFF" />
-            <Text style={styles.photoCountText}>{item.photoCount}</Text>
+            <Ionicons name="albums-outline" size={13} color={colors.primaryForeground} />
+            <AppText variant="caption" tone="inverse" style={styles.photoCountText}>{item.photoCount}</AppText>
           </View>
         ) : null}
       </View>
 
       <View style={styles.copy}>
-        <Text style={styles.store} numberOfLines={1}>{item.storeName ?? SHORTLIST_COPY.needsStore}</Text>
-        <View style={styles.placeRow}>
-          <Ionicons name="location-outline" size={11} color={colors.mutedForeground} />
-          <Text style={styles.place} numberOfLines={1}>{place || 'Location not set'}</Text>
-        </View>
-        <Text style={[styles.price, !price && styles.priceMissing]} numberOfLines={1}>
-          {price ?? 'Needs price'}
-        </Text>
+        <AppText variant="label" tone="primary" numberOfLines={1}>
+          {item.storeName ?? SHORTLIST_COPY.needsStore}
+        </AppText>
+        {price ? (
+          <AppText variant="data" tone="primary" numberOfLines={1}>{price}</AppText>
+        ) : (
+          // The one thing left to do, in action colour — not a value in disguise.
+          <AppText variant="label" tone="action" numberOfLines={1}>Add price</AppText>
+        )}
+        {place ? (
+          <AppText variant="caption" tone="muted" numberOfLines={1}>{place}</AppText>
+        ) : null}
         {description ? (
-          <Text style={styles.description} numberOfLines={2}>{description}</Text>
+          <AppText variant="caption" tone="muted" numberOfLines={1}>{description}</AppText>
         ) : null}
       </View>
     </PressableScale>
@@ -158,19 +166,13 @@ const styles = StyleSheet.create({
   rail: { marginHorizontal: -spacing.lg },
   railContent: { paddingHorizontal: spacing.lg, gap: spacing.md },
   cardLayout: { width: CARD_WIDTH },
-  // Flex so every card takes the tallest card's height: a two-line description
-  // on one find must not leave the rail's bottom edge ragged.
-  card: {
-    flex: 1,
-    borderRadius: radii.photo,
-    backgroundColor: colors.surfaceElevated,
-    boxShadow: '0 2px 8px rgba(40, 35, 31, 0.06)',
-  },
+  // A plate and its caption on the page ground — no box, no shadow. Flex so
+  // every card takes the tallest card's height and the rail's foot stays level.
+  card: { flex: 1, gap: spacing.sm },
   imageFrame: {
     aspectRatio: 4 / 5,
     overflow: 'hidden',
-    borderTopLeftRadius: radii.photo,
-    borderTopRightRadius: radii.photo,
+    borderRadius: radii.photo,
     backgroundColor: colors.surfaceSubtle,
   },
   imagePending: { opacity: 0 },
@@ -188,39 +190,17 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: spacing.sm,
     bottom: spacing.sm,
-    minWidth: 34,
-    height: 26,
+    height: 24,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
     borderRadius: radii.full,
     backgroundColor: 'rgba(24, 20, 18, 0.62)',
   },
-  photoCountText: {
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.bold,
-    color: '#FFFFFF',
-    fontVariant: ['tabular-nums'],
-  },
-  copy: { gap: 3, padding: spacing.md },
-  store: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  placeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  place: { flex: 1, fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
-  price: {
-    paddingTop: 2,
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-    fontVariant: ['tabular-nums'],
-  },
-  priceMissing: { color: colors.primary },
-  description: { ...typography.text.caption, color: colors.mutedForeground },
+  photoCountText: { fontWeight: typography.weight.semibold, fontVariant: ['tabular-nums'] },
+  copy: { gap: 2, paddingHorizontal: 2 },
   seeAllCard: {
     flex: 1,
     alignItems: 'center',
@@ -238,10 +218,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: `${colors.action}14`,
   },
-  seeAllLabel: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.action,
-    textAlign: 'center',
-  },
+  seeAllLabel: { textAlign: 'center' },
 });

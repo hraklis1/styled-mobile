@@ -1,10 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import type { WishlistEntry } from '../../lib/wishlist';
-import { getWishlistRecommendationType } from '../../lib/wishlistType';
+import {
+  getWishlistBrands,
+  getWishlistCardTitle,
+  getWishlistMeta,
+  getWishlistTypeLabel,
+} from '../../lib/wishlistPresentation';
 import { WishlistOutfitPreview } from './WishlistOutfitPreview';
-import { colors, radii, spacing, typography } from '../../theme';
-import { EditorialCardMeta } from '../primitives/Editorial';
+import { colors, radii, spacing } from '../../theme';
+import { AppText } from '../primitives/AppText';
+import { PressableScale } from '../primitives/PressableScale';
 
 type Props = {
   entry: WishlistEntry;
@@ -12,99 +18,86 @@ type Props = {
   onMore: () => void;
 };
 
+/**
+ * A saved Stylist entry as a line-sheet row: a small photo plate, the
+ * recommendation, and the figures a decision turns on. Rows are ruled rather
+ * than boxed so the list reads as one page instead of a stack of cards.
+ */
 export function ShopWishlistSummaryCard({ entry, onPress, onMore }: Props) {
   const { outfit, eventContext } = entry;
-  const recommendationType = getWishlistRecommendationType(entry);
-  const brands = [...new Set(outfit.items.map((item) => item.brand?.trim()).filter(Boolean))];
+  const brands = getWishlistBrands(entry);
   const savedEdit = outfit.shoppingBrief;
   const context = eventContext?.title ?? outfit.city?.trim();
   const savedDate = new Date(entry.savedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  const itemLabel = savedEdit ? `${savedEdit.targets.length} options` : recommendationType === 'look' ? `${outfit.items.length} ${outfit.items.length === 1 ? 'item' : 'items'}`
-    : recommendationType === 'piece' ? '1 piece' : `${outfit.items.length} options`;
-  const accessibilityLabel = [
-    outfit.intro,
-    itemLabel,
-    outfit.totalBudget,
-    context,
-  ].filter(Boolean).join(', ');
+  const title = getWishlistCardTitle(entry);
+  const meta = getWishlistMeta(entry);
+  const figure = savedEdit ? `${savedEdit.targets.length} options` : outfit.totalBudget?.trim();
+  const count = savedEdit ? undefined : meta.split(' · ')[0];
 
   return (
-    <Pressable
-      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+    <PressableScale
+      scaleTo={0.99}
+      haptic={false}
+      contentStyle={styles.row}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      accessibilityHint={`Opens ${savedEdit ? 'saved edit' : recommendationType === 'look' ? 'look' : recommendationType === 'piece' ? 'piece' : 'list'} details`}
+      accessibilityLabel={[title, meta, context].filter(Boolean).join(', ')}
+      accessibilityHint={`Opens ${getWishlistTypeLabel(entry).toLocaleLowerCase()} details`}
     >
-      <WishlistOutfitPreview entry={entry} style={styles.preview} />
-      <View style={styles.content}>
-        <View style={styles.topRow}>
-          {context ? (
-            <View style={styles.contextRow}>
-              <Ionicons
-                name={eventContext ? 'calendar-outline' : 'location-outline'}
-                size={12}
-                color={colors.primary}
-              />
-              <Text style={styles.contextText} numberOfLines={1}>{context}</Text>
-            </View>
-          ) : <View />}
-          <TouchableOpacity
-            onPress={onMore}
-            style={styles.moreButton}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            accessibilityRole="button"
-            accessibilityLabel="Outfit options"
-          >
-            <Ionicons name="ellipsis-horizontal" size={18} color={colors.mutedForeground} />
-          </TouchableOpacity>
-        </View>
-        <EditorialCardMeta
-          title={savedEdit ? savedEdit.headline : outfit.intro}
-          subtitle={savedEdit ? 'Shopping Brief' : brands.length > 0 ? brands.slice(0, 3).join(' · ') : undefined}
-          titleStyle={styles.intro}
-        />
+      <WishlistOutfitPreview entry={entry} scale="thumb" style={styles.preview} />
+      <View style={styles.copy}>
+        {context ? (
+          <AppText variant="eyebrow" tone="brand" numberOfLines={1}>{context}</AppText>
+        ) : null}
+        <AppText variant="cardTitle" tone="primary" numberOfLines={2}>{title}</AppText>
+        {savedEdit ? (
+          <AppText variant="caption" tone="muted" numberOfLines={1}>Shopping Brief</AppText>
+        ) : brands.length > 0 ? (
+          <AppText variant="caption" tone="muted" numberOfLines={1}>{brands.slice(0, 3).join(' · ')}</AppText>
+        ) : null}
         <View style={styles.metaRow}>
-          <Text style={styles.budget} numberOfLines={1}>{savedEdit ? 'Saved edit' : outfit.totalBudget}</Text>
-          <Text style={styles.meta}>
-            {itemLabel} · {savedDate}
-          </Text>
+          {figure ? (
+            <AppText variant="data" tone="primary" numberOfLines={1} style={styles.figure}>{figure}</AppText>
+          ) : null}
+          <AppText variant="caption" tone="muted" numberOfLines={1} style={styles.meta}>
+            {[count, savedDate].filter(Boolean).join(' · ')}
+          </AppText>
         </View>
       </View>
-    </Pressable>
+      <TouchableOpacity
+        onPress={onMore}
+        style={styles.moreButton}
+        accessibilityRole="button"
+        accessibilityLabel="Saved item options"
+      >
+        <Ionicons name="ellipsis-horizontal" size={18} color={colors.mutedForeground} />
+      </TouchableOpacity>
+    </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    minHeight: 156,
+  row: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: spacing.md,
-    padding: spacing.md,
-    borderRadius: radii.lg,
-    borderCurve: 'continuous',
-    backgroundColor: colors.surfaceElevated,
-    boxShadow: '0 1px 4px rgba(40, 35, 31, 0.045)',
+    paddingVertical: spacing.lg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.hairline,
   },
-  cardPressed: { opacity: 0.78, transform: [{ scale: 0.99 }] },
-  preview: { width: 112, minHeight: 128 },
-  content: { flex: 1, minWidth: 0, justifyContent: 'space-between' },
-  topRow: { minHeight: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.xs },
-  contextRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 },
-  contextText: { flex: 1, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.medium, color: colors.mutedForeground },
+  preview: { width: 88, aspectRatio: 4 / 5, borderRadius: radii.photo },
+  copy: { flex: 1, minWidth: 0, gap: spacing.xs },
+  metaRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, paddingTop: spacing.xs },
+  figure: { flexShrink: 1 },
+  meta: { flexShrink: 0, fontVariant: ['tabular-nums'] },
+  // Pulled up and out by the row's own padding so the 44pt target sits on the
+  // row's corner without a spacer of its own.
   moreButton: {
     width: 44,
     height: 44,
-    marginTop: -8,
-    marginRight: -8,
+    marginTop: -spacing.md,
+    marginRight: -spacing.md,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radii.full,
-    backgroundColor: 'transparent',
   },
-  intro: { fontSize: typography.text.body.fontSize, lineHeight: 20, fontWeight: typography.weight.semibold, color: colors.foreground },
-  brands: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
-  metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.xs },
-  budget: { flexShrink: 1, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground },
-  meta: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
 });

@@ -8,6 +8,12 @@ import { colors, editorial, radii, spacing, typography } from '../../theme';
 type Props = {
   entry: WishlistEntry;
   style?: StyleProp<ViewStyle>;
+  /**
+   * `tile` (default) can carry the typographic cover a saved edit gets before
+   * it has imagery. `thumb` is for list-row plates under ~100pt wide, where
+   * that cover would wrap into an unreadable stack — it shows an emblem instead.
+   */
+  scale?: 'tile' | 'thumb';
 };
 
 const CATEGORY_ICON: [pattern: RegExp, icon: keyof typeof Ionicons.glyphMap][] = [
@@ -24,7 +30,7 @@ const categoryIcon = (category?: string): keyof typeof Ionicons.glyphMap => {
   return CATEGORY_ICON.find(([pattern]) => pattern.test(value))?.[1] ?? 'bag-outline';
 };
 
-export function WishlistOutfitPreview({ entry, style }: Props) {
+export function WishlistOutfitPreview({ entry, style, scale = 'tile' }: Props) {
   const savedEdit = entry.outfit.shoppingBrief;
   const outfitItems = entry.outfit.items.map((item, index) => ({
     key: `${item.brand}-${item.name}-${index}`,
@@ -52,7 +58,7 @@ export function WishlistOutfitPreview({ entry, style }: Props) {
   // A saved Shopping Edit has a real editorial identity even before commerce
   // imagery arrives. Present it as an issued cover rather than a generic empty
   // product tile, so the saved preview still feels intentional.
-  if (imageItems.length === 0 && savedEdit) {
+  if (imageItems.length === 0 && savedEdit && scale === 'tile') {
     return (
       <View style={[styles.preview, style]} accessibilityElementsHidden>
         <View style={styles.editCover}>
@@ -73,7 +79,7 @@ export function WishlistOutfitPreview({ entry, style }: Props) {
       <View style={[styles.preview, style]} accessibilityElementsHidden>
         <View style={styles.empty}>
           <Ionicons
-            name={items.length === 0 ? 'bag-handle-outline' : categoryIcon(items[0].category)}
+            name={savedEdit ? 'sparkles-outline' : items.length === 0 ? 'bag-handle-outline' : categoryIcon(items[0].category)}
             size={26}
             color={colors.primary}
           />

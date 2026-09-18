@@ -3,6 +3,7 @@ import { getWishlistRecommendationType } from '../wishlistType';
 import {
   getWishlistAccessibilityLabel,
   getWishlistBrands,
+  getWishlistCardTitle,
   getWishlistBoardLabel,
   getWishlistBoardTitle,
   getWishlistContext,
@@ -141,5 +142,21 @@ describe('wishlist presentation', () => {
     };
 
     expect(getWishlistBoardTitle(introOnly)).toBe('A polished neutral edit for everyday layering.');
+  });
+});
+
+describe('getWishlistCardTitle', () => {
+  it('drops a short lead-in phrase before a colon', () => {
+    const lead = { ...entry, outfit: { ...entry.outfit, intro: 'Next best purchase: a versatile navy blazer' } };
+    expect(getWishlistCardTitle(lead)).toBe('A versatile navy blazer');
+  });
+
+  it('keeps a title with no lead-in', () => {
+    expect(getWishlistCardTitle(entry)).toBe('Polished linen layers');
+  });
+
+  it('keeps a colon that sits past the lead-in window', () => {
+    const late = { ...entry, outfit: { ...entry.outfit, intro: 'A weekend wardrobe built around one linen blazer: three looks' } };
+    expect(getWishlistCardTitle(late)).toBe('A weekend wardrobe built around one linen blazer: three looks');
   });
 });
