@@ -196,6 +196,6 @@ const styles = StyleSheet.create({
   actions: { alignSelf: 'stretch', marginTop: spacing.xl, gap: spacing.sm },
   saveButton: { minHeight: 48, borderRadius: radii.full, backgroundColor: colors.primary, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.xs },
   saveButtonText: { color: colors.primaryForeground, fontWeight: typography.weight.semibold, fontSize: typography.text.bodySmall.fontSize },
-  dismissButton: { minHeight: 44, justifyContent: 'center', alignItems: 'center' },
+  dismissButton: { minHeight: 44, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.surfaceSubtle, borderRadius: radii.full, paddingHorizontal: spacing.md },
   dismissButtonText: { color: colors.mutedForeground, fontSize: typography.text.bodySmall.fontSize },
 });

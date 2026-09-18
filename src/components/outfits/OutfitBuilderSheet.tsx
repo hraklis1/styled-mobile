@@ -1018,7 +1018,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.border,
     backgroundColor: colors.secondary,
-    minHeight: 36,
+    minHeight: 44,
   },
   occasionChipActive: {
     borderColor: colors.primary,
@@ -1154,8 +1154,8 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   pickerFilterButton: {
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
     borderRadius: radii.md,
     backgroundColor: colors.muted,
     alignItems: 'center',

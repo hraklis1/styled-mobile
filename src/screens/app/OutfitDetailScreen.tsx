@@ -987,7 +987,7 @@ const styles = StyleSheet.create({
   tagChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 34,
+    minHeight: 44,
     paddingHorizontal: spacing.sm + 2,
     borderRadius: radii.full,
     backgroundColor: colors.muted,
@@ -1044,7 +1044,7 @@ const styles = StyleSheet.create({
     minHeight: 36,
     marginTop: spacing.sm,
   },
-  notesSaveBtn: {
+  notesSaveBtn: { minHeight: 44, justifyContent: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderRadius: radii.md,

@@ -349,6 +349,11 @@ function AppTabNavigator() {
           ),
           tabBarLabel: ({ children, color }) => (
             <Text
+              // Keep all five navigation labels legible in a fixed-width bar.
+              // Full names remain exposed by each tab's accessibility label.
+              maxFontSizeMultiplier={1.4}
+              numberOfLines={1}
+              adjustsFontSizeToFit
               style={[
                 tabStyles.tabLabel,
                 { color, fontWeight: typography.weight.medium },

@@ -613,7 +613,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
             accessibilityLabel={`${event.outfitId == null ? 'View details' : 'View outfit'} for ${event.title}, ${event.itemIds!.length} pieces`}
           >
             <ItemThumbStack itemIds={event.itemIds!} itemsById={itemsById} />
-            <Ionicons name="chevron-forward" size={14} color={colors.border} />
+            <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />
           </TouchableOpacity>
         ) : (
           <View style={styles.eventReadiness}>
@@ -767,7 +767,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
                 </Text>
               </View>
               {!pastPresentation.hasOutfit ? (
-                <Ionicons name="chevron-forward" size={14} color={colors.border} />
+                <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />
               ) : null}
             </TouchableOpacity>
             {pastPresentation.hasOutfit ? (
@@ -836,7 +836,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
                 label: 'More',
                 accessibilityLabel: 'More calendar tools',
                 icon: 'ellipsis-horizontal',
-                variant: 'ghost',
+                variant: 'secondary',
                 onPress: openCalendarUtilities,
               },
             ]}
@@ -954,7 +954,7 @@ const styles = StyleSheet.create({
   },
   dayEmptyBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
-    minHeight: 40,
+    minHeight: 44,
     paddingHorizontal: spacing.md,
     borderRadius: radii.full, backgroundColor: colors.surfaceSelected,
   },

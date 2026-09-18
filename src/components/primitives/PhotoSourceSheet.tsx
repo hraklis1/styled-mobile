@@ -162,7 +162,7 @@ export function PhotoSourceSheet({
                   <Text style={styles.optionTitle}>{manualLabel}</Text>
                   <Text style={styles.optionSub}>{manualHint}</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={16} color={colors.border} />
+                <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
               </TouchableOpacity>
             ) : null}
 
@@ -180,7 +180,7 @@ export function PhotoSourceSheet({
                 <Text style={[styles.optionTitle, variant === 'quick-log' && styles.quickLibraryTitle]}>{libraryLabel}</Text>
                 <Text style={styles.optionSub}>{libraryHint}</Text>
               </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.border} />
+              <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
             </TouchableOpacity>
 
             {escapeLabel && onEscape ? (
@@ -196,7 +196,7 @@ export function PhotoSourceSheet({
                   <Text style={styles.escapeTitle}>{escapeLabel}</Text>
                   {escapeHint ? <Text style={styles.optionSub}>{escapeHint}</Text> : null}
                 </View>
-                <Ionicons name="chevron-forward" size={15} color={colors.border} />
+                <Ionicons name="chevron-forward" size={15} color={colors.mutedForeground} />
               </TouchableOpacity>
             ) : null}
           </View>

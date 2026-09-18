@@ -457,8 +457,8 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   backBtn: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -632,6 +632,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   wornBtn: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -646,8 +647,8 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   deleteBtn: {
-    width: 30,
-    height: 30,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -778,8 +779,8 @@ const styles = StyleSheet.create({
     color: colors.foreground,
   },
   bucketCloseBtn: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },

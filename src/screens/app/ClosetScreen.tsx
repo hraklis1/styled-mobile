@@ -733,7 +733,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
               </View>
             )}
             {!outfitSelectionMode && (
-              <Ionicons name="chevron-forward" size={16} color={colors.border} />
+              <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
             )}
           </PressableScale>
         );
@@ -895,7 +895,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         primaryAction={{
           label: segment === 'pieces' ? 'Add' : segment === 'boards' ? 'New board' : 'Create outfit',
           icon: 'add',
-          variant: 'ghost',
+          variant: 'secondary',
           onPress: handlePrimaryAction,
           accessibilityLabel: segment === 'pieces' ? 'Add pieces' : undefined,
         }}
@@ -1469,14 +1469,14 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   headerBtn: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     borderRadius: radii.md,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'center', backgroundColor: colors.surfaceSubtle,
   },
   primaryHeaderBtn: {
-    height: 36,
+    height: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1553,8 +1553,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   filterBtn: {
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
     borderRadius: radii.lg,
     backgroundColor: colors.muted,
     alignItems: 'center',

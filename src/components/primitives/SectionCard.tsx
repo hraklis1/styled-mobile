@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, typography } from '../../theme';
+import { colors, spacing, typography, radii } from '../../theme';
 
 interface SectionCardProps {
   title: string;
@@ -47,6 +47,7 @@ export function SectionCard({
           accessibilityLabel={`${expanded ? 'Collapse' : 'Expand'} ${title}`}
           accessibilityState={{ expanded }}
           activeOpacity={0.7}
+          style={styles.toggle}
         >
           {heading}
           {!expanded && summary ? <View style={styles.summary}>{summary}</View> : null}
@@ -62,9 +63,13 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     gap: spacing.lg,
   },
+  toggle: { minHeight: 44, justifyContent: 'center' },
   borderedCard: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radii.card,
+    paddingHorizontal: spacing.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
     marginBottom: spacing.sm,
   },
   plainCard: {

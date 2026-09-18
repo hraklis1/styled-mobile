@@ -17,10 +17,11 @@ export function Input({ style, error = false, ...rest }: Props) {
 
 const styles = StyleSheet.create({
   input: {
-    height: 50,
+    minHeight: 52,
+    paddingVertical: spacing.md,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
+    borderColor: colors.controlOutline,
+    borderRadius: radii.field,
     paddingHorizontal: spacing.lg,
     fontSize: typography.text.body.fontSize,
     color: colors.foreground,

@@ -1,28 +1,31 @@
 import { Platform, type TextStyle } from 'react-native';
 
-// Translated from the web app's HSL CSS variables (index.css)
+// Shared light palette: warm stone canvas, white surfaces, obsidian actions.
 export const colors = {
-  background:          '#FBFAF7', // Warm ivory
-  foreground:          '#1D1B18', // Soft fashion black
-  card:                '#F3F0EA',
-  surfaceElevated:     '#FDFCF9',
-  surfaceSubtle:       '#F5F3EE',
-  surfaceSelected:     '#E8E5DE',
-  primary:             '#292723', // Primary action ink
-  primaryForeground:   '#FFFCF7',
-  secondary:           '#EDEAE3',
-  secondaryForeground: '#403A33',
-  muted:               '#EEECE6',
-  mutedForeground:     '#6F6A62',
+  background:          '#F6F5F2', // Warm stone
+  foreground:          '#242422', // Soft fashion black
+  card:                '#FFFFFF',
+  surfaceElevated:     '#FFFFFF',
+  surfaceSubtle:       '#EFEEE9',
+  surfaceSelected:     '#E5E3DC',
+  primary:             '#242422', // Primary action ink
+  primaryForeground:   '#FFFFFF',
+  secondary:           '#EFEEE9',
+  secondaryForeground: '#242422',
+  muted:               '#EFEEE9',
+  mutedForeground:     '#625F59',
   accent:              '#E8DED1',
   // Quiet action text; pair with an underline or directional icon.
-  action:              '#514B43',
-  border:              '#DDD9D1',
-  hairline:            '#E7E3DC',
-  inkSubtle:           '#4E4841',
+  action:              '#242422',
+  border:              '#DEDCD6',
+  hairline:            '#DEDCD6',
+  inkSubtle:           '#625F59',
   error:               '#B94242',
   destructive:         '#BF4040', // Alias for error
   success:             '#4A7D59',
+  controlOutline:      '#8A857C',
+  tertiary:            '#76716A',
+  primaryPressed:      '#3A3A37',
   white:               '#FFFFFF',
 } as const;
 
@@ -67,6 +70,7 @@ export const spacing = {
   xxxl: 48,
   page: 24,
   grid: 12,
+  control: 20,
   gridRow: 24,
   section: 32,
 } as const;
@@ -195,6 +199,8 @@ export const typography = {
       lineHeight: 22,
       fontWeight: weight.semibold,
     },
+    actionTitle: { fontSize: 16, lineHeight: 22, fontWeight: weight.semibold },
+    priorityNumeral: { fontSize: 14, lineHeight: 20, fontVariant: ['tabular-nums'] as TextStyle['fontVariant'] },
     cardTitle: {
       fontSize: 14, lineHeight: 20, fontWeight: weight.medium,
     },
@@ -209,7 +215,7 @@ export const typography = {
       fontWeight: weight.regular,
     },
     label: {
-      fontSize: 14, lineHeight: 20, fontWeight: weight.medium, letterSpacing: 0.2,
+      fontSize: 14, lineHeight: 20, fontWeight: weight.semibold, letterSpacing: 0.1,
     },
     caption: {
       fontSize: 12,
@@ -255,7 +261,8 @@ export const radii = {
    * corner treatment. Just enough to take the hard pixel off the corner.
    */
   photo: 2,
-  action: 4,
+  action: 9999,
+  field: 12,
   bubble: 8,
   sheet: 24,
   sm:   6,
@@ -330,6 +337,14 @@ export function cutoutScaleFor(category: string | null | undefined): number {
 // elements (FABs, modals) where borders would look incorrect and elevation
 // alone is needed for proper layer stacking.
 export const shadows = {
+  control: {
+    shadowColor: '#242422', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 4, elevation: 1,
+  },
+  actionCard: {
+    shadowColor: '#242422', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08, shadowRadius: 12, elevation: 3,
+  },
   xs: Platform.select({
     ios: {
       shadowColor:   '#28231F',
@@ -400,19 +415,19 @@ export const shadows = {
   }),
 };
 
-/** Selective depth for the Shopping Brief and Edit; other flows retain their palette. */
+/** Shopping accents share the app canvas and action surfaces. */
 export const shoppingSurfaces = {
-  canvas: '#F8F7F3',
-  alabaster: '#FFFEFA',
-  bone: '#F0EDE5',
-  espresso: '#302B25',
-  secondaryInk: '#625D54',
+  canvas: colors.background,
+  alabaster: colors.surfaceElevated,
+  bone: colors.surfaceSubtle,
+  espresso: colors.primary,
+  secondaryInk: colors.mutedForeground,
   olive: { accent: '#586047', wash: '#EEF0E7' },
   stone: { accent: '#716E65', wash: '#F0EEE8' },
   charcoal: { accent: '#454A47', wash: '#ECEEEB' },
   edge: 'rgba(48,43,37,0.08)',
   highlight: 'rgba(255,255,255,0.72)',
-  panelGradient: ['#FFFEFA', '#F7F5EF', '#F0EDE5'],
+  panelGradient: ['#FFFFFF', '#FFFFFF', '#F6F5F2'],
   panelStops: [0, 0.58, 1],
   tileGradient: ['#F8F7F2', '#F0EDE5', '#ECE9E1'],
   tileStops: [0, 0.65, 1],

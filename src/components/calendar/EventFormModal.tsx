@@ -452,7 +452,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: spacing.md,
-    minHeight: 42,
+    minHeight: 44,
     paddingVertical: spacing.sm,
     borderRadius: radii.lg,
     borderWidth: 1,
@@ -484,7 +484,7 @@ const s = StyleSheet.create({
   envRow: { flexDirection: 'row', gap: spacing.sm },
   envChip: {
     flex: 1,
-    minHeight: 42,
+    minHeight: 44,
     justifyContent: 'center',
     borderRadius: radii.lg,
     borderWidth: 1,

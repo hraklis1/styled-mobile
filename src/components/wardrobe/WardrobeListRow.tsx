@@ -121,7 +121,7 @@ export function WardrobeListRow({
               color={item.isFavorite ? '#E53E3E' : colors.mutedForeground}
             />
           </TouchableOpacity>
-          <Ionicons name="chevron-forward" size={15} color={colors.border} />
+          <Ionicons name="chevron-forward" size={15} color={colors.mutedForeground} />
         </View>
       )}
     </TouchableOpacity>

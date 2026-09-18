@@ -116,7 +116,7 @@ export function StylistComposer({
                 <TouchableOpacity
                   style={styles.attachmentBadge}
                   onPress={onRemoveAttachment}
-                  hitSlop={8}
+                  hitSlop={12}
                   accessibilityLabel="Remove attachment"
                 >
                   <Ionicons name="close" size={12} color={colors.white} />
@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xs,
   },
   composer: {
-    minHeight: 52, backgroundColor: colors.surfaceElevated, borderRadius: radii.bubble, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, padding: spacing.xs,
+    minHeight: 52, backgroundColor: colors.surfaceElevated, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.controlOutline, padding: spacing.xs,
   },
   composerRow: {
     flexDirection: 'row',

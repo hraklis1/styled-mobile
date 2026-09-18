@@ -1872,7 +1872,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   scanSecondaryButton: {
-    minHeight: 40,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -1888,7 +1888,7 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   scanGhostButton: {
-    minHeight: 40,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.sm,

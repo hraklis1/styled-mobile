@@ -126,8 +126,8 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: shoppingSurfaces.canvas },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: shoppingSurfaces.canvas },
   scroll: { flex: 1 },
-  content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxxl + spacing.xl },
-  header: { marginHorizontal: -spacing.lg, backgroundColor: shoppingSurfaces.canvas },
+  content: { paddingHorizontal: spacing.page, paddingBottom: spacing.xxxl + spacing.xl },
+  header: { marginHorizontal: -spacing.page, backgroundColor: shoppingSurfaces.canvas },
   notice: { ...typography.text.caption, color: colors.mutedForeground, paddingVertical: spacing.sm },
   errorNotice: { ...typography.text.caption, color: colors.destructive, paddingVertical: spacing.sm },
 });

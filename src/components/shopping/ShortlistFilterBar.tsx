@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
   row: { gap: spacing.sm, alignItems: 'center', paddingHorizontal: spacing.lg },
   chip: {
     maxWidth: 200,
-    height: 30,
+    height: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,

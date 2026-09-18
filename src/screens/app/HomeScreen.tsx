@@ -1,3 +1,5 @@
+import { AskStylistButton } from '../../components/home/AskStylistButton';
+import { AddToClosetCard } from '../../components/home/AddToClosetCard';
 import { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
@@ -255,7 +257,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       }
     }
   }, [fabCollapsed]);
-  const { width } = useWindowDimensions();
+  const { width, fontScale } = useWindowDimensions();
+  const largeText = fontScale > 1.3;
   // Full-bleed: the hero runs edge to edge rather than sitting inset like the
   // rest of the page's cards, at the same portrait ratio outfit photography
   // uses everywhere else in the app.
@@ -636,12 +639,12 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       onScroll={handleHomeScroll}
       scrollEventThrottle={16}
     >
-      <View style={styles.headerRow}>
+      <View style={[styles.headerRow, largeText && styles.headerRowLarge]}>
         <ScreenHeader
           title={getGreeting(user?.displayName)}
           titleVariant="display"
           safeTop={false}
-          style={styles.greetingHeader}
+          style={[styles.greetingHeader, largeText && styles.greetingHeaderLarge]}
           subtitleNode={(
             <TouchableOpacity
               style={styles.weatherLocationButton}
@@ -662,7 +665,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           )}
         />
         <TouchableOpacity
-          style={styles.avatarBtn}
+          style={[styles.avatarBtn, largeText && styles.avatarLarge]}
           onPress={() => navigation.navigate('Profile')}
           activeOpacity={0.7}
           hitSlop={4}
@@ -682,9 +685,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         </TouchableOpacity>
       </View>
 
-      {/* ── AI Stylist fake input ─────────────────────────────── */}
-      <TouchableOpacity
-        style={styles.stylistPill}
+      <AskStylistButton style={styles.stylistEntry}
         onPress={() => openStylist({
           source: 'home_prompt',
           onNavigateToCloset: (outfitId) => navigation.navigate('Closet', {
@@ -698,49 +699,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             }});
           },
         })}
-        activeOpacity={0.7}
-        accessibilityRole="button"
-        accessibilityLabel="Open AI Stylist"
-      >
-        <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.primary} />
-        <Text style={styles.stylistPillText} numberOfLines={1}>
-          Ask your stylist anything…
-        </Text>
-        <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
-      </TouchableOpacity>
-
-      {/* ── Permanent wardrobe action ─────────────────────── */}
-      {/*
-        Deliberately one action, not a pair. Logging a worn outfit used to sit
-        here as a second row built from the same template, and users read the
-        two as variants of one thing — tapping the camera-badged log row when
-        they meant to add a garment. Logging now lives in the diary it feeds
-        ("Your Week in Wear" below), so the row in the add-things slot is the
-        one that adds things.
-      */}
-      <View style={styles.wardrobeActions}>
-        <PressableScale
-          contentStyle={styles.wardrobeAction}
-          onPress={handleAddToCloset}
-          accessibilityRole="button"
-          accessibilityLabel="Add to my closet"
-          accessibilityHint="Opens options to take a photo, choose from your library, or import several pieces"
-        >
-          <View style={styles.wardrobeActionVisual}>
-            <Ionicons name="camera-outline" size={22} color={colors.primary} />
-            <View style={styles.wardrobeActionBadge}>
-              <Ionicons name="add" size={11} color={colors.primaryForeground} />
-            </View>
-          </View>
-          <View style={styles.wardrobeActionCopy}>
-            <Text style={styles.wardrobeActionTitle}>Add to my closet</Text>
-            <Text style={styles.wardrobeActionSubtitle}>
-              Photograph or import pieces you own
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={17} color={colors.primary} />
-        </PressableScale>
-      </View>
+      />
+      <AddToClosetCard onPress={handleAddToCloset} />
 
       {/* ── Featured outfit ────────────────────────────────────── */}
       <EditorialSection
@@ -953,7 +913,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               <Text style={styles.emptyTitle}>No upcoming events</Text>
               <Text style={styles.emptySubtitle}>Add events to plan outfits ahead</Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.border} />
+            <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
           </PressableScale>
         ) : (
           <View style={styles.calendarStack}>
@@ -1043,7 +1003,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               <Text style={styles.emptyTitle}>Nothing logged yet</Text>
               <Text style={styles.emptySubtitle}>Record what you wore from pieces in your closet</Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.border} />
+            <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
           </PressableScale>
         ) : logs.length === 1 ? (() => {
           const log = logs[0];
@@ -1230,14 +1190,17 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     marginBottom: spacing.md,
   },
+  headerRowLarge: { flexDirection: 'column-reverse', alignItems: 'stretch' },
+  greetingHeaderLarge: { flex: 0 },
+  avatarLarge: { alignSelf: 'flex-end' },
   greetingHeader: {
     flex: 1,
     paddingHorizontal: 0,
     paddingBottom: 0,
   },
   avatarBtn: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     borderRadius: radii.full,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
@@ -1259,51 +1222,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
 
-  // AI Stylist fake-input pill
-  stylistPill: {
-    minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.surfaceElevated, borderRadius: radii.bubble, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, marginBottom: spacing.lg,
-  },
-  stylistPillText: {
-    ...typography.text.body,
-    flex: 1,
-    color: colors.mutedForeground,
-  },
-  // Flat and quiet, deliberately: the fashion imagery below is what should
-  // carry visual weight on this page, not the utility actions above it.
-  wardrobeActions: {
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline,
-  },
-  wardrobeAction: {
-    minHeight: 78, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md,
-  },
-  wardrobeActionVisual: {
-    width: 44, height: 44, alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative',
-  },
-  wardrobeActionBadge: {
-    position: 'absolute',
-    right: 5,
-    bottom: 5,
-    width: 17,
-    height: 17,
-    borderRadius: radii.full,
-    backgroundColor: colors.primary,
-    borderWidth: 2,
-    borderColor: colors.surfaceElevated,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  wardrobeActionCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  wardrobeActionTitle: {
-    ...typography.text.cardTitle,
-    color: colors.foreground,
-  },
-  wardrobeActionSubtitle: {
-    ...typography.text.caption,
-    color: colors.mutedForeground,
-  },
+  stylistEntry: { marginBottom: spacing.lg },
 
   // Empty wardrobe nudge
   nudgeCard: {
@@ -1545,7 +1464,7 @@ const styles = StyleSheet.create({
     maxWidth: 220,
   },
   emptyOutfitButton: {
-    minHeight: 40,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,

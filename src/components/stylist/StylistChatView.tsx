@@ -3239,7 +3239,7 @@ const styles = StyleSheet.create({
   headerIdentity: { flex: 1, alignItems: 'flex-start', gap: spacing.xs },
   headerContextPill: {
     maxWidth: '96%',
-    minHeight: 22,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -3250,7 +3250,7 @@ const styles = StyleSheet.create({
   headerSubtitle: { flexShrink: 1, ...typography.text.meta, color: colors.mutedForeground },
   headerWeather: { ...typography.text.meta, color: colors.primary },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  doneBtn: { minHeight: 36, justifyContent: 'center', paddingHorizontal: spacing.sm },
+  doneBtn: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.surfaceSubtle },
   doneBtnText: { color: colors.primary, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold },
   // Conversation drawer
   drawerBackdrop: {
@@ -3619,8 +3619,8 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   headerIconBtn: {
-    width: 30,
-    height: 30,
+    width: 44,
+    height: 44,
     borderRadius: radii.full,
     alignItems: 'center',
     justifyContent: 'center',
@@ -3684,8 +3684,8 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.medium,
   },
   lineSheetSwapBtn: {
-    width: 32,
-    height: 32,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -3864,7 +3864,7 @@ const styles = StyleSheet.create({
   inlineErrorCopy: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   inlineErrorTitle: { color: colors.foreground, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold },
   inlineErrorText: { color: colors.mutedForeground, fontSize: typography.text.caption.fontSize, lineHeight: 17 },
-  retryBtn: { alignSelf: 'flex-start', minHeight: 36, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.foreground },
+  retryBtn: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.foreground },
   retryBtnText: { color: colors.primaryForeground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold },
   stylistSheetModal: { flex: 1, justifyContent: 'flex-end' },
   stylistSheetBackdrop: {
@@ -4085,8 +4085,8 @@ const styles = StyleSheet.create({
     letterSpacing: typography.tracking.none,
   },
   sheetCloseBtn: {
-    width: 32,
-    height: 32,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radii.full,

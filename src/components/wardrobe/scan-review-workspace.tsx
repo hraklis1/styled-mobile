@@ -815,7 +815,7 @@ function BrandResult({ icon, label, muted, onPress }: { icon: keyof typeof Ionic
     <TouchableOpacity style={styles.brandResult} onPress={onPress} accessibilityRole="button">
       <View style={styles.brandResultIcon}><Ionicons name={icon} size={19} color={muted ? colors.mutedForeground : colors.primary} /></View>
       <Text style={[styles.brandResultText, muted && styles.brandResultMuted]} numberOfLines={1}>{label}</Text>
-      <Ionicons name="chevron-forward" size={17} color={colors.border} />
+      <Ionicons name="chevron-forward" size={17} color={colors.mutedForeground} />
     </TouchableOpacity>
   );
 }
@@ -1033,7 +1033,7 @@ const styles = StyleSheet.create({
   heroImage: { width: '100%', height: '100%' },
   utilityRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginHorizontal: spacing.lg, minHeight: 44 },
   utilitySpacer: { flex: 1 },
-  utilityButton: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, borderRadius: radii.full, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.surfaceElevated },
+  utilityButton: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, borderRadius: radii.full, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.surfaceElevated },
   utilityButtonActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   utilityButtonText: { ...typography.text.caption, fontWeight: typography.weight.semibold, color: colors.foreground },
   utilityButtonTextActive: { color: colors.primaryForeground },

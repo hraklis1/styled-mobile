@@ -30,7 +30,7 @@ export function MenuContent({
           <Text style={styles.optionTitle}>Take Photo</Text>
           <Text style={styles.optionSub}>Snap your item — AI fills in the details</Text>
         </View>
-        <Ionicons name="chevron-forward" size={16} color={colors.border} />
+        <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.option} onPress={onFromLibrary} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Import from photo library">
@@ -41,7 +41,7 @@ export function MenuContent({
           <Text style={styles.optionTitle}>Choose from Photos</Text>
           <Text style={styles.optionSub}>Pick a photo from your camera roll</Text>
         </View>
-        <Ionicons name="chevron-forward" size={16} color={colors.border} />
+        <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.option} onPress={onBatchImport} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Batch import up to 10 photos">
@@ -52,7 +52,7 @@ export function MenuContent({
           <Text style={styles.optionTitle}>Batch Import</Text>
           <Text style={styles.optionSub}>Scan up to 10 photos at once</Text>
         </View>
-        <Ionicons name="chevron-forward" size={16} color={colors.border} />
+        <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.option} onPress={onManual} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Enter item manually">
@@ -63,7 +63,7 @@ export function MenuContent({
           <Text style={styles.optionTitle}>Enter Manually</Text>
           <Text style={styles.optionSub}>Type the name, category, and colour</Text>
         </View>
-        <Ionicons name="chevron-forward" size={16} color={colors.border} />
+        <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
       </TouchableOpacity>
 
     </View>

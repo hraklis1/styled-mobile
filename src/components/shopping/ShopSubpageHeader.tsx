@@ -67,7 +67,7 @@ export function ShopSubpageHeader({ title, subtitle, eyebrow = 'SHOP', eyebrowTr
 const styles = StyleSheet.create({
   // Page ground, not a tinted plate: Shop's subpages are one continuous
   // sheet, sectioned by single hairlines rather than by changes of surface.
-  header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, backgroundColor: colors.background },
+  header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, backgroundColor: colors.surfaceElevated },
   headerCompact: { paddingBottom: spacing.md },
   topRow: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xl },
   topRowCompact: { minHeight: 42, marginBottom: spacing.sm },
@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
   // Outlined, not filled: on the page ground a white disc had nothing to sit
   // against, and a tinted one vanished. A hairline ring reads as a control
   // without adding a surface.
-  backButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.background },
+  backButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.surfaceElevated },
   actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   eyebrowRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
   title: { maxWidth: 340, paddingTop: spacing.sm },

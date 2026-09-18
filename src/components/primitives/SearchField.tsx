@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, TextInput, View, useWindowDimensions, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, typography } from '../../theme';
+import { colors, spacing, typography, radii } from '../../theme';
 
 type Props = Omit<TextInputProps, 'style' | 'value' | 'onChangeText'> & {
   value: string;
@@ -15,7 +15,7 @@ type Props = Omit<TextInputProps, 'style' | 'value' | 'onChangeText'> & {
 const FIELD_HEIGHT = 44;
 
 /**
- * The one search treatment: a transparent field with a fine baseline, the
+ * A filled search capsule with a defined outline, the
  * same height as the filter and view controls it sits beside. Screens should
  * use this rather than composing an icon + TextInput of their own.
  */
@@ -51,6 +51,7 @@ export function SearchField({
       {showClear ? (
         <Pressable
           onPress={clear}
+          style={({ pressed }) => [styles.clear, pressed && styles.pressed]}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           accessibilityRole="button"
           accessibilityLabel={dismissible ? 'Close search' : 'Clear search'}
@@ -69,12 +70,16 @@ const styles = StyleSheet.create({
     minHeight: FIELD_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'transparent',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-    paddingHorizontal: 0,
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.controlOutline,
+    borderRadius: radii.full,
+    paddingLeft: spacing.lg,
+    paddingRight: spacing.xs,
     gap: spacing.sm,
   },
+  clear: { width: 44, height: 44, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center' },
+  pressed: { backgroundColor: colors.surfaceSelected },
   icon: { flexShrink: 0 },
   input: {
     flex: 1,

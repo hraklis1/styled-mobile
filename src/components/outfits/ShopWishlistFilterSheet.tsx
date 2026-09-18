@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.hairline,
   },
-  headerSide: { width: 64, minHeight: 40, justifyContent: 'center' },
+  headerSide: { width: 64, minHeight: 44, justifyContent: 'center' },
   headerSideRight: { alignItems: 'flex-end' },
   title: { flex: 1, textAlign: 'center', fontSize: typography.text.body.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground },
   clearText: { fontSize: typography.text.bodySmall.fontSize, color: colors.primary },
@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
-    minHeight: 38,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,

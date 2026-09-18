@@ -64,7 +64,7 @@ export function ScreenHeader({
           variant={titleVariant === 'display' ? 'editorialHero' : 'pageTitle'}
           tone="primary"
           style={styles.headerTitle}
-          numberOfLines={titleVariant === 'display' ? 2 : 1}
+          numberOfLines={stacked ? undefined : titleVariant === 'display' ? 2 : 1}
         >
           {title}
         </AppText>
@@ -127,6 +127,8 @@ export function EditorialSection({
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
+  const { width, fontScale } = useWindowDimensions();
+  const stacked = width < 360 || fontScale > 1.3;
   const ruled = variant === 'ruled';
   const editorialHeading = headingStyle === 'editorial';
 
@@ -139,6 +141,7 @@ export function EditorialSection({
         styles.sectionHeader,
         editorialHeading ? styles.editorialSectionHeader : null,
         description ? styles.sectionHeaderTight : null,
+        stacked && styles.sectionHeaderStacked,
       ]}>
         <AppText
           variant={editorialHeading ? 'eyebrowLarge' : ruled ? 'eyebrow' : 'sectionTitle'}
@@ -152,6 +155,8 @@ export function EditorialSection({
           <PressableScale
             haptic={false}
             onPress={onAction}
+            motion="crisp" scaleTo={0.985}
+            pressedContentStyle={styles.controlPressed}
             contentStyle={styles.sectionAction}
             accessibilityRole="button"
             accessibilityLabel={actionLabel}
@@ -178,6 +183,8 @@ export function IconButton({
 }: HeaderAction & { style?: StyleProp<ViewStyle> }) {
   return (
     <PressableScale
+      motion="crisp" scaleTo={0.985}
+      pressedContentStyle={variant === 'primary' ? styles.primaryPressed : styles.controlPressed}
       contentStyle={[styles.iconButton, styles[`${variant}IconButton`], style]}
       onPress={onPress}
       accessibilityRole="button"
@@ -202,6 +209,8 @@ export function ActionButton({
 }: HeaderAction & { style?: StyleProp<ViewStyle> }) {
   return (
     <PressableScale
+      motion="crisp" scaleTo={0.985}
+      pressedContentStyle={variant === 'primary' ? styles.primaryPressed : styles.controlPressed}
       contentStyle={[styles.actionButton, styles[`${variant}ActionButton`], style]}
       onPress={onPress}
       accessibilityRole="button"
@@ -374,9 +383,11 @@ const styles = StyleSheet.create({
   iconButton: {
     width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radii.action,
   },
+  primaryPressed: { backgroundColor: colors.primaryPressed },
+  controlPressed: { backgroundColor: colors.surfaceSelected },
   primaryIconButton: { backgroundColor: colors.primary },
   secondaryIconButton: {
-    backgroundColor: 'transparent',
+    backgroundColor: colors.surfaceSubtle,
   },
   ghostIconButton: { backgroundColor: 'transparent' },
   actionButton: {
@@ -384,7 +395,7 @@ const styles = StyleSheet.create({
   },
   primaryActionButton: { backgroundColor: colors.primary },
   secondaryActionButton: {
-    backgroundColor: 'transparent',
+    backgroundColor: colors.surfaceSubtle,
   },
   ghostActionButton: { backgroundColor: 'transparent' },
   actionButtonText: { flexShrink: 1 },
@@ -415,6 +426,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.md,
   },
+  sectionHeaderStacked: { flexDirection: 'column', alignItems: 'flex-start', gap: spacing.sm },
   // A description carries its own gap to the content below it.
   sectionHeaderTight: { marginBottom: spacing.xs },
   ruledSectionTitle: {
@@ -428,10 +440,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   sectionAction: {
-    minHeight: 44, justifyContent: 'center', paddingLeft: spacing.md,
+    minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radii.full, backgroundColor: colors.surfaceSubtle,
   },
   sectionActionText: {
-    flexShrink: 1, textDecorationLine: 'underline',
+    flexShrink: 1,
   },
   segment: {
     flexDirection: 'row',
@@ -443,7 +455,7 @@ const styles = StyleSheet.create({
   },
   segmentButton: {
     flex: 1,
-    minHeight: 34,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radii.full,
@@ -461,7 +473,7 @@ const styles = StyleSheet.create({
     gap: spacing.xl,
   },
   tabsButton: {
-    minHeight: 34,
+    minHeight: 44,
     justifyContent: 'flex-end',
     gap: 5,
   },
@@ -477,13 +489,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   filterControl: {
-    width: 44, height: 44, alignItems: 'center', justifyContent: 'center',
+    width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radii.full, backgroundColor: colors.surfaceSubtle,
   },
-  // Active means "a filter is on", not "this is the primary action" — a solid
-  // fill here made it the visual equal of the one filled button a header is
-  // allowed. It states itself with a drawn edge instead.
+  // Selected controls retain the same container and gain a defined edge.
   filterControlActive: {
-    borderBottomWidth: 1, borderBottomColor: colors.primary,
+    borderWidth: 1, borderColor: colors.controlOutline, backgroundColor: colors.surfaceSelected,
   },
   // A corner badge, so the control keeps its 44pt circle instead of stretching
   // into a pill the moment a filter is on.
@@ -503,13 +513,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   viewModeControl: {
-    minHeight: 44, flexDirection: 'row',
+    minHeight: 44, flexDirection: 'row', gap: spacing.xs,
   },
   viewModeButton: {
-    width: 44, height: 44, alignItems: 'center', justifyContent: 'center',
+    width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radii.full, backgroundColor: colors.surfaceSubtle,
   },
   viewModeButtonActive: {
-    borderBottomWidth: 1, borderBottomColor: colors.primary,
+    borderWidth: 1, borderColor: colors.controlOutline, backgroundColor: colors.surfaceSelected,
   },
   cardMeta: {
     flex: 1,

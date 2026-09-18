@@ -486,8 +486,8 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   pickerFilterButton: {
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
     borderRadius: radii.md,
     backgroundColor: colors.muted,
     alignItems: 'center',

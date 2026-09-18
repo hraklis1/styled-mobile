@@ -70,7 +70,7 @@ export function HomeWardrobeEdit({ onBriefPress, shortlist, style }: Props) {
 const styles = StyleSheet.create({
   briefGroup: { gap: spacing.sm },
   link: {
-    minHeight: 32,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',

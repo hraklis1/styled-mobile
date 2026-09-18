@@ -21,7 +21,7 @@ export function SelectRow({ label, value, placeholder, onPress }: {
         {!!label && <Text style={styles.label}>{label}</Text>}
         <Text style={value ? styles.value : styles.placeholder}>{value || placeholder}</Text>
       </View>
-      <Ionicons name="chevron-forward" size={14} color={colors.border} />
+      <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
     </TouchableOpacity>
   );
 }

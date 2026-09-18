@@ -720,7 +720,7 @@ const styles = StyleSheet.create({
   catalogError: { fontSize: typography.text.caption.fontSize, color: colors.error },
   catalogSaveButton: {
     alignSelf: 'flex-start',
-    minHeight: 38,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
@@ -757,7 +757,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     backgroundColor: colors.card,
   },
-  disclosureToggle: { minHeight: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  disclosureToggle: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   disclosureLabel: { ...typography.text.eyebrow, color: colors.primary },
   tagTextBlock: { gap: spacing.xs },
   tagHeader: { ...typography.text.eyebrow, color: colors.primary, marginTop: spacing.xs },
@@ -770,11 +770,11 @@ const styles = StyleSheet.create({
   closeButton: {
     position: 'absolute',
     right: spacing.lg,
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 18,
+    borderRadius: 22,
     backgroundColor: 'rgba(24, 20, 18, 0.5)',
   },
 });

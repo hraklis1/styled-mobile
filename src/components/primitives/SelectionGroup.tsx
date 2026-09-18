@@ -166,7 +166,7 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    minHeight: 42,
+    minHeight: 44,
     paddingHorizontal: spacing.lg,
     borderRadius: radii.full,
   },

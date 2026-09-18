@@ -1495,7 +1495,7 @@ const styles = StyleSheet.create({
   tagChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 34,
+    minHeight: 44,
     paddingHorizontal: spacing.sm + 2,
     borderRadius: radii.full,
     backgroundColor: colors.muted,

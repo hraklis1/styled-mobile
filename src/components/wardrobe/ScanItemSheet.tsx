@@ -998,7 +998,7 @@ function IdleContent({ onPickImage }: { onPickImage: (src: 'camera' | 'library')
           <Text style={idleStyles.optionTitle}>Take Photo</Text>
           <Text style={idleStyles.optionSub}>Snap your outfit or items</Text>
         </View>
-        <Ionicons name="chevron-forward" size={16} color={colors.border} />
+        <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
       </TouchableOpacity>
       <TouchableOpacity style={idleStyles.option} onPress={() => onPickImage('library')}>
         <View style={idleStyles.iconBox}>
@@ -1008,7 +1008,7 @@ function IdleContent({ onPickImage }: { onPickImage: (src: 'camera' | 'library')
           <Text style={idleStyles.optionTitle}>Choose from Library</Text>
           <Text style={idleStyles.optionSub}>Select from camera roll</Text>
         </View>
-        <Ionicons name="chevron-forward" size={16} color={colors.border} />
+        <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
       </TouchableOpacity>
     </View>
   );

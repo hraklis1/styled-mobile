@@ -334,7 +334,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  skipBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  skipBtn: { minHeight: 44, justifyContent: 'center', flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, backgroundColor: colors.surfaceSubtle, borderRadius: radii.full },
   skipText: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
   eyebrow: {
     ...typography.text.eyebrowLarge,
@@ -380,7 +380,7 @@ const s = StyleSheet.create({
     gap: spacing.xs,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
-    borderRadius: radii.lg,
+    borderRadius: radii.full,
     borderCurve: 'continuous',
     minHeight: 46,
   },

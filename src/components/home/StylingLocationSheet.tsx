@@ -433,7 +433,7 @@ const styles = StyleSheet.create({
   title: { fontSize: typography.text.sheetTitle.fontSize, fontWeight: typography.weight.bold, color: colors.foreground },
   subtitle: { fontSize: typography.text.bodySmall.fontSize, lineHeight: 19, color: colors.mutedForeground },
   closeButton: {
-    width: 36, height: 36, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center',
+    width: 44, height: 44, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.surfaceSubtle,
   },
   options: { gap: spacing.sm },
@@ -461,7 +461,7 @@ const styles = StyleSheet.create({
   feedbackText: { fontSize: typography.text.caption.fontSize, color: colors.primary, fontWeight: typography.weight.medium },
   feedbackError: { color: colors.error },
   editButton: {
-    minWidth: 52, minHeight: 34, alignItems: 'center', justifyContent: 'center',
+    minWidth: 52, minHeight: 44, alignItems: 'center', justifyContent: 'center',
     borderRadius: radii.full, backgroundColor: colors.surfaceSubtle,
   },
   editButtonText: { fontSize: typography.text.bodySmall.fontSize, color: colors.primary, fontWeight: typography.weight.semibold },

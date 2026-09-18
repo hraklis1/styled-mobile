@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { PressableScale } from './PressableScale';
-import { colors, spacing, typography } from '../../theme';
+import { colors, spacing, typography, radii, shadows } from '../../theme';
 
 type Props = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -40,7 +40,8 @@ export function EditorialRow({
 
   return (
     <PressableScale
-      scaleTo={filled ? 0.99 : undefined}
+      motion="crisp" scaleTo={0.985}
+      pressedContentStyle={styles.pressed}
       contentStyle={filled ? styles.rowFilled : styles.rowRuled}
       onPress={onPress}
       accessibilityRole="button"
@@ -61,6 +62,7 @@ export function EditorialRow({
 }
 
 const styles = StyleSheet.create({
+  pressed: { backgroundColor: colors.surfaceSelected },
   rowRuled: {
     minHeight: 68,
     flexDirection: 'row',
@@ -71,13 +73,14 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.hairline,
   },
   rowFilled: {
-    minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md,
+    minHeight: 88, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg,
+    backgroundColor: colors.surfaceElevated, borderRadius: radii.card, ...shadows.actionCard,
   },
   iconRuled: {
     width: 28, height: 40, alignItems: 'flex-start', justifyContent: 'center',
   },
   iconFilled: {
-    width: 28, height: 40, alignItems: 'flex-start', justifyContent: 'center',
+    width: 44, height: 44, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceSubtle, borderRadius: radii.panel,
   },
   copy: { flex: 1, minWidth: 0, gap: 2 },
   title: { color: colors.foreground, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold },

@@ -28,6 +28,9 @@ export function ColorSwatchGrid({ selected, onSelect, disabled }: ColorSwatchGri
             ]}
             onPress={() => onSelect(color, normalizedColorDisplayName(color))}
             disabled={disabled}
+            accessibilityRole="button"
+            accessibilityLabel={normalizedColorDisplayName(color)}
+            accessibilityState={{ selected: isSelected, disabled }}
             activeOpacity={0.75}
           >
             {isSelected && (
@@ -47,9 +50,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   swatch: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,

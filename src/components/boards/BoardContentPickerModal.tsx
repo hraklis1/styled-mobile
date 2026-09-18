@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
   cancelText: { color: colors.mutedForeground, fontSize: typography.text.body.fontSize },
   saveText: { color: colors.primary, fontSize: typography.text.body.fontSize, fontWeight: typography.weight.bold },
   tabs: { flexDirection: 'row', margin: spacing.lg, padding: 3, borderRadius: radii.full, backgroundColor: colors.secondary },
-  tab: { flex: 1, minHeight: 38, alignItems: 'center', justifyContent: 'center', borderRadius: radii.full },
+  tab: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radii.full },
   tabActive: { backgroundColor: colors.surfaceElevated },
   tabText: { color: colors.mutedForeground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.medium },
   tabTextActive: { color: colors.foreground, fontWeight: typography.weight.semibold },

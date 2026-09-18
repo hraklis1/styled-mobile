@@ -431,7 +431,7 @@ const styles = StyleSheet.create({
   tabControls: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.md },
   browseControls: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  headerIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: colors.surfaceElevated },
+  headerIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: colors.surfaceElevated },
   // Same height and edge as the FilterControl beside it, so the row reads as
   // one control set. `border`, not `hairline`: white-on-ivory needs a drawn edge.
   searchBox: {

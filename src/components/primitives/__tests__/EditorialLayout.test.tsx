@@ -31,6 +31,8 @@ describe('Editorial responsive controls', () => {
       });
       expect(StyleSheet.flatten(header.props.style).flexDirection).toBe('column');
       expect(StyleSheet.flatten(header.props.style).paddingTop).toBeGreaterThan(47);
+      const title = header.props.children[0].props.children[1];
+      expect(title.props.numberOfLines).toBeUndefined();
       const actions = header.props.children[1];
       const action = actions.props.children[1];
       action.props.onPress();

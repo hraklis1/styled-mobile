@@ -133,7 +133,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
             section's "See all" — so a second pill here only made a toolbar. */}
         <View style={styles.mastheadActions}>
           <ActionButton icon="camera-outline" label="Shopping Mode"
-            variant="ghost" onPress={openShoppingCamera} />
+            variant="secondary" onPress={openShoppingCamera} />
         </View>
         <View style={styles.briefSection}>
           <ShoppingBriefCard

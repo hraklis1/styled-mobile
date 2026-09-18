@@ -22,6 +22,8 @@ type Props = Omit<PressableProps, 'children'> & {
   /** Visual styles (bg, border, radius) applied to the inner Animated.View that scales.
    *  Keep layout props (flex, margin, width) on the outer `style` to avoid reflow mid-animation. */
   contentStyle?: StyleProp<ViewStyle>;
+  /** Surface feedback remains visible when Reduce Motion suppresses scale. */
+  pressedContentStyle?: StyleProp<ViewStyle>;
   /** Scale target on press. Defaults to 0.96. */
   scaleTo?: number;
   /** 'spring' (default) has a soft overshoot as it settles. 'crisp' eases in and
@@ -40,6 +42,7 @@ export function PressableScale({
   children,
   style,
   contentStyle,
+  pressedContentStyle,
   scaleTo = 0.96,
   motion = 'spring',
   haptic = true,
@@ -98,9 +101,11 @@ export function PressableScale({
       onPressOut={handlePressOut}
       {...rest}
     >
-      <Animated.View style={[contentStyle, animatedStyle]} layout={layout}>
-        {children}
-      </Animated.View>
+      {({ pressed }) => (
+        <Animated.View style={[contentStyle, pressed && !rest.disabled && pressedContentStyle, animatedStyle]} layout={layout}>
+          {children}
+        </Animated.View>
+      )}
     </Pressable>
   );
 }

@@ -5,7 +5,7 @@ import {
   type ViewStyle,
   type StyleProp,
 } from 'react-native';
-import { colors, spacing, typography, radii } from '../../theme';
+import { colors, spacing, typography, radii, shadows } from '../../theme';
 import { PressableScale } from './PressableScale';
 
 type Variant = 'primary' | 'secondary' | 'outline' | 'ghost';
@@ -30,11 +30,13 @@ export function Button({ label, variant = 'primary', size = 'md', loading = fals
   return (
     <PressableScale
       contentStyle={[styles.base, styles[size], styles[variant], isDisabled && styles.disabled]}
+      pressedContentStyle={variant === 'primary' ? styles.primaryPressed : styles.pressed}
+      motion="crisp" scaleTo={0.985}
       style={style}
       disabled={isDisabled}
       accessibilityRole="button"
       accessibilityLabel={rest.accessibilityLabel ?? label}
-      accessibilityState={{ disabled: isDisabled }}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
       {...rest}
     >
       {loading ? (
@@ -47,7 +49,7 @@ export function Button({ label, variant = 'primary', size = 'md', loading = fals
 }
 
 const styles = StyleSheet.create({
-  // Actions share a quiet, squared treatment and grow with larger text.
+  // Capsule actions grow with system text.
   base: {
     borderRadius: radii.action,
     borderCurve: 'continuous',
@@ -64,14 +66,17 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   // Variants
+  primaryPressed: { backgroundColor: colors.primaryPressed },
+  pressed: { backgroundColor: colors.surfaceSelected },
   primary: {
+    ...shadows.control,
     backgroundColor: colors.primary,
   },
   secondary: {
     backgroundColor: colors.secondary,
   },
   outline: {
-    backgroundColor: 'transparent',
+    backgroundColor: colors.surfaceElevated,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },

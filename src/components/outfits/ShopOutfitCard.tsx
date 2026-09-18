@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    minHeight: 42,
+    minHeight: 44,
     marginTop: 'auto',
     borderRadius: radii.full,
     backgroundColor: colors.foreground,

@@ -358,7 +358,7 @@ const s = StyleSheet.create({
     paddingBottom: spacing.xs,
   },
   circleBtn: {
-    width: 40, height: 40,
+    width: 44, height: 44,
     borderRadius: radii.full,
     backgroundColor: colors.muted,
     alignItems: 'center', justifyContent: 'center',
@@ -410,11 +410,11 @@ const s = StyleSheet.create({
   notesHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   notesLabel: { fontSize: typography.text.caption.fontSize, color: colors.primary, fontWeight: typography.weight.semibold, textTransform: 'uppercase', letterSpacing: typography.tracking.meta },
   notesText: { fontSize: typography.text.bodySmall.fontSize, color: colors.inkSubtle, lineHeight: typography.text.bodySmall.fontSize * 1.5 },
-  notesMoreBtn: { minHeight: 32, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4 },
+  notesMoreBtn: { minHeight: 44, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4 },
   notesMoreText: { fontSize: typography.text.caption.fontSize, color: colors.primary, fontWeight: typography.weight.semibold },
   sourceLinks: { gap: spacing.xs },
   sourceLink: {
-    minHeight: 40,
+    minHeight: 44,
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
     paddingHorizontal: spacing.md,
     borderRadius: radii.md,
@@ -449,7 +449,8 @@ const s = StyleSheet.create({
     gap: spacing.sm,
   },
   manualToggle: {
-    minHeight: 38,
+    backgroundColor: colors.surfaceSubtle, borderRadius: radii.full,
+    minHeight: 44,
     alignSelf: 'center',
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
     paddingHorizontal: spacing.md,

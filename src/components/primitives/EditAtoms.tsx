@@ -72,6 +72,9 @@ export function OptionChips<T extends string>({
         return (
           <PressableScale
             key={val}
+            motion="crisp" scaleTo={0.985}
+            pressedContentStyle={{ opacity: 0.75 }}
+            accessibilityRole="button" accessibilityState={{ selected: active }}
             contentStyle={[styles.optionChip, active && styles.optionChipActive]}
             onPress={() => {
               if (multi && onMultiToggle) onMultiToggle(val);
@@ -111,9 +114,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   input: {
+    minHeight: 52,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
+    borderColor: colors.controlOutline,
+    borderRadius: radii.field,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
     fontSize: typography.text.body.fontSize,
@@ -131,6 +135,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs + 2,
   },
   optionChip: {
+    minHeight: 44, justifyContent: 'center',
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: 6,
     borderRadius: radii.full,

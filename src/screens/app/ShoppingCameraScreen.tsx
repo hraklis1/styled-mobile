@@ -1331,7 +1331,7 @@ const styles = StyleSheet.create({
   contextPill: {
     flexShrink: 1,
     maxWidth: '55%',
-    minHeight: 36,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs + 2,

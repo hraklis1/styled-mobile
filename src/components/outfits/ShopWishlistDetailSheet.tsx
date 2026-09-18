@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  headerSide: { width: 44, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerSide: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   titleWrap: { flex: 1, alignItems: 'center', gap: 2 },
   title: { fontSize: typography.text.body.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground },
   subtitle: { maxWidth: '90%', fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },

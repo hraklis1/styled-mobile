@@ -61,7 +61,7 @@ export function OutfitCard({
             <View style={styles.draftBadge}><Text style={styles.draftText}>Draft</Text></View>
           ) : null}
         </View>
-        <Ionicons name="chevron-forward" size={16} color={colors.border} />
+        <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
       </TouchableOpacity>
     );
   }

@@ -333,8 +333,8 @@ const styles = StyleSheet.create({
   // Sits on the title's baseline row so the mark or menu reads as part of the
   // heading rather than floating in the band's corner.
   trailingSlot: {
-    width: 32,
-    height: 32,
+    width: 44,
+    height: 44,
     marginTop: -3,
     marginRight: -spacing.xs,
     alignItems: 'center',
