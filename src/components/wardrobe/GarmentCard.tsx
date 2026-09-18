@@ -31,7 +31,7 @@ function GarmentCardComponent({
   selectionMode = false,
   isSelected = false,
   onToggleSelect,
-  bottomSpacing = spacing.md,
+  bottomSpacing = spacing.gridRow,
 }: Props) {
   const imageHeight = cardWidth / aspectRatio;
   const handlePress = selectionMode ? onToggleSelect : onPress;
@@ -94,8 +94,7 @@ export const GarmentCard = React.memo(GarmentCardComponent);
 
 const styles = StyleSheet.create({
   card: {
-    marginBottom: spacing.md,
-    marginHorizontal: spacing.sm / 2,
+    marginBottom: spacing.gridRow,
   },
   selectedOverlay: {
     position: 'absolute',
@@ -142,16 +141,9 @@ const styles = StyleSheet.create({
     borderColor: colors.white,
   },
   info: {
-    paddingTop: spacing.sm + 1,
-    paddingHorizontal: 2,
-    gap: 3,
-    minHeight: 62,
+    paddingTop: 10, paddingHorizontal: 0, gap: spacing.xs, minHeight: 64,
   },
   name: {
-    fontSize: typography.text.bodySmall.fontSize,
-    lineHeight: 17,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-    minHeight: 34,
+    ...typography.text.productName, color: colors.foreground, minHeight: 36,
   },
 });

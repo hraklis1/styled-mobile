@@ -71,7 +71,7 @@ import {
   recordDailyPick,
   saveDailyPickHistory,
 } from '../../lib/dailyPickHistory';
-import { colors, shadows, spacing, typography, radii, editorial } from '../../theme';
+import { colors, spacing, typography, radii, editorial } from '../../theme';
 import { PressableScale } from '../../components/primitives/PressableScale';
 import { ActionMenuSheet } from '../../components/primitives/ActionMenuSheet';
 import { ScreenHeader, EditorialSection } from '../../components/primitives/Editorial';
@@ -82,7 +82,7 @@ import type { Item } from '../../types/item';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const SIDE_PAD = spacing.lg;
+const SIDE_PAD = spacing.page;
 const COL_GAP  = spacing.md;
 const WEEK_TILE_SIZE = 104;
 
@@ -702,7 +702,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         accessibilityRole="button"
         accessibilityLabel="Open AI Stylist"
       >
-        <Ionicons name="sparkles" size={16} color={colors.primary} />
+        <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.primary} />
         <Text style={styles.stylistPillText} numberOfLines={1}>
           Ask your stylist anything…
         </Text>
@@ -759,7 +759,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             accessibilityLiveRegion="polite"
             accessibilityLabel="Curating today’s look"
           >
-            <Ionicons name="sparkles-outline" size={18} color={colors.primary} />
+            <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.primary} />
             <Text style={styles.curatingPlaceholderText}>Curating today’s look…</Text>
           </View>
         ) : generatedCandidate ? (
@@ -996,7 +996,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                     >
                       <View style={[
                         styles.eventIcon,
-                        { backgroundColor: isToday ? `${colors.primary}28` : `${colors.primary}18` },
+                        { backgroundColor: 'transparent' },
                       ]}>
                         <Ionicons name={iconName} size={18} color={colors.primary} />
                       </View>
@@ -1210,25 +1210,13 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxxl * 2,
   },
   compactEditorialSection: {
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.md,
+    paddingTop: spacing.section, paddingBottom: spacing.md,
   },
   nextUpCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
-    borderRadius: radii.xl,
-    borderCurve: 'continuous',
-    backgroundColor: colors.surfaceSubtle,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md,
   },
   nextUpIcon: {
-    width: 38,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.md,
-    backgroundColor: `${colors.primary}15`,
+    width: 24, height: 24, alignItems: 'center', justifyContent: 'center',
   },
   nextUpCopy: { flex: 1, gap: 2 },
   nextUpTitle: { ...typography.text.cardTitle, color: colors.foreground },
@@ -1273,17 +1261,7 @@ const styles = StyleSheet.create({
 
   // AI Stylist fake-input pill
   stylistPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    ...shadows.xs,
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radii.full,
-    borderWidth: 1,
-    borderColor: colors.hairline,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    marginBottom: spacing.lg,
+    minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.surfaceElevated, borderRadius: radii.bubble, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, marginBottom: spacing.lg,
   },
   stylistPillText: {
     ...typography.text.body,
@@ -1293,29 +1271,13 @@ const styles = StyleSheet.create({
   // Flat and quiet, deliberately: the fashion imagery below is what should
   // carry visual weight on this page, not the utility actions above it.
   wardrobeActions: {
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radii.xl,
-    borderCurve: 'continuous',
-    overflow: 'hidden',
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline,
   },
   wardrobeAction: {
-    minHeight: 78,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    minHeight: 78, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md,
   },
   wardrobeActionVisual: {
-    width: 50,
-    height: 50,
-    borderRadius: radii.lg,
-    borderCurve: 'continuous',
-    backgroundColor: colors.surfaceSelected,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    position: 'relative',
+    width: 44, height: 44, alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative',
   },
   wardrobeActionBadge: {
     position: 'absolute',
@@ -1410,24 +1372,13 @@ const styles = StyleSheet.create({
   // actions and Next Up wear. Home has exactly two container shapes —
   // full-bleed image, and this.
   eventCard: {
-    width: 148,
-    height: 128,
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radii.xl,
-    borderCurve: 'continuous',
-    padding: spacing.md,
-    gap: 4,
+    width: 148, minHeight: 128, paddingVertical: spacing.md, gap: spacing.xs,
   },
   eventCardToday: {
-    backgroundColor: colors.surfaceSelected,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.primary,
   },
   eventIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radii.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.xs,
+    width: 24, height: 24, alignItems: 'flex-start', justifyContent: 'center', marginBottom: spacing.xs,
   },
   eventTitle: {
     ...typography.text.cardTitle,
@@ -1608,14 +1559,7 @@ const styles = StyleSheet.create({
   // to delete (see confirmDeleteLog); a swipe gesture would fight this
   // ScrollView's own horizontal pan.
   weekSoloCard: {
-    minHeight: 128,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.lg,
-    padding: spacing.md,
-    borderRadius: radii.xl,
-    borderCurve: 'continuous',
-    backgroundColor: colors.surfaceSubtle,
+    minHeight: 128, flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingVertical: spacing.md,
   },
   weekSoloImage: {
     width: WEEK_TILE_SIZE,

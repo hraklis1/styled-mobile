@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import {
   StyleSheet,
+  useWindowDimensions,
   View,
   type StyleProp,
   type TextStyle,
@@ -52,10 +53,12 @@ export function ScreenHeader({
   titleVariant = 'default',
 }: ScreenHeaderProps) {
   const insets = useSafeAreaInsets();
+  const { width, fontScale } = useWindowDimensions();
+  const stacked = width < 360 || fontScale > 1.3;
 
   return (
-    <View style={[styles.header, safeTop && { paddingTop: insets.top + spacing.md }, style]}>
-      <View style={styles.headerCopy}>
+    <View style={[styles.header, safeTop && { paddingTop: insets.top + spacing.md }, stacked && styles.headerStacked, style]}>
+      <View style={[styles.headerCopy, stacked && styles.headerCopyStacked]}>
         {eyebrow ? <AppText variant="eyebrow" tone="brand">{eyebrow}</AppText> : null}
         <AppText
           variant={titleVariant === 'display' ? 'editorialHero' : 'pageTitle'}
@@ -344,7 +347,7 @@ export function EditorialCardMeta({
     <View style={[styles.cardMeta, style]}>
       <View style={styles.cardMetaCopy}>
         {eyebrow ? <AppText variant="eyebrow" tone="brand" numberOfLines={1}>{eyebrow}</AppText> : null}
-        <AppText variant="cardTitle" tone="primary" style={titleStyle} numberOfLines={1}>{title}</AppText>
+        <AppText variant="cardTitle" tone="primary" style={titleStyle} numberOfLines={2}>{title}</AppText>
         {subtitle ? <AppText variant="caption" tone="muted" numberOfLines={1}>{subtitle}</AppText> : null}
       </View>
       {trailing}
@@ -354,52 +357,42 @@ export function EditorialCardMeta({
 
 const styles = StyleSheet.create({
   header: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
+    paddingHorizontal: spacing.page,
+    paddingBottom: 20,
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
     gap: spacing.md,
     backgroundColor: colors.background,
   },
+  headerStacked: { flexDirection: 'column', alignItems: 'stretch' },
+  headerCopyStacked: { flex: 0 },
   headerCopy: { flex: 1, minWidth: 0, gap: spacing.xs },
   headerTitle: { flexShrink: 1 },
   headerSubtitle: { flexShrink: 1 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexShrink: 0 },
   iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: radii.full,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radii.action,
   },
   primaryIconButton: { backgroundColor: colors.primary },
   secondaryIconButton: {
-    backgroundColor: colors.surfaceElevated,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    backgroundColor: 'transparent',
   },
   ghostIconButton: { backgroundColor: 'transparent' },
   actionButton: {
-    minHeight: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.full,
+    minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.md, borderRadius: radii.action,
   },
   primaryActionButton: { backgroundColor: colors.primary },
   secondaryActionButton: {
-    backgroundColor: colors.surfaceElevated,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    backgroundColor: 'transparent',
   },
   ghostActionButton: { backgroundColor: 'transparent' },
   actionButtonText: { flexShrink: 1 },
   primaryActionButtonText: { color: colors.primaryForeground },
   ruledSectionActionText: { color: colors.action },
-  section: { marginBottom: spacing.xl },
+  section: {
+    marginBottom: spacing.section,
+  },
   ruledSection: {
     paddingVertical: spacing.xl,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -413,12 +406,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.lg,
   },
   editorialSectionHeader: {
-    minHeight: 22,
-    alignItems: 'flex-end',
-    paddingBottom: spacing.sm,
-    marginBottom: spacing.lg,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    minHeight: 22, alignItems: 'flex-end', paddingBottom: spacing.sm, marginBottom: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border,
   },
   sectionHeader: {
     minHeight: 28,
@@ -439,8 +427,12 @@ const styles = StyleSheet.create({
     maxWidth: 330,
     marginBottom: spacing.md,
   },
-  sectionAction: { paddingVertical: spacing.xs, paddingLeft: spacing.md },
-  sectionActionText: { flexShrink: 1 },
+  sectionAction: {
+    minHeight: 44, justifyContent: 'center', paddingLeft: spacing.md,
+  },
+  sectionActionText: {
+    flexShrink: 1, textDecorationLine: 'underline',
+  },
   segment: {
     flexDirection: 'row',
     backgroundColor: colors.surfaceSubtle,
@@ -485,21 +477,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   filterControl: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.full,
-    backgroundColor: colors.surfaceElevated,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 44, height: 44, alignItems: 'center', justifyContent: 'center',
   },
   // Active means "a filter is on", not "this is the primary action" — a solid
   // fill here made it the visual equal of the one filled button a header is
   // allowed. It states itself with a drawn edge instead.
   filterControlActive: {
-    borderWidth: 1,
-    borderColor: colors.foreground,
+    borderBottomWidth: 1, borderBottomColor: colors.primary,
   },
   // A corner badge, so the control keeps its 44pt circle instead of stretching
   // into a pill the moment a filter is on.
@@ -519,24 +503,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   viewModeControl: {
-    height: 44,
-    flexDirection: 'row',
-    borderRadius: radii.full,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    overflow: 'hidden',
+    minHeight: 44, flexDirection: 'row',
   },
   viewModeButton: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.full,
+    width: 44, height: 44, alignItems: 'center', justifyContent: 'center',
   },
   viewModeButtonActive: {
-    backgroundColor: colors.surfaceElevated,
-    ...shadows.xs,
+    borderBottomWidth: 1, borderBottomColor: colors.primary,
   },
   cardMeta: {
     flex: 1,

@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 
-import { colors, radii } from '../../theme';
+import { imageColors, colors, radii } from '../../theme';
 import {
   getOutfitMosaicRects,
   MAX_OUTFIT_MOSAIC_SLOTS,
@@ -40,11 +40,11 @@ export function ResolvedOutfitCollage({
           <Image source={{ uri: slot.uri }} style={styles.fill} contentFit={slot.contentFit ?? 'cover'} transition={150} cachePolicy="memory-disk" recyclingKey={slot?.key} />
         ) : slot?.ghost ? (
           <View style={styles.placeholder}>
-            <Ionicons name="unlink-outline" size={Math.min(size, height) * 0.25} color={colors.border} />
+            <Ionicons name="unlink-outline" size={Math.min(size, height) * 0.25} color={imageColors.border} />
           </View>
         ) : (
           <View style={styles.placeholder}>
-            <Ionicons name="layers-outline" size={Math.min(size, height) * 0.3} color={colors.border} />
+            <Ionicons name="layers-outline" size={Math.min(size, height) * 0.3} color={imageColors.border} />
           </View>
         )}
       </View>
@@ -80,7 +80,7 @@ export function ResolvedOutfitCollage({
               <Image source={{ uri: slot.uri }} style={styles.fill} contentFit={slot.contentFit ?? 'cover'} transition={150} cachePolicy="memory-disk" recyclingKey={slot?.key} />
             ) : slot?.ghost ? (
               <View style={[styles.fill, styles.ghostCell]}>
-                <Ionicons name="unlink-outline" size={Math.min(cellW, cellH) * 0.3} color={colors.border} />
+                <Ionicons name="unlink-outline" size={Math.min(cellW, cellH) * 0.3} color={imageColors.border} />
               </View>
             ) : (
               <View style={[styles.fill, { backgroundColor: colors.muted }]} />
@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
     // A hairline inner stroke + the matted gaps make a set of mismatched source
     // photos read as one cohesive styled look rather than a loose scrapbook.
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: imageColors.border,
   },
   fill: {
     width: '100%',

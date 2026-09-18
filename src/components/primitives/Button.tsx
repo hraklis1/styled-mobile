@@ -47,14 +47,19 @@ export function Button({ label, variant = 'primary', size = 'md', loading = fals
 }
 
 const styles = StyleSheet.create({
-  // Every CTA in the app is a pill; rounding belongs to controls, not images.
+  // Actions share a quiet, squared treatment and grow with larger text.
   base: {
-    borderRadius: radii.full,
+    borderRadius: radii.action,
+    borderCurve: 'continuous',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  md: { height: 48, paddingHorizontal: spacing.xl },
-  sm: { height: 40, paddingHorizontal: spacing.md },
+  md: {
+    minHeight: 52, paddingHorizontal: spacing.page, paddingVertical: 14,
+  },
+  sm: {
+    minHeight: 44, paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+  },
   disabled: {
     opacity: 0.5,
   },
@@ -67,7 +72,7 @@ const styles = StyleSheet.create({
   },
   outline: {
     backgroundColor: 'transparent',
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
   ghost: {
@@ -76,7 +81,6 @@ const styles = StyleSheet.create({
   // Labels
   label: {
     ...typography.text.label,
-    fontSize: typography.text.body.fontSize,
   },
   primaryLabel: {
     color: colors.primaryForeground,

@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
-import { colors, radii, spacing, typography } from '../../theme';
+import { imageColors, colors, radii, spacing, typography } from '../../theme';
 import type { Board } from '../../types/board';
 import type { Item } from '../../types/item';
 import type { Outfit } from '../../types/outfit';
@@ -34,7 +34,7 @@ function CoverCell({
   return (
     <View style={styles.cell}>
       <View style={styles.cellPlaceholder}>
-        <Ionicons name="sparkles-outline" size={15} color={colors.mutedForeground} />
+        <Ionicons name="sparkles-outline" size={15} color={imageColors.mutedForeground} />
       </View>
       {!failed && (
         <Image
@@ -101,7 +101,7 @@ export function BoardCover({ board, itemMap, outfitMap, size, height = size, com
           style={styles.fallback}
         >
           <View style={styles.fallbackIcon}>
-            <Ionicons name="albums-outline" size={compact ? 18 : 30} color={colors.primary} />
+            <Ionicons name="albums-outline" size={compact ? 18 : 30} color={imageColors.primary} />
           </View>
           {!compact && (
             <Text style={styles.fallbackText}>Start curating</Text>
@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: colors.surfaceSubtle,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
+    borderColor: imageColors.hairline,
     borderCurve: 'continuous',
   },
   moodboard: { flex: 1, flexDirection: 'row', gap: GAP },
@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(255,252,247,0.72)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
+    borderColor: imageColors.hairline,
   },
   overflow: {
     ...StyleSheet.absoluteFill,

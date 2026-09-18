@@ -1,3 +1,4 @@
+import { StylistRichText } from './StylistRichText';
 import { useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
@@ -7,7 +8,7 @@ import { Image as ExpoImage } from 'expo-image';
 import { GapCard, type GapItem } from './GapCard';
 import { ResolvedOutfitCollage } from '../outfits/ResolvedOutfitCollage';
 import { itemImageContentFit, itemImageUri } from '../../lib/itemImage';
-import { colors, radii, shadows, spacing, typography } from '../../theme';
+import { imageColors, colors, radii, spacing, typography } from '../../theme';
 import type { Item } from '../../types/item';
 import type { CreateOutfitInput } from '../../hooks/useOutfits';
 import type {
@@ -161,7 +162,7 @@ export function StylistLookResponseCard({
       )}
 
       <Text style={styles.title}>{title}</Text>
-      <Text style={styles.body}>{messageText}</Text>
+      <StylistRichText text={messageText} />
 
       {isIncomplete && items.length > 0 && (
         <View style={styles.section}>
@@ -230,9 +231,15 @@ export function StylistLookResponseCard({
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: colors.surfaceElevated, borderRadius: radii.xl, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.md, ...shadows.sm },
-  incompleteCard: { backgroundColor: '#F7F1E8' },
-  clarificationCard: { backgroundColor: colors.surfaceElevated },
+  card: {
+    gap: spacing.md,
+  },
+  incompleteCard: {
+
+  },
+  clarificationCard: {
+
+  },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   eyebrow: { ...typography.text.eyebrow, color: colors.primary },
@@ -244,13 +251,17 @@ const styles = StyleSheet.create({
   sectionLabel: { ...typography.text.eyebrow, color: colors.mutedForeground },
   itemLedger: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   ledgerItem: { width: 76, gap: spacing.xs },
-  ledgerThumb: { width: 76, height: 76, backgroundColor: colors.surfaceElevated, borderRadius: radii.md, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  ledgerThumb: { width: 76, height: 76, backgroundColor: imageColors.surfaceElevated, borderRadius: radii.md, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   ledgerText: { fontSize: typography.text.caption.fontSize, lineHeight: 15, color: colors.secondaryForeground },
   gapList: { gap: spacing.sm },
   actions: { gap: spacing.sm },
-  primaryButton: { minHeight: 48, borderRadius: radii.md, borderCurve: 'continuous', backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg },
+  primaryButton: {
+    minHeight: 52, borderRadius: radii.action, borderCurve: 'continuous', backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.page, paddingVertical: 14,
+  },
   disabledButton: { opacity: 0.5 },
-  primaryButtonText: { color: colors.primaryForeground, fontSize: typography.text.body.fontSize, fontWeight: typography.weight.semibold },
+  primaryButtonText: {
+    ...typography.text.label, color: colors.primaryForeground,
+  },
   secondaryActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   secondaryButton: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm },
   secondaryButtonText: { color: colors.primary, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold },

@@ -4,6 +4,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -24,6 +25,7 @@ type Props = {
   onCancel: () => void;
   onSubmit: (value: string) => void;
   submitting?: boolean;
+  suggestions?: readonly string[];
 };
 
 export function BoardNameSheet({
@@ -35,6 +37,7 @@ export function BoardNameSheet({
   onCancel,
   onSubmit,
   submitting = false,
+  suggestions = [],
 }: Props) {
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
@@ -63,6 +66,7 @@ export function BoardNameSheet({
       >
         <Pressable style={styles.backdrop} onPress={onCancel} accessibilityLabel="Dismiss" />
         <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
+          <ScrollView keyboardShouldPersistTaps="handled" style={styles.formScroll}>
           <View style={styles.header}>
             <View style={styles.headerCopy}>
               <Text style={styles.title}>{title}</Text>
@@ -93,6 +97,26 @@ export function BoardNameSheet({
             accessibilityLabel="Board name"
           />
 
+          {suggestions.length > 0 && (
+            <View style={styles.suggestions}>
+              <Text style={styles.suggestionsLabel}>Start with a theme</Text>
+              <View style={styles.suggestionOptions}>
+                {suggestions.map(name => (
+                  <TouchableOpacity
+                    key={name}
+                    style={[styles.suggestion, value === name && styles.suggestionSelected]}
+                    onPress={() => setValue(name)}
+                    disabled={submitting}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: value === name, disabled: submitting }}
+                  >
+                    <Text style={styles.suggestionText}>{name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
+
           <View style={styles.actions}>
             <TouchableOpacity
               style={styles.cancelButton}
@@ -113,6 +137,7 @@ export function BoardNameSheet({
               <Text style={styles.submitText}>{submitLabel}</Text>
             </TouchableOpacity>
           </View>
+          </ScrollView>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -125,11 +150,13 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(29, 27, 24, 0.45)',
   },
+  formScroll: { flexGrow: 0 },
   sheet: {
-    paddingHorizontal: spacing.lg,
+    maxHeight: '90%',
+    paddingHorizontal: spacing.page,
     paddingTop: spacing.lg,
-    borderTopLeftRadius: radii.xl,
-    borderTopRightRadius: radii.xl,
+    borderTopLeftRadius: radii.sheet,
+    borderTopRightRadius: radii.sheet,
     backgroundColor: colors.background,
     borderCurve: 'continuous',
   },
@@ -140,24 +167,17 @@ const styles = StyleSheet.create({
   },
   headerCopy: { flex: 1, gap: 2 },
   title: {
-    color: colors.foreground,
-    fontSize: typography.text.sectionTitle.fontSize,
-    fontWeight: typography.weight.semibold,
+    ...typography.text.editorialSheet, color: colors.foreground,
   },
   subtitle: { color: colors.mutedForeground, fontSize: typography.text.bodySmall.fontSize },
   closeButton: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.full,
-    backgroundColor: colors.secondary,
+    width: 44, height: 44, alignItems: 'center', justifyContent: 'center',
   },
   input: {
-    minHeight: 50,
+    minHeight: 52,
     marginTop: spacing.lg,
     paddingHorizontal: spacing.md,
-    borderRadius: radii.lg,
+    borderRadius: radii.action,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surfaceElevated,
@@ -165,13 +185,19 @@ const styles = StyleSheet.create({
     fontSize: typography.text.body.fontSize,
     borderCurve: 'continuous',
   },
+  suggestions: { gap: spacing.sm, marginTop: spacing.xl },
+  suggestionsLabel: { ...typography.text.eyebrow, color: colors.mutedForeground },
+  suggestionOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  suggestion: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radii.action },
+  suggestionSelected: { backgroundColor: colors.surfaceSelected },
+  suggestionText: { ...typography.text.bodySmall, color: colors.foreground },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   cancelButton: {
     flex: 1,
-    minHeight: 50,
+    minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radii.lg,
+    borderRadius: radii.action,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
     backgroundColor: colors.surfaceElevated,
@@ -180,13 +206,15 @@ const styles = StyleSheet.create({
   cancelText: { color: colors.mutedForeground, fontSize: typography.text.body.fontSize, fontWeight: typography.weight.medium },
   submitButton: {
     flex: 1,
-    minHeight: 50,
+    minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radii.lg,
+    borderRadius: radii.action,
     backgroundColor: colors.primary,
     borderCurve: 'continuous',
   },
   submitButtonDisabled: { opacity: 0.45 },
-  submitText: { color: colors.primaryForeground, fontSize: typography.text.body.fontSize, fontWeight: typography.weight.semibold },
+  submitText: {
+    ...typography.text.label, color: colors.primaryForeground,
+  },
 });

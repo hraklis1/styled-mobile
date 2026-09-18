@@ -53,7 +53,6 @@ import { ShoppingPriorityEditScreen } from '../screens/app/ShoppingPriorityEditS
 import { StylistScreen } from '../screens/app/StylistScreen';
 import { ErrorState } from '../components/primitives/ErrorState';
 import { QuickMenuTabButton } from '../components/navigation/QuickMenuTabButton';
-import { StylistTabButton } from '../components/navigation/StylistTabButton';
 import { TabQuickMenuSheet, type TabQuickMenuOption } from '../components/navigation/TabQuickMenuSheet';
 import { ShortcutCoachSheet } from '../components/navigation/ShortcutCoachSheet';
 import { hasSeenShortcutCoach, markShortcutCoachSeen } from '../lib/shortcutCoach';
@@ -108,11 +107,11 @@ const StylistStack = createNativeStackNavigator();
 const ShopStack = createNativeStackNavigator<ShopStackParamList>();
 
 const TAB_ICONS: Record<string, { default: keyof typeof Ionicons.glyphMap; selected: keyof typeof Ionicons.glyphMap }> = {
-  Home: { default: 'home-outline', selected: 'home' },
-  Closet: { default: 'file-tray-full-outline', selected: 'file-tray-full' },
-  Stylist: { default: 'sparkles-outline', selected: 'sparkles' },
-  Shop: { default: 'bag-outline', selected: 'bag' },
-  Calendar: { default: 'calendar-outline', selected: 'calendar' },
+  Home: { default: 'home-outline', selected: 'home-outline' },
+  Closet: { default: 'file-tray-full-outline', selected: 'file-tray-full-outline' },
+  Stylist: { default: 'chatbubble-ellipses-outline', selected: 'chatbubble-ellipses-outline' },
+  Shop: { default: 'bag-outline', selected: 'bag-outline' },
+  Calendar: { default: 'calendar-outline', selected: 'calendar-outline' },
 };
 
 const STYLIST_SHEET_TRANSITION: NonNullable<BottomTabNavigationOptions['transitionSpec']> = {
@@ -312,7 +311,6 @@ function AppTabNavigator() {
     backgroundColor: colors.background,
     borderTopColor: colors.hairline,
     borderTopWidth: StyleSheet.hairlineWidth,
-    boxShadow: '0 -3px 10px rgba(29, 27, 24, 0.07)',
   };
 
   return (
@@ -342,18 +340,18 @@ function AppTabNavigator() {
           tabBarStyle: baseTabBarStyle,
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.mutedForeground,
-          tabBarIcon: ({ color, focused, size }) => (
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? TAB_ICONS[route.name].selected : TAB_ICONS[route.name].default}
-              size={size}
+              size={22}
               color={color}
             />
           ),
-          tabBarLabel: ({ children, color, focused }) => (
+          tabBarLabel: ({ children, color }) => (
             <Text
               style={[
                 tabStyles.tabLabel,
-                { color, fontWeight: focused ? typography.weight.semibold : typography.weight.regular },
+                { color, fontWeight: typography.weight.medium },
               ]}
             >
               {children}
@@ -435,8 +433,6 @@ function AppTabNavigator() {
           component={StylistNavigator}
           options={{
             tabBarAccessibilityLabel: 'Stylist',
-            tabBarLabel: () => null,
-            tabBarButton: (props) => <StylistTabButton {...props} />,
             transitionSpec: STYLIST_SHEET_TRANSITION,
             sceneStyleInterpolator: stylistSheetInterpolator,
           }}
@@ -528,9 +524,7 @@ function AppTabNavigator() {
 
 const tabStyles = StyleSheet.create({
   tabLabel: {
-    fontSize: typography.text.caption.fontSize,
-    lineHeight: 14,
-    marginBottom: spacing.xs,
+    fontSize: 10, lineHeight: 14, marginBottom: spacing.xs,
   },
 });
 

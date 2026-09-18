@@ -62,8 +62,8 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
   },
   optionsHitArea: {
-    width: 32,
-    height: 32,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -104,18 +104,13 @@ export function BoardFeedTile({
 
 const styles = StyleSheet.create({
   cell: {
-    paddingHorizontal: spacing.sm / 2,
-    marginBottom: spacing.md,
+    paddingHorizontal: spacing.grid / 2, marginBottom: spacing.gridRow,
   },
   metadata: {
-    minHeight: 62,
-    paddingTop: spacing.sm + 1,
-    paddingHorizontal: 2,
+    minHeight: 64, paddingTop: 10,
   },
   outfitName: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.medium,
-    color: colors.foreground,
+    ...typography.text.cardTitle, color: colors.foreground,
   },
   wishlistTile: {
     borderRadius: radii.lg,

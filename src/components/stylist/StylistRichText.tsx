@@ -5,14 +5,14 @@ import { colors, spacing, typography } from '../../theme';
 // React Native <Text> nesting is finicky with regex replacement, so this stays
 // deliberately shallow: split on newlines into block rows (bullet vs paragraph),
 // and within a row do a single **bold** split into spans. Nothing deeper.
-// Used only for `advice`/audit replies — outfit/shop messages keep plain text.
+// Shared by assistant prose and structured-response introductions.
 
-function renderInline(text: string, keyPrefix: string) {
+function renderInline(text: string, keyPrefix: string, lead = false) {
   // Split on **bold** markers; odd indices are the bolded spans.
   const parts = text.split(/\*\*(.+?)\*\*/g);
   return parts.map((part, i) =>
     i % 2 === 1 ? (
-      <Text key={`${keyPrefix}-b${i}`} style={styles.bold}>{part}</Text>
+      <Text key={`${keyPrefix}-b${i}`} style={lead ? styles.leadEmphasis : styles.bold}>{part}</Text>
     ) : (
       <Text key={`${keyPrefix}-t${i}`}>{part}</Text>
     ),
@@ -24,6 +24,7 @@ const BULLET_RE = /^\s*[-•*]\s+(.*)$/;
 export function StylistRichText({ text, streaming }: { text: string; streaming?: boolean }) {
   const lines = text.split('\n');
   const blocks: React.ReactNode[] = [];
+  let hasProse = false;
 
   lines.forEach((line, idx) => {
     const trimmed = line.trim();
@@ -37,9 +38,11 @@ export function StylistRichText({ text, streaming }: { text: string; streaming?:
         </View>,
       );
     } else {
+      const lead = !hasProse;
+      hasProse = true;
       blocks.push(
-        <Text key={`p-${idx}`} style={styles.paragraph}>
-          {renderInline(trimmed, `p-${idx}`)}
+        <Text key={`p-${idx}`} style={lead ? styles.lead : styles.paragraph}>
+          {renderInline(trimmed, `p-${idx}`, lead)}
         </Text>,
       );
     }
@@ -53,16 +56,17 @@ export function StylistRichText({ text, streaming }: { text: string; streaming?:
   );
 }
 
-// The stylist's prose is set in the editorial face — a note in the app's own
-// voice, not chrome. Bullets stay in the sans so lists read as lists. Emphasis
-// inside serif prose switches to the medium *face*; React Native must not
-// synthesize a bold for a bundled custom font.
+// Only the first prose block uses the editorial face. Later prose and lists
+// use the body face; emphasis follows the face of its containing block.
 const styles = StyleSheet.create({
-  container: { gap: spacing.sm },
-  paragraph: {
-    ...typography.text.editorialBody,
-    color: colors.foreground,
+  container: {
+    gap: spacing.lg,
   },
+  paragraph: {
+    ...typography.text.body, color: colors.foreground,
+  },
+  lead: { ...typography.text.stylistLead, color: colors.foreground },
+  leadEmphasis: { fontFamily: typography.family.editorialMedium },
   bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
   bulletDot: {
     fontSize: typography.text.body.fontSize,
@@ -75,5 +79,7 @@ const styles = StyleSheet.create({
     color: colors.foreground,
     lineHeight: typography.text.body.fontSize * 1.6,
   },
-  bold: { fontFamily: typography.family.editorialMedium },
+  bold: {
+    fontWeight: typography.weight.semibold,
+  },
 });

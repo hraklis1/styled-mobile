@@ -1,3 +1,4 @@
+import { StylistRichText } from './StylistRichText';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -41,7 +42,7 @@ export function WardrobeAuditCard({ audit, items, onStyleItem, onNavigateToShop 
           <Text style={styles.eyebrow}>WARDROBE EDIT</Text>
         </View>
         <Text style={styles.title}>A thoughtful closet edit</Text>
-        <Text style={styles.summary}>{audit.summary}</Text>
+        <StylistRichText text={audit.summary} />
       </View>
 
       {audit.strengths.length > 0 ? (
@@ -136,7 +137,9 @@ export function WardrobeAuditCard({ audit, items, onStyleItem, onNavigateToShop 
 }
 
 const styles = StyleSheet.create({
-  card: { borderRadius: radii.xl, borderCurve: 'continuous', backgroundColor: colors.surfaceElevated, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
+  card: {
+    gap: spacing.md,
+  },
   header: { padding: spacing.lg, gap: spacing.sm },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   eyebrow: { ...typography.text.eyebrowLarge, color: colors.primary },
@@ -159,7 +162,9 @@ const styles = StyleSheet.create({
   itemMeta: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
   actionLabel: { ...typography.text.eyebrow, color: colors.primary },
   reason: { paddingLeft: 60, fontSize: typography.text.bodySmall.fontSize, lineHeight: 19, color: colors.inkSubtle },
-  styleButton: { minHeight: 34, justifyContent: 'center', borderRadius: 17, backgroundColor: colors.muted, paddingHorizontal: spacing.md },
+  styleButton: {
+    minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md,
+  },
   styleButtonText: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, color: colors.primary },
   gapList: { gap: spacing.sm },
 });

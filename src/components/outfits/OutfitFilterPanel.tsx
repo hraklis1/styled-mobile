@@ -163,17 +163,17 @@ export function OutfitFilterPanel({
         stickyHeaderIndices={[0]}
       >
         {/* ── Sticky header ── */}
+        <View style={styles.stickyHeader}>
         <View style={styles.panelHeader}>
+          <Text style={styles.panelTitle}>Sort &amp; Filter</Text>
           <TouchableOpacity
             onPress={onClearAll}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            style={{ opacity: activeFilterCount > 0 ? 1 : 0 }}
+            style={{ minHeight: 44, justifyContent: 'center', opacity: activeFilterCount > 0 ? 1 : 0 }}
             disabled={activeFilterCount === 0}
           >
             <Text style={styles.resetText}>Reset</Text>
           </TouchableOpacity>
-
-          <Text style={styles.panelTitle}>Sort &amp; Filter</Text>
 
           <TouchableOpacity
             onPress={() => bottomSheetRef.current?.dismiss()}
@@ -181,6 +181,7 @@ export function OutfitFilterPanel({
           >
             <Ionicons name="close" size={22} color={colors.foreground} />
           </TouchableOpacity>
+        </View>
         </View>
 
         {/* ── Sort ── */}
@@ -208,9 +209,12 @@ export function OutfitFilterPanel({
           <View style={styles.chips}>
             <TouchableOpacity
               style={[styles.chip, showAssigned && styles.chipActive]}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: showAssigned }}
               onPress={onToggleAssigned}
               activeOpacity={0.7}
             >
+              <Ionicons name="checkmark" size={16} color={colors.primary} style={{ opacity: showAssigned ? 1 : 0 }} />
               <Text style={[styles.chipText, showAssigned && styles.chipTextActive]}>
                 Assigned to event
               </Text>
@@ -227,9 +231,12 @@ export function OutfitFilterPanel({
           <View style={styles.chips}>
             <TouchableOpacity
               style={[styles.chip, showFavorites && styles.chipActive]}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: showFavorites }}
               onPress={onToggleFavorites}
               activeOpacity={0.7}
             >
+              <Ionicons name="checkmark" size={16} color={colors.primary} style={{ opacity: showFavorites ? 1 : 0 }} />
               <Text style={[styles.chipText, showFavorites && styles.chipTextActive]}>
                 Favourites only
               </Text>
@@ -246,9 +253,12 @@ export function OutfitFilterPanel({
           <View style={styles.chips}>
             <TouchableOpacity
               style={[styles.chip, showNeverWorn && styles.chipActive]}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: showNeverWorn }}
               onPress={onToggleNeverWorn}
               activeOpacity={0.7}
             >
+              <Ionicons name="checkmark" size={16} color={colors.primary} style={{ opacity: showNeverWorn ? 1 : 0 }} />
               <Text style={[styles.chipText, showNeverWorn && styles.chipTextActive]}>
                 Never worn
               </Text>
@@ -270,10 +280,13 @@ export function OutfitFilterPanel({
                   <TouchableOpacity
                     key={tag}
                     style={[styles.chip, active && styles.chipActive]}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: active }}
                     onPress={() => onToggleTag(tag)}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                    <Ionicons name="checkmark" size={16} color={colors.primary} style={{ opacity: active ? 1 : 0 }} />
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>
                       #{tag}
                     </Text>
                   </TouchableOpacity>
@@ -293,7 +306,7 @@ export function OutfitFilterPanel({
 
 const styles = StyleSheet.create({
   sheetBackground: {
-    backgroundColor: colors.background,
+    backgroundColor: colors.background, borderTopLeftRadius: radii.sheet, borderTopRightRadius: radii.sheet,
   },
   handle: {
     backgroundColor: colors.border,
@@ -301,10 +314,13 @@ const styles = StyleSheet.create({
   },
 
   // Header
+  // ScrollView transfers the sticky child's styles to its own wrapper.
+  // Keep row layout on an inner view so controls remain on one line.
+  stickyHeader: { backgroundColor: colors.background },
   panelHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.page,
     paddingBottom: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
@@ -317,12 +333,7 @@ const styles = StyleSheet.create({
     minWidth: 48,
   },
   panelTitle: {
-    flex: 1,
-    fontSize: typography.text.sectionTitle.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-    letterSpacing: typography.tracking.none,
-    textAlign: 'center',
+    flex: 1, ...typography.text.editorialSheet, color: colors.foreground, textAlign: 'left',
   },
 
   scroll: {
@@ -333,16 +344,12 @@ const styles = StyleSheet.create({
   accordionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.page,
     paddingTop: spacing.xl,
     paddingBottom: spacing.sm,
   },
   sectionLabel: {
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.mutedForeground,
-    textTransform: 'uppercase',
-    letterSpacing: typography.tracking.wide,
+    ...typography.text.eyebrow, color: colors.mutedForeground,
   },
   accordionBadge: {
     marginLeft: spacing.sm,
@@ -366,7 +373,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.page,
     paddingVertical: 11,
     gap: spacing.md,
   },
@@ -399,29 +406,25 @@ const styles = StyleSheet.create({
   chips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.page,
     gap: spacing.sm,
   },
   chip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: 7,
-    borderRadius: radii.full,
-    backgroundColor: colors.muted,
+    minHeight: 44, paddingHorizontal: spacing.sm, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderRadius: radii.action,
   },
   chipActive: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.surfaceSelected,
   },
   chipText: {
-    fontSize: typography.text.bodySmall.fontSize,
-    color: colors.foreground,
+    ...typography.text.bodySmall, flexShrink: 1, color: colors.foreground,
   },
   chipTextActive: {
-    color: colors.primaryForeground,
+    color: colors.foreground,
   },
 
   // Footer
   footer: {
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.page,
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -429,14 +432,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   applyBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: radii.md,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
+    minHeight: 52, backgroundColor: colors.primary, borderRadius: radii.action, paddingHorizontal: spacing.page, paddingVertical: 14, alignItems: 'center', justifyContent: 'center',
   },
   applyText: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.primaryForeground,
+    ...typography.text.label, color: colors.primaryForeground,
   },
 });

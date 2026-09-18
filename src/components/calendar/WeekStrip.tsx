@@ -265,18 +265,26 @@ const s = StyleSheet.create({
   dayBtn: {
     minHeight: 58,
     alignItems: 'center', justifyContent: 'center',
-    borderRadius: radii.lg, gap: 2,
+    borderRadius: radii.action, gap: 2,
     borderCurve: 'continuous',
   },
-  dayBtnSel: { backgroundColor: colors.primary },
+  dayBtnSel: {
+    borderWidth: 1, borderColor: colors.primary, backgroundColor: 'transparent',
+  },
   dayBtnToday: { borderWidth: 1, borderColor: colors.primary },
   dayAbbrev: { ...typography.text.caption, fontWeight: typography.weight.semibold, color: colors.mutedForeground, textTransform: 'uppercase' },
   dayNum: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.bold, color: colors.mutedForeground },
-  dayTextSel: { color: colors.white },
+  dayTextSel: {
+    color: colors.primary,
+  },
   dayTextToday: { color: colors.primary },
-  dot: { width: 7, height: 3, borderRadius: 2, backgroundColor: 'transparent' },
+  dot: {
+    width: 3, height: 3, borderRadius: 1.5, backgroundColor: 'transparent',
+  },
   dotVis: { backgroundColor: colors.primary },
-  dotSel: { backgroundColor: 'rgba(255,255,255,0.7)' },
+  dotSel: {
+    backgroundColor: colors.primary,
+  },
   dotHidden: { opacity: 0 },
   colHeaders: { flexDirection: 'row', marginBottom: 4 },
   colHeader: {
@@ -289,10 +297,7 @@ const s = StyleSheet.create({
   monthRow: { flexDirection: 'row', marginBottom: 2 },
   monthCell: { flex: 1, alignItems: 'center' },
   compactBtn: {
-    width: 36, height: 36,
-    alignItems: 'center', justifyContent: 'center',
-    borderRadius: radii.lg, gap: 1,
-    borderCurve: 'continuous',
+    width: '100%', minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radii.action, gap: 1, borderCurve: 'continuous',
   },
   compactNum: {
     fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold,

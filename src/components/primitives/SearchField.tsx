@@ -1,6 +1,6 @@
-import { Pressable, StyleSheet, TextInput, View, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View, useWindowDimensions, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, radii, spacing, typography } from '../../theme';
+import { colors, spacing, typography } from '../../theme';
 
 type Props = Omit<TextInputProps, 'style' | 'value' | 'onChangeText'> & {
   value: string;
@@ -15,7 +15,7 @@ type Props = Omit<TextInputProps, 'style' | 'value' | 'onChangeText'> & {
 const FIELD_HEIGHT = 44;
 
 /**
- * The one search treatment: an elevated ivory pill with a hairline edge, the
+ * The one search treatment: a transparent field with a fine baseline, the
  * same height as the filter and view controls it sits beside. Screens should
  * use this rather than composing an icon + TextInput of their own.
  */
@@ -28,6 +28,8 @@ export function SearchField({
   accessibilityLabel,
   ...inputProps
 }: Props) {
+  const { fontScale } = useWindowDimensions();
+  const fieldHeight = Math.max(FIELD_HEIGHT, Math.ceil(typography.text.bodySmall.fontSize * fontScale * 1.25) + 16);
   const showClear = dismissible || value.length > 0;
   const clear = () => {
     onChangeText('');
@@ -41,7 +43,7 @@ export function SearchField({
         {...inputProps}
         value={value}
         onChangeText={onChangeText}
-        style={styles.input}
+        style={[styles.input, { height: fieldHeight }]}
         placeholderTextColor={colors.mutedForeground}
         returnKeyType={inputProps.returnKeyType ?? 'search'}
         accessibilityLabel={accessibilityLabel ?? inputProps.placeholder}
@@ -67,11 +69,10 @@ const styles = StyleSheet.create({
     minHeight: FIELD_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radii.full,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    paddingHorizontal: spacing.md,
+    backgroundColor: 'transparent',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+    paddingHorizontal: 0,
     gap: spacing.sm,
   },
   icon: { flexShrink: 0 },

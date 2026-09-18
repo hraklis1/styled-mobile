@@ -161,7 +161,7 @@ const s = StyleSheet.create({
   // Full-bleed against the screen's own side padding, at the app's landscape
   // lifestyle ratio. No card chrome: it's meant to read as a photograph, not
   // a container — the same treatment Home gives "Today's Look".
-  imageBand: { marginHorizontal: -spacing.lg },
+  imageBand: { marginHorizontal: -spacing.page },
 
   heroScrim: {
     position: 'absolute',
@@ -199,9 +199,7 @@ const s = StyleSheet.create({
     color: colors.foreground,
   },
   meta: {
-    fontSize: typography.text.bodySmall.fontSize,
-    color: colors.mutedForeground,
-    fontWeight: typography.weight.medium,
+    ...typography.text.meta, color: colors.mutedForeground,
   },
   context: {
     ...typography.text.caption,
@@ -223,13 +221,10 @@ const s = StyleSheet.create({
     color: colors.mutedForeground,
   },
   planBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
-    backgroundColor: colors.primary,
-    borderRadius: radii.full,
-    minHeight: 44,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, backgroundColor: colors.primary, borderRadius: radii.action, minHeight: 52, paddingHorizontal: spacing.page, paddingVertical: 14,
   },
   planBtnDisabled: { opacity: 0.72 },
-  planBtnText: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, color: colors.white },
+  planBtnText: {
+    ...typography.text.label, color: colors.primaryForeground,
+  },
 });

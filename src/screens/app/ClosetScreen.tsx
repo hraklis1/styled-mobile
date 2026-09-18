@@ -80,8 +80,8 @@ const OUTFIT_SORT_OPTIONS: { key: OutfitSortKey; label: string }[] = [
   { key: 'name_asc',      label: 'Name A → Z' },
 ];
 
-const SIDE_PAD = spacing.lg;
-const COL_GAP  = spacing.sm;
+const SIDE_PAD = spacing.page;
+const COL_GAP  = spacing.grid;
 const STARTER_BOARD_NAMES = ['Workwear', 'Vacation', 'Never Worn', 'Seasonal Rotation'];
 
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
@@ -97,9 +97,6 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 
 // Heights used to size the collapsible region and sheet detents.
 // These are rough constants; adjust if layout changes.
-const SEARCH_ROW_H      = 50;
-const PILL_ROW_H        = 42;
-const SUBCATEGORY_ROW_H = 42;
 
 function FadedPillScroll({ children }: { children: ReactNode }) {
   const viewportWidth = useRef(0);
@@ -163,7 +160,10 @@ function FadedPillScroll({ children }: { children: ReactNode }) {
 
 export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, fontScale } = useWindowDimensions();
+  const SEARCH_ROW_H = Math.max(44, Math.ceil(typography.text.bodySmall.fontSize * fontScale * 1.25) + 16) + 6;
+  const PILL_ROW_H = Math.max(44, Math.ceil(typography.text.bodySmall.lineHeight * fontScale) + 16) + spacing.sm;
+  const SUBCATEGORY_ROW_H = PILL_ROW_H;
   const { openScanItem, openBatchScan } = useGlobalScan();
   const { openAddSheet } = useGlobalAddSheet();
   const { openStylist } = useGlobalAIStylist();
@@ -303,7 +303,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
       tension: 150,
       friction: 25,
     }).start();
-  }, [headerTranslateY]);
+  }, [headerTranslateY, SEARCH_ROW_H, PILL_ROW_H, SUBCATEGORY_ROW_H]);
 
   const handleScroll = useCallback(
     (e: any) => {
@@ -597,10 +597,6 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     setBoardOptionsTarget(board);
   }, []);
 
-  const createSmartBoard = useCallback((name: string) => {
-    if (boards.some((board) => board.name.toLowerCase() === name.toLowerCase())) return;
-    createBoard.mutate({ name });
-  }, [boards, createBoard]);
 
   const handleBulkAddToBoard = useCallback(() => {
     if (selectedIds.size === 0) return;
@@ -620,23 +616,6 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     setOutfitBuilderVisible(true);
   }, [handleAddPieces, handleNewBoard, segment]);
 
-  const renderStarterBoard = (name: string, emptyState = false) => {
-    const exists = boards.some((board) => board.name.toLowerCase() === name.toLowerCase());
-    const disabled = exists || createBoard.isPending;
-    return (
-      <TouchableOpacity
-        key={name}
-        style={[styles.smartBoardChip, emptyState && styles.emptyThemeChip, exists && styles.smartBoardChipDisabled]}
-        onPress={() => createSmartBoard(name)}
-        disabled={disabled}
-        accessibilityRole="button"
-        accessibilityState={{ disabled }}
-      >
-        <Ionicons name={exists ? 'checkmark' : 'add'} size={14} color={exists ? colors.mutedForeground : colors.primary} />
-        <Text style={[styles.smartBoardChipText, exists && styles.smartBoardChipTextDisabled]}>{name}</Text>
-      </TouchableOpacity>
-    );
-  };
 
   const handleStyleSelected = useCallback(() => {
     if (selectedIds.size === 0) return;
@@ -690,9 +669,6 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
           </View>
           {!selectionMode && item.isFavorite && (
             <Ionicons name="heart" size={16} color={colors.primary} />
-          )}
-          {!selectionMode && (
-            <Ionicons name="chevron-forward" size={16} color={colors.border} />
           )}
         </PressableScale>
       );
@@ -891,10 +867,6 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         <Ionicons name="add" size={16} color={colors.primaryForeground} />
         <Text style={styles.emptyBtnText}>Create board</Text>
       </TouchableOpacity>
-      <Text style={styles.emptyThemeLabel}>Or start with a theme</Text>
-      <View style={styles.emptyThemeGrid}>
-        {STARTER_BOARD_NAMES.map((name) => renderStarterBoard(name, true))}
-      </View>
     </View>
   );
 
@@ -923,6 +895,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         primaryAction={{
           label: segment === 'pieces' ? 'Add' : segment === 'boards' ? 'New board' : 'Create outfit',
           icon: 'add',
+          variant: 'ghost',
           onPress: handlePrimaryAction,
           accessibilityLabel: segment === 'pieces' ? 'Add pieces' : undefined,
         }}
@@ -1029,7 +1002,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             keyExtractor={(b) => String(b.id)}
             numColumns={2}
             renderItem={({ item }) => (
-              <View style={{ paddingHorizontal: COL_GAP / 2, marginBottom: spacing.md }}>
+              <View style={{ paddingHorizontal: COL_GAP / 2, marginBottom: spacing.gridRow }}>
                 <BoardCard
                   board={item}
                   itemMap={itemMap}
@@ -1050,16 +1023,6 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
                     accessibilityLabel="Search boards"
                     style={styles.boardSearch}
                   />
-                )}
-                {visibleBoardCount > 0 && (
-                  <>
-                    <View style={styles.smartBoardHeading}>
-                      <Text style={styles.smartBoardTitle}>Start with a theme</Text>
-                    </View>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.smartBoardRow}>
-                      {STARTER_BOARD_NAMES.map((name) => renderStarterBoard(name))}
-                    </ScrollView>
-                  </>
                 )}
               </View>
             }
@@ -1469,6 +1432,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
           submitLabel={boardNameMode.kind === 'new' ? 'Create board' : 'Save name'}
           submitting={boardNameMode.kind === 'new' ? createBoard.isPending : updateBoard.isPending}
           onCancel={() => setBoardNameMode(null)}
+          suggestions={boardNameMode.kind === 'new' ? STARTER_BOARD_NAMES.filter(name => !boards.some(board => board.name.toLowerCase() === name.toLowerCase())) : undefined}
           onSubmit={submitBoardName}
         />
       )}
@@ -1481,17 +1445,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
 const styles = StyleSheet.create({
   boardListHeader: { paddingHorizontal: COL_GAP / 2, paddingBottom: spacing.lg, gap: spacing.md },
   boardSearch: { flex: 0 },
-  smartBoardHeading: { alignItems: 'flex-start' },
-  smartBoardTitle: { color: colors.mutedForeground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, letterSpacing: typography.tracking.spacious, textTransform: 'uppercase' },
-  smartBoardRow: { gap: spacing.sm, paddingRight: spacing.lg },
-  smartBoardChip: { minHeight: 38, paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: 'transparent', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  emptyThemeChip: { marginBottom: spacing.sm },
-  smartBoardChipDisabled: { backgroundColor: colors.secondary, borderColor: colors.secondary },
-  smartBoardChipText: { color: colors.secondaryForeground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.medium },
-  smartBoardChipTextDisabled: { color: colors.mutedForeground },
   noBoardResults: { paddingVertical: spacing.xl, alignItems: 'center' },
-  emptyThemeLabel: { marginTop: spacing.lg, color: colors.mutedForeground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, letterSpacing: typography.tracking.spacious, textTransform: 'uppercase' },
-  emptyThemeGrid: { marginTop: spacing.sm, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm },
   boardSkeletonGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: COL_GAP / 2 },
   boardSkeletonTitle: { marginTop: spacing.sm + 1 },
   boardSkeletonSubtitle: { marginTop: spacing.xs },
@@ -1630,7 +1584,9 @@ const styles = StyleSheet.create({
   // ── Category pills
   pillScrollWrap: { flexShrink: 0 },
   pillScroll: { flexShrink: 0 },
-  pillContent: { paddingHorizontal: SIDE_PAD, paddingBottom: spacing.sm, gap: spacing.sm },
+  pillContent: {
+    paddingHorizontal: SIDE_PAD, paddingBottom: spacing.sm, gap: spacing.lg,
+  },
   pillFade: {
     position: 'absolute',
     top: 0,
@@ -1640,25 +1596,16 @@ const styles = StyleSheet.create({
   pillFadeLeft: { left: 0 },
   pillFadeRight: { right: 0 },
   pill: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs + 2,
-    borderRadius: radii.full,
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
+    minHeight: 44, justifyContent: 'center', paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: 'transparent',
   },
   pillActive: {
-    backgroundColor: colors.surfaceSelected,
-    borderColor: colors.border,
+    borderBottomColor: colors.primary,
   },
   pillLabel: {
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.medium,
-    color: colors.mutedForeground,
+    ...typography.text.bodySmall, color: colors.mutedForeground,
   },
   pillLabelActive: {
-    color: colors.foreground,
-    fontWeight: typography.weight.semibold,
+    color: colors.foreground, fontWeight: typography.weight.medium,
   },
 
   // ── List layout
@@ -1676,18 +1623,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: SIDE_PAD,
   },
   outfitGridItem: {
-    paddingHorizontal: COL_GAP / 2,
-    marginBottom: spacing.lg,
+    paddingHorizontal: COL_GAP / 2, marginBottom: spacing.gridRow,
   },
 
   // ── Item row (list mode)
   itemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingVertical: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline,
   },
   itemRowSelected: {
     backgroundColor: `${colors.primary}10`,
@@ -1696,8 +1637,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   itemRowInfo: {
-    flex: 1,
-    gap: 2,
+    flex: 1, gap: spacing.xs,
   },
 
   // ── Item cards (grid mode)
@@ -1754,9 +1694,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   itemName: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
+    ...typography.text.cardTitle, color: colors.foreground,
   },
   // ── Outfit cards
   outfitCard: {},
@@ -1784,9 +1722,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
   },
   outfitInfo: {
-    paddingTop: spacing.sm + 2,
-    paddingHorizontal: 2,
-    gap: 3,
+    paddingTop: 10, paddingHorizontal: 0, gap: spacing.xs,
   },
   outfitName: {
     ...typography.text.cardTitle,

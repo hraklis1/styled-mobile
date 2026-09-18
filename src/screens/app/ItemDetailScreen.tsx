@@ -774,17 +774,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
             accessibilityState={{ expanded: coverSheetOpen, disabled: polishItem.isPending }}
             accessibilityLabel={`Cover image: ${coverImageVariantLabel(cover.variant)}. Choose a different cover image.`}
           >
-            <Ionicons
-              name={cover.variant === 'original'
-                ? 'image-outline'
-                : cover.variant === 'cutout'
-                  ? 'cut-outline'
-                  : 'sparkles-outline'}
-              size={14}
-              color={colors.foreground}
-            />
-            <Text style={styles.coverPickerText}>{coverImageVariantLabel(cover.variant)}</Text>
-            <Ionicons name="chevron-down" size={13} color={colors.mutedForeground} />
+            <Ionicons name="images-outline" size={20} color={colors.foreground} />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.backButton, { top: insets.top + spacing.sm }]}
@@ -873,7 +863,6 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           accessibilityRole="button"
           accessibilityLabel={`Ask AI Stylist how to style ${viewItem.name}`}
         >
-          <Ionicons name="sparkles" size={18} color={colors.primaryForeground} />
           <Text style={styles.stylistButtonText}>Style this item</Text>
         </TouchableOpacity>
 
@@ -890,7 +879,6 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
             <Ionicons name="checkmark-circle-outline" size={20} color={colors.primary} />
             <Text style={styles.actionLabel}>Worn today</Text>
           </TouchableOpacity>
-          <View style={styles.actionDivider} />
           <TouchableOpacity
             style={[styles.actionButton, updateItem.isPending && styles.actionDisabled]}
             onPress={handleToggleFavorite}
@@ -908,8 +896,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           </TouchableOpacity>
           {!isCreateMode && !!itemId && (
             <>
-              <View style={styles.actionDivider} />
-              <TouchableOpacity
+                  <TouchableOpacity
                 style={[styles.actionButton, isBusy && styles.actionDisabled]}
                 onPress={() => setSaveSheetOpen(true)}
                 disabled={isBusy}
@@ -1266,20 +1253,7 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   coverPickerButton: {
-    position: 'absolute',
-    zIndex: 2,
-    right: spacing.lg + 44 + spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    minHeight: 44,
-    maxWidth: '54%',
-    backgroundColor: 'rgba(255,252,247,0.94)',
-    borderRadius: radii.full,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    paddingHorizontal: spacing.sm + 2,
-    borderCurve: 'continuous',
+    position: 'absolute', zIndex: 2, width: 44, height: 44, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background, borderRadius: radii.action,
   },
   coverPickerText: {
     fontSize: typography.text.caption.fontSize,
@@ -1297,66 +1271,54 @@ const styles = StyleSheet.create({
     position: 'absolute',
     zIndex: 2,
     left: spacing.lg,
-    backgroundColor: colors.white,
-    borderRadius: radii.full,
+    backgroundColor: colors.background,
+    borderRadius: radii.action,
     width: 44,
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     borderCurve: 'continuous',
-    boxShadow: '0 2px 8px rgba(29,27,24,0.12)',
   },
   itemOptionsButton: {
     position: 'absolute',
     zIndex: 2,
     right: spacing.lg,
-    backgroundColor: 'rgba(255,252,247,0.94)',
-    borderRadius: radii.full,
+    backgroundColor: colors.background,
+    borderRadius: radii.action,
     width: 44,
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     borderCurve: 'continuous',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    boxShadow: '0 2px 8px rgba(29,27,24,0.10)',
   },
   createCoverButton: {
     position: 'absolute',
     zIndex: 2,
     right: spacing.lg + 44 + spacing.sm,
-    backgroundColor: 'rgba(255,252,247,0.94)',
-    borderRadius: radii.full,
+    backgroundColor: colors.background,
+    borderRadius: radii.action,
     width: 44,
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     borderCurve: 'continuous',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    boxShadow: '0 2px 8px rgba(29,27,24,0.10)',
   },
 
   header: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.md,
+    paddingHorizontal: spacing.page, paddingTop: spacing.xl, paddingBottom: 20,
   },
-  headerText: { gap: 5 },
+  headerText: {
+    gap: spacing.sm,
+  },
   name: {
     ...typography.text.editorialTitle,
     color: colors.foreground,
   },
   brand: {
-    fontSize: typography.text.body.fontSize,
-    lineHeight: 21,
-    fontWeight: typography.weight.medium,
-    color: colors.inkSubtle,
+    ...typography.text.meta, fontWeight: typography.weight.medium, color: colors.inkSubtle,
   },
   breadcrumb: {
-    fontSize: typography.text.bodySmall.fontSize,
-    lineHeight: 19,
-    color: colors.mutedForeground,
+    ...typography.text.meta, color: colors.mutedForeground,
   },
   summary: {
     marginTop: spacing.xs,
@@ -1397,26 +1359,15 @@ const styles = StyleSheet.create({
   },
 
   stylistButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    minHeight: 52,
-    paddingHorizontal: spacing.lg,
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.sm,
-    backgroundColor: colors.primary,
-    borderRadius: radii.full,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minHeight: 52, paddingHorizontal: spacing.page, paddingVertical: 14, marginHorizontal: spacing.page, marginBottom: spacing.sm, backgroundColor: colors.primary, borderRadius: radii.action,
   },
   stylistButtonText: {
-    fontSize: typography.text.body.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.primaryForeground,
+    ...typography.text.label, color: colors.primaryForeground,
   },
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: spacing.lg,
+    marginHorizontal: spacing.page,
     marginBottom: spacing.sm,
     minHeight: 68,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -1443,7 +1394,7 @@ const styles = StyleSheet.create({
   },
 
   editorialSection: {
-    marginHorizontal: spacing.lg,
+    marginHorizontal: spacing.page,
     paddingVertical: spacing.xl,
     gap: spacing.md,
     borderTopWidth: StyleSheet.hairlineWidth,

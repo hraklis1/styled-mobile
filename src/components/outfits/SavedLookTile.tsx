@@ -58,10 +58,10 @@ export function SavedLookTile({
                 size={11}
                 color={colors.mutedForeground}
               />
-              <Text style={styles.context} numberOfLines={1}>{context}</Text>
+              <Text style={styles.context} numberOfLines={2}>{context}</Text>
             </View>
           ) : null}
-          <Text style={styles.meta} numberOfLines={1}>{meta}</Text>
+          <Text style={styles.meta} numberOfLines={2}>{meta}</Text>
         </View>
       ) : null}
     </PressableScale>
@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
   tile: { gap: spacing.sm },
   preview: { width: '100%', aspectRatio: 4 / 5, borderRadius: radii.photo },
   copy: { gap: 2, paddingHorizontal: 2 },
-  title: { ...typography.text.label, color: colors.foreground },
+  title: { ...typography.text.cardTitle, color: colors.foreground },
   contextRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   context: { flex: 1, ...typography.text.caption, color: colors.mutedForeground },
   meta: { ...typography.text.caption, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },

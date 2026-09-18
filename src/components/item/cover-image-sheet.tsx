@@ -117,7 +117,7 @@ export function CoverImageSheet({
       >
         <View style={styles.header}>
           <Text style={styles.title}>Cover image</Text>
-          <Text style={styles.subtitle}>Choose what represents this piece across your closet.</Text>
+          <Text style={styles.subtitle}>Current cover: {coverImageVariantLabel(currentVariant)}. Choose what represents this piece across your closet.</Text>
         </View>
 
         <View style={styles.options}>
@@ -177,18 +177,18 @@ export function CoverImageSheet({
 }
 
 const styles = StyleSheet.create({
-  sheetBackground: { backgroundColor: colors.background },
+  sheetBackground: {
+    backgroundColor: colors.background, borderTopLeftRadius: radii.sheet, borderTopRightRadius: radii.sheet,
+  },
   handle: { backgroundColor: colors.border, width: 36 },
   content: {
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.page,
     paddingTop: spacing.sm,
     gap: spacing.lg,
   },
   header: { gap: spacing.xs },
   title: {
-    color: colors.foreground,
-    fontSize: typography.text.sectionTitle.fontSize,
-    fontWeight: typography.weight.bold,
+    ...typography.text.editorialSheet, color: colors.foreground,
   },
   subtitle: {
     color: colors.mutedForeground,

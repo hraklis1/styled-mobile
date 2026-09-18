@@ -5,27 +5,35 @@ export const colors = {
   background:          '#FBFAF7', // Warm ivory
   foreground:          '#1D1B18', // Soft fashion black
   card:                '#F3F0EA',
-  surfaceElevated:     '#FFFFFF',
+  surfaceElevated:     '#FDFCF9',
   surfaceSubtle:       '#F5F3EE',
-  surfaceSelected:     '#ECE6DA',
-  primary:             '#6F5948', // Disciplined atelier taupe
+  surfaceSelected:     '#E8E5DE',
+  primary:             '#292723', // Primary action ink
   primaryForeground:   '#FFFCF7',
   secondary:           '#EDEAE3',
   secondaryForeground: '#403A33',
   muted:               '#EEECE6',
-  mutedForeground:     '#746E66',
+  mutedForeground:     '#6F6A62',
   accent:              '#E8DED1',
-  // Muted terracotta, reserved for interactive *text* (links, inline actions) so
-  // a tappable phrase is distinguishable from the taupe used for brand
-  // structure and status. Not for filled buttons — those stay `primary`.
-  action:              '#9A5B42',
-  border:              '#E1DCD3',
-  hairline:            '#EEEAE3',
+  // Quiet action text; pair with an underline or directional icon.
+  action:              '#514B43',
+  border:              '#DDD9D1',
+  hairline:            '#E7E3DC',
   inkSubtle:           '#4E4841',
   error:               '#B94242',
   destructive:         '#BF4040', // Alias for error
   success:             '#4A7D59',
   white:               '#FFFFFF',
+} as const;
+
+/** Original image/placeholder colors stay independent of control styling. */
+export const imageColors = {
+  primary: '#6F5948',
+  surfaceSelected: '#ECE6DA',
+  surfaceElevated: '#FFFFFF',
+  mutedForeground: '#746E66',
+  border: '#E1DCD3',
+  hairline: '#EEEAE3',
 } as const;
 
 /**
@@ -57,6 +65,10 @@ export const spacing = {
   xl:  24,
   xxl: 32,
   xxxl: 48,
+  page: 24,
+  grid: 12,
+  gridRow: 24,
+  section: 32,
 } as const;
 
 const weight = {
@@ -121,16 +133,18 @@ export const typography = {
       fontFamily: editorialFamily.editorialRegular,
       fontSize: 34,
       lineHeight: 40,
+      letterSpacing: -0.3,
     },
     editorialTitle: {
-      fontFamily: editorialFamily.editorialMedium,
+      fontFamily: editorialFamily.editorialRegular,
       fontSize: 28,
       lineHeight: 34,
+      letterSpacing: -0.15,
     },
     editorialSection: {
-      fontFamily: editorialFamily.editorialMedium,
-      fontSize: 20,
-      lineHeight: 26,
+      fontFamily: editorialFamily.editorialRegular,
+      fontSize: 22,
+      lineHeight: 28,
     },
     editorialCompact: {
       fontFamily: editorialFamily.editorialMedium,
@@ -182,13 +196,11 @@ export const typography = {
       fontWeight: weight.semibold,
     },
     cardTitle: {
-      fontSize: 15,
-      lineHeight: 20,
-      fontWeight: weight.semibold,
+      fontSize: 14, lineHeight: 20, fontWeight: weight.medium,
     },
     body: {
       fontSize: 15,
-      lineHeight: 22,
+      lineHeight: 23,
       fontWeight: weight.regular,
     },
     bodySmall: {
@@ -197,9 +209,7 @@ export const typography = {
       fontWeight: weight.regular,
     },
     label: {
-      fontSize: 13,
-      lineHeight: 18,
-      fontWeight: weight.semibold,
+      fontSize: 14, lineHeight: 20, fontWeight: weight.medium, letterSpacing: 0.2,
     },
     caption: {
       fontSize: 12,
@@ -207,42 +217,22 @@ export const typography = {
       fontWeight: weight.regular,
     },
     eyebrow: {
-      fontSize: 11,
-      lineHeight: 14,
-      fontWeight: weight.bold,
-      letterSpacing: tracking.eyebrow,
-      textTransform: 'uppercase' as const,
+      fontSize: 11, lineHeight: 16, fontWeight: weight.medium, letterSpacing: 1.2, textTransform: 'uppercase' as const,
     },
     eyebrowLarge: {
-      fontSize: 12,
-      lineHeight: 16,
-      fontWeight: weight.bold,
-      letterSpacing: tracking.eyebrowLarge,
-      textTransform: 'uppercase' as const,
+      fontSize: 12, lineHeight: 17, fontWeight: weight.medium, letterSpacing: 1.2, textTransform: 'uppercase' as const,
     },
-    /**
-     * Small tracked metadata under a title — colour, count, section labels.
-     * Medium, not bold, and tracked a step under the eyebrows: a caption that
-     * reads as line-sheet detail rather than a heading.
-     */
+    /** Sentence-case supporting metadata; uppercase is reserved for eyebrows. */
     meta: {
-      fontSize: 11,
-      lineHeight: 14,
-      fontWeight: weight.medium,
-      letterSpacing: tracking.label,
-      textTransform: 'uppercase' as const,
+      fontSize: 12, lineHeight: 17, fontWeight: weight.regular, letterSpacing: 0.2,
     },
-    /**
-     * Line-sheet strings — "BEIGE · LINEN · SS" — tracked a step wider than
-     * `meta` so the separators read as air rather than punctuation.
-     */
+    /** Maker and category captions beneath garment names. */
     metaSheet: {
-      fontSize: 11,
-      lineHeight: 16,
-      fontWeight: weight.medium,
-      letterSpacing: tracking.relaxed,
-      textTransform: 'uppercase' as const,
+      fontSize: 12, lineHeight: 17, fontWeight: weight.regular, letterSpacing: 0.2,
     },
+    productName: { fontSize: 13, lineHeight: 18, fontWeight: weight.medium, letterSpacing: 0 },
+    stylistLead: { fontFamily: editorialFamily.editorialRegular, fontSize: 20, lineHeight: 28 },
+    editorialSheet: { fontFamily: editorialFamily.editorialRegular, fontSize: 24, lineHeight: 30 },
     data: {
       fontSize: 15,
       lineHeight: 20,
@@ -265,6 +255,9 @@ export const radii = {
    * corner treatment. Just enough to take the hard pixel off the corner.
    */
   photo: 2,
+  action: 4,
+  bubble: 8,
+  sheet: 24,
   sm:   6,
   md:   8,
   lg:   12,

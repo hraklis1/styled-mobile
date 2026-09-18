@@ -15,7 +15,7 @@ describe('AppText', () => {
     const styles = element.props.style as unknown[];
 
     expect(styles[0]).toMatchObject({
-      fontFamily: typography.family.editorialMedium,
+      fontFamily: typography.family.editorialRegular,
       fontSize: typography.text.editorialTitle.fontSize,
       lineHeight: typography.text.editorialTitle.lineHeight,
     });

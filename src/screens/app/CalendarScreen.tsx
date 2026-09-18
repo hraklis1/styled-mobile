@@ -921,7 +921,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
-  scrollContent: { paddingHorizontal: spacing.lg },
+  scrollContent: { paddingHorizontal: spacing.page },
 
   // ── Floating header (absolute, slides over the list on scroll) ──────────
   listArea: { flex: 1, overflow: 'hidden' },
@@ -931,7 +931,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
     backgroundColor: colors.background,
   },
-  weekStripWrap: { paddingHorizontal: spacing.lg },
+  weekStripWrap: { paddingHorizontal: spacing.page },
 
   dayEmpty: {
     alignItems: 'center', gap: spacing.sm,
@@ -961,7 +961,9 @@ const styles = StyleSheet.create({
   dayEmptyBtnText: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.primary },
 
   dayHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.xs },
-  dayLabel: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: typography.tracking.meta },
+  dayLabel: {
+    ...typography.text.meta, color: colors.mutedForeground,
+  },
   dayDivider: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
   dayCountdown: { ...typography.text.caption, fontWeight: typography.weight.medium, color: colors.primary },
 
@@ -995,9 +997,13 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   eventBody: { flex: 1, minWidth: 0, gap: 3 },
-  eventTitle: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground },
+  eventTitle: {
+    ...typography.text.editorialSection, color: colors.foreground,
+  },
   eventMeta: { flexDirection: 'row', alignItems: 'center', gap: 3, minWidth: 0 },
-  eventTime: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground, fontWeight: typography.weight.medium },
+  eventTime: {
+    ...typography.text.meta, color: colors.mutedForeground,
+  },
   dot: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
   eventOccasion: { fontSize: typography.text.caption.fontSize, color: colors.primary, fontWeight: typography.weight.medium, flexShrink: 0 },
   eventLoc: { ...typography.text.caption, color: colors.mutedForeground, flexShrink: 1 },

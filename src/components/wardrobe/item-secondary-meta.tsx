@@ -23,8 +23,7 @@ export function ItemSecondaryMeta({
   );
 }
 
-// A line-sheet caption: tracked small caps, brand a shade darker than the
-// category so the eye lands on the maker first.
+// Quiet sentence-case metadata, with the maker a shade darker than the category.
 const styles = StyleSheet.create({
   meta: {
     ...typography.text.metaSheet,

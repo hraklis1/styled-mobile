@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { PressableScale } from './PressableScale';
-import { colors, radii, spacing, typography } from '../../theme';
+import { colors, spacing, typography } from '../../theme';
 
 type Props = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -17,13 +17,13 @@ type Props = {
   /**
    * `ruled` — hairline-bottomed, transparent, for rows stacked inside an
    * editorial section (the default; matches the app's ruled sections).
-   * `filled` — a quiet standalone block on `surfaceSubtle`, for a row that
+   * `filled` — a standalone, spatially separated row that
    * has to stand on its own without a section around it (an empty state).
    */
   variant?: 'ruled' | 'filled';
 };
 
-/** The app's one row idiom: an icon square, a title/description pair, and a
+/** The app's one row idiom: an unboxed icon, a title/description pair, and a
  *  chevron. Used for navigation doorways, action prompts, and empty-state
  *  invitations alike — only the container changes with `variant`. */
 export function EditorialRow({
@@ -71,31 +71,13 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.hairline,
   },
   rowFilled: {
-    minHeight: 72,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
-    borderRadius: radii.lg,
-    borderCurve: 'continuous',
-    backgroundColor: colors.surfaceSubtle,
+    minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md,
   },
   iconRuled: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.md,
-    borderCurve: 'continuous',
-    backgroundColor: `${colors.primary}12`,
+    width: 28, height: 40, alignItems: 'flex-start', justifyContent: 'center',
   },
   iconFilled: {
-    width: 36,
-    height: 36,
-    borderRadius: radii.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: `${colors.primary}14`,
+    width: 28, height: 40, alignItems: 'flex-start', justifyContent: 'center',
   },
   copy: { flex: 1, minWidth: 0, gap: 2 },
   title: { color: colors.foreground, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold },

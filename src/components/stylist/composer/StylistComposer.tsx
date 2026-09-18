@@ -14,7 +14,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { DictationLevelBars } from './DictationLevelBars';
 import { useDictation } from './useDictation';
-import { colors, radii, shadows, spacing, typography } from '../../../theme';
+import { imageColors, colors, radii, spacing, typography } from '../../../theme';
 import type { StylistComposerAttachment } from '../../../features/stylist/types';
 
 type Props = {
@@ -228,17 +228,11 @@ export function StylistComposer({
 
 const styles = StyleSheet.create({
   inputBar: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.page,
     paddingTop: spacing.xs,
   },
   composer: {
-    minHeight: 50,
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radii.xl,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    padding: 4,
-    ...shadows.xs,
+    minHeight: 52, backgroundColor: colors.surfaceElevated, borderRadius: radii.bubble, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, padding: spacing.xs,
   },
   composerRow: {
     flexDirection: 'row',
@@ -259,7 +253,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: radii.lg,
-    backgroundColor: colors.surfaceSelected,
+    backgroundColor: imageColors.surfaceSelected,
   },
   attachmentBadge: {
     position: 'absolute',

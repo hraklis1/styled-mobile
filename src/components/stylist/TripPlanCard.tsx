@@ -1,3 +1,4 @@
+import { StylistRichText } from './StylistRichText';
 import { useCallback, useMemo, useState } from 'react';
 import {
   Image,
@@ -205,7 +206,7 @@ export function TripPlanCard({
         <Ionicons name={isBoardCapsule ? 'albums-outline' : 'briefcase-outline'} size={13} color={colors.primary} />
         <Text style={styles.sectionEyebrowText}>{isBoardCapsule ? 'Board capsule' : 'Trip plan'}</Text>
       </View>
-      {plan.intro ? <Text style={styles.intro}>{plan.intro}</Text> : null}
+      {plan.intro ? <StylistRichText text={plan.intro} /> : null}
 
       <ScrollView
         horizontal
@@ -290,12 +291,7 @@ const styles = StyleSheet.create({
   },
   carousel: { gap: spacing.md, paddingVertical: spacing.xs, paddingRight: spacing.lg },
   outfitCard: {
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radii.xl,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: `${colors.primary}24`,
-    padding: spacing.lg,
-    gap: spacing.sm,
+    padding: spacing.lg, gap: spacing.sm,
   },
   placeholderCard: { alignItems: 'center', justifyContent: 'center', minHeight: 220 },
   placeholderText: { color: colors.mutedForeground, fontSize: typography.text.bodySmall.fontSize, marginTop: spacing.xs },
@@ -314,20 +310,11 @@ const styles = StyleSheet.create({
   tripGaps: { backgroundColor: '#F7F1E8', borderRadius: radii.md, padding: spacing.sm, gap: spacing.xs },
   tripGapsTitle: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.bold, color: colors.action, textTransform: 'uppercase', letterSpacing: typography.tracking.label },
   addEventBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.md,
-    backgroundColor: colors.primary,
+    minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.page, paddingVertical: 14, borderRadius: radii.action, backgroundColor: colors.primary,
   },
   addEventBtnDone: { backgroundColor: colors.primary },
   addEventBtnText: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.bold,
-    color: colors.primaryForeground,
-    flexShrink: 1,
+    ...typography.text.label, color: colors.primaryForeground, flexShrink: 1,
   },
   saveBtn: {
     flexDirection: 'row',
@@ -346,10 +333,7 @@ const styles = StyleSheet.create({
   pageDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.border },
   pageDotActive: { width: 18, backgroundColor: colors.primary },
   packing: {
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radii.lg,
-    padding: spacing.md,
-    gap: spacing.xs,
+    paddingVertical: spacing.md, gap: spacing.xs,
   },
   packingTitle: {
     fontSize: typography.text.sectionTitle.fontSize,

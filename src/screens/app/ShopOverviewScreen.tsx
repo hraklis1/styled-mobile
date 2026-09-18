@@ -132,7 +132,8 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
         {/* One action under the masthead. The shortlist has its own door — the
             section's "See all" — so a second pill here only made a toolbar. */}
         <View style={styles.mastheadActions}>
-          <ActionButton icon="camera-outline" label="Shopping Mode" onPress={openShoppingCamera} />
+          <ActionButton icon="camera-outline" label="Shopping Mode"
+            variant="ghost" onPress={openShoppingCamera} />
         </View>
         <View style={styles.briefSection}>
           <ShoppingBriefCard
@@ -230,17 +231,17 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: spacing.md,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.page,
     paddingBottom: spacing.lg,
   },
   headerCopy: { flex: 1, gap: spacing.sm },
-  mastheadActions: { flexDirection: 'row', paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
+  mastheadActions: { flexDirection: 'row', paddingHorizontal: spacing.page, paddingBottom: spacing.lg },
   // Ruled like the sections below it, not a tinted plate: surfaceSubtle on
   // the page ground was a 1.02:1 difference with no edge, and the only
   // change of surface on the page. One hairline, the same grammar as
   // "Your Shortlist", and the brief still leads because it comes first.
   briefSection: {
-    marginHorizontal: spacing.lg,
+    marginHorizontal: spacing.page,
     paddingTop: spacing.xl,
     // The card's own text action carries 44pt of foot; a hair more is all the
     // section needs before the next rule.
@@ -248,7 +249,7 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.hairline,
   },
-  section: { paddingHorizontal: spacing.lg },
+  section: { paddingHorizontal: spacing.page },
   savedPreviewGrid: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   // A lone tile keeps to half the row rather than swelling to a full-width plate.
   savedPreviewSingle: { flex: 0, width: '48%' },

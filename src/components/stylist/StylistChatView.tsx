@@ -1643,7 +1643,6 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
       <EditorialEntrance>
         <View style={styles.stylistNote}>
           <View style={styles.sectionEyebrow}>
-            <Ionicons name="sparkles" size={13} color={colors.primary} />
             <Text style={styles.sectionEyebrowText}>{message.boardAction === 'theme' ? 'Board direction' : message.boardAction === 'complete' ? 'Board edit' : message.mode === 'knowledge' ? 'Good to know' : 'My take'}</Text>
           </View>
           <StylistRichText text={message.text} streaming={message.isStreaming} />
@@ -1760,12 +1759,9 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
       <EditorialEntrance>
         <View style={styles.stylistNote}>
           <View style={styles.sectionEyebrow}>
-            <Ionicons name="sparkles" size={13} color={colors.primary} />
             <Text style={styles.sectionEyebrowText}>Stylist note</Text>
           </View>
-          <Text style={styles.stylistNoteText}>
-            {message.text}{message.isStreaming ? '▍' : ''}
-          </Text>
+          <StylistRichText text={message.text} streaming={message.isStreaming} />
           {onToggleAudio && (
             <TouchableOpacity style={styles.quietAudioBtn} onPress={onToggleAudio} accessibilityLabel="Read stylist note aloud">
               <Ionicons
@@ -2166,7 +2162,6 @@ function OutfitSuggestionCard({
       <View style={styles.lookHeader}>
         <View style={styles.lookHeaderTop}>
           <View style={styles.sectionEyebrow}>
-            <Ionicons name="sparkles" size={13} color={colors.primary} />
             <Text style={styles.sectionEyebrowText}>Styled for you</Text>
           </View>
           <View style={styles.headerCardActions}>
@@ -2233,7 +2228,7 @@ function OutfitSuggestionCard({
 
       <View style={styles.stylistNoteBlock}>
         <Text style={styles.rationaleLabel}>Stylist's note</Text>
-        <Text style={styles.outfitCardText}>{currentMessageText}</Text>
+        <StylistRichText text={currentMessageText} />
       </View>
 
       {matchedItems.length > 0 && (
@@ -3221,7 +3216,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.page,
     minHeight: 66,
     paddingBottom: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -3483,10 +3478,7 @@ const styles = StyleSheet.create({
   // Messages
   messageList: { flex: 1 },
   messageListContent: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.xxl,
-    gap: spacing.xl,
+    paddingHorizontal: spacing.page, paddingTop: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.xl,
   },
   messageListEmpty: {
     flex: 1,
@@ -3506,36 +3498,16 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
   chipsContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingRight: spacing.xl,
-    gap: spacing.xs,
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.page, gap: spacing.lg,
   },
   chip: {
-    minHeight: 31,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    borderRadius: radii.full,
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: spacing.xs,
-    backgroundColor: 'rgba(255,255,255,0.42)',
+    minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.sm,
   },
   chipText: {
-    fontSize: typography.text.caption.fontSize,
-    color: colors.secondaryForeground,
-    fontWeight: typography.weight.medium,
-    textAlign: 'center',
+    ...typography.text.bodySmall, color: colors.action, textDecorationLine: 'underline',
   },
   moreChip: {
-    width: 31,
-    height: 31,
-    borderRadius: radii.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.5)',
+    width: 44, height: 44, alignItems: 'center', justifyContent: 'center',
   },
   // @ Mention menu
   mentionMenu: {
@@ -3588,14 +3560,10 @@ const styles = StyleSheet.create({
   // The user's words are context; the stylist's reply is the page. A quiet
   // ivory panel keeps the brief legible without outweighing what follows.
   bubble: {
-    maxWidth: '76%',
-    borderRadius: radii.panel,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
+    maxWidth: '86%', borderRadius: radii.bubble, paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
   },
   bubbleUser: {
     backgroundColor: surfaces.userBubble,
-    borderBottomRightRadius: radii.sm,
   },
   bubbleText: {
     fontSize: typography.text.bodySmall.fontSize,
@@ -3608,7 +3576,9 @@ const styles = StyleSheet.create({
   userAttachmentLabel: { flexShrink: 1, color: colors.foreground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold },
   editorialResponse: { gap: spacing.sm },
   shopCardContainer: { gap: spacing.sm },
-  stylistNote: { gap: spacing.sm, paddingHorizontal: spacing.xs },
+  stylistNote: {
+    gap: spacing.sm,
+  },
   stylistNoteText: {
     fontSize: typography.text.body.fontSize,
     color: colors.foreground,
@@ -3633,13 +3603,7 @@ const styles = StyleSheet.create({
   },
   // Outfit suggestion card
   outfitCard: {
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radii.xl,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    padding: spacing.md,
     gap: spacing.md,
-    ...shadows.sm,
   },
   lookHeader: { gap: 3, paddingHorizontal: spacing.xs },
   lookHeaderTop: {
@@ -3932,7 +3896,9 @@ const styles = StyleSheet.create({
   attachmentChoiceIcon: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: radii.full, backgroundColor: colors.surfaceSelected },
   attachmentChoiceLabel: { color: colors.foreground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, textAlign: 'center' },
   followUpList: { gap: spacing.xs, marginTop: spacing.lg },
-  followUpRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, borderRadius: radii.md, backgroundColor: colors.surfaceSubtle },
+  followUpRow: {
+    minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline,
+  },
   followUpText: { color: colors.foreground, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.medium },
   // Empty state
   emptyState: {

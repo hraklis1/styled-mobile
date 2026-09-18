@@ -43,8 +43,8 @@ import { ensureEntitled } from '../../lib/entitlementGate';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { track } from '../../lib/analytics';
 
-const SIDE_PAD = spacing.lg;
-const COL_GAP = spacing.sm;
+const SIDE_PAD = spacing.page;
+const COL_GAP = spacing.grid;
 const HEADER_SCROLL_THRESHOLD = 10;
 const HEADER_SCROLL_DELTA = 6;
 const BOARD_WISHLIST_REMOVAL_COPY = {

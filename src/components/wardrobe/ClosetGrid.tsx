@@ -7,8 +7,8 @@ import { editorial, spacing } from '../../theme';
 import type { Item } from '../../types/item';
 
 const NUM_COLS = 2;
-const SIDE_PAD = spacing.lg;
-const COL_GAP  = spacing.sm;
+const SIDE_PAD = spacing.page;
+const COL_GAP  = spacing.grid;
 
 const CARD_ASPECT_RATIO = editorial.garmentAspectRatio;
 
@@ -36,7 +36,7 @@ type Props = {
 };
 
 // Overhead reserves two title lines, one metadata line, and the card's spacing.
-const CARD_OVERHEAD = 74;
+const CARD_OVERHEAD = 88;
 
 const ClosetGridComponent = forwardRef<FlashListRef<Item>, Props>(function ClosetGridComponent({
   items,
@@ -63,6 +63,7 @@ const ClosetGridComponent = forwardRef<FlashListRef<Item>, Props>(function Close
 
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<Item>) => (
+      <View style={{ paddingHorizontal: COL_GAP / 2 }}>
       <GarmentCard
         item={item}
         aspectRatio={CARD_ASPECT_RATIO}
@@ -73,6 +74,7 @@ const ClosetGridComponent = forwardRef<FlashListRef<Item>, Props>(function Close
         onLongPress={() => onItemLongPress(item)}
         onToggleSelect={() => onToggleSelect(item.id)}
       />
+      </View>
     ),
     [cardWidth, selectionMode, selectedIds, onItemPress, onItemLongPress, onToggleSelect],
   );
