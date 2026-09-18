@@ -43,3 +43,6 @@ yarn-error.*
 
 # Generated commerce-provider benchmark output (may contain raw provider payloads)
 /eval/commerce/results/
+
+# Supabase CLI link state
+supabase/.temp/

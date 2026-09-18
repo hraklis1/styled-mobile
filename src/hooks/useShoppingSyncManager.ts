@@ -26,6 +26,25 @@ const SHOPPING_BUCKET = 'shopping-snaps';
 let activeSync: Promise<void> | null = null;
 let syncAgain = false;
 
+// Failed items wait before another attempt. Without this, a server-side
+// rejection (schema drift, a bad row) is retried on every store change - and
+// during a visit, GPS ticks rewrite pendingVisitMetadata continuously - which
+// hammered Supabase at several requests a second and hung the app.
+const RETRY_BASE_MS = 30_000;
+const RETRY_MAX_MS = 10 * 60_000;
+const retryState = new Map<string, { failures: number; nextAttemptAt: number }>();
+
+function shouldSkipUntilRetry(key: string, now: number): boolean {
+  const entry = retryState.get(key);
+  return entry !== undefined && entry.nextAttemptAt > now;
+}
+
+function noteSyncFailure(key: string, now: number): void {
+  const failures = (retryState.get(key)?.failures ?? 0) + 1;
+  const delay = Math.min(RETRY_BASE_MS * 2 ** (failures - 1), RETRY_MAX_MS);
+  retryState.set(key, { failures, nextAttemptAt: now + delay });
+}
+
 function legacyShoppingSessionPayload<T extends Record<string, unknown>>(payload: T): T {
   const legacyPayload = { ...payload };
   Reflect.deleteProperty(legacyPayload, 'location_hint');
@@ -353,12 +372,16 @@ async function syncReadyUploads(userId: string): Promise<void> {
 
   for (const visit of metadata) {
     if (getShoppingAccount() !== userId) return;
+    const visitKey = `visit:${visit.id}`;
+    if (shouldSkipUntilRetry(visitKey, Date.now())) continue;
     const networkState = await Network.getNetworkStateAsync();
     if (networkState.isConnected !== true || networkState.isInternetReachable !== true) return;
     try {
       const didSync = await syncVisitMetadata(userId, visit);
       syncedAny = didSync || syncedAny;
+      retryState.delete(visitKey);
     } catch (error) {
+      noteSyncFailure(visitKey, Date.now());
       console.warn(`Shopping visit ${visit.id} metadata is still pending: ${describeSyncError(error)}`);
       break;
     }
@@ -368,6 +391,8 @@ async function syncReadyUploads(userId: string): Promise<void> {
     if (getShoppingAccount() !== userId) return;
     if (useShoppingSessionStore.getState().deletedCaptureIds.includes(upload.id)) continue;
     if (upload.ocrStatus === 'processing') continue;
+    const uploadKey = `upload:${upload.id}`;
+    if (shouldSkipUntilRetry(uploadKey, Date.now())) continue;
     if (upload.locationStatus === 'resolving') {
       if (Date.now() - upload.timestamp < 15_000) continue;
       useShoppingSessionStore.getState().markPendingUploadLocationUnavailable(upload.id);
@@ -380,10 +405,12 @@ async function syncReadyUploads(userId: string): Promise<void> {
     try {
       const didSync = await uploadShoppingSnap(userId, upload);
       syncedAny = didSync || syncedAny;
+      retryState.delete(uploadKey);
       // A stale failure message must not outlive the attempt that cleared it.
       if (upload.uploadError && getShoppingAccount() === userId) useShoppingSessionStore.setState((state) => ({ pendingUploads: state.pendingUploads.map((value) => value.id === upload.id ? { ...value, uploadError: undefined } : value) }));
     } catch (error) {
-      // Keep the item locally. A later connectivity/store change retries it.
+      // Keep the item locally. The backoff expires, or the user taps Retry.
+      noteSyncFailure(uploadKey, Date.now());
       if (getShoppingAccount() === userId) useShoppingSessionStore.setState((state) => ({ pendingUploads: state.pendingUploads.map((value) => value.id === upload.id ? { ...value, uploadError: error instanceof Error && error.message.startsWith('This photo is missing') ? error.message : 'Photo backup is paused. Your original is safe on this phone. Retry when connected.' } : value) }));
       console.warn(`Shopping snap ${upload.id} is still pending: ${describeSyncError(error)}`);
     }
@@ -396,7 +423,11 @@ async function syncReadyUploads(userId: string): Promise<void> {
   }
 }
 
-export function requestShoppingSync(userId: string): Promise<void> {
+export function requestShoppingSync(
+  userId: string,
+  options: { retryFailed?: boolean } = {},
+): Promise<void> {
+  if (options.retryFailed) retryState.clear();
   syncAgain = true;
   if (activeSync) return activeSync;
 

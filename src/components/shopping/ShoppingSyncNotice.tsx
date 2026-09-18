@@ -34,7 +34,7 @@ export function ShoppingSyncNotice() {
       <View style={{ padding: 12, backgroundColor: colors.surfaceSubtle }}>
         <Text style={{ color: colors.foreground }}>{uploadError}</Text>
         <TouchableOpacity
-          onPress={() => void requestShoppingSync(user.id)}
+          onPress={() => void requestShoppingSync(user.id, { retryFailed: true })}
           style={{ minHeight: 44, justifyContent: 'center' }}
         >
           <Text style={{ color: colors.action }}>Retry photo backup</Text>

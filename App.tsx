@@ -23,7 +23,10 @@ import { useAppStateListener } from './src/hooks/useAppStateListener';
 
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
-  tracesSampleRate: __DEV__ ? 1.0 : 0.1,
+  // Dev builds red-box on every mid-edit ReferenceError and Fast Refresh
+  // hiccup; shipping those to Sentry just generates alert emails.
+  enabled: !__DEV__,
+  tracesSampleRate: 0.1,
 });
 
 // Must be called before AuthProvider mounts so loginUser() can run immediately after auth
