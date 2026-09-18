@@ -74,10 +74,17 @@ function titleCase(value: string): string {
     .join(' ');
 }
 
+function sentenceCase(value: string): string {
+  const flat = value.replace(/_/g, ' ').toLowerCase().trim();
+  return flat.charAt(0).toUpperCase() + flat.slice(1);
+}
+
 type EditorialDetailRow = {
   label: string;
   value: string;
   numeric?: boolean;
+  /** Small colour dots rendered inline before the value (colour row only). */
+  swatches?: string[];
 };
 
 const SCRIM_BAR_HEIGHT = 48;
@@ -100,12 +107,17 @@ function EditorialDetailList({ rows }: { rows: EditorialDetailRow[] }) {
           style={[styles.editorialDetailRow, index < rows.length - 1 && styles.editorialDetailRowBorder]}
         >
           <Text style={styles.detailLabel}>{row.label}</Text>
-          <Text
-            selectable
-            style={[styles.detailValue, row.numeric && styles.numericValue]}
-          >
-            {row.value}
-          </Text>
+          <View style={styles.detailValueCell}>
+            {row.swatches?.map((hex, swatchIndex) => (
+              <View key={`${hex}-${swatchIndex}`} style={[styles.swatch, { backgroundColor: hex }]} />
+            ))}
+            <Text
+              selectable
+              style={[styles.detailValue, row.numeric && styles.numericValue]}
+            >
+              {row.value}
+            </Text>
+          </View>
         </View>
       ))}
     </View>
@@ -559,27 +571,43 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const summary = summaryParts.length > 0 || summarySeasons
     ? `${summaryParts.join(', ')}${summaryParts.length > 0 && summarySeasons ? ' — ' : ''}${summarySeasons ?? ''}.`
     : null;
-  const styleDescriptors = [
-    viewItem.pattern,
-    viewItem.fit,
-    viewItem.neckline,
-    viewItem.sleeveLength ? SLEEVE_LENGTH_LABELS[viewItem.sleeveLength] : null,
-    ...(viewItem.notableDetails ?? []),
-  ]
-    .filter((value): value is string => !!value)
-    .map(titleCase);
-  const hasStyleProfile = styleDescriptors.length > 0 || (viewItem.colorPalette?.length ?? 0) > 0;
-
-  const atAGlanceRows: EditorialDetailRow[] = [];
+  // Spec sheet: one garment attribute per row, only when known. Occasions and
+  // condition live here too — they describe the garment, not its wear history.
+  const styleProfileRows: EditorialDetailRow[] = [];
+  const paletteSwatches = viewItem.colorPalette ?? [];
+  if (viewItem.color || paletteSwatches.length > 0) {
+    styleProfileRows.push({
+      label: 'Colour',
+      value: viewItem.color ? titleCase(viewItem.color) : paletteSwatches.join(', '),
+      swatches: paletteSwatches,
+    });
+  }
+  if (viewItem.pattern) styleProfileRows.push({ label: 'Pattern', value: titleCase(viewItem.pattern) });
+  if (viewItem.fit) {
+    // "Relaxed fit" under a "Fit" label reads twice; keep just the adjective.
+    styleProfileRows.push({ label: 'Fit', value: titleCase(viewItem.fit.replace(/[\s_-]*fit$/i, '')) || titleCase(viewItem.fit) });
+  }
+  if (viewItem.neckline) styleProfileRows.push({ label: 'Neckline', value: titleCase(viewItem.neckline) });
+  if (viewItem.sleeveLength) {
+    styleProfileRows.push({ label: 'Sleeve', value: SLEEVE_LENGTH_LABELS[viewItem.sleeveLength] });
+  }
+  const notableDetails = (viewItem.notableDetails ?? []).filter(Boolean);
+  if (notableDetails.length > 0) {
+    styleProfileRows.push({
+      label: 'Details',
+      value: sentenceCase(notableDetails.join(', ')),
+    });
+  }
   if (viewItem.occasions?.length > 0) {
-    atAGlanceRows.push({
+    styleProfileRows.push({
       label: 'Occasions',
       value: viewItem.occasions.map(titleCase).join(', '),
     });
   }
   if (viewItem.condition && viewItem.condition !== 'good') {
-    atAGlanceRows.push({ label: 'Condition', value: titleCase(viewItem.condition) });
+    styleProfileRows.push({ label: 'Condition', value: titleCase(viewItem.condition) });
   }
+  const hasStyleProfile = styleProfileRows.length > 0;
 
   const wearSentence = viewItem.wearCount === 0
     ? 'Not worn yet.'
@@ -927,33 +955,9 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
               ) : null}
             </View>
           ) : (
-            <View style={styles.profileBody}>
-              {viewItem.colorPalette?.length > 0 && (
-                <View
-                  style={styles.swatchRow}
-                  accessible
-                  accessibilityLabel={`Colour palette: ${viewItem.colorPalette.join(', ')}`}
-                >
-                  {viewItem.colorPalette.map((hex, index) => (
-                    <View key={`${hex}-${index}`} style={[styles.swatch, { backgroundColor: hex }]} />
-                  ))}
-                  {viewItem.color ? <Text style={styles.swatchLabel}>{viewItem.color}</Text> : null}
-                </View>
-              )}
-              {styleDescriptors.length > 0 ? (
-                <Text selectable style={styles.profileDescriptors} numberOfLines={2}>
-                  {styleDescriptors.join(' · ')}
-                </Text>
-              ) : null}
-            </View>
+            <EditorialDetailList rows={styleProfileRows} />
           )}
         </EditorialSection>
-
-        {atAGlanceRows.length > 0 ? (
-          <EditorialSection title="Wear">
-            <EditorialDetailList rows={atAGlanceRows} />
-          </EditorialSection>
-        ) : null}
 
         <EditorialSection title="Wear history">
           <Text style={styles.wearSentence}>{wearSentence}</Text>
@@ -1488,29 +1492,12 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: typography.weight.semibold,
   },
-  profileBody: { gap: spacing.md },
-  swatchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
   swatch: {
-    width: 22,
-    height: 22,
+    width: 14,
+    height: 14,
     borderRadius: radii.full,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-  },
-  swatchLabel: {
-    ...typography.text.meta,
-    color: colors.inkSubtle,
-    marginLeft: spacing.xs,
-  },
-  // Line-sheet descriptors: tracked small caps, one or two lines, no prose.
-  profileDescriptors: {
-    ...typography.text.metaSheet,
-    lineHeight: 18,
-    color: colors.foreground,
   },
   chipRow: {
     flexDirection: 'row',
@@ -1537,8 +1524,15 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     color: colors.mutedForeground,
   },
-  detailValue: {
+  detailValueCell: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: spacing.xs,
+  },
+  detailValue: {
+    flexShrink: 1,
     fontSize: typography.text.body.fontSize,
     lineHeight: 22,
     color: colors.foreground,
