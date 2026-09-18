@@ -33,8 +33,9 @@ type ScreenHeaderProps = {
   style?: StyleProp<ViewStyle>;
   /**
    * `default` — system sans, used across most screens with an active header.
-   * `display` — the serif editorial face, for screens whose title is a
-   * masthead rather than a chrome label (currently Home only).
+   * `display` — the serif editorial face for tab mastheads (Home, Closet,
+   * Calendar). Its subtitle is set as tracked `meta` — a line-sheet count or
+   * dek under a headline, not a sentence.
    */
   titleVariant?: 'default' | 'display';
 };
@@ -64,7 +65,16 @@ export function ScreenHeader({
         >
           {title}
         </AppText>
-        {subtitleNode ?? (subtitle ? <AppText variant="bodySmall" tone="muted" style={styles.headerSubtitle} numberOfLines={2}>{subtitle}</AppText> : null)}
+        {subtitleNode ?? (subtitle ? (
+          <AppText
+            variant={titleVariant === 'display' ? 'meta' : 'bodySmall'}
+            tone="muted"
+            style={styles.headerSubtitle}
+            numberOfLines={2}
+          >
+            {subtitle}
+          </AppText>
+        ) : null)}
       </View>
       {(primaryAction || secondaryActions.length > 0) && (
         <View style={styles.headerActions}>
@@ -352,7 +362,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     backgroundColor: colors.background,
   },
-  headerCopy: { flex: 1, minWidth: 0, gap: 3 },
+  headerCopy: { flex: 1, minWidth: 0, gap: spacing.xs },
   headerTitle: { flexShrink: 1 },
   headerSubtitle: { flexShrink: 1 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexShrink: 0 },

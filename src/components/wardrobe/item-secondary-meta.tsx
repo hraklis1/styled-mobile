@@ -23,21 +23,20 @@ export function ItemSecondaryMeta({
   );
 }
 
+// A line-sheet caption: tracked small caps, brand a shade darker than the
+// category so the eye lands on the maker first.
 const styles = StyleSheet.create({
   meta: {
-    fontSize: typography.text.caption.fontSize,
-    lineHeight: 16,
+    ...typography.text.metaSheet,
     color: colors.mutedForeground,
   },
   brand: {
     color: colors.inkSubtle,
-    fontWeight: typography.weight.medium,
   },
   separator: {
     color: colors.mutedForeground,
   },
   category: {
     color: colors.mutedForeground,
-    fontWeight: typography.weight.regular,
   },
 });

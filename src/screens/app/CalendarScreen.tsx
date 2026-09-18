@@ -595,7 +595,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
             <Text style={styles.eventDateDay}>{presentation.dayLabel}</Text>
           </View>
           <View style={styles.eventBody}>
-            <Text style={styles.eventTitle} numberOfLines={1}>{event.title}</Text>
+            <Text style={styles.eventTitle} numberOfLines={2}>{event.title}</Text>
             <View style={styles.eventMeta}>
               <Text style={styles.eventTime}>{formatTime(new Date(event.date))}</Text>
               <Text style={styles.dot}>·</Text>
@@ -828,7 +828,8 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
         >
           <ScreenHeader
             title="Calendar"
-            subtitle="Plan ahead for every occasion."
+            titleVariant="display"
+            subtitle="Plan ahead"
             primaryAction={{ label: 'Add event', icon: 'add', onPress: handleAddEvent }}
             secondaryActions={[
               {

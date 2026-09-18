@@ -1,9 +1,9 @@
 import { formatShoppingPrice } from '../../lib/shoppingPresentation';
 import { useState, useRef, useEffect, type ReactNode } from 'react';
 import {
+  Animated,
   View,
   Text,
-  ScrollView,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -80,6 +80,8 @@ type EditorialDetailRow = {
   numeric?: boolean;
 };
 
+const SCRIM_BAR_HEIGHT = 48;
+
 function EditorialSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <View style={styles.editorialSection}>
@@ -133,6 +135,15 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const imageHeight = width * 0.92;
   const insets = useSafeAreaInsets();
   const heroHeight = imageHeight + insets.top;
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const scrimThreshold = heroHeight - insets.top - SCRIM_BAR_HEIGHT;
+  const scrimOpacity = scrollY.interpolate({
+    inputRange: [scrimThreshold, scrimThreshold + 40],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+  const [scrimVisible, setScrimVisible] = useState(false);
+  const scrimVisibleRef = useRef(false);
 
   // ── Edit modal visibility ────────────────────────────────────────────────────
   const [editOpen, setEditOpen] = useState(false);
@@ -528,11 +539,26 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const warmthLabel = viewItem.warmthRating != null
     ? ['Very Light', 'Light', 'Medium', 'Warm', 'Very Warm'][viewItem.warmthRating - 1]
     : null;
-  const essentialFacts = [
-    viewItem.color,
-    viewItem.material,
-    warmthLabel ? `${warmthLabel} warmth` : null,
+  // One sentence in the stylist's voice — "Beige linen, very light — spring
+  // and summer." The rows below never repeat what this line already says.
+  const seasonLabels = (viewItem.seasons ?? [])
+    .map((season) => SEASON_LABELS[season as Season] ?? titleCase(season));
+  const summaryLead = [viewItem.color, viewItem.material]
+    .filter((value): value is string => !!value)
+    .join(' ')
+    .toLowerCase();
+  const summaryParts = [
+    summaryLead ? summaryLead.charAt(0).toUpperCase() + summaryLead.slice(1) : null,
+    warmthLabel ? warmthLabel.toLowerCase() : null,
   ].filter((value): value is string => !!value);
+  const summarySeasons = seasonLabels.length > 0
+    ? seasonLabels.length === 1
+      ? seasonLabels[0].toLowerCase()
+      : `${seasonLabels.slice(0, -1).join(', ').toLowerCase()} and ${seasonLabels[seasonLabels.length - 1].toLowerCase()}`
+    : null;
+  const summary = summaryParts.length > 0 || summarySeasons
+    ? `${summaryParts.join(', ')}${summaryParts.length > 0 && summarySeasons ? ' — ' : ''}${summarySeasons ?? ''}.`
+    : null;
   const styleDescriptors = [
     viewItem.pattern,
     viewItem.fit,
@@ -545,17 +571,6 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const hasStyleProfile = styleDescriptors.length > 0 || (viewItem.colorPalette?.length ?? 0) > 0;
 
   const atAGlanceRows: EditorialDetailRow[] = [];
-  if (viewItem.color) atAGlanceRows.push({ label: 'Colour', value: viewItem.color });
-  if (viewItem.material) atAGlanceRows.push({ label: 'Material', value: viewItem.material });
-  if (warmthLabel) atAGlanceRows.push({ label: 'Warmth', value: warmthLabel });
-  if (viewItem.seasons?.length > 0) {
-    atAGlanceRows.push({
-      label: 'Seasons',
-      value: viewItem.seasons
-        .map((season) => SEASON_LABELS[season as Season] ?? titleCase(season))
-        .join(', '),
-    });
-  }
   if (viewItem.occasions?.length > 0) {
     atAGlanceRows.push({
       label: 'Occasions',
@@ -566,12 +581,10 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     atAGlanceRows.push({ label: 'Condition', value: titleCase(viewItem.condition) });
   }
 
-  const wearHistoryRows: EditorialDetailRow[] = [
-    { label: 'Times worn', value: String(viewItem.wearCount), numeric: true },
-  ];
-  if (viewItem.lastWornAt) {
-    wearHistoryRows.push({ label: 'Last worn', value: formatDate(viewItem.lastWornAt) });
-  }
+  const wearSentence = viewItem.wearCount === 0
+    ? 'Not worn yet.'
+    : `Worn ${viewItem.wearCount === 1 ? 'once' : `${viewItem.wearCount} times`}${viewItem.lastWornAt ? `, last on ${formatDate(viewItem.lastWornAt)}` : ''}.`;
+  const wearHistoryRows: EditorialDetailRow[] = [];
   if (viewItem.purchasePrice != null) {
     wearHistoryRows.push({ label: 'Paid', value: viewItem.sourceShoppingFindId ? formatShoppingPrice(viewItem.purchasePrice, viewItem.purchaseCurrency ?? null)! : `$${viewItem.purchasePrice.toFixed(2)}`, numeric: true });
   }
@@ -649,13 +662,24 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
 
   return (
     <View style={styles.flex}>
-      <ScrollView
+      <Animated.ScrollView
         style={styles.flex}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="always"
         onTouchStart={() => inlineTagRef.current?.blur()}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+          useNativeDriver: true,
+          listener: (event: { nativeEvent: { contentOffset: { y: number } } }) => {
+            const visible = event.nativeEvent.contentOffset.y > scrimThreshold;
+            if (visible !== scrimVisibleRef.current) {
+              scrimVisibleRef.current = visible;
+              setScrimVisible(visible);
+            }
+          },
+        })}
+        scrollEventThrottle={16}
       >
         {/* Image */}
         <View style={[styles.imageContainer, { height: heroHeight }]}>
@@ -796,8 +820,8 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
             <Text selectable style={styles.name}>{viewItem.name || 'Unnamed Item'}</Text>
             {viewItem.brand ? <Text selectable style={styles.brand}>{viewItem.brand}</Text> : null}
             {breadcrumb ? <Text selectable style={styles.breadcrumb}>{breadcrumb}</Text> : null}
-            {essentialFacts.length > 0 ? (
-              <Text selectable style={styles.essentialFacts}>{essentialFacts.join(' · ')}</Text>
+            {summary ? (
+              <Text selectable style={styles.summary}>{summary}</Text>
             ) : null}
           </View>
         </View>
@@ -913,10 +937,11 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
                   {viewItem.colorPalette.map((hex, index) => (
                     <View key={`${hex}-${index}`} style={[styles.swatch, { backgroundColor: hex }]} />
                   ))}
+                  {viewItem.color ? <Text style={styles.swatchLabel}>{viewItem.color}</Text> : null}
                 </View>
               )}
               {styleDescriptors.length > 0 ? (
-                <Text selectable style={styles.profileDescriptors}>
+                <Text selectable style={styles.profileDescriptors} numberOfLines={2}>
                   {styleDescriptors.join(' · ')}
                 </Text>
               ) : null}
@@ -925,17 +950,18 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         </EditorialSection>
 
         {atAGlanceRows.length > 0 ? (
-          <EditorialSection title="At a glance">
+          <EditorialSection title="Wear">
             <EditorialDetailList rows={atAGlanceRows} />
           </EditorialSection>
         ) : null}
 
         <EditorialSection title="Wear history">
-          <EditorialDetailList rows={wearHistoryRows} />
+          <Text style={styles.wearSentence}>{wearSentence}</Text>
+          {wearHistoryRows.length > 0 ? <EditorialDetailList rows={wearHistoryRows} /> : null}
         </EditorialSection>
 
-        {/* Tags */}
-        <EditorialSection title="Tags">
+        {/* Notes & care — tags, care, label scan and free notes in one ruled section */}
+        <EditorialSection title="Notes & care">
           <View style={styles.chipRow}>
             {(viewItem.tags ?? []).map((tag) => (
               <TouchableOpacity
@@ -988,12 +1014,11 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
               </TouchableOpacity>
             )}
           </View>
-        </EditorialSection>
-
-        {/* Fabric & Care */}
-        <EditorialSection title="Fabric & care">
           {viewItem.care ? (
             <EditorialDetailList rows={[{ label: 'Care', value: viewItem.care }]} />
+          ) : null}
+          {viewItem.notes ? (
+            <Text selectable style={styles.notes}>{viewItem.notes}</Text>
           ) : null}
           <TouchableOpacity
             style={[styles.scanLabelBtn, tagScanner.isScanning && styles.actionDisabled]}
@@ -1014,14 +1039,28 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
             </Text>
           </TouchableOpacity>
         </EditorialSection>
+      </Animated.ScrollView>
 
-        {/* Notes */}
-        {viewItem.notes ? (
-          <EditorialSection title="Notes">
-            <Text selectable style={styles.notes}>{viewItem.notes}</Text>
-          </EditorialSection>
-        ) : null}
-      </ScrollView>
+      {/* Scroll scrim: fades in once the hero has scrolled away so body copy
+          never collides with the status bar, and brings the title and back
+          control along with it. */}
+      <Animated.View
+        pointerEvents={scrimVisible ? 'auto' : 'none'}
+        style={[styles.scrim, { height: insets.top + SCRIM_BAR_HEIGHT, opacity: scrimOpacity }]}
+      >
+        <View style={[styles.scrimBar, { paddingTop: insets.top }]}>
+          <TouchableOpacity
+            style={styles.scrimBack}
+            onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            accessibilityLabel="Back to closet"
+          >
+            <Ionicons name="chevron-back" size={22} color={colors.foreground} />
+          </TouchableOpacity>
+          <Text style={styles.scrimTitle} numberOfLines={1}>{viewItem.name || 'Unnamed Item'}</Text>
+          <View style={styles.scrimBack} />
+        </View>
+      </Animated.View>
 
       {/* ── Label scan result sheet ─────────────────────────────────────────── */}
       <Modal
@@ -1315,11 +1354,42 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     color: colors.mutedForeground,
   },
-  essentialFacts: {
+  summary: {
     marginTop: spacing.xs,
-    fontSize: typography.text.bodySmall.fontSize,
-    lineHeight: 20,
+    ...typography.text.editorialBody,
+    fontSize: 17,
+    lineHeight: 25,
     color: colors.inkSubtle,
+  },
+  scrim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 3,
+  },
+  // Opaque paper, not blur: a blurred taupe CTA under the bar reads as a
+  // brown smear, and the rest of the app's chrome is flat ivory anyway.
+  scrimBar: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.hairline,
+  },
+  scrimBack: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scrimTitle: {
+    flex: 1,
+    ...typography.text.editorialSection,
+    color: colors.foreground,
+    textAlign: 'center',
   },
 
   stylistButton: {
@@ -1376,12 +1446,14 @@ const styles = StyleSheet.create({
     borderTopColor: colors.hairline,
   },
   sectionTitle: {
-    fontSize: typography.text.caption.fontSize,
-    lineHeight: 18,
-    fontWeight: typography.weight.semibold,
+    ...typography.text.eyebrow,
     color: colors.mutedForeground,
-    textTransform: 'uppercase',
-    letterSpacing: typography.tracking.eyebrow,
+  },
+  wearSentence: {
+    ...typography.text.editorialBody,
+    fontSize: 17,
+    lineHeight: 25,
+    color: colors.foreground,
   },
   profileEmptyRow: {
     flexDirection: 'row',
@@ -1419,18 +1491,25 @@ const styles = StyleSheet.create({
   profileBody: { gap: spacing.md },
   swatchRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing.sm,
   },
   swatch: {
-    width: 28,
-    height: 28,
+    width: 22,
+    height: 22,
     borderRadius: radii.full,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
+  swatchLabel: {
+    ...typography.text.meta,
+    color: colors.inkSubtle,
+    marginLeft: spacing.xs,
+  },
+  // Line-sheet descriptors: tracked small caps, one or two lines, no prose.
   profileDescriptors: {
-    fontSize: typography.text.body.fontSize,
-    lineHeight: 23,
+    ...typography.text.metaSheet,
+    lineHeight: 18,
     color: colors.foreground,
   },
   chipRow: {

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, cutoutScaleFor, radii } from '../../theme';
+import { colors, cutoutScaleFor, radii, surfaces } from '../../theme';
 import { itemCoverPresentation } from '../../lib/itemImage';
 import type { Item } from '../../types/item';
 
@@ -20,7 +20,7 @@ export function GarmentImage({
   item,
   width,
   height,
-  borderRadius = radii.lg,
+  borderRadius = radii.photo,
   placeholderIconSize = 40,
   children,
   style,
@@ -58,16 +58,16 @@ export function GarmentImage({
 }
 
 const styles = StyleSheet.create({
+  // A flat plate: the garment's own edge is the only edge. No border, and only
+  // enough rounding to take the hard pixel off the corner.
   frame: {
     overflow: 'hidden',
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F0ECE5',
+    backgroundColor: surfaces.plate,
   },
   placeholder: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surfaceSubtle,
+    backgroundColor: surfaces.plate,
   },
 });

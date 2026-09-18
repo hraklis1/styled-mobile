@@ -37,6 +37,7 @@ import { ShoppingStoreAssignmentSheet } from '../../components/shopping/Shopping
 import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
 import { AppText } from '../../components/primitives/AppText';
 import { ActionButton, FilterControl, IconButton, SegmentedControl } from '../../components/primitives/Editorial';
+import { SearchField } from '../../components/primitives/SearchField';
 import { ActionMenuSheet, type ActionMenuOption } from '../../components/primitives/ActionMenuSheet';
 import { OptionChips } from '../../components/primitives/EditAtoms';
 import { useAuth } from '../../contexts/AuthContext';
@@ -261,7 +262,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
     for (const status of catalogStatuses) {
       filters.push({
         key: `status:${status}`,
-        label: SHOPPING_CATALOG_STATUS_OPTIONS.find((option) => option.value === status)?.label ?? status,
+        label: SHOPPING_CATALOG_STATUS_OPTIONS.find((option) => option.value === status)?.label ?? status.charAt(0).toUpperCase() + status.slice(1),
         onRemove: () => setCatalogStatuses((current) => {
           const next = new Set(current);
           next.delete(status);
@@ -554,28 +555,17 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
             ) : null}
           </View>
           {searchOpen || query ? (
-            <View style={styles.searchField}>
-              <Ionicons name="search-outline" size={16} color={colors.mutedForeground} />
-              <TextInput
-                value={query}
-                onChangeText={setQuery}
-                autoFocus
-                placeholder="Search pieces, brands, stores, notes…"
-                placeholderTextColor={colors.mutedForeground}
-                accessibilityLabel="Search shortlist"
-                returnKeyType="search"
-                onSubmitEditing={() => track('shopping_search_used', { result_count: filteredItems.length })}
-                style={styles.searchInput}
-              />
-              <TouchableOpacity
-                onPress={() => { setQuery(''); setSearchOpen(false); }}
-                accessibilityRole="button"
-                accessibilityLabel="Close search"
-                hitSlop={8}
-              >
-                <Ionicons name="close-circle" size={18} color={colors.mutedForeground} />
-              </TouchableOpacity>
-            </View>
+            <SearchField
+              value={query}
+              onChangeText={setQuery}
+              onClear={() => setSearchOpen(false)}
+              dismissible
+              autoFocus
+              placeholder="Search pieces, brands, stores, notes…"
+              accessibilityLabel="Search shortlist"
+              onSubmitEditing={() => track('shopping_search_used', { result_count: filteredItems.length })}
+              style={styles.searchField}
+            />
           ) : null}
         </View>
         {allItems.length > 0 ? <ShortlistFilterBar filters={appliedFilters} /> : null}
@@ -831,16 +821,7 @@ const styles = StyleSheet.create({
   controls: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md, gap: spacing.md },
   modeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   syncNotice: { paddingHorizontal: spacing.lg },
-  searchField: {
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.md,
-    backgroundColor: colors.surfaceSubtle,
-  },
-  searchInput: { flex: 1, minHeight: 44, color: colors.foreground },
+  searchField: { flex: 0 },
   remoteError: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, backgroundColor: colors.accent },
   remoteErrorText: { flex: 1, fontSize: typography.text.caption.fontSize, color: colors.secondaryForeground },
   emptyState: { minHeight: 320, alignItems: 'center', gap: spacing.md, paddingTop: spacing.xxl, paddingHorizontal: spacing.xl },

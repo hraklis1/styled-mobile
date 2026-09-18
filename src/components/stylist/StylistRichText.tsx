@@ -53,12 +53,15 @@ export function StylistRichText({ text, streaming }: { text: string; streaming?:
   );
 }
 
+// The stylist's prose is set in the editorial face — a note in the app's own
+// voice, not chrome. Bullets stay in the sans so lists read as lists. Emphasis
+// inside serif prose switches to the medium *face*; React Native must not
+// synthesize a bold for a bundled custom font.
 const styles = StyleSheet.create({
-  container: { gap: spacing.xs },
+  container: { gap: spacing.sm },
   paragraph: {
-    fontSize: typography.text.body.fontSize,
+    ...typography.text.editorialBody,
     color: colors.foreground,
-    lineHeight: typography.text.body.fontSize * 1.6,
   },
   bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
   bulletDot: {
@@ -72,5 +75,5 @@ const styles = StyleSheet.create({
     color: colors.foreground,
     lineHeight: typography.text.body.fontSize * 1.6,
   },
-  bold: { fontWeight: typography.weight.bold },
+  bold: { fontFamily: typography.family.editorialMedium },
 });

@@ -139,22 +139,19 @@ function ShortlistFindCard({ item, onPress }: { item: ShoppingEditItem; onPress:
         ) : null}
       </View>
 
+      {/* A caption, not a spec sheet: what the piece is, then where and for
+          how much as one tracked line. The only thing set in action colour is
+          the one thing still to do. */}
       <View style={styles.copy}>
-        <AppText variant="label" tone="primary" numberOfLines={1}>
-          {item.storeName ?? SHORTLIST_COPY.needsStore}
+        <AppText variant="cardTitle" tone="primary" numberOfLines={2}>
+          {description || item.storeName || SHORTLIST_COPY.needsStore}
         </AppText>
-        {price ? (
-          <AppText variant="data" tone="primary" numberOfLines={1}>{price}</AppText>
-        ) : (
-          // The one thing left to do, in action colour — not a value in disguise.
-          <AppText variant="label" tone="action" numberOfLines={1}>Add price</AppText>
-        )}
-        {place ? (
-          <AppText variant="caption" tone="muted" numberOfLines={1}>{place}</AppText>
-        ) : null}
-        {description ? (
-          <AppText variant="caption" tone="muted" numberOfLines={1}>{description}</AppText>
-        ) : null}
+        <AppText variant="metaSheet" tone="muted" numberOfLines={1}>
+          {description ? `${item.storeName ?? SHORTLIST_COPY.needsStore} · ` : null}
+          {price
+            ? <AppText variant="metaSheet" tone="secondary">{price}</AppText>
+            : <AppText variant="metaSheet" tone="action">Add price</AppText>}
+        </AppText>
       </View>
     </PressableScale>
   );

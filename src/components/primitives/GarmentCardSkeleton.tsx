@@ -1,10 +1,10 @@
 import { View, useWindowDimensions } from 'react-native';
 import { SkeletonBlock } from './SkeletonLoader';
-import { spacing, radii } from '../../theme';
+import { spacing, radii, editorial } from '../../theme';
 
 const SIDE_PAD = spacing.lg;
 const COL_GAP  = spacing.sm;
-const ASPECT_RATIO = 4 / 5;
+const ASPECT_RATIO = editorial.garmentAspectRatio;
 
 type Props = { count?: number };
 
@@ -23,7 +23,7 @@ export function GarmentCardSkeleton({ count = 6 }: Props) {
     }}>
       {Array.from({ length: count }).map((_, i) => (
         <View key={i} style={{ width: cardWidth, marginBottom: spacing.md }}>
-          <SkeletonBlock width={cardWidth} height={cardHeight} borderRadius={radii.md} />
+          <SkeletonBlock width={cardWidth} height={cardHeight} borderRadius={radii.photo} />
           <SkeletonBlock
             width={cardWidth * 0.7}
             height={12}

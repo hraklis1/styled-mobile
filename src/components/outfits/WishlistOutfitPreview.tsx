@@ -61,12 +61,15 @@ export function WishlistOutfitPreview({ entry, style, scale = 'tile' }: Props) {
   if (imageItems.length === 0 && savedEdit && scale === 'tile') {
     return (
       <View style={[styles.preview, style]} accessibilityElementsHidden>
+        {/* The section above already says these are shopping edits, so the
+            cover's eyebrow carries the count and the foot carries one line of
+            the stylist's reasoning instead of repeating the label. */}
         <View style={styles.editCover}>
-          <Text style={styles.editEyebrow}>Shopping edit</Text>
-          <Text style={styles.editTitle} numberOfLines={4}>{savedEdit.headline}</Text>
-          <Text style={styles.editMeta}>
-            {savedEdit.targets.length} {savedEdit.targets.length === 1 ? 'direction' : 'directions'}
+          <Text style={styles.editEyebrow}>
+            {String(savedEdit.targets.length).padStart(2, '0')} {savedEdit.targets.length === 1 ? 'direction' : 'directions'}
           </Text>
+          <Text style={styles.editTitle} numberOfLines={3}>{savedEdit.headline}</Text>
+          <Text style={styles.editMeta} numberOfLines={2}>{savedEdit.summary}</Text>
         </View>
       </View>
     );
@@ -147,7 +150,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     backgroundColor: colors.surfaceSubtle,
   },
-  editEyebrow: { ...typography.text.eyebrow, color: colors.primary },
+  editEyebrow: { ...typography.text.meta, color: colors.mutedForeground },
   editTitle: { ...typography.text.editorialSection, color: colors.foreground },
-  editMeta: { ...typography.text.caption, color: colors.mutedForeground },
+  editMeta: { ...typography.text.caption, color: colors.inkSubtle },
 });

@@ -11,9 +11,13 @@ import { PressableScale } from './PressableScale';
 type Variant = 'primary' | 'secondary' | 'outline' | 'ghost';
 
 // Need to match PressableScale's style interface for proper typings
+type Size = 'md' | 'sm';
+
 type Props = {
   label: string;
   variant?: Variant;
+  /** `md` is the full-width CTA; `sm` is the header / inline pill. */
+  size?: Size;
   loading?: boolean;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -21,11 +25,11 @@ type Props = {
   accessibilityLabel?: string;
 };
 
-export function Button({ label, variant = 'primary', loading = false, disabled, style, ...rest }: Props) {
+export function Button({ label, variant = 'primary', size = 'md', loading = false, disabled, style, ...rest }: Props) {
   const isDisabled = disabled || loading;
   return (
     <PressableScale
-      contentStyle={[styles.base, styles[variant], isDisabled && styles.disabled]}
+      contentStyle={[styles.base, styles[size], styles[variant], isDisabled && styles.disabled]}
       style={style}
       disabled={isDisabled}
       accessibilityRole="button"
@@ -43,13 +47,14 @@ export function Button({ label, variant = 'primary', loading = false, disabled, 
 }
 
 const styles = StyleSheet.create({
+  // Every CTA in the app is a pill; rounding belongs to controls, not images.
   base: {
-    height: 50,
-    borderRadius: radii.md,
+    borderRadius: radii.full,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
   },
+  md: { height: 48, paddingHorizontal: spacing.xl },
+  sm: { height: 40, paddingHorizontal: spacing.md },
   disabled: {
     opacity: 0.5,
   },
@@ -70,8 +75,8 @@ const styles = StyleSheet.create({
   },
   // Labels
   label: {
+    ...typography.text.label,
     fontSize: typography.text.body.fontSize,
-    fontWeight: typography.weight.semibold,
   },
   primaryLabel: {
     color: colors.primaryForeground,

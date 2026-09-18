@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { PressableScale } from '../primitives/PressableScale';
 import { EditorialCardMeta } from '../primitives/Editorial';
 import { BoardCover } from './BoardCover';
-import { colors, radii, spacing, typography } from '../../theme';
+import { colors, spacing, typography } from '../../theme';
 import type { Board } from '../../types/board';
 import type { Item } from '../../types/item';
 import type { Outfit } from '../../types/outfit';
@@ -28,22 +28,27 @@ export const BoardCard = React.memo(function BoardCard({ board, itemMap, outfitM
         <PressableScale onPress={onPress} accessibilityRole="button" accessibilityLabel={`Open ${board.name} board, ${summary}`}>
           <BoardCover board={board} itemMap={itemMap} outfitMap={outfitMap} size={width} />
         </PressableScale>
-        {onOptions && (
-          <TouchableOpacity
-            style={styles.optionsHitArea}
-            onPress={onOptions}
-            activeOpacity={0.72}
-            accessibilityRole="button"
-            accessibilityLabel={`Options for ${board.name}`}
-          >
-            <View style={styles.optionsButton}>
-              <Ionicons name="ellipsis-horizontal" size={17} color={colors.foreground} />
-            </View>
-          </TouchableOpacity>
-        )}
       </View>
+      {/* The options control lives in the meta row, so the cover stays an
+          unbroken image and nothing floats over the photograph. */}
       <View style={styles.metaRow}>
-        <EditorialCardMeta title={board.name} subtitle={summary} titleStyle={styles.boardTitle} />
+        <EditorialCardMeta
+          title={board.name}
+          subtitle={summary}
+          titleStyle={styles.boardTitle}
+          trailing={onOptions ? (
+            <TouchableOpacity
+              style={styles.optionsHitArea}
+              onPress={onOptions}
+              activeOpacity={0.72}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={`Options for ${board.name}`}
+            >
+              <Ionicons name="ellipsis-horizontal" size={18} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          ) : undefined}
+        />
       </View>
     </View>
   );
@@ -57,27 +62,12 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
   },
   optionsHitArea: {
-    position: 'absolute',
-    top: spacing.sm,
-    right: spacing.sm,
-    width: 44,
-    height: 44,
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  optionsButton: {
-    width: 35,
-    height: 35,
-    borderRadius: radii.full,
-    backgroundColor: 'rgba(255,252,247,0.94)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderCurve: 'continuous',
   },
   boardTitle: {
-    fontSize: typography.text.body.fontSize,
-    fontWeight: typography.weight.regular,
+    ...typography.text.cardTitle,
   },
 });

@@ -52,7 +52,7 @@ import { useItems } from '../../hooks/useItems';
 import { useProfile } from '../../hooks/useProfile';
 import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
 import { conversationLocation, type StylingLocationContext } from '../../lib/stylingLocation';
-import { resolveTempUnit } from '../../lib/temperature';
+import { formatTemp, resolveTempUnit } from '../../lib/temperature';
 import { sanitizeStylistResponseText } from '../../lib/stylistResponseText';
 import {
   useAcceptEventOutfitPlan,
@@ -77,7 +77,9 @@ import { StylistIntakeSheet } from './StylistIntakeSheet';
 import { WardrobeAuditCard } from './WardrobeAuditCard';
 import { StylistLookResponseCard } from './StylistLookResponseCard';
 import { buildStylistStarters, buildTodayPrompt, type StylistStarter } from './stylist-empty-state';
-import { colors, radii, shadows, spacing, typography } from '../../theme';
+import { colors, editorial, radii, shadows, spacing, surfaces, typography } from '../../theme';
+import { GarmentImage } from '../wardrobe/garment-image';
+import { SkeletonBlock } from '../primitives/SkeletonLoader';
 import { useStylistTransport } from '../../features/stylist/hooks/useStylistTransport';
 import { buildInitialStylistSendOptions } from '../../features/stylist/initialPrompt';
 import {
@@ -103,6 +105,14 @@ import { deviceTimeContext, summarizeStylistWorkflow } from '../../features/styl
 import { BUDGET_OPTIONS, OCCASION_OPTIONS, STYLE_OPTIONS } from '../../lib/profileOptions';
 import type { ShopOutfit } from '../../types/shop';
 import type { Item } from '../../types/item';
+
+// The streaming placeholder's plate: shallow, so a short answer doesn't
+// arrive under a tall empty frame.
+const TYPING_PLATE_HEIGHT = 160;
+
+// "Wear it with" thumbnails are the same 3:4 plate as a closet card, scaled down.
+const ADVICE_THUMB_WIDTH = 56;
+const ADVICE_THUMB_HEIGHT = Math.round(ADVICE_THUMB_WIDTH / editorial.garmentAspectRatio);
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -807,10 +817,7 @@ export function StylistChatView({
 
       let weatherSummary: string | undefined;
       if (weather.data) {
-        const tempStr = tempUnit === 'C'
-          ? `${weather.data.current.temperatureC}°C`
-          : `${weather.data.current.temperatureF}°F`;
-        weatherSummary = `${weather.data.current.summary} ${tempStr}`;
+        weatherSummary = `${weather.data.current.summary} ${formatTemp(weather.data.current, tempUnit)}`;
       }
 
       const occasionHint = text ? detectOccasionHint(text) : undefined;
@@ -1216,7 +1223,7 @@ export function StylistChatView({
             <Text style={styles.headerSubtitle} numberOfLines={1}>{activeLocation.label || 'Set location'}</Text>
             {weather.data?.current ? (
               <Text style={styles.headerWeather}>
-                {tempUnit === 'C' ? `${weather.data.current.temperatureC}°` : `${weather.data.current.temperatureF}°`}
+                {formatTemp(weather.data.current, tempUnit)}
               </Text>
             ) : null}
           </TouchableOpacity>
@@ -1647,24 +1654,17 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
                 {message.suggestedItemIds
                   .map((id) => allItems.find((i) => i.id === id))
                   .filter((i): i is Item => !!i)
-                  .map((item) => {
-                    const uri = itemImageUri(item);
-                    return (
-                      <TouchableOpacity
-                        key={item.id}
-                        style={styles.adviceThumb}
-                        onPress={() => setDetailItem(item)}
-                        activeOpacity={0.8}
-                        accessibilityLabel={`View ${item.name} details`}
-                      >
-                        {uri ? (
-                          <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode={itemImageContentFit(item)} />
-                        ) : (
-                          <Ionicons name="shirt-outline" size={18} color={colors.mutedForeground} />
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
+                  .map((item) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={styles.adviceThumb}
+                      onPress={() => setDetailItem(item)}
+                      activeOpacity={0.8}
+                      accessibilityLabel={`View ${item.name} details`}
+                    >
+                      <GarmentImage item={item} width={ADVICE_THUMB_WIDTH} height={ADVICE_THUMB_HEIGHT} placeholderIconSize={18} />
+                    </TouchableOpacity>
+                  ))}
               </ScrollView>
             </View>
           )}
@@ -2499,11 +2499,20 @@ function TypingIndicator() {
     return () => { a1.stop(); a2.stop(); a3.stop(); };
   }, []);
 
+  // Beneath the pulsing label, the reply's own silhouette — eyebrow, a serif
+  // title line, a 4:5 plate — so the layout doesn't jump when the card lands.
   return (
     <View style={styles.typingRow}>
       <View style={styles.typingLabel}>
         <Ionicons name="sparkles" size={13} color={colors.primary} />
         <Text style={styles.sectionEyebrowText}>Styling your answer</Text>
+      </View>
+      <View style={styles.typingSkeleton}>
+        <SkeletonBlock width="60%" height={28} borderRadius={radii.sm} />
+        <SkeletonBlock width="36%" height={12} borderRadius={radii.sm} />
+        <SkeletonBlock width="100%" height={TYPING_PLATE_HEIGHT} borderRadius={radii.photo} style={styles.typingPlate} />
+        <SkeletonBlock width="92%" height={12} borderRadius={radii.sm} />
+        <SkeletonBlock width="74%" height={12} borderRadius={radii.sm} />
       </View>
       <View style={styles.typingBubble}>
         {[dot1, dot2, dot3].map((d, i) => (
@@ -3226,8 +3235,10 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     backgroundColor: 'transparent',
   },
+  // The stylist's masthead is the same serif as the other tabs, set one step
+  // down from the hero so it sits inside a sticky blur header.
   headerTitle: {
-    ...typography.text.sheetTitle,
+    ...typography.text.editorialTitle,
     color: colors.foreground,
   },
   headerIdentity: { flex: 1, alignItems: 'flex-start', gap: spacing.xs },
@@ -3241,8 +3252,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     backgroundColor: 'transparent',
   },
-  headerSubtitle: { flexShrink: 1, ...typography.text.caption, color: colors.mutedForeground },
-  headerWeather: { ...typography.text.caption, color: colors.primary, fontWeight: typography.weight.semibold },
+  headerSubtitle: { flexShrink: 1, ...typography.text.meta, color: colors.mutedForeground },
+  headerWeather: { ...typography.text.meta, color: colors.primary },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   doneBtn: { minHeight: 36, justifyContent: 'center', paddingHorizontal: spacing.sm },
   doneBtnText: { color: colors.primary, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold },
@@ -3574,25 +3585,27 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   bubbleRowUser: { justifyContent: 'flex-end' },
+  // The user's words are context; the stylist's reply is the page. A quiet
+  // ivory panel keeps the brief legible without outweighing what follows.
   bubble: {
-    maxWidth: '82%',
-    borderRadius: radii.xl,
+    maxWidth: '76%',
+    borderRadius: radii.panel,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
   },
   bubbleUser: {
-    backgroundColor: colors.primary,
-    borderBottomRightRadius: radii.md,
+    backgroundColor: surfaces.userBubble,
+    borderBottomRightRadius: radii.sm,
   },
   bubbleText: {
     fontSize: typography.text.bodySmall.fontSize,
     lineHeight: typography.text.bodySmall.fontSize * 1.55,
   },
-  bubbleTextUser: { color: colors.white },
+  bubbleTextUser: { color: colors.foreground },
   userAttachment: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs },
   userAttachmentImage: { width: 52, height: 58, borderRadius: radii.md },
-  userAttachmentFallback: { width: 38, height: 38, borderRadius: radii.md, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.16)' },
-  userAttachmentLabel: { flexShrink: 1, color: colors.primaryForeground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold },
+  userAttachmentFallback: { width: 38, height: 38, borderRadius: radii.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceElevated },
+  userAttachmentLabel: { flexShrink: 1, color: colors.foreground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold },
   editorialResponse: { gap: spacing.sm },
   shopCardContainer: { gap: spacing.sm },
   stylistNote: { gap: spacing.sm, paddingHorizontal: spacing.xs },
@@ -3674,11 +3687,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
   },
   lineSheetThumb: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.sm,
+    width: 40,
+    height: 53,
+    borderRadius: radii.photo,
     overflow: 'hidden',
-    backgroundColor: colors.muted,
+    backgroundColor: surfaces.plate,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -3720,10 +3733,13 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     paddingHorizontal: spacing.xs,
   },
+  // The note under a look is the stylist speaking — same editorial prose as a
+  // "My take" reply, one step smaller so it sits inside the card.
   outfitCardText: {
-    fontSize: typography.text.bodySmall.fontSize,
+    ...typography.text.editorialBody,
+    fontSize: 17,
+    lineHeight: 25,
     color: colors.foreground,
-    lineHeight: typography.text.bodySmall.fontSize * 1.6,
   },
   addEventBtn: {
     flexDirection: 'row',
@@ -3850,15 +3866,11 @@ const styles = StyleSheet.create({
   gapList: { gap: spacing.xs },
   adviceThumbs: { gap: spacing.sm, paddingVertical: spacing.xs },
   responseSection: { gap: spacing.sm, marginTop: spacing.sm },
-  responseSectionTitle: { color: colors.foreground, fontSize: typography.text.sectionTitle.fontSize, fontWeight: typography.weight.semibold },
+  // Every section heading in a reply is the same tracked eyebrow.
+  responseSectionTitle: { ...typography.text.eyebrow, color: colors.primary },
   adviceThumb: {
-    width: 56,
-    height: 56,
-    borderRadius: radii.md,
+    borderRadius: radii.photo,
     overflow: 'hidden',
-    backgroundColor: colors.muted,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   // Typing indicator
   typingRow: {
@@ -3870,6 +3882,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
   },
+  typingSkeleton: { gap: spacing.sm, paddingVertical: spacing.xs },
+  typingPlate: { marginVertical: spacing.xs },
   typingBubble: { flexDirection: 'row', gap: spacing.xs },
   typingDot: {
     width: 7,

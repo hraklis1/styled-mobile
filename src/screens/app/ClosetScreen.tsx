@@ -2,8 +2,6 @@ import { useState, useCallback, useRef, useEffect, useMemo, type ReactNode } fro
 import {
   View,
   Text,
-  TextInput,
-  Pressable,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
@@ -34,7 +32,7 @@ import { filterVisibleBoards } from '../../lib/legacyBoards';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { parseEventDate } from '../../lib/outfitAssignments';
 import { CATEGORY_LABELS, type Item, type ItemCategory } from '../../types/item';
-import { colors, shadows, spacing, typography, radii } from '../../theme';
+import { colors, editorial, shadows, spacing, surfaces, typography, radii } from '../../theme';
 import { useGlobalScan } from '../../contexts/GlobalScanContext';
 import { useGlobalAddSheet } from '../../contexts/GlobalAddSheetContext';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
@@ -47,6 +45,7 @@ import {
   SegmentedControl,
   ViewModeControl,
 } from '../../components/primitives/Editorial';
+import { SearchField } from '../../components/primitives/SearchField';
 import { GarmentCardSkeleton } from '../../components/primitives/GarmentCardSkeleton';
 import { SkeletonBlock } from '../../components/primitives/SkeletonLoader';
 import { ErrorState } from '../../components/primitives/ErrorState';
@@ -256,6 +255,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   } = useClosetFilters({ items, outfits, events, search });
 
   const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / 2;
+  const outfitTileHeight = Math.round(cardWidth / editorial.outfitAspectRatio);
 
   // Floating header height — drives the paddingTop that reserves space for the
   // header inside the list. Changes only on category tap, never during scroll.
@@ -778,7 +778,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             accessibilityState={outfitSelectionMode ? { selected: isSelected } : undefined}
           >
             <View style={styles.collageWrapper}>
-              <OutfitCollage outfit={outfit} size={cardWidth} />
+              <OutfitCollage outfit={outfit} size={cardWidth} height={outfitTileHeight} borderRadius={radii.photo} />
               {outfitSelectionMode && isSelected && <View style={styles.selectedOverlay} />}
               {outfitSelectionMode && (
                 <View style={styles.selectionBadge}>
@@ -789,47 +789,35 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
                   />
                 </View>
               )}
-              {!outfitSelectionMode && (assignment || outfit.isFavorite) && (
+              {!outfitSelectionMode && outfit.isFavorite && (
                 <View style={styles.outfitBadgeStack}>
-                  {assignment && eventDate ? (
-                    <View style={styles.eventDateBadge}>
-                      <Ionicons name="calendar-outline" size={12} color={colors.foreground} />
-                      <Text style={styles.eventDateText}>
-                        {eventDate}{additionalEventCount > 0 ? ` +${additionalEventCount}` : ''}
-                      </Text>
-                    </View>
-                  ) : null}
-                  {outfit.isFavorite ? (
-                    <View style={styles.outfitFavBadge}>
-                      <Ionicons name="heart" size={12} color={colors.primary} />
-                    </View>
-                  ) : null}
+                  <View style={styles.outfitFavBadge}>
+                    <Ionicons name="heart" size={12} color={colors.primary} />
+                  </View>
                 </View>
               )}
             </View>
             <View style={styles.outfitInfo}>
-              <Text style={styles.outfitName} numberOfLines={1}>{outfit.name}</Text>
-              {(outfit.wearCount > 0 || assignment || outfit.isDraft) && (
-                <View style={styles.outfitMetaRow}>
-                  {outfit.wearCount > 0 ? (
-                    <Text style={styles.outfitWorn} numberOfLines={1}>Worn {outfit.wearCount}×</Text>
-                  ) : null}
-                  {assignment && eventDate ? (
-                    <Text style={styles.outfitWorn} numberOfLines={1}>
-                      {eventDate}{additionalEventCount > 0 ? ` +${additionalEventCount}` : ''}
-                    </Text>
-                  ) : null}
+              <Text style={styles.outfitName} numberOfLines={2}>{outfit.name}</Text>
+              {(outfit.wearCount > 0 || (assignment && eventDate) || outfit.isDraft) && (
+                <Text style={styles.outfitMeta} numberOfLines={1}>
+                  {[
+                    assignment && eventDate
+                      ? `${eventDate}${additionalEventCount > 0 ? ` +${additionalEventCount}` : ''}`
+                      : null,
+                    outfit.wearCount > 0 ? `Worn ${outfit.wearCount}×` : null,
+                  ].filter(Boolean).join(' · ')}
                   {outfit.isDraft ? (
-                    <Text style={styles.outfitDraftText} numberOfLines={1}>Draft</Text>
+                    <Text style={styles.outfitDraftText}>{outfit.wearCount > 0 || (assignment && eventDate) ? ' · Draft' : 'Draft'}</Text>
                   ) : null}
-                </View>
+                </Text>
               )}
             </View>
           </PressableScale>
         </View>
       );
     },
-    [cardWidth, navigation, outfitViewMode, outfitSelectionMode, selectedOutfitIds, toggleOutfitSelect, handleOutfitLongPress, upcomingAssignmentSummaries],
+    [cardWidth, outfitTileHeight, navigation, outfitViewMode, outfitSelectionMode, selectedOutfitIds, toggleOutfitSelect, handleOutfitLongPress, upcomingAssignmentSummaries],
   );
 
   // ── Empty states ───────────────────────────────────────────────────────────
@@ -929,6 +917,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
 
       <ScreenHeader
         title="Closet"
+        titleVariant="display"
         subtitle={subtitle}
         safeTop={false}
         primaryAction={{
@@ -972,7 +961,9 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
           </View>
         ) : segment === 'pieces' ? (
           <Reanimated.View
-            key={`pieces-${piecesViewMode}`}
+            // Re-keyed on view mode *and* the category edit, so a filter change
+            // fades a fresh selection in rather than snapping the grid.
+            key={`pieces-${piecesViewMode}-${[...selectedCategories].sort().join(',')}-${activeSubcategory ?? ''}`}
             entering={FadeIn.duration(170)}
             style={styles.piecesListStage}
           >
@@ -1013,8 +1004,8 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
           }
           </Reanimated.View>
         ) : segment === 'outfits' ? (
+          <Reanimated.View key={`outfits-${outfitViewMode}`} entering={FadeIn.duration(170)} style={styles.piecesListStage}>
           <FlashList
-            key={`outfits-${outfitViewMode}`}
             data={filteredOutfits}
             keyExtractor={outfit => String(outfit.id)}
             renderItem={renderOutfitCard}
@@ -1030,9 +1021,10 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             onScroll={handleScroll}
             scrollEventThrottle={16}
           />
+          </Reanimated.View>
         ) : (
+          <Reanimated.View key="boards-grid" entering={FadeIn.duration(170)} style={styles.piecesListStage}>
           <FlashList
-            key="boards-grid"
             data={sortedBoards}
             keyExtractor={(b) => String(b.id)}
             numColumns={2}
@@ -1051,23 +1043,13 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             ListHeaderComponent={
               <View style={styles.boardListHeader}>
                 {showBoardSearch && (
-                  <View style={styles.boardSearchWrap}>
-                    <Ionicons name="search-outline" size={17} color={colors.mutedForeground} />
-                    <TextInput
-                      value={boardSearch}
-                      onChangeText={setBoardSearch}
-                      style={styles.boardSearchInput}
-                      placeholder="Search boards…"
-                      placeholderTextColor={colors.mutedForeground}
-                      returnKeyType="search"
-                      accessibilityLabel="Search boards"
-                    />
-                    {!!boardSearch && (
-                      <TouchableOpacity style={styles.boardSearchClear} onPress={() => setBoardSearch('')} accessibilityLabel="Clear board search">
-                        <Ionicons name="close-circle" size={18} color={colors.mutedForeground} />
-                      </TouchableOpacity>
-                    )}
-                  </View>
+                  <SearchField
+                    value={boardSearch}
+                    onChangeText={setBoardSearch}
+                    placeholder="Search boards…"
+                    accessibilityLabel="Search boards"
+                    style={styles.boardSearch}
+                  />
                 )}
                 {visibleBoardCount > 0 && (
                   <>
@@ -1097,6 +1079,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             }}
             showsVerticalScrollIndicator={false}
           />
+          </Reanimated.View>
         )}
 
         {/* Floating header — absolute over the list, slides on native thread.
@@ -1107,22 +1090,11 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         >
           {/* Search, filters, and the Pieces-only layout control */}
           <View style={styles.searchRow}>
-            <View style={styles.searchWrap}>
-              <Ionicons name="search-outline" size={16} color={colors.mutedForeground} style={styles.searchIcon} />
-              <TextInput
-                style={styles.searchInput}
-                value={search}
-                onChangeText={setSearch}
-                placeholder={segment === 'pieces' ? 'Search pieces…' : 'Search outfits…'}
-                placeholderTextColor={colors.mutedForeground}
-                returnKeyType="search"
-              />
-              {search.length > 0 && (
-                <Pressable onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Clear search" accessibilityRole="button">
-                  <Ionicons name="close-circle" size={16} color={colors.mutedForeground} />
-                </Pressable>
-              )}
-            </View>
+            <SearchField
+              value={search}
+              onChangeText={setSearch}
+              placeholder={segment === 'pieces' ? 'Search pieces…' : 'Search outfits…'}
+            />
 
             {segment === 'pieces' && (
               <>
@@ -1508,9 +1480,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
 
 const styles = StyleSheet.create({
   boardListHeader: { paddingHorizontal: COL_GAP / 2, paddingBottom: spacing.lg, gap: spacing.md },
-  boardSearchWrap: { minHeight: 46, paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.secondary, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  boardSearchInput: { flex: 1, minHeight: 46, color: colors.foreground, fontSize: typography.text.body.fontSize, lineHeight: typography.inputLineHeight(typography.text.body.fontSize) },
-  boardSearchClear: { width: 36, height: 44, alignItems: 'center', justifyContent: 'center' },
+  boardSearch: { flex: 0 },
   smartBoardHeading: { alignItems: 'flex-start' },
   smartBoardTitle: { color: colors.mutedForeground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, letterSpacing: typography.tracking.spacious, textTransform: 'uppercase' },
   smartBoardRow: { gap: spacing.sm, paddingRight: spacing.lg },
@@ -1627,28 +1597,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: SIDE_PAD,
     marginBottom: spacing.xs,
     gap: spacing.sm,
-  },
-  searchWrap: {
-    flex: 1,
-    minWidth: 0,
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radii.full,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    paddingHorizontal: spacing.md,
-    gap: spacing.sm,
-  },
-  searchIcon: { flexShrink: 0 },
-  searchInput: {
-    flex: 1,
-    height: 44,
-    fontSize: typography.text.bodySmall.fontSize,
-    lineHeight: typography.inputLineHeight(typography.text.bodySmall.fontSize),
-    color: colors.foreground,
-    paddingVertical: 0,
   },
   filterBtn: {
     width: 42,
@@ -1778,24 +1726,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: spacing.xs,
   },
-  eventDateBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: radii.full,
-    backgroundColor: 'rgba(255,252,247,0.92)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-    ...shadows.xs,
-  },
-  eventDateText: {
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-    fontVariant: ['tabular-nums'],
-  },
   outfitFavBadge: {
     width: 22,
     height: 22,
@@ -1830,12 +1760,11 @@ const styles = StyleSheet.create({
   },
   // ── Outfit cards
   outfitCard: {},
+  // A flat plate, like the garment tiles: the collage's own edge is the edge.
   collageWrapper: {
-    borderRadius: radii.lg,
+    borderRadius: radii.photo,
     overflow: 'hidden',
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
+    backgroundColor: surfaces.plate,
   },
   selectedOverlay: {
     position: 'absolute',
@@ -1860,24 +1789,19 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   outfitName: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.semibold,
+    ...typography.text.cardTitle,
     color: colors.foreground,
   },
   outfitWorn: {
     fontSize: typography.text.caption.fontSize,
     color: colors.mutedForeground,
   },
-  outfitMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
+  outfitMeta: {
+    ...typography.text.metaSheet,
+    color: colors.mutedForeground,
   },
   outfitDraftText: {
-    fontSize: typography.text.caption.fontSize,
     color: colors.primary,
-    fontWeight: typography.weight.semibold,
   },
   outfitRow: {
     flexDirection: 'row',

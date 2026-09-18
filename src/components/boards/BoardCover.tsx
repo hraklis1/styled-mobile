@@ -67,7 +67,7 @@ export function BoardCover({ board, itemMap, outfitMap, size, height = size, com
 
   return (
     <View
-      style={[styles.cover, { width: size, height, borderRadius: compact ? radii.md : radii.lg }]}
+      style={[styles.cover, { width: size, height, borderRadius: compact ? radii.sm : radii.photo }]}
       accessibilityLabel={`${board.name} cover`}
     >
       {covers.length >= 4 ? (
@@ -163,7 +163,7 @@ const styles = StyleSheet.create({
   fallbackIcon: {
     width: 46,
     height: 46,
-    borderRadius: 23,
+    borderRadius: radii.full,
     backgroundColor: 'rgba(255,252,247,0.62)',
     alignItems: 'center',
     justifyContent: 'center',

@@ -232,6 +232,17 @@ export const typography = {
       letterSpacing: tracking.label,
       textTransform: 'uppercase' as const,
     },
+    /**
+     * Line-sheet strings — "BEIGE · LINEN · SS" — tracked a step wider than
+     * `meta` so the separators read as air rather than punctuation.
+     */
+    metaSheet: {
+      fontSize: 11,
+      lineHeight: 16,
+      fontWeight: weight.medium,
+      letterSpacing: tracking.relaxed,
+      textTransform: 'uppercase' as const,
+    },
     data: {
       fontSize: 15,
       lineHeight: 20,
@@ -259,6 +270,21 @@ export const radii = {
   lg:   12,
   xl:   18,
   full: 9999,
+  /** Cards, sheets, look cards. */
+  card: 18,
+  /** Bubbles and inline panels inside a card. */
+  panel: 12,
+} as const;
+
+/**
+ * Named surfaces for the two places a colour is a *rule*, not a choice: the
+ * plate every garment or outfit image sits on, and the user's own message in
+ * the stylist thread. Both point at palette tokens so the palette stays the
+ * single source of truth.
+ */
+export const surfaces = {
+  plate:      colors.surfaceSubtle,
+  userBubble: colors.surfaceSelected,
 } as const;
 
 export const editorial = {

@@ -201,11 +201,11 @@ export function ShoppingSessionBundle({
               tapping it is what supplies it. Anywhere else on the row still
               opens the visit. */}
           <View style={styles.titleRow}>
-            <Text style={[styles.title, canAddStore && styles.titleAction]} numberOfLines={1}>
+            <Text style={styles.title} numberOfLines={1}>
               {group.storeName ?? SHORTLIST_COPY.needsStore}
             </Text>
             {canAddStore
-              ? <Ionicons name="add" size={17} color={colors.action} />
+              ? null
               : <Ionicons name="chevron-forward" size={15} color={colors.inkSubtle} style={styles.titleChevron} />}
           </View>
           <View style={styles.metaRow}>
@@ -213,6 +213,17 @@ export function ShoppingSessionBundle({
             {/* Terracotta marks the outstanding task — the one thing this visit
                 still needs. Navigation stays quiet, so the row only ever
                 raises its voice for work. */}
+            {canAddStore ? (
+              <PressableScale
+                motion="crisp"
+                onPress={onAddStore}
+                accessibilityRole="button"
+                accessibilityLabel={SHORTLIST_COPY.addStore}
+                hitSlop={8}
+              >
+                <Text style={styles.metaAction}>{SHORTLIST_COPY.addStore}</Text>
+              </PressableScale>
+            ) : null}
             {canSortPhotos ? (
               <PressableScale
                 motion="crisp"
@@ -308,7 +319,6 @@ const styles = StyleSheet.create({
   heading: { flex: 1, minWidth: 0 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   title: { ...typography.text.editorialCompact, color: colors.foreground, flexShrink: 1 },
-  titleAction: { color: colors.action },
   titleChevron: { marginTop: 2 },
   metaRow: {
     minHeight: 20,
@@ -317,8 +327,8 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingTop: spacing.xs,
   },
-  metaText: { flexShrink: 1, minWidth: 0, fontSize: 12, lineHeight: 18, color: colors.mutedForeground },
-  metaAction: { fontSize: 13, lineHeight: 18, fontWeight: typography.weight.medium, color: colors.action },
+  metaText: { flexShrink: 1, minWidth: 0, ...typography.text.caption, lineHeight: 18, color: colors.mutedForeground },
+  metaAction: { ...typography.text.label, lineHeight: 18, color: colors.action },
 
   // Sits on the title's baseline row so the mark or menu reads as part of the
   // heading rather than floating in the band's corner.

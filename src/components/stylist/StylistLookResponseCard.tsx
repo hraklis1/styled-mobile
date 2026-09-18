@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
   eyebrow: { ...typography.text.eyebrow, color: colors.primary },
   gapCount: { ...typography.text.eyebrow, color: colors.action },
   title: { ...typography.text.editorialTitle, color: colors.foreground },
-  body: { fontSize: typography.text.body.fontSize, lineHeight: typography.text.body.fontSize * 1.5, color: colors.inkSubtle },
+  body: { ...typography.text.editorialBody, fontSize: 17, lineHeight: 25, color: colors.inkSubtle },
   collageWrap: { backgroundColor: colors.card, borderRadius: radii.lg, overflow: 'hidden', alignItems: 'center' },
   section: { gap: spacing.sm },
   sectionLabel: { ...typography.text.eyebrow, color: colors.mutedForeground },
