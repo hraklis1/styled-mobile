@@ -34,6 +34,7 @@ import { colors } from '../../theme';
 export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitReviewScreenProps) {
   const { sessionId } = route.params;
   const { user } = useAuth();
+  const userId = user?.id ?? null;
   const { data: remoteSnaps = [], isLoading } = useShoppingSnaps();
   const pendingUploads = useShoppingSessionStore((state) => state.pendingUploads);
   const visitPreviews = useShoppingSessionStore((state) => state.visitPreviews);
@@ -134,7 +135,7 @@ export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitRe
     const previews = useShoppingSessionStore.getState().visitPreviews.filter((preview) => ids.has(preview.id));
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      await deleteShoppingSnaps(targets, user?.id ?? null);
+      await deleteShoppingSnaps(targets, userId);
       previews.forEach((preview) => deleteShoppingPreview(preview.previewUri));
     } catch (error) {
       Alert.alert(
@@ -142,7 +143,7 @@ export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitRe
         error instanceof Error ? error.message : 'Please try again.',
       );
     }
-  }, [rawSnaps, user?.id]);
+  }, [rawSnaps, userId]);
 
   const confirmRemove = useCallback((snapIds: string[]) => {
     const count = snapIds.length;
