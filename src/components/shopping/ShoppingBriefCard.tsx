@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { PressableScale } from '../primitives/PressableScale';
 import { ShoppingPriorityRow, sentenceCase } from './ShoppingPriorityRow';
-import { colors, radii, spacing, typography } from '../../theme';
+import { shoppingSurfaces, colors, radii, spacing, typography } from '../../theme';
 import type { ShoppingBrief, ShoppingBriefPriority } from '../../lib/shopDecisionWorkspace';
 
 /** Two is a strategy; five is a shopping list. The rest live behind "View plan". */
@@ -64,7 +64,8 @@ export function ShoppingBriefCard({
     <View style={[styles.card, cardStyle, style]}>
       {children}
       {onStartShopping ? <PressableScale
-        scaleTo={0.97}
+        motion="crisp"
+        scaleTo={0.985}
         contentStyle={styles.startButton}
         onPress={onStartShopping}
         accessibilityRole="button"
@@ -186,26 +187,29 @@ function TextAction({
 }) {
   return (
     <PressableScale
+      motion="crisp"
+      scaleTo={0.985}
       haptic={false}
       contentStyle={styles.textAction}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      {icon ? <Ionicons name={icon} size={14} color={colors.action} /> : null}
+      {icon ? <Ionicons name={icon} size={14} color={shoppingSurfaces.olive.accent} /> : null}
       <Text style={styles.textActionLabel}>{label}</Text>
-      <Ionicons name="arrow-forward" size={13} color={colors.action} />
+      <Ionicons name="arrow-forward" size={13} color={shoppingSurfaces.olive.accent} />
     </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
-  // No fill and no hairline of its own: the card sits in Shop's ruled brief
+  // The quiet canvas has no hairline of its own: it sits in Shop's ruled brief
   // section (ShopOverviewScreen's `briefSection`), whose top rule is the
   // boundary — a rule here on top of that would read as two dividers in the
   // space of one.
   card: {
     gap: spacing.sm,
+    backgroundColor: shoppingSurfaces.canvas,
   },
   loadingBlock: { minHeight: 104, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   masthead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
@@ -237,7 +241,10 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     paddingHorizontal: spacing.lg,
     borderRadius: radii.full,
-    backgroundColor: colors.primary,
+    backgroundColor: shoppingSurfaces.espresso,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: shoppingSurfaces.highlight,
+    boxShadow: shoppingSurfaces.buttonShadow,
   },
   startLabel: {
     fontSize: typography.text.bodySmall.fontSize,
@@ -251,5 +258,5 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     gap: spacing.xs,
   },
-  textActionLabel: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.action },
+  textActionLabel: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: shoppingSurfaces.olive.accent },
 });

@@ -399,3 +399,23 @@ export const shadows = {
     default: {},
   }),
 };
+
+/** Selective depth for the Shopping Brief and Edit; other flows retain their palette. */
+export const shoppingSurfaces = {
+  canvas: '#F8F7F3',
+  alabaster: '#FFFEFA',
+  bone: '#F0EDE5',
+  espresso: '#302B25',
+  secondaryInk: '#625D54',
+  olive: { accent: '#586047', wash: '#EEF0E7' },
+  stone: { accent: '#716E65', wash: '#F0EEE8' },
+  charcoal: { accent: '#454A47', wash: '#ECEEEB' },
+  edge: 'rgba(48,43,37,0.08)',
+  highlight: 'rgba(255,255,255,0.72)',
+  panelGradient: ['#FFFEFA', '#F7F5EF', '#F0EDE5'],
+  panelStops: [0, 0.58, 1],
+  tileGradient: ['#F8F7F2', '#F0EDE5', '#ECE9E1'],
+  tileStops: [0, 0.65, 1],
+  panelShadow: '0 2px 4px rgba(48,43,37,0.025), 0 10px 28px rgba(48,43,37,0.045)',
+  buttonShadow: '0 2px 5px rgba(48,43,37,0.10)',
+} as const;

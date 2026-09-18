@@ -10,6 +10,7 @@ import {
 import Animated, {
   Easing,
   useSharedValue,
+  useReducedMotion,
   useAnimatedStyle,
   withSpring,
   withTiming,
@@ -49,6 +50,7 @@ export function PressableScale({
   ...rest
 }: Props) {
   const scale = useSharedValue(1);
+  const reduceMotion = useReducedMotion();
 
   const handlePressIn = useCallback(
     (e: GestureResponderEvent) => {
@@ -84,7 +86,7 @@ export function PressableScale({
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
-      transform: [{ scale: scale.value }],
+      transform: [{ scale: reduceMotion ? 1 : scale.value }],
     };
   });
 

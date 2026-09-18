@@ -8,7 +8,7 @@ import { ShoppingPriorityRow } from '../../components/shopping/ShoppingPriorityR
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useNotNowShoppingPriority, useShoppingBrief } from '../../hooks/useShoppingBrief';
 import { toLocalDateKey } from '../../lib/dailyStylistPick';
-import { colors, spacing, typography } from '../../theme';
+import { shoppingSurfaces, colors, spacing, typography } from '../../theme';
 import { track } from '../../lib/analytics';
 import type { ShoppingBriefDetailScreenProps } from '../../navigation/types';
 
@@ -123,11 +123,11 @@ export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScr
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
+  screen: { flex: 1, backgroundColor: shoppingSurfaces.canvas },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: shoppingSurfaces.canvas },
   scroll: { flex: 1 },
   content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxxl + spacing.xl },
-  header: { marginHorizontal: -spacing.lg },
+  header: { marginHorizontal: -spacing.lg, backgroundColor: shoppingSurfaces.canvas },
   notice: { ...typography.text.caption, color: colors.mutedForeground, paddingVertical: spacing.sm },
   errorNotice: { ...typography.text.caption, color: colors.destructive, paddingVertical: spacing.sm },
 });

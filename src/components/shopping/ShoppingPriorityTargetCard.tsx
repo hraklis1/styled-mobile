@@ -10,12 +10,14 @@ import Animated, {
   useReducedMotion,
 } from 'react-native-reanimated';
 
+import { shoppingAccent } from '../../lib/shoppingAccent';
+import { ShoppingSurfaceLight } from './ShoppingSurfaceLight';
 import { getSwatchColor } from '../../lib/colorUtils';
 import { itemCoverPresentation } from '../../lib/itemImage';
 import { track } from '../../lib/analytics';
 import { PressableScale } from '../primitives/PressableScale';
 import { ShoppingOfferRail } from './ShoppingOfferRail';
-import { colors, cutoutScaleFor, editorial, radii, spacing, typography } from '../../theme';
+import { shoppingSurfaces, colors, cutoutScaleFor, editorial, radii, spacing, typography } from '../../theme';
 import {
   humanizeInlineTokens,
   splitPriceRange,
@@ -66,6 +68,7 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTit
   const expandTracked = useRef(false);
   const reduceMotion = useReducedMotion();
   const swatch = getSwatchColor(target.color);
+  const accent = shoppingAccent(target.color);
   const looks = targetOutfitIdeas(target);
   // Absent whenever no product source is configured, which is the resting
   // state — the target reads exactly as it always has in that case.
@@ -106,6 +109,7 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTit
     <Animated.View style={[styles.card, isLast && styles.cardLast]} layout={reduceMotion ? undefined : cardSpring}>
       <PressableScale
         scaleTo={0.985}
+        motion="crisp"
         onPress={toggle}
         accessibilityRole="button"
         accessibilityLabel={`Direction ${index}: ${title}. ${metaAccessible}`}
@@ -119,7 +123,7 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTit
             importantForAccessibility="no-hide-descendants"
           >
             <Text style={styles.railNumber}>{String(index).padStart(2, '0')}</Text>
-            <ColorSpine primary={swatch.primary} secondary={swatch.secondary} />
+            <ColorSpine primary={accent.accent} />
           </View>
 
           <View style={styles.headingBody}>
@@ -132,9 +136,9 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTit
             <Text style={styles.rationale} numberOfLines={expanded ? undefined : 4}>{rationale}</Text>
 
             <View style={styles.metaRow}>
-              <Text style={styles.metaText} numberOfLines={1}>{metaSegments.join(' · ')}</Text>
+              <Text style={styles.metaText}>{metaSegments.join(' · ')}</Text>
               {price.compact ? (
-                <Text style={styles.metaPrice} numberOfLines={1}>{price.compact}</Text>
+                <Text style={styles.metaPrice}>{price.compact}</Text>
               ) : null}
             </View>
             <View style={styles.disclosureRow}>
@@ -175,6 +179,8 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTit
               target.productUrl ? (
                 <PressableScale
                   haptic={false}
+                  motion="crisp"
+                  scaleTo={0.985}
                   onPress={() => {
                     track('shopping_brief_product_opened', { targetKey: target.key, merchant: target.merchant ?? null });
                     void WebBrowser.openBrowserAsync(target.productUrl!);
@@ -203,6 +209,7 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTit
                   targetTitle={target.title}
                   wardrobe={wardrobe}
                   swatch={swatch}
+                  wash={accent.wash}
                 />
               ))}
             </View>
@@ -236,7 +243,7 @@ function InlineDetail({ label, value, linked }: { label: string; value: string; 
       <Text style={styles.detailLabel}>{label}</Text>
       <View style={styles.detailValueRow}>
         <Text selectable={!linked} style={[styles.detailValue, linked && styles.detailValueLinked]}>{value}</Text>
-        {linked ? <Ionicons name="open-outline" size={13} color={colors.action} /> : null}
+        {linked ? <Ionicons name="open-outline" size={13} color={shoppingSurfaces.olive.accent} /> : null}
       </View>
     </View>
   );
@@ -258,12 +265,14 @@ function UnlockedLook({
   targetTitle,
   wardrobe,
   swatch,
+  wash,
 }: {
   look: ShoppingPriorityOutfitIdea;
   newPiece: string;
   targetTitle: string;
   wardrobe: ReadonlyMap<number, Item>;
   swatch: { primary: string; secondary?: string };
+  wash: string;
 }) {
   const pieces = look.itemIds.map((id) => ({ id, item: wardrobe.get(id) }));
   const names = pieces.map(({ item }) => item?.name ?? 'a piece no longer in your closet');
@@ -282,7 +291,7 @@ function UnlockedLook({
         contentContainerStyle={styles.lookStrip}
       >
         <View style={styles.tile}>
-          <View style={styles.ghostFrame}>
+          <View style={[styles.ghostFrame, { backgroundColor: wash }]}>
             <View style={[styles.ghostSwatch, { backgroundColor: swatch.primary }]} />
           </View>
           <Text style={styles.tileCaption} numberOfLines={2}>{newPiece}</Text>
@@ -312,6 +321,7 @@ function WardrobeThumbnail({ item }: { item?: Item }) {
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
+      {(!cover.uri || imageFailed || cover.isCatalogStyle) ? <ShoppingSurfaceLight tile /> : null}
       {cover.uri && !imageFailed ? (
         <Image
           source={{ uri: cover.uri }}
@@ -363,17 +373,18 @@ const styles = StyleSheet.create({
   spineHalf: { flex: 1 },
   headingBody: { flex: 1, minWidth: 0, gap: spacing.sm },
   title: { ...typography.text.editorialCompact, color: colors.foreground },
-  rationale: { ...typography.text.body, color: colors.inkSubtle },
+  rationale: { ...typography.text.body, color: shoppingSurfaces.secondaryInk },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
+    flexWrap: 'wrap',
     gap: spacing.md,
     paddingTop: spacing.xs,
   },
   // One grey for the descriptors, ink for the number: the price is the axis
   // the three directions are compared on, so it is the one thing in the row
   // set in the foreground colour.
-  metaText: { flex: 1, minWidth: 0, ...typography.text.meta, color: colors.mutedForeground },
+  metaText: { flexGrow: 1, flexShrink: 1, flexBasis: 120, ...typography.text.meta, color: colors.mutedForeground },
   // Fixed width so the three directions' prices stack into one column rather
   // than drifting with the length of the colour name beside them.
   metaPrice: { minWidth: 78, textAlign: 'right', ...typography.text.data, color: colors.foreground },
@@ -382,12 +393,12 @@ const styles = StyleSheet.create({
   // Indented to the text column so the rail keeps reading as one spine down
   // the whole card, open or closed.
   body: { gap: spacing.xl, paddingTop: spacing.md, paddingLeft: RAIL_WIDTH + spacing.md },
-  details: { gap: spacing.md },
-  detailRow: { gap: 3 },
+  details: { gap: spacing.lg },
+  detailRow: { gap: spacing.xs, minHeight: 44, justifyContent: 'center' },
   detailLabel: { ...typography.text.meta, color: colors.mutedForeground },
-  detailValueRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  detailValue: { ...typography.text.bodySmall, lineHeight: 20, color: colors.inkSubtle },
-  detailValueLinked: { color: colors.action, fontWeight: typography.weight.medium },
+  detailValueRow: { flexWrap: 'wrap', flexDirection: 'row', alignItems: 'center', gap: 6 },
+  detailValue: { flexShrink: 1, ...typography.text.bodySmall, lineHeight: 20, color: shoppingSurfaces.secondaryInk },
+  detailValueLinked: { color: shoppingSurfaces.olive.accent, fontWeight: typography.weight.medium },
   looksSection: { gap: spacing.lg },
   looksLabel: { ...typography.text.meta, color: colors.mutedForeground },
   look: { gap: spacing.sm },
@@ -404,9 +415,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radii.photo,
-    backgroundColor: colors.surfaceSubtle,
+    backgroundColor: shoppingSurfaces.bone,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
+    borderColor: shoppingSurfaces.edge,
   },
   catalogThumbnail: { padding: spacing.xs },
   // The piece you'd buy: the same frame, empty, holding only its colour.
@@ -416,9 +427,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radii.photo,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderStyle: 'dashed',
-    borderColor: colors.border,
+    borderColor: shoppingSurfaces.edge,
   },
   ghostSwatch: { width: 10, height: 10, borderRadius: radii.full },
   tileCaption: { fontSize: 11, lineHeight: 14, color: colors.mutedForeground },

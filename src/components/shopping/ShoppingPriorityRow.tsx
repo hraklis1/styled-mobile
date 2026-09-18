@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { PressableScale } from '../primitives/PressableScale';
-import { colors, spacing, typography } from '../../theme';
+import { shoppingSurfaces, colors, spacing, typography } from '../../theme';
 import type { ShoppingBriefPriority } from '../../lib/shopDecisionWorkspace';
 
 /** Priority labels arrive lowercase ("formal trousers") but read as titles
@@ -66,9 +66,11 @@ export function ShoppingPriorityRow({ index, priority, compact, onPress, onSkip,
         {context ? <Text style={styles.context}>{context}</Text> : null}
         {meta || onSkip ? (
           <View style={styles.metaRow}>
-            {meta ? <Text style={styles.meta} numberOfLines={1}>{meta}</Text> : <View style={styles.metaSpacer} />}
+            {meta ? <Text style={styles.meta}>{meta}</Text> : <View style={styles.metaSpacer} />}
             {onSkip ? (
               <PressableScale
+                motion="crisp"
+                scaleTo={0.985}
                 haptic={false}
                 contentStyle={styles.skip}
                 onPress={onSkip}
@@ -88,7 +90,8 @@ export function ShoppingPriorityRow({ index, priority, compact, onPress, onSkip,
   if (!onPress) return inner;
   return (
     <PressableScale
-      scaleTo={0.99}
+      motion="crisp"
+      scaleTo={0.985}
       haptic={false}
       onPress={onPress}
       accessibilityRole="button"
@@ -121,10 +124,10 @@ const styles = StyleSheet.create({
   title: { flexShrink: 1, ...typography.text.editorialCompact, color: colors.foreground },
   titleCompact: { ...typography.text.editorialSection },
   context: { ...typography.text.bodySmall, lineHeight: 20, color: colors.inkSubtle },
-  metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, minHeight: 20 },
-  meta: { flex: 1, ...typography.text.meta, color: colors.mutedForeground },
+  metaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, minHeight: 20 },
+  meta: { flexGrow: 1, flexShrink: 1, flexBasis: 120, ...typography.text.meta, color: colors.mutedForeground },
   metaSpacer: { flex: 1 },
   // Tall enough to hit, quiet enough to ignore.
-  skip: { minHeight: 36, justifyContent: 'center', paddingLeft: spacing.sm },
-  skipText: { ...typography.text.caption, color: colors.mutedForeground },
+  skip: { minHeight: 44, justifyContent: 'center', paddingLeft: spacing.sm },
+  skipText: { ...typography.text.caption, color: shoppingSurfaces.olive.accent },
 });

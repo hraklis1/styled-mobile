@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInUp, FadeOutDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ShoppingSurfaceLight } from '../../components/shopping/ShoppingSurfaceLight';
 import { PressableScale } from '../../components/primitives/PressableScale';
 import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
 import { ShoppingPriorityTargetCard } from '../../components/shopping/ShoppingPriorityTargetCard';
@@ -12,7 +13,7 @@ import { useShoppingPriorityEdit } from '../../hooks/useShoppingPriorityEdit';
 import { addOutfitToWishlist, useWishlist } from '../../hooks/useWishlist';
 import { track } from '../../lib/analytics';
 import { shoppingPriorityEditDisplayHeadline, shoppingPriorityGapFigure, shoppingPriorityGapNarrative, shoppingPriorityTargetDisplayTitle, splitPriceRange } from '../../lib/shoppingPriorityEdit';
-import { colors, radii, spacing, typography } from '../../theme';
+import { shoppingSurfaces, colors, radii, spacing, typography } from '../../theme';
 import type { ShopOutfit } from '../../types/shop';
 import type { ShoppingPriorityEditScreenProps } from '../../navigation/types';
 
@@ -232,23 +233,21 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
             onBack={goBack}
             style={[styles.fullBleedHeader, styles.readyHeader]}
           />
-          {/* One deck under the hero, on the page ground: the figure, the
-              stylist's sentence, then what it unlocks — and a single rule
-              before the directions. The earlier tinted band with its own two
-              rules and a 34pt sans stat was a second masthead under the
-              first. */}
-          <View style={styles.deck}>
-            {gapLabel ? <Text selectable style={styles.deckLabel}>{gapLabel}</Text> : null}
-            {deck.figure !== null ? (
-              // Only the wardrobe-multiplier candidates carry a count;
-              // structural and occasion gaps have nothing comparable, so the
-              // deck simply reads without a figure for those.
-              <Text style={styles.figure} accessibilityLabel={`Adds ${deck.figure} new outfits`}>{deck.figure}</Text>
-            ) : null}
-            <Text selectable style={styles.deckStatement}>{deck.statement}</Text>
-            {priority.unlocks.length > 0 ? (
-              <Text selectable style={styles.deckMeta}>Unlocks {priority.unlocks.join(' · ')}</Text>
-            ) : null}
+          <View style={deck.figure !== null ? styles.metricShadow : undefined}>
+            <View style={[styles.deck, deck.figure !== null && styles.metricPanel]}>
+              {deck.figure !== null ? <ShoppingSurfaceLight /> : null}
+              {gapLabel ? <Text selectable style={styles.deckLabel}>{gapLabel}</Text> : null}
+              {deck.figure !== null ? (
+                // Only the wardrobe-multiplier candidates carry a count;
+                // structural and occasion gaps have nothing comparable, so the
+                // deck simply reads without a figure for those.
+                <Text style={styles.figure} accessibilityLabel={`Adds ${deck.figure} new outfits`}>{deck.figure}</Text>
+              ) : null}
+              <Text selectable style={styles.deckStatement}>{deck.statement}</Text>
+              {priority.unlocks.length > 0 ? (
+                <Text selectable style={styles.deckMeta}>Unlocks {priority.unlocks.join(' · ')}</Text>
+              ) : null}
+            </View>
           </View>
         </View>
         {data.targets.map((target, index) => (
@@ -302,6 +301,8 @@ function SaveEditAction({ saving, isSaved, onPress }: { saving: boolean; isSaved
 
   return (
     <PressableScale
+      motion="crisp"
+      scaleTo={0.985}
       style={styles.saveButton}
       contentStyle={[styles.saveAction, isSaved && styles.saveActionSaved]}
       onPress={() => void onPress()}
@@ -335,9 +336,9 @@ function StateScreen({ children, onBack, title }: { children: ReactNode; onBack:
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
+  screen: { flex: 1, backgroundColor: shoppingSurfaces.canvas },
   content: { paddingHorizontal: spacing.lg },
-  fullBleedHeader: { marginHorizontal: -spacing.lg },
+  fullBleedHeader: { marginHorizontal: -spacing.lg, backgroundColor: shoppingSurfaces.canvas },
   readyHeader: { paddingBottom: spacing.lg },
   stateContent: { flexGrow: 1, paddingHorizontal: spacing.lg, gap: spacing.xl },
   stateCard: { flex: 1, minHeight: 260, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl, borderRadius: radii.xl, borderCurve: 'continuous', backgroundColor: colors.surfaceElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
@@ -350,14 +351,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.hairline,
   },
+  metricShadow: { borderRadius: radii.md, boxShadow: shoppingSurfaces.panelShadow, marginBottom: spacing.md },
+  metricPanel: { padding: spacing.lg, borderRadius: radii.md, borderCurve: 'continuous', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: shoppingSurfaces.edge, backgroundColor: shoppingSurfaces.alabaster },
   deckLabel: { ...typography.text.meta, color: colors.mutedForeground },
-  // Serif figure in ink, not a sans stat in taupe: it belongs to the same
-  // typographic family as the hero two lines up. The sentence beneath is
-  // its label.
-  figure: { ...typography.text.editorialFigure, color: colors.foreground },
+  // The olive figure anchors the softly lit panel in the existing serif face.
+  figure: { ...typography.text.editorialFigure, color: shoppingSurfaces.olive.accent },
   // The stylist's sentence, kept whole, in the regular editorial face so it
   // reads as a deck under the headline rather than a second one.
-  deckStatement: { maxWidth: 360, ...typography.text.editorialBody, color: colors.foreground },
+  deckStatement: { maxWidth: 360, ...typography.text.editorialBody, color: shoppingSurfaces.espresso },
   deckMeta: { ...typography.text.meta, color: colors.mutedForeground },
   body: { fontSize: typography.text.bodySmall.fontSize, lineHeight: 20, color: colors.mutedForeground },
   targetCardWrap: {},
@@ -368,14 +369,14 @@ const styles = StyleSheet.create({
   saveBandCopy: { maxWidth: 330, fontSize: typography.text.bodySmall.fontSize, lineHeight: 19, color: colors.mutedForeground },
   noBuyCard: { padding: spacing.lg, gap: spacing.sm, borderRadius: radii.xl, borderCurve: 'continuous', backgroundColor: colors.surfaceElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   noBuyTitle: { fontSize: typography.text.sectionTitle.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground },
-  primaryButton: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: radii.full, backgroundColor: colors.primary },
+  primaryButton: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: radii.full, backgroundColor: shoppingSurfaces.espresso, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: shoppingSurfaces.highlight, boxShadow: shoppingSurfaces.buttonShadow },
   primaryButtonText: { color: colors.primaryForeground, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold },
   saveButton: { width: '100%' },
-  saveAction: { minHeight: 52, width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, borderRadius: radii.full, backgroundColor: colors.primary },
-  saveActionSaved: { backgroundColor: colors.primary },
+  saveAction: { minHeight: 52, width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, borderRadius: radii.full, backgroundColor: shoppingSurfaces.espresso, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: shoppingSurfaces.highlight, boxShadow: shoppingSurfaces.buttonShadow },
+  saveActionSaved: { backgroundColor: shoppingSurfaces.espresso },
   saveActionText: { color: colors.primaryForeground, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold },
   stickyHeader: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
-  stickyHeaderContent: { backgroundColor: colors.background, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline },
+  stickyHeaderContent: { backgroundColor: shoppingSurfaces.canvas, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline },
   saveToast: { position: 'absolute', left: spacing.lg, right: spacing.lg, minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.lg, borderCurve: 'continuous', backgroundColor: colors.surfaceElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, boxShadow: '0 4px 14px rgba(40, 35, 31, 0.12)', zIndex: 20 },
   saveToastText: { flex: 1, color: colors.foreground, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.medium },
 });
