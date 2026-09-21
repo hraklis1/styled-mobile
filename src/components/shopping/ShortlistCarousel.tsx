@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { AppText } from '../primitives/AppText';
 import { PressableScale } from '../primitives/PressableScale';
-import { formatShoppingPrice, shoppingCatalogChips } from '../../lib/shoppingPresentation';
+import { shoppingCatalogChips, shoppingPieceTitle, shoppingPriceCaption } from '../../lib/shoppingPresentation';
 import { SHORTLIST_COPY } from '../../lib/shoppingVocabulary';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { ShoppingEditItem } from '../../lib/shoppingGallery';
@@ -81,15 +81,21 @@ export function ShortlistCarousel({
 function ShortlistFindCard({ item, onPress }: { item: ShoppingEditItem; onPress: () => void }) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
-  const price = formatShoppingPrice(item.extractedPrice, item.currencyCode ?? null);
+  const price = shoppingPriceCaption(item);
   const place = cardPlaceLabel(item);
   const catalogChips = shoppingCatalogChips(item);
   // What the piece is, in the user's own terms — never the photo bookkeeping the
   // gallery falls back to, which tells you nothing about whether to buy it.
-  // Nothing known means no line: a placeholder row is not information.
   const description = catalogChips.length > 0
     ? catalogChips.join(' · ')
     : item.notes?.trim() || '';
+  // Name, then the category the chips already carry, then the store: the card
+  // must say *something* about the piece before falling back to a placeholder.
+  const title = item.productName?.trim() || description || shoppingPieceTitle(item);
+  // The store is one of the three facts a decision turns on, so it is never
+  // conditional on the others being known — a Chanel find with no category
+  // used to read "Saved piece · Confirm price" with the store dropped.
+  const store = item.storeName?.trim() || SHORTLIST_COPY.needsStore;
 
   useEffect(() => {
     setImageLoaded(false);
@@ -105,7 +111,7 @@ function ShortlistFindCard({ item, onPress }: { item: ShoppingEditItem; onPress:
       contentStyle={styles.card}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={[item.storeName ?? 'Shopping piece', place, price, description].filter(Boolean).join(', ')}
+      accessibilityLabel={[title, store, place, price.label].filter(Boolean).join(', ')}
       accessibilityHint="Opens this piece in your shortlist"
     >
       <View style={styles.imageFrame}>
@@ -144,13 +150,11 @@ function ShortlistFindCard({ item, onPress }: { item: ShoppingEditItem; onPress:
           the one thing still to do. */}
       <View style={styles.copy}>
         <AppText variant="cardTitle" tone="primary" numberOfLines={2}>
-          {description || item.storeName || SHORTLIST_COPY.needsStore}
+          {title}
         </AppText>
         <AppText variant="metaSheet" tone="muted" numberOfLines={1}>
-          {description ? `${item.storeName ?? SHORTLIST_COPY.needsStore} · ` : null}
-          {price
-            ? <AppText variant="metaSheet" tone="secondary">{price}</AppText>
-            : <AppText variant="metaSheet" tone="action">Add price</AppText>}
+          {`${store} · `}
+          <AppText variant="metaSheet" tone={price.pending ? 'action' : 'secondary'}>{price.label}</AppText>
         </AppText>
       </View>
     </PressableScale>

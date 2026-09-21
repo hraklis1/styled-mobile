@@ -18,7 +18,7 @@ type Props = {
   scope: WishlistScope;
   sortOrder: WishlistSortOrder;
   resultCount: number;
-  resultNoun: 'look' | 'piece' | 'list';
+  resultNoun: 'look' | 'piece' | 'list' | 'recommendation';
   onToggleCategory: (value: string) => void;
   onToggleCity: (value: string) => void;
   onToggleBrand: (value: string) => void;

@@ -1,4 +1,4 @@
-import { shoppingPriceCandidates } from './shoppingPrices';
+import { resolveShoppingPrice, shoppingPriceCandidates } from './shoppingPrices';
 import { extractTextFromImage, isSupported } from 'expo-text-extractor';
 
 export const PRICE_REGEX = /\$\s?((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{2})?)/;
@@ -8,9 +8,8 @@ export type LocalOCRResult = {
   rawOcrText: string;
 };
 
-export function extractPriceFromText(text: string): number | null {
-  const candidates = shoppingPriceCandidates(text);
-  return candidates.length === 1 ? candidates[0].amount : null;
+export function extractPriceFromText(text: string, country?: string | null): number | null {
+  return resolveShoppingPrice(shoppingPriceCandidates(text, country), country).amount;
 }
 
 /** Runs entirely on-device using Apple Vision on iOS and ML Kit on Android. */

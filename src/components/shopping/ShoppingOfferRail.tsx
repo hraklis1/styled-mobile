@@ -101,7 +101,7 @@ function OfferCard({ offer, onPress }: { offer: ProductOffer; onPress: () => voi
       contentStyle={styles.card}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={[offer.title, offer.merchant, offer.formattedPrice].filter(Boolean).join(', ')}
+      accessibilityLabel={[`View at ${offer.merchant}`, offer.title, offer.formattedPrice].filter(Boolean).join(', ')}
       accessibilityHint={`Opens ${offer.merchant} in your browser`}
     >
       <View style={styles.imageFrame}>
@@ -140,12 +140,14 @@ function OfferCard({ offer, onPress }: { offer: ProductOffer; onPress: () => voi
           </Text>
           <Ionicons name="open-outline" size={12} color={colors.action} />
         </View>
+        <Text style={styles.viewAction}>View at {offer.merchant} →</Text>
       </View>
     </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
+  viewAction: { ...typography.text.caption, color: colors.action },
   section: { gap: spacing.sm },
   header: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
   label: { ...typography.text.eyebrow, color: colors.mutedForeground },

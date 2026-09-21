@@ -30,9 +30,32 @@ const REVIEW_REASON_LABELS: Record<ShoppingReviewReasonKey, string> = {
   'text-needs-price-check': SHORTLIST_COPY.checkTagText,
 };
 
+/**
+ * The price line every shortlist surface prints under a piece: the amount when
+ * one is known, otherwise the one action that resolves it. `pending` marks the
+ * action case so callers can set it in action colour — a fix-it control, not a
+ * label — the same way on the rail, the tile, the visit strip and the lightbox.
+ */
+export function shoppingPriceCaption(
+  item: Pick<ShoppingEditItem, 'extractedPrice' | 'currencyCode' | 'priceResolution'>,
+): { label: string; pending: boolean } {
+  const price = formatShoppingPrice(item.extractedPrice, item.currencyCode ?? null);
+  if (price) return { label: price, pending: false };
+  return {
+    label: item.priceResolution?.status === 'ambiguous' ? SHORTLIST_COPY.confirmPrice : SHORTLIST_COPY.needsPrice,
+    pending: true,
+  };
+}
+
+/** What a shortlist piece is called when it has no product name: the category
+ *  the user or the classifier gave it, before an anonymous placeholder. */
+export function shoppingPieceTitle(item: Pick<ShoppingEditItem, 'productName' | 'category'>): string {
+  return item.productName?.trim() || item.category?.trim() || SHORTLIST_COPY.untitledPiece;
+}
+
 export function formatShoppingPrice(price: number | null, currencyCode: string | null = DEFAULT_CURRENCY_CODE): string | null {
   if (price === null) return null;
-  if (!currencyCode) return `${price.toLocaleString()} · currency needed`;
+  if (!currencyCode) return `${price.toLocaleString()} · Confirm currency`;
   const currencyDigits = new Intl.NumberFormat(undefined, { style: 'currency', currency: currencyCode })
     .resolvedOptions().minimumFractionDigits;
   const maximumFractionDigits = currencyDigits === 0 ? 0 : 2;

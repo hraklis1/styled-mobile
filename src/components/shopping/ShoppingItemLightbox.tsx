@@ -1,6 +1,6 @@
 import { useReducedMotion } from 'react-native-reanimated';
 import { purchaseDetails, validateShoppingPatch } from '../../lib/shoppingCatalog';
-import { parseShoppingAmount, shoppingPriceCandidates, suggestedShoppingCurrency } from '../../lib/shoppingPrices';
+import { parseShoppingAmount, resolveShoppingPrice, shoppingPriceCandidates, suggestedShoppingCurrency } from '../../lib/shoppingPrices';
 import { ShoppingWardrobeForm } from './ShoppingWardrobeForm';
 import { ShoppingSyncNotice } from './ShoppingSyncNotice';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -24,9 +24,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar, setStatusBarStyle } from 'expo-status-bar';
 
+import { ActionMenuSheet } from '../primitives/ActionMenuSheet';
 import { ShoppingSnapOrganizerModal } from './ShoppingSnapOrganizerModal';
 import { useCurrencyCode } from '../../hooks/useCurrencyCode';
+import { PriceCandidateChips, type PriceChoice } from './PriceCandidateChips';
 import { useShoppingItemActions } from '../../hooks/useShoppingItemActions';
+import { useEntitlement } from '../../hooks/useEntitlement';
+import { useShoppingBrief } from '../../hooks/useShoppingBrief';
+import { matchShoppingPriority } from '../../lib/shopClarity';
+import { sentenceCase } from './ShoppingPriorityRow';
 import { formatShoppingDetailLocation } from '../../lib/shoppingLocations';
 import {
   formatShoppingPrice,
@@ -35,11 +41,12 @@ import {
   parseShoppingTagOcr,
   SHOPPING_CATALOG_STATUS_OPTIONS,
   shoppingItemBadges,
+  shoppingPieceTitle,
   snapRoleLabel,
 } from '../../lib/shoppingPresentation';
 import type { ShoppingEditItem } from '../../lib/shoppingGallery';
 import { SHORTLIST_COPY } from '../../lib/shoppingVocabulary';
-import { colors, radii, spacing, typography } from '../../theme';
+import { colors, radii, shoppingSurfaces, spacing, typography } from '../../theme';
 import type { ShoppingFindCatalog, ShoppingFindCatalogPatch } from '../../types/shoppingSnap';
 
 function catalogFromItem(item: ShoppingEditItem): ShoppingFindCatalog {
@@ -140,9 +147,20 @@ export function ShoppingItemLightbox({
   const reducedMotion = useReducedMotion();
   const { width, height } = useWindowDimensions();
   const scrollRef = useRef<ScrollView>(null);
+  const contentScrollRef = useRef<ScrollView>(null);
+  const catalogEditorY = useRef(0);
   const [activeIndex, setActiveIndex] = useState(0);
   const [showFullTag, setShowFullTag] = useState(false);
   const [displayItem, setDisplayItem] = useState(item);
+  // The other half of Shop: when a find answers a priority on this month's
+  // brief, say so here, where the decision is made. Reads the cached brief
+  // only — the query is shared with the overview, so this costs no request.
+  const { isPremium } = useEntitlement();
+  const brief = useShoppingBrief(isPremium);
+  const filledPriority = useMemo(
+    () => (brief.data ? matchShoppingPriority(displayItem, brief.data.priorities) : null),
+    [brief.data, displayItem],
+  );
   const [catalogEditing, setCatalogEditing] = useState(false);
   const [catalogDraft, setCatalogDraft] = useState<ShoppingFindCatalog>(() => catalogFromItem(item));
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -153,6 +171,7 @@ export function ShoppingItemLightbox({
   const [wardrobeOpen, setWardrobeOpen] = useState(false);
   const [priceDraft, setPriceDraft] = useState(item.extractedPrice?.toString() ?? '');
   const [organizerOpen, setOrganizerOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const {
     saveCatalog,
@@ -171,6 +190,8 @@ export function ShoppingItemLightbox({
     setCatalogError(null);
     setDecisionError(null);
     setShowCaptureInfo(false);
+    setShowFullTag(false);
+    setMoreOpen(false);
   }, [item]);
 
   useEffect(() => {
@@ -178,13 +199,62 @@ export function ShoppingItemLightbox({
     return () => setStatusBarStyle('dark');
   }, []);
 
+  useEffect(() => {
+    if (!catalogEditing) return;
+    const frame = requestAnimationFrame(() => {
+      contentScrollRef.current?.scrollTo({
+        y: Math.max(0, catalogEditorY.current - spacing.md),
+        animated: true,
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [catalogEditing]);
+
   const photos = useMemo(
     () => [displayItem.primarySnap, ...displayItem.snaps.filter((snap) => snap.id !== displayItem.primarySnap.id)],
     [displayItem],
   );
   const currencyCode = useCurrencyCode();
-  const price = formatShoppingPrice(displayItem.extractedPrice, displayItem.currencyCode ?? null);
-  const priceCandidates = shoppingPriceCandidates(displayItem.snaps.map((snap) => snap.rawOcrText).join('\n'), displayItem.primarySnap.countryCode);
+  const priceCandidates = displayItem.priceResolution?.candidates ?? displayItem.snaps.flatMap((snap) => shoppingPriceCandidates(snap.rawOcrText, snap.countryCode, currencyCode));
+  const hasTagPhoto = displayItem.snaps.some((snap) => snap.captureRole === 'tag');
+  const priceCountry = displayItem.snaps.find((snap) => snap.captureRole === 'tag' && snap.countryCode)?.countryCode
+    ?? (hasTagPhoto ? null : displayItem.snaps.find((snap) => snap.captureRole !== 'garment' && snap.countryCode)?.countryCode
+      ?? displayItem.snaps.find((snap) => snap.countryCode)?.countryCode);
+  const priceResolution = displayItem.priceResolution ?? resolveShoppingPrice(priceCandidates, priceCountry, undefined, currencyCode);
+  const amount = displayItem.extractedPrice ?? priceResolution.amount;
+  const resolvedCurrency = displayItem.currencyCode ?? priceResolution.currencyCode;
+  const price = formatShoppingPrice(amount, resolvedCurrency);
+  // One tap settles a price the tag left open — a conflict, a symbol with
+  // no currency, or an automatic pick among several readings the shopper has
+  // not confirmed — without opening the editor.
+  const showPriceChips = !catalogEditing && priceCandidates.length > 0 && (
+    priceResolution.status === 'ambiguous'
+    || (amount !== null && !resolvedCurrency)
+    || (displayItem.priceOverride == null && priceCandidates.length > 1)
+  );
+  const [priceChipError, setPriceChipError] = useState<string | null>(null);
+  const pickPrice = (choice: PriceChoice) => {
+    setPriceChipError(null);
+    const patch: ShoppingFindCatalogPatch = { priceOverride: choice.amount, currencyCode: choice.currencyCode };
+    // No expected base: the item's currencyCode is the *resolved* currency,
+    // not what the group row stores, and sending it would read as a conflict.
+    void saveCatalog(displayItem.captureGroupId, patch)
+      .then(() => {
+        setDisplayItem((current) => ({
+          ...current,
+          ...patch,
+          extractedPrice: choice.amount,
+          priceResolution: current.priceResolution
+            ? { ...current.priceResolution, amount: choice.amount, currencyCode: choice.currencyCode, status: 'resolved', inferred: false }
+            : current.priceResolution,
+        }));
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      })
+      .catch((error) => setPriceChipError(error instanceof Error ? error.message : 'Please try again.'));
+  };
+  const priceActionLabel = amount !== null && !resolvedCurrency
+    ? `${amount.toLocaleString()} · Confirm currency`
+    : priceResolution.status === 'ambiguous' ? SHORTLIST_COPY.confirmPrice : SHORTLIST_COPY.needsPrice;
   const meta = [displayItem.sizeLabel ? `Size ${displayItem.sizeLabel}` : null, displayItem.colorLabel, displayItem.materialLabel]
     .filter(Boolean)
     .join('   ·   ');
@@ -249,7 +319,7 @@ export function ShoppingItemLightbox({
     } satisfies ShoppingFindCatalogPatch;
     const original = catalogFromItem(displayItem);
     const patch = Object.fromEntries(Object.entries(details).filter(([key, value]) => {
-      if (key === 'priceOverride' && priceDraft === (displayItem.extractedPrice?.toString() ?? '')) return false;
+      if (key === 'priceOverride' && (priceDraft.trim() ? parseShoppingAmount(priceDraft) : null) === displayItem.extractedPrice) return false;
       return value !== (original[key as keyof ShoppingFindCatalog] ?? null);
     })) as ShoppingFindCatalogPatch;
     setCatalogError(null);
@@ -320,7 +390,7 @@ export function ShoppingItemLightbox({
     <Modal visible animationType={reducedMotion ? 'none' : 'slide'} presentationStyle="fullScreen" onRequestClose={onClose}>
       <StatusBar style="light" />
       <View style={styles.root}>
-        <ScrollView bounces={false} showsVerticalScrollIndicator={false}>
+        <ScrollView ref={contentScrollRef} bounces={false} showsVerticalScrollIndicator={false}>
           <View style={[styles.hero, { height: heroHeight }]}>
             <ScrollView
               ref={scrollRef}
@@ -382,9 +452,51 @@ export function ShoppingItemLightbox({
           <View style={[styles.content, { paddingBottom: insets.bottom + spacing.xxl }]}>
             <Text style={styles.eyebrow}>{[displayItem.brand, displayItem.storeName].filter(Boolean).join(' · ')}</Text>
             <View style={styles.titleRow}>
-              <Text style={styles.title}>{displayItem.productName || displayItem.category || 'Saved piece'}</Text>
-              {price ? <Text style={styles.price}>{price}</Text> : <Text style={styles.priceMuted}>Price not found</Text>}
+              <Text style={styles.title}>{shoppingPieceTitle(displayItem)}</Text>
+              {price && resolvedCurrency ? <Text style={styles.price}>{price}</Text> : (
+                <TouchableOpacity
+                  testID="choose-price-button"
+                  style={styles.priceAction}
+                  accessibilityRole="button"
+                  accessibilityLabel={priceActionLabel}
+                  onPress={() => {
+                    void Haptics.selectionAsync();
+                    setPriceDraft(displayItem.extractedPrice?.toString() ?? '');
+                    setCatalogDraft(catalogFromItem(displayItem));
+                    setCatalogError(null);
+                    setCatalogEditing(true);
+                  }}
+                >
+                  <Text style={styles.priceActionLabel}>{priceActionLabel}</Text>
+                  <Ionicons name="create-outline" size={14} color={colors.action} />
+                </TouchableOpacity>
+              )}
             </View>
+            {showPriceChips ? (
+              <View style={styles.priceChips}>
+                <PriceCandidateChips
+                  prompt={priceResolution.status === 'ambiguous' ? 'Which price?' : !resolvedCurrency && amount !== null ? 'Which currency?' : 'Read from the tag'}
+                  candidates={priceCandidates}
+                  selected={amount !== null && resolvedCurrency ? { amount, currencyCode: resolvedCurrency } : null}
+                  disabled={isSavingCatalog}
+                  onPick={pickPrice}
+                />
+                {priceChipError ? <Text selectable style={styles.catalogError}>{priceChipError}</Text> : null}
+              </View>
+            ) : null}
+            {filledPriority ? (
+              <View style={styles.briefChip} accessibilityLabel={`Fills your brief: ${sentenceCase(filledPriority.label)}`}>
+                <Ionicons name="checkmark-circle" size={14} color={shoppingSurfaces.olive.accent} />
+                <Text style={styles.briefChipText} numberOfLines={1}>
+                  Fills your brief · <Text style={styles.briefChipStrong}>{sentenceCase(filledPriority.label)}</Text>
+                </Text>
+              </View>
+            ) : null}
+            <TouchableOpacity style={[styles.stylistRow, styles.stylistPrimary]} onPress={handleAskStylist} accessibilityRole="button">
+              <Ionicons name="sparkles" size={14} color={colors.primary} />
+              <Text style={styles.stylistRowText}>{SHORTLIST_COPY.askStylist}</Text>
+              <Ionicons name="chevron-forward" size={13} color={colors.primary} />
+            </TouchableOpacity>
             {meta ? <Text style={styles.meta}>{meta}</Text> : null}
             <ShoppingSyncNotice />
             <View style={styles.decisionSection}>
@@ -453,19 +565,10 @@ export function ShoppingItemLightbox({
                   {catalogEditing ? 'Cancel' : SHORTLIST_COPY.editDetails}
                 </Text>
               </TouchableOpacity>
-              {canOrganize ? (
-                <TouchableOpacity
-                  style={styles.actionPill}
-                  hitSlop={4}
-                  onPress={() => {
-                    void Haptics.selectionAsync();
-                    setOrganizerOpen(true);
-                  }}
-                >
-                  <Ionicons name="albums-outline" size={14} color={colors.foreground} />
-                  <Text style={styles.actionPillText}>Organize</Text>
-                </TouchableOpacity>
-              ) : null}
+              <TouchableOpacity style={styles.actionPill} onPress={() => setMoreOpen(true)} accessibilityRole="button" accessibilityLabel="More piece options">
+                <Ionicons name="ellipsis-horizontal" size={14} color={colors.foreground} />
+                <Text style={styles.actionPillText}>More</Text>
+              </TouchableOpacity>
               {mapCoordinate ? (
                 <TouchableOpacity style={styles.actionPill} hitSlop={4} onPress={openMap}>
                   <Ionicons name="location-outline" size={14} color={colors.foreground} />
@@ -475,21 +578,31 @@ export function ShoppingItemLightbox({
             </View>
 
             {catalogEditing ? (
-              <View style={styles.catalogEditor}>
+              <View
+                style={styles.catalogEditor}
+                onLayout={(event) => {
+                  catalogEditorY.current = event.nativeEvent.layout.y;
+                  requestAnimationFrame(() => {
+                    contentScrollRef.current?.scrollTo({
+                      y: Math.max(0, catalogEditorY.current - spacing.md),
+                      animated: true,
+                    });
+                  });
+                }}
+              >
                 <View style={styles.catalogFieldGrid}>
+                  <CatalogField label="Price" value={priceDraft} onChange={setPriceDraft} />
+                  <CatalogField label="Currency (CAD, EUR…)" value={catalogDraft.currencyCode ?? null} onChange={(value) => setCatalogDraft((current) => ({ ...current, currencyCode: value.toUpperCase() }))} />
                   <CatalogField label="Product name" value={catalogDraft.productName ?? null} onChange={(value) => setCatalogDraft((current) => ({ ...current, productName: value }))} />
                   <CatalogField label="Brand" value={catalogDraft.brand ?? null} onChange={(value) => setCatalogDraft((current) => ({ ...current, brand: value }))} />
                   <CatalogField label="Product code" value={catalogDraft.productCode ?? null} onChange={(value) => setCatalogDraft((current) => ({ ...current, productCode: value }))} />
                   <CatalogField label="Purchase link" value={catalogDraft.purchaseUrl ?? null} onChange={(value) => setCatalogDraft((current) => ({ ...current, purchaseUrl: value }))} />
-                  <CatalogField label="Price" value={priceDraft} onChange={setPriceDraft} />
-                  <CatalogField label="Currency (CAD, EUR…)" value={catalogDraft.currencyCode ?? null} onChange={(value) => setCatalogDraft((current) => ({ ...current, currencyCode: value.toUpperCase() }))} />
                   <CatalogField label="Category" value={catalogDraft.category} onChange={(value) => setCatalogDraft((current) => ({ ...current, category: value }))} />
                   <CatalogField label="Size" value={catalogDraft.sizeLabel} onChange={(value) => setCatalogDraft((current) => ({ ...current, sizeLabel: value }))} />
                   <CatalogField label="Color" value={catalogDraft.colorLabel} onChange={(value) => setCatalogDraft((current) => ({ ...current, colorLabel: value }))} />
                   <CatalogField label="Material" value={catalogDraft.materialLabel} onChange={(value) => setCatalogDraft((current) => ({ ...current, materialLabel: value }))} />
                 </View>
-                {!catalogDraft.currencyCode ? <TouchableOpacity style={{ minHeight: 44, justifyContent: 'center' }} onPress={() => setCatalogDraft((current) => ({ ...current, currencyCode: suggestedShoppingCurrency(displayItem.primarySnap.countryCode, currencyCode) }))}><Text style={{ color: colors.action }}>Use {suggestedShoppingCurrency(displayItem.primarySnap.countryCode, currencyCode)} currency</Text></TouchableOpacity> : null}
-                {priceCandidates.length > 0 ? <View style={{ gap: 8 }}><Text style={styles.detailLabel}>Prices read from your tags — choose one</Text>{priceCandidates.map((candidate, index) => <TouchableOpacity key={index} style={{ minHeight: 44, justifyContent: 'center' }} onPress={() => { setPriceDraft(String(candidate.amount)); setCatalogDraft((current) => ({ ...current, currencyCode: candidate.currencyCode ?? current.currencyCode })); }}><Text style={{ color: colors.action }}>{candidate.label}{candidate.currencyCode ? ` · ${candidate.currencyCode}` : ' · confirm currency'}</Text></TouchableOpacity>)}</View> : null}
+                {!catalogDraft.currencyCode ? <TouchableOpacity style={{ minHeight: 44, justifyContent: 'center' }} onPress={() => setCatalogDraft((current) => ({ ...current, currencyCode: suggestedShoppingCurrency(priceCountry, currencyCode) }))}><Text style={{ color: colors.action }}>Use {suggestedShoppingCurrency(priceCountry, currencyCode)} currency</Text></TouchableOpacity> : null}
                 <TextInput
                   value={catalogDraft.notes ?? ''}
                   onChangeText={(value) => setCatalogDraft((current) => ({ ...current, notes: value }))}
@@ -515,15 +628,11 @@ export function ShoppingItemLightbox({
               </View>
             ) : null}
 
-            <TouchableOpacity style={styles.stylistRow} onPress={() => void saveCatalog(displayItem.captureGroupId, { coverPhotoId: activePhoto.id }).then(() => setDisplayItem((current) => ({ ...current, primarySnap: activePhoto, coverPhotoId: activePhoto.id }))).catch((error) => Alert.alert('Could not save cover', error.message))}><Text style={styles.stylistRowText}>Use this photo as cover</Text></TouchableOpacity>
+
             {displayItem.purchaseUrl ? <TouchableOpacity style={styles.stylistRow} onPress={() => { try { validateShoppingPatch({ purchaseUrl: displayItem.purchaseUrl }); void Linking.openURL(displayItem.purchaseUrl!).catch(() => Alert.alert('Could not open link')); } catch { Alert.alert('Edit the purchase link first.'); } }}><Text style={styles.stylistRowText}>Open purchase link</Text></TouchableOpacity> : null}
             {displayItem.catalogStatus === 'closet' ? <TouchableOpacity style={styles.stylistRow} onPress={() => { if (displayItem.wardrobeItemId) { onClose(); void Linking.openURL(`styled://wardrobe-item/${displayItem.wardrobeItemId}`); } else setWardrobeOpen(true); }}><Text style={styles.stylistRowText}>{displayItem.wardrobeItemId ? 'View in wardrobe' : 'Add to wardrobe'}</Text></TouchableOpacity> : null}
             {wardrobeOpen ? <ShoppingWardrobeForm item={displayItem} onClose={() => setWardrobeOpen(false)} onSaved={(id) => { setWardrobeOpen(false); setDisplayItem((current) => ({ ...current, wardrobeItemId: id })); }} /> : null}
-            <TouchableOpacity style={styles.stylistRow} onPress={handleAskStylist} accessibilityRole="button">
-              <Ionicons name="sparkles" size={14} color={colors.primary} />
-              <Text style={styles.stylistRowText}>{SHORTLIST_COPY.askStylist}</Text>
-              <Ionicons name="chevron-forward" size={13} color={colors.primary} />
-            </TouchableOpacity>
+
 
             <View style={styles.badgeRow}>
               {badges.map((badge) => (
@@ -548,7 +657,7 @@ export function ShoppingItemLightbox({
               <DetailRow label="Location" value={formatShoppingDetailLocation(displayItem)} />
             </View>
 
-            <View style={styles.disclosureCard}>
+            {showCaptureInfo ? <View style={styles.disclosureCard} onLayout={(event) => contentScrollRef.current?.scrollTo({ y: event.nativeEvent.layout.y, animated: !reducedMotion })}>
               <TouchableOpacity
                 style={styles.disclosureToggle}
                 onPress={() => setShowCaptureInfo((current) => !current)}
@@ -565,10 +674,10 @@ export function ShoppingItemLightbox({
                   <DetailRow label="Backup" value={syncLabel} />
                 </View>
               ) : null}
-            </View>
+            </View> : null}
 
-            {tagOcrText.length > 0 ? (
-              <View style={styles.disclosureCard}>
+            {showFullTag && tagOcrText.length > 0 ? (
+              <View style={styles.disclosureCard} onLayout={(event) => contentScrollRef.current?.scrollTo({ y: event.nativeEvent.layout.y, animated: !reducedMotion })}>
                 <TouchableOpacity
                   style={styles.disclosureToggle}
                   onPress={() => setShowFullTag((current) => !current)}
@@ -601,19 +710,7 @@ export function ShoppingItemLightbox({
               </View>
             ) : null}
 
-            <TouchableOpacity
-              style={styles.deleteTouch}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              onPress={handleDelete}
-              disabled={isDeleting}
-              accessibilityRole="button"
-            >
-              {isDeleting ? (
-                <ActivityIndicator size="small" color={colors.error} />
-              ) : (
-                <Text style={styles.deleteText}>Delete this piece</Text>
-              )}
-            </TouchableOpacity>
+
           </View>
         </ScrollView>
 
@@ -626,6 +723,22 @@ export function ShoppingItemLightbox({
         </TouchableOpacity>
       </View>
 
+      <ActionMenuSheet
+        visible={moreOpen}
+        title="Piece options"
+        onClose={() => setMoreOpen(false)}
+        options={[
+          ...(canOrganize ? [{ label: 'Organize photos', icon: 'albums-outline' as const, onPress: () => setOrganizerOpen(true) }] : []),
+          { label: 'Use this photo as cover', icon: 'image-outline', onPress: () => {
+            void saveCatalog(displayItem.captureGroupId, { coverPhotoId: activePhoto.id })
+              .then(() => setDisplayItem((current) => ({ ...current, primarySnap: activePhoto, coverPhotoId: activePhoto.id })))
+              .catch((error) => Alert.alert('Could not save cover', error.message));
+          } },
+          { label: 'Capture information', icon: 'information-circle-outline', onPress: () => { setShowFullTag(false); setShowCaptureInfo(true); } },
+          ...(tagOcrText.length ? [{ label: 'Tag text', icon: 'pricetag-outline' as const, onPress: () => { setShowCaptureInfo(false); setShowFullTag(true); } }] : []),
+          { label: isDeleting ? 'Deleting…' : 'Delete this piece', icon: 'trash-outline', destructive: true, onPress: () => { if (!isDeleting) handleDelete(); } },
+        ]}
+      />
       <ShoppingSnapOrganizerModal
         visible={organizerOpen}
         snaps={displayItem.snaps}
@@ -638,6 +751,7 @@ export function ShoppingItemLightbox({
 }
 
 const styles = StyleSheet.create({
+  stylistPrimary: { backgroundColor: colors.surfaceSubtle, borderRadius: radii.card, paddingHorizontal: spacing.md },
   root: { flex: 1, backgroundColor: colors.background },
   hero: { width: '100%', backgroundColor: colors.surfaceSubtle },
   topScrim: { position: 'absolute', top: 0, left: 0, right: 0, height: 100 },
@@ -667,7 +781,11 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing.md },
   title: { flex: 1, ...typography.text.editorialTitle, color: colors.foreground },
   price: { fontSize: typography.text.sheetTitle.fontSize, color: colors.foreground, fontVariant: ['tabular-nums'] },
-  priceMuted: { fontSize: typography.text.sectionTitle.fontSize, color: colors.mutedForeground },
+  priceAction: { maxWidth: '45%', minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.xs, paddingHorizontal: spacing.xs },
+  // A fix-it control, not a caption: set in action colour with a pencil so it
+  // reads as the thing to tap, matching the pending price on every tile.
+  priceChips: { marginTop: spacing.xs, gap: spacing.xs },
+  priceActionLabel: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.action },
   meta: { fontSize: typography.text.bodySmall.fontSize, letterSpacing: typography.tracking.compact, textTransform: 'uppercase', color: colors.mutedForeground },
   decisionSection: { gap: spacing.sm, paddingTop: spacing.sm },
   decisionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -730,6 +848,9 @@ const styles = StyleSheet.create({
   },
   disabled: { opacity: 0.6 },
   catalogSaveText: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, color: colors.primaryForeground },
+  briefChip: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: 28, paddingHorizontal: spacing.sm, borderRadius: radii.full, backgroundColor: shoppingSurfaces.olive.wash },
+  briefChipText: { flexShrink: 1, fontSize: typography.text.caption.fontSize, color: shoppingSurfaces.olive.accent },
+  briefChipStrong: { fontWeight: typography.weight.semibold },
   stylistRow: {
     marginTop: spacing.xs,
     minHeight: 44,

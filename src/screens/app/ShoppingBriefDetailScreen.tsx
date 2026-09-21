@@ -1,14 +1,16 @@
-import { useCallback, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeOut, useReducedMotion } from 'react-native-reanimated';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { FadeInUp, FadeOut, FadeOutDown, useReducedMotion } from 'react-native-reanimated';
 
 import { EditorialSection } from '../../components/primitives/Editorial';
 import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
-import { ShoppingPriorityRow } from '../../components/shopping/ShoppingPriorityRow';
+import { sentenceCase, ShoppingPriorityRow } from '../../components/shopping/ShoppingPriorityRow';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useNotNowShoppingPriority, useShoppingBrief } from '../../hooks/useShoppingBrief';
 import { toLocalDateKey } from '../../lib/dailyStylistPick';
-import { shoppingSurfaces, colors, spacing, typography } from '../../theme';
+import { shoppingSurfaces, colors, radii, spacing, typography } from '../../theme';
+import { clarifyOutfitClaims, OUTFIT_ESTIMATE_EXPLANATION, potentialOutfitCount, shoppingPriorityRoute } from '../../lib/shopClarity';
 import { track } from '../../lib/analytics';
 import type { ShoppingBriefDetailScreenProps } from '../../navigation/types';
 
@@ -33,11 +35,39 @@ export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScr
   const { isPremium } = useEntitlement();
   const brief = useShoppingBrief(isPremium);
   const notNow = useNotNowShoppingPriority();
-  const [notNowNotice, setNotNowNotice] = useState(false);
+  const insets = useSafeAreaInsets();
   // Skipped rows leave the list rather than lingering with a "skipped" label:
   // the brief cache is only refreshed on the next day's fetch.
   const [skippedKeys, setSkippedKeys] = useState<string[]>([]);
+  // "Not for me" is reversible for a few seconds: the row leaves at once, a
+  // toast offers Undo, and the server only hears about it once the toast has
+  // gone. The server has no undo of its own, so the grace period is the undo.
+  const [pendingSkip, setPendingSkip] = useState<{ key: string; label: string } | null>(null);
+  const pendingSkipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reduceMotion = useReducedMotion();
+
+  const commitSkip = useCallback((recommendationKey: string, localDate: string, meta: { category: string; reason: string; scope: string }) => {
+    notNow.reset();
+    notNow.mutate({ recommendationKey, localDate }, {
+      onSuccess: () => track('shopping_brief_priority_not_now', meta),
+      // Restore the row: a skip the server never recorded would reappear
+      // tomorrow anyway, and leaving it hidden now would be a lie.
+      onError: () => setSkippedKeys((keys) => keys.filter((key) => key !== recommendationKey)),
+    });
+  }, [notNow]);
+
+  const undoSkip = useCallback(() => {
+    if (pendingSkipTimer.current) clearTimeout(pendingSkipTimer.current);
+    pendingSkipTimer.current = null;
+    setPendingSkip((pending) => {
+      if (pending) setSkippedKeys((keys) => keys.filter((key) => key !== pending.key));
+      return null;
+    });
+  }, []);
+
+  useEffect(() => () => {
+    if (pendingSkipTimer.current) clearTimeout(pendingSkipTimer.current);
+  }, []);
 
   const goBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -70,12 +100,11 @@ export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScr
         <ShopSubpageHeader
           eyebrow="YOUR SHOPPING BRIEF"
           title={data.headline}
-          subtitle={data.summary}
+          subtitle={data.priorities.reduce((summary, priority) => clarifyOutfitClaims(summary, priority.impactScore), data.summary)}
           onBack={goBack}
           style={styles.header}
         />
-        {notNowNotice ? <Text style={styles.notice}>Suggestion skipped for now.</Text> : null}
-        {notNow.isError ? <Text style={styles.errorNotice}>Couldn’t skip this suggestion. Tap “Not for me” to retry.</Text> : null}
+        {notNow.isError ? <Text style={styles.errorNotice}>Couldn’t skip that suggestion. Tap “Not for me” to retry.</Text> : null}
         {visiblePriorities.length > 0 ? (
           <EditorialSection variant="ruled" title="Priorities">
             {visiblePriorities.map((priority, index) => {
@@ -91,24 +120,25 @@ export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScr
                     isLast={index === visiblePriorities.length - 1}
                     onPress={() => {
                       track('shopping_brief_priority_opened', { category: priority.category, reason: priority.reason, rank: priority.priority });
-                      navigation.navigate('ShoppingPriorityEdit', {
-                        priority,
-                        origin: 'shopping_brief',
-                        briefGeneratedAt: data.generatedAt,
-                      });
+                      navigation.navigate('ShoppingPriorityEdit', shoppingPriorityRoute(priority, data.generatedAt));
                     }}
                     onSkip={priority.recommendationKey ? () => {
                       if (notNow.isPending) return;
                       const recommendationKey = priority.recommendationKey!;
-                      notNow.reset();
-                      notNow.mutate({
-                        recommendationKey,
-                        localDate: data.localDate ?? toLocalDateKey(new Date()),
-                      }, { onSuccess: () => {
-                        setSkippedKeys((keys) => [...keys, recommendationKey]);
-                        setNotNowNotice(true);
-                        track('shopping_brief_priority_not_now', { category: priority.category, reason: priority.reason, scope: priority.scope ?? 'general' });
-                      } });
+                      const localDate = data.localDate ?? toLocalDateKey(new Date());
+                      const meta = { category: priority.category, reason: priority.reason, scope: priority.scope ?? 'general' };
+                      // A second skip while one is pending commits the first.
+                      if (pendingSkipTimer.current) {
+                        clearTimeout(pendingSkipTimer.current);
+                        if (pendingSkip) commitSkip(pendingSkip.key, localDate, meta);
+                      }
+                      setSkippedKeys((keys) => [...keys, recommendationKey]);
+                      setPendingSkip({ key: recommendationKey, label: sentenceCase(priority.label) });
+                      pendingSkipTimer.current = setTimeout(() => {
+                        pendingSkipTimer.current = null;
+                        setPendingSkip(null);
+                        commitSkip(recommendationKey, localDate, meta);
+                      }, 4000);
                     } : undefined}
                     skipping={skipping}
                   />
@@ -117,7 +147,23 @@ export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScr
             })}
           </EditorialSection>
         ) : null}
+        {/* A footnote to the counts it qualifies, after the rows that carry
+            them — not a floating notice above a list that hasn't started. */}
+        {visiblePriorities.some((priority) => potentialOutfitCount(priority.impactScore)) ? <Text style={styles.notice}>{OUTFIT_ESTIMATE_EXPLANATION}</Text> : null}
       </ScrollView>
+      {pendingSkip ? (
+        <Animated.View
+          entering={reduceMotion ? undefined : FadeInUp.duration(160)}
+          exiting={reduceMotion ? undefined : FadeOutDown.duration(120)}
+          style={[styles.toast, { bottom: insets.bottom + spacing.lg }]}
+          accessibilityLiveRegion="polite"
+        >
+          <Text style={styles.toastText} numberOfLines={1}>Skipped {pendingSkip.label}</Text>
+          <Pressable onPress={undoSkip} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Undo skipping ${pendingSkip.label}`}>
+            <Text style={styles.toastAction}>Undo</Text>
+          </Pressable>
+        </Animated.View>
+      ) : null}
     </View>
   );
 }
@@ -130,4 +176,7 @@ const styles = StyleSheet.create({
   header: { marginHorizontal: -spacing.page, backgroundColor: shoppingSurfaces.canvas },
   notice: { ...typography.text.caption, color: colors.mutedForeground, paddingVertical: spacing.sm },
   errorNotice: { ...typography.text.caption, color: colors.destructive, paddingVertical: spacing.sm },
+  toast: { position: 'absolute', left: spacing.page, right: spacing.page, minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md, borderRadius: radii.lg, borderCurve: 'continuous', backgroundColor: colors.surfaceElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, boxShadow: '0 4px 14px rgba(40, 35, 31, 0.12)', zIndex: 20 },
+  toastText: { flex: 1, ...typography.text.bodySmall, fontWeight: typography.weight.medium, color: colors.foreground },
+  toastAction: { ...typography.text.label, color: colors.action },
 });

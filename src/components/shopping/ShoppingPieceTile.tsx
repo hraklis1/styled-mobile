@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import type { ShoppingEditItem } from '../../lib/shoppingGallery';
-import { formatShoppingPrice } from '../../lib/shoppingPresentation';
+import { shoppingPieceTitle, shoppingPriceCaption } from '../../lib/shoppingPresentation';
 import { colors, spacing, typography } from '../../theme';
 export function ShoppingPieceTile({
   item,
@@ -20,7 +20,8 @@ export function ShoppingPieceTile({
   selecting: boolean;
   onLongPress: () => void;
 }) {
-  const title = item.productName || item.category || 'Saved piece';
+  const title = shoppingPieceTitle(item);
+  const price = shoppingPriceCaption(item);
   return (
     <View style={styles.tile}>
       <TouchableOpacity
@@ -52,11 +53,8 @@ export function ShoppingPieceTile({
         <Text style={styles.meta} numberOfLines={1}>
           {[item.brand, item.storeName].filter(Boolean).join(' · ')}
         </Text>
-        <Text style={styles.price}>
-          {formatShoppingPrice(
-            item.extractedPrice,
-            item.currencyCode ?? null,
-          ) ?? 'Price not added'}
+        <Text style={[styles.price, price.pending && styles.pricePending]}>
+          {price.label}
         </Text>
       </TouchableOpacity>
       {!selecting ? (
@@ -103,6 +101,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontVariant: ['tabular-nums'],
   },
+  pricePending: { color: colors.action, fontWeight: '600' },
   favorite: {
     position: 'absolute',
     right: 4,

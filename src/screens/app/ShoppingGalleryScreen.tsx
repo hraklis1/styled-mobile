@@ -2,6 +2,7 @@ import { ShoppingPieceTile } from '../../components/shopping/ShoppingPieceTile';
 import { ShoppingCompare } from '../../components/shopping/ShoppingCompare';
 import { ShoppingSyncNotice } from '../../components/shopping/ShoppingSyncNotice';
 import { useShoppingItemActions } from '../../hooks/useShoppingItemActions';
+import { useCurrencyCode } from '../../hooks/useCurrencyCode';
 import { useShoppingOfflineStore, emptyShoppingAccount } from '../../stores/useShoppingOfflineStore';
 import { browseShoppingItems } from '../../lib/shoppingSearch';
 import { track } from '../../lib/analytics';
@@ -126,7 +127,8 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
     () => mergeShoppingSnaps(remoteSnaps, pendingUploads),
     [pendingUploads, remoteSnaps],
   );
-  const allItems = useMemo(() => buildShoppingEditItems(allSnaps), [allSnaps]);
+  const homeCurrency = useCurrencyCode();
+  const allItems = useMemo(() => buildShoppingEditItems(allSnaps, { homeCurrency }), [allSnaps, homeCurrency]);
 
   // The one attention axis fans back out into the three arguments
   // filterShoppingEditItems already takes, so that library stays as it is.
@@ -175,6 +177,12 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   }, [navigation, returnTo]);
 
   useEffect(() => {
+    if (route.params?.resetFilters) {
+      setQuery(''); setSearchOpen(false); setFavorites(false); setCategory('');
+      setCurrency(''); setMinimum(''); setMaximum(''); setOldest(false);
+      setStoreFilter(STORE_FILTER_ALL); setDateFilter('all'); setAttentionFilter('all');
+      setCatalogStatuses(new Set());
+    }
     const requestedFilter = route.params?.catalogFilter;
     if (requestedFilter) {
       setCatalogStatuses(requestedFilter === 'active'
@@ -186,10 +194,10 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
       const focused = allItems.find((item) => item.captureGroupId === focusGroupId);
       if (focused) setLightboxItem(focused);
     }
-    if (focusGroupId || requestedFilter) {
-      navigation.setParams({ focusGroupId: undefined, catalogFilter: undefined });
+    if (focusGroupId || requestedFilter || route.params?.resetFilters) {
+      navigation.setParams({ focusGroupId: undefined, catalogFilter: undefined, resetFilters: undefined });
     }
-  }, [allItems, navigation, route.params?.catalogFilter, route.params?.focusGroupId]);
+  }, [allItems, navigation, route.params?.catalogFilter, route.params?.focusGroupId, route.params?.resetFilters]);
   const storeOptions = useMemo(() => buildShoppingStoreOptions(allItems), [allItems]);
   const unassignedStoreCount = useMemo(() => countItemsWithoutStore(allItems), [allItems]);
   const storeFilterLabel = useMemo(
@@ -447,9 +455,6 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
     }
     if (!group.storeName) {
       options.push({ label: SHORTLIST_COPY.addStore, icon: 'storefront-outline', onPress: () => openStoreAssignment(group) });
-      // The row's heading is spoken for (it asks for the store), so the way
-      // into the visit lives here instead.
-      options.push({ label: 'Open visit', icon: 'images-outline', onPress: () => navigation.navigate('ShoppingHaulDetail', { groupKey: group.key }) });
     }
     options.push({ label: 'Select visit', icon: 'checkmark-circle-outline', onPress: () => startSelection(group) });
     options.push({ label: 'Delete visit', icon: 'trash-outline', destructive: true, onPress: () => confirmDeleteGroup(group) });
@@ -507,7 +512,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
           />
           <ActionButton
             icon="camera"
-            label="Add piece"
+            label="Save a find"
             onPress={() => navigation.navigate('ShoppingCamera')}
           />
         </>
@@ -597,7 +602,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
         contentContainerStyle={{ paddingBottom: selectionMode ? 180 : 32 }}
         refreshing={isRefetching}
         onRefresh={() => void refetch()}
-        ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyTitle}>{allItems.length ? 'No matching pieces' : 'Your next find starts here'}</Text><Text style={styles.emptyText}>Photograph a piece or import photos to consider later.</Text><ActionButton icon="add" label={allItems.length ? 'Clear filters' : 'Add piece'} onPress={() => { if (allItems.length) { setQuery(''); setFavorites(false); setCategory(''); setCurrency(''); setMinimum(''); setMaximum(''); setCatalogStatuses(new Set()); clearItemFilters(); } else navigation.navigate('ShoppingCamera'); }} /></View>}
+        ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyTitle}>{allItems.length ? 'No matching pieces' : 'Your next find starts here'}</Text><Text style={styles.emptyText}>Photograph a piece or import photos to consider later.</Text><ActionButton icon="add" label={allItems.length ? 'Clear filters' : 'Save a find'} onPress={() => { if (allItems.length) { setQuery(''); setFavorites(false); setCategory(''); setCurrency(''); setMinimum(''); setMaximum(''); setCatalogStatuses(new Set()); clearItemFilters(); } else navigation.navigate('ShoppingCamera'); }} /></View>}
         renderItem={({ item }) => <ShoppingPieceTile item={item} selected={selectedItemIds.has(item.id)} selecting={selectionMode} onPress={() => { if (selectionMode) setSelectedItemIds((ids) => { const next = new Set(ids); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; }); else setLightboxItem(item); }} onLongPress={() => { setSelectionMode(true); setSelectedItemIds(new Set([item.id])); }} onFavorite={() => void saveCatalog(item.captureGroupId, { isFavorite: !item.isFavorite }).catch((error) => Alert.alert('Could not save', error.message))} />}
       /> : <FlatList
         key="visits"
@@ -639,7 +644,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
             </Text>
             <TouchableOpacity style={styles.emptyButton} onPress={() => navigation.navigate('ShoppingCamera')}>
               <Ionicons name="camera-outline" size={18} color={colors.primaryForeground} />
-              <Text style={styles.emptyButtonText}>Open Shopping Mode</Text>
+              <Text style={styles.emptyButtonText}>Save a find</Text>
             </TouchableOpacity>
           </View>
         )}

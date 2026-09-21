@@ -17,7 +17,7 @@ export const SHORTLIST_COPY = {
   visits: 'visits',
   photos: 'photos',
   editDetails: 'Edit details',
-  askStylist: 'Ask the stylist about this',
+  askStylist: 'Would this work with my wardrobe?',
   captureInformation: 'Capture information',
   tagDetails: 'Tag details',
   considering: 'Considering',
@@ -35,12 +35,16 @@ export const SHORTLIST_COPY = {
   backedUp: 'Backed up',
 
   /** The state: this find has no store attached. */
-  needsStore: 'Needs store',
+  needsStore: 'Store not added',
   /** The action that resolves it. */
   addStore: 'Add store',
 
   /** The state: no price was read off the tag. */
-  needsPrice: 'Needs price',
+  needsPrice: 'Add price',
+  /** A price was read but more than one candidate came out of the tag. */
+  confirmPrice: 'Confirm price',
+  /** A piece with neither a product name nor a category. */
+  untitledPiece: 'Untitled find',
 
   /** The state: a photo the classifier never filed as garment or tag. */
   unsorted: 'Unsorted',

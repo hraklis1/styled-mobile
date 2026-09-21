@@ -7,6 +7,7 @@ import { ShoppingEditCard } from '../../components/shopping/ShoppingEditCard';
 import { ShoppingItemLightbox } from '../../components/shopping/ShoppingItemLightbox';
 import { ShoppingStoreAssignmentSheet } from '../../components/shopping/ShoppingStoreAssignmentSheet';
 import { useAssignShoppingStore } from '../../hooks/useAssignShoppingStore';
+import { useCurrencyCode } from '../../hooks/useCurrencyCode';
 import { buildShoppingStoreOptions } from '../../lib/shoppingStoreFilters';
 import { useShoppingSnaps } from '../../hooks/useShoppingSnaps';
 import { buildShoppingEditItems, mergeShoppingSnaps, type ShoppingEditItem } from '../../lib/shoppingGallery';
@@ -32,9 +33,10 @@ export function ShoppingHaulDetailScreen({ route, navigation }: ShoppingHaulDeta
   const pendingUploads = useShoppingSessionStore((state) => state.pendingUploads);
   // Unfiltered on purpose — the immersive gallery shows the whole haul
   // regardless of whatever store/date filters are active back on the list.
+  const homeCurrency = useCurrencyCode();
   const allItems = useMemo(
-    () => buildShoppingEditItems(mergeShoppingSnaps(remoteSnaps, pendingUploads)),
-    [pendingUploads, remoteSnaps],
+    () => buildShoppingEditItems(mergeShoppingSnaps(remoteSnaps, pendingUploads), { homeCurrency }),
+    [homeCurrency, pendingUploads, remoteSnaps],
   );
   const groups = useMemo(() => buildShoppingSessionGroups(allItems), [allItems]);
   const storeOptions = useMemo(() => buildShoppingStoreOptions(allItems), [allItems]);

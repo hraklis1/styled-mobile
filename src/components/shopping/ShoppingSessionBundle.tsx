@@ -13,7 +13,8 @@ import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 
 import { PressableScale } from '../primitives/PressableScale';
-import { formatShoppingPrice } from '../../lib/shoppingPresentation';
+import { shoppingPieceTitle, shoppingPriceCaption } from '../../lib/shoppingPresentation';
+import { formatShoppingPlaceLabel } from '../../lib/shoppingLocations';
 import { type ShoppingSessionGroup } from '../../lib/shoppingSessionGroups';
 import { SHORTLIST_COPY } from '../../lib/shoppingVocabulary';
 import { colors, radii, spacing, typography } from '../../theme';
@@ -37,7 +38,7 @@ function ShoppingSessionTile({
   onLongPress: () => void;
 }) {
   const [failed, setFailed] = useState(false);
-  const price = formatShoppingPrice(item.extractedPrice, item.currencyCode ?? null);
+  const price = shoppingPriceCaption(item);
 
   return (
     <TouchableOpacity
@@ -45,7 +46,7 @@ function ShoppingSessionTile({
       activeOpacity={0.85}
       onPress={onPress}
       onLongPress={onLongPress}
-      accessibilityLabel={`${item.storeName ?? 'Shopping'} piece${price ? `, ${price}` : ''}`}
+      accessibilityLabel={`${shoppingPieceTitle(item)}, ${price.label}`}
     >
       <View style={styles.tile}>
         {failed ? (
@@ -73,7 +74,7 @@ function ShoppingSessionTile({
           instead of an unpriced strip sitting higher than a priced one. */}
       <View style={styles.tileCaption}>
         {item.isFavorite ? <Ionicons name="heart" size={11} color={colors.primary} /> : null}
-        {price ? <Text style={styles.tileCaptionText} numberOfLines={1}>{price}</Text> : null}
+        <Text style={[styles.tileCaptionText, price.pending && styles.tileCaptionPending]} numberOfLines={1}>{price.label}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -129,12 +130,21 @@ export function ShoppingSessionBundle({
   const canSortPhotos = needsGrouping && Boolean(onReviewGrouping) && !selectionMode;
   const showMenu = Boolean(onOpenMenu) && !selectionMode;
 
-  // A store-less visit has no name to tell it apart from the next one, so its
-  // capture time does that job instead.
-  const when = group.storeName ? group.dateLabel : `${group.dateLabel}, ${group.timeLabel}`;
+  // A store-less visit is still a visit, not an error: it is titled by where
+  // and when it happened, and the missing store is asked for on the meta
+  // line — the one place on the row that raises its voice for work. "Store
+  // not added" as a 32pt heading made the shortlist lead with its gaps.
+  const knownPlace = formatShoppingPlaceLabel(group.items[0], { maxParts: 1 });
+  const place = group.placeLabel
+    ?? (knownPlace === 'Location not set' ? null : knownPlace)
+    ?? group.locationHint;
+  const title = group.storeName ?? (place ? `${place} · ${group.dateLabel}` : `${group.dateLabel} visit`);
+  // The title already carries the date for a store-less visit, so the meta
+  // line carries the clock time — what tells two same-day visits apart.
+  const when = group.storeName ? group.dateLabel : group.timeLabel;
   const metaSegments = [
     when,
-    group.placeLabel ?? group.locationHint,
+    group.storeName ? group.placeLabel ?? group.locationHint : null,
     `${group.itemCount} ${group.itemCount === 1 ? SHORTLIST_COPY.piece : SHORTLIST_COPY.pieces}`,
   ].filter((segment): segment is string => Boolean(segment));
 
@@ -190,23 +200,18 @@ export function ShoppingSessionBundle({
         <TouchableOpacity
           style={styles.heading}
           activeOpacity={0.7}
-          onPress={canAddStore ? onAddStore : handleChromePress}
+          onPress={handleChromePress}
           onLongPress={handleChromeLongPress}
           accessibilityRole="button"
-          accessibilityLabel={selectionMode ? `Select entire visit, ${group.itemCount} pieces` : canAddStore
-            ? `${SHORTLIST_COPY.needsStore}. ${SHORTLIST_COPY.addStore} for this visit.`
-            : `${group.storeName}, ${metaSegments.join(', ')}`}
+          accessibilityLabel={selectionMode
+            ? `Select entire visit, ${group.itemCount} pieces`
+            : `${title}, ${metaSegments.join(', ')}${canAddStore ? `. ${SHORTLIST_COPY.needsStore}.` : ''}`}
         >
-          {/* Where the store name would be, the row asks for one — and
-              tapping it is what supplies it. Anywhere else on the row still
-              opens the visit. */}
+          {/* The heading is always the way into the visit; the store, when
+              missing, is asked for by the action on the meta line below. */}
           <View style={styles.titleRow}>
-            <Text style={styles.title} numberOfLines={1}>
-              {group.storeName ?? SHORTLIST_COPY.needsStore}
-            </Text>
-            {canAddStore
-              ? null
-              : <Ionicons name="chevron-forward" size={15} color={colors.inkSubtle} style={styles.titleChevron} />}
+            <Text style={styles.title} numberOfLines={1}>{title}</Text>
+            <Ionicons name="chevron-forward" size={15} color={colors.inkSubtle} style={styles.titleChevron} />
           </View>
           <View style={styles.metaRow}>
             <Text style={styles.metaText}>{metaSegments.join('  ·  ')}</Text>
@@ -366,6 +371,8 @@ const styles = StyleSheet.create({
   tileFallback: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center' },
   tileCaption: { height: 20, flexDirection: 'row', alignItems: 'center', gap: 4, paddingTop: spacing.xs },
   tileCaptionText: { flex: 1, fontSize: 12, lineHeight: 16, color: colors.inkSubtle, fontVariant: ['tabular-nums'] },
+  // The one thing still to do on the piece, set apart from prices that are known.
+  tileCaptionPending: { color: colors.action, fontWeight: '600' },
   tileSelectionRing: {
     position: 'absolute',
     top: 0,

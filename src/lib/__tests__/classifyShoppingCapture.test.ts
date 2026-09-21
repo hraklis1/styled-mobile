@@ -1,6 +1,9 @@
 import { classifyShoppingCapture } from '../classifyShoppingCapture';
 
 describe('classifyShoppingCapture', () => {
+  it('recognizes a tag even when its price requires a choice', () => {
+    expect(classifyShoppingCapture('$60\n$90', null, true)).toBe('tag');
+  });
   it('recognizes price tags from an extracted price', () => {
     expect(classifyShoppingCapture('LULULEMON\n$128.00\nSIZE M', 128)).toBe('tag');
   });

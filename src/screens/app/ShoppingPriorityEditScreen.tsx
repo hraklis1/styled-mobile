@@ -11,6 +11,7 @@ import { ShoppingPriorityTargetCard } from '../../components/shopping/ShoppingPr
 import { useItems } from '../../hooks/useItems';
 import { useShoppingPriorityEdit } from '../../hooks/useShoppingPriorityEdit';
 import { addOutfitToWishlist, useWishlist } from '../../hooks/useWishlist';
+import { clarifyOutfitClaims, OUTFIT_ESTIMATE_EXPLANATION, potentialOutfitCount, priorityOccasionLabel, shoppingGuideIntro } from '../../lib/shopClarity';
 import { track } from '../../lib/analytics';
 import { shoppingPriorityEditDisplayHeadline, shoppingPriorityGapFigure, shoppingPriorityGapNarrative, shoppingPriorityTargetDisplayTitle, splitPriceRange } from '../../lib/shoppingPriorityEdit';
 import { shoppingSurfaces, colors, radii, spacing, typography } from '../../theme';
@@ -70,6 +71,12 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
     else navigation.replace('ShoppingBriefDetail');
   }, [navigation]);
 
+  // The row the user tapped on the brief, kept on the eyebrow of every state
+  // of this screen. The stylist's headline ("Clean low-profile staples") is
+  // the hook, but it is the priority label that confirms they landed where
+  // they meant to — and it used to vanish exactly when the two diverged.
+  const guideEyebrow = `Guide · ${priority.label.replace(/\s+/g, ' ').trim()}`;
+
   const showSavedToast = useCallback(() => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setShowSaveToast(true);
@@ -99,7 +106,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
       track('shopping_brief_edit_saved', { category: priority.category, reason: priority.reason, rank: priority.priority, source: source ?? 'shopping_brief', targetCount: 3 });
     } catch {
       track('shopping_brief_edit_save_failed', { category: priority.category });
-      Alert.alert("Couldn't save this edit", 'Please try again in a moment.');
+      Alert.alert("Couldn't save this guide", 'Please try again in a moment.');
     } finally {
       setSaving(false);
     }
@@ -128,7 +135,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
 
   if (edit.isLoading) {
     return (
-      <StateScreen onBack={goBack} title="Curating your edit">
+      <StateScreen onBack={goBack} eyebrow={guideEyebrow} title="Building your guide">
         <ActivityIndicator color={colors.primary} />
         <Text selectable style={styles.loadingText}>Curating your options…</Text>
       </StateScreen>
@@ -137,11 +144,11 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
 
   if (edit.isError || !edit.data) {
     return (
-      <StateScreen onBack={goBack} title="Shopping Edit">
+      <StateScreen onBack={goBack} eyebrow={guideEyebrow} title="Something went wrong">
         <Ionicons name="cloud-offline-outline" size={28} color={colors.primary} />
-        <Text selectable style={styles.stateTitle}>This edit needs another look</Text>
+        <Text selectable style={styles.stateTitle}>This guide needs another look</Text>
         <Text selectable style={styles.stateCopy}>We couldn’t build the options just now. Your Shopping Brief is unchanged.</Text>
-        <PressableScale contentStyle={styles.primaryButton} onPress={() => { track('shopping_brief_edit_retry', { category: priority.category }); void edit.refetch(); }} accessibilityRole="button" accessibilityLabel="Retry Shopping Edit">
+        <PressableScale contentStyle={styles.primaryButton} onPress={() => { track('shopping_brief_edit_retry', { category: priority.category }); void edit.refetch(); }} accessibilityRole="button" accessibilityLabel="Retry building this guide">
           <Text style={styles.primaryButtonText}>Try again</Text>
         </PressableScale>
       </StateScreen>
@@ -154,7 +161,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
     return (
       <View style={styles.screen}>
         <ScrollView contentContainerStyle={[styles.stateContent, { paddingBottom: insets.bottom + spacing.xxxl }]} showsVerticalScrollIndicator={false}>
-          <ShopSubpageHeader eyebrow="SHOPPING EDIT" title="Your brief was updated" subtitle={data.summary} onBack={goBack} style={styles.fullBleedHeader} />
+          <ShopSubpageHeader eyebrow={guideEyebrow} title="Your brief was updated" subtitle={data.summary} onBack={goBack} style={styles.fullBleedHeader} />
           <View style={styles.noBuyCard} accessibilityLiveRegion="polite">
             <Ionicons name="checkmark-circle-outline" size={30} color={colors.primary} />
             <Text selectable style={styles.noBuyTitle}>This priority is already covered</Text>
@@ -173,7 +180,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
     return (
       <View style={styles.screen}>
         <ScrollView contentContainerStyle={[styles.stateContent, { paddingBottom: insets.bottom + spacing.xxxl }]} showsVerticalScrollIndicator={false}>
-          <ShopSubpageHeader eyebrow="SHOPPING EDIT" title={displayHeadline} subtitle={data.summary} onBack={goBack} style={styles.fullBleedHeader} />
+          <ShopSubpageHeader eyebrow={guideEyebrow} title={displayHeadline} subtitle={data.summary} onBack={goBack} style={styles.fullBleedHeader} />
           <View style={styles.noBuyCard}>
             <Ionicons name="checkmark-circle-outline" size={30} color={colors.primary} />
             <Text selectable style={styles.noBuyTitle}>You can wait</Text>
@@ -195,22 +202,14 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
   });
   // …and when the figure *is* the sentence, the sentence continues from it.
   const deck = shoppingPriorityGapFigure(gap.voice, priority.impactScore);
-  // Suppressed when the headline is already the label: shoppingPriorityEdit-
-  // DisplayHeadline falls back to it for verbose headlines, and the line would
-  // then be a literal repeat of the title two rows up.
-  const normalizedGapLabel = priority.label.replace(/\s+/g, ' ').trim();
-  const gapLabel = normalizedGapLabel.toLocaleLowerCase() === displayHeadline.toLocaleLowerCase()
-    || gap.voice.toLocaleLowerCase().startsWith(normalizedGapLabel.toLocaleLowerCase())
-    ? ''
-    : normalizedGapLabel.charAt(0).toUpperCase() + normalizedGapLabel.slice(1);
   // Stated once for the whole edit rather than repeated on every card.
   const priceCurrency = data.targets.reduce<string | null>(
     (found, target) => found ?? splitPriceRange(target.priceRange).currency,
     null,
   );
   const compactProgress = currentDirectionIndex === null
-    ? `${directionCount} curated directions`
-    : `Direction ${formatDirectionNumber(currentDirectionIndex + 1)} of ${formatDirectionNumber(directionCount)}`;
+    ? `${directionCount} styles to consider`
+    : `Style ${formatDirectionNumber(currentDirectionIndex + 1)} of ${formatDirectionNumber(directionCount)}`;
 
   return (
     <View style={styles.screen}>
@@ -222,12 +221,12 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
       >
         <View onLayout={(event) => setHeroHeight(event.nativeEvent.layout.height)}>
           <ShopSubpageHeader
-            eyebrow="SHOPPING EDIT"
+            eyebrow={guideEyebrow}
             // Ladder bookkeeping and the direction count are label-level
             // facts, so they sit on the eyebrow line rather than in the deck.
             eyebrowTrailing={gap.step
               ? `Step ${gap.step.current} of ${gap.step.total}`
-              : `${formatDirectionNumber(directionCount)} directions`}
+              : `${formatDirectionNumber(directionCount)} styles`}
             title={displayHeadline}
             titleNumberOfLines={2}
             onBack={goBack}
@@ -236,20 +235,22 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
           <View style={deck.figure !== null ? styles.metricShadow : undefined}>
             <View style={[styles.deck, deck.figure !== null && styles.metricPanel]}>
               {deck.figure !== null ? <ShoppingSurfaceLight /> : null}
-              {gapLabel ? <Text selectable style={styles.deckLabel}>{gapLabel}</Text> : null}
               {deck.figure !== null ? (
                 // Only the wardrobe-multiplier candidates carry a count;
                 // structural and occasion gaps have nothing comparable, so the
                 // deck simply reads without a figure for those.
-                <Text style={styles.figure} accessibilityLabel={`Adds ${deck.figure} new outfits`}>{deck.figure}</Text>
+                <Text style={styles.figure} accessibilityLabel={potentialOutfitCount(deck.figure) ?? undefined}>{deck.figure}</Text>
               ) : null}
-              <Text selectable style={styles.deckStatement}>{deck.statement}</Text>
-              {priority.unlocks.length > 0 ? (
-                <Text selectable style={styles.deckMeta}>Unlocks {priority.unlocks.join(' · ')}</Text>
+              <Text selectable style={styles.deckStatement}>{deck.figure !== null ? `potential outfit combination${deck.figure === 1 ? '' : 's'}` : clarifyOutfitClaims(deck.statement, priority.impactScore)}</Text>
+              {deck.figure !== null && !/^new outfits?\b/i.test(deck.statement) ? <Text style={styles.deckMeta}>{deck.statement}</Text> : null}
+              {potentialOutfitCount(priority.impactScore) ? <Text style={styles.deckMeta}>{OUTFIT_ESTIMATE_EXPLANATION}</Text> : null}
+              {priorityOccasionLabel(priority) ? (
+                <Text style={styles.deckMeta}>{priorityOccasionLabel(priority)}</Text>
               ) : null}
             </View>
           </View>
         </View>
+        <Text style={styles.guideIntro}>{shoppingGuideIntro(directionCount)}{priceCurrency ? ` Suggested budgets in ${priceCurrency}.` : ''}</Text>
         {data.targets.map((target, index) => (
           <Animated.View
             key={target.key}
@@ -263,14 +264,16 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
               wardrobe={wearable}
               displayTitle={shoppingPriorityTargetDisplayTitle(target.title, `${priority.label} ${displayHeadline}`)}
               isLast={index === directionCount - 1}
+              defaultExpanded={index === 0}
+              onSaveFind={() => {
+                track('shopping_brief_save_find_tapped', { category: priority.category, targetKey: target.key });
+                navigation.navigate('ShoppingCamera');
+              }}
             />
           </Animated.View>
         ))}
-        {priceCurrency ? (
-          <Text style={styles.currencyNote}>Price ranges in {priceCurrency}</Text>
-        ) : null}
         <View style={styles.saveBand}>
-          <Text selectable style={styles.saveBandCopy}>Keep these directions in Saved Shopping.</Text>
+          <Text selectable style={styles.saveBandCopy}>Keep this guide in Saved recommendations.</Text>
           <SaveEditAction saving={saving} isSaved={isSaved} onPress={saveEdit} />
         </View>
       </ScrollView>
@@ -278,7 +281,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
         <Animated.View entering={reduceMotion ? undefined : FadeInUp.duration(150)} exiting={reduceMotion ? undefined : FadeOutDown.duration(100)} style={styles.stickyHeader}>
           <ShopSubpageHeader
             compact
-            eyebrow="SHOPPING EDIT"
+            eyebrow={guideEyebrow}
             title={displayHeadline}
             subtitle={compactProgress}
             onBack={goBack}
@@ -289,7 +292,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
       {showSaveToast ? (
         <Animated.View entering={reduceMotion ? undefined : FadeInUp.duration(160)} exiting={reduceMotion ? undefined : FadeOutDown.duration(120)} style={[styles.saveToast, { bottom: insets.bottom + spacing.lg }]} accessibilityLiveRegion="polite">
           <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-          <Text style={styles.saveToastText}>Edit saved</Text>
+          <Text style={styles.saveToastText}>Added to Saved recommendations</Text>
         </Animated.View>
       ) : null}
     </View>
@@ -297,7 +300,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
 }
 
 function SaveEditAction({ saving, isSaved, onPress }: { saving: boolean; isSaved: boolean; onPress: () => Promise<void> }) {
-  const label = saving ? 'Saving…' : isSaved ? 'Saved' : 'Save this edit';
+  const label = saving ? 'Saving…' : isSaved ? 'Saved' : 'Save this guide';
 
   return (
     <PressableScale
@@ -309,8 +312,8 @@ function SaveEditAction({ saving, isSaved, onPress }: { saving: boolean; isSaved
       disabled={saving || isSaved}
       haptic={!isSaved}
       accessibilityRole="button"
-      accessibilityLabel={saving ? 'Saving Shopping Edit' : isSaved ? 'Shopping Edit saved' : 'Save Shopping Edit'}
-      accessibilityHint={isSaved ? undefined : 'Adds these directions to Saved Shopping'}
+      accessibilityLabel={saving ? 'Saving guide' : isSaved ? 'In Saved recommendations' : 'Save this guide'}
+      accessibilityHint={isSaved ? undefined : 'Adds this guide to Saved recommendations'}
       accessibilityState={{ selected: isSaved, busy: saving, disabled: saving || isSaved }}
     >
       {saving ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Ionicons name={isSaved ? 'checkmark' : 'bookmark-outline'} size={18} color={colors.primaryForeground} />}
@@ -323,12 +326,12 @@ function formatDirectionNumber(value: number): string {
   return String(value).padStart(2, '0');
 }
 
-function StateScreen({ children, onBack, title }: { children: ReactNode; onBack: () => void; title: string }) {
+function StateScreen({ children, onBack, eyebrow, title }: { children: ReactNode; onBack: () => void; eyebrow: string; title: string }) {
   const insets = useSafeAreaInsets();
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={[styles.stateContent, { paddingBottom: insets.bottom + spacing.xxxl }]} showsVerticalScrollIndicator={false}>
-        <ShopSubpageHeader compact eyebrow="SHOPPING EDIT" title={title} onBack={onBack} style={styles.fullBleedHeader} />
+        <ShopSubpageHeader compact eyebrow={eyebrow} title={title} onBack={onBack} style={styles.fullBleedHeader} />
         <View style={styles.stateCard}>{children}</View>
       </ScrollView>
     </View>
@@ -336,6 +339,7 @@ function StateScreen({ children, onBack, title }: { children: ReactNode; onBack:
 }
 
 const styles = StyleSheet.create({
+  guideIntro: { ...typography.text.bodySmall, color: colors.inkSubtle, marginBottom: spacing.lg },
   screen: { flex: 1, backgroundColor: shoppingSurfaces.canvas },
   content: { paddingHorizontal: spacing.lg },
   fullBleedHeader: { marginHorizontal: -spacing.lg, backgroundColor: shoppingSurfaces.canvas },
@@ -353,7 +357,6 @@ const styles = StyleSheet.create({
   },
   metricShadow: { borderRadius: radii.md, boxShadow: shoppingSurfaces.panelShadow, marginBottom: spacing.md },
   metricPanel: { padding: spacing.lg, borderRadius: radii.md, borderCurve: 'continuous', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: shoppingSurfaces.edge, backgroundColor: shoppingSurfaces.alabaster },
-  deckLabel: { ...typography.text.meta, color: colors.mutedForeground },
   // The olive figure anchors the softly lit panel in the existing serif face.
   figure: { ...typography.text.editorialFigure, color: shoppingSurfaces.olive.accent },
   // The stylist's sentence, kept whole, in the regular editorial face so it
@@ -362,7 +365,6 @@ const styles = StyleSheet.create({
   deckMeta: { ...typography.text.meta, color: colors.mutedForeground },
   body: { fontSize: typography.text.bodySmall.fontSize, lineHeight: 20, color: colors.mutedForeground },
   targetCardWrap: {},
-  currencyNote: { textAlign: 'right', paddingTop: spacing.sm, paddingBottom: spacing.lg, fontSize: typography.text.caption.fontSize, lineHeight: 16, color: colors.mutedForeground },
   saveBand: { marginHorizontal: -spacing.lg, paddingHorizontal: spacing.lg, paddingVertical: spacing.xl, gap: spacing.lg, backgroundColor: colors.surfaceElevated, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
   // Functional copy introducing a button, not a headline — the same inversion
   // the gap statement had. The pill is the loud element in this band.

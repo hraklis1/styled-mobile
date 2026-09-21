@@ -8,11 +8,12 @@ export type ShoppingCaptureRole = 'garment' | 'tag' | 'unknown';
 export function classifyShoppingCapture(
   rawOcrText: string,
   extractedPrice: number | null,
+  hasPriceCandidates = false,
 ): ShoppingCaptureRole {
   const text = rawOcrText.trim();
-  if (!text && extractedPrice === null) return 'garment';
+  if (!text && extractedPrice === null && !hasPriceCandidates) return 'garment';
 
-  let score = extractedPrice === null ? 0 : 3;
+  let score = extractedPrice !== null || hasPriceCandidates ? 3 : 0;
   if (/\b(?:sku|style|item|article|upc|colour|color)\b/i.test(text)) score += 2;
   if (/\b(?:size|xs|s|m|l|xl|xxl)\b/i.test(text)) score += 1;
   if (/\b[A-Z0-9]{6,16}\b/.test(text)) score += 1;

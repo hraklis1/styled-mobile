@@ -60,7 +60,7 @@ export type HomeStackParamList = {
   Profile: undefined;
 };
 
-export type SavedShoppingTab = 'looks' | 'pieces' | 'lists';
+export type SavedShoppingTab = 'all' | 'looks' | 'pieces' | 'lists';
 export type ShopSection = 'shortlist' | 'saved-looks' | 'saved-shopping';
 
 // Shop nested stack (wishlist + shopping tools)
@@ -69,6 +69,7 @@ export type ShopStackParamList = {
     section?: ShopSection;
     focusGroupId?: string;
     catalogFilter?: 'active' | 'all';
+    resetFilters?: boolean;
     selectedId?: string;
     returnTo?: 'Home' | 'Closet';
   } | undefined;
@@ -77,6 +78,7 @@ export type ShopStackParamList = {
   ShoppingGallery: {
     focusGroupId?: string;
     catalogFilter?: 'active' | 'all';
+    resetFilters?: boolean;
     returnTo?: 'Home' | 'Closet';
   } | undefined;
   ShoppingHaulDetail: { groupKey: string };

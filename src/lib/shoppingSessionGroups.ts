@@ -150,7 +150,7 @@ export function shoppingSessionAttention(group: ShoppingSessionGroup): ShoppingS
     attention.push({ key: 'on-this-phone', label: `${group.pendingCount} ${SHORTLIST_COPY.onThisPhone.toLowerCase()}` });
   }
   if (group.needsPriceCount > 0) {
-    attention.push({ key: 'needs-price', label: `${group.needsPriceCount} ${SHORTLIST_COPY.needsPrice.toLowerCase()}` });
+    attention.push({ key: 'needs-price', label: `${group.needsPriceCount} without a price` });
   }
   if (group.unsortedCount > 0) {
     attention.push({ key: 'unsorted', label: `${group.unsortedCount} ${SHORTLIST_COPY.unsorted.toLowerCase()}` });

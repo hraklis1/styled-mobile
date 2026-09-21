@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 
 import type { ShoppingCaptureRole } from '../lib/classifyShoppingCapture';
+import type { ShoppingPriceResolution } from '../lib/shoppingPrices';
 import { relocateLocalUris } from '../lib/relocateLocalUri';
 import type { ShoppingSnapOrganizationUpdate } from '../lib/shoppingSnapOrganizer';
 import type { ShoppingPurchaseDetails, ShoppingFindCatalogPatch, ShoppingFindCatalogStatus } from '../types/shoppingSnap';
@@ -44,10 +45,15 @@ export type ShoppingVisitPreview = {
   previewUri: string | null;
   captureRole: ShoppingCaptureRole;
   ocrStatus: PendingShoppingUpload['ocrStatus'];
+  /** What OCR read off this photo, kept on the preview so the camera can
+   *  still show it after the upload itself has synced away. */
+  price?: ShoppingPreviewPrice | null;
   syncStatus: 'pending' | 'synced';
   storagePath: string | null;
   timestamp: number;
 };
+
+export type ShoppingPreviewPrice = Pick<ShoppingPriceResolution, 'amount' | 'currencyCode' | 'status' | 'inferred' | 'candidates'>;
 
 export type PendingShoppingUpload = ShoppingPurchaseDetails & {
   groupingExplicit?: boolean;

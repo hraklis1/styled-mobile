@@ -4,6 +4,7 @@ import {
   FlatList,
   Keyboard,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -51,13 +52,22 @@ function toggleValue(values: string[], value: string) {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
 }
 
-const TABS: { value: SavedShoppingTab; label: string; kind: 'look' | 'piece' | 'list' }[] = [
+const TABS: { value: SavedShoppingTab; label: string; kind: 'look' | 'piece' | 'list' | null }[] = [
+  { value: 'all', label: 'All', kind: null },
   { value: 'looks', label: 'Looks', kind: 'look' },
   { value: 'pieces', label: 'Pieces', kind: 'piece' },
   { value: 'lists', label: 'Lists', kind: 'list' },
 ];
 
 function tabCopy(tab: SavedShoppingTab) {
+  if (tab === 'all') return {
+    title: 'Saved recommendations',
+    emptyTitle: 'Your next inspiration starts here',
+    emptySubtitle: 'Ask your Stylist for a look, piece, or shopping guide, then save the recommendations you love to keep them here.',
+    searchPlaceholder: 'Search recommendations, brands, cities…',
+    searchLabel: 'Search saved recommendations',
+    noResultsTitle: 'No matching recommendations',
+  };
   if (tab === 'pieces') return {
     title: 'Saved pieces',
     emptyTitle: 'No saved pieces yet',
@@ -110,8 +120,10 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
 
   useFocusEffect(
     useCallback(() => {
+      setActiveTab(initialTab);
+      setQuery(''); setScope('all'); setCategories([]); setCities([]); setBrands([]); setSortOrder('newest');
       refetch();
-    }, [refetch]),
+    }, [initialTab, refetch]),
   );
 
   useFocusEffect(
@@ -130,7 +142,7 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
   const selectedTab = TABS.find((tab) => tab.value === activeTab) ?? TABS[0];
   const copy = tabCopy(activeTab);
   const tabEntries = useMemo(
-    () => entries.filter((entry) => getWishlistRecommendationType(entry) === selectedTab.kind),
+    () => selectedTab.kind === null ? entries : entries.filter((entry) => getWishlistRecommendationType(entry) === selectedTab.kind),
     [entries, selectedTab.kind],
   );
   const filterOptions = useMemo(() => getWishlistFilterOptions(tabEntries), [tabEntries]);
@@ -164,11 +176,12 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
   }, [clearFilters]);
 
   const savedCounts = useMemo(() => ({
+    all: entries.length,
     looks: entries.filter((entry) => getWishlistRecommendationType(entry) === 'look').length,
     pieces: entries.filter((entry) => getWishlistRecommendationType(entry) === 'piece').length,
     lists: entries.filter((entry) => getWishlistRecommendationType(entry) === 'list').length,
   }), [entries]);
-  const resultNoun = activeTab === 'looks' ? 'look' : activeTab === 'pieces' ? 'piece' : 'list';
+  const resultNoun = activeTab === 'all' ? 'recommendation' : activeTab === 'looks' ? 'look' : activeTab === 'pieces' ? 'piece' : 'list';
 
   const confirmRemove = useCallback((entry: WishlistEntry) => {
     const kind = getWishlistRecommendationType(entry);
@@ -205,7 +218,7 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
       <ShopSubpageHeader
         compact
         eyebrow="SHOP"
-        title="From your Stylist"
+        title="Saved recommendations"
         onBack={() => (navigation.canGoBack() ? navigation.goBack() : navigation.replace('ShopMain'))}
         actions={(
           <>
@@ -219,7 +232,7 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
             <TouchableOpacity
               style={styles.headerIcon}
               onPress={() => navigation.navigate('ShoppingCamera')}
-              accessibilityLabel="Open Shopping Mode camera"
+              accessibilityLabel="Save a find"
             >
               <Ionicons name="camera-outline" size={21} color={colors.foreground} />
             </TouchableOpacity>
@@ -228,6 +241,7 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
       />
 
       <View style={styles.tabControls}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <SegmentedControl
           value={activeTab}
           variant="tabs"
@@ -237,6 +251,7 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
             clearAllSearchAndFilters();
           }}
         />
+        </ScrollView>
       </View>
 
       {loading ? (
@@ -252,7 +267,7 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
           </Text>
           <ActionButton
             style={styles.emptyButton}
-            label="Chat with your Stylist"
+            label="Ask your Stylist"
             icon="sparkles"
             onPress={() => openStylist(buildShopStylistLaunch(
               activeTab === 'lists' ? 'Build me a focused shopping list.' : activeTab === 'pieces' ? 'Help me find one piece to buy.' : 'Shop for a new outfit for me',
@@ -302,6 +317,7 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
             renderItem={({ item }) => (
               <ShopWishlistSummaryCard
                 entry={item}
+                showType={activeTab === 'all'}
                 onPress={() => setSelectedEntry(item)}
                 onMore={() => openEntryMenu(item)}
               />
@@ -407,7 +423,7 @@ export function SavedShoppingScreen({ navigation, route }: SavedShoppingScreenPr
   return (
     <SavedShoppingContent
       navigation={navigation}
-      initialTab={route.params?.tab ?? 'looks'}
+      initialTab={route.params?.tab ?? 'all'}
       selectedId={route.params?.selectedId}
     />
   );

@@ -7,10 +7,19 @@ import { ShoppingPriorityRow, sentenceCase } from './ShoppingPriorityRow';
 import { shoppingSurfaces, colors, radii, spacing, typography } from '../../theme';
 import type { ShoppingBrief, ShoppingBriefPriority } from '../../lib/shopDecisionWorkspace';
 
-/** Two is a strategy; five is a shopping list. The rest live behind "View plan". */
-const PRIORITY_LIMIT = 2;
+/** Three is a strategy; five is a shopping list. The brief's own headline
+ *  routinely counts to three ("Three practical additions…"), so the card shows
+ *  three: a headline that promises more rows than the card has reads as a
+ *  card with something missing. Anything past that lives on the detail. */
+const PRIORITY_LIMIT = 3;
 
 export { sentenceCase };
+
+/** Illustrative rows for the locked card — labelled as an example on screen. */
+const SAMPLE_PRIORITIES: ShoppingBriefPriority[] = [
+  { label: 'Everyday leather sneakers', category: 'shoes', reason: 'wardrobe_gap', context: '', priority: 1, unlocks: [], impactScore: 130 },
+  { label: 'Camel wool overcoat', category: 'outerwear', reason: 'weather', context: '', priority: 2, unlocks: ['Cold-weather layering'] },
+];
 
 /** "Your shopping brief" paired with an issue line, e.g. "August brief" — so
  *  the card reads as something issued this month rather than computed live. */
@@ -32,6 +41,7 @@ type Props = {
   /** Opens ShoppingBriefDetailScreen — the full summary, every priority, and
    *  each one's own See options control, all folded off this compressed card. */
   onOpenFullBrief: () => void;
+  onSelectPriority?: (priority: ShoppingBriefPriority) => void;
   onStartShopping?: () => void;
   startLabel?: string;
   onUpgrade: () => void;
@@ -53,6 +63,7 @@ export function ShoppingBriefCard({
   isLoading,
   isError,
   onOpenFullBrief,
+  onSelectPriority,
   onStartShopping,
   startLabel,
   onUpgrade,
@@ -86,6 +97,15 @@ export function ShoppingBriefCard({
         <Text style={styles.body}>
           See which additions would genuinely expand your wardrobe—and when you are better off buying nothing.
         </Text>
+        {/* What a brief looks like, not just what it does: two example rows in
+            the real priority grammar, dimmed and marked as an example, so the
+            locked card sells the thing rather than describing it. */}
+        <View style={styles.sample} accessibilityLabel="Example brief: two ranked priorities with the outfit combinations each would add">
+          <Text style={styles.sampleLabel}>Example</Text>
+          {SAMPLE_PRIORITIES.map((priority, index) => (
+            <ShoppingPriorityRow key={priority.label} compact index={index + 1} priority={priority} isLast={index === SAMPLE_PRIORITIES.length - 1} />
+          ))}
+        </View>
         <TextAction label="See plans" icon="sparkles" onPress={onUpgrade} />
       </>,
     );
@@ -148,18 +168,22 @@ export function ShoppingBriefCard({
         </View>
       ) : null}
 
-      <PriorityList priorities={priorities} />
+      <PriorityList priorities={priorities} onSelectPriority={onSelectPriority} />
 
-      {/* The reasoning behind each priority, and the dedicated edit control to act
-          on it, live on ShoppingBriefDetailScreen — this is the one door to
-          it, so a card that only ever states a headline and two labels still
-          reads as a brief rather than a teaser. */}
-      <TextAction label="Read the full brief" onPress={onOpenFullBrief} />
+      {/* Count-aware: when the card already holds every priority, the detail
+          adds the summary and the reasoning, so the link says that; when it
+          holds more, the link says how many, not "why". */}
+      <TextAction
+        label={brief.priorities.length > priorities.length
+          ? `See all ${brief.priorities.length} priorities`
+          : 'Read the full brief'}
+        onPress={onOpenFullBrief}
+      />
     </>,
   );
 }
 
-function PriorityList({ priorities }: { priorities: ShoppingBriefPriority[] }) {
+function PriorityList({ priorities, onSelectPriority }: { priorities: ShoppingBriefPriority[]; onSelectPriority?: (priority: ShoppingBriefPriority) => void }) {
   if (priorities.length === 0) return null;
   return (
     <View style={styles.priorities}>
@@ -169,6 +193,7 @@ function PriorityList({ priorities }: { priorities: ShoppingBriefPriority[] }) {
           compact
           index={index + 1}
           priority={priority}
+          onPress={onSelectPriority ? () => onSelectPriority(priority) : undefined}
           isLast={index === priorities.length - 1}
         />
       ))}
@@ -229,6 +254,8 @@ const styles = StyleSheet.create({
   nextUpRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   nextUpLabel: { ...typography.text.caption, fontWeight: typography.weight.medium, color: colors.mutedForeground },
   priorities: { paddingTop: spacing.xs },
+  sample: { opacity: 0.55, paddingTop: spacing.xs },
+  sampleLabel: { ...typography.text.meta, color: colors.mutedForeground },
   // Full width, unlike every other action on this card: it is the page's one
   // filled button, and stretching it across the foot is what makes it read as
   // the brief's conclusion rather than a fourth thing to consider.

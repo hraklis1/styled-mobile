@@ -9,6 +9,7 @@ import { SavedLookTile } from '../../components/outfits/SavedLookTile';
 import { EditorialSection, ActionButton } from '../../components/primitives/Editorial';
 import { AppText } from '../../components/primitives/AppText';
 import { EditorialRow } from '../../components/primitives/EditorialRow';
+import { useCurrencyCode } from '../../hooks/useCurrencyCode';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useItems } from '../../hooks/useItems';
 import { useShoppingBrief } from '../../hooks/useShoppingBrief';
@@ -16,6 +17,7 @@ import { useShoppingSnaps } from '../../hooks/useShoppingSnaps';
 import { useWishlist } from '../../hooks/useWishlist';
 import { buildShoppingEditItems, mergeShoppingSnaps, type ShoppingEditItem } from '../../lib/shoppingGallery';
 import { buildShortlistSpotlight } from '../../lib/shortlistSpotlight';
+import { shoppingPriorityRoute } from '../../lib/shopClarity';
 import { track } from '../../lib/analytics';
 import { presentPaywall } from '../../lib/paywall';
 import { colors, spacing } from '../../theme';
@@ -45,17 +47,19 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
     if (requestedSection === 'shortlist') {
       navigation.replace('ShoppingGallery', {
         catalogFilter: route.params?.catalogFilter,
+        resetFilters: route.params?.resetFilters,
         focusGroupId: route.params?.focusGroupId,
         returnTo: route.params?.returnTo,
       });
     } else if (requestedSection === 'saved-looks' || requestedSection === 'saved-shopping') {
-      navigation.replace('SavedShopping', { selectedId: route.params?.selectedId, tab: 'looks' });
+      navigation.replace('SavedShopping', { selectedId: route.params?.selectedId, tab: requestedSection === 'saved-looks' ? 'looks' : 'all' });
     }
-  }, [navigation, requestedSection, route.params?.catalogFilter, route.params?.focusGroupId, route.params?.returnTo, route.params?.selectedId]);
+  }, [navigation, route.params?.resetFilters, requestedSection, route.params?.catalogFilter, route.params?.focusGroupId, route.params?.returnTo, route.params?.selectedId]);
 
+  const homeCurrency = useCurrencyCode();
   const shoppingItems = useMemo(
-    () => buildShoppingEditItems(mergeShoppingSnaps(remoteSnaps, pendingUploads)),
-    [pendingUploads, remoteSnaps],
+    () => buildShoppingEditItems(mergeShoppingSnaps(remoteSnaps, pendingUploads), { homeCurrency }),
+    [homeCurrency, pendingUploads, remoteSnaps],
   );
   const spotlight = useMemo(() => buildShortlistSpotlight(shoppingItems), [shoppingItems]);
   const activeFinds = spotlight.awaitingDecision;
@@ -99,7 +103,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
   }, [navigation]);
 
 
-  const openHistory = useCallback((params?: { focusGroupId?: string; catalogFilter?: 'active' | 'all' }) => {
+  const openHistory = useCallback((params?: { focusGroupId?: string; catalogFilter?: 'active' | 'all'; resetFilters?: boolean }) => {
     track('shop_section_opened', { section: params?.focusGroupId ? 'candidate' : 'shopping_history' });
     navigation.navigate('ShoppingGallery', params);
   }, [navigation]);
@@ -111,7 +115,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
 
   const openSavedShopping = useCallback((selectedId?: string) => {
     track('shop_destination_opened', { destination: 'saved-shopping' });
-    navigation.navigate('SavedShopping', selectedId ? { selectedId } : undefined);
+    navigation.navigate('SavedShopping', { tab: 'all', ...(selectedId ? { selectedId } : {}) });
   }, [navigation]);
 
   return (
@@ -129,11 +133,15 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
           </View>
         </View>
 
-        {/* One action under the masthead. The shortlist has its own door — the
-            section's "See all" — so a second pill here only made a toolbar. */}
+        {/* One action under the masthead, with its explainer beside it rather
+            than beneath: the brief is the page's premium content and belongs
+            above the fold, and a two-line paragraph under the button pushed
+            it off. The shortlist has its own door — the section's "See all"
+            — so a second pill here only made a toolbar. */}
         <View style={styles.mastheadActions}>
-          <ActionButton icon="camera-outline" label="Shopping Mode"
+          <ActionButton icon="camera-outline" label="Save a find"
             variant="secondary" onPress={openShoppingCamera} />
+          <AppText variant="caption" tone="muted" style={styles.mastheadHint}>Photograph a piece in store, then ask your Stylist if it earns its place.</AppText>
         </View>
         <View style={styles.briefSection}>
           <ShoppingBriefCard
@@ -141,6 +149,11 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
             brief={brief.data}
             isLoading={brief.isLoading}
             isError={brief.isError}
+            onSelectPriority={(priority) => {
+              if (!brief.data) return;
+              track('shopping_brief_priority_opened', { category: priority.category, reason: priority.reason, rank: priority.priority });
+              navigation.navigate('ShoppingPriorityEdit', shoppingPriorityRoute(priority, brief.data.generatedAt));
+            }}
             onOpenFullBrief={() => navigation.navigate('ShoppingBriefDetail')}
             onUpgrade={() => {
               track('shop_brief_upgrade_tapped');
@@ -158,8 +171,9 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
           headingStyle="editorial"
           style={styles.section}
           title="Your Shortlist"
+          description="Pieces you’ve found and are considering."
           actionLabel={spotlight.itemCount > 0 ? `See all ${spotlight.itemCount}` : undefined}
-          onAction={() => openHistory({ catalogFilter: activeFinds.length > 0 ? 'active' : 'all' })}
+          onAction={() => openHistory({ catalogFilter: 'all', resetFilters: true })}
         >
           {spotlight.itemCount > 0 ? (
             <>
@@ -167,7 +181,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
                 items={spotlight.railItems}
                 totalCount={spotlight.itemCount}
                 onPressItem={openFind}
-                onSeeAll={() => openHistory({ catalogFilter: 'all' })}
+                onSeeAll={() => openHistory({ catalogFilter: 'all', resetFilters: true })}
               />
             </>
           ) : (
@@ -185,8 +199,9 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
           variant="ruled"
           headingStyle="editorial"
           style={styles.section}
-          title="Saved by Your Stylist"
-          actionLabel={savedShopping.length > 0 ? `${savedShopping.length} saved` : undefined}
+          title="Saved recommendations"
+          description="Looks, pieces, and shopping guides you’ve saved from your Stylist."
+          actionLabel={savedShopping.length > 0 ? `See all ${savedShopping.length}` : undefined}
           onAction={() => openSavedShopping()}
         >
           {savedPreviewEntries.length > 0 ? (
@@ -235,7 +250,8 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.lg,
   },
   headerCopy: { flex: 1, gap: spacing.sm },
-  mastheadActions: { flexDirection: 'row', paddingHorizontal: spacing.page, paddingBottom: spacing.lg },
+  mastheadActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.page, paddingBottom: spacing.lg },
+  mastheadHint: { flex: 1, minWidth: 0 },
   // Ruled like the sections below it, not a tinted plate: surfaceSubtle on
   // the page ground was a 1.02:1 difference with no edge, and the only
   // change of surface on the page. One hairline, the same grammar as

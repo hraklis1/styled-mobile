@@ -488,9 +488,9 @@ function AppTabNavigator() {
                   },
                   {
                     key: 'saved-looks',
-                    label: 'From Your Stylist',
+                    label: 'Saved recommendations',
                     icon: 'heart-outline',
-                    onPress: () => navigation.navigate('Shop', { screen: 'SavedShopping' }),
+                    onPress: () => navigation.navigate('Shop', { screen: 'SavedShopping', params: { tab: 'all' } }),
                   },
                   {
                     key: 'shopping-history',
@@ -500,7 +500,7 @@ function AppTabNavigator() {
                   },
                   {
                     key: 'shopping-camera',
-                    label: 'Shopping Mode',
+                    label: 'Save a find',
                     icon: 'camera-outline',
                     onPress: () => navigation.navigate('Shop', { screen: 'ShoppingCamera' }),
                   },

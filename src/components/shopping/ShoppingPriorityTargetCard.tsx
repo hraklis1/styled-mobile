@@ -38,6 +38,13 @@ type Props = {
   /** The last card sits directly above the currency note and the save band,
    *  which already draw their own rules. */
   isLast?: boolean;
+  /** Open on arrival. The first card on a guide opens itself, so the looks
+   *  strip — the reason to trust the recommendation — is on the first screen
+   *  rather than behind three identical chevrons. */
+  defaultExpanded?: boolean;
+  /** "Found one? Save it" — the bridge from this guide to the shortlist.
+   *  Omitted where the guide is read-only (a saved copy, for instance). */
+  onSaveFind?: () => void;
 };
 
 const cardSpring = LinearTransition.springify().damping(16).stiffness(200);
@@ -63,8 +70,8 @@ const TILE_WIDTH = 64;
  * price sit in its own column across all three cards — and reads as a
  * numbered edit rather than a list of rows to configure.
  */
-export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTitle, isLast }: Props) {
-  const [expanded, setExpanded] = useState(false);
+export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTitle, isLast, defaultExpanded = false, onSaveFind }: Props) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const expandTracked = useRef(false);
   const reduceMotion = useReducedMotion();
   const swatch = getSwatchColor(target.color);
@@ -92,7 +99,7 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTit
     looks.length > 0 ? `${looks.length} look${looks.length === 1 ? '' : 's'}` : null,
     offers.length > 0 ? `${offers.length} available now` : null,
   ].filter((segment): segment is string => Boolean(segment));
-  const metaAccessible = [target.color, price.compact, ...metaSegments.slice(1)]
+  const metaAccessible = [target.color, `Suggested budget ${price.compact}${price.currency ? ` ${price.currency}` : ''}`, ...metaSegments.slice(1)]
     .filter(Boolean)
     .join(', ');
 
@@ -112,7 +119,7 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTit
         motion="crisp"
         onPress={toggle}
         accessibilityRole="button"
-        accessibilityLabel={`Direction ${index}: ${title}. ${metaAccessible}`}
+        accessibilityLabel={`Style ${index}: ${title}. ${metaAccessible}`}
         accessibilityHint={expanded ? 'Collapses the details' : 'Shows material, silhouette, where to look and wardrobe pairings'}
         accessibilityState={{ expanded }}
       >
@@ -138,11 +145,11 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTit
             <View style={styles.metaRow}>
               <Text style={styles.metaText}>{metaSegments.join(' · ')}</Text>
               {price.compact ? (
-                <Text style={styles.metaPrice}>{price.compact}</Text>
+                <Text style={styles.metaPrice}>Budget {price.compact}{price.currency ? ` ${price.currency}` : ''}</Text>
               ) : null}
             </View>
             <View style={styles.disclosureRow}>
-              <Text style={styles.disclosureLabel}>{expanded ? 'Less' : 'Details'}</Text>
+              <Text style={styles.disclosureLabel}>{expanded ? 'Less' : looks.length > 0 ? 'See outfit ideas & details' : 'See style details'}</Text>
               <Ionicons
                 name="chevron-down"
                 size={14}
@@ -170,7 +177,7 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTit
                 between them, for what is one specification read as a single
                 thought. */}
             {specification ? <InlineDetail label="Specification" value={specification} /> : null}
-            {target.retailerExamples.length > 0 ? (
+            {target.productUrl || target.retailerExamples.length > 0 ? (
               // Tappable only once a product-matching layer populates productUrl
               // (see the commerce-seam comment on ShoppingPriorityTarget) — until
               // then this stays the same inert text it always was, since
@@ -186,12 +193,12 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTit
                     void WebBrowser.openBrowserAsync(target.productUrl!);
                   }}
                   accessibilityRole="button"
-                  accessibilityLabel={`Shop ${target.title}${target.merchant ? ` at ${target.merchant}` : ''}`}
+                  accessibilityLabel={target.merchant ? `View at ${target.merchant}` : `View ${target.title}`}
                 >
-                  <InlineDetail label="Where to look" value={target.merchant ?? target.retailerExamples.join(' · ')} linked />
+                  <InlineDetail label={target.merchant ? `View at ${target.merchant}` : 'View product'} value={target.title} linked />
                 </PressableScale>
               ) : (
-                <InlineDetail label="Where to look" value={target.retailerExamples.join(' · ')} />
+                <RetailerChips retailers={target.retailerExamples} query={target.title} targetKey={target.key} />
               )
             ) : null}
           </View>
@@ -214,9 +221,60 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTit
               ))}
             </View>
           ) : null}
+
+          {onSaveFind ? (
+            <PressableScale
+              haptic={false}
+              motion="crisp"
+              scaleTo={0.985}
+              contentStyle={styles.saveFind}
+              onPress={onSaveFind}
+              accessibilityRole="button"
+              accessibilityLabel={`Found a ${title}? Save it to your shortlist`}
+              accessibilityHint="Opens the camera to photograph the piece"
+            >
+              <Ionicons name="camera-outline" size={15} color={shoppingSurfaces.olive.accent} />
+              <Text style={styles.saveFindLabel}>Found one? Save it to your shortlist</Text>
+              <Ionicons name="arrow-forward" size={13} color={shoppingSurfaces.olive.accent} />
+            </PressableScale>
+          ) : null}
         </Animated.View>
       ) : null}
     </Animated.View>
+  );
+}
+
+/**
+ * "Where to look" as chips rather than a run of inert text. There is no
+ * product link yet at this seam, so each chip opens a web search for the
+ * retailer and the piece — a real next step, honestly labelled as a search,
+ * not an availability claim.
+ */
+function RetailerChips({ retailers, query, targetKey }: { retailers: string[]; query: string; targetKey: string }) {
+  return (
+    <View style={styles.detailRow}>
+      <Text style={styles.detailLabel}>Where to look</Text>
+      <View style={styles.chipRow}>
+        {retailers.map((retailer) => (
+          <PressableScale
+            key={retailer}
+            haptic={false}
+            motion="crisp"
+            scaleTo={0.97}
+            contentStyle={styles.chip}
+            onPress={() => {
+              track('shopping_brief_retailer_searched', { targetKey, retailer });
+              void WebBrowser.openBrowserAsync(`https://www.google.com/search?q=${encodeURIComponent(`${retailer} ${query}`)}`);
+            }}
+            accessibilityRole="link"
+            accessibilityLabel={`Search ${retailer} for ${query}`}
+          >
+            <Text style={styles.chipLabel}>{retailer}</Text>
+            <Ionicons name="search-outline" size={12} color={shoppingSurfaces.olive.accent} />
+          </PressableScale>
+        ))}
+      </View>
+    </View>
   );
 }
 
@@ -294,7 +352,9 @@ function UnlockedLook({
           <View style={[styles.ghostFrame, { backgroundColor: wash }]}>
             <View style={[styles.ghostSwatch, { backgroundColor: swatch.primary }]} />
           </View>
-          <Text style={styles.tileCaption} numberOfLines={2}>{newPiece}</Text>
+          {/* "+ Tan Leather Sneaker": the one frame in the strip that is not
+              yet in the wardrobe, said so, rather than an unlabeled swatch. */}
+          <Text style={[styles.tileCaption, styles.tileCaptionNew]} numberOfLines={2}>+ {newPiece}</Text>
         </View>
         {pieces.map(({ id, item }, pieceIndex) => (
           <View key={id} style={styles.tile}>
@@ -433,4 +493,20 @@ const styles = StyleSheet.create({
   },
   ghostSwatch: { width: 10, height: 10, borderRadius: radii.full },
   tileCaption: { fontSize: 11, lineHeight: 14, color: colors.mutedForeground },
+  tileCaptionNew: { color: shoppingSurfaces.olive.accent, fontWeight: typography.weight.medium },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chip: {
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.full,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: shoppingSurfaces.edge,
+    backgroundColor: shoppingSurfaces.alabaster,
+  },
+  chipLabel: { ...typography.text.bodySmall, color: shoppingSurfaces.olive.accent, fontWeight: typography.weight.medium },
+  saveFind: { minHeight: 44, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: spacing.xs },
+  saveFindLabel: { ...typography.text.bodySmall, fontWeight: typography.weight.semibold, color: shoppingSurfaces.olive.accent },
 });

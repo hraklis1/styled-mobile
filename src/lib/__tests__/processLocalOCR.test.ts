@@ -2,10 +2,20 @@ jest.mock('expo-text-extractor', () => ({
   extractTextFromImage: jest.fn(),
   isSupported: true,
 }));
-
-import { extractPriceFromText, PRICE_REGEX } from '../processLocalOCR';
+import { extractPriceFromText, PRICE_REGEX, processLocalOCR } from '../processLocalOCR';
+import { extractTextFromImage } from 'expo-text-extractor';
 
 describe('processLocalOCR price parsing', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('retains native OCR lines and resolves a labeled sale price', async () => {
+    (extractTextFromImage as jest.Mock).mockResolvedValueOnce(['Was CAD 120', 'Now CAD 90']);
+    expect(await processLocalOCR('file:///tag.jpg')).toEqual({
+      extractedPrice: 90,
+      rawOcrText: 'Was CAD 120\nNow CAD 90',
+    });
+    expect(extractTextFromImage).toHaveBeenCalledWith('file:///tag.jpg');
+  });
   it('uses the expected dollar-price pattern', () => {
     expect('$ 29.99'.match(PRICE_REGEX)?.[0]).toBe('$ 29.99');
   });

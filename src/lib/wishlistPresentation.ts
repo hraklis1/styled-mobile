@@ -2,7 +2,7 @@ import type { WishlistEntry } from './wishlist';
 import { getWishlistRecommendationType } from './wishlistType';
 
 export function getWishlistContext(entry: WishlistEntry): string | undefined {
-  if (entry.outfit.shoppingBrief) return 'Shopping Brief';
+  if (entry.outfit.shoppingBrief) return 'Shopping guide';
   return entry.eventContext?.title?.trim() || entry.outfit.city?.trim() || undefined;
 }
 
@@ -87,7 +87,7 @@ export function getWishlistAccessibilityLabel(entry: WishlistEntry): string {
 }
 
 export function getWishlistTypeLabel(entry: WishlistEntry): string {
-  if (entry.outfit.shoppingBrief) return 'Saved edit';
+  if (entry.outfit.shoppingBrief) return 'Shopping guide';
   const type = getWishlistRecommendationType(entry);
   return type === 'piece' ? 'Saved piece' : type === 'list' ? 'Saved list' : 'Saved look';
 }

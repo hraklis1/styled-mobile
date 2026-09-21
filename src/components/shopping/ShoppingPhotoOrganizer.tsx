@@ -1,3 +1,5 @@
+import { resolveShoppingSnapPrices } from '../../lib/shoppingPrices';
+import { useCurrencyCode } from '../../hooks/useCurrencyCode';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionSheetIOS,
@@ -61,13 +63,11 @@ function nextRole(role: ShoppingCaptureRole): ShoppingCaptureRole {
   return 'unknown';
 }
 
-function stagePrice(snaps: ShoppingSnap[], snapIds: string[]): string | null {
+function stagePrice(snaps: ShoppingSnap[], snapIds: string[], homeCurrency: string): string | null {
   const snapSet = new Set(snapIds);
-  const price = snaps.find((snap) => snapSet.has(snap.id) && snap.priceOverride != null)?.priceOverride
-    ?? snaps.find((snap) => snapSet.has(snap.id) && snap.captureRole === 'tag' && snap.extractedPrice !== null)?.extractedPrice
-    ?? snaps.find((snap) => snapSet.has(snap.id) && snap.extractedPrice !== null)?.extractedPrice
-    ?? null;
-  return formatShoppingPrice(price, snaps.find((snap) => snapSet.has(snap.id) && snap.currencyCode)?.currencyCode ?? null);
+  const price = resolveShoppingSnapPrices(snaps.filter((snap) => snapSet.has(snap.id)), homeCurrency);
+  return formatShoppingPrice(price.amount, price.currencyCode)
+    ?? (price.status === 'ambiguous' ? 'Confirm price' : null);
 }
 
 function containsPoint(rect: Rect | null, x: number, y: number): boolean {
@@ -162,6 +162,7 @@ export function ShoppingPhotoOrganizer({
   const stageRects = useRef(new Map<string, Rect>());
   const dropZoneRect = useRef<Rect | null>(null);
 
+  const homeCurrency = useCurrencyCode();
   const snapById = useMemo(() => new Map(snaps.map((snap) => [snap.id, snap])), [snaps]);
   const snapsWithStagedRoles = useMemo(
     () => snaps.map((snap) => ({ ...snap, captureRole: rolesBySnapId[snap.id] ?? snap.captureRole })),
@@ -177,8 +178,8 @@ export function ShoppingPhotoOrganizer({
   // every drag frame.
   const stageSummaries = useMemo(() => stages.map((stage, index) => ({
     title: snapsWithStagedRoles.find((snap) => stage.snapIds.includes(snap.id))?.category ?? `Piece ${index + 1}`,
-    price: stagePrice(snapsWithStagedRoles, stage.snapIds),
-  })), [snapsWithStagedRoles, stages]);
+    price: stagePrice(snapsWithStagedRoles, stage.snapIds, homeCurrency),
+  })), [homeCurrency, snapsWithStagedRoles, stages]);
 
   const applyStages = useCallback((next: ShoppingOrganizerStage[]) => {
     stagesRef.current = next;

@@ -83,7 +83,7 @@ it('keeps the compact teaser noninteractive and suppresses duplicate context', (
   expect(renderer.root.findAllByType(Pressable)).toHaveLength(0);
   const labels = renderer.root.findAllByType(Text).map((node) => node.props.children);
   expect(labels).toContain('02');
-  expect(labels).toContain('9 new outfits · Work');
+  expect(labels).toContain('9 potential outfit combinations · Work');
   expect(labels).not.toContain('Not for me');
 });
 

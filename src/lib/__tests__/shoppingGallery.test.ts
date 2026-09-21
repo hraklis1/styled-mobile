@@ -33,6 +33,47 @@ const synced: ShoppingSnap = {
 };
 
 describe('shoppingGallery', () => {
+  it('recovers stored OCR with the tag currency instead of the garment cover currency', () => {
+    const item = buildShoppingEditItems([
+      { ...synced, extractedPrice: null, rawOcrText: '', currencyCode: 'USD' },
+      { ...synced, id: 'tag', captureRole: 'tag', extractedPrice: null, rawOcrText: 'Was CAD 120\nNow CAD 90', countryCode: 'CA', currencyCode: null },
+    ])[0];
+    expect(item).toMatchObject({ extractedPrice: 90, currencyCode: 'CAD', needsReview: false, priceResolution: { status: 'resolved' } });
+    expect(item.primarySnap.id).toBe(synced.id);
+    expect(item.snaps[1].extractedPrice).toBeNull();
+  });
+
+  it('preserves saved prices even when a new parser would select a sale price', () => {
+    const item = buildShoppingEditItems([{ ...synced, rawOcrText: 'Was CAD 120 Now CAD 90' }])[0];
+    expect(item).toMatchObject({ extractedPrice: 120, currencyCode: 'CAD' });
+    expect(item.priceResolution?.candidates).toHaveLength(2);
+  });
+
+  it('does not silently pick the first of two conflicting tags', () => {
+    const snaps: ShoppingSnap[] = [
+      { ...synced, captureRole: 'tag', rawOcrText: 'CAD 120' },
+      { ...synced, id: 'tag2', captureRole: 'tag', extractedPrice: 90, rawOcrText: 'CAD 90' },
+    ];
+    expect(buildShoppingEditItems(snaps)[0]).toMatchObject({ extractedPrice: null, needsReview: true, priceResolution: { status: 'ambiguous' } });
+    expect(buildShoppingEditItems(snaps.map((snap) => ({ ...snap, priceOverride: 0, currencyCode: 'EUR' })))[0])
+      .toMatchObject({ extractedPrice: 0, currencyCode: 'EUR', needsReview: false, priceResolution: { status: 'resolved' } });
+  });
+
+  it('keeps split OCR tokens from separate photos separate', () => {
+    const item = buildShoppingEditItems([
+      { ...synced, extractedPrice: null, rawOcrText: '$' },
+      { ...synced, id: 'tag', captureRole: 'tag', extractedPrice: null, rawOcrText: '12345' },
+    ])[0];
+    expect(item.priceResolution?.status).toBe('missing');
+  });
+
+  it('resolves multi-country tags using the tag location, even with a locationless cover', () => {
+    const item = buildShoppingEditItems([
+      { ...synced, extractedPrice: null, rawOcrText: '' },
+      { ...synced, id: 'tag', captureRole: 'tag', extractedPrice: null, rawOcrText: 'USD 60\nCAD 90', countryCode: 'CA' },
+    ])[0];
+    expect(item).toMatchObject({ extractedPrice: 90, currencyCode: 'CAD', needsReview: false });
+  });
   it('treats an empty status set as all and supports single and multi-select status filters', () => {
     expect(matchesShoppingCatalogStatuses('considering', new Set())).toBe(true);
     expect(matchesShoppingCatalogStatuses('wishlist', new Set(['wishlist']))).toBe(true);
@@ -158,8 +199,8 @@ describe('shoppingGallery', () => {
   it('summarizes item, store, missing price, and pending counts', () => {
     const snaps = [
       synced,
-      { ...synced, id: 'pending', captureGroupId: 'group-pending', storeName: 'COS', extractedPrice: null, syncStatus: 'pending' as const },
-      { ...synced, id: 'tag', captureGroupId: 'group-pending', captureRole: 'tag' as const, extractedPrice: null, syncStatus: 'pending' as const },
+      { ...synced, id: 'pending', captureGroupId: 'group-pending', storeName: 'COS', extractedPrice: null, rawOcrText: '', syncStatus: 'pending' as const },
+      { ...synced, id: 'tag', captureGroupId: 'group-pending', captureRole: 'tag' as const, extractedPrice: null, rawOcrText: '', syncStatus: 'pending' as const },
     ];
 
     const summary = summarizeShoppingEditItems(buildShoppingEditItems(snaps));

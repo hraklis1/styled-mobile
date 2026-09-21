@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Keyboard, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -11,6 +11,10 @@ import {
   shoppingCatalogChips,
   shoppingItemBadges,
 } from '../../lib/shoppingPresentation';
+import { parseShoppingAmount, suggestedShoppingCurrency } from '../../lib/shoppingPrices';
+import { purchaseDetails, validateShoppingPatch } from '../../lib/shoppingCatalog';
+import { useShoppingItemActions } from '../../hooks/useShoppingItemActions';
+import { PriceCandidateChips } from './PriceCandidateChips';
 import { SHORTLIST_COPY } from '../../lib/shoppingVocabulary';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { ShoppingEditItem } from '../../lib/shoppingGallery';
@@ -45,9 +49,29 @@ export function ShoppingEditCard({
 }) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
-  const price = formatShoppingPrice(item.extractedPrice, item.currencyCode ?? null);
+  const [editing, setEditing] = useState(false);
+  const [nameDraft, setNameDraft] = useState(item.productName ?? item.category ?? '');
+  const [priceDraft, setPriceDraft] = useState(item.extractedPrice?.toString() ?? '');
+  const [currencyDraft, setCurrencyDraft] = useState(item.currencyCode ?? '');
+  const [editError, setEditError] = useState<string | null>(null);
+  const [savedPatch, setSavedPatch] = useState<{
+    productName?: string | null;
+    priceOverride?: number | null;
+    currencyCode?: string | null;
+  }>({});
+  const { saveCatalog, isSavingCatalog } = useShoppingItemActions();
+  const visibleName = savedPatch.productName !== undefined
+    ? savedPatch.productName
+    : item.productName ?? item.category ?? (showStore ? item.storeName : null);
+  const visiblePriceValue = savedPatch.priceOverride !== undefined ? savedPatch.priceOverride : item.extractedPrice;
+  const visibleCurrency = savedPatch.currencyCode !== undefined ? savedPatch.currencyCode : item.currencyCode;
+  const hasTagPhoto = item.snaps.some((snap) => snap.captureRole === 'tag');
+  const priceCountry = item.snaps.find((snap) => snap.captureRole === 'tag' && snap.countryCode)?.countryCode
+    ?? (hasTagPhoto ? null : item.snaps.find((snap) => snap.captureRole !== 'garment' && snap.countryCode)?.countryCode
+      ?? item.snaps.find((snap) => snap.countryCode)?.countryCode);
+  const price = formatShoppingPrice(visiblePriceValue, visibleCurrency ?? null)
+    ?? (savedPatch.priceOverride === undefined && item.priceResolution?.status === 'ambiguous' ? 'Confirm price' : null);
   const badges = shoppingItemBadges(item);
-  const title = showStore ? item.storeName ?? SHORTLIST_COPY.needsStore : item.category;
   const catalogChips = shoppingCatalogChips(showStore ? item : { ...item, category: null });
   const accessibilityStateLabel = item.needsReview
     ? ', needs review'
@@ -58,21 +82,59 @@ export function ShoppingEditCard({
   useEffect(() => {
     setImageLoaded(false);
     setImageFailed(false);
+    setSavedPatch({});
+    setNameDraft(item.productName ?? item.category ?? '');
+    setPriceDraft(item.extractedPrice?.toString() ?? '');
+    setCurrencyDraft(item.currencyCode ?? '');
+    setEditing(false);
+    setEditError(null);
   }, [item.primarySnap.id, item.primarySnap.imageUri]);
+
+  const openEditor = () => {
+    setNameDraft(item.productName ?? item.category ?? '');
+    setPriceDraft(visiblePriceValue?.toString() ?? '');
+    setCurrencyDraft(visibleCurrency ?? suggestedShoppingCurrency(priceCountry) ?? '');
+    setEditError(null);
+    setEditing(true);
+  };
+
+  const saveCardEdits = async () => {
+    const productName = nameDraft.trim() || null;
+    const priceOverride = priceDraft.trim() ? parseShoppingAmount(priceDraft) : null;
+    const currencyCode = currencyDraft.trim().toUpperCase() || null;
+    const patch = {
+      productName,
+      priceOverride,
+      currencyCode,
+    };
+    try {
+      validateShoppingPatch(patch);
+      await saveCatalog(item.captureGroupId, patch, purchaseDetails(item));
+      setSavedPatch(patch);
+      setEditing(false);
+      setEditError(null);
+      Keyboard.dismiss();
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : 'Could not save changes.');
+    }
+  };
 
   return (
     <TouchableOpacity
       style={[styles.card, { width }, isSelected && styles.cardSelected]}
       activeOpacity={0.9}
       onPress={() => {
+        if (editing) return;
         void Haptics.selectionAsync();
         onPress(item.primarySnap);
       }}
       onLongPress={() => {
+        if (editing) return;
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         onLongPress();
       }}
-      accessibilityLabel={`${item.storeName ?? 'Shopping'} piece${price ? `, ${price}` : ''}${accessibilityStateLabel}`}
+      accessibilityLabel={`${visibleName ?? item.storeName ?? 'Shopping'} piece${price ? `, ${price}` : ''}${accessibilityStateLabel}`}
       accessibilityState={{ selected: isSelected }}
     >
       <View style={styles.imageFrame}>
@@ -125,18 +187,87 @@ export function ShoppingEditCard({
       </View>
 
       <View style={styles.copy}>
-        {title ? (
-          <View style={styles.copyTopRow}>
-            <Text style={styles.storeText} numberOfLines={1}>{title}</Text>
-            {item.syncStatus === 'pending' ? (
-              <Ionicons name="cloud-upload-outline" size={14} color={colors.primary} />
-            ) : null}
-          </View>
-        ) : null}
+        <View style={styles.copyTopRow}>
+          <Text style={styles.storeText} numberOfLines={1}>{visibleName ?? 'Unnamed piece'}</Text>
+          {item.syncStatus === 'pending' ? (
+            <Ionicons name="cloud-upload-outline" size={14} color={colors.primary} />
+          ) : null}
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={openEditor}
+            disabled={isSavingCatalog}
+            accessibilityRole="button"
+            accessibilityLabel="Edit item name, price, and currency"
+          >
+            <Ionicons name="pencil-outline" size={14} color={colors.action} />
+          </TouchableOpacity>
+        </View>
         <View style={styles.detailRow}>
           <Text style={styles.roleText} numberOfLines={1}>{itemRoleSummary(item)}</Text>
           {price ? <Text style={styles.priceText} numberOfLines={1}>{price}</Text> : null}
         </View>
+        {!editing && savedPatch.priceOverride === undefined && item.priceResolution?.status === 'ambiguous' ? (
+          <View style={styles.priceChips}>
+            <PriceCandidateChips
+              prompt="Which price?"
+              candidates={item.priceResolution.candidates}
+              disabled={isSavingCatalog}
+              onPick={(choice) => {
+                const patch = { priceOverride: choice.amount, currencyCode: choice.currencyCode };
+                void saveCatalog(item.captureGroupId, patch)
+                  .then(() => {
+                    setSavedPatch((current) => ({ ...current, ...patch }));
+                    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  })
+                  .catch((error) => setEditError(error instanceof Error ? error.message : 'Could not save the price.'));
+              }}
+            />
+            {editError ? <Text style={styles.editError}>{editError}</Text> : null}
+          </View>
+        ) : null}
+        {editing ? (
+          <View style={styles.editPanel}>
+            <TextInput
+              value={nameDraft}
+              onChangeText={setNameDraft}
+              placeholder="Item name"
+              placeholderTextColor={colors.mutedForeground}
+              style={styles.editInput}
+              accessibilityLabel="Item name"
+              returnKeyType="next"
+            />
+            <View style={styles.editPriceRow}>
+              <TextInput
+                value={priceDraft}
+                onChangeText={setPriceDraft}
+                placeholder="Price"
+                placeholderTextColor={colors.mutedForeground}
+                keyboardType="decimal-pad"
+                style={[styles.editInput, styles.editPriceInput]}
+                accessibilityLabel="Price"
+              />
+              <TextInput
+                value={currencyDraft}
+                onChangeText={setCurrencyDraft}
+                placeholder="CAD"
+                placeholderTextColor={colors.mutedForeground}
+                autoCapitalize="characters"
+                maxLength={3}
+                style={[styles.editInput, styles.editCurrencyInput]}
+                accessibilityLabel="Currency"
+              />
+            </View>
+            {editError ? <Text style={styles.editError}>{editError}</Text> : null}
+            <View style={styles.editActions}>
+              <TouchableOpacity onPress={() => { setEditing(false); setEditError(null); }} disabled={isSavingCatalog}>
+                <Text style={styles.editCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => void saveCardEdits()} disabled={isSavingCatalog} style={styles.editSaveButton}>
+                <Text style={styles.editSaveText}>{isSavingCatalog ? 'Saving…' : 'Save'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
         {catalogChips.length > 0 ? (
           <Text style={styles.catalogText} numberOfLines={1}>{catalogChips.join(' · ')}</Text>
         ) : null}
@@ -242,6 +373,42 @@ const styles = StyleSheet.create({
   },
   copy: { gap: spacing.xs, padding: spacing.sm },
   copyTopRow: { minHeight: 18, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  editButton: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  priceChips: { marginTop: spacing.xs },
+  editPanel: {
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+    paddingTop: spacing.xs,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  editInput: {
+    minHeight: 34,
+    flex: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.sm,
+    backgroundColor: colors.background,
+    color: colors.foreground,
+    fontSize: typography.text.caption.fontSize,
+  },
+  editPriceRow: { flexDirection: 'row', gap: spacing.xs },
+  editPriceInput: { flex: 1 },
+  editCurrencyInput: { flex: 0, width: 64, textAlign: 'center' },
+  editError: { ...typography.text.caption, color: colors.destructive },
+  editActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.md, paddingTop: spacing.xs },
+  editCancel: { ...typography.text.caption, color: colors.mutedForeground },
+  editSaveButton: { paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radii.full, backgroundColor: colors.primary },
+  editSaveText: { ...typography.text.caption, fontWeight: typography.weight.semibold, color: colors.primaryForeground },
   storeText: {
     flex: 1,
     fontSize: typography.text.bodySmall.fontSize,

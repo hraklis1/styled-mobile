@@ -16,6 +16,7 @@ type Props = {
   entry: WishlistEntry;
   onPress: () => void;
   onMore: () => void;
+  showType?: boolean;
 };
 
 /**
@@ -23,7 +24,7 @@ type Props = {
  * recommendation, and the figures a decision turns on. Rows are ruled rather
  * than boxed so the list reads as one page instead of a stack of cards.
  */
-export function ShopWishlistSummaryCard({ entry, onPress, onMore }: Props) {
+export function ShopWishlistSummaryCard({ entry, onPress, onMore, showType }: Props) {
   const { outfit, eventContext } = entry;
   const brands = getWishlistBrands(entry);
   const savedEdit = outfit.shoppingBrief;
@@ -46,12 +47,13 @@ export function ShopWishlistSummaryCard({ entry, onPress, onMore }: Props) {
     >
       <WishlistOutfitPreview entry={entry} scale="thumb" style={styles.preview} />
       <View style={styles.copy}>
+        {showType ? <AppText variant="caption" tone="brand">{getWishlistTypeLabel(entry)}</AppText> : null}
         {context ? (
           <AppText variant="eyebrow" tone="brand" numberOfLines={1}>{context}</AppText>
         ) : null}
         <AppText variant="cardTitle" tone="primary" numberOfLines={2}>{title}</AppText>
-        {savedEdit ? (
-          <AppText variant="caption" tone="muted" numberOfLines={1}>Shopping Brief</AppText>
+        {savedEdit && !showType ? (
+          <AppText variant="caption" tone="muted" numberOfLines={1}>Shopping guide</AppText>
         ) : brands.length > 0 ? (
           <AppText variant="caption" tone="muted" numberOfLines={1}>{brands.slice(0, 3).join(' · ')}</AppText>
         ) : null}

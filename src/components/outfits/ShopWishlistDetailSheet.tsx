@@ -6,6 +6,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { WishlistEntry } from '../../lib/wishlist';
 import { getWishlistRecommendationType } from '../../lib/wishlistType';
 import { colors, spacing, typography } from '../../theme';
+import { useItems } from '../../hooks/useItems';
+import { ShoppingPriorityTargetCard } from '../shopping/ShoppingPriorityTargetCard';
+import { clarifyOutfitClaims, OUTFIT_ESTIMATE_EXPLANATION, potentialOutfitCount, shoppingGuideIntro } from '../../lib/shopClarity';
 import { ShopOutfitCard } from './ShopOutfitCard';
 
 type Props = {
@@ -34,11 +37,13 @@ const DEFAULT_REMOVAL_COPY = {
 };
 
 export function ShopWishlistDetailSheet({ entry, onClose, onRemove, onSaveToBoard, removalCopy = DEFAULT_REMOVAL_COPY }: Props) {
+  const { data: items = [] } = useItems();
+  const wardrobe = useMemo(() => new Map(items.filter((item) => !item.isArchived && item.condition !== 'needs_repair' && item.condition !== 'donate').map((item) => [item.id, item])), [items]);
   const ref = useRef<BottomSheetModal>(null);
   const insets = useSafeAreaInsets();
   const snapPoints = useMemo(() => ['94%'], []);
   const recommendationType = getWishlistRecommendationType(entry);
-  const title = entry.outfit.shoppingBrief ? 'Saved edit' : recommendationType === 'look' ? 'Saved look' : recommendationType === 'piece' ? 'Saved piece' : 'Saved list';
+  const title = entry.outfit.shoppingBrief ? 'Shopping guide' : recommendationType === 'look' ? 'Saved look' : recommendationType === 'piece' ? 'Saved piece' : 'Saved list';
   const fallbackContext = recommendationType === 'list' ? 'Options to consider' : recommendationType === 'piece' ? 'Individual piece' : 'Complete look';
 
   useEffect(() => { ref.current?.present(); }, []);
@@ -106,15 +111,13 @@ export function ShopWishlistDetailSheet({ entry, onClose, onRemove, onSaveToBoar
         {entry.outfit.shoppingBrief ? (
           <View style={styles.editContent}>
             <Text style={styles.editHeadline}>{entry.outfit.shoppingBrief.headline}</Text>
-            <Text style={styles.editSummary}>{entry.outfit.shoppingBrief.summary}</Text>
+            <Text style={styles.editSummary}>{clarifyOutfitClaims(entry.outfit.shoppingBrief.summary, entry.outfit.shoppingBrief.priority.impactScore)}</Text>
+            <Text style={styles.editSummary}>{shoppingGuideIntro(entry.outfit.shoppingBrief.targets.length)}</Text>
+            {potentialOutfitCount(entry.outfit.shoppingBrief.priority.impactScore) ? (
+              <Text style={styles.editSummary}>{potentialOutfitCount(entry.outfit.shoppingBrief.priority.impactScore)}. {OUTFIT_ESTIMATE_EXPLANATION}</Text>
+            ) : null}
             {entry.outfit.shoppingBrief.targets.map((target, index) => (
-              <View key={target.key} style={styles.editTarget}>
-                <Text style={styles.editTargetIndex}>0{index + 1}</Text>
-                <Text style={styles.editTargetTitle}>{target.title}</Text>
-                <Text style={styles.editTargetMeta}>{target.silhouette} · {target.color} · {target.material}</Text>
-                <Text style={styles.editTargetMeta}>{target.priceRange} · Look at {target.retailerExamples.join(' · ')}</Text>
-                <Text style={styles.editTargetRationale}>{target.rationale}</Text>
-              </View>
+              <ShoppingPriorityTargetCard key={target.key} target={target} index={index + 1} wardrobe={wardrobe} isLast={index === entry.outfit.shoppingBrief!.targets.length - 1} />
             ))}
           </View>
         ) : <ShopOutfitCard outfit={entry.outfit} />}

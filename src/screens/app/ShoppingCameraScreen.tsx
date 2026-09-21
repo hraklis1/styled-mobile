@@ -1,4 +1,9 @@
-import { shoppingPriceCandidates } from '../../lib/shoppingPrices';
+import { resolveShoppingPrice, shoppingPriceCandidates } from '../../lib/shoppingPrices';
+import { captureItemPrice } from '../../lib/shoppingCapturePrice';
+import { formatShoppingPrice } from '../../lib/shoppingPresentation';
+import { PriceCandidateChips, type PriceChoice } from '../../components/shopping/PriceCandidateChips';
+import { useCurrencyCode } from '../../hooks/useCurrencyCode';
+import { useShoppingItemActions } from '../../hooks/useShoppingItemActions';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -42,7 +47,7 @@ import type { ShoppingCameraScreenProps } from '../../navigation/types';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import { processLocalOCR } from '../../lib/processLocalOCR';
 import { classifyShoppingCapture } from '../../lib/classifyShoppingCapture';
-import { extractGpsCoords, resolveShoppingSessionLocation } from '../../lib/photoLocation';
+import { capturePhotoLocationData, resolveShoppingSessionLocation } from '../../lib/photoLocation';
 import { createShoppingPreview, deleteShoppingPreview } from '../../lib/shoppingPreviews';
 import { evaluateShoppingVisitResume } from '../../lib/shoppingVisit';
 import { deleteShoppingSnaps } from '../../lib/deleteShoppingSnaps';
@@ -159,6 +164,19 @@ function guideToCrop(
   };
 }
 
+
+/** The price read off one photo, short enough for a 52pt thumbnail. */
+function photoPriceLabel(photo: { price?: { amount: number | null; currencyCode: string | null; status: string } | null }): string | null {
+  if (!photo.price || photo.price.status !== 'resolved' || photo.price.amount === null) return null;
+  return shortPriceLabel(photo.price.amount, photo.price.currencyCode);
+}
+
+/** Formatted when the currency is known; otherwise just the number, since
+ *  "148 · Confirm currency" does not fit anywhere in the camera. */
+function shortPriceLabel(amount: number, currencyCode: string | null): string {
+  return currencyCode ? formatShoppingPrice(amount, currencyCode) ?? String(amount) : amount.toLocaleString();
+}
+
 export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) {
   const cameraRef = useRef<CameraView>(null);
   const storeSheetRef = useRef<BottomSheetModal>(null);
@@ -201,6 +219,8 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { user } = useAuth();
   const { data: visitedStoreLocations = [] } = useShoppingStoreLocations();
+  const homeCurrency = useCurrencyCode();
+  const { saveCatalog } = useShoppingItemActions();
 
   const currentStoreName = useShoppingSessionStore((state) => state.currentStoreName);
   const currentSession = useShoppingSessionStore((state) => state.currentSession);
@@ -230,6 +250,41 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
   const activeItemNumber = activeItemIndex < 0 ? captureStacks.length + 1 : activeItemIndex + 1;
   const activePhotoCount = activeItemIndex < 0 ? 0 : captureStacks[activeItemIndex].previews.length;
   const activePhotos = activeItemIndex < 0 ? [] : captureStacks[activeItemIndex].previews;
+  // A price the shopper already tapped lives on the pending uploads' group
+  // catalog (and in the offline mutation queue once they have synced).
+  const groupOverrides = useMemo(() => {
+    const overrides = new Map<string, PriceChoice>();
+    for (const upload of pendingUploads) {
+      if (upload.priceOverride != null && !overrides.has(upload.captureGroupId)) {
+        overrides.set(upload.captureGroupId, { amount: upload.priceOverride, currencyCode: upload.currencyCode ?? null });
+      }
+    }
+    return overrides;
+  }, [pendingUploads]);
+  const [pickedPrices, setPickedPrices] = useState<Record<string, PriceChoice>>({});
+  const stackPrices = useMemo(() => new Map(captureStacks.map((stack) => [
+    stack.groupId,
+    captureItemPrice(stack.previews, pickedPrices[stack.groupId] ?? groupOverrides.get(stack.groupId) ?? null),
+  ])), [captureStacks, groupOverrides, pickedPrices]);
+  const stackPriceLabels = useMemo(() => new Map([...stackPrices].map(([groupId, price]) => [
+    groupId,
+    price.status === 'resolved' && price.amount !== null ? shortPriceLabel(price.amount, price.currencyCode) : price.status === 'ambiguous' ? '?' : null,
+  ])), [stackPrices]);
+  const activePrice = attachGroupId ? stackPrices.get(attachGroupId) ?? null : null;
+  const [priceSaveError, setPriceSaveError] = useState<string | null>(null);
+  const pickPrice = useCallback((groupId: string, choice: PriceChoice) => {
+    setPickedPrices((current) => ({ ...current, [groupId]: choice }));
+    setPriceSaveError(null);
+    saveCatalog(groupId, { priceOverride: choice.amount, currencyCode: choice.currencyCode })
+      .then(() => {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        AccessibilityInfo.announceForAccessibility(`Price set to ${formatShoppingPrice(choice.amount, choice.currencyCode) ?? choice.amount}`);
+      })
+      .catch((error: unknown) => {
+        setPickedPrices((current) => { const next = { ...current }; delete next[groupId]; return next; });
+        setPriceSaveError(error instanceof Error ? error.message : 'Could not save the price.');
+      });
+  }, [saveCatalog]);
   const captureBusy = isCapturing || isImporting || isClosing || isDiscarding || isDeleting;
   const exitAllowedRef = useRef(false);
   useEffect(() => {
@@ -263,19 +318,19 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
       try {
         const result = await processLocalOCR(localFileUri);
         const pending = useShoppingSessionStore.getState().pendingUploads.find((upload) => upload.id === id);
-        const candidates = shoppingPriceCandidates(result.rawOcrText, pending?.countryCode);
-        if (pending && !pending.currencyCode && candidates.length === 1 && candidates[0].currencyCode) {
-          useShoppingSessionStore.getState().updatePendingGroupCatalog(pending.captureGroupId, { currencyCode: candidates[0].currencyCode });
-        }
-        const captureRole = classifyShoppingCapture(result.rawOcrText, result.extractedPrice);
+        const candidates = shoppingPriceCandidates(result.rawOcrText, pending?.countryCode, homeCurrency);
+        const price = resolveShoppingPrice(candidates, pending?.countryCode, undefined, homeCurrency);
+        const captureRole = classifyShoppingCapture(result.rawOcrText, price.amount, candidates.length > 0);
         useShoppingSessionStore.getState().updatePendingUploadOCR(id, {
           ...result,
+          extractedPrice: price.amount,
           captureRole,
           ocrStatus: 'complete',
         });
         useShoppingSessionStore.getState().updateVisitPreview(id, {
           captureRole,
           ocrStatus: 'complete',
+          price: { amount: price.amount, currencyCode: price.currencyCode, status: price.status, inferred: price.inferred, candidates: price.candidates },
         });
       } catch (ocrError: unknown) {
         console.warn('Shopping photo OCR failed', ocrError);
@@ -288,10 +343,11 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
         useShoppingSessionStore.getState().updateVisitPreview(id, {
           captureRole: 'unknown',
           ocrStatus: 'failed',
+          price: null,
         });
       }
     });
-  }, []);
+  }, [homeCurrency]);
 
   useEffect(() => {
     if (permission && !permission.granted && permission.canAskAgain) {
@@ -440,7 +496,10 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
       for (const asset of assets) {
         try {
           const id = Crypto.randomUUID();
-          const coordinates = asset.exif ? extractGpsCoords(asset.exif) : null;
+          const photoLocation = await capturePhotoLocationData(asset.exif, false);
+          const coordinates = photoLocation
+            ? { latitude: photoLocation.latitude, longitude: photoLocation.longitude }
+            : null;
           const localFileUri = await persistShoppingPhoto(
             asset.uri,
             id,
@@ -460,17 +519,17 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
             // imports from different cities never overwrite one another.
             shoppingSessionId: importSessionId,
             sessionStartedAt: coordinates ? Date.now() : session?.startedAt ?? null,
-            latitude: coordinates?.latitude ?? null,
-            longitude: coordinates?.longitude ?? null,
-            locationAccuracyMeters: coordinates ? null : session?.locationAccuracyMeters ?? null,
-            locality: coordinates ? null : session?.locality ?? null,
-            region: coordinates ? null : session?.region ?? null,
-            countryCode: coordinates ? null : session?.countryCode ?? null,
-            branchLabel: coordinates ? null : session?.branchLabel ?? null,
-            locationHint: coordinates ? null : session?.locationHint ?? null,
-            locationSource: coordinates ? 'photo_exif' : session?.locationSource ?? 'unavailable',
-            locationStatus: coordinates ? 'resolved' : session?.locationStatus ?? 'unavailable',
-            locationCapturedAt: coordinates ? Date.now() : session?.locationCapturedAt ?? null,
+            latitude: photoLocation?.latitude ?? session?.latitude ?? null,
+            longitude: photoLocation?.longitude ?? session?.longitude ?? null,
+            locationAccuracyMeters: photoLocation?.accuracyMeters ?? (coordinates ? null : session?.locationAccuracyMeters ?? null),
+            locality: photoLocation?.locality ?? (coordinates ? null : session?.locality ?? null),
+            region: photoLocation?.region ?? (coordinates ? null : session?.region ?? null),
+            countryCode: photoLocation?.countryCode ?? (coordinates ? null : session?.countryCode ?? null),
+            branchLabel: photoLocation?.branchLabel ?? (coordinates ? null : session?.branchLabel ?? null),
+            locationHint: photoLocation?.locationHint ?? (coordinates ? null : session?.locationHint ?? null),
+            locationSource: photoLocation ? 'photo_exif' : session?.locationSource ?? 'unavailable',
+            locationStatus: photoLocation?.countryCode || photoLocation?.locality ? 'resolved' : session?.locationStatus ?? 'unavailable',
+            locationCapturedAt: photoLocation?.capturedAt ?? (coordinates ? Date.now() : session?.locationCapturedAt ?? null),
             captureGroupId: captureGroup.groupId,
             captureGroupStartedAt: captureGroup.groupStartedAt,
             captureSequence: captureGroup.sequence,
@@ -885,7 +944,7 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
         <Ionicons name="camera-outline" size={44} color={colors.primary} />
         <Text style={styles.permissionTitle}>Camera access is required</Text>
         <Text style={styles.permissionText}>
-          Shopping Mode uses a custom camera so every photo saves without a confirmation step.
+          Allow camera access to photograph a piece and its price tag.
         </Text>
         {permission.canAskAgain ? (
           <TouchableOpacity style={styles.permissionButton} onPress={() => void requestPermission()}>
@@ -987,33 +1046,64 @@ export function ShoppingCameraScreen({ navigation }: ShoppingCameraScreenProps) 
 
       <View style={styles.bottomDock} pointerEvents="box-none"
         onLayout={(event) => setDockHeight(event.nativeEvent.layout.height)}>
+        {visitPreviews.length === 0 && !galleryImportProgress ? <Text style={styles.captureGuidance}>Start with the piece. Add its price tag if you have it.</Text> : null}
+        {activePrice?.status === 'missing' && activePhotos.some((photo) => photo.captureRole === 'tag') ? (
+          <Text style={styles.captureGuidance}>No price read — retake the tag closer.</Text>
+        ) : null}
+        {activePrice && attachGroupId && (activePrice.status === 'ambiguous' || (activePrice.inferred && !activePrice.confirmed)) ? (
+          <View style={styles.priceChooser}>
+            <PriceCandidateChips
+              tone="camera"
+              prompt={activePrice.status === 'ambiguous' ? 'Which price?' : 'Price'}
+              candidates={activePrice.candidates}
+              selected={activePrice.amount !== null ? { amount: activePrice.amount, currencyCode: activePrice.currencyCode } : null}
+              disabled={captureBusy}
+              onPick={(choice) => pickPrice(attachGroupId, choice)}
+            />
+            {priceSaveError ? <Text style={styles.priceChooserError}>{priceSaveError}</Text> : null}
+          </View>
+        ) : null}
         {activePhotos.length > 0 ? (
           <View style={styles.activePhotosRail}>
             <ScrollView ref={photoRailRef} horizontal showsHorizontalScrollIndicator={false}
               style={styles.photoViewport} contentContainerStyle={styles.photoRail}
               onContentSizeChange={() => photoRailRef.current?.scrollToEnd({ animated: !reducedMotion })}>
-              {activePhotos.map((photo, index) => (
+              {activePhotos.map((photo, index) => {
+                // Once the shopper has confirmed a price, every photo of the
+                // item wears it; until then each shows what it read.
+                const photoPrice = activePrice?.confirmed && attachGroupId ? stackPriceLabels.get(attachGroupId) ?? null : photoPriceLabel(photo);
+                return (
                 <Animated.View key={photo.id} entering={reducedMotion ? undefined : ZoomIn.duration(220)}>
                   <TouchableOpacity onPress={() => setSelectedPreviewId(photo.id)} disabled={captureBusy}
                     style={styles.photoButton}
                     accessibilityRole="button"
-                    accessibilityLabel={`Open photo ${index + 1} of item ${activeItemNumber}${photo.captureRole === 'tag' ? ', price tag' : ''}`}
+                    accessibilityLabel={`Open photo ${index + 1} of item ${activeItemNumber}${photo.captureRole === 'tag' ? ', price tag' : ''}${photoPrice ? `, ${photoPrice}` : ''}`}
                     accessibilityHint="Opens the photo. Delete from there.">
                     <Image source={{ uri: photo.previewUri ?? photo.localFileUri }} contentFit="cover" style={styles.photoThumbnail} />
-                    {photo.captureRole === 'tag' ? (
+                    {photoPrice ? (
+                      <View style={styles.pricePill}>
+                        <Text style={styles.pricePillText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{photoPrice}</Text>
+                      </View>
+                    ) : photo.price?.status === 'ambiguous' ? (
+                      <View style={styles.roleGlyph}>
+                        <Text style={styles.roleGlyphText}>?</Text>
+                      </View>
+                    ) : photo.captureRole === 'tag' ? (
                       <View style={styles.roleGlyph}>
                         <Ionicons name="pricetag" size={10} color={cameraColors.backdrop} />
                       </View>
                     ) : null}
                   </TouchableOpacity>
                 </Animated.View>
-              ))}
+                );
+              })}
             </ScrollView>
           </View>
         ) : null}
         <View style={[styles.bottomControls, { paddingBottom: insets.bottom + spacing.lg }]}>
           <CaptureStackRail
             stacks={captureStacks}
+            priceLabels={stackPriceLabels}
             activeGroupId={attachGroupId}
             showEmptyItem
             disabled={captureBusy}
@@ -1259,7 +1349,13 @@ const styles = StyleSheet.create({
   photoButton: { width: 52, height: 68, borderRadius: radii.sm, borderCurve: 'continuous', overflow: 'hidden' },
   photoThumbnail: { width: '100%', height: '100%', borderRadius: radii.sm, borderCurve: 'continuous' },
   roleGlyph: { position: 'absolute', right: 4, bottom: 4, width: 18, height: 18, alignItems: 'center', justifyContent: 'center', borderRadius: 9, backgroundColor: cameraColors.onCamera },
+  roleGlyphText: { fontSize: 11, lineHeight: 13, fontWeight: typography.weight.bold, color: cameraColors.backdrop },
+  pricePill: { position: 'absolute', left: 2, right: 2, bottom: 2, height: 16, paddingHorizontal: 3, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: cameraColors.onCamera },
+  pricePillText: { fontSize: 10, lineHeight: 12, fontWeight: typography.weight.semibold, color: cameraColors.backdrop, fontVariant: ['tabular-nums'] },
+  priceChooser: { width: '100%', paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.xs },
+  priceChooserError: { ...typography.text.caption, color: cameraColors.destructive },
   root: { flex: 1, backgroundColor: cameraColors.backdrop },
+  captureGuidance: { ...typography.text.bodySmall, color: cameraColors.onCamera, textAlign: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
   permissionRoot: {
     flex: 1,
     alignItems: 'center',

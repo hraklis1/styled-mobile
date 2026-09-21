@@ -22,6 +22,38 @@ import {
   useShoppingSessionStore,
 } from '../../stores/useShoppingSessionStore';
 import type { ShoppingSnap } from '../../types/shoppingSnap';
+import type { PendingShoppingUpload } from '../../stores/useShoppingSessionStore';
+import { buildShoppingEditItems, mergeShoppingSnaps } from '../shoppingGallery';
+import { resolveShoppingPrice, shoppingPriceCandidates } from '../shoppingPrices';
+
+it('retains OCR amount and currency through capture persistence and synced cache reload', async () => {
+  setShoppingAccount('price-test');
+  const upload: PendingShoppingUpload = {
+    id: 'price-photo', localFileUri: 'file:///tag.jpg', storeName: null,
+    storeLocationId: null, shoppingSessionId: null, sessionStartedAt: null,
+    latitude: null, longitude: null, locationAccuracyMeters: null, locality: null,
+    region: null, countryCode: 'CA', branchLabel: null, locationSource: 'unavailable',
+    locationStatus: 'unavailable', locationCapturedAt: null, captureGroupId: 'price-group',
+    captureGroupStartedAt: 1, captureSequence: 1, captureRole: 'unknown',
+    extractedPrice: null, rawOcrText: '', ocrStatus: 'processing', timestamp: 1,
+  };
+  const rawOcrText = 'US $ 90\nWas CAN $ 112\nNow CAN $ 99';
+  const price = resolveShoppingPrice(shoppingPriceCandidates(rawOcrText, 'CA'), 'CA');
+  useShoppingSessionStore.getState().addPendingUpload(upload);
+  useShoppingSessionStore.getState().updatePendingUploadOCR(upload.id, {
+    extractedPrice: price.amount, rawOcrText, ocrStatus: 'complete', captureRole: 'tag',
+  });
+  await useShoppingSessionStore.persist.rehydrate();
+  const pending = useShoppingSessionStore.getState().pendingUploads;
+  expect(pending.find((item) => item.id === upload.id)).toMatchObject({ extractedPrice: 99, rawOcrText, ocrStatus: 'complete' });
+  const merged = mergeShoppingSnaps([], pending);
+  expect(buildShoppingEditItems(merged)[0]).toMatchObject({ extractedPrice: 99, currencyCode: 'CAD', needsReview: false });
+  useShoppingOfflineStore.getState().cache('price-test', merged.map((item) => ({ ...item, syncStatus: 'synced', storagePath: 'price-test/tag.jpg' })));
+  await useShoppingOfflineStore.persist.rehydrate();
+  const reloaded = useShoppingOfflineStore.getState().accounts['price-test'].snaps;
+  expect(buildShoppingEditItems(reloaded)[0]).toMatchObject({ extractedPrice: 99, currencyCode: 'CAD', syncStatus: 'synced', needsReview: false });
+  setShoppingAccount(null);
+});
 const snap = {
   id: 'photo',
   captureGroupId: 'group',

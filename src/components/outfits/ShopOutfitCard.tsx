@@ -168,7 +168,7 @@ export function ShopOutfitCard({ outfit, onRemove, onSave, onSaved, saveLabel }:
                 color={saved ? '#16A34A' : colors.mutedForeground}
               />
               <Text style={[styles.footerBtnText, saved && styles.footerBtnTextSaved]}>
-                {saved ? 'Saved' : saving ? 'Saving…' : saveLabel ?? defaultSaveLabel}
+                {saved ? 'In Saved recommendations' : saving ? 'Saving…' : saveLabel ?? defaultSaveLabel}
               </Text>
             </Pressable>
           )}

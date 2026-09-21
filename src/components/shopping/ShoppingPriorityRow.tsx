@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+import { clarifyOutfitClaims, potentialOutfitCount, priorityOccasionLabel } from '../../lib/shopClarity';
 import { PressableScale } from '../primitives/PressableScale';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { ShoppingBriefPriority } from '../../lib/shopDecisionWorkspace';
@@ -17,7 +18,7 @@ type Props = {
   index: number;
   priority: ShoppingBriefPriority;
   /** Compact = the teaser on Shop's cover card: title and one meta line, no
-   *  context, no actions, and not itself tappable (the card is). */
+   *  context, and optionally tappable when a selection callback is supplied. */
   compact?: boolean;
   onPress?: () => void;
   onSkip?: () => void;
@@ -25,24 +26,39 @@ type Props = {
   isLast?: boolean;
 };
 
+/** "formal shirt or blouse to meet the dress code" → "To meet the dress code".
+ *  Leaves the text alone when the label is not its opening. */
+function stripLeadingLabel(text: string, normalizedLabel: string): string {
+  const trimmed = text.replace(/\s+/g, ' ').trim();
+  if (!normalizedLabel || !trimmed.toLocaleLowerCase().startsWith(normalizedLabel)) {
+    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+  }
+  const rest = trimmed.slice(normalizedLabel.length).replace(/^[\s,:—–-]+/, '');
+  if (!rest) return '';
+  return rest.charAt(0).toUpperCase() + rest.slice(1);
+}
+
 /** Numbered editorial priority with independent navigation and skip actions. */
 export function ShoppingPriorityRow({ index, priority, compact, onPress, onSkip, skipping, isLast }: Props) {
   const label = sentenceCase(priority.label);
   // The context often opens by restating the label ("Versatile mid-rise
   // trousers would create…") — under a title that already says it, that is
-  // the same thought twice. Same guard the edit screen uses for its gap label.
+  // the same thought twice. Rather than dropping the sentence (which left
+  // rows with nothing but a number), strip the restated label and let the
+  // rest stand as the reason. Same guard the edit screen uses.
   const normalizedLabel = priority.label.replace(/\s+/g, ' ').trim().toLocaleLowerCase();
-  const context = !compact && priority.context && !priority.context.toLocaleLowerCase().startsWith(normalizedLabel)
-    ? priority.context
+  const context = !compact && priority.context
+    ? clarifyOutfitClaims(stripLeadingLabel(priority.context, normalizedLabel), priority.impactScore)
     : null;
-  const hasCount = typeof priority.impactScore === 'number' && priority.impactScore > 0;
-  // …and when the context that survives already spells the count out
-  // ("would add 9 new outfits"), the meta line doesn't repeat it.
-  const countInContext = hasCount && context ? context.includes(`${priority.impactScore} new outfit`) : false;
+  const countLabel = potentialOutfitCount(priority.impactScore);
+  // An occasion the reason already names ("…for Test event.") is not repeated
+  // on the meta line beneath it.
+  const occasion = priorityOccasionLabel({ ...priority, unlocks: priority.unlocks.slice(0, compact ? 1 : 2) });
+  const eventNamed = priority.eventTitle?.trim();
   const meta = [
-    hasCount && !countInContext ? `${priority.impactScore} new outfits` : null,
-    ...priority.unlocks.slice(0, compact ? 1 : 2),
-  ].filter((segment): segment is string => Boolean(segment)).join(' · ');
+    countLabel && !context?.includes(countLabel) ? countLabel : null,
+    occasion && !(eventNamed && context?.toLocaleLowerCase().includes(eventNamed.toLocaleLowerCase())) ? occasion : null,
+  ].filter(Boolean).join(' · ');
 
   const inner = (
     <View style={[styles.row, compact && styles.rowCompact]}>
@@ -51,11 +67,12 @@ export function ShoppingPriorityRow({ index, priority, compact, onPress, onSkip,
       </Text>
       <View style={styles.body}>
         <View style={styles.titleRow}>
-          <Text style={[styles.title, compact && styles.titleCompact]} numberOfLines={compact ? 1 : undefined}>{label}</Text>
-          {onPress ? <Ionicons name="chevron-forward" size={18} color={colors.primary} accessible={false} /> : null}
+          <Text style={[styles.title, compact && styles.titleCompact]} >{label}</Text>
+          {onPress && !compact ? <Ionicons name="chevron-forward" size={18} color={colors.primary} accessible={false} /> : null}
         </View>
         {context ? <Text style={styles.context}>{context}</Text> : null}
         {meta ? <Text style={styles.meta}>{meta}</Text> : null}
+        {compact && onPress ? <Text style={styles.explore}>Open the guide →</Text> : null}
       </View>
     </View>
   );
@@ -68,7 +85,7 @@ export function ShoppingPriorityRow({ index, priority, compact, onPress, onSkip,
           contentStyle={styles.open} pressedContentStyle={styles.pressed}
           onPress={onPress} accessibilityRole="button"
           accessibilityLabel={meta ? `${label}. ${meta}` : label}
-          accessibilityHint="Opens the shopping edit"
+          accessibilityHint="Opens the shopping guide for this priority"
         >
           {inner}
         </PressableScale>
@@ -106,6 +123,7 @@ const styles = StyleSheet.create({
   titleCompact: { ...typography.text.editorialSection },
   context: { ...typography.text.bodySmall, color: colors.inkSubtle },
   meta: { ...typography.text.meta, color: colors.mutedForeground },
+  explore: { ...typography.text.label, color: colors.action },
   footer: { alignItems: 'flex-end', paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
   skip: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radii.full, backgroundColor: colors.surfaceSubtle },
   skipText: { ...typography.text.label, color: colors.primary },

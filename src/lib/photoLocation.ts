@@ -8,12 +8,37 @@ import * as Location from 'expo-location';
 export function extractGpsCoords(
   exif: Record<string, unknown>,
 ): { latitude: number; longitude: number } | null {
+  const toDecimal = (value: unknown): number | null => {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const numeric = Number(trimmed);
+    if (Number.isFinite(numeric)) return numeric;
+    const fraction = trimmed.match(/^(-?\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/);
+    if (!fraction) return null;
+    const numerator = Number(fraction[1]);
+    const denominator = Number(fraction[2]);
+    return denominator === 0 ? null : numerator / denominator;
+  };
+
+  const coordinate = (value: unknown): number | null => {
+    if (Array.isArray(value)) {
+      const parts = value.map(toDecimal);
+      if (parts.length >= 3 && parts.every((part) => part !== null)) {
+        return parts[0]! + parts[1]! / 60 + parts[2]! / 3600;
+      }
+      return null;
+    }
+    return toDecimal(value);
+  };
+
   // iOS: exif['{GPS}'] or exif['GPS']
   const gpsBlock = (exif['{GPS}'] ?? exif['GPS']) as Record<string, unknown> | null | undefined;
   if (gpsBlock && typeof gpsBlock === 'object') {
-    const lat = gpsBlock['Latitude'] as number | undefined;
+    const lat = coordinate(gpsBlock['Latitude']);
     const latRef = gpsBlock['LatitudeRef'] as string | undefined;
-    const lon = gpsBlock['Longitude'] as number | undefined;
+    const lon = coordinate(gpsBlock['Longitude']);
     const lonRef = gpsBlock['LongitudeRef'] as string | undefined;
     if (lat != null && lon != null) {
       return {
@@ -24,9 +49,9 @@ export function extractGpsCoords(
   }
 
   // Android: top-level GPSLatitude / GPSLongitude
-  const lat = exif['GPSLatitude'] as number | undefined;
+  const lat = coordinate(exif['GPSLatitude']);
   const latRef = exif['GPSLatitudeRef'] as string | undefined;
-  const lon = exif['GPSLongitude'] as number | undefined;
+  const lon = coordinate(exif['GPSLongitude']);
   const lonRef = exif['GPSLongitudeRef'] as string | undefined;
   if (lat != null && lon != null) {
     return {

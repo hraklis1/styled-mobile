@@ -86,7 +86,7 @@ describe('shoppingSessionGroups', () => {
     const groups = buildShoppingSessionGroups(items, now);
 
     expect(groups[0]).toMatchObject({ needsPriceCount: 1, pendingCount: 1, unsortedCount: 1, favoriteCount: 1 });
-    expect(shoppingSessionHighlights(groups[0])).toEqual(['1 on this phone', '1 needs price']);
+    expect(shoppingSessionHighlights(groups[0])).toEqual(['1 on this phone', '1 without a price']);
   });
 
   it('says a trip is settled when nothing is outstanding', () => {

@@ -61,12 +61,12 @@ export function WishlistOutfitPreview({ entry, style, scale = 'tile' }: Props) {
   if (imageItems.length === 0 && savedEdit && scale === 'tile') {
     return (
       <View style={[styles.preview, style]} accessibilityElementsHidden>
-        {/* The section above already says these are shopping edits, so the
-            cover's eyebrow carries the count and the foot carries one line of
-            the stylist's reasoning instead of repeating the label. */}
+        {/* The cover names what it is with the same noun the guide screen
+            uses ("Shopping guide", counted in styles), so a tile saved from
+            "Save this guide" is recognisable as the thing that was saved. */}
         <View style={styles.editCover}>
           <Text style={styles.editEyebrow}>
-            {String(savedEdit.targets.length).padStart(2, '0')} {savedEdit.targets.length === 1 ? 'direction' : 'directions'}
+            Guide · {String(savedEdit.targets.length).padStart(2, '0')} {savedEdit.targets.length === 1 ? 'style' : 'styles'}
           </Text>
           <Text style={styles.editTitle} numberOfLines={3}>{savedEdit.headline}</Text>
           <Text style={styles.editMeta} numberOfLines={2}>{savedEdit.summary}</Text>

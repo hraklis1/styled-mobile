@@ -156,13 +156,16 @@ export function EditorialSection({
             haptic={false}
             onPress={onAction}
             motion="crisp" scaleTo={0.985}
-            pressedContentStyle={styles.controlPressed}
-            contentStyle={styles.sectionAction}
+            pressedContentStyle={editorialHeading ? undefined : styles.controlPressed}
+            contentStyle={editorialHeading ? styles.editorialSectionAction : styles.sectionAction}
             accessibilityRole="button"
             accessibilityLabel={actionLabel}
           >
+            {/* Under a department label the action is a text link on the
+                same baseline — a 44pt pill floated a full line above the rule
+                and read as detached from the title it belonged to. */}
             <AppText variant="label" tone="action" style={styles.sectionActionText}>
-              {actionLabel}
+              {actionLabel}{editorialHeading ? ' →' : ''}
             </AppText>
           </PressableScale>
         ) : null}
@@ -444,6 +447,11 @@ const styles = StyleSheet.create({
   },
   sectionActionText: {
     flexShrink: 1,
+  },
+  // Same 44pt hit target, laid out so its text sits on the eyebrow's baseline
+  // rather than in a plate above it.
+  editorialSectionAction: {
+    minHeight: 44, justifyContent: 'flex-end', paddingBottom: 1, marginBottom: -spacing.sm, paddingLeft: spacing.md,
   },
   segment: {
     flexDirection: 'row',

@@ -40,6 +40,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useStylingWeatherToday } from '../../hooks/useWeather';
 import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
 import { useProfile } from '../../hooks/useProfile';
+import { useCurrencyCode } from '../../hooks/useCurrencyCode';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useDismissDailyLook, useResolveDailyLook, useSaveDailyLook, type DailyLookCandidate, type DailyLookResolveInput } from '../../hooks/useDailyLook';
 import { DailyLookDetailSheet } from '../../components/home/DailyLookDetailSheet';
@@ -206,9 +207,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [savedDailyLookContext, setSavedDailyLookContext] = useState<SavedDailyLookContext | null>(null);
   const saveDailyLook = useSaveDailyLook();
   const dismissDailyLook = useDismissDailyLook();
+  const homeCurrency = useCurrencyCode();
   const shortlist = useMemo(
-    () => buildShortlistSpotlight(buildShoppingEditItems(mergeShoppingSnaps(shoppingSnaps, pendingShoppingUploads))),
-    [pendingShoppingUploads, shoppingSnaps],
+    () => buildShortlistSpotlight(buildShoppingEditItems(mergeShoppingSnaps(shoppingSnaps, pendingShoppingUploads), { homeCurrency })),
+    [homeCurrency, pendingShoppingUploads, shoppingSnaps],
   );
 
   useFocusEffect(useCallback(() => {

@@ -5,6 +5,7 @@ import {
   Modal,
   Pressable,
   StyleSheet,
+  ScrollView,
   Text,
   TouchableOpacity,
   View,
@@ -83,7 +84,7 @@ export function ActionMenuSheet({ visible, title, subtitle, options, onClose }: 
           <Text style={styles.title}>{title}</Text>
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
 
-          <View style={styles.options}>
+          <ScrollView style={styles.optionsScroll} contentContainerStyle={styles.options} showsVerticalScrollIndicator={false}>
             {options.map((option) => (
               <TouchableOpacity
                 key={option.label}
@@ -115,7 +116,7 @@ export function ActionMenuSheet({ visible, title, subtitle, options, onClose }: 
                 />
               </TouchableOpacity>
             ))}
-          </View>
+          </ScrollView>
 
           <TouchableOpacity
             style={styles.cancelButton}
@@ -135,6 +136,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { flex: 1, backgroundColor: 'rgba(29, 27, 24, 0.45)' },
   sheet: {
+    maxHeight: '90%',
     backgroundColor: colors.background,
     borderTopLeftRadius: radii.sheet,
     borderTopRightRadius: radii.sheet,
@@ -160,7 +162,8 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     fontSize: typography.text.bodySmall.fontSize,
   },
-  options: { gap: spacing.sm, marginTop: spacing.lg },
+  optionsScroll: { flexShrink: 1, marginTop: spacing.lg },
+  options: { gap: spacing.sm },
   option: {
     minHeight: 62,
     flexDirection: 'row',

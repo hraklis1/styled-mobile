@@ -29,8 +29,10 @@ export function stackCover(stack: CaptureStack): ShoppingVisitPreview {
 // Tiles carry their own metadata (number badge, photo count, stacked-card
 // offset) instead of caption lines beneath them, so the rail stays one
 // thumbnail tall and the viewfinder above keeps the space.
-export function CaptureStackRail({ stacks, activeGroupId, showEmptyItem, disabled, onSelect }: {
+export function CaptureStackRail({ stacks, priceLabels, activeGroupId, showEmptyItem, disabled, onSelect }: {
   stacks: CaptureStack[];
+  /** Per item, the price read so far ("$90"), "?" when it needs a tap, or nothing. */
+  priceLabels?: Map<string, string | null>;
   activeGroupId: string | null;
   showEmptyItem: boolean;
   disabled: boolean;
@@ -55,19 +57,23 @@ export function CaptureStackRail({ stacks, activeGroupId, showEmptyItem, disable
         const active = stack.groupId === activeGroupId;
         const cover = stackCover(stack);
         const multi = stack.previews.length > 1;
+        const priceLabel = priceLabels?.get(stack.groupId) ?? null;
         return (
           <Animated.View key={stack.groupId} entering={reducedMotion ? undefined : ZoomIn.duration(220)}>
             <TouchableOpacity disabled={disabled} onPress={() => onSelect(stack.groupId)}
               onLayout={(event) => positions.current.set(stack.groupId, event.nativeEvent.layout.x)}
               style={styles.item} accessibilityRole="button" accessibilityState={{ selected: active, disabled }}
-              accessibilityLabel={`Item ${index + 1}, ${stack.previews.length} photo${stack.previews.length === 1 ? '' : 's'}`}
+              accessibilityLabel={`Item ${index + 1}, ${stack.previews.length} photo${stack.previews.length === 1 ? '' : 's'}${priceLabel === '?' ? ', confirm price' : priceLabel ? `, ${priceLabel}` : ''}`}
               accessibilityHint="Select this item to add photos">
               {multi ? <View style={[styles.card, styles.cardBack]} /> : null}
               {multi ? <View style={[styles.card, styles.cardMid]} /> : null}
               <View style={[styles.frame, active && styles.activeFrame]}>
                 <Image source={{ uri: cover.previewUri ?? cover.localFileUri }} style={styles.cover} contentFit="cover" />
                 {multi ? (
-                  <View style={styles.countPill}><Text style={styles.countText}>{stack.previews.length}</Text></View>
+                  <View style={[styles.countPill, priceLabel ? styles.countPillTop : null]}><Text style={styles.countText}>{stack.previews.length}</Text></View>
+                ) : null}
+                {priceLabel ? (
+                  <View style={styles.pricePill}><Text style={styles.priceText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{priceLabel}</Text></View>
                 ) : null}
               </View>
               <View style={[styles.numBadge, active && styles.numBadgeActive]}>
@@ -116,5 +122,9 @@ const styles = StyleSheet.create({
   numText: { ...typography.text.caption, fontSize: 11, lineHeight: 13, fontWeight: typography.weight.semibold, color: cameraColors.backdrop, fontVariant: ['tabular-nums'] },
   numTextActive: { color: cameraColors.onCamera },
   countPill: { position: 'absolute', right: 3, bottom: 3, height: 16, paddingHorizontal: 5, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: cameraColors.control },
+  countPillTop: { bottom: undefined, top: 3 },
+  // Sits on the bottom edge inside the frame so the rail stays one thumbnail tall.
+  pricePill: { position: 'absolute', left: 2, right: 2, bottom: 2, height: 16, paddingHorizontal: 3, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: cameraColors.onCamera },
+  priceText: { ...typography.text.caption, fontSize: 10, lineHeight: 12, fontWeight: typography.weight.semibold, color: cameraColors.backdrop, fontVariant: ['tabular-nums'] },
   countText: { ...typography.text.caption, fontSize: 10, lineHeight: 12, fontWeight: typography.weight.semibold, color: cameraColors.onCamera, fontVariant: ['tabular-nums'] },
 });

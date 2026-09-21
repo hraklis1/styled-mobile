@@ -1,3 +1,4 @@
+import { resolveShoppingSnapPrices, type ShoppingPriceResolution } from './shoppingPrices';
 import type { PendingShoppingUpload, ShoppingVisitPreview } from '../stores/useShoppingSessionStore';
 import type { ShoppingPurchaseDetails, ShoppingFindCatalogStatus, ShoppingSnap } from '../types/shoppingSnap';
 import { purchaseDetails } from './shoppingCatalog';
@@ -31,6 +32,7 @@ export type ShoppingEditItem = ShoppingPurchaseDetails & {
   region: string | null;
   locationHint?: string | null;
   extractedPrice: number | null;
+  priceResolution?: ShoppingPriceResolution;
   capturedAt: string;
   syncStatus: 'pending' | 'synced';
   needsReview: boolean;
@@ -98,17 +100,17 @@ function choosePrimarySnap(snaps: ShoppingSnap[]): ShoppingSnap {
   })[0];
 }
 
-function itemReviewReasons(snaps: ShoppingSnap[]): string[] {
+function itemReviewReasons(snaps: ShoppingSnap[], price: ShoppingPriceResolution): string[] {
   const reasons: string[] = [];
 
   if (snaps.some((snap) => snap.captureRole === 'unknown')) reasons.push('Unsorted photo');
-  if (snaps.some((snap) => snap.rawOcrText.trim().length > 0 && snap.extractedPrice === null)) {
+  if (price.status !== 'resolved' && snaps.some((snap) => snap.rawOcrText.trim().length > 0)) {
     reasons.push('Text needs price check');
   }
   return reasons;
 }
 
-export function buildShoppingEditItems(snaps: ShoppingSnap[]): ShoppingEditItem[] {
+export function buildShoppingEditItems(snaps: ShoppingSnap[], options?: { homeCurrency?: string | null }): ShoppingEditItem[] {
   const grouped = new Map<string, ShoppingSnap[]>();
 
   for (const snap of snaps) {
@@ -124,15 +126,13 @@ export function buildShoppingEditItems(snaps: ShoppingSnap[]): ShoppingEditItem[
       ));
       const coverId = sortedSnaps.find((snap) => snap.coverPhotoId)?.coverPhotoId;
       const primarySnap = sortedSnaps.find((snap) => snap.id === coverId) ?? choosePrimarySnap(sortedSnaps);
-      const priceSnap = sortedSnaps.find((snap) => snap.captureRole === 'tag' && snap.extractedPrice !== null)
-        ?? sortedSnaps.find((snap) => snap.extractedPrice !== null);
       const storeSnap = sortedSnaps.find((snap) => snap.storeName);
       const locationSnap = sortedSnaps.find((snap) => snap.branchLabel || snap.locality || snap.region) ?? primarySnap;
       const newestSnap = [...sortedSnaps].sort(
         (a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime(),
       )[0];
-      const corrected = sortedSnaps.find((snap) => snap.priceOverride != null);
-      const extractedPrice = corrected?.priceOverride ?? priceSnap?.extractedPrice ?? null;
+      const priceResolution = resolveShoppingSnapPrices(sortedSnaps, options?.homeCurrency);
+      const extractedPrice = priceResolution.amount;
       const storeName = storeSnap?.storeName ?? null;
       const catalogSnap = sortedSnaps.find((snap) => (
         snap.category
@@ -143,14 +143,14 @@ export function buildShoppingEditItems(snaps: ShoppingSnap[]): ShoppingEditItem[
         || snap.isFavorite
         || snap.catalogStatus !== 'considering'
       )) ?? primarySnap;
-      const reviewReasons = itemReviewReasons(sortedSnaps);
+      const reviewReasons = itemReviewReasons(sortedSnaps, priceResolution);
       const syncStatus: ShoppingEditItem['syncStatus'] = sortedSnaps.some((snap) => snap.syncStatus === 'pending')
         ? 'pending'
         : 'synced';
 
       return {
         ...purchaseDetails(catalogSnap),
-        currencyCode: catalogSnap.currencyCode ?? corrected?.currencyCode ?? priceSnap?.currencyCode ?? null,
+        currencyCode: priceResolution.currencyCode,
         id: captureGroupId,
         captureGroupId,
         snaps: sortedSnaps,
@@ -164,6 +164,7 @@ export function buildShoppingEditItems(snaps: ShoppingSnap[]): ShoppingEditItem[
         region: locationSnap.region,
         locationHint: locationSnap.locationHint ?? null,
         extractedPrice,
+        priceResolution,
         capturedAt: newestSnap.capturedAt,
         syncStatus,
         needsReview: reviewReasons.length > 0,
