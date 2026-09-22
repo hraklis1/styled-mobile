@@ -3,7 +3,8 @@ import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ShoppingBriefCard } from '../../components/shopping/ShoppingBriefCard';
+import { ShoppingBriefCard, briefIssueLabel } from '../../components/shopping/ShoppingBriefCard';
+import { ShoppingSurfaceLight } from '../../components/shopping/ShoppingSurfaceLight';
 import { ShortlistCarousel } from '../../components/shopping/ShortlistCarousel';
 import { SavedLookTile } from '../../components/outfits/SavedLookTile';
 import { EditorialSection, ActionButton } from '../../components/primitives/Editorial';
@@ -20,7 +21,7 @@ import { buildShortlistSpotlight } from '../../lib/shortlistSpotlight';
 import { shoppingPriorityRoute } from '../../lib/shopClarity';
 import { track } from '../../lib/analytics';
 import { presentPaywall } from '../../lib/paywall';
-import { colors, spacing } from '../../theme';
+import { colors, radii, shoppingSurfaces, spacing } from '../../theme';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import type { ShopOverviewScreenProps } from '../../navigation/types';
 
@@ -143,34 +144,49 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
             variant="secondary" onPress={openShoppingCamera} />
           <AppText variant="caption" tone="muted" style={styles.mastheadHint}>Photograph a piece in store, then ask your Stylist if it earns its place.</AppText>
         </View>
-        <View style={styles.briefSection}>
-          <ShoppingBriefCard
-            isPremium={isPremium}
-            brief={brief.data}
-            isLoading={brief.isLoading}
-            isError={brief.isError}
-            onSelectPriority={(priority) => {
-              if (!brief.data) return;
-              track('shopping_brief_priority_opened', { category: priority.category, reason: priority.reason, rank: priority.priority });
-              navigation.navigate('ShoppingPriorityEdit', shoppingPriorityRoute(priority, brief.data.generatedAt));
-            }}
-            onOpenFullBrief={() => navigation.navigate('ShoppingBriefDetail')}
-            onUpgrade={() => {
-              track('shop_brief_upgrade_tapped');
-              void presentPaywall();
-            }}
-            onAddWardrobePieces={() => (
-              navigation.getParent()?.navigate('Closet', { screen: 'ClosetMain', params: { segment: 'pieces' } })
-            )}
-            onRetry={() => void brief.refetch()}
-          />
-        </View>
+        {/* The brief is a section of this page like any other, so it wears the
+            page's own department heading rather than a masthead of its own
+            inside the panel — which put its label 16pt in from the gutter every
+            other section label sits on, at a different size and colour. The
+            issue line takes the header's `trailing` slot. */}
+        <EditorialSection
+          headingStyle="editorial"
+          style={styles.section}
+          title="Your shopping brief"
+          trailing={<AppText variant="caption" tone="muted">{briefIssueLabel()}</AppText>}
+        >
+          <View style={styles.briefShadow}>
+            <View style={styles.briefPanel}>
+              <ShoppingSurfaceLight />
+              <ShoppingBriefCard
+                isPremium={isPremium}
+                brief={brief.data}
+                isLoading={brief.isLoading}
+                isError={brief.isError}
+                onSelectPriority={(priority) => {
+                  if (!brief.data) return;
+                  track('shopping_brief_priority_opened', { category: priority.category, reason: priority.reason, rank: priority.priority });
+                  navigation.navigate('ShoppingPriorityEdit', shoppingPriorityRoute(priority, brief.data.generatedAt));
+                }}
+                onOpenFullBrief={() => navigation.navigate('ShoppingBriefDetail')}
+                onUpgrade={() => {
+                  track('shop_brief_upgrade_tapped');
+                  void presentPaywall();
+                }}
+                onAddWardrobePieces={() => (
+                  navigation.getParent()?.navigate('Closet', { screen: 'ClosetMain', params: { segment: 'pieces' } })
+                )}
+                onRetry={() => void brief.refetch()}
+              />
+            </View>
+          </View>
+        </EditorialSection>
 
         <EditorialSection
           variant="ruled"
           headingStyle="editorial"
           style={styles.section}
-          title="Your Shortlist"
+          title="Your shortlist"
           description="Pieces you’ve found and are considering."
           actionLabel={spotlight.itemCount > 0 ? `See all ${spotlight.itemCount}` : undefined}
           onAction={() => openHistory({ catalogFilter: 'all', resetFilters: true })}
@@ -252,18 +268,23 @@ const styles = StyleSheet.create({
   headerCopy: { flex: 1, gap: spacing.sm },
   mastheadActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.page, paddingBottom: spacing.lg },
   mastheadHint: { flex: 1, minWidth: 0 },
-  // Ruled like the sections below it, not a tinted plate: surfaceSubtle on
-  // the page ground was a 1.02:1 difference with no edge, and the only
-  // change of surface on the page. One hairline, the same grammar as
-  // "Your Shortlist", and the brief still leads because it comes first.
-  briefSection: {
-    marginHorizontal: spacing.page,
-    paddingTop: spacing.xl,
-    // The card's own text action carries 44pt of foot; a hair more is all the
-    // section needs before the next rule.
-    paddingBottom: spacing.xs,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.hairline,
+  // A flat surfaceSubtle plate was tried here and rejected — 1.02:1 against
+  // the page ground with no edge to read. The separation comes from the edge,
+  // the lit top lip and the shadow instead, which is the recipe
+  // ShoppingPriorityEditScreen's metric panel already uses; the brief now
+  // rhymes with the guide screen it opens.
+  //
+  // Split in two on purpose: the outer view carries the shadow and must not
+  // clip, the inner one clips the gradient to the radius.
+  briefShadow: { borderRadius: radii.md, boxShadow: shoppingSurfaces.panelShadow },
+  briefPanel: {
+    padding: spacing.lg,
+    borderRadius: radii.md,
+    borderCurve: 'continuous',
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: shoppingSurfaces.edge,
+    backgroundColor: shoppingSurfaces.alabaster,
   },
   section: { paddingHorizontal: spacing.page },
   savedPreviewGrid: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },

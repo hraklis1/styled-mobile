@@ -3,7 +3,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import type { WishlistEntry } from '../../lib/wishlist';
-import { colors, editorial, radii, spacing, typography } from '../../theme';
+import { colors, editorial, radii, shoppingSurfaces, spacing, typography } from '../../theme';
+import { ShoppingSurfaceLight } from '../shopping/ShoppingSurfaceLight';
 
 type Props = {
   entry: WishlistEntry;
@@ -65,6 +66,10 @@ export function WishlistOutfitPreview({ entry, style, scale = 'tile' }: Props) {
             uses ("Shopping guide", counted in styles), so a tile saved from
             "Save this guide" is recognisable as the thing that was saved. */}
         <View style={styles.editCover}>
+          {/* The same softly lit surface the brief panel and the guide screen
+              use, at tile scale — a flat grey plate of text read as a failed
+              image load beside the photographed shortlist cards above it. */}
+          <ShoppingSurfaceLight tile />
           <Text style={styles.editEyebrow}>
             Guide · {String(savedEdit.targets.length).padStart(2, '0')} {savedEdit.targets.length === 1 ? 'style' : 'styles'}
           </Text>
@@ -148,9 +153,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.sm,
     padding: spacing.md,
-    backgroundColor: colors.surfaceSubtle,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: shoppingSurfaces.edge,
+    backgroundColor: shoppingSurfaces.alabaster,
   },
-  editEyebrow: { ...typography.text.meta, color: colors.mutedForeground },
+  editEyebrow: { ...typography.text.meta, color: shoppingSurfaces.olive.accent },
   editTitle: { ...typography.text.editorialSection, color: colors.foreground },
   editMeta: { ...typography.text.caption, color: colors.inkSubtle },
 });

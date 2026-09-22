@@ -21,16 +21,13 @@ const SAMPLE_PRIORITIES: ShoppingBriefPriority[] = [
   { label: 'Camel wool overcoat', category: 'outerwear', reason: 'weather', context: '', priority: 2, unlocks: ['Cold-weather layering'] },
 ];
 
-/** "Your shopping brief" paired with an issue line, e.g. "August brief" — so
- *  the card reads as something issued this month rather than computed live. */
-function BriefMasthead() {
-  const issue = new Date().toLocaleDateString('en-US', { month: 'long' });
-  return (
-    <View style={styles.masthead}>
-      <Text style={styles.label}>Your shopping brief</Text>
-      <Text style={styles.issue}>{issue} brief</Text>
-    </View>
-  );
+/** The issue line, e.g. "August brief" — so the brief reads as something
+ *  issued this month rather than computed live. It rides in the section
+ *  header's `trailing` slot on Shop, beside the department label, which is
+ *  why it is exported rather than drawn by the card: the card owns the
+ *  content, the page owns the heading. */
+export function briefIssueLabel(): string {
+  return `${new Date().toLocaleDateString('en-US', { month: 'long' })} brief`;
 }
 
 type Props = {
@@ -92,7 +89,6 @@ export function ShoppingBriefCard({
   if (!isPremium) {
     return shell(
       <>
-        <BriefMasthead />
         <Text style={styles.headline} numberOfLines={2}>Know what to shop for before you go</Text>
         <Text style={styles.body}>
           See which additions would genuinely expand your wardrobe—and when you are better off buying nothing.
@@ -123,7 +119,6 @@ export function ShoppingBriefCard({
   if (isError || !brief) {
     return shell(
       <>
-        <BriefMasthead />
         <Text style={styles.headline} numberOfLines={2}>Your brief is temporarily unavailable</Text>
         <Text style={styles.body}>Your shortlist is still here.</Text>
         <TextAction label="Try again" onPress={onRetry} />
@@ -138,7 +133,6 @@ export function ShoppingBriefCard({
     const starterPriorities = brief.priorities.slice(0, PRIORITY_LIMIT);
     return shell(
       <>
-        <BriefMasthead />
         <Text style={styles.headline} numberOfLines={2}>{brief.headline}</Text>
         <Text style={styles.body}>{brief.summary}</Text>
         <PriorityList priorities={starterPriorities} />
@@ -151,7 +145,6 @@ export function ShoppingBriefCard({
 
   return shell(
     <>
-      <BriefMasthead />
       {/* The headline is the hook; the summary it used to trail here is the
           deck on ShoppingBriefDetailScreen, where it appears once, in full,
           instead of clipped to two lines and then repeated. */}
@@ -220,33 +213,32 @@ function TextAction({
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      {icon ? <Ionicons name={icon} size={14} color={shoppingSurfaces.olive.accent} /> : null}
+      {icon ? <Ionicons name={icon} size={14} color={colors.action} /> : null}
       <Text style={styles.textActionLabel}>{label}</Text>
-      <Ionicons name="arrow-forward" size={13} color={shoppingSurfaces.olive.accent} />
+      <Ionicons name="arrow-forward" size={13} color={colors.action} />
     </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
-  // The quiet canvas has no hairline of its own: it sits in Shop's ruled brief
-  // section (ShopOverviewScreen's `briefSection`), whose top rule is the
-  // boundary — a rule here on top of that would read as two dividers in the
-  // space of one.
+  // Transparent, and no hairline of its own: the card sits inside Shop's
+  // softly lit brief panel (ShopOverviewScreen's `briefPanel`), which owns the
+  // surface, the edge and the padding. A fill here would cover the gradient
+  // and a rule would read as two dividers in the space of one.
   card: {
     gap: spacing.sm,
-    backgroundColor: shoppingSurfaces.canvas,
+    backgroundColor: 'transparent',
   },
   loadingBlock: { minHeight: 104, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
-  masthead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
-  label: { ...typography.text.eyebrow, color: colors.primary },
-  issue: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
-  // display.sm, not .md: at .md this matched the page's own masthead
-  // ("Buy fewer, better pieces") one-for-one and the two competed. A step
-  // down reads as the page's cover feature rather than a second title.
+  // A deck, not a title. At editorialCompact (22pt medium) this matched the
+  // priority titles below it one-for-one, so the recommendation list never
+  // resolved as a list — the eye had two things of equal weight to land on.
+  // Dropped to the regular editorial face a step down, it sets up the page's
+  // ladder: masthead 28 → the pieces being recommended 22 → this 19.
   // Capped short of the column so a two-line headline breaks at a phrase
   // rather than stranding its last word on the second line.
   headline: {
-    ...typography.text.editorialCompact,
+    ...typography.text.editorialBody,
     maxWidth: 320,
     color: colors.foreground,
   },
@@ -285,5 +277,9 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     gap: spacing.xs,
   },
-  textActionLabel: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: shoppingSurfaces.olive.accent },
+  // Ink, not olive: this is a section-level "go deeper" link like the
+  // "See all" beside Your shortlist, and the three should not differ. Olive
+  // is reserved for content marks — the numerals and the counts — so the
+  // accent never appears on something tappable.
+  textActionLabel: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.action },
 });

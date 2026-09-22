@@ -95,7 +95,11 @@ function ShortlistFindCard({ item, onPress }: { item: ShoppingEditItem; onPress:
   // The store is one of the three facts a decision turns on, so it is never
   // conditional on the others being known — a Chanel find with no category
   // used to read "Saved piece · Confirm price" with the store dropped.
-  const store = item.storeName?.trim() || SHORTLIST_COPY.needsStore;
+  // When it is missing it is something still to do, not a fact about the
+  // piece, so it reads as the invitation it is and takes action ink — the
+  // same contract shoppingPriceCaption's `pending` carries.
+  const storeName = item.storeName?.trim();
+  const store = storeName || SHORTLIST_COPY.addStore;
 
   useEffect(() => {
     setImageLoaded(false);
@@ -153,7 +157,8 @@ function ShortlistFindCard({ item, onPress }: { item: ShoppingEditItem; onPress:
           {title}
         </AppText>
         <AppText variant="metaSheet" tone="muted" numberOfLines={1}>
-          {`${store} · `}
+          <AppText variant="metaSheet" tone={storeName ? 'muted' : 'action'}>{store}</AppText>
+          {' · '}
           <AppText variant="metaSheet" tone={price.pending ? 'action' : 'secondary'}>{price.label}</AppText>
         </AppText>
       </View>

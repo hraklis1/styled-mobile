@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { clarifyOutfitClaims, potentialOutfitCount, priorityOccasionLabel } from '../../lib/shopClarity';
 import { PressableScale } from '../primitives/PressableScale';
-import { colors, radii, spacing, typography } from '../../theme';
+import { colors, radii, shoppingSurfaces, spacing, typography } from '../../theme';
 import type { ShoppingBriefPriority } from '../../lib/shopDecisionWorkspace';
 
 /** Priority labels arrive lowercase ("formal trousers") but read as titles
@@ -65,14 +65,13 @@ export function ShoppingPriorityRow({ index, priority, compact, onPress, onSkip,
       <Text style={styles.numeral} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         {String(index).padStart(2, '0')}
       </Text>
-      <View style={styles.body}>
+      <View style={[styles.body, compact && !isLast && styles.bodyRuled]}>
         <View style={styles.titleRow}>
           <Text style={[styles.title, compact && styles.titleCompact]} >{label}</Text>
-          {onPress && !compact ? <Ionicons name="chevron-forward" size={18} color={colors.primary} accessible={false} /> : null}
+          {onPress ? <Ionicons name="chevron-forward" size={compact ? 16 : 18} color={compact ? colors.mutedForeground : colors.primary} accessible={false} /> : null}
         </View>
         {context ? <Text style={styles.context}>{context}</Text> : null}
         {meta ? <Text style={styles.meta}>{meta}</Text> : null}
-        {compact && onPress ? <Text style={styles.explore}>Open the guide →</Text> : null}
       </View>
     </View>
   );
@@ -116,14 +115,25 @@ const styles = StyleSheet.create({
   pressed: { backgroundColor: colors.surfaceSelected },
   row: { flexDirection: 'row', gap: spacing.md, padding: spacing.lg },
   rowCompact: { paddingHorizontal: 0, paddingVertical: spacing.md },
-  numeral: { width: PRIORITY_RAIL_WIDTH, ...typography.text.priorityNumeral, color: colors.tertiary, paddingTop: spacing.xs },
+  // The rail is the ordering device, so it is set in the Shop family's accent
+  // rather than in grey: the sequence should read down the left edge.
+  numeral: { width: PRIORITY_RAIL_WIDTH, ...typography.text.priorityNumeral, color: shoppingSurfaces.olive.accent, paddingTop: spacing.xs },
   body: { flex: 1, minWidth: 0, gap: spacing.sm },
+  // What makes the compact rows read as one ordered list rather than three
+  // blocks of text. The rule sits on the body column, so it starts after the
+  // numerals rather than under them — a line sheet, not a table.
+  bodyRuled: {
+    paddingBottom: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.hairline,
+  },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   title: { flex: 1, ...typography.text.editorialCompact, color: colors.foreground },
   titleCompact: { ...typography.text.editorialSection },
   context: { ...typography.text.bodySmall, color: colors.inkSubtle },
-  meta: { ...typography.text.meta, color: colors.mutedForeground },
-  explore: { ...typography.text.label, color: colors.action },
+  // Coloured whole, never split into a nested <Text> to pick out the number:
+  // TactileActions.test pins this line's children as a single string.
+  meta: { ...typography.text.meta, color: shoppingSurfaces.olive.accent, fontVariant: ['tabular-nums'] },
   footer: { alignItems: 'flex-end', paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
   skip: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radii.full, backgroundColor: colors.surfaceSubtle },
   skipText: { ...typography.text.label, color: colors.primary },
