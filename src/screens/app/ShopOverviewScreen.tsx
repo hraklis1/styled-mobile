@@ -142,7 +142,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
         <View style={styles.mastheadActions}>
           <ActionButton icon="camera-outline" label="Save a find"
             variant="secondary" onPress={openShoppingCamera} />
-          <AppText variant="caption" tone="muted" style={styles.mastheadHint}>Photograph a piece in store, then ask your Stylist if it earns its place.</AppText>
+          <AppText variant="caption" tone="muted" style={styles.mastheadHint}>Snap a piece or its tag while you’re out — it’s filed to your Shortlist to revisit, compare and style later.</AppText>
         </View>
         {/* The brief is a section of this page like any other, so it wears the
             page's own department heading rather than a masthead of its own
