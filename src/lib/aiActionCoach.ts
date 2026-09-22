@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export type AiActionCoachSurface = 'item_polish' | 'outfit_flatlay';
+export type AiActionCoachSurface = 'item_polish' | 'outfit_flatlay' | 'shop_save_find';
 
 const AI_ACTION_COACH_VERSION = 'v1';
 const AI_ACTION_COACH_KEY_PREFIX = 'ai_action_coach_seen';

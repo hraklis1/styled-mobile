@@ -179,6 +179,7 @@ export function OutfitHero({
         title="AI Flat-lay"
         body={coachBody}
         onDismiss={() => onCoachDismiss?.()}
+        scrimAccessibilityLabel="Dismiss the AI Flat-lay tip"
         style={{ top: insets.top + spacing.sm + CONTROL_SIZE + spacing.sm, right: spacing.lg }}
         caretRight={CONTROL_SIZE + spacing.sm + CONTROL_SIZE / 2}
       />

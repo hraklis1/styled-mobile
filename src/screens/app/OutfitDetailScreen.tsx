@@ -361,7 +361,7 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
           onMenu={openOutfitMenu}
           onGenerate={() => handleGenerate(false)}
           coachVisible={flatlayCoachVisible && !hasAiImage}
-          coachBody={`Turns this outfit into a styled flat-lay photo. Uses ${flatlayCost} credit${flatlayCost === 1 ? '' : 's'} — tap again to try it.`}
+          coachBody={`Turns this outfit into a styled flat-lay photo. Uses ${flatlayCost} credit${flatlayCost === 1 ? '' : 's'}.`}
           onCoachDismiss={() => dismissFlatlayCoach('got_it')}
         />
 

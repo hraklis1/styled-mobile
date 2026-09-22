@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Animated, Modal, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { colors, radii, spacing, typography } from '../../theme';
 import { PressableScale } from './PressableScale';
@@ -15,9 +15,30 @@ type Props = {
   style?: StyleProp<ViewStyle>;
   /** Horizontal offset of the caret from the callout's right edge, lined up with the button it points at. */
   caretRight?: number;
+  /** Spoken when the scrim behind the callout is tapped to dismiss it. */
+  scrimAccessibilityLabel?: string;
 };
 
-export function AiActionCoachmark({ visible, title, body, onDismiss, style, caretRight = 22 }: Props) {
+/**
+ * A one-time callout pointed at the control it explains. It carries its own
+ * dimming layer: the page behind it greys out so the tip is the only lit thing
+ * on screen, and tapping anywhere on that layer dismisses it.
+ *
+ * The scrim lives in a transparent modal rather than a view in the host screen,
+ * because the tab bar belongs to the navigator above every screen — a view
+ * inside one can't cover it. Positioning via `style` is therefore in
+ * screen coordinates, which is what every caller's inset-based offsets already
+ * assume.
+ */
+export function AiActionCoachmark({
+  visible,
+  title,
+  body,
+  onDismiss,
+  style,
+  caretRight = 22,
+  scrimAccessibilityLabel = 'Dismiss this tip',
+}: Props) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(-6)).current;
 
@@ -34,28 +55,38 @@ export function AiActionCoachmark({ visible, title, body, onDismiss, style, care
   if (!visible) return null;
 
   return (
-    <Animated.View
-      style={[styles.container, style, { opacity, transform: [{ translateY }] }]}
-      pointerEvents="box-none"
-    >
-      <View style={[styles.caret, { right: caretRight }]} />
-      <View style={styles.card}>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.body}>{body}</Text>
-        <PressableScale
-          contentStyle={styles.dismissButton}
-          onPress={onDismiss}
-          accessibilityRole="button"
-          accessibilityLabel="Got it"
+    <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={onDismiss}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={scrimAccessibilityLabel}
+        onPress={onDismiss}
+        style={styles.scrim}
+      >
+        <Animated.View
+          style={[styles.container, style, { opacity, transform: [{ translateY }] }]}
+          pointerEvents="box-none"
         >
-          <Text style={styles.dismissText}>Got it</Text>
-        </PressableScale>
-      </View>
-    </Animated.View>
+          <View style={[styles.caret, { right: caretRight }]} />
+          <View style={styles.card}>
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.body}>{body}</Text>
+            <PressableScale
+              contentStyle={styles.dismissButton}
+              onPress={onDismiss}
+              accessibilityRole="button"
+              accessibilityLabel="Got it"
+            >
+              <Text style={styles.dismissText}>Got it</Text>
+            </PressableScale>
+          </View>
+        </Animated.View>
+      </Pressable>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  scrim: { flex: 1, backgroundColor: 'rgba(29,27,24,0.22)' },
   container: {
     position: 'absolute',
     zIndex: 3,

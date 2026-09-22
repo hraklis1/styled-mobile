@@ -811,8 +811,9 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           <AiActionCoachmark
             visible={polishCoachVisible}
             title="AI Polish"
-            body={`Creates a clean catalog-style photo of this item. Uses ${polishCost} credit${polishCost === 1 ? '' : 's'} — tap again to try it.`}
+            body={`Creates a clean catalog-style photo of this item. Uses ${polishCost} credit${polishCost === 1 ? '' : 's'}.`}
             onDismiss={() => dismissPolishCoach('got_it')}
+            scrimAccessibilityLabel="Dismiss the AI Polish tip"
             style={{ top: insets.top + spacing.sm + 44 + spacing.sm, right: spacing.lg }}
             caretRight={44 + spacing.sm + 22}
           />

@@ -7,9 +7,11 @@ import { ShoppingBriefCard, briefIssueLabel } from '../../components/shopping/Sh
 import { ShoppingSurfaceLight } from '../../components/shopping/ShoppingSurfaceLight';
 import { ShortlistCarousel } from '../../components/shopping/ShortlistCarousel';
 import { SavedLookTile } from '../../components/outfits/SavedLookTile';
-import { EditorialSection, ActionButton } from '../../components/primitives/Editorial';
+import { EditorialSection, ScreenHeader } from '../../components/primitives/Editorial';
 import { AppText } from '../../components/primitives/AppText';
+import { AiActionCoachmark } from '../../components/primitives/AiActionCoachmark';
 import { EditorialRow } from '../../components/primitives/EditorialRow';
+import { useAuth } from '../../contexts/AuthContext';
 import { useCurrencyCode } from '../../hooks/useCurrencyCode';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useItems } from '../../hooks/useItems';
@@ -20,6 +22,7 @@ import { buildShoppingEditItems, mergeShoppingSnaps, type ShoppingEditItem } fro
 import { buildShortlistSpotlight } from '../../lib/shortlistSpotlight';
 import { shoppingPriorityRoute } from '../../lib/shopClarity';
 import { track } from '../../lib/analytics';
+import { hasSeenAiActionCoach, markAiActionCoachSeen } from '../../lib/aiActionCoach';
 import { presentPaywall } from '../../lib/paywall';
 import { colors, radii, shoppingSurfaces, spacing } from '../../theme';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
@@ -35,6 +38,7 @@ import type { ShopOverviewScreenProps } from '../../navigation/types';
  */
 export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProps) {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const { isPremium } = useEntitlement();
   const { refetch: refetchItems } = useItems();
   const { data: remoteSnaps = [], refetch: refetchSnaps } = useShoppingSnaps();
@@ -98,10 +102,44 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
     setRefreshing(false);
   }, [brief, isPremium, refetchItems, refetchSnaps]);
 
+  // ── First-run "Save a find" coachmark ───────────────────────────────────────
+  // The button lost its standing caption when it moved into the masthead, so
+  // what it does is explained once, pointed at the button itself, and never
+  // again.
+  const [saveFindCoachVisible, setSaveFindCoachVisible] = useState(false);
+  const [headerHeight, setHeaderHeight] = useState(0);
+
+  useEffect(() => {
+    const userId = user?.id;
+    if (!userId) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    hasSeenAiActionCoach('shop_save_find', userId).then((seen) => {
+      if (!active || seen) return;
+      timer = setTimeout(() => {
+        if (!active) return;
+        track('ai_action_coach_shown', { surface: 'shop_save_find' });
+        setSaveFindCoachVisible(true);
+      }, 700);
+    }).catch(() => undefined);
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [user?.id]);
+
+  const dismissSaveFindCoach = useCallback((reason: 'got_it' | 'button_tap') => {
+    const userId = user?.id;
+    setSaveFindCoachVisible(false);
+    track('ai_action_coach_dismissed', { surface: 'shop_save_find', reason });
+    if (userId) void markAiActionCoachSeen('shop_save_find', userId);
+  }, [user?.id]);
+
   const openShoppingCamera = useCallback(() => {
+    dismissSaveFindCoach('button_tap');
     track('shop_action_selected', { action: 'evaluate_item' });
     navigation.navigate('ShoppingCamera');
-  }, [navigation]);
+  }, [dismissSaveFindCoach, navigation]);
 
 
   const openHistory = useCallback((params?: { focusGroupId?: string; catalogFilter?: 'active' | 'all'; resetFilters?: boolean }) => {
@@ -127,23 +165,26 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} tintColor={colors.primary} />}
         contentContainerStyle={styles.content}
       >
-        <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-          <View style={styles.headerCopy}>
-            <AppText variant="eyebrowLarge" tone="brand">SHOP</AppText>
-            <AppText variant="editorialTitle" tone="primary">Buy fewer, better pieces</AppText>
-          </View>
+        {/* The tab masthead is the shared ScreenHeader the other tabs wear —
+            page name in the display face, tagline demoted to its subtitle.
+            Shop used to invert that (a small SHOP eyebrow over an editorial
+            tagline), which read as a different kind of page. */}
+        <View onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}>
+          <ScreenHeader
+            title="Shop"
+            titleVariant="display"
+            subtitle="Buy fewer, better pieces"
+            safeTop={false}
+            style={{ paddingTop: insets.top + spacing.md }}
+            primaryAction={{
+              label: 'Save a find',
+              icon: 'camera-outline',
+              variant: 'secondary',
+              onPress: openShoppingCamera,
+            }}
+          />
         </View>
 
-        {/* One action under the masthead: the shortlist has its own door —
-            the section's "See all" — so a second pill here only made a
-            toolbar. The explainer is a caption tucked under the button, not a
-            deck under the title: set as editorial prose at full measure it
-            read as a second headline and pulled the eye off the brief. */}
-        <View style={styles.mastheadActions}>
-          <ActionButton icon="camera-outline" label="Save a find"
-            variant="secondary" onPress={openShoppingCamera} />
-          <AppText variant="caption" tone="muted" style={styles.mastheadHint}>Snap a piece or its tag in store — it’s filed to your Shortlist for later.</AppText>
-        </View>
         {/* The brief is a section of this page like any other, so it wears the
             page's own department heading rather than a masthead of its own
             inside the panel — which put its label 16pt in from the gutter every
@@ -251,6 +292,17 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
         accessibilityElementsHidden
         style={[styles.safeAreaScrim, { height: insets.top }]}
       />
+      {/* Hung off the measured masthead height so the caret stays under the
+          button whatever the header measures at. */}
+      <AiActionCoachmark
+        visible={saveFindCoachVisible && headerHeight > 0}
+        title="Save a find"
+        body="Snap a piece or its price tag while you're in store. It's filed to your Shortlist so you can decide later."
+        onDismiss={() => dismissSaveFindCoach('got_it')}
+        style={{ top: headerHeight - spacing.sm, right: spacing.page }}
+        caretRight={36}
+        scrimAccessibilityLabel="Dismiss the Save a find tip"
+      />
     </View>
   );
 }
@@ -258,19 +310,6 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   content: { paddingBottom: spacing.xxxl },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-    paddingHorizontal: spacing.page,
-    paddingBottom: spacing.lg,
-  },
-  headerCopy: { flex: 1, gap: spacing.sm },
-  mastheadActions: { alignItems: 'flex-start', gap: spacing.sm, paddingHorizontal: spacing.page, paddingBottom: spacing.lg },
-  // Held to a caption measure so it stays a footnote to the button rather than
-  // a banner across the page.
-  mastheadHint: { maxWidth: 300 },
   // A flat surfaceSubtle plate was tried here and rejected — 1.02:1 against
   // the page ground with no edge to read. The separation comes from the edge,
   // the lit top lip and the shadow instead, which is the recipe
