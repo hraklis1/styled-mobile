@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   ActivityIndicator,
@@ -82,6 +82,7 @@ import { GarmentImage } from '../wardrobe/garment-image';
 import { SkeletonBlock } from '../primitives/SkeletonLoader';
 import { useStylistTransport } from '../../features/stylist/hooks/useStylistTransport';
 import { buildInitialStylistSendOptions } from '../../features/stylist/initialPrompt';
+import { dayDividers } from '../../features/stylist/dayDivider';
 import {
   STYLIST_NEGATIVE_REASON_CHIPS,
   type StylistAskRequest,
@@ -1196,6 +1197,9 @@ export function StylistChatView({
   // ── Render ─────────────────────────────────────────────────────────────────
 
   const isEmpty = messages.length === 0 && !isLoading && !errorMessage;
+  // Recomputed per render rather than per minute: a thread only crosses midnight
+  // while open in the rarest case, and the transcript rerenders on every turn.
+  const dividers = useMemo(() => dayDividers(messages), [messages]);
   const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant');
   const contextualChips = useContextualChips(lastAssistantMsg, entryContext);
 
@@ -1290,38 +1294,46 @@ export function StylistChatView({
         ) : (
           <>
             {messages.map((msg) => (
-              <View
-                key={msg.id}
-                onLayout={(event) => {
-                  messageLayoutsRef.current[msg.id] = event.nativeEvent.layout.y;
-                  if (pendingFocusMessageIdRef.current === msg.id && scrollToMessageStart(msg.id)) {
-                    pendingFocusMessageIdRef.current = null;
-                  }
-                }}
-              >
-                <MessageBubble
-                  message={msg}
-                  allItems={allItems}
-                  isPlaying={playingId === msg.id}
-                  createOutfit={createOutfit}
-                  eventContext={eventContext}
-                  entryContext={entryContext}
-                  onAddToEvent={onAddToEvent}
-                  onNavigateToShop={onNavigateToShop}
-                  onClarificationSelect={(value) => sendMessage({ text: value, mode: 'from_closet' })}
-                  onNavigateToCloset={onNavigateToCloset}
-                  onStyleAuditItem={openAuditItemStyling}
-                  onSaveToBoard={setBoardTarget}
-                  onToggleAudio={
-                    msg.role === 'assistant' && !msg.isStreaming
-                      ? () =>
-                          playingId === msg.id
-                            ? stopCurrentAudio()
-                            : playTts(msg.id, msg.text)
-                      : undefined
-                  }
-                />
-              </View>
+              <Fragment key={msg.id}>
+                {dividers.has(msg.id) ? (
+                  <View style={styles.dayDivider} accessibilityRole="header">
+                    <View style={styles.dayDividerRule} />
+                    <Text style={styles.dayDividerLabel}>{dividers.get(msg.id)}</Text>
+                    <View style={styles.dayDividerRule} />
+                  </View>
+                ) : null}
+                <View
+                  onLayout={(event) => {
+                    messageLayoutsRef.current[msg.id] = event.nativeEvent.layout.y;
+                    if (pendingFocusMessageIdRef.current === msg.id && scrollToMessageStart(msg.id)) {
+                      pendingFocusMessageIdRef.current = null;
+                    }
+                  }}
+                >
+                  <MessageBubble
+                    message={msg}
+                    allItems={allItems}
+                    isPlaying={playingId === msg.id}
+                    createOutfit={createOutfit}
+                    eventContext={eventContext}
+                    entryContext={entryContext}
+                    onAddToEvent={onAddToEvent}
+                    onNavigateToShop={onNavigateToShop}
+                    onClarificationSelect={(value) => sendMessage({ text: value, mode: 'from_closet' })}
+                    onNavigateToCloset={onNavigateToCloset}
+                    onStyleAuditItem={openAuditItemStyling}
+                    onSaveToBoard={setBoardTarget}
+                    onToggleAudio={
+                      msg.role === 'assistant' && !msg.isStreaming
+                        ? () =>
+                            playingId === msg.id
+                              ? stopCurrentAudio()
+                              : playTts(msg.id, msg.text)
+                        : undefined
+                    }
+                  />
+                </View>
+              </Fragment>
             ))}
             {isLoading && !messages.some((m) => m.isStreaming) && <TypingIndicator />}
             {errorMessage ? (
@@ -3854,6 +3866,22 @@ const styles = StyleSheet.create({
     height: 7,
     borderRadius: 4,
     backgroundColor: colors.primary,
+  },
+  dayDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  dayDividerRule: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.hairline,
+  },
+  dayDividerLabel: {
+    ...typography.text.eyebrow,
+    color: colors.mutedForeground,
   },
   inlineError: {
     gap: spacing.sm,
