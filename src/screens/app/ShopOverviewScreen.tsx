@@ -134,15 +134,15 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
           </View>
         </View>
 
-        {/* One action under the masthead, with its explainer beside it rather
-            than beneath: the brief is the page's premium content and belongs
-            above the fold, and a two-line paragraph under the button pushed
-            it off. The shortlist has its own door — the section's "See all"
-            — so a second pill here only made a toolbar. */}
+        {/* One action under the masthead: the shortlist has its own door —
+            the section's "See all" — so a second pill here only made a
+            toolbar. The explainer is a caption tucked under the button, not a
+            deck under the title: set as editorial prose at full measure it
+            read as a second headline and pulled the eye off the brief. */}
         <View style={styles.mastheadActions}>
           <ActionButton icon="camera-outline" label="Save a find"
             variant="secondary" onPress={openShoppingCamera} />
-          <AppText variant="caption" tone="muted" style={styles.mastheadHint}>Snap a piece or its tag while you’re out — it’s filed to your Shortlist to revisit, compare and style later.</AppText>
+          <AppText variant="caption" tone="muted" style={styles.mastheadHint}>Snap a piece or its tag in store — it’s filed to your Shortlist for later.</AppText>
         </View>
         {/* The brief is a section of this page like any other, so it wears the
             page's own department heading rather than a masthead of its own
@@ -153,6 +153,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
           headingStyle="editorial"
           style={styles.section}
           title="Your shopping brief"
+          description="The gaps in your wardrobe worth filling this month, ranked by how much they’d add."
           trailing={<AppText variant="caption" tone="muted">{briefIssueLabel()}</AppText>}
         >
           <View style={styles.briefShadow}>
@@ -266,8 +267,10 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.lg,
   },
   headerCopy: { flex: 1, gap: spacing.sm },
-  mastheadActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.page, paddingBottom: spacing.lg },
-  mastheadHint: { flex: 1, minWidth: 0 },
+  mastheadActions: { alignItems: 'flex-start', gap: spacing.sm, paddingHorizontal: spacing.page, paddingBottom: spacing.lg },
+  // Held to a caption measure so it stays a footnote to the button rather than
+  // a banner across the page.
+  mastheadHint: { maxWidth: 300 },
   // A flat surfaceSubtle plate was tried here and rejected — 1.02:1 against
   // the page ground with no edge to read. The separation comes from the edge,
   // the lit top lip and the shadow instead, which is the recipe
