@@ -203,33 +203,6 @@ export function shoppingPriorityGapNarrative(
 }
 
 /**
- * How the edit's deck should carry `impactScore` next to the stylist's sentence.
- *
- * The figure is set large on its own line, so the sentence under it must not
- * spell the same number out again. Three cases:
- *  - the sentence never mentions the count → figure, then the sentence as is;
- *  - the multiplier shape, "<label> would create 80 new outfits from pieces
- *    you already own." → the figure takes the number and the sentence
- *    continues from it ("new outfits from pieces you already own.");
- *  - the count appears anywhere else → no figure; the sentence keeps it.
- */
-export function shoppingPriorityGapFigure(
-  voice: string,
-  impactScore: number | undefined,
-): { figure: number | null; statement: string } {
-  if (typeof impactScore !== 'number' || impactScore <= 0) return { figure: null, statement: voice };
-  const mention = new RegExp(`\\b${impactScore}\\s+new\\s+outfits?\\b`, 'i');
-  if (!mention.test(voice)) return { figure: impactScore, statement: voice };
-  const multiplier = new RegExp(
-    `^.+?\\bwould\\s+(?:create|add|unlock|open up|give you)\\s+${impactScore}\\s+(new\\s+outfits?\\b.*)$`,
-    'i',
-  );
-  const match = multiplier.exec(voice);
-  if (match) return { figure: impactScore, statement: match[1].trim() };
-  return { figure: null, statement: voice };
-}
-
-/**
  * The direction title with a category noun the page already states removed.
  *
  * Three directions named "Charcoal Tapered Trousers", "Mid-Grey Slim Trousers"

@@ -4,16 +4,15 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInUp, FadeOutDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ShoppingSurfaceLight } from '../../components/shopping/ShoppingSurfaceLight';
 import { PressableScale } from '../../components/primitives/PressableScale';
 import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
 import { ShoppingPriorityTargetCard } from '../../components/shopping/ShoppingPriorityTargetCard';
 import { useItems } from '../../hooks/useItems';
 import { useShoppingPriorityEdit } from '../../hooks/useShoppingPriorityEdit';
 import { addOutfitToWishlist, useWishlist } from '../../hooks/useWishlist';
-import { clarifyOutfitClaims, OUTFIT_ESTIMATE_EXPLANATION, potentialOutfitCount, priorityOccasionLabel, shoppingGuideIntro } from '../../lib/shopClarity';
+import { priorityAnchorPieces, priorityOccasionLabel, shoppingGuideIntro, wearableWardrobe, withoutOutfitCount, worksWithLabel } from '../../lib/shopClarity';
 import { track } from '../../lib/analytics';
-import { shoppingPriorityEditDisplayHeadline, shoppingPriorityGapFigure, shoppingPriorityGapNarrative, shoppingPriorityTargetDisplayTitle, splitPriceRange } from '../../lib/shoppingPriorityEdit';
+import { shoppingPriorityEditDisplayHeadline, shoppingPriorityGapNarrative, shoppingPriorityTargetDisplayTitle, splitPriceRange } from '../../lib/shoppingPriorityEdit';
 import { shoppingSurfaces, colors, radii, spacing, typography } from '../../theme';
 import type { ShopOutfit } from '../../types/shop';
 import type { ShoppingPriorityEditScreenProps } from '../../navigation/types';
@@ -34,7 +33,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
   const [showCompactHeader, setShowCompactHeader] = useState(false);
   const [currentDirectionIndex, setCurrentDirectionIndex] = useState<number | null>(null);
   const reduceMotion = useReducedMotion();
-  const wearable = useMemo(() => new Map(items.filter((item) => !item.isArchived && item.condition !== 'needs_repair' && item.condition !== 'donate').map((item) => [item.id, item])), [items]);
+  const wearable = useMemo(() => wearableWardrobe(items), [items]);
   const savedFromWishlist = useMemo(() => {
     if (!edit.data || edit.data.status !== 'ready') return false;
     return wishlist.some((entry) => entry.outfit.shoppingBrief?.generatedAt === edit.data?.generatedAt);
@@ -196,12 +195,13 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
   // sentence, a noun phrase restating the label, and — on ladder candidates —
   // step bookkeeping. Each gets its own slot rather than one long paragraph.
   const gap = shoppingPriorityGapNarrative(priority.label, priority.context, {
-    // The deck sets the same figure at 44pt, so a severable tail that spells
-    // it out again is dropped here…
+    // A severable tail that only restates the count is dropped here, and
+    // any count left inside the sentence is taken out below: the page makes
+    // its case with the pieces it works with and the looks, not a number.
     impactScore: priority.impactScore,
   });
-  // …and when the figure *is* the sentence, the sentence continues from it.
-  const deck = shoppingPriorityGapFigure(gap.voice, priority.impactScore);
+  const deckStatement = withoutOutfitCount(gap.voice, priority.impactScore);
+  const worksWith = worksWithLabel(priorityAnchorPieces(priority, wearable), 3);
   // Stated once for the whole edit rather than repeated on every card.
   const priceCurrency = data.targets.reduce<string | null>(
     (found, target) => found ?? splitPriceRange(target.priceRange).currency,
@@ -232,22 +232,12 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
             onBack={goBack}
             style={[styles.fullBleedHeader, styles.readyHeader]}
           />
-          <View style={deck.figure !== null ? styles.metricShadow : undefined}>
-            <View style={[styles.deck, deck.figure !== null && styles.metricPanel]}>
-              {deck.figure !== null ? <ShoppingSurfaceLight /> : null}
-              {deck.figure !== null ? (
-                // Only the wardrobe-multiplier candidates carry a count;
-                // structural and occasion gaps have nothing comparable, so the
-                // deck simply reads without a figure for those.
-                <Text style={styles.figure} accessibilityLabel={potentialOutfitCount(deck.figure) ?? undefined}>{deck.figure}</Text>
-              ) : null}
-              <Text selectable style={styles.deckStatement}>{deck.figure !== null ? `potential outfit combination${deck.figure === 1 ? '' : 's'}` : clarifyOutfitClaims(deck.statement, priority.impactScore)}</Text>
-              {deck.figure !== null && !/^new outfits?\b/i.test(deck.statement) ? <Text style={styles.deckMeta}>{deck.statement}</Text> : null}
-              {potentialOutfitCount(priority.impactScore) ? <Text style={styles.deckMeta}>{OUTFIT_ESTIMATE_EXPLANATION}</Text> : null}
-              {priorityOccasionLabel(priority) ? (
-                <Text style={styles.deckMeta}>{priorityOccasionLabel(priority)}</Text>
-              ) : null}
-            </View>
+          <View style={styles.deck}>
+            {deckStatement ? <Text selectable style={styles.deckStatement}>{deckStatement}</Text> : null}
+            {worksWith ? <Text style={styles.deckMeta}>{worksWith}</Text> : null}
+            {priorityOccasionLabel(priority) ? (
+              <Text style={styles.deckMeta}>{priorityOccasionLabel(priority)}</Text>
+            ) : null}
           </View>
         </View>
         <Text style={styles.guideIntro}>{shoppingGuideIntro(directionCount)}{priceCurrency ? ` Suggested budgets in ${priceCurrency}.` : ''}</Text>
@@ -355,10 +345,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.hairline,
   },
-  metricShadow: { borderRadius: radii.md, boxShadow: shoppingSurfaces.panelShadow, marginBottom: spacing.md },
-  metricPanel: { padding: spacing.lg, borderRadius: radii.md, borderCurve: 'continuous', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: shoppingSurfaces.edge, backgroundColor: shoppingSurfaces.alabaster },
-  // The olive figure anchors the softly lit panel in the existing serif face.
-  figure: { ...typography.text.editorialFigure, color: shoppingSurfaces.olive.accent },
   // The stylist's sentence, kept whole, in the regular editorial face so it
   // reads as a deck under the headline rather than a second one.
   deckStatement: { maxWidth: 360, ...typography.text.editorialBody, color: shoppingSurfaces.espresso },

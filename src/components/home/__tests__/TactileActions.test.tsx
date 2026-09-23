@@ -15,6 +15,7 @@ jest.mock('react-native/Libraries/Components/Pressable/Pressable', () => {
 });
 
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }));
+jest.mock('../../shopping/WardrobeThumbnail', () => ({ WardrobeThumbnail: 'WardrobeThumbnail' }));
 jest.mock('expo-haptics', () => ({ impactAsync: jest.fn(), ImpactFeedbackStyle: { Light: 'light' } }));
 jest.mock('react-native-reanimated', () => ({
   __esModule: true,
@@ -83,8 +84,19 @@ it('keeps the compact teaser noninteractive and suppresses duplicate context', (
   expect(renderer.root.findAllByType(Pressable)).toHaveLength(0);
   const labels = renderer.root.findAllByType(Text).map((node) => node.props.children);
   expect(labels).toContain('02');
-  expect(labels).toContain('9 potential outfit combinations · Work');
+  expect(labels).toContain('Work');
+  expect(labels.join(' ')).not.toMatch(/\b9\b/);
   expect(labels).not.toContain('Not for me');
+});
+
+it('moves ladder bookkeeping to the eyebrow and drops a bare outfit claim', () => {
+  const laddered = render(<ShoppingPriorityRow index={1} priority={{ ...priority, context: 'You own a blazer but cannot build a work outfit yet. Step 1 of 2: versatile mid-rise trousers.' }} />);
+  const ladderText = laddered.root.findAllByType(Text).map((node) => node.props.children);
+  expect(ladderText).toContain('Work · Dinner · 1 of 2');
+  expect(ladderText.join(' ')).not.toMatch(/Step 1 of 2/);
+
+  const generic = render(<ShoppingPriorityRow index={2} priority={{ ...priority, context: 'Versatile mid-rise trousers would create 9 new outfits from pieces you already own.' }} />);
+  expect(generic.root.findAllByType(Text).map((node) => node.props.children).join(' ')).not.toMatch(/new outfits/);
 });
 
 it('preserves pressed surface feedback with Reduce Motion and suppresses it when disabled', () => {

@@ -8,7 +8,7 @@ import { getWishlistRecommendationType } from '../../lib/wishlistType';
 import { colors, spacing, typography } from '../../theme';
 import { useItems } from '../../hooks/useItems';
 import { ShoppingPriorityTargetCard } from '../shopping/ShoppingPriorityTargetCard';
-import { clarifyOutfitClaims, OUTFIT_ESTIMATE_EXPLANATION, potentialOutfitCount, shoppingGuideIntro } from '../../lib/shopClarity';
+import { shoppingGuideIntro, withoutOutfitCount } from '../../lib/shopClarity';
 import { ShopOutfitCard } from './ShopOutfitCard';
 
 type Props = {
@@ -111,11 +111,8 @@ export function ShopWishlistDetailSheet({ entry, onClose, onRemove, onSaveToBoar
         {entry.outfit.shoppingBrief ? (
           <View style={styles.editContent}>
             <Text style={styles.editHeadline}>{entry.outfit.shoppingBrief.headline}</Text>
-            <Text style={styles.editSummary}>{clarifyOutfitClaims(entry.outfit.shoppingBrief.summary, entry.outfit.shoppingBrief.priority.impactScore)}</Text>
+            <Text style={styles.editSummary}>{withoutOutfitCount(entry.outfit.shoppingBrief.summary, entry.outfit.shoppingBrief.priority.impactScore)}</Text>
             <Text style={styles.editSummary}>{shoppingGuideIntro(entry.outfit.shoppingBrief.targets.length)}</Text>
-            {potentialOutfitCount(entry.outfit.shoppingBrief.priority.impactScore) ? (
-              <Text style={styles.editSummary}>{potentialOutfitCount(entry.outfit.shoppingBrief.priority.impactScore)}. {OUTFIT_ESTIMATE_EXPLANATION}</Text>
-            ) : null}
             {entry.outfit.shoppingBrief.targets.map((target, index) => (
               <ShoppingPriorityTargetCard key={target.key} target={target} index={index + 1} wardrobe={wardrobe} isLast={index === entry.outfit.shoppingBrief!.targets.length - 1} />
             ))}

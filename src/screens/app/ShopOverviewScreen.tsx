@@ -20,7 +20,7 @@ import { useShoppingSnaps } from '../../hooks/useShoppingSnaps';
 import { useWishlist } from '../../hooks/useWishlist';
 import { buildShoppingEditItems, mergeShoppingSnaps, type ShoppingEditItem } from '../../lib/shoppingGallery';
 import { buildShortlistSpotlight } from '../../lib/shortlistSpotlight';
-import { shoppingPriorityRoute } from '../../lib/shopClarity';
+import { shoppingPriorityRoute, wearableWardrobe } from '../../lib/shopClarity';
 import { track } from '../../lib/analytics';
 import { hasSeenAiActionCoach, markAiActionCoachSeen } from '../../lib/aiActionCoach';
 import { presentPaywall } from '../../lib/paywall';
@@ -40,7 +40,8 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { isPremium } = useEntitlement();
-  const { refetch: refetchItems } = useItems();
+  const { data: items = [], refetch: refetchItems } = useItems();
+  const wardrobe = useMemo(() => wearableWardrobe(items), [items]);
   const { data: remoteSnaps = [], refetch: refetchSnaps } = useShoppingSnaps();
   const { data: savedShopping = [] } = useWishlist();
   const pendingUploads = useShoppingSessionStore((state) => state.pendingUploads);
@@ -194,7 +195,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
           headingStyle="editorial"
           style={styles.section}
           title="Your shopping brief"
-          description="The gaps in your wardrobe worth filling this month, ranked by how much they’d add."
+          description="The gaps in your wardrobe worth filling this month, most useful first."
           trailing={<AppText variant="caption" tone="muted">{briefIssueLabel()}</AppText>}
         >
           <View style={styles.briefShadow}>
@@ -203,6 +204,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
               <ShoppingBriefCard
                 isPremium={isPremium}
                 brief={brief.data}
+                wardrobe={wardrobe}
                 isLoading={brief.isLoading}
                 isError={brief.isError}
                 onSelectPriority={(priority) => {

@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import Animated, {
@@ -11,13 +10,12 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { shoppingAccent } from '../../lib/shoppingAccent';
-import { ShoppingSurfaceLight } from './ShoppingSurfaceLight';
+import { WardrobeThumbnail } from './WardrobeThumbnail';
 import { getSwatchColor } from '../../lib/colorUtils';
-import { itemCoverPresentation } from '../../lib/itemImage';
 import { track } from '../../lib/analytics';
 import { PressableScale } from '../primitives/PressableScale';
 import { ShoppingOfferRail } from './ShoppingOfferRail';
-import { shoppingSurfaces, colors, cutoutScaleFor, editorial, radii, spacing, typography } from '../../theme';
+import { shoppingSurfaces, colors, editorial, radii, spacing, typography } from '../../theme';
 import {
   humanizeInlineTokens,
   splitPriceRange,
@@ -367,49 +365,6 @@ function UnlockedLook({
   );
 }
 
-function WardrobeThumbnail({ item }: { item?: Item }) {
-  const cover = itemCoverPresentation(item, { preferThumb: true });
-  const [imageFailed, setImageFailed] = useState(false);
-
-  useEffect(() => {
-    setImageFailed(false);
-  }, [cover.uri]);
-
-  return (
-    <View
-      style={styles.thumbnail}
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-    >
-      {(!cover.uri || imageFailed || cover.isCatalogStyle) ? <ShoppingSurfaceLight tile /> : null}
-      {cover.uri && !imageFailed ? (
-        <Image
-          source={{ uri: cover.uri }}
-          style={[
-            StyleSheet.absoluteFill,
-            // Catalog-style covers are subjects on an empty ground, so they get
-            // inset on the tile the way wardrobe rows do it; a plain photo is a
-            // crop and still fills its frame. Without the split, a cutout on
-            // white sits next to an edge-to-edge snapshot and the row stops
-            // reading as one set.
-            cover.isCatalogStyle && styles.catalogThumbnail,
-            cover.variant === 'cutout' && { transform: [{ scale: cutoutScaleFor(item?.category) }] },
-          ]}
-          contentFit={cover.contentFit}
-          contentPosition="center"
-          transition={150}
-          cachePolicy="memory-disk"
-          recyclingKey={item ? `${item.id}:${cover.variant}` : undefined}
-          accessible={false}
-          onError={() => setImageFailed(true)}
-        />
-      ) : (
-        <Ionicons name="shirt-outline" size={18} color={colors.mutedForeground} />
-      )}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   // No horizontal padding of its own: the screen's content gutter is the
   // margin, so the numeral rail lines up with the hero and the deck above.
@@ -465,21 +420,6 @@ const styles = StyleSheet.create({
   lookLabel: { ...typography.text.label, color: colors.foreground },
   lookStrip: { flexDirection: 'row', gap: spacing.md, paddingRight: spacing.lg },
   tile: { width: TILE_WIDTH, gap: 6 },
-  // Reference marks under a look name, not hero imagery: a contact-sheet
-  // frame, flat plate, hairline edge, no rounding beyond `photo`. Rounded
-  // corners are for controls, and these are photographs.
-  thumbnail: {
-    width: '100%',
-    aspectRatio: editorial.garmentAspectRatio,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.photo,
-    backgroundColor: shoppingSurfaces.bone,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: shoppingSurfaces.edge,
-  },
-  catalogThumbnail: { padding: spacing.xs },
   // The piece you'd buy: the same frame, empty, holding only its colour.
   ghostFrame: {
     width: '100%',

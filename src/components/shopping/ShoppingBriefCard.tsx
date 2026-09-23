@@ -6,6 +6,7 @@ import { PressableScale } from '../primitives/PressableScale';
 import { ShoppingPriorityRow, sentenceCase } from './ShoppingPriorityRow';
 import { shoppingSurfaces, colors, radii, spacing, typography } from '../../theme';
 import type { ShoppingBrief, ShoppingBriefPriority } from '../../lib/shopDecisionWorkspace';
+import type { Item } from '../../types/item';
 
 /** Three is a strategy; five is a shopping list. The brief's own headline
  *  routinely counts to three ("Three practical additions…"), so the card shows
@@ -17,7 +18,7 @@ export { sentenceCase };
 
 /** Illustrative rows for the locked card — labelled as an example on screen. */
 const SAMPLE_PRIORITIES: ShoppingBriefPriority[] = [
-  { label: 'Everyday leather sneakers', category: 'shoes', reason: 'wardrobe_gap', context: '', priority: 1, unlocks: [], impactScore: 130 },
+  { label: 'Everyday leather sneakers', category: 'shoes', reason: 'wardrobe_gap', context: '', priority: 1, unlocks: ['Weekends', 'Smart casual'] },
   { label: 'Camel wool overcoat', category: 'outerwear', reason: 'weather', context: '', priority: 2, unlocks: ['Cold-weather layering'] },
 ];
 
@@ -38,6 +39,8 @@ type Props = {
   /** Opens ShoppingBriefDetailScreen — the full summary, every priority, and
    *  each one's own See options control, all folded off this compressed card. */
   onOpenFullBrief: () => void;
+  /** The wearable closet by id, so each priority can show the pieces it works with. */
+  wardrobe?: ReadonlyMap<number, Item>;
   onSelectPriority?: (priority: ShoppingBriefPriority) => void;
   onStartShopping?: () => void;
   startLabel?: string;
@@ -60,6 +63,7 @@ export function ShoppingBriefCard({
   isLoading,
   isError,
   onOpenFullBrief,
+  wardrobe,
   onSelectPriority,
   onStartShopping,
   startLabel,
@@ -96,7 +100,7 @@ export function ShoppingBriefCard({
         {/* What a brief looks like, not just what it does: two example rows in
             the real priority grammar, dimmed and marked as an example, so the
             locked card sells the thing rather than describing it. */}
-        <View style={styles.sample} accessibilityLabel="Example brief: two ranked priorities with the outfit combinations each would add">
+        <View style={styles.sample} accessibilityLabel="Example brief: two ranked priorities and the occasions each would cover">
           <Text style={styles.sampleLabel}>Example</Text>
           {SAMPLE_PRIORITIES.map((priority, index) => (
             <ShoppingPriorityRow key={priority.label} compact index={index + 1} priority={priority} isLast={index === SAMPLE_PRIORITIES.length - 1} />
@@ -161,7 +165,7 @@ export function ShoppingBriefCard({
         </View>
       ) : null}
 
-      <PriorityList priorities={priorities} onSelectPriority={onSelectPriority} />
+      <PriorityList priorities={priorities} wardrobe={wardrobe} onSelectPriority={onSelectPriority} />
 
       {/* Count-aware: when the card already holds every priority, the detail
           adds the summary and the reasoning, so the link says that; when it
@@ -176,7 +180,7 @@ export function ShoppingBriefCard({
   );
 }
 
-function PriorityList({ priorities, onSelectPriority }: { priorities: ShoppingBriefPriority[]; onSelectPriority?: (priority: ShoppingBriefPriority) => void }) {
+function PriorityList({ priorities, wardrobe, onSelectPriority }: { priorities: ShoppingBriefPriority[]; wardrobe?: ReadonlyMap<number, Item>; onSelectPriority?: (priority: ShoppingBriefPriority) => void }) {
   if (priorities.length === 0) return null;
   return (
     <View style={styles.priorities}>
@@ -186,6 +190,7 @@ function PriorityList({ priorities, onSelectPriority }: { priorities: ShoppingBr
           compact
           index={index + 1}
           priority={priority}
+          wardrobe={wardrobe}
           onPress={onSelectPriority ? () => onSelectPriority(priority) : undefined}
           isLast={index === priorities.length - 1}
         />

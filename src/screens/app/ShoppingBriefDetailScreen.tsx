@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInUp, FadeOut, FadeOutDown, useReducedMotion } from 'react-native-reanimated';
@@ -7,10 +7,11 @@ import { EditorialSection } from '../../components/primitives/Editorial';
 import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
 import { sentenceCase, ShoppingPriorityRow } from '../../components/shopping/ShoppingPriorityRow';
 import { useEntitlement } from '../../hooks/useEntitlement';
+import { useItems } from '../../hooks/useItems';
 import { useNotNowShoppingPriority, useShoppingBrief } from '../../hooks/useShoppingBrief';
 import { toLocalDateKey } from '../../lib/dailyStylistPick';
 import { shoppingSurfaces, colors, radii, spacing, typography } from '../../theme';
-import { clarifyOutfitClaims, OUTFIT_ESTIMATE_EXPLANATION, potentialOutfitCount, shoppingPriorityRoute } from '../../lib/shopClarity';
+import { shoppingPriorityRoute, wearableWardrobe, withoutOutfitCount } from '../../lib/shopClarity';
 import { track } from '../../lib/analytics';
 import type { ShoppingBriefDetailScreenProps } from '../../navigation/types';
 
@@ -35,6 +36,8 @@ export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScr
   const { isPremium } = useEntitlement();
   const brief = useShoppingBrief(isPremium);
   const notNow = useNotNowShoppingPriority();
+  const { data: items = [] } = useItems();
+  const wardrobe = useMemo(() => wearableWardrobe(items), [items]);
   const insets = useSafeAreaInsets();
   // Skipped rows leave the list rather than lingering with a "skipped" label:
   // the brief cache is only refreshed on the next day's fetch.
@@ -100,13 +103,13 @@ export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScr
         <ShopSubpageHeader
           eyebrow="YOUR SHOPPING BRIEF"
           title={data.headline}
-          subtitle={data.priorities.reduce((summary, priority) => clarifyOutfitClaims(summary, priority.impactScore), data.summary)}
+          subtitle={data.priorities.reduce((summary, priority) => withoutOutfitCount(summary, priority.impactScore), data.summary)}
           onBack={goBack}
           style={styles.header}
         />
         {notNow.isError ? <Text style={styles.errorNotice}>Couldn’t skip that suggestion. Tap “Not for me” to retry.</Text> : null}
         {visiblePriorities.length > 0 ? (
-          <EditorialSection variant="ruled" title="Priorities">
+          <EditorialSection variant="ruled" title="Priorities" style={styles.priorities}>
             {visiblePriorities.map((priority, index) => {
               const skipping = notNow.isPending && notNow.variables?.recommendationKey === priority.recommendationKey;
               return (
@@ -117,6 +120,7 @@ export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScr
                   <ShoppingPriorityRow
                     index={index + 1}
                     priority={priority}
+                    wardrobe={wardrobe}
                     isLast={index === visiblePriorities.length - 1}
                     onPress={() => {
                       track('shopping_brief_priority_opened', { category: priority.category, reason: priority.reason, rank: priority.priority });
@@ -147,10 +151,10 @@ export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScr
             })}
           </EditorialSection>
         ) : null}
-        {/* A footnote to the counts it qualifies, after the rows that carry
-            them — not a floating notice above a list that hasn't started. */}
-        {visiblePriorities.some((priority) => potentialOutfitCount(priority.impactScore)) ? <Text style={styles.notice}>{OUTFIT_ESTIMATE_EXPLANATION}</Text> : null}
       </ScrollView>
+      {/* The header scrolls away with the page, so the safe area gets its own
+          canvas-coloured strip — body copy never runs under the clock. */}
+      <View pointerEvents="none" accessibilityElementsHidden style={[styles.safeAreaScrim, { height: insets.top }]} />
       {pendingSkip ? (
         <Animated.View
           entering={reduceMotion ? undefined : FadeInUp.duration(160)}
@@ -173,8 +177,11 @@ const styles = StyleSheet.create({
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: shoppingSurfaces.canvas },
   scroll: { flex: 1 },
   content: { paddingHorizontal: spacing.page, paddingBottom: spacing.xxxl + spacing.xl },
-  header: { marginHorizontal: -spacing.page, backgroundColor: shoppingSurfaces.canvas },
-  notice: { ...typography.text.caption, color: colors.mutedForeground, paddingVertical: spacing.sm },
+  header: { marginHorizontal: -spacing.page, paddingBottom: spacing.lg, backgroundColor: shoppingSurfaces.canvas },
+  // Tighter than the default ruled section so the first priority starts on
+  // the first screen, under the full summary.
+  priorities: { paddingTop: spacing.lg },
+  safeAreaScrim: { position: 'absolute', zIndex: 20, top: 0, left: 0, right: 0, backgroundColor: shoppingSurfaces.canvas },
   errorNotice: { ...typography.text.caption, color: colors.destructive, paddingVertical: spacing.sm },
   toast: { position: 'absolute', left: spacing.page, right: spacing.page, minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md, borderRadius: radii.lg, borderCurve: 'continuous', backgroundColor: colors.surfaceElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, boxShadow: '0 4px 14px rgba(40, 35, 31, 0.12)', zIndex: 20 },
   toastText: { flex: 1, ...typography.text.bodySmall, fontWeight: typography.weight.medium, color: colors.foreground },

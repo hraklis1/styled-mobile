@@ -44,6 +44,7 @@ jest.mock('../../../hooks/useShoppingSnaps', () => ({ useShoppingSnaps: () => ({
 jest.mock('../../../stores/useShoppingSessionStore', () => ({ useShoppingSessionStore: (selector: any) => selector({ pendingUploads: mockPending }) }));
 
 jest.mock('../../../components/shopping/ShoppingPieceTile', () => ({ ShoppingPieceTile: 'ShoppingPieceTile' }));
+jest.mock('../../../components/shopping/WardrobeThumbnail', () => ({ WardrobeThumbnail: 'WardrobeThumbnail' }));
 jest.mock('../../../components/shopping/ShoppingCompare', () => ({ ShoppingCompare: 'ShoppingCompare' }));
 jest.mock('../../../components/shopping/ShoppingSyncNotice', () => ({ ShoppingSyncNotice: 'ShoppingSyncNotice' }));
 jest.mock('../../../components/shopping/ShoppingSessionBundle', () => ({ ShoppingSessionBundle: 'ShoppingSessionBundle' }));
@@ -83,7 +84,7 @@ it('opens the exact overview priority with its recommendation and brief context'
   mockEntries = [];
   render(ShopOverviewScreen);
   const priority = mockBrief.priorities[0];
-  act(() => button('Leather sneakers. 130 potential outfit combinations').props.onPress());
+  act(() => button('Leather sneakers').props.onPress());
   expect(navigation.navigate).toHaveBeenCalledWith('ShoppingPriorityEdit', { priority, origin: 'shopping_brief', briefGeneratedAt: mockBrief.generatedAt });
   expect(button('Read the full brief')).toBeDefined();
 });
@@ -92,7 +93,7 @@ it('keeps starter suggestions behind the existing add-wardrobe action', () => {
   const onSelectPriority = jest.fn();
   act(() => { renderer = TestRenderer.create(<ShoppingBriefCard isPremium brief={{ ...mockBrief, status: 'insufficient_data' }} isLoading={false} isError={false} onOpenFullBrief={jest.fn()} onUpgrade={jest.fn()} onAddWardrobePieces={jest.fn()} onRetry={jest.fn()} onSelectPriority={onSelectPriority} />); });
   expect(button('Add wardrobe pieces')).toBeDefined();
-  expect(button('Leather sneakers. 130 potential outfit combinations')).toBeUndefined();
+  expect(button('Leather sneakers')).toBeUndefined();
 });
 
 it('defaults to all types sorted newest first and keeps type filters working', () => {
