@@ -235,7 +235,7 @@ type ServerMessagePayload = {
   shopOutfit?: ShopOutfit;
   tripPlan?: StylistTripPlanData;
   wardrobeAudit?: StylistWardrobeAuditData;
-  boardAction?: 'outfit' | 'complete' | 'capsule' | 'theme';
+  boardAction?: 'outfit' | 'complete' | 'capsule' | 'theme' | 'ask';
 };
 
 type ServerMessage = { id: number; role: Role; text: string; recId?: number | null; payload?: ServerMessagePayload | null; createdAt?: string };

@@ -1,15 +1,17 @@
 jest.mock('../api', () => ({ API_BASE_URL: 'https://api.styled.test' }));
 
 import {
-  canComposeOutfit,
-  filterBoardFeed,
   getBoardCoverUris,
   getBoardContentSummary,
+  getBoardFilterCount,
   getBoardInsights,
+  getBoardPieces,
   getBoardSavedCount,
+  parseBoardEntryKeys,
+  withoutBoardEntries,
   shouldShowBoardSearch,
 } from '../boardPresentation';
-import type { Board, BoardFeedItem } from '../../types/board';
+import type { Board } from '../../types/board';
 import type { Item } from '../../types/item';
 
 const board: Board = {
@@ -33,7 +35,6 @@ const makeItem = (id: number, name: string, imageUrl: string | null, category: I
 });
 
 const item = makeItem(1, 'Navy blazer', 'https://example.com/blazer.jpg', 'outerwear', ['#25324A']);
-const feed: BoardFeedItem[] = [{ kind: 'item', key: 'i1', item }];
 
 describe('board presentation', () => {
   it('counts every supported saved type', () => {
@@ -87,41 +88,46 @@ describe('board presentation', () => {
     ]);
   });
 
-  it('returns no cover sources for empty or wishlist-only boards', () => {
-    expect(getBoardCoverUris({ ...board, coverImageUrl: null, itemIds: [], outfitIds: [], wishlistIds: ['wish-1'] }, new Map(), new Map())).toEqual([]);
+  it('returns no cover sources for an empty board', () => {
+    expect(getBoardCoverUris({ ...board, coverImageUrl: null, itemIds: [], outfitIds: [], wishlistIds: [] }, new Map(), new Map())).toEqual([]);
   });
 
-  it('filters mixed board content and derives fashion insights', () => {
-    expect(filterBoardFeed(feed, 'item')).toHaveLength(1);
-    expect(filterBoardFeed(feed, 'outfit')).toHaveLength(0);
-    expect(getBoardInsights(feed)).toEqual({ colors: ['#25324A'], categories: [['Outerwear', 1]] });
+  it('fills a wishlist-only cover from saved product imagery', () => {
+    const wishlist = new Map([['wish-1', {
+      id: 'wish-1',
+      outfit: { items: [{ imageUrl: 'https://example.com/shop-1.jpg' }, { imageUrl: 'https://example.com/shop-2.jpg' }] },
+    } as never]]);
+
+    expect(getBoardCoverUris({ ...board, coverImageUrl: null, itemIds: [], outfitIds: [], wishlistIds: ['wish-1'] }, new Map(), new Map(), wishlist)).toEqual([
+      'https://example.com/shop-1.jpg',
+      'https://example.com/shop-2.jpg',
+    ]);
+  });
+
+  it('derives fashion insights from saved pieces', () => {
+    expect(getBoardInsights([item])).toEqual({ colors: ['#25324A'], categories: [['Outerwear', 1]] });
+  });
+
+  it('counts filter chips from board membership, not loaded pages', () => {
+    expect(getBoardFilterCount(board, 'all')).toBe(4);
+    expect(getBoardFilterCount(board, 'item')).toBe(2);
+    expect(getBoardFilterCount(board, 'outfit')).toBe(1);
+    expect(getBoardFilterCount(board, 'wishlist')).toBe(1);
+  });
+
+  it('resolves every saved piece from the closet in board order, skipping ghosts', () => {
+    const second = { ...item, id: 2 };
+    expect(getBoardPieces({ itemIds: [2, 99, 1] }, [item, second]).map((piece) => piece.id)).toEqual([2, 1]);
+  });
+
+  it('round-trips selection keys and removes them from a board', () => {
+    const refs = parseBoardEntryKeys(['i1', 'o3', 'wwish-1']);
+    expect(refs).toEqual([
+      { type: 'item', id: 1 },
+      { type: 'outfit', id: 3 },
+      { type: 'wishlist', id: 'wish-1' },
+    ]);
+    expect(withoutBoardEntries(board, refs)).toEqual({ itemIds: [2], outfitIds: [], wishlistIds: [] });
   });
 });
 
-describe('canComposeOutfit', () => {
-  let nextId = 100;
-  const piece = (category: Item['category'], overrides: Partial<Item> = {}): BoardFeedItem => {
-    const base = makeItem(nextId++, `${category} piece`, null, category, []);
-    return { kind: 'item', key: `i${base.id}`, item: { ...base, ...overrides } };
-  };
-
-  it('is false for a board with too little to style', () => {
-    const sparse: BoardFeedItem[] = [];
-    expect(canComposeOutfit(sparse)).toBe(false);
-
-    const outfitsOnly: BoardFeedItem[] = [{ kind: 'outfit', key: 'o1', outfit: { id: 1 } as never }];
-    expect(canComposeOutfit(outfitsOnly)).toBe(false);
-  });
-
-  it('is true only for a complete silhouette', () => {
-    expect(canComposeOutfit([piece('top'), piece('bottom'), piece('shoes')])).toBe(true);
-    expect(canComposeOutfit([piece('full_body'), piece('shoes')])).toBe(true);
-    expect(canComposeOutfit([piece('top'), piece('bottom'), piece('outerwear')])).toBe(false);
-  });
-
-  it('ignores unwearable pieces, like the server does', () => {
-    expect(canComposeOutfit([
-      piece('top'), piece('bottom'), piece('shoes', { isArchived: true }),
-    ])).toBe(false);
-  });
-});

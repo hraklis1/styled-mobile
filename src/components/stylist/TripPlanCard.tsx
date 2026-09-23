@@ -183,6 +183,7 @@ export function TripPlanCard({
   onAddToEvent,
   onSaveOutfit,
   saveLabel,
+  eyebrowLabel,
 }: {
   plan: TripPlanData;
   allItems: Item[];
@@ -192,6 +193,8 @@ export function TripPlanCard({
   /** Override what saving a look does — defaults to createOutfit.mutateAsync. */
   onSaveOutfit?: (input: CreateOutfitInput) => Promise<unknown>;
   saveLabel?: string;
+  /** Replaces the "Trip plan" / "Board capsule" eyebrow, e.g. for a single board look. */
+  eyebrowLabel?: string;
 }) {
   const { width } = useWindowDimensions();
   const cardWidth = Math.min(width - spacing.xxl * 2, 320);
@@ -204,7 +207,7 @@ export function TripPlanCard({
     <View style={styles.container}>
       <View style={styles.sectionEyebrow}>
         <Ionicons name={isBoardCapsule ? 'albums-outline' : 'briefcase-outline'} size={13} color={colors.primary} />
-        <Text style={styles.sectionEyebrowText}>{isBoardCapsule ? 'Board capsule' : 'Trip plan'}</Text>
+        <Text style={styles.sectionEyebrowText}>{eyebrowLabel ?? (isBoardCapsule ? 'Board capsule' : 'Trip plan')}</Text>
       </View>
       {plan.intro ? <StylistRichText text={plan.intro} /> : null}
 

@@ -26,7 +26,23 @@ import { getBoardSavedCount } from '../../lib/boardPresentation';
 import { BoardCover } from './BoardCover';
 import { colors, spacing, typography, radii } from '../../theme';
 
-export function useBoardPicker(target: BoardEntryRef | BoardEntryRef[] | null, onClose: () => void) {
+export type BoardPickerOptions = {
+  /** Leave this board out of the list (the board the entries are moving out of). */
+  excludeBoardId?: number;
+  /**
+   * Move mode: picking a board adds the entries and reports the destination's
+   * pre-save snapshot (null for a newly created board) so the host can take
+   * them out of the source board and offer an undo that reverses both sides.
+   */
+  onMoved?: (destination: { name: string; before: Board | null }) => void;
+};
+
+export function useBoardPicker(
+  target: BoardEntryRef | BoardEntryRef[] | null,
+  onClose: () => void,
+  options: BoardPickerOptions = {},
+) {
+  const { excludeBoardId, onMoved } = options;
   const { data: boards = [] } = useBoards();
   const { data: items = [] } = useItems();
   const { data: outfits = [] } = useOutfits();
@@ -39,7 +55,10 @@ export function useBoardPicker(target: BoardEntryRef | BoardEntryRef[] | null, o
 
   const itemMap = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
   const outfitMap = useMemo(() => new Map(outfits.map((outfit) => [outfit.id, outfit])), [outfits]);
-  const visibleBoards = useMemo(() => filterVisibleBoards(boards), [boards]);
+  const visibleBoards = useMemo(
+    () => filterVisibleBoards(boards).filter((board) => board.id !== excludeBoardId),
+    [boards, excludeBoardId],
+  );
 
   const targets: BoardEntryRef[] = target == null ? [] : Array.isArray(target) ? target : [target];
 
@@ -49,7 +68,8 @@ export function useBoardPicker(target: BoardEntryRef | BoardEntryRef[] | null, o
 
   function toggleBoard(board: Board) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const allIn = allTargetsIn(board);
+    // A move only ever adds; entries already on the destination are merged.
+    const allIn = onMoved ? false : allTargetsIn(board);
     const itemIds = new Set<number>(board.itemIds);
     const outfitIds = new Set<number>(board.outfitIds);
     const wishlistIds = new Set<string>(board.wishlistIds);
@@ -64,6 +84,11 @@ export function useBoardPicker(target: BoardEntryRef | BoardEntryRef[] | null, o
       outfitIds: [...outfitIds],
       wishlistIds: [...wishlistIds],
     });
+    if (onMoved) {
+      onMoved({ name: board.name, before: board });
+      onClose();
+      return;
+    }
     setLastChange({
       message: allIn ? `Removed from ${board.name}` : `Saved to ${board.name}`,
       board,
@@ -92,6 +117,7 @@ export function useBoardPicker(target: BoardEntryRef | BoardEntryRef[] | null, o
     });
     setNewName('');
     setCreating(false);
+    onMoved?.({ name, before: null });
     onClose();
   }
 
@@ -99,7 +125,9 @@ export function useBoardPicker(target: BoardEntryRef | BoardEntryRef[] | null, o
     visibleBoards, itemMap, outfitMap,
     creating, setCreating, newName, setNewName,
     lastChange, undoLastChange, allTargetsIn, toggleBoard, handleCreate,
-    title: targets.length > 1 ? `Save ${targets.length} items to…` : 'Save to board',
+    title: onMoved
+      ? `Move ${targets.length} ${targets.length === 1 ? 'item' : 'items'} to…`
+      : targets.length > 1 ? `Save ${targets.length} items to…` : 'Save to board',
   };
 }
 

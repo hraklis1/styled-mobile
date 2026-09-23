@@ -161,7 +161,7 @@ export type StylistAssistantMessage = StylistBaseMessage & {
   wardrobeAudit?: StylistWardrobeAuditData;
   eventPlan?: StylistEventPlanData;
   recId?: number;
-  boardAction?: 'outfit' | 'complete' | 'capsule' | 'theme';
+  boardAction?: 'outfit' | 'complete' | 'capsule' | 'theme' | 'ask';
 };
 
 export type StylistMessage = StylistUserMessage | StylistAssistantMessage;
@@ -294,7 +294,7 @@ export type StylistAskDoneEvent = {
   mode?: StylistMode;
   recId?: number | null;
   conversationId?: number | null;
-  boardAction?: 'outfit' | 'complete' | 'capsule' | 'theme';
+  boardAction?: 'outfit' | 'complete' | 'capsule' | 'theme' | 'ask';
 };
 
 export type StylistSendOptions = {

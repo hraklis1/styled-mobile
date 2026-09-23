@@ -28,17 +28,23 @@ import { BoardIdentityRail } from '../../components/boards/BoardIdentityRail';
 import { BoardCompactIdentityBar } from '../../components/boards/BoardCompactIdentityBar';
 import { BoardFeedTile } from '../../components/boards/BoardFeedTile';
 import { ShopWishlistDetailSheet } from '../../components/outfits/ShopWishlistDetailSheet';
+import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
+import { useItems } from '../../hooks/useItems';
+import { useOutfits } from '../../hooks/useOutfits';
+import type { Board } from '../../types/board';
 import type { WishlistEntry } from '../../lib/wishlist';
 import { useLibraryLaunch } from '../../hooks/useCameraLaunch';
 import {
-  canComposeOutfit,
-  filterBoardFeed,
   getBoardContentSummary,
+  getBoardFilterCount,
   getBoardInsights,
+  getBoardPieces,
+  parseBoardEntryKeys,
+  withoutBoardEntries,
   type BoardFilter,
 } from '../../lib/boardPresentation';
 import { isLegacyDailyFindsBoard } from '../../lib/legacyBoards';
-import { BoardCapsuleSheet } from '../../components/boards/BoardCapsuleSheet';
+import { BoardAskSheet } from '../../components/boards/BoardAskSheet';
 import { ensureEntitled } from '../../lib/entitlementGate';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { track } from '../../lib/analytics';
@@ -84,31 +90,23 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
   const [filter, setFilter] = useState<BoardFilter>('all');
   const [renameSheetVisible, setRenameSheetVisible] = useState(false);
 
-  const feed = useBoardFeed(boardId);
+  // A filtered view asks the server for that kind alone: the mixed feed lists
+  // every piece before any outfit, so filtering loaded pages client-side would
+  // show an empty Outfits tab on any board with more than a page of pieces.
+  const feed = useBoardFeed(boardId, filter === 'all' ? undefined : filter);
 
-  const remoteItems = useMemo(() => {
-    return flattenBoardFeed(feed.data?.pages);
-  }, [feed.data?.pages]);
+  const items = useMemo(() => flattenBoardFeed(feed.data?.pages), [feed.data?.pages]);
+  const totalCount = board ? getBoardFilterCount(board, 'all') : items.length;
 
-  const items = useMemo(() => {
-    return remoteItems;
-  }, [remoteItems]);
+  // Everything summarising the board reads the whole closet rather than the
+  // loaded feed pages, which only ever cover part of a large board.
+  const { data: closet = [] } = useItems();
+  const { data: allOutfits = [] } = useOutfits();
+  const boardItemMap = useMemo(() => new Map(closet.map((item) => [item.id, item])), [closet]);
+  const boardOutfitMap = useMemo(() => new Map(allOutfits.map((outfit) => [outfit.id, outfit])), [allOutfits]);
+  const boardPieces = useMemo(() => (board ? getBoardPieces(board, closet) : []), [board, closet]);
 
-  const boardItemMap = useMemo(
-    () => new Map(items.flatMap((entry) => (entry.kind === 'item' ? [[entry.item.id, entry.item] as const] : []))),
-    [items],
-  );
-  const boardOutfitMap = useMemo(
-    () => new Map(items.flatMap((entry) => (entry.kind === 'outfit' ? [[entry.outfit.id, entry.outfit] as const] : []))),
-    [items],
-  );
-
-  const visibleItems = useMemo(() => {
-    return filterBoardFeed(items, filter);
-  }, [filter, items]);
-
-  const boardInsights = useMemo(() => getBoardInsights(items), [items]);
-  const canStyle = useMemo(() => canComposeOutfit(items), [items]);
+  const boardInsights = useMemo(() => getBoardInsights(boardPieces), [boardPieces]);
   const boardEvent = useBoardEvent(boardId);
 
   const lastScrollY = useRef(0);
@@ -180,12 +178,15 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
   const [coverPickerVisible, setCoverPickerVisible] = useState(route.params.editCover === true);
   const [detailWishlistEntry, setDetailWishlistEntry] = useState<WishlistEntry | null>(null);
   const [organizeMode, setOrganizeMode] = useState(route.params.organize === true);
-  const [capsuleVisible, setCapsuleVisible] = useState(false);
+  const [askVisible, setAskVisible] = useState(false);
+  const [saveSheetMode, setSaveSheetMode] = useState<'add' | 'move' | null>(null);
   const [lastRemoval, setLastRemoval] = useState<{
-    count: number;
+    message: string;
     itemIds: number[];
     outfitIds: number[];
     wishlistIds: string[];
+    /** Set for a move: the destination's membership before the move, to put back on undo. */
+    destination?: Board;
   } | null>(null);
 
   useEffect(() => {
@@ -225,6 +226,22 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
     setOrganizeMode(false);
   }, []);
 
+  const selectedRefs = useMemo(() => parseBoardEntryKeys(selectedKeys), [selectedKeys]);
+
+  /** Take the selection off this board, keeping a snapshot for the undo toast. */
+  const removeSelection = useCallback((message: string, destination?: Board) => {
+    if (!board) return;
+    setLastRemoval({
+      message,
+      itemIds: board.itemIds,
+      outfitIds: board.outfitIds,
+      wishlistIds: board.wishlistIds,
+      destination,
+    });
+    updateBoard({ id: boardId, ...withoutBoardEntries(board, selectedRefs) });
+    setSelectedKeys(new Set());
+  }, [board, boardId, selectedRefs, updateBoard]);
+
   const handleDeleteSelected = useCallback(() => {
     if (!board || selectedKeys.size === 0) return;
     const count = selectedKeys.size;
@@ -236,33 +253,18 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
         {
           text: 'Remove',
           style: 'destructive',
-          onPress: () => {
-            setLastRemoval({
-              count,
-              itemIds: board.itemIds,
-              outfitIds: board.outfitIds,
-              wishlistIds: board.wishlistIds,
-            });
-            const itemIds = new Set<number>();
-            const outfitIds = new Set<number>();
-            const wishlistIds = new Set<string>();
-            for (const key of selectedKeys) {
-              if (key.startsWith('i')) itemIds.add(Number(key.slice(1)));
-              else if (key.startsWith('o')) outfitIds.add(Number(key.slice(1)));
-              else if (key.startsWith('w')) wishlistIds.add(key.slice(1));
-            }
-            updateBoard({
-              id: boardId,
-              itemIds: board.itemIds.filter((id) => !itemIds.has(id)),
-              outfitIds: board.outfitIds.filter((id) => !outfitIds.has(id)),
-              wishlistIds: board.wishlistIds.filter((id) => !wishlistIds.has(id)),
-            });
-            setSelectedKeys(new Set());
-          },
+          onPress: () => removeSelection(`${count} removed from board`),
         },
       ],
     );
-  }, [board, boardId, selectedKeys, updateBoard]);
+  }, [board, removeSelection, selectedKeys.size]);
+
+  const handleMoved = useCallback(({ name, before }: { name: string; before: Board | null }) => {
+    const count = selectedRefs.length;
+    track('board_entries_moved', { boardId, count });
+    removeSelection(`${count} moved to ${name}`, before ?? undefined);
+    setOrganizeMode(false);
+  }, [boardId, removeSelection, selectedRefs.length]);
 
   const undoRemoval = useCallback(() => {
     if (!lastRemoval) return;
@@ -272,6 +274,16 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
       outfitIds: lastRemoval.outfitIds,
       wishlistIds: lastRemoval.wishlistIds,
     });
+    // A move also added to another board; put that board back as it was.
+    const destination = lastRemoval.destination;
+    if (destination) {
+      updateBoard({
+        id: destination.id,
+        itemIds: destination.itemIds,
+        outfitIds: destination.outfitIds,
+        wishlistIds: destination.wishlistIds,
+      });
+    }
     setLastRemoval(null);
   }, [boardId, lastRemoval, updateBoard]);
 
@@ -288,16 +300,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
 
   const handleUploadCover = useCallback(async () => {
     const image = await launchLibrary({ allowsEditing: true, maxDim: 800 });
-    if (image?.dataUrl) {
-      updateBoard(
-        { id: boardId, coverImageUrl: image.dataUrl },
-        {
-          onSuccess: () => {
-            Alert.alert('Cover Updated', 'The cover photo for this board was successfully updated.');
-          },
-        }
-      );
-    }
+    if (image?.dataUrl) updateBoard({ id: boardId, coverImageUrl: image.dataUrl });
   }, [boardId, launchLibrary, updateBoard]);
 
   const handleSelectCover = useCallback((coverImageUrl: string | null) => {
@@ -313,11 +316,11 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
   const handleStyleBoard = useCallback(async () => {
     const entitled = await ensureEntitled(isPremium, {
       title: 'Unlock your AI Stylist',
-      message: 'Turn the pieces you have saved here into complete looks.',
+      message: 'Ask your stylist about anything you have saved here.',
     });
     if (!entitled) return;
-    track('board_capsule_opened', { boardId });
-    setCapsuleVisible(true);
+    track('board_ask_opened', { boardId });
+    setAskVisible(true);
   }, [boardId, isPremium]);
 
   const handleEventPress = useCallback(() => {
@@ -385,10 +388,10 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
 
   const boardTools = !organizeMode ? (
     <View style={styles.tools}>
-      {items.length > 0 && (
+      {totalCount > 0 && board && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
           {BOARD_FILTERS.map((option) => {
-            const count = option.key === 'all' ? items.length : items.filter((entry) => entry.kind === option.key).length;
+            const count = getBoardFilterCount(board, option.key);
             return (
               <TouchableOpacity
                 key={option.key}
@@ -405,7 +408,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
         </ScrollView>
       )}
 
-      {(boardEvent || canStyle) && (
+      {(boardEvent || totalCount > 0) && (
         <View style={styles.contextRow}>
           {boardEvent && (
             <TouchableOpacity
@@ -422,26 +425,27 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
             </TouchableOpacity>
           )}
 
-          {canStyle && (
+          {totalCount > 0 && (
             <TouchableOpacity
               style={styles.styleBoardBtn}
               onPress={handleStyleBoard}
               hitSlop={{ top: spacing.xs, bottom: spacing.xs }}
               accessibilityRole="button"
-              accessibilityLabel={`Style ${board?.name ?? 'this board'}`}
+              accessibilityLabel={`Ask about ${board?.name ?? 'this board'}`}
               activeOpacity={0.85}
             >
               <Ionicons name="sparkles" size={15} color={colors.primaryForeground} />
-              <Text style={styles.styleBoardText}>Style</Text>
+              <Text style={styles.styleBoardText}>Ask</Text>
             </TouchableOpacity>
           )}
         </View>
       )}
+
     </View>
   ) : (
     <View style={styles.organizeBanner}>
       <Ionicons name="checkmark-circle-outline" size={18} color={colors.primary} />
-      <Text style={styles.organizeText}>Tap anything you want to remove. Your closet stays unchanged.</Text>
+      <Text style={styles.organizeText}>Select pieces to move, save to another board, or remove. Your closet stays unchanged.</Text>
     </View>
   );
 
@@ -487,14 +491,32 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
           )}
         </View>
         {isMultiselect ? (
-          <TouchableOpacity
-            style={styles.headerBtn}
-            onPress={handleDeleteSelected}
-            disabled={selectedKeys.size === 0}
-            accessibilityLabel="Remove selected"
-          >
-            <Ionicons name="trash-outline" size={22} color={colors.destructive} />
-          </TouchableOpacity>
+          <View style={[styles.headerActions, selectedKeys.size === 0 && styles.headerActionsDisabled]}>
+            <TouchableOpacity
+              style={styles.headerBtn}
+              onPress={() => setSaveSheetMode('move')}
+              disabled={selectedKeys.size === 0}
+              accessibilityLabel="Move selected to another board"
+            >
+              <Ionicons name="arrow-redo-outline" size={21} color={colors.foreground} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.headerBtn}
+              onPress={() => setSaveSheetMode('add')}
+              disabled={selectedKeys.size === 0}
+              accessibilityLabel="Also save selected to another board"
+            >
+              <Ionicons name="albums-outline" size={21} color={colors.foreground} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.headerBtn}
+              onPress={handleDeleteSelected}
+              disabled={selectedKeys.size === 0}
+              accessibilityLabel="Remove selected"
+            >
+              <Ionicons name="trash-outline" size={21} color={colors.destructive} />
+            </TouchableOpacity>
+          </View>
         ) : (
           <View style={{ flexDirection: 'row' }}>
             <TouchableOpacity
@@ -520,7 +542,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
             <ActivityIndicator color={colors.primary} />
           </View>
         </>
-      ) : items.length === 0 ? (
+      ) : totalCount === 0 ? (
         <>
           {boardContext && <View style={styles.emptyHeader}>{boardContext}</View>}
           <View style={styles.centered}>
@@ -543,7 +565,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
       ) : (
         <View style={styles.listStage}>
           <FlashList
-            data={visibleItems}
+            data={items}
             numColumns={2}
             renderItem={renderItem}
             keyExtractor={(it) => it.key}
@@ -635,18 +657,26 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
           removalCopy={BOARD_WISHLIST_REMOVAL_COPY}
         />
       )}
-      {capsuleVisible && board && (
-        <BoardCapsuleSheet
+      {askVisible && board && (
+        <BoardAskSheet
           board={board}
-          items={items.flatMap((entry) => (entry.kind === 'item' ? [entry.item] : []))}
-          onClose={() => setCapsuleVisible(false)}
+          items={boardPieces}
+          closetById={boardItemMap}
+          onClose={() => setAskVisible(false)}
+        />
+      )}
+      {saveSheetMode && (
+        <SaveToBoardSheet
+          target={selectedRefs}
+          onClose={() => setSaveSheetMode(null)}
+          options={saveSheetMode === 'move' ? { excludeBoardId: boardId, onMoved: handleMoved } : { excludeBoardId: boardId }}
         />
       )}
 
       {lastRemoval && (
         <View style={[styles.undoToast, { bottom: insets.bottom + spacing.lg }]} accessibilityLiveRegion="polite">
           <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-          <Text style={styles.undoToastText}>{lastRemoval.count} removed from board</Text>
+          <Text style={styles.undoToastText} numberOfLines={1}>{lastRemoval.message}</Text>
           <TouchableOpacity style={styles.undoToastButton} onPress={undoRemoval} accessibilityRole="button">
             <Text style={styles.undoToastAction}>Undo</Text>
           </TouchableOpacity>
@@ -761,6 +791,8 @@ const styles = StyleSheet.create({
     fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
   },
+  headerActions: { flexDirection: 'row', gap: spacing.xs },
+  headerActionsDisabled: { opacity: 0.4 },
   organizeBanner: { minHeight: 48, marginHorizontal: spacing.lg, marginBottom: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.accent },
   organizeText: { flex: 1, color: colors.secondaryForeground, fontSize: typography.text.caption.fontSize },
   filteredEmpty: { paddingTop: spacing.xxxl, alignItems: 'center', gap: spacing.xs },

@@ -10,7 +10,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { BoardEntryRef } from '../../hooks/useBoards';
-import { useBoardPicker, BoardPickerBody, boardPickerContentStyle } from './BoardPicker';
+import { useBoardPicker, BoardPickerBody, boardPickerContentStyle, type BoardPickerOptions } from './BoardPicker';
 import { colors, spacing } from '../../theme';
 
 // Fixed snap point — dynamic sizing collapses to 0 height when the content is a
@@ -21,6 +21,8 @@ type Props = {
   onClose: () => void;
   /** A single reference or a batch (bulk select) to save into a board. */
   target: BoardEntryRef | BoardEntryRef[] | null;
+  /** Move mode and board exclusion; see BoardPickerOptions. */
+  options?: BoardPickerOptions;
 };
 
 // Mounted only while open by the parent (matches AddActionSheet), so it presents
@@ -30,10 +32,10 @@ type Props = {
 // BottomSheetModalProvider lives at the app root, above those modals, so the
 // sheet portals behind them and never appears. BoardPickerModal is the variant
 // for those hosts.
-export function SaveToBoardSheet({ onClose, target }: Props) {
+export function SaveToBoardSheet({ onClose, target, options }: Props) {
   const insets = useSafeAreaInsets();
   const ref = useRef<BottomSheetModal>(null);
-  const picker = useBoardPicker(target, onClose);
+  const picker = useBoardPicker(target, onClose, options);
 
   useEffect(() => {
     ref.current?.present();

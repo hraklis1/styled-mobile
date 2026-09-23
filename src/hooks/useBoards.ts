@@ -179,14 +179,19 @@ type BoardFeedRef =
   | { kind: 'wishlist'; data: WishlistEntry };
 type BoardFeedPage = { items: BoardFeedRef[]; nextCursor: string | null };
 
-/** Cursor-paginated mixed feed for a board (items + outfits + wishlist). */
-export function useBoardFeed(boardId: number) {
+/**
+ * Cursor-paginated feed for a board. With no `kind` it is the mixed feed
+ * (items, then outfits, then wishlist); with one, the server pages through that
+ * kind alone, so a filtered view never depends on how much of the mixed feed
+ * has loaded.
+ */
+export function useBoardFeed(boardId: number, kind?: BoardFeedItem['kind']) {
   return useInfiniteQuery({
-    queryKey: [...BOARDS_QUERY_KEY, boardId, 'feed'] as const,
+    queryKey: [...BOARDS_QUERY_KEY, boardId, 'feed', kind ?? 'all'] as const,
     queryFn: ({ pageParam }) =>
       api
         .get<BoardFeedPage>(`/api/boards/${boardId}/feed`, {
-          params: { cursor: pageParam, limit: 30 },
+          params: { cursor: pageParam, limit: 30, ...(kind ? { kind } : {}) },
         })
         .then((r) => r.data),
     initialPageParam: undefined as string | undefined,

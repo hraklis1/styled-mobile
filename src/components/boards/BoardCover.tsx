@@ -9,6 +9,7 @@ import type { Board } from '../../types/board';
 import type { Item } from '../../types/item';
 import type { Outfit } from '../../types/outfit';
 import { getBoardCoverUris, getBoardSavedCount } from '../../lib/boardPresentation';
+import { useWishlist } from '../../hooks/useWishlist';
 
 type Props = {
   board: Board;
@@ -52,7 +53,12 @@ function CoverCell({
 }
 
 export function BoardCover({ board, itemMap, outfitMap, size, height = size, compact }: Props) {
-  const covers = useMemo(() => getBoardCoverUris(board, itemMap, outfitMap), [board, itemMap, outfitMap]);
+  const { data: wishlist } = useWishlist();
+  const wishlistMap = useMemo(() => new Map((wishlist ?? []).map((entry) => [entry.id, entry])), [wishlist]);
+  const covers = useMemo(
+    () => getBoardCoverUris(board, itemMap, outfitMap, wishlistMap),
+    [board, itemMap, outfitMap, wishlistMap],
+  );
 
   const count = getBoardSavedCount(board);
   const overflow = Math.max(0, count - covers.length);
