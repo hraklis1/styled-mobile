@@ -145,7 +145,7 @@ export function EditorialSection({
       ]}>
         <AppText
           variant={editorialHeading ? 'eyebrowLarge' : ruled ? 'eyebrow' : 'sectionTitle'}
-          tone={editorialHeading ? 'muted' : ruled ? 'muted' : 'primary'}
+          tone={editorialHeading ? 'primary' : ruled ? 'muted' : 'primary'}
           style={editorialHeading ? styles.editorialSectionTitle : ruled ? styles.ruledSectionTitle : undefined}
         >
           {title}
@@ -164,13 +164,19 @@ export function EditorialSection({
             {/* Under a department label the action is a text link on the
                 same baseline — a 44pt pill floated a full line above the rule
                 and read as detached from the title it belonged to. */}
-            <AppText variant="label" tone="action" style={styles.sectionActionText}>
+            {/* Quieter than the label it serves: the heading names the
+                section, the link is a way out of it. */}
+            <AppText
+              variant={editorialHeading ? 'bodySmall' : 'label'}
+              tone={editorialHeading ? 'secondary' : 'action'}
+              style={styles.sectionActionText}
+            >
               {actionLabel}{editorialHeading ? ' →' : ''}
             </AppText>
           </PressableScale>
         ) : null}
       </View>
-      {description ? <AppText variant="bodySmall" tone="secondary" style={styles.sectionDescription}>{description}</AppText> : null}
+      {description ? <AppText variant={editorialHeading ? 'meta' : 'bodySmall'} tone={editorialHeading ? 'muted' : 'secondary'} style={styles.sectionDescription}>{description}</AppText> : null}
       {children}
     </View>
   );
@@ -451,7 +457,7 @@ const styles = StyleSheet.create({
   // Same 44pt hit target, laid out so its text sits on the eyebrow's baseline
   // rather than in a plate above it.
   editorialSectionAction: {
-    minHeight: 44, justifyContent: 'flex-end', paddingBottom: 1, marginBottom: -spacing.sm, paddingLeft: spacing.md,
+    minHeight: 44, justifyContent: 'flex-end', paddingLeft: spacing.md,
   },
   segment: {
     flexDirection: 'row',

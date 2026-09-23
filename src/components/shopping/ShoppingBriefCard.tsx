@@ -269,7 +269,9 @@ const styles = StyleSheet.create({
   // masthead, so it reads as a letter rather than a headline.
   noteText: { ...typography.text.editorialBody, fontSize: 17, lineHeight: 24, flex: 1, fontStyle: 'italic', color: colors.foreground },
   edit: { gap: spacing.xs, paddingTop: spacing.xs },
-  editLabel: { ...typography.text.meta, color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 1 },
+  // Sentence case so it reads as a label inside the card, not another
+  // uppercase department heading of the page.
+  editLabel: { ...typography.text.meta, color: colors.mutedForeground },
   // Bleeds to the panel edge so a long third pill scrolls rather than clips.
   editScroll: { marginHorizontal: -spacing.lg, flexGrow: 0 },
   editRow: { gap: spacing.sm, paddingHorizontal: spacing.lg },

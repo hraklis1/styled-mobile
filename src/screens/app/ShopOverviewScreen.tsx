@@ -231,7 +231,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
           headingStyle="editorial"
           style={styles.section}
           title="Your shortlist"
-          description="Pieces you’ve found and are considering."
+          description={spotlight.itemCount > 0 ? undefined : 'Pieces you’ve found and are considering.'}
           actionLabel={spotlight.itemCount > 0 ? `See all ${spotlight.itemCount}` : undefined}
           onAction={() => openHistory({ catalogFilter: 'all', resetFilters: true })}
         >
@@ -260,7 +260,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
           headingStyle="editorial"
           style={styles.section}
           title="Saved recommendations"
-          description="Looks, pieces, and shopping guides you’ve saved from your Stylist."
+          description={savedPreviewEntries.length > 0 ? undefined : 'Looks, pieces, and shopping guides you’ve saved from your Stylist.'}
           actionLabel={savedShopping.length > 0 ? `See all ${savedShopping.length}` : undefined}
           onAction={() => openSavedShopping()}
         >
