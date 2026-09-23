@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Alert } from 'react-native';
 import {
   BottomSheetModal,
   BottomSheetView,
@@ -12,7 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { StylistRichText } from '../stylist/StylistRichText';
 import { GarmentImage } from '../wardrobe/garment-image';
-import { useBoardAsk } from '../../hooks/useBoardAsk';
+import { useBoardAsk, useBoardAsks, useClearBoardAsks, type BoardAskEntry } from '../../hooks/useBoardAsk';
 import { apiErrorCode } from '../../lib/api';
 import { track } from '../../lib/analytics';
 import type { Board } from '../../types/board';
@@ -38,13 +38,19 @@ type Props = {
 /**
  * "Ask about this board": one open question to the stylist, answered in place.
  * Boards can be any collection (all shoes, a mood, inspiration), so there is no
- * fixed workflow here — the user asks, the stylist answers, and asking again
- * replaces the answer. Each question is a single advice call.
+ * fixed workflow here — the user asks, the stylist answers. Each question is a
+ * single advice call; answers are saved to the board's history on the server,
+ * so reopening the sheet shows the newest in full and older ones collapsed.
  */
 export function BoardAskSheet({ board, items, closetById, onClose }: Props) {
   const insets = useSafeAreaInsets();
   const ref = useRef<BottomSheetModal>(null);
   const ask = useBoardAsk();
+  const { data: history = [] } = useBoardAsks(board.id);
+  const clearHistory = useClearBoardAsks(board.id);
+  // The newest answer is open by default; tapping an older question opens it instead.
+  const [openId, setOpenId] = useState<number | null>(null);
+  const expandedId = openId ?? history[0]?.id ?? null;
   const [question, setQuestion] = useState('');
   const [asked, setAsked] = useState<string | null>(null);
   const usedExample = useRef(false);
@@ -68,18 +74,42 @@ export function BoardAskSheet({ board, items, closetById, onClose }: Props) {
     usedExample.current = false;
     setAsked(trimmed);
     setQuestion('');
-    ask.mutate({ boardId: board.id, name: board.name, itemIds, question: trimmed });
+    ask.mutate(
+      { boardId: board.id, name: board.name, itemIds, question: trimmed },
+      {
+        onSuccess: (entry) => {
+          setAsked(null);
+          setOpenId(entry.id);
+        },
+      },
+    );
   }, [ask, board.id, board.name, itemIds]);
+
+  const confirmClear = useCallback(() => {
+    Alert.alert('Clear saved answers?', 'This removes every question and answer saved on this board.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Clear',
+        style: 'destructive',
+        onPress: () => {
+          track('board_ask_cleared', { boardId: board.id, count: history.length });
+          setOpenId(null);
+          clearHistory.mutate();
+        },
+      },
+    ]);
+  }, [board.id, clearHistory, history.length]);
+
+  const mentionedFor = useCallback(
+    (entry: BoardAskEntry) => entry.itemIds.map((id) => closetById.get(id)).filter((item): item is Item => !!item),
+    [closetById],
+  );
 
   const pickExample = useCallback((text: string) => {
     usedExample.current = true;
     setQuestion(text);
   }, []);
 
-  const mentioned = useMemo(
-    () => (ask.data?.itemIds ?? []).map((id) => closetById.get(id)).filter((item): item is Item => !!item),
-    [ask.data?.itemIds, closetById],
-  );
   const errorCode = ask.error ? apiErrorCode(ask.error) : undefined;
   const isPaywalled = errorCode === 'FREE_LIMIT_REACHED' || errorCode === 'PREMIUM_REQUIRED';
   const canSend = question.trim().length > 0 && !ask.isPending;
@@ -133,7 +163,7 @@ export function BoardAskSheet({ board, items, closetById, onClose }: Props) {
         </View>
 
         <BottomSheetScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          {!asked && (
+          {!asked && history.length === 0 && (
             <View style={styles.examples}>
               {EXAMPLES.map((example) => (
                 <TouchableOpacity
@@ -175,18 +205,46 @@ export function BoardAskSheet({ board, items, closetById, onClose }: Props) {
             </View>
           )}
 
-          {!ask.isPending && ask.data && (
-            <View style={styles.answer}>
-              <StylistRichText text={ask.data.response} />
-              {mentioned.length > 0 && (
-                <View style={styles.mentionedRow}>
-                  {mentioned.map((item) => (
-                    <GarmentImage key={item.id} item={item} width={64} height={80} borderRadius={radii.md} placeholderIconSize={20} />
-                  ))}
-                </View>
-              )}
+          {history.length > 0 && (
+            <View style={styles.historyHeader}>
+              <Text style={styles.historyLabel}>Saved answers</Text>
+              <TouchableOpacity onPress={confirmClear} hitSlop={spacing.sm} accessibilityRole="button" accessibilityLabel="Clear saved answers">
+                <Text style={styles.clearText}>Clear</Text>
+              </TouchableOpacity>
             </View>
           )}
+
+          {history.map((entry) => {
+            const open = entry.id === expandedId;
+            const mentioned = open ? mentionedFor(entry) : [];
+            return (
+              <View key={entry.id} style={styles.entry}>
+                <TouchableOpacity
+                  style={styles.entryHead}
+                  onPress={() => setOpenId(open ? -1 : entry.id)}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: open }}
+                >
+                  <Text style={[styles.entryQuestion, open && styles.entryQuestionOpen]} numberOfLines={open ? undefined : 1}>
+                    {entry.question}
+                  </Text>
+                  <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={colors.mutedForeground} />
+                </TouchableOpacity>
+                {open && (
+                  <View style={styles.answer}>
+                    <StylistRichText text={entry.response} />
+                    {mentioned.length > 0 && (
+                      <View style={styles.mentionedRow}>
+                        {mentioned.map((item) => (
+                          <GarmentImage key={item.id} item={item} width={64} height={80} borderRadius={radii.md} placeholderIconSize={20} />
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+            );
+          })}
         </BottomSheetScrollView>
       </BottomSheetView>
     </BottomSheetModal>
@@ -240,7 +298,14 @@ const styles = StyleSheet.create({
   asked: { color: colors.mutedForeground, fontSize: typography.text.bodySmall.fontSize, fontStyle: 'italic' },
   centered: { alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.xxxl, gap: spacing.sm },
   centeredText: { color: colors.mutedForeground, fontSize: typography.text.bodySmall.fontSize, textAlign: 'center' },
-  answer: { gap: spacing.lg },
+  answer: { gap: spacing.lg, paddingBottom: spacing.md },
+  historyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.xs },
+  historyLabel: { color: colors.mutedForeground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, textTransform: 'uppercase', letterSpacing: 0.6 },
+  clearText: { color: colors.mutedForeground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold },
+  entry: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
+  entryHead: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
+  entryQuestion: { flex: 1, color: colors.mutedForeground, fontSize: typography.text.bodySmall.fontSize },
+  entryQuestionOpen: { color: colors.foreground, fontWeight: typography.weight.semibold },
   mentionedRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   retryBtn: {
     minHeight: 44,
