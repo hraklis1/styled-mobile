@@ -13,7 +13,7 @@ jest.mock('react-native-reanimated', () => ({
   useSharedValue: () => ({ value: 1 }), useAnimatedStyle: () => ({}),
 }));
 jest.mock('../../../components/primitives/PressableScale', () => ({ PressableScale: 'PressableScale' }));
-jest.mock('../../../components/primitives/Editorial', () => ({ ActionButton: 'ActionButton', FilterControl: 'FilterControl', IconButton: 'IconButton', SegmentedControl: 'SegmentedControl', EditorialSection: 'EditorialSection' }));
+jest.mock('../../../components/primitives/Editorial', () => ({ ActionButton: 'ActionButton', FilterControl: 'FilterControl', IconButton: 'IconButton', SegmentedControl: 'SegmentedControl', EditorialSection: 'EditorialSection', ScreenHeader: 'ScreenHeader' }));
 jest.mock('../../../components/primitives/EditorialRow', () => ({ EditorialRow: 'EditorialRow' }));
 jest.mock('../../../components/shopping/ShopSubpageHeader', () => ({ ShopSubpageHeader: (props: any) => require('react').createElement('ShopSubpageHeader', props, props.actions) }));
 jest.mock('../../../components/shopping/ShortlistCarousel', () => ({ ShortlistCarousel: 'ShortlistCarousel' }));
@@ -25,6 +25,7 @@ jest.mock('../../../components/boards/SaveToBoardSheet', () => ({ SaveToBoardShe
 jest.mock('../../../components/primitives/ActionMenuSheet', () => ({ ActionMenuSheet: 'ActionMenuSheet' }));
 jest.mock('../../../lib/analytics', () => ({ track: jest.fn() }));
 jest.mock('../../../lib/paywall', () => ({ presentPaywall: jest.fn() }));
+jest.mock('../../../lib/aiActionCoach', () => ({ hasSeenAiActionCoach: jest.fn().mockResolvedValue(true), markAiActionCoachSeen: jest.fn() }));
 const mockOpenStylist = jest.fn();
 jest.mock('../../../contexts/GlobalAIStylistContext', () => ({ useGlobalAIStylist: () => ({ openStylist: mockOpenStylist }) }));
 const mockRefetch = jest.fn();
@@ -84,7 +85,7 @@ it('opens the exact overview priority with its recommendation and brief context'
   mockEntries = [];
   render(ShopOverviewScreen);
   const priority = mockBrief.priorities[0];
-  act(() => button('Leather sneakers').props.onPress());
+  act(() => button('Priority 1: Leather sneakers').props.onPress());
   expect(navigation.navigate).toHaveBeenCalledWith('ShoppingPriorityEdit', { priority, origin: 'shopping_brief', briefGeneratedAt: mockBrief.generatedAt });
   expect(button('Read the full brief')).toBeDefined();
 });
@@ -93,7 +94,7 @@ it('keeps starter suggestions behind the existing add-wardrobe action', () => {
   const onSelectPriority = jest.fn();
   act(() => { renderer = TestRenderer.create(<ShoppingBriefCard isPremium brief={{ ...mockBrief, status: 'insufficient_data' }} isLoading={false} isError={false} onOpenFullBrief={jest.fn()} onUpgrade={jest.fn()} onAddWardrobePieces={jest.fn()} onRetry={jest.fn()} onSelectPriority={onSelectPriority} />); });
   expect(button('Add wardrobe pieces')).toBeDefined();
-  expect(button('Leather sneakers')).toBeUndefined();
+  expect(button('Priority 1: Leather sneakers').props.onPress).toBeUndefined();
 });
 
 it('defaults to all types sorted newest first and keeps type filters working', () => {
