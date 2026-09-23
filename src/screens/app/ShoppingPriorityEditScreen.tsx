@@ -254,7 +254,6 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
               wardrobe={wearable}
               displayTitle={shoppingPriorityTargetDisplayTitle(target.title, `${priority.label} ${displayHeadline}`)}
               isLast={index === directionCount - 1}
-              defaultExpanded={index === 0}
               onSaveFind={() => {
                 track('shopping_brief_save_find_tapped', { category: priority.category, targetKey: target.key });
                 navigation.navigate('ShoppingCamera');

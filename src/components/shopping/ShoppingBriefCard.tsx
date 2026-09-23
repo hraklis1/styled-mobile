@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { PressableScale } from '../primitives/PressableScale';
-import { ShoppingPriorityRow, sentenceCase } from './ShoppingPriorityRow';
+import { sentenceCase } from './ShoppingPriorityRow';
 import { shoppingSurfaces, colors, radii, spacing, typography } from '../../theme';
 import type { ShoppingBrief, ShoppingBriefPriority } from '../../lib/shopDecisionWorkspace';
 import type { Item } from '../../types/item';
+import { withoutOutfitCount } from '../../lib/shopClarity';
 
 /** Three is a strategy; five is a shopping list. The brief's own headline
  *  routinely counts to three ("Three practical additions…"), so the card shows
@@ -21,6 +22,8 @@ const SAMPLE_PRIORITIES: ShoppingBriefPriority[] = [
   { label: 'Everyday leather sneakers', category: 'shoes', reason: 'wardrobe_gap', context: '', priority: 1, unlocks: ['Weekends', 'Smart casual'] },
   { label: 'Camel wool overcoat', category: 'outerwear', reason: 'weather', context: '', priority: 2, unlocks: ['Cold-weather layering'] },
 ];
+
+const SAMPLE_NOTE = 'You have plenty to wear on weekends, but little that holds up on a cold morning. A camel overcoat would do the most work—it sits over nearly everything you own.';
 
 /** The issue line, e.g. "August brief" — so the brief reads as something
  *  issued this month rather than computed live. It rides in the section
@@ -100,11 +103,10 @@ export function ShoppingBriefCard({
         {/* What a brief looks like, not just what it does: two example rows in
             the real priority grammar, dimmed and marked as an example, so the
             locked card sells the thing rather than describing it. */}
-        <View style={styles.sample} accessibilityLabel="Example brief: two ranked priorities and the occasions each would cover">
+        <View style={styles.sample} accessibilityLabel="Example brief: a note from your stylist and the pieces it recommends">
           <Text style={styles.sampleLabel}>Example</Text>
-          {SAMPLE_PRIORITIES.map((priority, index) => (
-            <ShoppingPriorityRow key={priority.label} compact index={index + 1} priority={priority} isLast={index === SAMPLE_PRIORITIES.length - 1} />
-          ))}
+          <BriefNote text={SAMPLE_NOTE} />
+          <BriefEditStrip priorities={SAMPLE_PRIORITIES} />
         </View>
         <TextAction label="See plans" icon="sparkles" onPress={onUpgrade} />
       </>,
@@ -137,27 +139,25 @@ export function ShoppingBriefCard({
     const starterPriorities = brief.priorities.slice(0, PRIORITY_LIMIT);
     return shell(
       <>
-        <Text style={styles.headline} numberOfLines={2}>{brief.headline}</Text>
-        <Text style={styles.body}>{brief.summary}</Text>
-        <PriorityList priorities={starterPriorities} />
+        <BriefNote text={brief.summary} />
+        <BriefEditStrip priorities={starterPriorities} />
         <TextAction label="Add wardrobe pieces" onPress={onAddWardrobePieces} />
       </>,
     );
   }
 
   const priorities = brief.priorities.slice(0, PRIORITY_LIMIT);
+  const note = brief.priorities.reduce((text, priority) => withoutOutfitCount(text, priority.impactScore), brief.summary);
 
   return shell(
     <>
-      {/* The headline is the hook; the summary it used to trail here is the
-          deck on ShoppingBriefDetailScreen, where it appears once, in full,
-          instead of clipped to two lines and then repeated. */}
-      <Text style={styles.headline} numberOfLines={2}>{brief.headline}</Text>
+      {/* The note is the stylist talking; the headline it replaced here
+          still titles ShoppingBriefDetailScreen and Home's brief band. */}
+      <BriefNote text={note} />
+      <TextAction label="Read the full brief" onPress={onOpenFullBrief} />
 
       {/* "Balanced" with no priorities but a known next candidate — distinct
-          from "well covered", where nothing was ever found. The summary
-          already names it in prose (see routes.ts); this chip repeats it as
-          a scannable label rather than new information. */}
+          from "well covered", where nothing was ever found. */}
       {brief.status === 'balanced' && brief.nextUp ? (
         <View style={styles.nextUpRow}>
           <Ionicons name="time-outline" size={13} color={colors.mutedForeground} />
@@ -165,36 +165,49 @@ export function ShoppingBriefCard({
         </View>
       ) : null}
 
-      <PriorityList priorities={priorities} wardrobe={wardrobe} onSelectPriority={onSelectPriority} />
-
-      {/* Count-aware: when the card already holds every priority, the detail
-          adds the summary and the reasoning, so the link says that; when it
-          holds more, the link says how many, not "why". */}
-      <TextAction
-        label={brief.priorities.length > priorities.length
-          ? `See all ${brief.priorities.length} priorities`
-          : 'Read the full brief'}
-        onPress={onOpenFullBrief}
-      />
+      <BriefEditStrip priorities={priorities} onSelectPriority={onSelectPriority} />
     </>,
   );
 }
 
-function PriorityList({ priorities, wardrobe, onSelectPriority }: { priorities: ShoppingBriefPriority[]; wardrobe?: ReadonlyMap<number, Item>; onSelectPriority?: (priority: ShoppingBriefPriority) => void }) {
+/** The brief in the stylist's own voice: a short note, set as a quotation
+ *  so it reads as advice from someone rather than a computed label. */
+export function BriefNote({ text, full }: { text: string; full?: boolean }) {
+  return (
+    <View style={styles.note}>
+      <Text style={styles.noteMark} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">“</Text>
+      <Text style={styles.noteText} numberOfLines={full ? undefined : 5}>{text}</Text>
+    </View>
+  );
+}
+
+/** The pieces the note recommends, as one line of numbered pills — the
+ *  rich rows (what each works with, occasions, skip) live on the detail. */
+function BriefEditStrip({ priorities, onSelectPriority }: { priorities: ShoppingBriefPriority[]; onSelectPriority?: (priority: ShoppingBriefPriority) => void }) {
   if (priorities.length === 0) return null;
   return (
-    <View style={styles.priorities}>
-      {priorities.map((priority, index) => (
-        <ShoppingPriorityRow
-          key={`${priority.priority}-${priority.label}`}
-          compact
-          index={index + 1}
-          priority={priority}
-          wardrobe={wardrobe}
-          onPress={onSelectPriority ? () => onSelectPriority(priority) : undefined}
-          isLast={index === priorities.length - 1}
-        />
-      ))}
+    <View style={styles.edit}>
+      <Text style={styles.editLabel}>The edit</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.editRow} style={styles.editScroll}>
+        {priorities.map((priority, index) => {
+          const label = sentenceCase(priority.label);
+          return (
+            <PressableScale
+              key={`${priority.priority}-${priority.label}`}
+              motion="crisp"
+              scaleTo={0.96}
+              disabled={!onSelectPriority}
+              contentStyle={styles.pill}
+              onPress={onSelectPriority ? () => onSelectPriority(priority) : undefined}
+              accessibilityRole={onSelectPriority ? 'button' : undefined}
+              accessibilityLabel={`Priority ${index + 1}: ${label}`}
+            >
+              <Text style={styles.pillNumeral}>{index + 1}</Text>
+              <Text style={styles.pillLabel} numberOfLines={1}>{label}</Text>
+            </PressableScale>
+          );
+        })}
+      </ScrollView>
     </View>
   );
 }
@@ -250,7 +263,41 @@ const styles = StyleSheet.create({
   body: { ...typography.text.bodySmall, color: colors.inkSubtle },
   nextUpRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   nextUpLabel: { ...typography.text.caption, fontWeight: typography.weight.medium, color: colors.mutedForeground },
-  priorities: { paddingTop: spacing.xs },
+  note: { flexDirection: 'row', gap: spacing.xs },
+  noteMark: { ...typography.text.editorialBody, fontSize: 30, lineHeight: 30, color: shoppingSurfaces.olive.accent, marginTop: -2 },
+  // The stylist's voice: the editorial face in italic, a step under the
+  // masthead, so it reads as a letter rather than a headline.
+  noteText: { ...typography.text.editorialBody, fontSize: 17, lineHeight: 24, flex: 1, fontStyle: 'italic', color: colors.foreground },
+  edit: { gap: spacing.xs, paddingTop: spacing.xs },
+  editLabel: { ...typography.text.meta, color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 1 },
+  // Bleeds to the panel edge so a long third pill scrolls rather than clips.
+  editScroll: { marginHorizontal: -spacing.lg, flexGrow: 0 },
+  editRow: { gap: spacing.sm, paddingHorizontal: spacing.lg },
+  pill: {
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingLeft: spacing.xs,
+    paddingRight: spacing.md,
+    borderRadius: radii.full,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: shoppingSurfaces.olive.wash,
+  },
+  pillNumeral: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    overflow: 'hidden',
+    textAlign: 'center',
+    lineHeight: 26,
+    fontSize: typography.text.caption.fontSize,
+    fontWeight: typography.weight.semibold,
+    color: shoppingSurfaces.olive.wash,
+    backgroundColor: shoppingSurfaces.olive.accent,
+  },
+  pillLabel: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.medium, color: colors.foreground },
   sample: { opacity: 0.55, paddingTop: spacing.xs },
   sampleLabel: { ...typography.text.meta, color: colors.mutedForeground },
   // Full width, unlike every other action on this card: it is the page's one

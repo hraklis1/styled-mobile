@@ -5,6 +5,7 @@ import Animated, { FadeInUp, FadeOut, FadeOutDown, useReducedMotion } from 'reac
 
 import { EditorialSection } from '../../components/primitives/Editorial';
 import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
+import { BriefNote } from '../../components/shopping/ShoppingBriefCard';
 import { sentenceCase, ShoppingPriorityRow } from '../../components/shopping/ShoppingPriorityRow';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useItems } from '../../hooks/useItems';
@@ -98,15 +99,15 @@ export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScr
   return (
     <View style={styles.screen}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* The one place the summary appears in full — the card on Shop
-            stops at the headline, and the edit moves on to the gap itself. */}
+        {/* The headline titles the page; the stylist's note follows in full,
+            unclamped, in the same voice as the card on Shop. */}
         <ShopSubpageHeader
           eyebrow="YOUR SHOPPING BRIEF"
           title={data.headline}
-          subtitle={data.priorities.reduce((summary, priority) => withoutOutfitCount(summary, priority.impactScore), data.summary)}
           onBack={goBack}
           style={styles.header}
         />
+        <BriefNote full text={data.priorities.reduce((summary, priority) => withoutOutfitCount(summary, priority.impactScore), data.summary)} />
         {notNow.isError ? <Text style={styles.errorNotice}>Couldn’t skip that suggestion. Tap “Not for me” to retry.</Text> : null}
         {visiblePriorities.length > 0 ? (
           <EditorialSection variant="ruled" title="Priorities" style={styles.priorities}>
