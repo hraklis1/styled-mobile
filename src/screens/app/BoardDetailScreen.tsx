@@ -48,6 +48,9 @@ import { BoardAskSheet } from '../../components/boards/BoardAskSheet';
 import { ensureEntitled } from '../../lib/entitlementGate';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { track } from '../../lib/analytics';
+import { useAuth } from '../../contexts/AuthContext';
+import { AiActionCoachmark } from '../../components/primitives/AiActionCoachmark';
+import { hasSeenAiActionCoach, markAiActionCoachSeen } from '../../lib/aiActionCoach';
 
 const SIDE_PAD = spacing.page;
 const COL_GAP = spacing.grid;
@@ -84,6 +87,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
   const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / 2;
 
   const { isPremium } = useEntitlement();
+  const { user } = useAuth();
   const { data: boards = [] } = useBoards();
   const board = boards.find((b) => b.id === boardId);
   const isDailyFinds = isLegacyDailyFindsBoard(board);
@@ -323,6 +327,42 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
     setAskVisible(true);
   }, [boardId, isPremium]);
 
+  // ── First-time "Ask" coachmark ─────────────────────────────────────────────
+  const showAsk = totalCount > 0 && !organizeMode;
+  const [askCoachVisible, setAskCoachVisible] = useState(false);
+  useEffect(() => {
+    const userId = user?.id;
+    setAskCoachVisible(false);
+    if (!userId || !showAsk) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    hasSeenAiActionCoach('board_ask', userId).then((seen) => {
+      if (!active || seen) return;
+      timer = setTimeout(() => {
+        if (active) {
+          track('ai_action_coach_shown', { surface: 'board_ask' });
+          setAskCoachVisible(true);
+        }
+      }, 700);
+    }).catch(() => undefined);
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [user?.id, showAsk]);
+
+  const dismissAskCoach = useCallback((reason: 'got_it' | 'button_tap') => {
+    const userId = user?.id;
+    setAskCoachVisible(false);
+    track('ai_action_coach_dismissed', { surface: 'board_ask', reason });
+    if (userId) void markAiActionCoachSeen('board_ask', userId);
+  }, [user?.id]);
+
+  const handleAskPress = useCallback(() => {
+    if (askCoachVisible) dismissAskCoach('button_tap');
+    void handleStyleBoard();
+  }, [askCoachVisible, dismissAskCoach, handleStyleBoard]);
+
   const handleEventPress = useCallback(() => {
     if (!boardEvent) return;
     navigation.getParent()?.navigate('Calendar', { eventId: boardEvent.id });
@@ -408,36 +448,21 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
         </ScrollView>
       )}
 
-      {(boardEvent || totalCount > 0) && (
+      {boardEvent && (
         <View style={styles.contextRow}>
-          {boardEvent && (
-            <TouchableOpacity
-              style={styles.eventStrip}
-              onPress={handleEventPress}
-              hitSlop={{ top: spacing.xs, bottom: spacing.xs }}
-              accessibilityRole="button"
-              accessibilityLabel={`Planned for ${boardEvent.title}`}
-              accessibilityHint="Opens this event in your calendar"
-            >
-              <Ionicons name="calendar-outline" size={15} color={colors.primary} />
-              <Text style={styles.eventTitle} numberOfLines={1}>{boardEvent.title}</Text>
-              <Text style={styles.eventWhen}>{boardEventWhen}</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={styles.eventStrip}
+            onPress={handleEventPress}
+            hitSlop={{ top: spacing.xs, bottom: spacing.xs }}
+            accessibilityRole="button"
+            accessibilityLabel={`Planned for ${boardEvent.title}`}
+            accessibilityHint="Opens this event in your calendar"
+          >
+            <Ionicons name="calendar-outline" size={15} color={colors.primary} />
+            <Text style={styles.eventTitle} numberOfLines={1}>{boardEvent.title}</Text>
+            <Text style={styles.eventWhen}>{boardEventWhen}</Text>
+          </TouchableOpacity>
 
-          {totalCount > 0 && (
-            <TouchableOpacity
-              style={styles.styleBoardBtn}
-              onPress={handleStyleBoard}
-              hitSlop={{ top: spacing.xs, bottom: spacing.xs }}
-              accessibilityRole="button"
-              accessibilityLabel={`Ask about ${board?.name ?? 'this board'}`}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="sparkles" size={15} color={colors.primaryForeground} />
-              <Text style={styles.styleBoardText}>Ask</Text>
-            </TouchableOpacity>
-          )}
         </View>
       )}
 
@@ -518,7 +543,18 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
             </TouchableOpacity>
           </View>
         ) : (
-          <View style={{ flexDirection: 'row' }}>
+          <View style={styles.headerActions}>
+            {showAsk && (
+              <TouchableOpacity
+                style={[styles.headerBtn, styles.askBtn]}
+                onPress={handleAskPress}
+                accessibilityRole="button"
+                accessibilityLabel={`Ask about ${board?.name ?? 'this board'}`}
+                accessibilityHint="Ask your AI stylist about what you've saved here"
+              >
+                <Ionicons name="sparkles" size={18} color={colors.primaryForeground} />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={styles.headerBtn}
               onPress={() => setContentPickerVisible(true)}
@@ -532,6 +568,16 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
           </View>
         )}
       </View>
+
+      <AiActionCoachmark
+        visible={askCoachVisible}
+        title="Ask your stylist"
+        body="Get outfit ideas, gaps to fill, and advice built from everything saved on this board."
+        onDismiss={() => dismissAskCoach('got_it')}
+        scrimAccessibilityLabel="Dismiss the Ask tip"
+        style={{ top: insets.top + spacing.sm + 44 + spacing.sm, right: spacing.sm }}
+        caretRight={(44 + spacing.xs) * 2 + 17}
+      />
 
       {organizeMode && boardTools}
 
@@ -776,23 +822,9 @@ const styles = StyleSheet.create({
   },
   eventTitle: { flex: 1, color: colors.secondaryForeground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold },
   eventWhen: { color: colors.secondaryForeground, fontSize: typography.text.caption.fontSize },
-  styleBoardBtn: {
-    minHeight: 44,
-    paddingHorizontal: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    borderRadius: radii.full,
-    backgroundColor: colors.primary,
-  },
-  styleBoardText: {
-    color: colors.primaryForeground,
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.semibold,
-  },
   headerActions: { flexDirection: 'row', gap: spacing.xs },
   headerActionsDisabled: { opacity: 0.4 },
+  askBtn: { backgroundColor: colors.primary },
   organizeBanner: { minHeight: 48, marginHorizontal: spacing.lg, marginBottom: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.accent },
   organizeText: { flex: 1, color: colors.secondaryForeground, fontSize: typography.text.caption.fontSize },
   filteredEmpty: { paddingTop: spacing.xxxl, alignItems: 'center', gap: spacing.xs },
