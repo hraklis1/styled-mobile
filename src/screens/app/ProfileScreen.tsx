@@ -30,6 +30,8 @@ import type { ProfileScreenProps } from '../../navigation/types';
 import { SectionCard } from '../../components/primitives/SectionCard';
 import { ClosetVisualsCard } from '../../components/profile/ClosetVisualsCard';
 import { SelectRow } from '../../components/profile/SelectRow';
+import { CustomProfileChips } from '../../components/profile/CustomProfileChips';
+import { termKey } from '../../lib/customProfileTerms';
 import { ProfilePickerModal } from '../../components/profile/ProfilePickerModal';
 import { LocationAutocompleteInput } from '../../components/primitives/LocationAutocompleteInput';
 import { BrandAutocompleteInput } from '../../components/primitives/BrandAutocompleteInput';
@@ -58,6 +60,8 @@ import {
   SIZING_REGION_OPTIONS,
   STYLE_OPTIONS,
   TOP_SIZES,
+  normalizeStylePreference,
+  normalizeOccasions,
   optionLabel,
   optionLabels,
   optionsForCut,
@@ -419,7 +423,7 @@ export function ProfileScreen(_props: ProfileScreenProps) {
     form.updateStyleProfileDetails((current) => ({
       ...current,
       [key]: values,
-      [oppositeKey]: current[oppositeKey].filter((entry) => !values.includes(entry)),
+      [oppositeKey]: current[oppositeKey].filter((entry) => !values.some((value) => termKey(value) === termKey(entry))),
     }));
   };
 
@@ -710,7 +714,10 @@ export function ProfileScreen(_props: ProfileScreenProps) {
 
           <View style={styles.field}>
             <FieldLabel hint="up to 4">Aesthetic</FieldLabel>
-            <OptionChips
+            <CustomProfileChips
+              label="aesthetic"
+              normalizeTerm={(value) => normalizeStylePreference([value])[0] ?? ''}
+              maxLength={30}
               options={STYLE_OPTIONS}
               values={form.stylePreference}
               onChange={form.setStylePreference}
@@ -787,7 +794,8 @@ export function ProfileScreen(_props: ProfileScreenProps) {
 
           <View style={styles.field}>
             <FieldLabel>Materials to seek</FieldLabel>
-            <OptionChips
+            <CustomProfileChips
+              label="material"
               options={MATERIAL_OPTIONS}
               values={details.materialLikes}
               onChange={(values) => updateExclusiveDetailArray('materialLikes', 'materialAvoids', values)}
@@ -796,7 +804,8 @@ export function ProfileScreen(_props: ProfileScreenProps) {
 
           <View style={styles.field}>
             <FieldLabel>Materials to avoid</FieldLabel>
-            <OptionChips
+            <CustomProfileChips
+              label="material"
               options={MATERIAL_OPTIONS}
               values={details.materialAvoids}
               onChange={(values) => updateExclusiveDetailArray('materialAvoids', 'materialLikes', values)}
@@ -805,7 +814,8 @@ export function ProfileScreen(_props: ProfileScreenProps) {
 
           <View style={styles.field}>
             <FieldLabel>Patterns I like</FieldLabel>
-            <OptionChips
+            <CustomProfileChips
+              label="pattern"
               options={PATTERN_OPTIONS}
               values={details.patternLikes}
               onChange={(values) => updateExclusiveDetailArray('patternLikes', 'patternAvoids', values)}
@@ -814,7 +824,8 @@ export function ProfileScreen(_props: ProfileScreenProps) {
 
           <View style={styles.field}>
             <FieldLabel>Patterns to avoid</FieldLabel>
-            <OptionChips
+            <CustomProfileChips
+              label="pattern"
               options={PATTERN_OPTIONS}
               values={details.patternAvoids}
               onChange={(values) => updateExclusiveDetailArray('patternAvoids', 'patternLikes', values)}
@@ -833,10 +844,25 @@ export function ProfileScreen(_props: ProfileScreenProps) {
 
           <View style={[styles.field, styles.divTop]}>
             <FieldLabel>Occasions</FieldLabel>
-            <OptionChips
+            <CustomProfileChips
+              label="occasion"
+              normalizeTerm={(value) => normalizeOccasions([value])[0] ?? ''}
+              occasionCategories={details.customOccasionCategories}
+              onAddOccasion={(value, category) => {
+                form.setOccasions([...form.occasions, value]);
+                form.updateStyleProfileDetails((current) => ({ ...current,
+                  customOccasionCategories: { ...current.customOccasionCategories, [value]: category },
+                }));
+              }}
               options={OCCASION_OPTIONS}
               values={form.occasions}
-              onChange={form.setOccasions}
+              onChange={(values) => {
+                form.setOccasions(values);
+                form.updateStyleProfileDetails((current) => ({ ...current,
+                  customOccasionCategories: Object.fromEntries(Object.entries(current.customOccasionCategories ?? {})
+                    .filter(([label]) => values.includes(label))),
+                }));
+              }}
             />
           </View>
         </SectionCard>
@@ -1021,7 +1047,8 @@ export function ProfileScreen(_props: ProfileScreenProps) {
                   values={details.sensitiveFit.proportions}
                   onChange={(values) => updateSensitiveArray('proportions', values)}
                 />
-                <OptionChips
+                <CustomProfileChips
+                  label="coverage preference"
                   options={optionsForCut(
                     COVERAGE_OPTIONS,
                     form.fitPreference,
@@ -1030,7 +1057,8 @@ export function ProfileScreen(_props: ProfileScreenProps) {
                   values={details.sensitiveFit.coverage}
                   onChange={(values) => updateSensitiveArray('coverage', values)}
                 />
-                <OptionChips
+                <CustomProfileChips
+                  label="comfort preference"
                   options={COMFORT_OPTIONS}
                   values={details.sensitiveFit.comfort}
                   onChange={(values) => updateSensitiveArray('comfort', values)}
@@ -1121,7 +1149,8 @@ export function ProfileScreen(_props: ProfileScreenProps) {
 
           <View style={styles.field}>
             <FieldLabel>Shopping priorities</FieldLabel>
-            <OptionChips
+            <CustomProfileChips
+              label="shopping priority"
               options={SHOPPING_PRIORITY_OPTIONS}
               values={details.shoppingPriorities}
               onChange={(values) => updateDetailArray('shoppingPriorities', values)}
@@ -1130,7 +1159,8 @@ export function ProfileScreen(_props: ProfileScreenProps) {
 
           <View style={styles.field}>
             <FieldLabel>Care constraints</FieldLabel>
-            <OptionChips
+            <CustomProfileChips
+              label="care constraint"
               options={CARE_CONSTRAINT_OPTIONS}
               values={details.careConstraints}
               onChange={(values) => updateDetailArray('careConstraints', values)}

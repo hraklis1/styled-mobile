@@ -2,6 +2,7 @@ export type CategoryBudgetKey = 'tops' | 'bottoms' | 'dresses' | 'outerwear' | '
 
 export type StyleProfileDetails = {
   version: 1;
+  customOccasionCategories?: Record<string, string>;
   styleAvoids: string[];
   favoriteColors: string[];
   avoidedColors: string[];

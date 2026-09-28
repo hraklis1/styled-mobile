@@ -1,3 +1,4 @@
+import { termKey } from './customProfileTerms';
 import type { StyleProfileDetails } from '../types/profile';
 
 /** The `fitPreference` values. Drives which options are worth offering. */
@@ -316,8 +317,8 @@ export function uniqueClean(values: readonly string[] | string | null | undefine
 }
 
 function withoutConflicts(values: readonly string[] | null | undefined, blockers: readonly string[] | null | undefined): string[] {
-  const blocked = new Set(uniqueClean(blockers));
-  return uniqueClean(values).filter((value) => !blocked.has(value));
+  const blocked = new Set(uniqueClean(blockers).map(termKey));
+  return uniqueClean(values).filter((value) => !blocked.has(termKey(value)));
 }
 
 export function normalizeStylePreference(values: readonly string[] | null | undefined): string[] {
@@ -362,6 +363,7 @@ export function normalizeFitFields(
 export function createEmptyStyleProfileDetails(): StyleProfileDetails {
   return {
     version: 1,
+    customOccasionCategories: {},
     styleAvoids: [],
     favoriteColors: [],
     avoidedColors: [],
@@ -405,6 +407,10 @@ export function normalizeStyleProfileDetails(raw: unknown): StyleProfileDetails 
 
   return {
     version: 1,
+    customOccasionCategories: Object.fromEntries(
+      Object.entries(details.customOccasionCategories ?? {}).filter(([label, category]) =>
+        label.trim() && OCCASION_OPTIONS.some((option) => option.value === category)),
+    ),
     styleAvoids: uniqueClean(details.styleAvoids),
     favoriteColors: uniqueClean(details.favoriteColors),
     avoidedColors: uniqueClean(details.avoidedColors),
@@ -434,6 +440,7 @@ export function normalizeStyleProfileDetails(raw: unknown): StyleProfileDetails 
 export function hasStyleProfileDetailsValue(details: StyleProfileDetails): boolean {
   const normalized = normalizeStyleProfileDetails(details);
   return (
+    Object.keys(normalized.customOccasionCategories ?? {}).length > 0 ||
     normalized.styleAvoids.length > 0 ||
     normalized.favoriteColors.length > 0 ||
     normalized.avoidedColors.length > 0 ||

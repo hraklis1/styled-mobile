@@ -176,3 +176,21 @@ describe('useProfileForm helpers', () => {
     });
   });
 });
+
+describe('custom profile preferences', () => {
+  it('preserves custom terms and occasion categories through save and reload', () => {
+    const payload = buildProfileUpdatePayload({ ...baseSnapshot,
+      stylePreference: ['Dark academia'], occasions: ['Gallery openings'],
+      styleProfileDetails: { ...createEmptyStyleProfileDetails(),
+        materialLikes: ['Merino'], patternAvoids: ['Houndstooth'],
+        shoppingPriorities: ['Secondhand first'], careConstraints: ['No ironing'],
+        sensitiveFit: { proportions: [], coverage: ['Covered knees'], comfort: ['Easy fastenings'], notes: null },
+        customOccasionCategories: { 'Gallery openings': 'smart_casual' },
+      },
+    });
+    const loaded = parseLoadedProfileForm({ ...baseProfile, ...payload } as Profile);
+    expect(loaded.stylePreference).toEqual(['Dark academia']);
+    expect(loaded.occasions).toEqual(['Gallery openings']);
+    expect(loaded.styleProfileDetails).toEqual(payload.styleProfileDetails);
+  });
+});

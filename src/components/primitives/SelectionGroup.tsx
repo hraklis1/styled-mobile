@@ -27,6 +27,7 @@ import type { ProfileOption } from '../../lib/profileOptions';
 
 type BaseProps = {
   options: readonly ProfileOption[];
+  trailing?: React.ReactNode;
   /** 'pill' for short labels, 'card' when options carry descriptions, 'swatch' for palettes. */
   layout?: 'pill' | 'card' | 'swatch';
   /** Overrides the automatic "Select all that apply" / "Choose one" caption. Pass null to hide it. */
@@ -140,6 +141,7 @@ export function SelectionGroup(props: Props) {
             </PressableScale>
           );
         })}
+        {props.trailing}
       </View>
     </View>
   );
