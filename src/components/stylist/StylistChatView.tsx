@@ -3063,6 +3063,7 @@ function ConversationDrawer({
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const panelWidth = Math.min(320, width * 0.82);
+  const [searchText, setSearchText] = useState('');
   const translateX = useRef(new Animated.Value(-panelWidth)).current;
   const backdrop = useRef(new Animated.Value(0)).current;
   const [mounted, setMounted] = useState(visible);
@@ -3097,10 +3098,19 @@ function ConversationDrawer({
     );
   };
 
-  const groups = useMemo(() => groupConversations(conversations), [conversations]);
+  const groups = useMemo(() => {
+    const query = searchText.trim().toLowerCase();
+    const matches = query
+      ? conversations.filter((conversation) =>
+          (conversation.title || 'Conversation').toLowerCase().includes(query)
+          || (conversation.preview ?? '').toLowerCase().includes(query))
+      : conversations;
+    return groupConversations(matches);
+  }, [conversations, searchText]);
 
   useEffect(() => {
     if (visible) {
+      setSearchText('');
       setMounted(true);
       Animated.parallel([
         Animated.timing(translateX, { toValue: 0, duration: 240, useNativeDriver: true }),
@@ -3140,6 +3150,31 @@ function ConversationDrawer({
             </TouchableOpacity>
           </View>
 
+          <View style={styles.drawerSearch}>
+            <Ionicons name="search" size={18} color={colors.mutedForeground} />
+            <TextInput
+              style={styles.drawerSearchInput}
+              value={searchText}
+              onChangeText={setSearchText}
+              placeholder="Search conversations"
+              placeholderTextColor={colors.mutedForeground}
+              accessibilityLabel="Search conversation titles and previews"
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {searchText.length > 0 && (
+              <TouchableOpacity
+                style={styles.drawerSearchClear}
+                onPress={() => setSearchText('')}
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+              >
+                <Ionicons name="close-circle" size={18} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            )}
+          </View>
+
           <TouchableOpacity style={styles.drawerNewBtn} onPress={onNew}>
             <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
             <Text style={styles.drawerNewText}>New conversation</Text>
@@ -3153,8 +3188,18 @@ function ConversationDrawer({
             <View style={styles.drawerEmpty}>
               <Text style={styles.drawerEmptyText}>No saved conversations yet.</Text>
             </View>
+          ) : groups.length === 0 ? (
+            <View style={styles.drawerEmpty}>
+              <Text style={styles.drawerEmptyText}>No matching conversations. Try another search.</Text>
+            </View>
           ) : (
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.drawerList}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.drawerList}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              automaticallyAdjustKeyboardInsets
+            >
               {groups.map((group) => (
                 <View key={group.label} style={styles.drawerGroup}>
                   <Text style={styles.drawerGroupLabel}>{group.label}</Text>
@@ -3304,6 +3349,30 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     backgroundColor: colors.surfaceSelected,
     marginBottom: spacing.sm,
+  },
+  drawerSearch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingLeft: spacing.sm,
+    borderRadius: radii.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    marginBottom: spacing.sm,
+  },
+  drawerSearchInput: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 44,
+    paddingVertical: spacing.sm,
+    fontSize: typography.text.bodySmall.fontSize,
+    color: colors.foreground,
+  },
+  drawerSearchClear: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   drawerNewText: {
     fontSize: typography.text.bodySmall.fontSize,
