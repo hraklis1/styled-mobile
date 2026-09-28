@@ -78,7 +78,7 @@ if [[ -z "$DEVICE_ID" ]]; then
   log "Booting simulator $DEVICE_ID"
   xcrun simctl boot "$DEVICE_ID"
 fi
-open -a Simulator
+open -a Simulator 2>/dev/null || true
 log "Simulator: $DEVICE_ID"
 
 # Build a simulator entitlements file: the project's entitlements plus a
