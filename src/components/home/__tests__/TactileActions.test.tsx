@@ -14,6 +14,7 @@ jest.mock('react-native/Libraries/Components/Pressable/Pressable', () => {
   } };
 });
 
+jest.mock('@expo/ui/community/menu', () => ({ MenuView: 'MenuView' }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }));
 jest.mock('../../shopping/WardrobeThumbnail', () => ({ WardrobeThumbnail: 'WardrobeThumbnail' }));
 jest.mock('expo-haptics', () => ({ impactAsync: jest.fn(), ImpactFeedbackStyle: { Light: 'light' } }));
@@ -57,9 +58,10 @@ it.each([AskStylistButton, AddToClosetCard])('keeps the launcher callback and di
 it('exposes independent brief actions without a pressable ancestor around skip', () => {
   const onPress = jest.fn(); const onSkip = jest.fn();
   const renderer = render(<ShoppingPriorityRow index={1} priority={priority} onPress={onPress} onSkip={onSkip} />);
-  const [open, skip] = renderer.root.findAllByType(Pressable);
-  act(() => skip.props.onPress());
-  expect(onSkip).toHaveBeenCalledTimes(1);
+  const open = renderer.root.findByType(Pressable);
+  const skip = renderer.root.findByType('MenuView' as any);
+  act(() => skip.props.onPressAction({ nativeEvent: { event: 'not_my_style' } }));
+  expect(onSkip).toHaveBeenCalledWith('not_my_style');
   expect(onPress).not.toHaveBeenCalled();
   let parent = skip.parent;
   while (parent) { expect(parent.type).not.toBe(Pressable); parent = parent.parent; }
@@ -67,16 +69,16 @@ it('exposes independent brief actions without a pressable ancestor around skip',
   expect(onPress).toHaveBeenCalledTimes(1);
 });
 
-it('keeps busy skip disabled and allows retry when pending ends', () => {
+it('keeps feedback options disabled while pending and allows retry', () => {
   const onSkip = jest.fn();
   const renderer = render(<ShoppingPriorityRow index={1} priority={priority} onSkip={onSkip} skipping />);
-  expect(renderer.root.findByType(Pressable).props.accessibilityState).toEqual({ disabled: true, busy: true });
-  expect(renderer.root.findAllByType(Text).some((node) => node.props.children === 'Skipping…')).toBe(true);
+  const menu = renderer.root.findByType('MenuView' as any);
+  expect(menu.props.actions.every((action: any) => action.attributes.disabled)).toBe(true);
+  act(() => menu.props.onPressAction({ nativeEvent: { event: 'already_owned' } }));
+  expect(onSkip).not.toHaveBeenCalled();
   act(() => renderer.update(<ShoppingPriorityRow index={1} priority={priority} onSkip={onSkip} skipping={false} />));
-  const retry = renderer.root.findByType(Pressable);
-  expect(retry.props.disabled).toBe(false);
-  act(() => retry.props.onPress());
-  expect(onSkip).toHaveBeenCalledTimes(1);
+  act(() => renderer.root.findByType('MenuView' as any).props.onPressAction({ nativeEvent: { event: 'already_owned' } }));
+  expect(onSkip).toHaveBeenCalledWith('already_owned');
 });
 
 it('keeps the compact teaser noninteractive and suppresses duplicate context', () => {
@@ -84,15 +86,15 @@ it('keeps the compact teaser noninteractive and suppresses duplicate context', (
   expect(renderer.root.findAllByType(Pressable)).toHaveLength(0);
   const labels = renderer.root.findAllByType(Text).map((node) => node.props.children);
   expect(labels).toContain('02');
-  expect(labels).toContain('Work');
+  expect(labels).not.toContain('Work');
   expect(labels.join(' ')).not.toMatch(/\b9\b/);
   expect(labels).not.toContain('Not for me');
 });
 
-it('moves ladder bookkeeping to the eyebrow and drops a bare outfit claim', () => {
+it('removes ladder bookkeeping and drops a bare outfit claim', () => {
   const laddered = render(<ShoppingPriorityRow index={1} priority={{ ...priority, context: 'You own a blazer but cannot build a work outfit yet. Step 1 of 2: versatile mid-rise trousers.' }} />);
   const ladderText = laddered.root.findAllByType(Text).map((node) => node.props.children);
-  expect(ladderText).toContain('Work · Dinner · 1 of 2');
+  expect(ladderText.join(' ')).not.toMatch(/1 of 2/);
   expect(ladderText.join(' ')).not.toMatch(/Step 1 of 2/);
 
   const generic = render(<ShoppingPriorityRow index={2} priority={{ ...priority, context: 'Versatile mid-rise trousers would create 9 new outfits from pieces you already own.' }} />);

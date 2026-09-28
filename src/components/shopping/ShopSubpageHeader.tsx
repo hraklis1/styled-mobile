@@ -9,6 +9,8 @@ import { colors, spacing } from '../../theme';
 
 type Props = {
   title: string;
+  editorialSize?: boolean;
+  backLabel?: string;
   subtitle?: string;
   /** Pass null to drop the eyebrow — for a title that already says it all. */
   eyebrow?: string | null;
@@ -24,7 +26,7 @@ type Props = {
 };
 
 /** Consistent in-app header for Shop stack pages (the native header is hidden). */
-export function ShopSubpageHeader({ title, subtitle, eyebrow = 'SHOP', eyebrowTrailing, onBack, actions, compact = false, titleNumberOfLines, subtitleNumberOfLines, style }: Props) {
+export function ShopSubpageHeader({ editorialSize, backLabel = 'Back to Shop', title, subtitle, eyebrow = 'SHOP', eyebrowTrailing, onBack, actions, compact = false, titleNumberOfLines, subtitleNumberOfLines, style }: Props) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -35,7 +37,7 @@ export function ShopSubpageHeader({ title, subtitle, eyebrow = 'SHOP', eyebrowTr
           onPress={onBack}
           haptic={false}
           accessibilityRole="button"
-          accessibilityLabel="Back to Shop"
+          accessibilityLabel={backLabel}
         >
           <Ionicons name="chevron-back" size={23} color={colors.foreground} />
         </PressableScale>
@@ -56,7 +58,7 @@ export function ShopSubpageHeader({ title, subtitle, eyebrow = 'SHOP', eyebrowTr
               {eyebrowTrailing ? <AppText variant="meta" tone="muted">{eyebrowTrailing}</AppText> : null}
             </View>
           ) : null}
-          <AppText variant="editorialHero" tone="primary" style={styles.title} numberOfLines={titleNumberOfLines}>{title}</AppText>
+          <AppText variant={editorialSize ? "editorialTitle" : "editorialHero"} tone="primary" style={styles.title} numberOfLines={titleNumberOfLines}>{title}</AppText>
           {subtitle ? <AppText variant="bodySmall" tone="secondary" style={styles.subtitle} numberOfLines={subtitleNumberOfLines}>{subtitle}</AppText> : null}
         </>
       )}

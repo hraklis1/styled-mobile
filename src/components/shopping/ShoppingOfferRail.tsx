@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import * as WebBrowser from 'expo-web-browser';
+import { openShoppingLink } from './ShoppingRetailerLinks';
+import { useReducedMotion } from 'react-native-reanimated';
 
 import { track } from '../../lib/analytics';
 import { PressableScale } from '../primitives/PressableScale';
@@ -43,11 +44,10 @@ export function ShoppingOfferRail({
     <View
       style={styles.section}
       accessibilityRole="summary"
-      accessibilityLabel={`${offers.length} available now for ${targetTitle}`}
+      accessibilityLabel={`Products to consider for ${targetTitle}`}
     >
       <View style={styles.header}>
-        <Text style={styles.label}>Available now</Text>
-        <Text style={styles.count}>{offers.length}</Text>
+        <Text style={styles.label}>Similar pieces</Text>
       </View>
 
       <ScrollView
@@ -72,7 +72,7 @@ export function ShoppingOfferRail({
                 position: index,
                 monetized: offer.monetized,
               });
-              void WebBrowser.openBrowserAsync(offer.url);
+              void openShoppingLink(offer.url);
             }}
           />
         ))}
@@ -88,6 +88,7 @@ export function ShoppingOfferRail({
 }
 
 function OfferCard({ offer, onPress }: { offer: ProductOffer; onPress: () => void }) {
+  const reduceMotion = useReducedMotion();
   const [imageFailed, setImageFailed] = useState(false);
 
   useEffect(() => {
@@ -113,7 +114,7 @@ function OfferCard({ offer, onPress }: { offer: ProductOffer; onPress: () => voi
             // merchant photography arrives in every aspect ratio there is.
             contentFit="cover"
             contentPosition="center"
-            transition={180}
+            transition={reduceMotion ? 0 : 180}
             cachePolicy="memory-disk"
             recyclingKey={offer.id}
             accessible={false}
@@ -133,7 +134,7 @@ function OfferCard({ offer, onPress }: { offer: ProductOffer; onPress: () => voi
 
       <View style={styles.copy}>
         <Text style={styles.merchant} numberOfLines={1}>{offer.merchant}</Text>
-        <Text style={styles.title} numberOfLines={2}>{offer.title}</Text>
+        <Text style={styles.title}>{offer.title}</Text>
         <View style={styles.footer}>
           <Text style={styles.price} numberOfLines={1}>
             {offer.formattedPrice || 'See price'}

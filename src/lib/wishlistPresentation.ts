@@ -1,3 +1,4 @@
+import { shoppingGarmentTitle } from './shoppingEditorial';
 import type { WishlistEntry } from './wishlist';
 import { getWishlistRecommendationType } from './wishlistType';
 
@@ -11,7 +12,7 @@ export function getWishlistBrands(entry: WishlistEntry): string[] {
 }
 
 export function getWishlistItemSummary(entry: WishlistEntry): string {
-  if (entry.outfit.shoppingBrief) return `${entry.outfit.shoppingBrief.targets.length} shopping targets`;
+  if (entry.outfit.shoppingBrief) return 'Styles to consider';
   const names = entry.outfit.items.map((item) => item.name?.trim()).filter(Boolean);
   if (names.length === 0) return 'No products listed';
   if (names.length <= 2) return names.join(' · ');
@@ -19,7 +20,7 @@ export function getWishlistItemSummary(entry: WishlistEntry): string {
 }
 
 export function getWishlistTitle(entry: WishlistEntry): string {
-  if (entry.outfit.shoppingBrief) return entry.outfit.shoppingBrief.headline;
+  if (entry.outfit.shoppingBrief) return shoppingGarmentTitle(entry.outfit.shoppingBrief.priority.label);
   const firstItemName = entry.outfit.items.find((item) => item.name?.trim())?.name.trim();
   const type = getWishlistRecommendationType(entry);
   const fallback = type === 'piece' ? 'Saved piece' : type === 'list' ? 'Saved list' : 'Saved look';
@@ -38,6 +39,7 @@ function getFirstSentence(value: string): string {
  * accessibility label.
  */
 export function getWishlistBoardTitle(entry: WishlistEntry): string {
+  if (entry.outfit.shoppingBrief) return getWishlistTitle(entry);
   const firstItemName = entry.outfit.items.find((item) => item.name?.trim())?.name.trim();
   if (firstItemName) return firstItemName;
 
@@ -52,7 +54,7 @@ export function getWishlistBoardLabel(entry: WishlistEntry): string {
 }
 
 export function getWishlistMeta(entry: WishlistEntry): string {
-  if (entry.outfit.shoppingBrief) return `${entry.outfit.shoppingBrief.targets.length} options`;
+  if (entry.outfit.shoppingBrief) return 'Shopping guide';
   const count = entry.outfit.items.length;
   const type = getWishlistRecommendationType(entry);
   const countLabel = type === 'piece' ? '1 piece' : type === 'list' ? `${count} ${count === 1 ? 'option' : 'options'}` : `${count} ${count === 1 ? 'item' : 'items'}`;
@@ -77,6 +79,7 @@ export function getWishlistSearchText(entry: WishlistEntry): string {
 }
 
 export function getWishlistAccessibilityLabel(entry: WishlistEntry): string {
+  if (entry.outfit.shoppingBrief) return `${getWishlistTitle(entry)}, Shopping guide`;
   const itemNames = entry.outfit.items.map((item) => item.name?.trim()).filter(Boolean).join(', ');
   return [
     getWishlistTitle(entry),

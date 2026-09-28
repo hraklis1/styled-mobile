@@ -1,190 +1,207 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { FadeInUp, FadeOut, FadeOutDown, useReducedMotion } from 'react-native-reanimated';
-
 import { EditorialSection } from '../../components/primitives/Editorial';
 import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
 import { BriefNote } from '../../components/shopping/ShoppingBriefCard';
-import { sentenceCase, ShoppingPriorityRow } from '../../components/shopping/ShoppingPriorityRow';
+import { ShoppingPriorityRow } from '../../components/shopping/ShoppingPriorityRow';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useItems } from '../../hooks/useItems';
-import { useNotNowShoppingPriority, useShoppingBrief } from '../../hooks/useShoppingBrief';
+import { useShoppingBrief } from '../../hooks/useShoppingBrief';
+import { useShoppingFeedback } from '../../hooks/useShoppingFeedback';
 import { toLocalDateKey } from '../../lib/dailyStylistPick';
-import { shoppingSurfaces, colors, radii, spacing, typography } from '../../theme';
+import { shoppingSurfaces, colors, spacing, typography } from '../../theme';
 import { shoppingPriorityRoute, wearableWardrobe, withoutOutfitCount } from '../../lib/shopClarity';
 import { track } from '../../lib/analytics';
 import type { ShoppingBriefDetailScreenProps } from '../../navigation/types';
 
-/**
- * The brief in full — everything ShoppingBriefCard clamps or drops to keep
- * Shop's first screen from being all brief. Reached only from a link on a
- * brief that has already loaded (the card, or Home's brief band), so a
- * missing brief here means the cache was evicted mid-visit rather than a
- * state this screen needs its own empty/upsell/error treatment for.
- *
- * ShopSubpageHeader lives inside the ScrollView as plain content — it
- * scrolls away with the rest of the page rather than pinning open. An
- * earlier *collapsing* header (masthead shrinking to a floating compact bar
- * as you scroll) broke scrolling on this same ScrollView container, but
- * that was the onScroll-driven collapse logic fighting the scroll position,
- * not the mere presence of the header inside the list. This version has no
- * scroll listener or header-driven re-layout, so it doesn't hit that bug —
- * confirmed by scrolling to the last priority with a multi-point drag
- * (touch_path) in the simulator.
- */
 export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScreenProps) {
   const { isPremium } = useEntitlement();
   const brief = useShoppingBrief(isPremium);
-  const notNow = useNotNowShoppingPriority();
+  const feedback = useShoppingFeedback();
   const { data: items = [] } = useItems();
   const wardrobe = useMemo(() => wearableWardrobe(items), [items]);
   const insets = useSafeAreaInsets();
-  // Skipped rows leave the list rather than lingering with a "skipped" label:
-  // the brief cache is only refreshed on the next day's fetch.
-  const [skippedKeys, setSkippedKeys] = useState<string[]>([]);
-  // "Not for me" is reversible for a few seconds: the row leaves at once, a
-  // toast offers Undo, and the server only hears about it once the toast has
-  // gone. The server has no undo of its own, so the grace period is the undo.
-  const [pendingSkip, setPendingSkip] = useState<{ key: string; label: string } | null>(null);
-  const pendingSkipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reduceMotion = useReducedMotion();
-
-  const commitSkip = useCallback((recommendationKey: string, localDate: string, meta: { category: string; reason: string; scope: string }) => {
-    notNow.reset();
-    notNow.mutate({ recommendationKey, localDate }, {
-      onSuccess: () => track('shopping_brief_priority_not_now', meta),
-      // Restore the row: a skip the server never recorded would reappear
-      // tomorrow anyway, and leaving it hidden now would be a lie.
-      onError: () => setSkippedKeys((keys) => keys.filter((key) => key !== recommendationKey)),
-    });
-  }, [notNow]);
-
-  const undoSkip = useCallback(() => {
-    if (pendingSkipTimer.current) clearTimeout(pendingSkipTimer.current);
-    pendingSkipTimer.current = null;
-    setPendingSkip((pending) => {
-      if (pending) setSkippedKeys((keys) => keys.filter((key) => key !== pending.key));
-      return null;
-    });
-  }, []);
-
-  useEffect(() => () => {
-    if (pendingSkipTimer.current) clearTimeout(pendingSkipTimer.current);
-  }, []);
-
   const goBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
     else navigation.replace('ShopMain');
   }, [navigation]);
-
-  if (brief.isLoading) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator color={colors.primary} />
-      </View>
-    );
-  }
-
-  if (!brief.data) {
-    goBack();
-    return null;
-  }
-
-  const { data } = brief;
-  const visiblePriorities = data.priorities.filter(
-    (priority) => !priority.recommendationKey || !skippedKeys.includes(priority.recommendationKey),
+  const data = brief.data;
+  const pending = feedback.pending.filter(
+    (entry) =>
+      entry.localDate === (data?.localDate ?? toLocalDateKey(new Date())) && !entry.submitting,
   );
-
   return (
     <View style={styles.screen}>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* The headline titles the page; the stylist's note follows in full,
-            unclamped, in the same voice as the card on Shop. */}
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: spacing.xxxl + pending.length * 56 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         <ShopSubpageHeader
+          editorialSize
           eyebrow="YOUR SHOPPING BRIEF"
-          title={data.headline}
+          title={data?.headline ?? 'Your shopping brief'}
           onBack={goBack}
           style={styles.header}
         />
-        <BriefNote full text={data.priorities.reduce((summary, priority) => withoutOutfitCount(summary, priority.impactScore), data.summary)} />
-        {notNow.isError ? <Text style={styles.errorNotice}>Couldn’t skip that suggestion. Tap “Not for me” to retry.</Text> : null}
-        {visiblePriorities.length > 0 ? (
-          <EditorialSection variant="ruled" title="Priorities" style={styles.priorities}>
-            {visiblePriorities.map((priority, index) => {
-              const skipping = notNow.isPending && notNow.variables?.recommendationKey === priority.recommendationKey;
-              return (
-                <Animated.View
-                  key={`${priority.priority}-${priority.label}`}
-                  exiting={reduceMotion ? undefined : FadeOut.duration(160)}
+        {!data ? (
+          <View style={styles.state}>
+            {brief.isLoading ? (
+              <>
+                <ActivityIndicator color={colors.primary} />
+                <Text style={styles.copy}>Reviewing your wardrobe…</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.copy}>
+                  {!isPremium
+                    ? 'Your Shopping Brief is included with your premium stylist.'
+                    : brief.fetchStatus === 'paused'
+                      ? 'Connect to the internet to open your brief.'
+                      : 'Your brief is temporarily unavailable.'}
+                </Text>
+                <Pressable
+                  onPress={
+                    isPremium
+                      ? () => {
+                          void brief.refetch();
+                        }
+                      : goBack
+                  }
+                  accessibilityRole="button"
+                  style={styles.action}
                 >
+                  <Text style={styles.actionText}>{isPremium ? 'Try again' : 'Back to Shop'}</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        ) : (
+          <>
+            <BriefNote
+              full
+              text={data.priorities.reduce(
+                (summary, priority) => withoutOutfitCount(summary, priority.impactScore),
+                data.summary,
+              )}
+            />
+            {brief.isError ? (
+              <Text accessibilityLiveRegion="polite" style={styles.copy}>
+                You’re reading your saved brief. We couldn’t refresh it just now.
+              </Text>
+            ) : null}
+            {feedback.error ? (
+              <Text accessibilityLiveRegion="polite" style={styles.error}>
+                {feedback.error}
+              </Text>
+            ) : null}
+            {data.priorities.length ? (
+              <EditorialSection
+                variant="ruled"
+                title="Your next additions"
+                style={styles.priorities}
+              >
+                {data.priorities.map((priority, index) => (
                   <ShoppingPriorityRow
+                    key={priority.recommendationKey ?? `${priority.priority}-${priority.label}`}
                     index={index + 1}
                     priority={priority}
                     wardrobe={wardrobe}
-                    isLast={index === visiblePriorities.length - 1}
+                    isLast={index === data.priorities.length - 1}
                     onPress={() => {
-                      track('shopping_brief_priority_opened', { category: priority.category, reason: priority.reason, rank: priority.priority });
-                      navigation.navigate('ShoppingPriorityEdit', shoppingPriorityRoute(priority, data.generatedAt));
+                      track('shopping_brief_priority_opened', {
+                        category: priority.category,
+                        reason: priority.reason,
+                        rank: priority.priority,
+                      });
+                      navigation.navigate(
+                        'ShoppingPriorityEdit',
+                        shoppingPriorityRoute(priority, data.generatedAt),
+                      );
                     }}
-                    onSkip={priority.recommendationKey ? () => {
-                      if (notNow.isPending) return;
-                      const recommendationKey = priority.recommendationKey!;
-                      const localDate = data.localDate ?? toLocalDateKey(new Date());
-                      const meta = { category: priority.category, reason: priority.reason, scope: priority.scope ?? 'general' };
-                      // A second skip while one is pending commits the first.
-                      if (pendingSkipTimer.current) {
-                        clearTimeout(pendingSkipTimer.current);
-                        if (pendingSkip) commitSkip(pendingSkip.key, localDate, meta);
-                      }
-                      setSkippedKeys((keys) => [...keys, recommendationKey]);
-                      setPendingSkip({ key: recommendationKey, label: sentenceCase(priority.label) });
-                      pendingSkipTimer.current = setTimeout(() => {
-                        pendingSkipTimer.current = null;
-                        setPendingSkip(null);
-                        commitSkip(recommendationKey, localDate, meta);
-                      }, 4000);
-                    } : undefined}
-                    skipping={skipping}
+                    onSkip={
+                      priority.recommendationKey
+                        ? (feedbackReason) =>
+                            feedback.dismiss({
+                              recommendationKey: priority.recommendationKey!,
+                              localDate: data.localDate ?? toLocalDateKey(new Date()),
+                              feedbackReason,
+                              label: priority.label,
+                            })
+                        : undefined
+                    }
                   />
-                </Animated.View>
-              );
-            })}
-          </EditorialSection>
-        ) : null}
+                ))}
+              </EditorialSection>
+            ) : null}
+          </>
+        )}
       </ScrollView>
-      {/* The header scrolls away with the page, so the safe area gets its own
-          canvas-coloured strip — body copy never runs under the clock. */}
-      <View pointerEvents="none" accessibilityElementsHidden style={[styles.safeAreaScrim, { height: insets.top }]} />
-      {pendingSkip ? (
-        <Animated.View
-          entering={reduceMotion ? undefined : FadeInUp.duration(160)}
-          exiting={reduceMotion ? undefined : FadeOutDown.duration(120)}
-          style={[styles.toast, { bottom: insets.bottom + spacing.lg }]}
-          accessibilityLiveRegion="polite"
-        >
-          <Text style={styles.toastText} numberOfLines={1}>Skipped {pendingSkip.label}</Text>
-          <Pressable onPress={undoSkip} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Undo skipping ${pendingSkip.label}`}>
-            <Text style={styles.toastAction}>Undo</Text>
-          </Pressable>
-        </Animated.View>
+      <View
+        pointerEvents="none"
+        accessibilityElementsHidden
+        style={[styles.scrim, { height: insets.top }]}
+      />
+      {pending.length ? (
+        <View style={styles.toasts}>
+          {pending.map((entry) => (
+            <View key={entry.id} style={styles.toast} accessibilityLiveRegion="polite">
+              <Text style={styles.copy}>Suggestion hidden</Text>
+              <Pressable
+                onPress={() => feedback.undo(entry.id)}
+                accessibilityRole="button"
+                accessibilityLabel={`Undo hiding ${entry.label}`}
+                style={styles.action}
+              >
+                <Text style={styles.actionText}>Undo</Text>
+              </Pressable>
+            </View>
+          ))}
+        </View>
       ) : null}
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: shoppingSurfaces.canvas },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: shoppingSurfaces.canvas },
-  scroll: { flex: 1 },
-  content: { paddingHorizontal: spacing.page, paddingBottom: spacing.xxxl + spacing.xl },
-  header: { marginHorizontal: -spacing.page, paddingBottom: spacing.lg, backgroundColor: shoppingSurfaces.canvas },
-  // Tighter than the default ruled section so the first priority starts on
-  // the first screen, under the full summary.
-  priorities: { paddingTop: spacing.lg },
-  safeAreaScrim: { position: 'absolute', zIndex: 20, top: 0, left: 0, right: 0, backgroundColor: shoppingSurfaces.canvas },
-  errorNotice: { ...typography.text.caption, color: colors.destructive, paddingVertical: spacing.sm },
-  toast: { position: 'absolute', left: spacing.page, right: spacing.page, minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md, borderRadius: radii.lg, borderCurve: 'continuous', backgroundColor: colors.surfaceElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, boxShadow: '0 4px 14px rgba(40, 35, 31, 0.12)', zIndex: 20 },
-  toastText: { flex: 1, ...typography.text.bodySmall, fontWeight: typography.weight.medium, color: colors.foreground },
-  toastAction: { ...typography.text.label, color: colors.action },
+  content: { paddingHorizontal: spacing.page },
+  header: {
+    marginHorizontal: -spacing.page,
+    paddingHorizontal: spacing.page,
+    paddingBottom: spacing.lg,
+    backgroundColor: shoppingSurfaces.canvas,
+  },
+  priorities: { paddingTop: spacing.xl },
+  state: { paddingVertical: spacing.xxl, gap: spacing.lg },
+  copy: { ...typography.text.body, color: colors.inkSubtle },
+  error: { ...typography.text.bodySmall, color: colors.destructive, paddingTop: spacing.md },
+  action: { minHeight: 44, minWidth: 44, justifyContent: 'center', paddingHorizontal: spacing.sm },
+  actionText: { ...typography.text.label, color: shoppingSurfaces.olive.accent },
+  scrim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: shoppingSurfaces.canvas,
+  },
+  toasts: {
+    position: 'absolute',
+    left: spacing.page,
+    right: spacing.page,
+    bottom: spacing.lg,
+    gap: spacing.xs,
+  },
+  toast: {
+    minHeight: 52,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
 });

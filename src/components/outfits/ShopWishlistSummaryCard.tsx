@@ -32,7 +32,7 @@ export function ShopWishlistSummaryCard({ entry, onPress, onMore, showType }: Pr
   const savedDate = new Date(entry.savedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   const title = getWishlistCardTitle(entry);
   const meta = getWishlistMeta(entry);
-  const figure = savedEdit ? `${savedEdit.targets.length} options` : outfit.totalBudget?.trim();
+  const figure = savedEdit ? undefined : outfit.totalBudget?.trim();
   const count = savedEdit ? undefined : meta.split(' · ')[0];
 
   return (

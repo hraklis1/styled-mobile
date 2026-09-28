@@ -26,6 +26,8 @@ export type ShoppingPriorityTarget = {
   priceRange: string;
   retailerExamples: string[];
   rationale: string;
+  editorialLabel?: string;
+  shoppingNotes?: string[];
   unlocks: string[];
   outfitIdeas: ShoppingPriorityOutfitIdea[];
   /**
@@ -232,7 +234,7 @@ export function shoppingPriorityTargetDisplayTitle(title: string, categoryLabel:
 }
 
 export function shoppingPriorityEditDisplayHeadline(headline: string, priorityLabel: string): string {
-  const candidate = normalizeEditorialCopy(headline);
+  const candidate = normalizeEditorialCopy(headline).replace(/\s+gap\b/gi, "");
   const wordCount = candidate ? candidate.split(' ').length : 0;
   if (candidate.length <= 42 && wordCount <= 5) return candidate;
 
@@ -290,9 +292,7 @@ export function parseShoppingPriorityEdit(value: unknown): ShoppingPriorityEdit 
     || (edit.noBuyReason != null && typeof edit.noBuyReason !== 'string')
     || (edit.briefUpdated != null && typeof edit.briefUpdated !== 'boolean')
   ) throw new Error('Invalid Shopping Edit response');
-  // Widened from an exact 3 to a range — matches the backend relaxation in
-  // server/shoppingPriorityEdit.ts, done ahead of real product results making
-  // a fixed count impossible. Still always 3 today.
+  // Historical saved guides and current responses may contain one to five styles.
   if (edit.status === 'ready' && (edit.targets.length < 1 || edit.targets.length > 5)) throw new Error('Invalid Shopping Edit response');
   if (edit.status === 'no_buy' && edit.targets.length !== 0) throw new Error('Invalid Shopping Edit response');
   const updatedBrief = edit.updatedBrief == null ? undefined : parseShoppingBrief(edit.updatedBrief);
@@ -304,7 +304,11 @@ export function parseShoppingPriorityEdit(value: unknown): ShoppingPriorityEdit 
   // the edit — see parseProductOffers. A target with no offers still renders.
   const targets = (edit.targets as ShoppingPriorityTarget[]).map((target) => {
     const offers = parseProductOffers((target as { offers?: unknown }).offers);
-    return offers.length > 0 ? { ...target, offers } : target;
+    const editorialLabel = typeof target.editorialLabel === 'string' ? target.editorialLabel.trim().slice(0, 48) : undefined;
+    const shoppingNotes = Array.isArray(target.shoppingNotes)
+      ? target.shoppingNotes.filter((note): note is string => typeof note === 'string' && !!note.trim()).slice(0, 3).map((note) => note.trim().slice(0, 160))
+      : undefined;
+    return { ...target, offers, editorialLabel, shoppingNotes };
   });
 
   return {

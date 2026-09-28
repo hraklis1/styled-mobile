@@ -3,7 +3,7 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 
-import { ShoppingSurfaceLight } from './ShoppingSurfaceLight';
+import { useReducedMotion } from 'react-native-reanimated';
 import { itemCoverPresentation } from '../../lib/itemImage';
 import { shoppingSurfaces, colors, cutoutScaleFor, editorial, radii, spacing } from '../../theme';
 import type { Item } from '../../types/item';
@@ -15,6 +15,7 @@ import type { Item } from '../../types/item';
  * shopping guide and the "works with" strip on a brief priority.
  */
 export function WardrobeThumbnail({ item, style, iconSize = 18 }: { item?: Item; style?: StyleProp<ViewStyle>; iconSize?: number }) {
+  const reduceMotion = useReducedMotion();
   const cover = itemCoverPresentation(item, { preferThumb: true });
   const [imageFailed, setImageFailed] = useState(false);
 
@@ -28,7 +29,6 @@ export function WardrobeThumbnail({ item, style, iconSize = 18 }: { item?: Item;
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
-      {(!cover.uri || imageFailed || cover.isCatalogStyle) ? <ShoppingSurfaceLight tile /> : null}
       {cover.uri && !imageFailed ? (
         <Image
           source={{ uri: cover.uri }}
@@ -44,7 +44,7 @@ export function WardrobeThumbnail({ item, style, iconSize = 18 }: { item?: Item;
           ]}
           contentFit={cover.contentFit}
           contentPosition="center"
-          transition={150}
+          transition={reduceMotion ? 0 : 150}
           cachePolicy="memory-disk"
           recyclingKey={item ? `${item.id}:${cover.variant}` : undefined}
           accessible={false}

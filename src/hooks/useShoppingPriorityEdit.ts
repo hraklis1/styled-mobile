@@ -18,6 +18,7 @@ export function shoppingPriorityEditQueryKey(
 ) {
   return [
     ...SHOPPING_PRIORITY_EDIT_QUERY_KEY,
+    'editorial-v1',
     priority,
     context.origin ?? null,
     context.briefGeneratedAt ?? null,

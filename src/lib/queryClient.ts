@@ -1,4 +1,5 @@
 import { QueryClient } from '@tanstack/react-query';
+import { shoppingFeedbackQueue } from './shoppingFeedback';
 import { isNetworkError } from './networkError';
 
 export const queryClient = new QueryClient({
@@ -17,6 +18,7 @@ export const queryClient = new QueryClient({
 
 // User-owned API responses must never survive an auth boundary.
 export async function clearUserQueryCache(): Promise<void> {
+  shoppingFeedbackQueue.clear();
   await queryClient.cancelQueries();
   queryClient.clear();
 }

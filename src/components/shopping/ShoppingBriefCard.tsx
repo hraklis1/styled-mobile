@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { stylistNotePreview } from '../../lib/shoppingEditorial';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -170,13 +171,16 @@ export function ShoppingBriefCard({
   );
 }
 
-/** The brief in the stylist's own voice: a short note, set as a quotation
- *  so it reads as advice from someone rather than a computed label. */
+/** Personal stylist commentary, with sentence-aware disclosure for older long notes. */
 export function BriefNote({ text, full }: { text: string; full?: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const preview = stylistNotePreview(text);
   return (
-    <View style={styles.note}>
-      <Text style={styles.noteMark} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">“</Text>
-      <Text style={styles.noteText} numberOfLines={full ? undefined : 5}>{text}</Text>
+    <View>
+      <Text style={[styles.noteText, full && typography.text.editorialBody]} selectable>{expanded ? text : preview}</Text>
+      {preview !== text ? <PressableScale onPress={() => setExpanded(!expanded)} haptic={false} accessibilityRole="button" accessibilityState={{ expanded }} contentStyle={styles.textAction}>
+        <Text style={styles.textActionLabel}>{expanded ? 'Show less' : 'Read the full note'}</Text>
+      </PressableScale> : null}
     </View>
   );
 }
@@ -203,7 +207,7 @@ function BriefEditStrip({ priorities, onSelectPriority }: { priorities: Shopping
               accessibilityLabel={`Priority ${index + 1}: ${label}`}
             >
               <Text style={styles.pillNumeral}>{index + 1}</Text>
-              <Text style={styles.pillLabel} numberOfLines={1}>{label}</Text>
+              <Text style={styles.pillLabel}>{label}</Text>
             </PressableScale>
           );
         })}
@@ -265,9 +269,7 @@ const styles = StyleSheet.create({
   nextUpLabel: { ...typography.text.caption, fontWeight: typography.weight.medium, color: colors.mutedForeground },
   note: { flexDirection: 'row', gap: spacing.xs },
   noteMark: { ...typography.text.editorialBody, fontSize: 30, lineHeight: 30, color: shoppingSurfaces.olive.accent, marginTop: -2 },
-  // The stylist's voice: the editorial face in italic, a step under the
-  // masthead, so it reads as a letter rather than a headline.
-  noteText: { ...typography.text.editorialBody, fontSize: 17, lineHeight: 24, flex: 1, fontStyle: 'italic', color: colors.foreground },
+  noteText: { ...typography.text.editorialBody,  color: colors.foreground },
   edit: { gap: spacing.xs, paddingTop: spacing.xs },
   // Sentence case so it reads as a label inside the card, not another
   // uppercase department heading of the page.
@@ -276,7 +278,7 @@ const styles = StyleSheet.create({
   editList: { gap: spacing.sm, alignItems: 'flex-start' },
   pill: {
     maxWidth: '100%',
-    minHeight: 36,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,

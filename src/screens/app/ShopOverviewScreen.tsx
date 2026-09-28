@@ -4,7 +4,6 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ShoppingBriefCard, briefIssueLabel } from '../../components/shopping/ShoppingBriefCard';
-import { ShoppingSurfaceLight } from '../../components/shopping/ShoppingSurfaceLight';
 import { ShortlistCarousel } from '../../components/shopping/ShortlistCarousel';
 import { SavedLookTile } from '../../components/outfits/SavedLookTile';
 import { EditorialSection, ScreenHeader } from '../../components/primitives/Editorial';
@@ -195,12 +194,11 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
           headingStyle="editorial"
           style={styles.section}
           title="Your shopping brief"
-          description="The gaps in your wardrobe worth filling this month, most useful first."
+          description="A few considered additions, chosen with your wardrobe in mind."
           trailing={<AppText variant="caption" tone="muted">{briefIssueLabel()}</AppText>}
         >
           <View style={styles.briefShadow}>
             <View style={styles.briefPanel}>
-              <ShoppingSurfaceLight />
               <ShoppingBriefCard
                 isPremium={isPremium}
                 brief={brief.data}
@@ -312,15 +310,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   content: { paddingBottom: spacing.xxxl },
-  // A flat surfaceSubtle plate was tried here and rejected — 1.02:1 against
-  // the page ground with no edge to read. The separation comes from the edge,
-  // the lit top lip and the shadow instead, which is the recipe
-  // ShoppingPriorityEditScreen's metric panel already uses; the brief now
-  // rhymes with the guide screen it opens.
-  //
-  // Split in two on purpose: the outer view carries the shadow and must not
-  // clip, the inner one clips the gradient to the radius.
-  briefShadow: { borderRadius: radii.md, boxShadow: shoppingSurfaces.panelShadow },
+  briefShadow: {},
   briefPanel: {
     padding: spacing.lg,
     borderRadius: radii.md,
