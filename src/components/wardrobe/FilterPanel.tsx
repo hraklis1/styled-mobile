@@ -14,7 +14,6 @@ import {
 } from '@gorhom/bottom-sheet';
 import Animated, {
   useAnimatedStyle, withTiming,
-  FadeIn, FadeOut, LinearTransition,
 } from 'react-native-reanimated';
 import { colors, spacing, typography, radii } from '../../theme';
 import {
@@ -42,7 +41,7 @@ function formatSeasonLabel(season: string): string {
 // ─── ColorSwatch ──────────────────────────────────────────────────────────────
 
 const SWATCH_SIZE = 30;
-const SWATCH_RING_SIZE = SWATCH_SIZE + 6;
+const SWATCH_RING_SIZE = 44;
 
 interface ColorSwatchProps {
   colorName: string;
@@ -54,7 +53,7 @@ const ColorSwatch = memo(({ colorName, selected, onPress }: ColorSwatchProps) =>
   const { primary, secondary } = getSwatchColor(colorName);
   const light = isColorLight(primary);
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.75}>
+    <TouchableOpacity onPress={onPress} activeOpacity={0.75} accessibilityRole="checkbox" accessibilityLabel={colorName} accessibilityState={{ checked: selected }}>
       <View style={[styles.swatchRing, selected && styles.swatchRingSelected]}>
         <View style={styles.swatchCircle}>
           {secondary != null ? (
@@ -80,11 +79,12 @@ ColorSwatch.displayName = 'ColorSwatch';
 interface AccordionSectionProps {
   title: string;
   badge?: number;
+  summary?: string;
   defaultExpanded?: boolean;
   children: ReactNode;
 }
 
-function AccordionSection({ title, badge, defaultExpanded = false, children }: AccordionSectionProps) {
+function AccordionSection({ title, badge, summary, defaultExpanded = false, children }: AccordionSectionProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
 
   const chevronStyle = useAnimatedStyle(() => ({
@@ -96,8 +96,8 @@ function AccordionSection({ title, badge, defaultExpanded = false, children }: A
 
   return (
     <>
-      <TouchableOpacity style={styles.accordionHeader} onPress={toggle} activeOpacity={0.7}>
-        <Text style={styles.sectionLabelInline}>{title}</Text>
+      <TouchableOpacity style={styles.accordionHeader} onPress={toggle} activeOpacity={0.7} accessibilityRole="button" accessibilityState={{ expanded }} accessibilityLabel={`${title}${summary ? `, ${summary}` : ''}`}>
+        <Text style={[styles.sectionLabelInline, { flexShrink: 1 }]} numberOfLines={1}>{title}{!expanded && summary ? ` · ${summary}` : ''}</Text>
         {badge != null && badge > 0 && (
           <View style={styles.accordionBadge}>
             <Text style={styles.accordionBadgeText}>{badge}</Text>
@@ -109,9 +109,6 @@ function AccordionSection({ title, badge, defaultExpanded = false, children }: A
       </TouchableOpacity>
       {expanded && (
         <Animated.View
-          entering={FadeIn.duration(150)}
-          exiting={FadeOut.duration(100)}
-          layout={LinearTransition}
           style={styles.accordionBody}
         >
           {children}
@@ -119,6 +116,11 @@ function AccordionSection({ title, badge, defaultExpanded = false, children }: A
       )}
     </>
   );
+}
+
+function selectionSummary(values: readonly (string | number)[]): string {
+  const first = values.slice(0, 2).map(value => String(value).replace(/_/g, ' ')).join(', ');
+  return values.length > 2 ? `${first} +${values.length - 2}` : first;
 }
 
 // ─── FilterPanel ──────────────────────────────────────────────────────────────
@@ -159,6 +161,10 @@ export interface FilterPanelProps {
   onToggleWarmth?: (level: number) => void;
   filteredCount: number;
   activeFilterCount: number;
+  canReset?: boolean;
+  availableSubcategories?: string[];
+  activeSubcategory?: string | null;
+  onSubcategoryChange?: (subcategory: string | null) => void;
   onClearAll: () => void;
 }
 
@@ -213,6 +219,8 @@ export function FilterPanel({
   onToggleWarmth,
   filteredCount,
   activeFilterCount,
+  canReset = activeFilterCount > 0,
+  availableSubcategories = [], activeSubcategory, onSubcategoryChange,
   onClearAll,
 }: FilterPanelProps) {
   const insets = useSafeAreaInsets();
@@ -241,10 +249,11 @@ export function FilterPanel({
 
   const renderFooter = useCallback(
     (props: BottomSheetFooterProps) => (
-      <BottomSheetFooter {...props} bottomInset={insets.bottom}>
-        <View style={styles.footer}>
+      <BottomSheetFooter {...props} bottomInset={0}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
           <TouchableOpacity
             style={styles.applyBtn}
+            accessibilityRole="button"
             onPress={() => bottomSheetRef.current?.dismiss()}
             activeOpacity={0.85}
           >
@@ -263,6 +272,7 @@ export function FilterPanel({
   return (
     <BottomSheetModal
       ref={bottomSheetRef}
+      accessible={false}
       snapPoints={snapPoints}
       enableDynamicSizing={false}
       topInset={insets.top}
@@ -286,8 +296,9 @@ export function FilterPanel({
           <TouchableOpacity
             onPress={onClearAll}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            style={{ minHeight: 44, justifyContent: 'center', opacity: activeFilterCount > 0 ? 1 : 0 }}
-            disabled={activeFilterCount === 0}
+            style={{ minHeight: 44, justifyContent: 'center', opacity: canReset ? 1 : 0.4 }}
+            disabled={!canReset}
+            accessibilityRole="button" accessibilityLabel="Reset filters and sort" accessibilityState={{ disabled: !canReset }}
           >
             <Text style={styles.resetText}>Reset</Text>
           </TouchableOpacity>
@@ -310,6 +321,7 @@ export function FilterPanel({
             <TouchableOpacity
               key={key}
               style={styles.row}
+              accessibilityRole="radio" accessibilityState={{ checked: sortKey === key }}
               onPress={() => onSortChange(key)}
               activeOpacity={0.7}
             >
@@ -325,6 +337,7 @@ export function FilterPanel({
         {onToggleCategory && (
           <AccordionSection
             title="Category"
+            summary={selectionSummary((selectedCategories ?? []).map(cat => CATEGORY_LABELS[cat as keyof typeof CATEGORY_LABELS] ?? cat))}
             badge={(selectedCategories ?? []).length}
             defaultExpanded={true}
           >
@@ -335,12 +348,13 @@ export function FilterPanel({
                   <TouchableOpacity
                     key={cat}
                     style={[styles.chip, active && styles.chipActive]}
+                    accessibilityLabel={CATEGORY_LABELS[cat]}
                     accessibilityRole="checkbox"
                     accessibilityState={{ checked: active }}
                     onPress={() => onToggleCategory(cat)}
                     activeOpacity={0.7}
                   >
-                    <Ionicons name="checkmark" size={16} color={colors.primary} style={{ opacity: active ? 1 : 0 }} />
+
                     <Text style={[styles.chipText, active && styles.chipTextActive]}>
                       {CATEGORY_LABELS[cat]}
                     </Text>
@@ -351,99 +365,26 @@ export function FilterPanel({
           </AccordionSection>
         )}
 
-        {/* ── Occasion ── */}
-        {onToggleOccasion && (
-          <AccordionSection
-            title="Occasion"
-            badge={(selectedOccasions ?? []).length}
-            defaultExpanded={true}
-          >
+        {availableSubcategories.length > 0 && onSubcategoryChange && (
+          <AccordionSection title="Subcategory" summary={activeSubcategory ?? undefined} badge={activeSubcategory ? 1 : 0}>
             <View style={styles.chips}>
-              {OCCASION_OPTIONS.map(occ => {
-                const active = (selectedOccasions ?? []).includes(occ);
-                return (
-                  <TouchableOpacity
-                    key={occ}
-                    style={[styles.chip, active && styles.chipActive]}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: active }}
-                    onPress={() => onToggleOccasion(occ)}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name="checkmark" size={16} color={colors.primary} style={{ opacity: active ? 1 : 0 }} />
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                      {OCCASION_LABELS[occ]}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+              {availableSubcategories.map(sub => (
+                <TouchableOpacity key={sub} style={[styles.chip, activeSubcategory === sub && styles.chipActive]}
+                  accessibilityRole="checkbox" accessibilityLabel={sub} accessibilityState={{ checked: activeSubcategory === sub }}
+                  onPress={() => onSubcategoryChange(activeSubcategory === sub ? null : sub)}>
+
+                  <Text style={[styles.chipText, activeSubcategory === sub && styles.chipTextActive]}>{sub}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </AccordionSection>
         )}
-
-        {/* ── Material ── */}
-        {allMaterials && allMaterials.length > 0 && (
-          <AccordionSection
-            title="Material"
-            badge={(selectedMaterials ?? []).length}
-            defaultExpanded={false}
-          >
-            <View style={styles.chips}>
-              {allMaterials.map(mat => {
-                const active = (selectedMaterials ?? []).includes(mat);
-                return (
-                  <TouchableOpacity
-                    key={mat}
-                    style={[styles.chip, active && styles.chipActive]}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: active }}
-                    onPress={() => onToggleMaterial?.(mat)}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name="checkmark" size={16} color={colors.primary} style={{ opacity: active ? 1 : 0 }} />
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{mat}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </AccordionSection>
-        )}
-
-        {/* ── Sleeve Length ── */}
-        {allSleeveLengths && allSleeveLengths.length > 0 && (
-          <AccordionSection
-            title="Sleeve Length"
-            badge={(selectedSleeveLengths ?? []).length}
-            defaultExpanded={false}
-          >
-            <View style={styles.chips}>
-              {SLEEVE_LENGTH_OPTIONS.map(sl => {
-                const active = (selectedSleeveLengths ?? []).includes(sl);
-                return (
-                  <TouchableOpacity
-                    key={sl}
-                    style={[styles.chip, active && styles.chipActive]}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: active }}
-                    onPress={() => onToggleSleeveLength?.(sl)}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name="checkmark" size={16} color={colors.primary} style={{ opacity: active ? 1 : 0 }} />
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                      {SLEEVE_LENGTH_LABELS[sl]}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </AccordionSection>
-        )}
-
 
         {/* ── Colour ── */}
         {allColors.length > 0 && (
           <AccordionSection
             title="Colour"
+            summary={selectionSummary(selectedColors)}
             badge={selectedColors.length}
             defaultExpanded={false}
           >
@@ -464,6 +405,7 @@ export function FilterPanel({
         {allBrands.length > 0 && (
           <AccordionSection
             title="Brand"
+            summary={selectionSummary(selectedBrands)}
             badge={selectedBrands.length}
             defaultExpanded={false}
           >
@@ -493,6 +435,7 @@ export function FilterPanel({
                 <TouchableOpacity
                   key={brand}
                   style={styles.row}
+                  accessibilityRole="checkbox" accessibilityState={{ checked: active }}
                   onPress={() => onToggleBrand(brand)}
                   activeOpacity={0.7}
                 >
@@ -511,10 +454,43 @@ export function FilterPanel({
           </AccordionSection>
         )}
 
+        {/* ── Occasion ── */}
+        {onToggleOccasion && (
+          <AccordionSection
+            title="Occasion"
+            summary={selectionSummary((selectedOccasions ?? []).map(occ => OCCASION_LABELS[occ as keyof typeof OCCASION_LABELS] ?? occ))}
+            badge={(selectedOccasions ?? []).length}
+            defaultExpanded={false}
+          >
+            <View style={styles.chips}>
+              {OCCASION_OPTIONS.map(occ => {
+                const active = (selectedOccasions ?? []).includes(occ);
+                return (
+                  <TouchableOpacity
+                    key={occ}
+                    style={[styles.chip, active && styles.chipActive]}
+                    accessibilityLabel={OCCASION_LABELS[occ]}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: active }}
+                    onPress={() => onToggleOccasion(occ)}
+                    activeOpacity={0.7}
+                  >
+
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                      {OCCASION_LABELS[occ]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </AccordionSection>
+        )}
+
         {/* ── Season ── */}
         {allSeasons.length > 0 && (
           <AccordionSection
             title="Season"
+            summary={selectionSummary(selectedSeasons.map(formatSeasonLabel))}
             badge={selectedSeasons.length}
             defaultExpanded={false}
           >
@@ -525,12 +501,13 @@ export function FilterPanel({
                   <TouchableOpacity
                     key={season}
                     style={[styles.chip, active && styles.chipActive]}
+                    accessibilityLabel={formatSeasonLabel(season)}
                     accessibilityRole="checkbox"
                     accessibilityState={{ checked: active }}
                     onPress={() => onToggleSeason(season)}
                     activeOpacity={0.7}
                   >
-                    <Ionicons name="checkmark" size={16} color={colors.primary} style={{ opacity: active ? 1 : 0 }} />
+
                     <Text style={[styles.chipText, active && styles.chipTextActive]}>
                       {formatSeasonLabel(season)}
                     </Text>
@@ -541,10 +518,74 @@ export function FilterPanel({
           </AccordionSection>
         )}
 
+        {/* ── Material ── */}
+        {allMaterials && allMaterials.length > 0 && (
+          <AccordionSection
+            title="Material"
+            summary={selectionSummary(selectedMaterials ?? [])}
+            badge={(selectedMaterials ?? []).length}
+            defaultExpanded={false}
+          >
+            <View style={styles.chips}>
+              {allMaterials.map(mat => {
+                const active = (selectedMaterials ?? []).includes(mat);
+                return (
+                  <TouchableOpacity
+                    key={mat}
+                    style={[styles.chip, active && styles.chipActive]}
+                    accessibilityLabel={mat}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: active }}
+                    onPress={() => onToggleMaterial?.(mat)}
+                    activeOpacity={0.7}
+                  >
+
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{mat}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </AccordionSection>
+        )}
+
+        {/* ── Sleeve Length ── */}
+        {allSleeveLengths && allSleeveLengths.length > 0 && (
+          <AccordionSection
+            title="Sleeve Length"
+            summary={selectionSummary(selectedSleeveLengths ?? [])}
+            badge={(selectedSleeveLengths ?? []).length}
+            defaultExpanded={false}
+          >
+            <View style={styles.chips}>
+              {SLEEVE_LENGTH_OPTIONS.map(sl => {
+                const active = (selectedSleeveLengths ?? []).includes(sl);
+                return (
+                  <TouchableOpacity
+                    key={sl}
+                    style={[styles.chip, active && styles.chipActive]}
+                    accessibilityLabel={SLEEVE_LENGTH_LABELS[sl]}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: active }}
+                    onPress={() => onToggleSleeveLength?.(sl)}
+                    activeOpacity={0.7}
+                  >
+
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                      {SLEEVE_LENGTH_LABELS[sl]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </AccordionSection>
+        )}
+
+
         {/* ── Condition ── */}
         {onToggleCondition && (
           <AccordionSection
             title="Condition"
+            summary={selectionSummary(selectedConditions ?? [])}
             badge={(selectedConditions ?? []).length}
             defaultExpanded={false}
           >
@@ -555,12 +596,13 @@ export function FilterPanel({
                   <TouchableOpacity
                     key={value}
                     style={[styles.chip, active && styles.chipActive]}
+                    accessibilityLabel={label}
                     accessibilityRole="checkbox"
                     accessibilityState={{ checked: active }}
                     onPress={() => onToggleCondition(value)}
                     activeOpacity={0.7}
                   >
-                    <Ionicons name="checkmark" size={16} color={colors.primary} style={{ opacity: active ? 1 : 0 }} />
+
                     <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
                   </TouchableOpacity>
                 );
@@ -573,6 +615,7 @@ export function FilterPanel({
         {onToggleWarmth && (
           <AccordionSection
             title="Warmth"
+            summary={selectionSummary((selectedWarmth ?? []).map(value => WARMTH_OPTIONS_FILTER.find(option => option.value === value)?.label ?? value))}
             badge={(selectedWarmth ?? []).length}
             defaultExpanded={false}
           >
@@ -583,12 +626,13 @@ export function FilterPanel({
                   <TouchableOpacity
                     key={value}
                     style={[styles.chip, active && styles.chipActive]}
+                    accessibilityLabel={label}
                     accessibilityRole="checkbox"
                     accessibilityState={{ checked: active }}
                     onPress={() => onToggleWarmth(value)}
                     activeOpacity={0.7}
                   >
-                    <Ionicons name="checkmark" size={16} color={colors.primary} style={{ opacity: active ? 1 : 0 }} />
+
                     <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
                   </TouchableOpacity>
                 );
@@ -601,6 +645,7 @@ export function FilterPanel({
         {allTags && allTags.length > 0 && (
           <AccordionSection
             title="Tags"
+            summary={selectionSummary(selectedTags ?? [])}
             badge={(selectedTags ?? []).length}
             defaultExpanded={false}
           >
@@ -611,12 +656,13 @@ export function FilterPanel({
                   <TouchableOpacity
                     key={tag}
                     style={[styles.chip, active && styles.chipActive]}
+                    accessibilityLabel={tag}
                     accessibilityRole="checkbox"
                     accessibilityState={{ checked: active }}
                     onPress={() => onToggleTag?.(tag)}
                     activeOpacity={0.7}
                   >
-                    <Ionicons name="checkmark" size={16} color={colors.primary} style={{ opacity: active ? 1 : 0 }} />
+
                     <Text style={[styles.chipText, active && styles.chipTextActive]}>{tag}</Text>
                   </TouchableOpacity>
                 );
@@ -672,7 +718,7 @@ const styles = StyleSheet.create({
 
   // ── Accordion
   accordionHeader: {
-    minHeight: 44, flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.page, paddingTop: spacing.xl, paddingBottom: spacing.sm,
+    minHeight: 44, flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.page, paddingVertical: spacing.sm,
   },
   sectionLabelInline: {
     ...typography.text.eyebrow, color: colors.mutedForeground,
@@ -692,6 +738,7 @@ const styles = StyleSheet.create({
     color: colors.primaryForeground,
   },
   accordionBody: {
+    paddingTop: spacing.sm,
     paddingBottom: spacing.md,
   },
 
@@ -809,16 +856,17 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   chip: {
-    minHeight: 44, paddingHorizontal: spacing.sm, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderRadius: radii.action,
+    minHeight: 44, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, justifyContent: 'center', flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderRadius: radii.full, borderWidth: 1, borderColor: colors.border,
   },
   chipActive: {
-    backgroundColor: colors.surfaceSelected,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   chipText: {
     ...typography.text.bodySmall, flexShrink: 1, color: colors.foreground,
   },
   chipTextActive: {
-    color: colors.foreground,
+    color: colors.primaryForeground,
   },
 
   // ── Footer

@@ -5,14 +5,18 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Animated,
   useWindowDimensions,
   Alert,
+  Keyboard,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { FlashList, type FlashListRef, type ViewToken } from '@shopify/flash-list';
+import { type FlashListRef } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
-import Reanimated, { FadeIn } from 'react-native-reanimated';
+import { useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
+import { ClosetHeader } from '../../components/wardrobe/closet-header';
+import { ClosetNavigation } from '../../components/wardrobe/closet-navigation';
+import { ClosetViewMenu } from '../../components/wardrobe/closet-view-menu';
+import { AnimatedClosetList } from '../../components/wardrobe/animated-closet-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useItems, useUpdateItem, useDeleteItem, useMarkItemWorn } from '../../hooks/useItems';
 import { useOutfits, useMarkOutfitWorn, useDeleteOutfit, useUpdateOutfit } from '../../hooks/useOutfits';
@@ -31,7 +35,7 @@ import { useBoards, useCreateBoard, useDeleteBoard, useUpdateBoard, type BoardEn
 import { filterVisibleBoards } from '../../lib/legacyBoards';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { parseEventDate } from '../../lib/outfitAssignments';
-import { CATEGORY_LABELS, type Item, type ItemCategory } from '../../types/item';
+import { CATEGORY_LABELS, OCCASION_LABELS, SLEEVE_LENGTH_LABELS, type Item, type ItemCategory } from '../../types/item';
 import { colors, editorial, shadows, spacing, surfaces, typography, radii } from '../../theme';
 import { useGlobalScan } from '../../contexts/GlobalScanContext';
 import { useGlobalAddSheet } from '../../contexts/GlobalAddSheetContext';
@@ -39,12 +43,6 @@ import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { useFabScroll } from '../../contexts/FabScrollContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { PressableScale } from '../../components/primitives/PressableScale';
-import {
-  FilterControl,
-  ScreenHeader,
-  SegmentedControl,
-  ViewModeControl,
-} from '../../components/primitives/Editorial';
 import { SearchField } from '../../components/primitives/SearchField';
 import { GarmentCardSkeleton } from '../../components/primitives/GarmentCardSkeleton';
 import { SkeletonBlock } from '../../components/primitives/SkeletonLoader';
@@ -57,6 +55,7 @@ import {
   getItemCardAccessibilityLabel,
   hasActivePieceFilters,
   shouldClearActiveSubcategory,
+  wearHistoryLabel, resolveClosetAnchor, closetAnchorViewOffset, closetOffsetForLayout, type ClosetAnchor,
 } from '../../lib/closet-presentation';
 import { shouldShowBoardSearch } from '../../lib/boardPresentation';
 import {
@@ -94,9 +93,6 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: 'recently_worn', label: 'Recently worn' },
   { key: 'cost_per_wear', label: 'Cost per wear' },
 ];
-
-// Heights used to size the collapsible region and sheet detents.
-// These are rough constants; adjust if layout changes.
 
 function FadedPillScroll({ children }: { children: ReactNode }) {
   const viewportWidth = useRef(0);
@@ -161,24 +157,26 @@ function FadedPillScroll({ children }: { children: ReactNode }) {
 export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const insets = useSafeAreaInsets();
   const { width, fontScale } = useWindowDimensions();
-  const SEARCH_ROW_H = Math.max(44, Math.ceil(typography.text.bodySmall.fontSize * fontScale * 1.25) + 16) + 6;
-  const PILL_ROW_H = Math.max(44, Math.ceil(typography.text.bodySmall.lineHeight * fontScale) + 16) + spacing.sm;
-  const SUBCATEGORY_ROW_H = PILL_ROW_H;
   const { openScanItem, openBatchScan } = useGlobalScan();
   const { openAddSheet } = useGlobalAddSheet();
   const { openStylist } = useGlobalAIStylist();
   const { fabCollapsed } = useFabScroll();
 
   const [segment, setSegment]               = useState<Segment>('pieces');
-  const [search, setSearch]                 = useState('');
+  const [piecesSearch, setPiecesSearch] = useState('');
+  const [outfitsSearch, setOutfitsSearch] = useState('');
   const [boardSearch, setBoardSearch]       = useState('');
+  const [searchVisibility, setSearchVisibility] = useState<Record<Segment, boolean>>({ pieces: false, outfits: false, boards: false });
+  const [categoryScrollReset, setCategoryScrollReset] = useState(0);
+  const [searchFocusRequest, setSearchFocusRequest] = useState<Segment | null>(null);
+  const pendingHeaderAnchor = useRef<Segment | null>(null);
   const [piecesViewMode, setPiecesViewMode] = useState<PiecesViewMode>('grid');
   const [outfitViewMode, setOutfitViewMode] = useState<ViewMode>('grid');
   const piecesViewTouched = useRef(false);
-  const piecesAnchorItemId = useRef<number | null>(null);
   const piecesGridRef = useRef<FlashListRef<Item>>(null);
   const piecesListRef = useRef<FlashListRef<Item>>(null);
-  const piecesViewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
+  const outfitListRef = useRef<FlashListRef<(typeof outfits)[number]>>(null);
+  const boardListRef = useRef<FlashListRef<Board>>(null);
 
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds]     = useState<Set<number>>(new Set());
@@ -251,95 +249,144 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     outfitActiveFilterCount,
     availableCategories, availableSubcategories,
     filteredItems, filteredOutfits,
-    clearSheetFilters, clearOutfitFilters, resetAll,
-  } = useClosetFilters({ items, outfits, events, search });
+    clearSheetFilters, clearOutfitFilters, clearPieceFilters, clearOutfitFiltersOnly, canResetPieces, canResetOutfits,
+  } = useClosetFilters({ items, outfits, events, piecesSearch, outfitsSearch });
+  const clearPieceFiltersAndResetCategories = () => {
+    clearPieceFilters();
+    setCategoryScrollReset(value => value + 1);
+  };
 
   const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / 2;
   const outfitTileHeight = Math.round(cardWidth / editorial.outfitAspectRatio);
 
-  // Floating header height — drives the paddingTop that reserves space for the
-  // header inside the list. Changes only on category tap, never during scroll.
   const hasCategoryPills = segment === 'pieces' && availableCategories.length > 0;
-  const subcatVisible    = hasCategoryPills && availableSubcategories.length > 0;
-  const listPaddingTop   =
-    SEARCH_ROW_H +
-    (hasCategoryPills ? PILL_ROW_H : 0) +
-    (subcatVisible ? SUBCATEGORY_ROW_H : 0);
+  const [headerHeight, setHeaderHeight] = useState(112);
+  const [collapseDistance, setCollapseDistance] = useState(32);
+  const scrollY = useSharedValue(0);
+  const listPaddingTop = headerHeight;
+  const anchors = useRef<Record<Segment, ClosetAnchor | null>>({ pieces: null, outfits: null, boards: null });
+  const restoring = useRef(false);
+  const restorationGeneration = useRef(0);
+  const getActiveList = useCallback(() => segment === 'pieces'
+    ? (piecesViewMode === 'grid' ? piecesGridRef.current : piecesListRef.current)
+    : segment === 'outfits' ? outfitListRef.current : boardListRef.current,
+  [segment, piecesViewMode]);
+  const activeItems = segment === 'pieces' ? filteredItems : segment === 'outfits' ? filteredOutfits : sortedBoards;
+  const columns = segment === 'pieces' ? (piecesViewMode === 'grid' ? 2 : 1) : segment === 'outfits' ? (outfitViewMode === 'grid' ? 2 : 1) : 2;
 
-  // ── Hide-on-scroll ─────────────────────────────────────────────────────────
-  // headerTranslateY drives the floating header on the native UI thread.
-  // Collapses on downward scroll past a threshold, re-expands on upward scroll.
+  const capturePosition = useCallback(() => {
+    const list = getActiveList();
+    if (!list || restoring.current || !activeItems.length) return;
+    const y = Math.max(0, list.getAbsoluteLastScrollOffset());
+    const visibleTop = y + headerHeight - Math.min(y, collapseDistance);
+    let index = Math.min(activeItems.length - 1, Math.max(0, list.getFirstVisibleIndex()));
+    // Account for the pinned overlay: FlashList itself sees the full viewport.
+    while (index < activeItems.length - 1) {
+      const layout = list.getLayout(index);
+      if (!layout || layout.y + list.getFirstItemOffset() + layout.height > visibleTop) break;
+      index++;
+    }
+    index -= index % columns;
+    const layout = list.getLayout(index);
+    anchors.current[segment] = {
+      id: activeItems[index].id, index, scrollY: y, columns,
+      offset: layout ? layout.y + list.getFirstItemOffset() - visibleTop : 0,
+    };
+  }, [activeItems, collapseDistance, columns, getActiveList, headerHeight, segment]);
 
-  const lastScrollY    = useRef(0);
-  const isCollapsed    = useRef(false);
-  // translateY drives the floating header on the native UI thread.
-  // The FlashList container never resizes, so FlashList recycling stays in sync
-  // no matter how fast the user flings back to the top.
-  const headerTranslateY = useRef(new Animated.Value(0)).current;
-
-  useFocusEffect(useCallback(() => {
-    fabCollapsed.value = 0;
-  }, [fabCollapsed]));
-
-  const expandCollapsible = useCallback(() => {
-    if (!isCollapsed.current) return;
-    isCollapsed.current = false;
-    Animated.spring(headerTranslateY, {
-      toValue: 0,
-      useNativeDriver: true,
-      tension: 150,
-      friction: 25,
-    }).start();
-  }, [headerTranslateY]);
-
-  const collapseCollapsible = useCallback(() => {
-    if (isCollapsed.current) return;
-    isCollapsed.current = true;
-    // Translate by max possible height so the header always clears the viewport
-    // regardless of how many pill rows are currently visible.
-    Animated.spring(headerTranslateY, {
-      toValue: -(SEARCH_ROW_H + PILL_ROW_H + SUBCATEGORY_ROW_H),
-      useNativeDriver: true,
-      tension: 150,
-      friction: 25,
-    }).start();
-  }, [headerTranslateY, SEARCH_ROW_H, PILL_ROW_H, SUBCATEGORY_ROW_H]);
-
-  const handleScroll = useCallback(
-    (e: any) => {
-      const y     = e.nativeEvent.contentOffset.y;
-      const delta = y - lastScrollY.current;
-      lastScrollY.current = y;
-
-      if (y <= 10) {
-        if (isCollapsed.current) fabCollapsed.value = 0;
-        expandCollapsible();
-      } else if (delta > 6) {
-        if (!isCollapsed.current) fabCollapsed.value = 1;
-        collapseCollapsible();
-      } else if (delta < -6) {
-        if (isCollapsed.current) fabCollapsed.value = 0;
-        expandCollapsible();
+  const restorePosition = useCallback(async () => {
+    const list = getActiveList();
+    if (!list) return;
+    const anchor = resolveClosetAnchor(activeItems, anchors.current[segment], columns);
+    restoring.current = true;
+    const generation = ++restorationGeneration.current;
+    try {
+      if (!anchor || anchor.scrollY < collapseDistance) {
+        const offset = anchor?.scrollY ?? 0;
+        list.scrollToOffset({ offset, animated: false });
+        scrollY.value = offset;
+      } else {
+        const offset = closetOffsetForLayout(anchor.offset, anchors.current[segment]?.columns, columns, list.getLayout(anchor.index)?.height ?? 44);
+        await list.scrollToIndex({ index: anchor.index, viewOffset: closetAnchorViewOffset(headerHeight - collapseDistance, offset), animated: false });
+        if (generation === restorationGeneration.current) scrollY.value = Math.max(0, list.getAbsoluteLastScrollOffset());
       }
+    } finally { if (generation === restorationGeneration.current) restoring.current = false; }
+  }, [activeItems, collapseDistance, columns, getActiveList, headerHeight, scrollY, segment]);
+
+  const handleScroll = useAnimatedScrollHandler({
+    onScroll: event => {
+      scrollY.value = Math.max(0, event.contentOffset.y);
+      fabCollapsed.value = event.contentOffset.y > collapseDistance ? 1 : 0;
     },
-    [fabCollapsed, expandCollapsible, collapseCollapsible],
-  );
+  }, [collapseDistance]);
+
+  const browsingSignature = JSON.stringify(segment === 'pieces'
+    ? [piecesSearch, sortKey, selectedColors, selectedBrands, selectedSeasons, selectedConditions, selectedWarmth, selectedCategories, selectedOccasions, selectedMaterials, selectedSleeveLengths, activeSubcategory]
+    : segment === 'outfits' ? [outfitsSearch, outfitSortKey, outfitSelectedTags, outfitShowAssigned, outfitShowNeverWorn, outfitShowFavorites] : [boardSearch]);
+  const signatures = useRef<Partial<Record<Segment, string>>>({});
+  useEffect(() => {
+    const previous = signatures.current[segment];
+    signatures.current[segment] = browsingSignature;
+    if (previous !== undefined && previous !== browsingSignature) {
+      restorationGeneration.current++;
+      restoring.current = false;
+      anchors.current[segment] = null;
+      getActiveList()?.scrollToOffset({ offset: 0, animated: false });
+      scrollY.value = 0;
+    }
+  }, [browsingSignature, getActiveList, scrollY, segment]);
+
+  const positionCallbacks = useRef({ capturePosition, restorePosition });
+  positionCallbacks.current = { capturePosition, restorePosition };
+  useFocusEffect(useCallback(() => {
+    void positionCallbacks.current.restorePosition();
+    return () => positionCallbacks.current.capturePosition();
+  }, []));
+  const measureHeader = useCallback((height: number, distance: number) => {
+    if (height === headerHeight && distance === collapseDistance) return;
+    if (pendingHeaderAnchor.current !== segment) capturePosition();
+    pendingHeaderAnchor.current = segment;
+    setHeaderHeight(height);
+    setCollapseDistance(distance);
+  }, [capturePosition, collapseDistance, headerHeight, segment]);
+  useEffect(() => {
+    if (pendingHeaderAnchor.current !== segment) return;
+    // Wait until FlashList has received the new content padding before restoring.
+    const frame = requestAnimationFrame(() => {
+      pendingHeaderAnchor.current = null;
+      void positionCallbacks.current.restorePosition();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [headerHeight, collapseDistance, segment]);
+
+  const toggleSearch = useCallback(() => {
+    capturePosition();
+    pendingHeaderAnchor.current = segment;
+    const opening = !searchVisibility[segment];
+    setSearchFocusRequest(opening ? segment : null);
+    if (!opening) Keyboard.dismiss();
+    setSearchVisibility(current => ({ ...current, [segment]: opening }));
+  }, [capturePosition, searchVisibility, segment]);
 
   // ── Segment switch ─────────────────────────────────────────────────────────
 
   const handleSegmentChange = useCallback(
     (next: Segment) => {
       if (next === segment) return;
-      setSearch('');
+      capturePosition();
+      restorationGeneration.current++;
+      restoring.current = false;
+      Keyboard.dismiss();
       setSelectionMode(false);
       setSelectedIds(new Set());
       setOutfitSelectionMode(false);
       setSelectedOutfitIds(new Set());
-      resetAll();
+      pendingHeaderAnchor.current = next;
+      setSearchFocusRequest(null);
       setSegment(next);
-      expandCollapsible();
+      scrollY.value = anchors.current[next]?.scrollY ?? 0;
     },
-    [segment, expandCollapsible, resetAll],
+    [segment, capturePosition, scrollY],
   );
 
   useEffect(() => {
@@ -379,37 +426,19 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
 
   const handlePiecesViewModeChange = useCallback((next: PiecesViewMode) => {
     if (next === piecesViewMode) return;
+    capturePosition();
     piecesViewTouched.current = true;
     setPiecesViewMode(next);
     void savePiecesViewMode(next);
-  }, [piecesViewMode]);
-
-  const handlePiecesViewableItemsChanged = useRef(({
-    viewableItems,
-  }: {
-    viewableItems: ViewToken<Item>[];
-  }) => {
-    const firstVisible = viewableItems
-      .filter(token => token.isViewable && token.index != null)
-      .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))[0];
-    if (firstVisible?.item) piecesAnchorItemId.current = firstVisible.item.id;
-  }).current;
-
-  const piecesInitialScrollIndex = useMemo(() => {
-    if (piecesAnchorItemId.current == null) return undefined;
-    const index = filteredItems.findIndex(item => item.id === piecesAnchorItemId.current);
-    if (index <= 0) return undefined;
-    return piecesViewMode === 'grid' ? index - (index % 2) : index;
-  }, [filteredItems, piecesViewMode]);
+  }, [piecesViewMode, capturePosition]);
 
   // ── Subtitle ───────────────────────────────────────────────────────────────
 
-  const subtitle =
-    segment === 'pieces'
-      ? `${filteredItems.length} ${filteredItems.length === 1 ? 'piece' : 'pieces'}`
-      : segment === 'boards'
-        ? `${boards.length} ${boards.length === 1 ? 'board' : 'boards'}`
-        : `${filteredOutfits.length} ${filteredOutfits.length === 1 ? 'outfit' : 'outfits'}`;
+  const totalPieces = items.filter(item => !item.isArchived).length;
+  const resultCount = segment === 'pieces' ? filteredItems.length : segment === 'outfits' ? filteredOutfits.length : sortedBoards.length;
+  const totalCount = segment === 'pieces' ? totalPieces : segment === 'outfits' ? outfits.length : visibleBoardCount;
+  const noun = segment === 'pieces' ? 'piece' : segment === 'outfits' ? 'outfit' : 'board';
+  const subtitle = `${resultCount < totalCount ? `${resultCount} of ${totalCount}` : resultCount} ${resultCount === 1 && resultCount === totalCount ? noun : `${noun}s`}`;
 
   // ── Render helpers ─────────────────────────────────────────────────────────
 
@@ -439,15 +468,11 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   }, []);
 
   const exitSelectionMode = useCallback(() => {
+    justLongPressedRef.current = false;
     setSelectionMode(false);
     setSelectedIds(new Set());
   }, []);
 
-  useEffect(() => {
-    if (selectionMode && selectedIds.size === 0) {
-      setSelectionMode(false);
-    }
-  }, [selectionMode, selectedIds.size]);
 
   const handleOutfitLongPress = useCallback((outfit: (typeof outfits)[number]) => {
     justLongPressedRef.current = true;
@@ -472,11 +497,6 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     setSelectedOutfitIds(new Set());
   }, []);
 
-  useEffect(() => {
-    if (outfitSelectionMode && selectedOutfitIds.size === 0) {
-      setOutfitSelectionMode(false);
-    }
-  }, [outfitSelectionMode, selectedOutfitIds.size]);
 
   const handleBulkDeleteOutfits = useCallback(() => {
     const count = selectedOutfitIds.size;
@@ -663,9 +683,10 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             borderRadius={radii.md}
             placeholderIconSize={20}
           />
-          <View style={styles.itemRowInfo}>
+          <View key={fontScale} style={styles.itemRowInfo}>
             <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
             <ItemSecondaryMeta item={item} />
+            <Text style={styles.wearHistory}>{wearHistoryLabel(item.wearCount)}</Text>
           </View>
           {!selectionMode && item.isFavorite && (
             <Ionicons name="heart" size={16} color={colors.primary} />
@@ -673,7 +694,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         </PressableScale>
       );
     },
-    [navigation, selectionMode, selectedIds, toggleSelect, handleLongPress],
+    [navigation, selectionMode, selectedIds, toggleSelect, handleLongPress, fontScale],
   );
 
   const renderOutfitCard = useCallback(
@@ -715,7 +736,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             <View style={[styles.outfitRowThumb, { width: thumbSize, height: thumbSize }]}>
               <OutfitCollage outfit={outfit} size={thumbSize} />
             </View>
-            <View style={styles.outfitRowInfo}>
+            <View key={fontScale} style={styles.outfitRowInfo}>
               <Text style={styles.outfitName} numberOfLines={1}>{outfit.name}</Text>
               {outfit.wearCount > 0 ? (
                 <Text style={styles.outfitWorn}>Worn {outfit.wearCount}×</Text>
@@ -773,7 +794,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
                 </View>
               )}
             </View>
-            <View style={styles.outfitInfo}>
+            <View key={fontScale} style={styles.outfitInfo}>
               <Text style={styles.outfitName} numberOfLines={2}>{outfit.name}</Text>
               {(outfit.wearCount > 0 || (assignment && eventDate) || outfit.isDraft) && (
                 <Text style={styles.outfitMeta} numberOfLines={1}>
@@ -793,12 +814,12 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         </View>
       );
     },
-    [cardWidth, outfitTileHeight, navigation, outfitViewMode, outfitSelectionMode, selectedOutfitIds, toggleOutfitSelect, handleOutfitLongPress, upcomingAssignmentSummaries],
+    [cardWidth, outfitTileHeight, navigation, outfitViewMode, outfitSelectionMode, selectedOutfitIds, toggleOutfitSelect, handleOutfitLongPress, upcomingAssignmentSummaries, fontScale],
   );
 
   // ── Empty states ───────────────────────────────────────────────────────────
 
-  const hasActivePiecesFilters = hasActivePieceFilters(search, activeFilterCount);
+  const hasActivePiecesFilters = hasActivePieceFilters(piecesSearch, activeFilterCount);
 
   const emptyPieces = (
     <View style={styles.emptyState}>
@@ -813,6 +834,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
           ? 'Try a different search or filter'
           : 'Start by adding your first item'}
       </Text>
+      {hasActivePiecesFilters && <TouchableOpacity style={styles.emptyBtn} onPress={() => { setPiecesSearch(''); clearPieceFilters(); }} accessibilityRole="button"><Text style={styles.emptyBtnText}>Clear search and filters</Text></TouchableOpacity>}
       {!hasActivePiecesFilters && (
         <TouchableOpacity style={styles.emptyBtn} onPress={handleAddPieces} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel="Add your first item">
           <Ionicons name="add" size={16} color={colors.primaryForeground} />
@@ -822,7 +844,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     </View>
   );
 
-  const hasActiveOutfitFilters = search.trim().length > 0 || outfitActiveFilterCount > 0;
+  const hasActiveOutfitFilters = outfitsSearch.trim().length > 0 || outfitActiveFilterCount > 0;
 
   const emptyOutfits = (
     <View style={styles.emptyState}>
@@ -835,6 +857,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
       <Text style={styles.emptySub}>
         {hasActiveOutfitFilters ? 'Try adjusting your search or filters' : 'Build outfits from your pieces'}
       </Text>
+      {hasActiveOutfitFilters && <TouchableOpacity style={styles.emptyBtn} onPress={() => { setOutfitsSearch(''); clearOutfitFiltersOnly(); }} accessibilityRole="button"><Text style={styles.emptyBtnText}>Clear search and filters</Text></TouchableOpacity>}
       {!hasActiveOutfitFilters && (
         <TouchableOpacity
           style={styles.emptyBtn}
@@ -882,47 +905,86 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     </View>
   );
 
+  const pretty = (value: string) => value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  const filterTokens: { key: string; label: string; remove: () => void }[] = [];
+  const addTokens = <T extends string | number,>(group: string, values: T[], setter: (values: T[]) => void, label: (value: T) => string = value => pretty(String(value))) => {
+    values.forEach(value => filterTokens.push({ key: `${group}:${value}`, label: `${group}: ${label(value)}`, remove: () => setter(values.filter(v => v !== value)) }));
+  };
+  if (segment === 'pieces') {
+    addTokens('Colour', selectedColors, setSelectedColors);
+    addTokens('Brand', selectedBrands, setSelectedBrands, value => value);
+    addTokens('Season', selectedSeasons, setSelectedSeasons);
+    addTokens('Occasion', selectedOccasions, setSelectedOccasions, value => OCCASION_LABELS[value as keyof typeof OCCASION_LABELS] ?? pretty(value));
+    addTokens('Material', selectedMaterials, setSelectedMaterials);
+    addTokens('Sleeve', selectedSleeveLengths, setSelectedSleeveLengths, value => SLEEVE_LENGTH_LABELS[value as keyof typeof SLEEVE_LENGTH_LABELS] ?? pretty(value));
+    addTokens('Condition', selectedConditions, setSelectedConditions);
+    addTokens('Warmth', selectedWarmth, setSelectedWarmth, value => ['Very light', 'Light', 'Medium', 'Warm', 'Very warm'][value - 1] ?? String(value));
+    if (activeSubcategory) filterTokens.push({ key: 'subcategory', label: activeSubcategory, remove: () => setActiveSubcategory(null) });
+  } else if (segment === 'outfits') {
+    addTokens('Tag', outfitSelectedTags, setOutfitSelectedTags, value => value);
+    if (outfitShowAssigned) filterTokens.push({ key: 'assigned', label: 'Assigned', remove: () => setOutfitShowAssigned(false) });
+    if (outfitShowNeverWorn) filterTokens.push({ key: 'never', label: 'Never worn', remove: () => setOutfitShowNeverWorn(false) });
+    if (outfitShowFavorites) filterTokens.push({ key: 'favorites', label: 'Favourites', remove: () => setOutfitShowFavorites(false) });
+  }
+  const browseHeader = (
+    <View style={[styles.browseHeader, (segment === 'pieces' ? piecesViewMode === 'grid' : segment === 'outfits' ? outfitViewMode === 'grid' : false) && { paddingHorizontal: COL_GAP / 2 }]}>
+          {/* Category pills — pieces only */}
+          {hasCategoryPills && (
+            <View style={styles.pillRow}>
+            <FadedPillScroll key={`${fontScale}-${categoryScrollReset}`}>
+              <PressableScale
+                contentStyle={[styles.pill, selectedCategories.length === 0 && styles.pillActive]}
+                onPress={() => applySelectedCategories([])}
+                accessibilityRole="checkbox"
+                accessibilityLabel="All categories"
+                accessibilityState={{ checked: selectedCategories.length === 0 }}
+              >
+                <Text style={[styles.pillLabel, selectedCategories.length === 0 && styles.pillLabelActive]}>
+                  All
+                </Text>
+              </PressableScale>
+              {availableCategories.map(cat => {
+                const active = selectedCategories.includes(cat);
+                return (
+                  <PressableScale
+                    key={cat}
+                    contentStyle={[styles.pill, active && styles.pillActive]}
+                    onPress={() => handleCategoryPress(cat)}
+                    accessibilityRole="checkbox"
+                    accessibilityLabel={CATEGORY_LABELS[cat]}
+                    accessibilityState={{ checked: active }}
+                  >
+                    <Text style={[styles.pillLabel, active && styles.pillLabelActive]}>
+                      {CATEGORY_LABELS[cat]}
+                    </Text>
+                  </PressableScale>
+                );
+              })}
+            </FadedPillScroll>
+            {activeFilterCount > 0 && (
+              <TouchableOpacity onPress={clearPieceFiltersAndResetCategories} style={styles.clearFilters} accessibilityRole="button" accessibilityLabel="Clear filters">
+                <Text style={styles.clearFiltersText}>Clear</Text>
+              </TouchableOpacity>
+            )}
+            </View>
+          )}
+
+
+      {(filterTokens.length > 0 || (!hasCategoryPills && (segment === 'pieces' ? activeFilterCount : outfitActiveFilterCount) > 0)) && <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterTokens}>
+        {!hasCategoryPills && <TouchableOpacity onPress={segment === 'pieces' ? clearPieceFiltersAndResetCategories : clearOutfitFiltersOnly} style={styles.clearFilters} accessibilityRole="button" accessibilityLabel="Clear filters"><Text style={styles.clearFiltersText}>Clear</Text></TouchableOpacity>}
+        {filterTokens.map(token => <PressableScale key={token.key} contentStyle={styles.filterToken} onPress={token.remove} accessibilityRole="button" accessibilityLabel={`Remove ${token.label} filter`}>
+          <Text style={styles.resultCount}>{token.label}</Text><Ionicons name="close" size={14} color={colors.foreground} />
+        </PressableScale>)}
+      </ScrollView>}
+    </View>
+  );
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
 
-      <ScreenHeader
-        title="Closet"
-        titleVariant="display"
-        subtitle={subtitle}
-        safeTop={false}
-        primaryAction={{
-          label: segment === 'pieces' ? 'Add' : segment === 'boards' ? 'New board' : 'Create outfit',
-          icon: 'add',
-          variant: 'secondary',
-          onPress: handlePrimaryAction,
-          accessibilityLabel: segment === 'pieces' ? 'Add pieces' : undefined,
-        }}
-        secondaryActions={segment === 'outfits' ? [{
-          label: outfitViewMode === 'grid' ? 'List view' : 'Grid view',
-          icon: outfitViewMode === 'grid' ? 'list-outline' : 'grid-outline',
-          onPress: () => setOutfitViewMode(v => v === 'grid' ? 'list' : 'grid'),
-        }] : []}
-      />
-
-      {/* ── Segmented control ── */}
-      <View style={styles.segmentRow}>
-        <SegmentedControl
-          value={segment}
-          variant="tabs"
-          options={[
-            { value: 'pieces', label: 'Pieces' },
-            { value: 'outfits', label: 'Outfits' },
-            { value: 'boards', label: 'Boards' },
-          ]}
-          onChange={handleSegmentChange}
-        />
-      </View>
-
-      {/* ── Content area + floating header ── */}
       <View style={{ flex: 1, overflow: 'hidden' }}>
-
         {/* Lists — padded so first item starts below the floating header */}
         {segment === 'pieces' && itemsLoading && items.length === 0 ? (
           <View style={{ flex: 1, paddingTop: listPaddingTop }}>
@@ -933,11 +995,9 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             <ErrorState message="Couldn't load your closet" onRetry={refetchItems} />
           </View>
         ) : segment === 'pieces' ? (
-          <Reanimated.View
-            // Re-keyed on view mode *and* the category edit, so a filter change
-            // fades a fresh selection in rather than snapping the grid.
-            key={`pieces-${piecesViewMode}-${[...selectedCategories].sort().join(',')}-${activeSubcategory ?? ''}`}
-            entering={FadeIn.duration(170)}
+          <View
+            // FlashList needs a new layout instance when changing column count.
+            key={`pieces-${piecesViewMode}`}
             style={styles.piecesListStage}
           >
           {piecesViewMode === 'grid' ? (
@@ -953,12 +1013,11 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
               onScroll={handleScroll}
               scrollEventThrottle={16}
               listPaddingTop={listPaddingTop}
-              initialScrollIndex={piecesInitialScrollIndex}
-              onViewableItemsChanged={handlePiecesViewableItemsChanged}
-              viewabilityConfig={piecesViewabilityConfig}
+              onLoad={() => { void restorePosition(); }}
+              ListHeaderComponent={browseHeader}
             />
           ) : (
-            <FlashList
+            <AnimatedClosetList
               ref={piecesListRef}
               data={filteredItems}
               keyExtractor={item => String(item.id)}
@@ -967,18 +1026,23 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
               ListEmptyComponent={itemsLoading ? null : emptyPieces}
               contentContainerStyle={{ paddingTop: listPaddingTop, ...styles.listContent }}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              maintainVisibleContentPosition={{ disabled: true }}
               onScroll={handleScroll}
               scrollEventThrottle={16}
-              initialScrollIndex={piecesInitialScrollIndex}
-              onViewableItemsChanged={handlePiecesViewableItemsChanged}
-              viewabilityConfig={piecesViewabilityConfig}
+              onLoad={() => { void restorePosition(); }}
+              ListHeaderComponent={browseHeader}
             />
           )
           }
-          </Reanimated.View>
+          </View>
         ) : segment === 'outfits' ? (
-          <Reanimated.View key={`outfits-${outfitViewMode}`} entering={FadeIn.duration(170)} style={styles.piecesListStage}>
-          <FlashList
+          <View key={`outfits-${outfitViewMode}`} style={styles.piecesListStage}>
+          <AnimatedClosetList
+            ref={outfitListRef}
+            onLoad={() => { void restorePosition(); }}
+            ListHeaderComponent={browseHeader}
             data={filteredOutfits}
             keyExtractor={outfit => String(outfit.id)}
             renderItem={renderOutfitCard}
@@ -991,13 +1055,20 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
                 : { paddingTop: listPaddingTop, paddingHorizontal: SIDE_PAD - COL_GAP / 2, paddingBottom: spacing.xxxl * 2 }
             }
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            maintainVisibleContentPosition={{ disabled: true }}
             onScroll={handleScroll}
             scrollEventThrottle={16}
           />
-          </Reanimated.View>
+          </View>
         ) : (
-          <Reanimated.View key="boards-grid" entering={FadeIn.duration(170)} style={styles.piecesListStage}>
-          <FlashList
+          <View key="boards-grid" style={styles.piecesListStage}>
+          <AnimatedClosetList
+            ref={boardListRef}
+            onLoad={() => { void restorePosition(); }}
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
             data={sortedBoards}
             keyExtractor={(b) => String(b.id)}
             numColumns={2}
@@ -1013,19 +1084,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
                 />
               </View>
             )}
-            ListHeaderComponent={
-              <View style={styles.boardListHeader}>
-                {showBoardSearch && (
-                  <SearchField
-                    value={boardSearch}
-                    onChangeText={setBoardSearch}
-                    placeholder="Search boards…"
-                    accessibilityLabel="Search boards"
-                    style={styles.boardSearch}
-                  />
-                )}
-              </View>
-            }
+            ListHeaderComponent={browseHeader}
             ListEmptyComponent={
               boardsLoading
                 ? boardLoadingSkeleton
@@ -1036,101 +1095,43 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
                     : null
             }
             contentContainerStyle={{
-              paddingTop: spacing.md,
+              paddingTop: listPaddingTop,
               paddingHorizontal: SIDE_PAD - COL_GAP / 2,
               paddingBottom: spacing.xxxl * 2,
             }}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            maintainVisibleContentPosition={{ disabled: true }}
           />
-          </Reanimated.View>
-        )}
-
-        {/* Floating header — absolute over the list, slides on native thread.
-            Hidden on the boards segment (no search/filter there). */}
-        {segment !== 'boards' && (
-        <Animated.View
-          style={[styles.floatingHeader, { transform: [{ translateY: headerTranslateY }] }]}
-        >
-          {/* Search, filters, and the Pieces-only layout control */}
-          <View style={styles.searchRow}>
-            <SearchField
-              value={search}
-              onChangeText={setSearch}
-              placeholder={segment === 'pieces' ? 'Search pieces…' : 'Search outfits…'}
-            />
-
-            {segment === 'pieces' && (
-              <>
-                <FilterControl count={activeFilterCount} onPress={() => setFilterSheetOpen(true)} />
-                <ViewModeControl value={piecesViewMode} onChange={handlePiecesViewModeChange} />
-              </>
-            )}
-            {segment === 'outfits' && (
-              <FilterControl
-                count={outfitActiveFilterCount}
-                onPress={() => setOutfitFilterSheetOpen(true)}
-                label="Sort and filter outfits"
-              />
-            )}
           </View>
-
-          {/* Category pills — pieces only */}
-          {hasCategoryPills && (
-            <FadedPillScroll>
-              <PressableScale
-                contentStyle={[styles.pill, selectedCategories.length === 0 && styles.pillActive]}
-                onPress={() => applySelectedCategories([])}
-                accessibilityRole="button"
-                accessibilityLabel="All categories"
-                accessibilityState={{ selected: selectedCategories.length === 0 }}
-              >
-                <Text style={[styles.pillLabel, selectedCategories.length === 0 && styles.pillLabelActive]}>
-                  All
-                </Text>
-              </PressableScale>
-              {availableCategories.map(cat => {
-                const active = selectedCategories.includes(cat);
-                return (
-                  <PressableScale
-                    key={cat}
-                    contentStyle={[styles.pill, active && styles.pillActive]}
-                    onPress={() => handleCategoryPress(cat)}
-                    accessibilityRole="button"
-                    accessibilityLabel={CATEGORY_LABELS[cat]}
-                    accessibilityState={{ selected: active }}
-                  >
-                    <Text style={[styles.pillLabel, active && styles.pillLabelActive]}>
-                      {CATEGORY_LABELS[cat]}
-                    </Text>
-                  </PressableScale>
-                );
-              })}
-            </FadedPillScroll>
-          )}
-
-          {/* Subcategory pills — shown/hidden without animation; listPaddingTop
-              and subcatVisible update in the same render so there is no gap */}
-          {subcatVisible && (
-            <FadedPillScroll>
-              {availableSubcategories.map(sub => (
-                <PressableScale
-                  key={sub}
-                  contentStyle={[styles.pill, activeSubcategory === sub && styles.pillActive]}
-                  onPress={() => setActiveSubcategory(prev => (prev === sub ? null : sub))}
-                  accessibilityRole="button"
-                  accessibilityLabel={sub}
-                  accessibilityState={{ selected: activeSubcategory === sub }}
-                >
-                  <Text style={[styles.pillLabel, activeSubcategory === sub && styles.pillLabelActive]}>
-                    {sub}
-                  </Text>
-                </PressableScale>
-              ))}
-            </FadedPillScroll>
-          )}
-        </Animated.View>
         )}
 
+        <ClosetHeader scrollY={scrollY}
+          summary={subtitle}
+          actionLabel={segment === 'pieces' ? 'Add' : segment === 'boards' ? 'New board' : 'Create outfit'}
+          onAction={handlePrimaryAction}
+          overflowAction={segment !== 'boards' ? <ClosetViewMenu key={segment} value={segment === 'pieces' ? piecesViewMode : outfitViewMode} label={segment} selectionDisabled={resultCount === 0}
+            onChange={next => { if (segment === 'pieces') handlePiecesViewModeChange(next); else { capturePosition(); setOutfitViewMode(next); } }}
+            onSelect={() => { justLongPressedRef.current = false; if (segment === 'pieces') { setSelectedIds(new Set()); setSelectionMode(true); } else { setSelectedOutfitIds(new Set()); setOutfitSelectionMode(true); } }} /> : undefined}
+          onMeasure={measureHeader}>
+          <ClosetNavigation value={segment} onChange={handleSegmentChange}
+            searchAvailable={segment !== 'boards' || showBoardSearch}
+            searchOpen={searchVisibility[segment]}
+            query={segment === 'pieces' ? piecesSearch : segment === 'outfits' ? outfitsSearch : boardSearch}
+            onSearch={toggleSearch}
+            filterCount={segment === 'pieces' ? activeFilterCount : outfitActiveFilterCount}
+            onFilter={segment === 'boards' ? undefined : () => { Keyboard.dismiss(); if (segment === 'pieces') setFilterSheetOpen(true); else setOutfitFilterSheetOpen(true); }} />
+          {searchVisibility[segment] && (segment !== 'boards' || showBoardSearch) && <View style={styles.searchRow}>
+            <SearchField key={segment} value={segment === 'pieces' ? piecesSearch : segment === 'outfits' ? outfitsSearch : boardSearch}
+              onChangeText={segment === 'pieces' ? setPiecesSearch : segment === 'outfits' ? setOutfitsSearch : setBoardSearch}
+              placeholder={`Search ${segment}…`} accessibilityLabel={`Search ${segment}`}
+              autoFocus={searchFocusRequest === segment} onBlur={() => setSearchFocusRequest(null)} />
+            <PressableScale onPress={toggleSearch} contentStyle={styles.closeSearch} accessibilityRole="button" accessibilityLabel="Close search">
+              <Ionicons name="close" size={22} color={colors.foreground} />
+            </PressableScale>
+          </View>}
+        </ClosetHeader>
       </View>
 
       {/* ── Bulk action bar ── */}
@@ -1368,6 +1369,10 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         }
         filteredCount={filteredItems.length}
         activeFilterCount={activeFilterCount}
+        canReset={canResetPieces}
+        availableSubcategories={availableSubcategories}
+        activeSubcategory={activeSubcategory}
+        onSubcategoryChange={setActiveSubcategory}
         onClearAll={clearSheetFilters}
       />}
 
@@ -1392,6 +1397,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
           onToggleFavorites={() => setOutfitShowFavorites(v => !v)}
           filteredCount={filteredOutfits.length}
           activeFilterCount={outfitActiveFilterCount}
+          canReset={canResetOutfits}
           onClearAll={clearOutfitFilters}
         />
       )}
@@ -1443,8 +1449,6 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  boardListHeader: { paddingHorizontal: COL_GAP / 2, paddingBottom: spacing.lg, gap: spacing.md },
-  boardSearch: { flex: 0 },
   noBoardResults: { paddingVertical: spacing.xl, alignItems: 'center' },
   boardSkeletonGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: COL_GAP / 2 },
   boardSkeletonTitle: { marginTop: spacing.sm + 1 },
@@ -1502,90 +1506,22 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  // ── Segmented control
-  segmentRow: {
-    paddingHorizontal: SIDE_PAD,
-    paddingTop: spacing.xs,
-    paddingBottom: spacing.md,
-  },
-  segment: {
-    flexDirection: 'row',
-    backgroundColor: colors.muted,
-    borderRadius: radii.full,
-    padding: 3,
-  },
-  segmentBtn: {
-    flex: 1,
-    paddingVertical: spacing.sm - 1,
-    alignItems: 'center',
-    borderRadius: radii.full,
-  },
-  segmentBtnActive: {
-    backgroundColor: colors.white,
-    ...shadows.xs,
-  },
-  segmentLabel: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.medium,
-    color: colors.mutedForeground,
-  },
-  segmentLabelActive: {
-    color: colors.foreground,
-    fontWeight: typography.weight.semibold,
-  },
-
-  // ── Floating header (absolute, slides over the list)
-  floatingHeader: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 10,
-    backgroundColor: colors.background,
-  },
-
   // ── Search row
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: SIDE_PAD,
-    marginBottom: spacing.xs,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.sm,
     gap: spacing.sm,
   },
-  filterBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.lg,
-    backgroundColor: colors.muted,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  filterBtnActive: {
-    backgroundColor: colors.foreground,
-  },
-  filterBadge: {
-    position: 'absolute',
-    top: 5,
-    right: 5,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  filterBadgeText: {
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.bold,
-    color: colors.primaryForeground,
-  },
-
+  closeSearch: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   // ── Category pills
-  pillScrollWrap: { flexShrink: 0 },
+  pillRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  pillScrollWrap: { flex: 1, minWidth: 0 },
   pillScroll: { flexShrink: 0 },
   pillContent: {
-    paddingHorizontal: SIDE_PAD, paddingBottom: spacing.sm, gap: spacing.lg,
+    paddingHorizontal: 0, paddingBottom: spacing.xs, gap: spacing.sm,
   },
   pillFade: {
     position: 'absolute',
@@ -1596,17 +1532,25 @@ const styles = StyleSheet.create({
   pillFadeLeft: { left: 0 },
   pillFadeRight: { right: 0 },
   pill: {
-    minHeight: 44, justifyContent: 'center', paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: 'transparent',
+    minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radii.full,
   },
   pillActive: {
-    borderBottomColor: colors.primary,
+    backgroundColor: colors.surfaceSelected, borderColor: colors.inkSubtle,
   },
   pillLabel: {
     ...typography.text.bodySmall, color: colors.mutedForeground,
   },
   pillLabelActive: {
-    color: colors.foreground, fontWeight: typography.weight.medium,
+    color: colors.foreground,
   },
+
+  browseHeader: { paddingTop: spacing.sm, paddingBottom: 0 },
+  resultCount: { ...typography.text.bodySmall, color: colors.mutedForeground },
+  clearFilters: { minHeight: 44, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.sm },
+  clearFiltersText: { ...typography.text.bodySmall, color: colors.foreground, fontWeight: typography.weight.medium },
+  filterTokens: { gap: spacing.sm, paddingBottom: spacing.sm },
+  filterToken: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: 44, paddingHorizontal: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radii.full },
+  wearHistory: { ...typography.text.caption, color: colors.mutedForeground },
 
   // ── List layout
   list: {
@@ -1628,7 +1572,7 @@ const styles = StyleSheet.create({
 
   // ── Item row (list mode)
   itemRow: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingVertical: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline,
   },
   itemRowSelected: {
     backgroundColor: `${colors.primary}10`,

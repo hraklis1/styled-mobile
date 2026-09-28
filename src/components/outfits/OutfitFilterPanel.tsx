@@ -13,7 +13,6 @@ import {
 } from '@gorhom/bottom-sheet';
 import Animated, {
   useAnimatedStyle, withTiming,
-  FadeIn, FadeOut,
 } from 'react-native-reanimated';
 import { colors, spacing, typography, radii } from '../../theme';
 
@@ -22,11 +21,12 @@ import { colors, spacing, typography, radii } from '../../theme';
 interface AccordionSectionProps {
   title: string;
   badge?: number;
+  summary?: string;
   defaultExpanded?: boolean;
   children: ReactNode;
 }
 
-function AccordionSection({ title, badge, defaultExpanded = false, children }: AccordionSectionProps) {
+function AccordionSection({ title, badge, summary, defaultExpanded = false, children }: AccordionSectionProps) {
   const [open, setOpen] = useState(defaultExpanded);
 
   const chevronStyle = useAnimatedStyle(() => ({
@@ -40,8 +40,9 @@ function AccordionSection({ title, badge, defaultExpanded = false, children }: A
         style={styles.accordionHeader}
         onPress={() => setOpen(v => !v)}
         activeOpacity={0.7}
+        accessibilityRole="button" accessibilityLabel={`${title}${summary ? `, ${summary}` : ''}`} accessibilityState={{ expanded: open }}
       >
-        <Text style={styles.sectionLabel}>{title}</Text>
+        <Text style={[styles.sectionLabel, { flexShrink: 1 }]} numberOfLines={1}>{title}{!open && summary ? ` · ${summary}` : ''}</Text>
         {badge != null && badge > 0 && (
           <View style={styles.accordionBadge}>
             <Text style={styles.accordionBadgeText}>{badge}</Text>
@@ -53,8 +54,6 @@ function AccordionSection({ title, badge, defaultExpanded = false, children }: A
       </TouchableOpacity>
       {open && (
         <Animated.View
-          entering={FadeIn.duration(150)}
-          exiting={FadeOut.duration(100)}
           style={styles.accordionBody}
         >
           {children}
@@ -82,6 +81,7 @@ export interface OutfitFilterPanelProps {
   onToggleFavorites: () => void;
   filteredCount: number;
   activeFilterCount: number;
+  canReset?: boolean;
   onClearAll: () => void;
 }
 
@@ -103,6 +103,7 @@ export function OutfitFilterPanel({
   onToggleFavorites,
   filteredCount,
   activeFilterCount,
+  canReset = activeFilterCount > 0,
   onClearAll,
 }: OutfitFilterPanelProps) {
   const insets = useSafeAreaInsets();
@@ -126,10 +127,11 @@ export function OutfitFilterPanel({
 
   const renderFooter = useCallback(
     (props: BottomSheetFooterProps) => (
-      <BottomSheetFooter {...props} bottomInset={insets.bottom}>
-        <View style={styles.footer}>
+      <BottomSheetFooter {...props} bottomInset={0}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
           <TouchableOpacity
             style={styles.applyBtn}
+            accessibilityRole="button"
             onPress={() => bottomSheetRef.current?.dismiss()}
             activeOpacity={0.85}
           >
@@ -148,6 +150,7 @@ export function OutfitFilterPanel({
   return (
     <BottomSheetModal
       ref={bottomSheetRef}
+      accessible={false}
       snapPoints={snapPoints}
       onDismiss={handleDismiss}
       backdropComponent={renderBackdrop}
@@ -169,14 +172,17 @@ export function OutfitFilterPanel({
           <TouchableOpacity
             onPress={onClearAll}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            style={{ minHeight: 44, justifyContent: 'center', opacity: activeFilterCount > 0 ? 1 : 0 }}
-            disabled={activeFilterCount === 0}
+            style={{ minHeight: 44, justifyContent: 'center', opacity: canReset ? 1 : 0.4 }}
+            disabled={!canReset}
+            accessibilityRole="button" accessibilityLabel="Reset filters and sort" accessibilityState={{ disabled: !canReset }}
           >
             <Text style={styles.resetText}>Reset</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             onPress={() => bottomSheetRef.current?.dismiss()}
+            style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
+            accessibilityRole="button" accessibilityLabel="Close filters"
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
             <Ionicons name="close" size={22} color={colors.foreground} />
@@ -190,6 +196,7 @@ export function OutfitFilterPanel({
             <TouchableOpacity
               key={key}
               style={styles.row}
+              accessibilityRole="radio" accessibilityState={{ checked: sortKey === key }}
               onPress={() => onSortChange(key)}
               activeOpacity={0.7}
             >
@@ -203,18 +210,20 @@ export function OutfitFilterPanel({
 
         <AccordionSection
           title="Event Assignment"
+          summary={showAssigned ? 'Assigned to event' : undefined}
           badge={showAssigned ? 1 : undefined}
-          defaultExpanded={showAssigned}
+          defaultExpanded={false}
         >
           <View style={styles.chips}>
             <TouchableOpacity
               style={[styles.chip, showAssigned && styles.chipActive]}
               accessibilityRole="checkbox"
+              accessibilityLabel="Assigned to event"
               accessibilityState={{ checked: showAssigned }}
               onPress={onToggleAssigned}
               activeOpacity={0.7}
             >
-              <Ionicons name="checkmark" size={16} color={colors.primary} style={{ opacity: showAssigned ? 1 : 0 }} />
+
               <Text style={[styles.chipText, showAssigned && styles.chipTextActive]}>
                 Assigned to event
               </Text>
@@ -225,18 +234,20 @@ export function OutfitFilterPanel({
         {/* ── Favourites ── */}
         <AccordionSection
           title="Favourites"
+          summary={showFavorites ? 'Favourites only' : undefined}
           badge={showFavorites ? 1 : undefined}
-          defaultExpanded={showFavorites}
+          defaultExpanded={false}
         >
           <View style={styles.chips}>
             <TouchableOpacity
               style={[styles.chip, showFavorites && styles.chipActive]}
               accessibilityRole="checkbox"
+              accessibilityLabel="Favourites only"
               accessibilityState={{ checked: showFavorites }}
               onPress={onToggleFavorites}
               activeOpacity={0.7}
             >
-              <Ionicons name="checkmark" size={16} color={colors.primary} style={{ opacity: showFavorites ? 1 : 0 }} />
+
               <Text style={[styles.chipText, showFavorites && styles.chipTextActive]}>
                 Favourites only
               </Text>
@@ -247,18 +258,20 @@ export function OutfitFilterPanel({
         {/* ── Wear status ── */}
         <AccordionSection
           title="Wear Status"
+          summary={showNeverWorn ? 'Never worn' : undefined}
           badge={showNeverWorn ? 1 : undefined}
-          defaultExpanded={showNeverWorn}
+          defaultExpanded={false}
         >
           <View style={styles.chips}>
             <TouchableOpacity
               style={[styles.chip, showNeverWorn && styles.chipActive]}
               accessibilityRole="checkbox"
+              accessibilityLabel="Never worn"
               accessibilityState={{ checked: showNeverWorn }}
               onPress={onToggleNeverWorn}
               activeOpacity={0.7}
             >
-              <Ionicons name="checkmark" size={16} color={colors.primary} style={{ opacity: showNeverWorn ? 1 : 0 }} />
+
               <Text style={[styles.chipText, showNeverWorn && styles.chipTextActive]}>
                 Never worn
               </Text>
@@ -270,8 +283,9 @@ export function OutfitFilterPanel({
         {allTags.length > 0 && (
           <AccordionSection
             title="Tags"
+            summary={`${selectedTags.slice(0, 2).join(', ')}${selectedTags.length > 2 ? ` +${selectedTags.length - 2}` : ''}`}
             badge={selectedTags.length}
-            defaultExpanded={selectedTags.length > 0}
+            defaultExpanded={false}
           >
             <View style={styles.chips}>
               {allTags.map(tag => {
@@ -281,11 +295,12 @@ export function OutfitFilterPanel({
                     key={tag}
                     style={[styles.chip, active && styles.chipActive]}
               accessibilityRole="checkbox"
+              accessibilityLabel={tag}
               accessibilityState={{ checked: active }}
                     onPress={() => onToggleTag(tag)}
                     activeOpacity={0.7}
                   >
-                    <Ionicons name="checkmark" size={16} color={colors.primary} style={{ opacity: active ? 1 : 0 }} />
+
               <Text style={[styles.chipText, active && styles.chipTextActive]}>
                       #{tag}
                     </Text>
@@ -342,11 +357,11 @@ const styles = StyleSheet.create({
 
   // Accordion
   accordionHeader: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.page,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.sm,
+    paddingVertical: spacing.sm,
   },
   sectionLabel: {
     ...typography.text.eyebrow, color: colors.mutedForeground,
@@ -366,6 +381,7 @@ const styles = StyleSheet.create({
     color: colors.primaryForeground,
   },
   accordionBody: {
+    paddingTop: spacing.sm,
     paddingBottom: spacing.md,
   },
 
@@ -410,16 +426,17 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   chip: {
-    minHeight: 44, paddingHorizontal: spacing.sm, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderRadius: radii.action,
+    minHeight: 44, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, justifyContent: 'center', flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderRadius: radii.full, borderWidth: 1, borderColor: colors.border,
   },
   chipActive: {
-    backgroundColor: colors.surfaceSelected,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   chipText: {
     ...typography.text.bodySmall, flexShrink: 1, color: colors.foreground,
   },
   chipTextActive: {
-    color: colors.foreground,
+    color: colors.primaryForeground,
   },
 
   // Footer

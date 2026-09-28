@@ -1,6 +1,6 @@
 import React, { forwardRef, useCallback } from 'react';
 import { View, useWindowDimensions } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
+import { AnimatedClosetList } from './animated-closet-list';
 import type { FlashListRef, ListRenderItemInfo, ViewToken } from '@shopify/flash-list';
 import { GarmentCard } from './GarmentCard';
 import { editorial, spacing } from '../../theme';
@@ -31,6 +31,7 @@ type Props = {
   contentInset?: { top?: number; bottom?: number };
   listPaddingTop?: number;
   initialScrollIndex?: number;
+  onLoad?: () => void;
   onViewableItemsChanged?: (info: { viewableItems: ViewToken<Item>[]; changed: ViewToken<Item>[] }) => void;
   viewabilityConfig?: { itemVisiblePercentThreshold?: number };
 };
@@ -52,10 +53,11 @@ const ClosetGridComponent = forwardRef<FlashListRef<Item>, Props>(function Close
   contentInset,
   listPaddingTop = 0,
   initialScrollIndex,
+  onLoad,
   onViewableItemsChanged,
   viewabilityConfig,
 }, ref) {
-  const { width } = useWindowDimensions();
+  const { width, fontScale } = useWindowDimensions();
   const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / NUM_COLS;
   const itemHeight = Math.round(cardWidth / CARD_ASPECT_RATIO) + CARD_OVERHEAD;
 
@@ -65,6 +67,7 @@ const ClosetGridComponent = forwardRef<FlashListRef<Item>, Props>(function Close
     ({ item }: ListRenderItemInfo<Item>) => (
       <View style={{ paddingHorizontal: COL_GAP / 2 }}>
       <GarmentCard
+        key={fontScale}
         item={item}
         aspectRatio={CARD_ASPECT_RATIO}
         cardWidth={cardWidth}
@@ -76,7 +79,7 @@ const ClosetGridComponent = forwardRef<FlashListRef<Item>, Props>(function Close
       />
       </View>
     ),
-    [cardWidth, selectionMode, selectedIds, onItemPress, onItemLongPress, onToggleSelect],
+    [cardWidth, fontScale, selectionMode, selectedIds, onItemPress, onItemLongPress, onToggleSelect],
   );
 
   const overrideItemLayout = useCallback(
@@ -88,7 +91,7 @@ const ClosetGridComponent = forwardRef<FlashListRef<Item>, Props>(function Close
 
   return (
     <View style={{ flex: 1, paddingHorizontal: SIDE_PAD - COL_GAP / 2 }}>
-      <FlashList
+      <AnimatedClosetList
         ref={ref}
         data={items}
         numColumns={NUM_COLS}
@@ -102,6 +105,10 @@ const ClosetGridComponent = forwardRef<FlashListRef<Item>, Props>(function Close
         scrollEventThrottle={scrollEventThrottle}
         contentInset={contentInset}
         initialScrollIndex={initialScrollIndex}
+        onLoad={onLoad}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        maintainVisibleContentPosition={{ disabled: true }}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         overrideItemLayout={overrideItemLayout}

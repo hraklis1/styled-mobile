@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
+import { useReducedMotion } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, cutoutScaleFor, radii, surfaces } from '../../theme';
 import { itemCoverPresentation } from '../../lib/itemImage';
@@ -25,6 +26,7 @@ export function GarmentImage({
   children,
   style,
 }: Props) {
+  const reduceMotion = useReducedMotion();
   const cover = itemCoverPresentation(item, { preferThumb: true });
   const cutoutMargin = cover.variant === 'cutout'
     ? (Math.min(width, height) * (1 - cutoutScaleFor(item.category))) / 2
@@ -42,7 +44,7 @@ export function GarmentImage({
           style={[StyleSheet.absoluteFill, cover.variant === 'cutout' && { margin: cutoutMargin }]}
           contentFit={cover.contentFit}
           contentPosition="center"
-          transition={200}
+          transition={reduceMotion ? 0 : 200}
           cachePolicy="memory-disk"
           recyclingKey={`${item.id}:${cover.variant}`}
           accessible={false}

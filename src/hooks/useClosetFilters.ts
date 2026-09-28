@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { parseMaterialString } from '../components/wardrobe/FilterPanel';
+import { parseMaterialString } from '../lib/colorUtils';
 import { SEASON_OPTIONS, CATEGORY_ORDER, CATEGORY_LABELS, type ItemCategory } from '../types/item';
 import { getSubcategories } from '../lib/taxonomy';
 import type { Item } from '../types/item';
@@ -19,10 +19,11 @@ interface UseClosetFiltersParams {
   items: Item[];
   outfits: Outfit[];
   events: Event[];
-  search: string;
+  piecesSearch: string;
+  outfitsSearch: string;
 }
 
-export function useClosetFilters({ items, outfits, events, search }: UseClosetFiltersParams) {
+export function useClosetFilters({ items, outfits, events, piecesSearch, outfitsSearch }: UseClosetFiltersParams) {
   // ── Pieces filter state ──────────────────────────────────────────────────
   const [sortKey, setSortKey]                     = useState<SortKey>('newest');
   const [filterSheetOpen, setFilterSheetOpen]     = useState(false);
@@ -66,7 +67,6 @@ export function useClosetFilters({ items, outfits, events, search }: UseClosetFi
 
   const activeFilterCount = useMemo(
     () => countActivePieceFilters({
-      hasNonDefaultSort: sortKey !== 'newest',
       selectedGroups: [
         selectedColors,
         selectedBrands,
@@ -94,7 +94,6 @@ export function useClosetFilters({ items, outfits, events, search }: UseClosetFi
   const upcomingAssignmentSummaries = useMemo(() => getUpcomingAssignmentSummaries(events), [events]);
   const outfitActiveFilterCount = useMemo(
     () =>
-      (outfitSortKey !== 'newest' ? 1 : 0) +
       outfitSelectedTags.length +
       (outfitShowAssigned ? 1 : 0) +
       (outfitShowNeverWorn ? 1 : 0) +
@@ -105,7 +104,7 @@ export function useClosetFilters({ items, outfits, events, search }: UseClosetFi
   // ── Category metadata ────────────────────────────────────────────────────
   const categoryCounts = useMemo(() => {
     const counts: Partial<Record<ItemCategory, number>> = {};
-    for (const item of items) {
+    for (const item of items.filter(i => !i.isArchived)) {
       if (item.category) counts[item.category] = (counts[item.category] ?? 0) + 1;
     }
     return counts;
@@ -121,7 +120,7 @@ export function useClosetFilters({ items, outfits, events, search }: UseClosetFi
     if (!selectedCategory) return [];
     const subs = new Set(
       items
-        .filter(i => i.category === selectedCategory && i.subcategory)
+        .filter(i => !i.isArchived && i.category === selectedCategory && i.subcategory)
         .map(i => i.subcategory!)
     );
     const taxOrder = getSubcategories(selectedCategory);
@@ -141,8 +140,8 @@ export function useClosetFilters({ items, outfits, events, search }: UseClosetFi
     let result = items.filter(i => !i.isArchived);
     result = result.filter(i => itemMatchesSelectedCategories(i.category, selectedCategories));
     if (activeSubcategory) result = result.filter(i => i.subcategory === activeSubcategory);
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
+    if (piecesSearch.trim()) {
+      const q = piecesSearch.trim().toLowerCase();
       result = result.filter(
         i =>
           i.name.toLowerCase().includes(q) ||
@@ -195,14 +194,14 @@ export function useClosetFilters({ items, outfits, events, search }: UseClosetFi
     else
       arr.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return arr;
-  }, [items, activeSubcategory, search, sortKey, selectedColors, selectedBrands, selectedSeasons,
+  }, [items, activeSubcategory, piecesSearch, sortKey, selectedColors, selectedBrands, selectedSeasons,
       selectedConditions, selectedWarmth, selectedCategories, selectedOccasions,
       selectedStatuses, selectedMaterials, selectedSleeveLengths]);
 
   const filteredOutfits = useMemo(() => {
     let result = outfits;
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
+    if (outfitsSearch.trim()) {
+      const q = outfitsSearch.trim().toLowerCase();
       result = result.filter(
         o =>
           o.name.toLowerCase().includes(q) ||
@@ -235,11 +234,10 @@ export function useClosetFilters({ items, outfits, events, search }: UseClosetFi
     else
       arr.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return arr;
-  }, [outfits, search, outfitSelectedTags, outfitShowAssigned, outfitShowNeverWorn, outfitShowFavorites, outfitSortKey, upcomingAssignmentSummaries]);
+  }, [outfits, outfitsSearch, outfitSelectedTags, outfitShowAssigned, outfitShowNeverWorn, outfitShowFavorites, outfitSortKey, upcomingAssignmentSummaries]);
 
   // ── Actions ──────────────────────────────────────────────────────────────
-  function clearSheetFilters() {
-    setSortKey('newest');
+  function clearPieceFilters() {
     setSelectedColors([]);
     setSelectedBrands([]);
     setSelectedSeasons([]);
@@ -253,12 +251,21 @@ export function useClosetFilters({ items, outfits, events, search }: UseClosetFi
     setActiveSubcategory(null);
   }
 
-  function clearOutfitFilters() {
-    setOutfitSortKey('newest');
+  function clearOutfitFiltersOnly() {
     setOutfitSelectedTags([]);
     setOutfitShowAssigned(false);
     setOutfitShowNeverWorn(false);
     setOutfitShowFavorites(false);
+  }
+
+  function clearSheetFilters() {
+    setSortKey('newest');
+    clearPieceFilters();
+  }
+
+  function clearOutfitFilters() {
+    setOutfitSortKey('newest');
+    clearOutfitFiltersOnly();
   }
 
   function resetAll() {
@@ -301,6 +308,9 @@ export function useClosetFilters({ items, outfits, events, search }: UseClosetFi
     filteredItems, filteredOutfits,
 
     // Actions
+    clearPieceFilters, clearOutfitFiltersOnly,
+    canResetPieces: activeFilterCount > 0 || sortKey !== 'newest',
+    canResetOutfits: outfitActiveFilterCount > 0 || outfitSortKey !== 'newest',
     clearSheetFilters,
     clearOutfitFilters,
     resetAll,
