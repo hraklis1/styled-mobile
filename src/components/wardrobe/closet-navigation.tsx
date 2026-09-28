@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { PressableScale } from '../primitives/PressableScale';
 import { FilterControl } from '../primitives/Editorial';
-import { colors, spacing, typography } from '../../theme';
+import { colors, radii, shadows, spacing, typography } from '../../theme';
 
 type Section = 'pieces' | 'outfits' | 'boards';
 const sections: { value: Section; label: string }[] = [
@@ -24,9 +24,9 @@ export function ClosetNavigation({ value, onChange, searchAvailable, searchOpen,
       <View style={styles.tabs} accessibilityRole="tablist">
         {sections.map(section => <PressableScale key={section.value} onPress={() => onChange(section.value)}
           accessibilityRole="tab" accessibilityLabel={section.label} accessibilityState={{ selected: value === section.value }}
-          contentStyle={styles.tab}>
-          <Text style={[styles.label, value === section.value && styles.selected]}>{section.label}</Text>
-          {value === section.value && <View style={styles.underline} />}
+          haptic={false} scaleTo={0.98}
+          contentStyle={[styles.tab, value === section.value && styles.activeTab]}>
+          <Text numberOfLines={1} style={[styles.label, value === section.value && styles.selected]}>{section.label}</Text>
         </PressableScale>)}
       </View>
       {(searchAvailable || onFilter) && <View style={[styles.controls, stacked && styles.controlsStacked]}>
@@ -44,11 +44,11 @@ export function ClosetNavigation({ value, onChange, searchAvailable, searchOpen,
 const styles = StyleSheet.create({
   navigation: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.page, gap: spacing.sm, paddingBottom: spacing.xs },
   stacked: { flexDirection: 'column', alignItems: 'stretch' },
-  tabs: { flexDirection: 'row', gap: spacing.lg, flexWrap: 'wrap' },
-  tab: { minWidth: 44, minHeight: 44, justifyContent: 'center', paddingVertical: spacing.sm },
-  label: { ...typography.text.bodySmall, fontWeight: typography.weight.medium, color: colors.mutedForeground },
+  tabs: { flexDirection: 'row', flexWrap: 'nowrap', flexShrink: 0, alignSelf: 'flex-start', backgroundColor: colors.surfaceSubtle, borderRadius: radii.full, padding: 3, borderWidth: StyleSheet.hairlineWidth, borderColor: 'transparent' },
+  tab: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radii.full, paddingHorizontal: spacing.sm },
+  activeTab: { backgroundColor: colors.surfaceElevated, ...shadows.xs },
+  label: { ...typography.text.bodySmall, color: colors.mutedForeground },
   selected: { color: colors.foreground },
-  underline: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 2, backgroundColor: colors.foreground, borderRadius: 1 },
   controls: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   controlsStacked: { alignSelf: 'flex-end' },
   search: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22 },
