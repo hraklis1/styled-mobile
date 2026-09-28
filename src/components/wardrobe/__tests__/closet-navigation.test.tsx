@@ -22,6 +22,7 @@ it.each([[402, 1, 'row'], [320, 1, 'column'], [402, 1.6, 'column']])(
     expect(StyleSheet.flatten(navigation.props.style).flexDirection).toBe(direction);
     const controls = root.findAllByType('PressableScale' as any);
     expect(controls.map(n => n.props.accessibilityLabel)).toEqual(['Pieces', 'Outfits', 'Boards', 'Search pieces, search active: linen']);
+    expect(controls[3].findAllByType('View' as any)).toHaveLength(0);
     controls.forEach(control => expect(StyleSheet.flatten(control.props.contentStyle).minHeight ?? StyleSheet.flatten(control.props.contentStyle).height).toBeGreaterThanOrEqual(44));
     act(() => controls[1].props.onPress());
     expect(onChange).toHaveBeenCalledWith('outfits');

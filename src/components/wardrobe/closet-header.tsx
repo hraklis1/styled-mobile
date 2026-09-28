@@ -5,10 +5,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { PressableScale } from '../primitives/PressableScale';
 import { colors, typography, spacing } from '../../theme';
 
-export function ClosetHeader({ scrollY, actionLabel, onAction, summary, overflowAction, children, onMeasure }: {
+export function ClosetHeader({ scrollY, actionLabel, onAction, summary, overflowAction, children, onMeasure, hideDivider = false }: {
   scrollY: SharedValue<number>; actionLabel: string; onAction: () => void; children: ReactNode;
   summary: string; overflowAction?: ReactNode;
   onMeasure: (height: number, collapseDistance: number) => void;
+  hideDivider?: boolean;
 }) {
   const { fontScale } = useWindowDimensions();
   const [titleHeight, setTitleHeight] = useState(64);
@@ -24,7 +25,7 @@ export function ClosetHeader({ scrollY, actionLabel, onAction, summary, overflow
   // Text swaps once at the compact boundary: no fades, springs, or duplicate
   // accessible titles, including when Reduce Motion is enabled.
   return (
-    <Animated.View style={[styles.header, position]} onLayout={event => setHeight(event.nativeEvent.layout.height)}>
+    <Animated.View style={[styles.header, hideDivider && styles.headerWithoutDivider, position]} onLayout={event => setHeight(event.nativeEvent.layout.height)}>
       <View style={styles.titleRow} onLayout={event => setTitleHeight(event.nativeEvent.layout.height)}>
         {/* Remeasure text after Dynamic Type changes without remounting the header. */}
         <View key={fontScale} style={[styles.titleContent, fontScale > 1.3 && styles.titleContentStacked, { paddingRight: overflowAction ? 88 : 44, opacity: compact ? 0 : 1 }]} accessibilityElementsHidden={compact} importantForAccessibility={compact ? 'no-hide-descendants' : 'auto'}>
@@ -43,6 +44,7 @@ export function ClosetHeader({ scrollY, actionLabel, onAction, summary, overflow
 }
 const styles = StyleSheet.create({
   header: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, backgroundColor: colors.background, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  headerWithoutDivider: { borderBottomWidth: 0 },
   titleRow: { minHeight: 64, paddingVertical: 8, justifyContent: 'center', paddingHorizontal: spacing.page },
   titleContent: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
   titleContentStacked: { flexDirection: 'column', alignItems: 'flex-start', gap: 0 },

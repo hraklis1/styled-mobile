@@ -17,7 +17,6 @@ export function ClosetNavigation({ value, onChange, searchAvailable, searchOpen,
   const { width, fontScale } = useWindowDimensions();
   // Tabs retain their full labels and touch targets at narrow/large-text sizes.
   const stacked = fontScale > 1.3 || width - spacing.page * 2 < 300 * fontScale;
-  const activeSearch = query.trim().length > 0;
   // iOS can retain intrinsic text widths after a live Dynamic Type change.
   // Remount only these controls so full labels are measured at the new scale.
   return (
@@ -31,11 +30,10 @@ export function ClosetNavigation({ value, onChange, searchAvailable, searchOpen,
         </PressableScale>)}
       </View>
       {(searchAvailable || onFilter) && <View style={[styles.controls, stacked && styles.controlsStacked]}>
-        {searchAvailable && !searchOpen && <PressableScale onPress={onSearch} contentStyle={[styles.search, activeSearch && styles.activeSearch]}
-          accessibilityRole="button" accessibilityLabel={`${searchOpen ? 'Hide search for' : 'Search'} ${value}${activeSearch ? `, search active: ${query}` : ''}`}
+        {searchAvailable && !searchOpen && <PressableScale onPress={onSearch} contentStyle={styles.search}
+          accessibilityRole="button" accessibilityLabel={`${searchOpen ? 'Hide search for' : 'Search'} ${value}${query.trim() ? `, search active: ${query}` : ''}`}
           accessibilityState={{ expanded: searchOpen }}>
           <Ionicons name="search-outline" size={20} color={colors.foreground} />
-          {activeSearch && <View style={styles.searchDot} />}
         </PressableScale>}
         {onFilter && <FilterControl count={filterCount} onPress={onFilter} />}
       </View>}
@@ -54,6 +52,4 @@ const styles = StyleSheet.create({
   controls: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   controlsStacked: { alignSelf: 'flex-end' },
   search: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22 },
-  activeSearch: { backgroundColor: colors.surfaceSelected },
-  searchDot: { position: 'absolute', top: 8, right: 8, width: 5, height: 5, borderRadius: 3, backgroundColor: colors.foreground },
 });
