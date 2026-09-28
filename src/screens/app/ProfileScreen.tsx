@@ -694,7 +694,7 @@ export function ProfileScreen(_props: ProfileScreenProps) {
           )}
         </SectionCard>
 
-        <SectionCard icon="sparkles-outline" title="STYLE DNA">
+        <SectionCard icon="sparkles-outline" title="STYLE DNA" collapsible initiallyExpanded={false}>
           <View style={styles.field}>
             <FieldLabel>Display name</FieldLabel>
             <TextInput
