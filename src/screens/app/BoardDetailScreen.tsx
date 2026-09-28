@@ -295,12 +295,12 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
 
   const handleRename = useCallback(() => {
     setRenameSheetVisible(true);
-  }, []);
+  }, [setRenameSheetVisible]);
 
   const submitRename = useCallback((name: string) => {
     setRenameSheetVisible(false);
     updateBoard({ id: boardId, name });
-  }, [boardId, updateBoard]);
+  }, [boardId, setRenameSheetVisible, updateBoard]);
 
   const handleUploadCover = useCallback(async () => {
     const image = await launchLibrary({ allowsEditing: true, maxDim: 800 });
