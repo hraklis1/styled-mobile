@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { PressableScale } from '../primitives/PressableScale';
@@ -181,14 +181,14 @@ export function BriefNote({ text, full }: { text: string; full?: boolean }) {
   );
 }
 
-/** The pieces the note recommends, as one line of numbered pills — the
+/** The pieces the note recommends, as a list of numbered pills — the
  *  rich rows (what each works with, occasions, skip) live on the detail. */
 function BriefEditStrip({ priorities, onSelectPriority }: { priorities: ShoppingBriefPriority[]; onSelectPriority?: (priority: ShoppingBriefPriority) => void }) {
   if (priorities.length === 0) return null;
   return (
     <View style={styles.edit}>
       <Text style={styles.editLabel}>The edit</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.editRow} style={styles.editScroll}>
+      <View style={styles.editList}>
         {priorities.map((priority, index) => {
           const label = sentenceCase(priority.label);
           return (
@@ -207,7 +207,7 @@ function BriefEditStrip({ priorities, onSelectPriority }: { priorities: Shopping
             </PressableScale>
           );
         })}
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -273,9 +273,9 @@ const styles = StyleSheet.create({
   // uppercase department heading of the page.
   editLabel: { ...typography.text.meta, color: colors.mutedForeground },
   // Bleeds to the panel edge so a long third pill scrolls rather than clips.
-  editScroll: { marginHorizontal: -spacing.lg, flexGrow: 0 },
-  editRow: { gap: spacing.sm, paddingHorizontal: spacing.lg },
+  editList: { gap: spacing.sm, alignItems: 'flex-start' },
   pill: {
+    maxWidth: '100%',
     minHeight: 36,
     flexDirection: 'row',
     alignItems: 'center',
@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
     color: shoppingSurfaces.olive.wash,
     backgroundColor: shoppingSurfaces.olive.accent,
   },
-  pillLabel: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.medium, color: colors.foreground },
+  pillLabel: { flexShrink: 1, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.medium, color: colors.foreground },
   sample: { opacity: 0.55, paddingTop: spacing.xs },
   sampleLabel: { ...typography.text.meta, color: colors.mutedForeground },
   // Full width, unlike every other action on this card: it is the page's one
