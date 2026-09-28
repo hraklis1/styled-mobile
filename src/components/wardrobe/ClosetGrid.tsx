@@ -27,6 +27,7 @@ type Props = {
   ListHeaderComponent?: React.ReactElement | null;
   ListEmptyComponent?: React.ReactElement | null;
   onScroll?: (event: any) => void;
+  onScrollBeginDrag?: () => void;
   scrollEventThrottle?: number;
   contentInset?: { top?: number; bottom?: number };
   listPaddingTop?: number;
@@ -49,6 +50,7 @@ const ClosetGridComponent = forwardRef<FlashListRef<Item>, Props>(function Close
   ListHeaderComponent,
   ListEmptyComponent,
   onScroll,
+  onScrollBeginDrag,
   scrollEventThrottle = 16,
   contentInset,
   listPaddingTop = 0,
@@ -102,6 +104,7 @@ const ClosetGridComponent = forwardRef<FlashListRef<Item>, Props>(function Close
         ListHeaderComponent={ListHeaderComponent}
         ListEmptyComponent={ListEmptyComponent}
         onScroll={onScroll}
+        onScrollBeginDrag={onScrollBeginDrag}
         scrollEventThrottle={scrollEventThrottle}
         contentInset={contentInset}
         initialScrollIndex={initialScrollIndex}

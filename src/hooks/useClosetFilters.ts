@@ -1,6 +1,7 @@
+import { matchesSearch, pieceSearchRecord, outfitSearchRecord } from '../lib/closet-search';
 import { useEffect, useState, useMemo } from 'react';
 import { parseMaterialString } from '../lib/colorUtils';
-import { SEASON_OPTIONS, CATEGORY_ORDER, CATEGORY_LABELS, type ItemCategory } from '../types/item';
+import { SEASON_OPTIONS, CATEGORY_ORDER, type ItemCategory } from '../types/item';
 import { getSubcategories } from '../lib/taxonomy';
 import type { Item } from '../types/item';
 import type { Outfit } from '../types/outfit';
@@ -135,20 +136,12 @@ export function useClosetFilters({ items, outfits, events, piecesSearch, outfits
     }
   }, [activeSubcategory, availableSubcategories]);
 
+  const pieceRecords = useMemo(() => new Map(items.map(i => [i.id, pieceSearchRecord(i)])), [items]);
+  const outfitRecords = useMemo(() => new Map(outfits.map(o => [o.id, outfitSearchRecord(o)])), [outfits]);
+
   // ── Filtered data ────────────────────────────────────────────────────────
-  const filteredItems = useMemo(() => {
+  const piecesWithoutCategories = useMemo(() => {
     let result = items.filter(i => !i.isArchived);
-    result = result.filter(i => itemMatchesSelectedCategories(i.category, selectedCategories));
-    if (activeSubcategory) result = result.filter(i => i.subcategory === activeSubcategory);
-    if (piecesSearch.trim()) {
-      const q = piecesSearch.trim().toLowerCase();
-      result = result.filter(
-        i =>
-          i.name.toLowerCase().includes(q) ||
-          (i.brand ?? '').toLowerCase().includes(q) ||
-          (i.category ? (CATEGORY_LABELS[i.category] ?? '').toLowerCase().includes(q) : false),
-      );
-    }
     if (selectedColors.length)
       result = result.filter(i => i.colorNormalized && selectedColors.includes(i.colorNormalized));
     if (selectedBrands.length)
@@ -168,6 +161,16 @@ export function useClosetFilters({ items, outfits, events, piecesSearch, outfits
     if (selectedSleeveLengths.length)
       result = result.filter(i => i.sleeveLength && selectedSleeveLengths.includes(i.sleeveLength));
 
+    return result;
+  }, [items, selectedColors, selectedBrands, selectedSeasons, selectedConditions, selectedWarmth,
+    selectedOccasions, selectedMaterials, selectedSleeveLengths]);
+  const piecesBeforeSearch = useMemo(() => piecesWithoutCategories.filter(i =>
+    itemMatchesSelectedCategories(i.category, selectedCategories) && (!activeSubcategory || i.subcategory === activeSubcategory)
+  ), [piecesWithoutCategories, selectedCategories, activeSubcategory]);
+  const categoryRecoveryCount = useMemo(() => piecesWithoutCategories.filter(i => matchesSearch(pieceRecords.get(i.id) ?? '', piecesSearch)).length,
+    [piecesWithoutCategories, pieceRecords, piecesSearch]);
+  const filteredItems = useMemo(() => {
+    const result = piecesBeforeSearch.filter(i => matchesSearch(pieceRecords.get(i.id) ?? '', piecesSearch));
     const arr = [...result];
     if (sortKey === 'oldest')
       arr.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -194,20 +197,10 @@ export function useClosetFilters({ items, outfits, events, piecesSearch, outfits
     else
       arr.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return arr;
-  }, [items, activeSubcategory, piecesSearch, sortKey, selectedColors, selectedBrands, selectedSeasons,
-      selectedConditions, selectedWarmth, selectedCategories, selectedOccasions,
-      selectedStatuses, selectedMaterials, selectedSleeveLengths]);
+  }, [piecesBeforeSearch, pieceRecords, piecesSearch, sortKey]);
 
-  const filteredOutfits = useMemo(() => {
+  const outfitsBeforeSearch = useMemo(() => {
     let result = outfits;
-    if (outfitsSearch.trim()) {
-      const q = outfitsSearch.trim().toLowerCase();
-      result = result.filter(
-        o =>
-          o.name.toLowerCase().includes(q) ||
-          (o.tags ?? []).some(t => t.toLowerCase().includes(q)),
-      );
-    }
     if (outfitSelectedTags.length)
       result = result.filter(o => outfitSelectedTags.every(t => (o.tags ?? []).includes(t)));
     if (outfitShowAssigned)
@@ -217,6 +210,10 @@ export function useClosetFilters({ items, outfits, events, piecesSearch, outfits
     if (outfitShowFavorites)
       result = result.filter(o => o.isFavorite);
 
+    return result;
+  }, [outfits, outfitSelectedTags, outfitShowAssigned, outfitShowNeverWorn, outfitShowFavorites, upcomingAssignmentSummaries]);
+  const filteredOutfits = useMemo(() => {
+    const result = outfitsBeforeSearch.filter(o => matchesSearch(outfitRecords.get(o.id) ?? '', outfitsSearch));
     const arr = [...result];
     if (outfitSortKey === 'oldest')
       arr.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -234,7 +231,7 @@ export function useClosetFilters({ items, outfits, events, piecesSearch, outfits
     else
       arr.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return arr;
-  }, [outfits, outfitsSearch, outfitSelectedTags, outfitShowAssigned, outfitShowNeverWorn, outfitShowFavorites, outfitSortKey, upcomingAssignmentSummaries]);
+  }, [outfitsBeforeSearch, outfitRecords, outfitsSearch, outfitSortKey]);
 
   // ── Actions ──────────────────────────────────────────────────────────────
   function clearPieceFilters() {
@@ -305,7 +302,7 @@ export function useClosetFilters({ items, outfits, events, piecesSearch, outfits
     categoryCounts, availableCategories, availableSubcategories,
 
     // Filtered data
-    filteredItems, filteredOutfits,
+    filteredItems, filteredOutfits, piecesBeforeSearch, outfitsBeforeSearch, pieceRecords, outfitRecords, categoryRecoveryCount,
 
     // Actions
     clearPieceFilters, clearOutfitFiltersOnly,

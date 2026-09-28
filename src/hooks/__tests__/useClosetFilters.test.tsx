@@ -61,3 +61,17 @@ it('shares multi-category selection, clears incompatible subcategories, and excl
   expect(filters.availableSubcategories).toEqual([]);
   expect(filters.filteredItems).toHaveLength(2);
 });
+it('keeps sort order and excludes archives with partial queries', () => {
+  act(() => renderer.update(<Harness piecesSearch="r" />));
+  expect(filters.filteredItems.map(i => i.id)).toEqual([2, 1]);
+  act(() => filters.setSortKey('oldest'));
+  expect(filters.filteredItems.map(i => i.id)).toEqual([1, 2]);
+});
+it('computes category recovery under the remaining filters', () => {
+  act(() => { filters.setSelectedCategories(['top']); filters.setSelectedColors(['black']); });
+  act(() => renderer.update(<Harness piecesSearch="pants" />));
+  expect(filters.filteredItems).toEqual([]);
+  expect(filters.categoryRecoveryCount).toBe(1);
+  act(() => filters.setSelectedColors(['white']));
+  expect(filters.categoryRecoveryCount).toBe(0);
+});

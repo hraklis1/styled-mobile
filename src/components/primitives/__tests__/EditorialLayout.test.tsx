@@ -1,4 +1,6 @@
 import React from 'react';
+import TestRenderer, { act } from 'react-test-renderer';
+import { TextInput } from 'react-native';
 import { StyleSheet, useWindowDimensions } from 'react-native';
 import { ScreenHeader } from '../Editorial';
 import { SearchField } from '../SearchField';
@@ -49,11 +51,13 @@ describe('Editorial responsive controls', () => {
   it('allows the search input to grow for large text without losing its value or callback', () => {
     setScreen(375, 2);
     const onChangeText = jest.fn();
-    const field = SearchField({ value: 'linen', onChangeText });
-    const input = React.Children.toArray(field.props.children)[1] as React.ReactElement<any>;
+    let renderer!: TestRenderer.ReactTestRenderer;
+    act(() => { renderer = TestRenderer.create(<SearchField value="linen" onChangeText={onChangeText} />); });
+    const input = renderer.root.findByType(TextInput);
     expect(StyleSheet.flatten(input.props.style).height).toBeGreaterThan(44);
     expect(input.props.value).toBe('linen');
     input.props.onChangeText('wool');
     expect(onChangeText).toHaveBeenCalledWith('wool');
+    act(() => renderer.unmount());
   });
 });

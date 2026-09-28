@@ -1,3 +1,8 @@
+import { useAuth } from '../../contexts/AuthContext';
+import { useClosetSearchHistory } from '../../hooks/useClosetSearchHistory';
+import { ClosetRecentSearches } from '../../components/wardrobe/closet-recent-searches';
+import { ClosetSearchFilters } from '../../components/wardrobe/closet-search-filters';
+import { addSearchFilter, combineSearchFilters, matchesSearch, searchRecord } from '../../lib/closet-search';
 import { useState, useCallback, useRef, useEffect, useMemo, type ReactNode } from 'react';
 import {
   View,
@@ -12,7 +17,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { type FlashListRef } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
-import { useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
+import Animated, { FadeIn, ReduceMotion, useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
 import { ClosetHeader } from '../../components/wardrobe/closet-header';
 import { ClosetNavigation } from '../../components/wardrobe/closet-navigation';
 import { ClosetViewMenu } from '../../components/wardrobe/closet-view-menu';
@@ -163,12 +168,31 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const { fabCollapsed } = useFabScroll();
 
   const [segment, setSegment]               = useState<Segment>('pieces');
+  const { user } = useAuth();
+  const [searchAccount, setSearchAccount] = useState(user?.id ?? null);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const history = useClosetSearchHistory(user?.id ?? null, segment);
   const [piecesSearch, setPiecesSearch] = useState('');
   const [outfitsSearch, setOutfitsSearch] = useState('');
   const [boardSearch, setBoardSearch]       = useState('');
+  const [searchFilters, setSearchFilters] = useState<Record<Segment, string[]>>({ pieces: [], outfits: [], boards: [] });
   const [searchVisibility, setSearchVisibility] = useState<Record<Segment, boolean>>({ pieces: false, outfits: false, boards: false });
   const [categoryScrollReset, setCategoryScrollReset] = useState(0);
   const [searchFocusRequest, setSearchFocusRequest] = useState<Segment | null>(null);
+  // Reset before rendering another account's query or recent searches.
+  if (searchAccount !== (user?.id ?? null)) {
+    setSearchAccount(user?.id ?? null);
+    setPiecesSearch(''); setOutfitsSearch(''); setBoardSearch('');
+    setSearchFilters({ pieces: [], outfits: [], boards: [] });
+    setSearchVisibility({ pieces: false, outfits: false, boards: false });
+    setSearchFocused(false); setSearchFocusRequest(null);
+  }
+  const activeQuery = segment === 'pieces' ? piecesSearch : segment === 'outfits' ? outfitsSearch : boardSearch;
+  const setActiveQuery = segment === 'pieces' ? setPiecesSearch : segment === 'outfits' ? setOutfitsSearch : setBoardSearch;
+  const activeSearchFilters = searchFilters[segment];
+  const effectiveSearch = combineSearchFilters(activeSearchFilters, activeQuery);
+  const setActiveSearchFilters = (next: string[]) => setSearchFilters(current => ({ ...current, [segment]: next }));
+
   const pendingHeaderAnchor = useRef<Segment | null>(null);
   const [piecesViewMode, setPiecesViewMode] = useState<PiecesViewMode>('grid');
   const [outfitViewMode, setOutfitViewMode] = useState<ViewMode>('grid');
@@ -201,12 +225,12 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
 
   const itemMap = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
   const outfitMap = useMemo(() => new Map(outfits.map((o) => [o.id, o])), [outfits]);
+  const boardRecords = useMemo(() => new Map(boards.map(b => [b.id, searchRecord([b.name])])), [boards]);
   const sortedBoards = useMemo(() => {
-      const normalized = boardSearch.trim().toLowerCase();
       return filterVisibleBoards(boards)
-      .filter((board) => !normalized || board.name.toLowerCase().includes(normalized))
-    }, [boardSearch, boards]);
-  const showBoardSearch = shouldShowBoardSearch(boards);
+      .filter((board) => matchesSearch(boardRecords.get(board.id) ?? '', combineSearchFilters(searchFilters.boards, boardSearch)))
+    }, [boardSearch, boards, boardRecords, searchFilters.boards]);
+  const showBoardSearch = shouldShowBoardSearch(boards) || searchVisibility.boards || !!boardSearch.trim() || searchFilters.boards.length > 0;
   const visibleBoardCount = filterVisibleBoards(boards).length;
   const createBoard = useCreateBoard();
   const updateBoard = useUpdateBoard();
@@ -248,9 +272,14 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     allOutfitTags, upcomingAssignmentSummaries,
     outfitActiveFilterCount,
     availableCategories, availableSubcategories,
-    filteredItems, filteredOutfits,
+    filteredItems, filteredOutfits, categoryRecoveryCount,
     clearSheetFilters, clearOutfitFilters, clearPieceFilters, clearOutfitFiltersOnly, canResetPieces, canResetOutfits,
-  } = useClosetFilters({ items, outfits, events, piecesSearch, outfitsSearch });
+  } = useClosetFilters({ items, outfits, events,
+    piecesSearch: combineSearchFilters(searchFilters.pieces, piecesSearch),
+    outfitsSearch: combineSearchFilters(searchFilters.outfits, outfitsSearch),
+  });
+
+
   const clearPieceFiltersAndResetCategories = () => {
     clearPieceFilters();
     setCategoryScrollReset(value => value + 1);
@@ -267,6 +296,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const anchors = useRef<Record<Segment, ClosetAnchor | null>>({ pieces: null, outfits: null, boards: null });
   const restoring = useRef(false);
   const restorationGeneration = useRef(0);
+  const resettingResults = useRef(false);
   const getActiveList = useCallback(() => segment === 'pieces'
     ? (piecesViewMode === 'grid' ? piecesGridRef.current : piecesListRef.current)
     : segment === 'outfits' ? outfitListRef.current : boardListRef.current,
@@ -276,7 +306,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
 
   const capturePosition = useCallback(() => {
     const list = getActiveList();
-    if (!list || restoring.current || !activeItems.length) return;
+    if (!list || resettingResults.current || restoring.current || !activeItems.length) return;
     const y = Math.max(0, list.getAbsoluteLastScrollOffset());
     const visibleTop = y + headerHeight - Math.min(y, collapseDistance);
     let index = Math.min(activeItems.length - 1, Math.max(0, list.getFirstVisibleIndex()));
@@ -321,18 +351,30 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   }, [collapseDistance]);
 
   const browsingSignature = JSON.stringify(segment === 'pieces'
-    ? [piecesSearch, sortKey, selectedColors, selectedBrands, selectedSeasons, selectedConditions, selectedWarmth, selectedCategories, selectedOccasions, selectedMaterials, selectedSleeveLengths, activeSubcategory]
-    : segment === 'outfits' ? [outfitsSearch, outfitSortKey, outfitSelectedTags, outfitShowAssigned, outfitShowNeverWorn, outfitShowFavorites] : [boardSearch]);
+    ? [combineSearchFilters(searchFilters.pieces, piecesSearch), sortKey, selectedColors, selectedBrands, selectedSeasons, selectedConditions, selectedWarmth, selectedCategories, selectedOccasions, selectedMaterials, selectedSleeveLengths, activeSubcategory]
+    : segment === 'outfits' ? [combineSearchFilters(searchFilters.outfits, outfitsSearch), outfitSortKey, outfitSelectedTags, outfitShowAssigned, outfitShowNeverWorn, outfitShowFavorites] : [combineSearchFilters(searchFilters.boards, boardSearch)]);
   const signatures = useRef<Partial<Record<Segment, string>>>({});
   useEffect(() => {
     const previous = signatures.current[segment];
     signatures.current[segment] = browsingSignature;
     if (previous !== undefined && previous !== browsingSignature) {
       restorationGeneration.current++;
+      resettingResults.current = true;
       restoring.current = false;
       anchors.current[segment] = null;
       getActiveList()?.scrollToOffset({ offset: 0, animated: false });
       scrollY.value = 0;
+      // FlashList may report the old offset while header padding is being measured.
+      // Keep the new result set at the top throughout that layout transaction.
+      let secondFrame: number | undefined;
+      const firstFrame = requestAnimationFrame(() => {
+        secondFrame = requestAnimationFrame(() => {
+          getActiveList()?.scrollToOffset({ offset: 0, animated: false });
+          scrollY.value = 0;
+          resettingResults.current = false;
+        });
+      });
+      return () => { cancelAnimationFrame(firstFrame); if (secondFrame !== undefined) cancelAnimationFrame(secondFrame); resettingResults.current = false; };
     }
   }, [browsingSignature, getActiveList, scrollY, segment]);
 
@@ -362,11 +404,30 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const toggleSearch = useCallback(() => {
     capturePosition();
     pendingHeaderAnchor.current = segment;
-    const opening = !searchVisibility[segment];
+    const opening = true;
+    setSearchFocused(true);
     setSearchFocusRequest(opening ? segment : null);
     if (!opening) Keyboard.dismiss();
     setSearchVisibility(current => ({ ...current, [segment]: opening }));
   }, [capturePosition, searchVisibility, segment]);
+
+  function finishSearch(close = true, query = activeQuery) {
+    const next = addSearchFilter(activeSearchFilters, query);
+    if (next !== activeSearchFilters) {
+      setActiveSearchFilters(next);
+      history.record(query);
+    }
+    setActiveQuery('');
+    if (close) {
+      Keyboard.dismiss(); setSearchFocused(false); setSearchFocusRequest(null);
+      capturePosition(); pendingHeaderAnchor.current = segment;
+      setSearchVisibility(current => ({ ...current, [segment]: false }));
+    }
+  }
+  function selectRecentSearch(query: string) { finishSearch(true, query); }
+  function removeSearchFilter(index: number) {
+    setActiveSearchFilters(activeSearchFilters.filter((_, current) => current !== index));
+  }
 
   // ── Segment switch ─────────────────────────────────────────────────────────
 
@@ -383,6 +444,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
       setSelectedOutfitIds(new Set());
       pendingHeaderAnchor.current = next;
       setSearchFocusRequest(null);
+      setSearchFocused(false);
       setSegment(next);
       scrollY.value = anchors.current[next]?.scrollY ?? 0;
     },
@@ -444,9 +506,9 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
 
   const handleItemPress = useCallback(
     (item: (typeof items)[number]) => {
-      navigation.navigate('ItemDetail', { itemId: item.id });
+      history.record(piecesSearch); navigation.navigate('ItemDetail', { itemId: item.id });
     },
-    [navigation],
+    [navigation, history, piecesSearch],
   );
 
   const handleLongPress = useCallback((item: (typeof items)[number]) => {
@@ -660,7 +722,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
       return (
         <PressableScale
           contentStyle={[styles.itemRow, selectionMode && isSelected && styles.itemRowSelected]}
-          onPress={selectionMode ? () => toggleSelect(item.id) : () => navigation.navigate('ItemDetail', { itemId: item.id })}
+          onPress={selectionMode ? () => toggleSelect(item.id) : () => { history.record(piecesSearch); navigation.navigate('ItemDetail', { itemId: item.id }); }}
           onLongPress={selectionMode ? undefined : () => handleLongPress(item)}
           delayLongPress={450}
           accessibilityRole="button"
@@ -694,7 +756,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         </PressableScale>
       );
     },
-    [navigation, selectionMode, selectedIds, toggleSelect, handleLongPress, fontScale],
+    [history, piecesSearch, navigation, selectionMode, selectedIds, toggleSelect, handleLongPress, fontScale],
   );
 
   const renderOutfitCard = useCallback(
@@ -716,7 +778,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             onPress={
               outfitSelectionMode
                 ? () => toggleOutfitSelect(outfit.id)
-                : () => navigation.navigate('OutfitDetail', { outfitId: outfit.id })
+                : () => { history.record(outfitsSearch); navigation.navigate('OutfitDetail', { outfitId: outfit.id }); }
             }
             onLongPress={outfitSelectionMode ? undefined : () => handleOutfitLongPress(outfit)}
             delayLongPress={450}
@@ -766,7 +828,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             onPress={
               outfitSelectionMode
                 ? () => toggleOutfitSelect(outfit.id)
-                : () => navigation.navigate('OutfitDetail', { outfitId: outfit.id })
+                : () => { history.record(outfitsSearch); navigation.navigate('OutfitDetail', { outfitId: outfit.id }); }
             }
             onLongPress={outfitSelectionMode ? undefined : () => handleOutfitLongPress(outfit)}
             delayLongPress={450}
@@ -814,12 +876,15 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         </View>
       );
     },
-    [cardWidth, outfitTileHeight, navigation, outfitViewMode, outfitSelectionMode, selectedOutfitIds, toggleOutfitSelect, handleOutfitLongPress, upcomingAssignmentSummaries, fontScale],
+    [history, outfitsSearch, cardWidth, outfitTileHeight, navigation, outfitViewMode, outfitSelectionMode, selectedOutfitIds, toggleOutfitSelect, handleOutfitLongPress, upcomingAssignmentSummaries, fontScale],
   );
 
   // ── Empty states ───────────────────────────────────────────────────────────
 
-  const hasActivePiecesFilters = hasActivePieceFilters(piecesSearch, activeFilterCount);
+  const piecesQuery = combineSearchFilters(searchFilters.pieces, piecesSearch);
+  const outfitsQuery = combineSearchFilters(searchFilters.outfits, outfitsSearch);
+  const boardQuery = combineSearchFilters(searchFilters.boards, boardSearch);
+  const hasActivePiecesFilters = items.some(i => !i.isArchived) && hasActivePieceFilters(piecesQuery, activeFilterCount);
 
   const emptyPieces = (
     <View style={styles.emptyState}>
@@ -831,10 +896,14 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
       </Text>
       <Text style={styles.emptySub}>
         {hasActivePiecesFilters
-          ? 'Try a different search or filter'
+          ? (piecesQuery.trim() ? `No matches for “${piecesQuery.trim()}”${activeFilterCount ? ' with these filters' : ''}` : 'Try adjusting your filters')
           : 'Start by adding your first item'}
       </Text>
-      {hasActivePiecesFilters && <TouchableOpacity style={styles.emptyBtn} onPress={() => { setPiecesSearch(''); clearPieceFilters(); }} accessibilityRole="button"><Text style={styles.emptyBtnText}>Clear search and filters</Text></TouchableOpacity>}
+      {hasActivePiecesFilters && <>
+        {(selectedCategories.length > 0 || activeSubcategory) && categoryRecoveryCount > 0 && <TouchableOpacity style={styles.emptyBtn} onPress={() => { setSelectedCategories([]); setActiveSubcategory(null); }} accessibilityRole="button" accessibilityLabel="Search all categories"><Text style={styles.emptyBtnText}>Search all categories</Text></TouchableOpacity>}
+        {activeFilterCount > 0 && <TouchableOpacity style={styles.emptyBtn} onPress={clearPieceFilters} accessibilityRole="button" accessibilityLabel="Clear filters"><Text style={styles.emptyBtnText}>Clear filters</Text></TouchableOpacity>}
+      </>}
+      {!!piecesQuery.trim() && <TouchableOpacity style={styles.emptyBtn} onPress={() => { setPiecesSearch(''); setActiveSearchFilters([]); }} accessibilityRole="button" accessibilityLabel="Clear search"><Text style={styles.emptyBtnText}>Clear search</Text></TouchableOpacity>}
       {!hasActivePiecesFilters && (
         <TouchableOpacity style={styles.emptyBtn} onPress={handleAddPieces} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel="Add your first item">
           <Ionicons name="add" size={16} color={colors.primaryForeground} />
@@ -844,7 +913,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     </View>
   );
 
-  const hasActiveOutfitFilters = outfitsSearch.trim().length > 0 || outfitActiveFilterCount > 0;
+  const hasActiveOutfitFilters = outfits.length > 0 && (outfitsQuery.trim().length > 0 || outfitActiveFilterCount > 0);
 
   const emptyOutfits = (
     <View style={styles.emptyState}>
@@ -855,9 +924,10 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         {hasActiveOutfitFilters ? 'No outfits match' : 'No outfits yet'}
       </Text>
       <Text style={styles.emptySub}>
-        {hasActiveOutfitFilters ? 'Try adjusting your search or filters' : 'Build outfits from your pieces'}
+        {hasActiveOutfitFilters ? (outfitsQuery.trim() ? `No matches for “${outfitsQuery.trim()}”${outfitActiveFilterCount ? ' with these filters' : ''}` : 'Try adjusting your filters') : 'Build outfits from your pieces'}
       </Text>
-      {hasActiveOutfitFilters && <TouchableOpacity style={styles.emptyBtn} onPress={() => { setOutfitsSearch(''); clearOutfitFiltersOnly(); }} accessibilityRole="button"><Text style={styles.emptyBtnText}>Clear search and filters</Text></TouchableOpacity>}
+      {hasActiveOutfitFilters && outfitActiveFilterCount > 0 && <TouchableOpacity style={styles.emptyBtn} onPress={clearOutfitFiltersOnly} accessibilityRole="button" accessibilityLabel="Clear filters"><Text style={styles.emptyBtnText}>Clear filters</Text></TouchableOpacity>}
+      {!!outfitsQuery.trim() && <TouchableOpacity style={styles.emptyBtn} onPress={() => { setOutfitsSearch(''); setActiveSearchFilters([]); }} accessibilityRole="button" accessibilityLabel="Clear search"><Text style={styles.emptyBtnText}>Clear search</Text></TouchableOpacity>}
       {!hasActiveOutfitFilters && (
         <TouchableOpacity
           style={styles.emptyBtn}
@@ -926,7 +996,8 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     if (outfitShowNeverWorn) filterTokens.push({ key: 'never', label: 'Never worn', remove: () => setOutfitShowNeverWorn(false) });
     if (outfitShowFavorites) filterTokens.push({ key: 'favorites', label: 'Favourites', remove: () => setOutfitShowFavorites(false) });
   }
-  const browseHeader = (
+  const showRecentSearches = searchFocused && !activeQuery.trim() && history.recent.length > 0;
+  const browseHeader = showRecentSearches ? null : (
     <View style={[styles.browseHeader, (segment === 'pieces' ? piecesViewMode === 'grid' : segment === 'outfits' ? outfitViewMode === 'grid' : false) && { paddingHorizontal: COL_GAP / 2 }]}>
           {/* Category pills — pieces only */}
           {hasCategoryPills && (
@@ -1011,6 +1082,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
               onToggleSelect={toggleSelect}
               ListEmptyComponent={itemsLoading ? null : emptyPieces}
               onScroll={handleScroll}
+              onScrollBeginDrag={() => { setSearchFocused(false); Keyboard.dismiss(); }}
               scrollEventThrottle={16}
               listPaddingTop={listPaddingTop}
               onLoad={() => { void restorePosition(); }}
@@ -1030,6 +1102,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
               keyboardDismissMode="on-drag"
               maintainVisibleContentPosition={{ disabled: true }}
               onScroll={handleScroll}
+              onScrollBeginDrag={() => { setSearchFocused(false); Keyboard.dismiss(); }}
               scrollEventThrottle={16}
               onLoad={() => { void restorePosition(); }}
               ListHeaderComponent={browseHeader}
@@ -1059,6 +1132,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             keyboardDismissMode="on-drag"
             maintainVisibleContentPosition={{ disabled: true }}
             onScroll={handleScroll}
+              onScrollBeginDrag={() => { setSearchFocused(false); Keyboard.dismiss(); }}
             scrollEventThrottle={16}
           />
           </View>
@@ -1068,6 +1142,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             ref={boardListRef}
             onLoad={() => { void restorePosition(); }}
             onScroll={handleScroll}
+              onScrollBeginDrag={() => { setSearchFocused(false); Keyboard.dismiss(); }}
             scrollEventThrottle={16}
             data={sortedBoards}
             keyExtractor={(b) => String(b.id)}
@@ -1079,7 +1154,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
                   itemMap={itemMap}
                   outfitMap={outfitMap}
                   width={cardWidth}
-                  onPress={() => navigation.navigate('BoardDetail', { boardId: item.id })}
+                  onPress={() => { history.record(boardSearch); navigation.navigate('BoardDetail', { boardId: item.id }); }}
                   onOptions={() => handleBoardOptions(item)}
                 />
               </View>
@@ -1088,8 +1163,8 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             ListEmptyComponent={
               boardsLoading
                 ? boardLoadingSkeleton
-                : boardSearch.trim().length > 0
-                  ? <View style={styles.noBoardResults}><Text style={styles.emptySub}>No boards match “{boardSearch}”.</Text></View>
+                : boardQuery.trim().length > 0
+                  ? <View style={styles.noBoardResults}><Text style={styles.emptySub}>No boards match “{boardQuery}”.</Text><TouchableOpacity style={styles.emptyBtn} onPress={() => { setBoardSearch(''); setActiveSearchFilters([]); }} accessibilityRole="button" accessibilityLabel="Clear search"><Text style={styles.emptyBtnText}>Clear search</Text></TouchableOpacity></View>
                   : visibleBoardCount === 0
                     ? emptyBoards
                     : null
@@ -1118,19 +1193,25 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
           <ClosetNavigation value={segment} onChange={handleSegmentChange}
             searchAvailable={segment !== 'boards' || showBoardSearch}
             searchOpen={searchVisibility[segment]}
-            query={segment === 'pieces' ? piecesSearch : segment === 'outfits' ? outfitsSearch : boardSearch}
+            query={effectiveSearch}
             onSearch={toggleSearch}
             filterCount={segment === 'pieces' ? activeFilterCount : outfitActiveFilterCount}
             onFilter={segment === 'boards' ? undefined : () => { Keyboard.dismiss(); if (segment === 'pieces') setFilterSheetOpen(true); else setOutfitFilterSheetOpen(true); }} />
-          {searchVisibility[segment] && (segment !== 'boards' || showBoardSearch) && <View style={styles.searchRow}>
-            <SearchField key={segment} value={segment === 'pieces' ? piecesSearch : segment === 'outfits' ? outfitsSearch : boardSearch}
-              onChangeText={segment === 'pieces' ? setPiecesSearch : segment === 'outfits' ? setOutfitsSearch : setBoardSearch}
-              placeholder={`Search ${segment}…`} accessibilityLabel={`Search ${segment}`}
-              autoFocus={searchFocusRequest === segment} onBlur={() => setSearchFocusRequest(null)} />
-            <PressableScale onPress={toggleSearch} contentStyle={styles.closeSearch} accessibilityRole="button" accessibilityLabel="Close search">
-              <Ionicons name="close" size={22} color={colors.foreground} />
-            </PressableScale>
-          </View>}
+          {searchVisibility[segment] && <Animated.View entering={FadeIn.duration(160).reduceMotion(ReduceMotion.System)}>
+            <View style={styles.searchRow}>
+              <SearchField key={segment} value={activeQuery} onChangeText={setActiveQuery}
+                placeholder={segment === 'pieces' ? 'Search your pieces' : `Search ${segment}…`}
+                accessibilityLabel={`Search ${segment}`} focusOnClear keepFocusOnSubmit autoCorrect={false} autoCapitalize="none"
+                autoFocus={searchFocusRequest === segment} onFocus={() => setSearchFocused(true)}
+                onBlur={() => { setSearchFocusRequest(null); setSearchFocused(false); }} onSubmitEditing={() => finishSearch(false)} />
+              <PressableScale onPress={() => finishSearch(true)} contentStyle={styles.closeSearch} accessibilityRole="button" accessibilityLabel="Done searching">
+                <Text style={styles.searchDone}>Done</Text>
+              </PressableScale>
+            </View>
+          </Animated.View>}
+          <ClosetSearchFilters filters={activeSearchFilters} onRemove={removeSearchFilter} />
+          {showRecentSearches && <ClosetRecentSearches recent={history.recent} onSelect={selectRecentSearch} onClear={history.clear} />}
+
         </ClosetHeader>
       </View>
 
@@ -1515,7 +1596,8 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     gap: spacing.sm,
   },
-  closeSearch: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  searchDone: { ...typography.text.bodySmall, color: colors.foreground },
+  closeSearch: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   // ── Category pills
   pillRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   pillScrollWrap: { flex: 1, minWidth: 0 },

@@ -31,7 +31,7 @@ export function ClosetNavigation({ value, onChange, searchAvailable, searchOpen,
         </PressableScale>)}
       </View>
       {(searchAvailable || onFilter) && <View style={[styles.controls, stacked && styles.controlsStacked]}>
-        {searchAvailable && <PressableScale onPress={onSearch} contentStyle={[styles.search, activeSearch && styles.activeSearch]}
+        {searchAvailable && !searchOpen && <PressableScale onPress={onSearch} contentStyle={[styles.search, activeSearch && styles.activeSearch]}
           accessibilityRole="button" accessibilityLabel={`${searchOpen ? 'Hide search for' : 'Search'} ${value}${activeSearch ? `, search active: ${query}` : ''}`}
           accessibilityState={{ expanded: searchOpen }}>
           <Ionicons name="search-outline" size={20} color={colors.foreground} />

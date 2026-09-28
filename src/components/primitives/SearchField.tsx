@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { Pressable, StyleSheet, TextInput, View, useWindowDimensions, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, radii } from '../../theme';
@@ -10,6 +11,8 @@ type Props = Omit<TextInputProps, 'style' | 'value' | 'onChangeText'> & {
   /** Always show the trailing control, even when empty (a dismissible search). */
   dismissible?: boolean;
   style?: StyleProp<ViewStyle>;
+  focusOnClear?: boolean;
+  keepFocusOnSubmit?: boolean;
 };
 
 const FIELD_HEIGHT = 44;
@@ -24,15 +27,20 @@ export function SearchField({
   onChangeText,
   onClear,
   dismissible = false,
+  focusOnClear = false,
+  keepFocusOnSubmit = false,
   style,
   accessibilityLabel,
+  onSubmitEditing,
   ...inputProps
 }: Props) {
+  const inputRef = useRef<TextInput>(null);
   const { fontScale } = useWindowDimensions();
   const fieldHeight = Math.max(FIELD_HEIGHT, Math.ceil(typography.text.bodySmall.fontSize * fontScale * 1.25) + 16);
   const showClear = dismissible || value.length > 0;
   const clear = () => {
     onChangeText('');
+    if (focusOnClear) inputRef.current?.focus();
     onClear?.();
   };
 
@@ -41,8 +49,14 @@ export function SearchField({
       <Ionicons name="search-outline" size={16} color={colors.mutedForeground} style={styles.icon} />
       <TextInput
         {...inputProps}
+        ref={inputRef}
         value={value}
         onChangeText={onChangeText}
+        blurOnSubmit={keepFocusOnSubmit ? false : inputProps.blurOnSubmit}
+        onSubmitEditing={event => {
+          onSubmitEditing?.(event);
+          if (keepFocusOnSubmit) setTimeout(() => inputRef.current?.focus(), 60);
+        }}
         style={[styles.input, { height: fieldHeight }]}
         placeholderTextColor={colors.mutedForeground}
         returnKeyType={inputProps.returnKeyType ?? 'search'}

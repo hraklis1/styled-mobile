@@ -3,12 +3,17 @@ import TestRenderer, { act } from 'react-test-renderer';
 import { StyleSheet } from 'react-native';
 import { ClosetScreen } from '../ClosetScreen';
 
+const mockRecord = jest.fn();
+let mockRecent: string[] = [];
+let mockAccount = 'account-a';
+jest.mock('../../../contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: mockAccount } }) }));
+jest.mock('../../../hooks/useClosetSearchHistory', () => ({ useClosetSearchHistory: () => ({ recent: mockRecent, record: mockRecord, clear: jest.fn() }) }));
 jest.mock('../../../lib/resolveImageUri', () => ({ resolveImageUri: (uri: string) => uri }));
 jest.mock('@react-navigation/native', () => ({ useFocusEffect: (callback: () => void) => require('react').useEffect(callback, [callback]) }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 47, bottom: 34 }) }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }));
 jest.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));
-jest.mock('react-native-reanimated', () => ({ useSharedValue: (value: number) => require('react').useRef({ value }).current, useAnimatedScrollHandler: () => jest.fn() }));
+jest.mock('react-native-reanimated', () => ({ __esModule: true, default: { View: 'AnimatedView' }, FadeIn: { duration: () => ({ reduceMotion: () => undefined }) }, ReduceMotion: { System: 'system' }, useSharedValue: (value: number) => require('react').useRef({ value }).current, useAnimatedScrollHandler: () => jest.fn() }));
 jest.mock('../../../lib/closet-preferences', () => ({ loadPiecesViewMode: () => new Promise(() => {}), savePiecesViewMode: jest.fn() }));
 jest.mock('../../../components/wardrobe/closet-header', () => ({ ClosetHeader: (props: any) => require('react').createElement('ClosetHeader', props, props.children, props.overflowAction) }));
 jest.mock('../../../components/wardrobe/closet-navigation', () => ({ ClosetNavigation: 'ClosetNavigation' }));
@@ -49,11 +54,12 @@ const mockItems = [
 ];
 const mockOutfits = [{ id: 7, name: 'Weekend', createdAt: '2026-01-01', tags: [], wearCount: 0 }];
 const mockEmpty: never[] = [];
+let mockBoards: any[] = [];
 const mockMutation = { mutate: jest.fn(), mutateAsync: jest.fn() };
 jest.mock('../../../hooks/useItems', () => ({ useItems: () => ({ data: mockItems }), useUpdateItem: () => mockMutation, useDeleteItem: () => mockMutation, useMarkItemWorn: () => mockMutation }));
 jest.mock('../../../hooks/useOutfits', () => ({ useOutfits: () => ({ data: mockOutfits }), useMarkOutfitWorn: () => mockMutation, useDeleteOutfit: () => mockMutation, useUpdateOutfit: () => mockMutation }));
 jest.mock('../../../hooks/useEvents', () => ({ useEvents: () => ({ data: mockEmpty }) }));
-jest.mock('../../../hooks/useBoards', () => ({ useBoards: () => ({ data: mockEmpty }), useCreateBoard: () => mockMutation, useDeleteBoard: () => mockMutation, useUpdateBoard: () => mockMutation }));
+jest.mock('../../../hooks/useBoards', () => ({ useBoards: () => ({ data: mockBoards }), useCreateBoard: () => mockMutation, useDeleteBoard: () => mockMutation, useUpdateBoard: () => mockMutation }));
 jest.mock('../../../hooks/useCameraLaunch', () => ({ useLibraryLaunch: () => jest.fn() }));
 jest.mock('../../../contexts/GlobalScanContext', () => ({ useGlobalScan: () => ({ openScanItem: jest.fn(), openBatchScan: jest.fn() }) }));
 jest.mock('../../../contexts/GlobalAddSheetContext', () => ({ useGlobalAddSheet: () => ({ openAddSheet: jest.fn() }) }));
@@ -63,7 +69,7 @@ jest.mock('../../../contexts/FabScrollContext', () => ({ useFabScroll: () => ({ 
 let renderer: TestRenderer.ReactTestRenderer;
 const node = (type: string) => renderer.root.findByType(type as any);
 const button = (label: string) => renderer.root.findAll(n => n.props.accessibilityLabel === label && typeof n.props.onPress === 'function')[0];
-beforeEach(() => { jest.clearAllMocks(); mockList.getAbsoluteLastScrollOffset.mockReturnValue(0); act(() => { renderer = TestRenderer.create(<ClosetScreen navigation={{ navigate: jest.fn(), setParams: jest.fn() } as any} route={{ params: {} } as any} />); }); });
+beforeEach(() => { mockRecent = []; mockBoards = []; jest.clearAllMocks(); mockList.getAbsoluteLastScrollOffset.mockReturnValue(0); act(() => { renderer = TestRenderer.create(<ClosetScreen navigation={{ navigate: jest.fn(), setParams: jest.fn() } as any} route={{ params: {} } as any} />); }); });
 afterEach(() => { act(() => renderer.unmount()); });
 
 it('enters selection from the menu with zero selected items and stays there after clearing', () => {
@@ -102,27 +108,86 @@ it('disables menu selection for empty results', () => {
   expect(node('ClosetViewMenu').props.selectionDisabled).toBe(true);
 });
 
-it('hides search without clearing it and preserves visibility per section', () => {
-  expect(renderer.root.findAllByType('SearchField' as any)).toHaveLength(0);
+it('commits search as a pill on Done and closes an empty search', () => {
   act(() => node('ClosetNavigation').props.onSearch());
-  expect(node('SearchField').props.autoFocus).toBe(true);
   act(() => node('SearchField').props.onChangeText('shirt'));
-  act(() => button('Close search').props.onPress());
-  expect(renderer.root.findAllByType('SearchField' as any)).toHaveLength(0);
+  act(() => button('Done searching').props.onPress());
   expect(node('ClosetNavigation').props.query).toBe('shirt');
+  expect(mockRecord).toHaveBeenCalledWith('shirt');
   expect(node('ClosetGrid').props.items).toHaveLength(1);
-  act(() => node('ClosetNavigation').props.onChange('outfits'));
+  expect(renderer.root.findAllByType('SearchField' as any)).toHaveLength(0);
+  expect(button('Remove search filter shirt')).toBeDefined();
+});
+it('adds multiple AND search pills with Enter and lets each one be removed', () => {
   act(() => node('ClosetNavigation').props.onSearch());
+  act(() => node('SearchField').props.onChangeText('black'));
+  act(() => node('SearchField').props.onSubmitEditing());
+  expect(node('SearchField').props.value).toBe('');
+  expect(node('ClosetNavigation').props.query).toBe('black');
+  act(() => node('SearchField').props.onChangeText('trousers'));
+  act(() => node('SearchField').props.onSubmitEditing());
+  expect(node('ClosetNavigation').props.query).toBe('black trousers');
+  expect(node('ClosetGrid').props.items.map((item: any) => item.id)).toEqual([2]);
+  act(() => button('Remove search filter black').props.onPress());
+  expect(node('ClosetNavigation').props.query).toBe('trousers');
+  expect(node('ClosetGrid').props.items.map((item: any) => item.id)).toEqual([2]);
+});
+it('preserves search pills independently across sections', () => {
+  act(() => node('ClosetNavigation').props.onSearch());
+  act(() => node('SearchField').props.onChangeText('shirt'));
+  act(() => button('Done searching').props.onPress());
+  act(() => node('ClosetNavigation').props.onChange('outfits'));
+  expect(node('ClosetNavigation').props.query).toBe('');
+  act(() => node('ClosetNavigation').props.onSearch());
+  act(() => node('SearchField').props.onChangeText('Weekend'));
+  act(() => button('Done searching').props.onPress());
+  expect(node('ClosetNavigation').props.query).toBe('Weekend');
   act(() => node('ClosetNavigation').props.onChange('pieces'));
-  expect(node('ClosetNavigation').props.searchOpen).toBe(false);
-  act(() => node('ClosetNavigation').props.onSearch());
-  expect(node('SearchField').props.value).toBe('shirt');
-  act(() => node('SearchField').props.onChangeText(''));
-  expect(node('ClosetNavigation').props.searchOpen).toBe(true);
-  expect(node('ClosetGrid').props.items).toHaveLength(2);
+  expect(node('ClosetNavigation').props.query).toBe('shirt');
+  expect(button('Remove search filter shirt')).toBeDefined();
   act(() => node('ClosetNavigation').props.onChange('outfits'));
-  expect(node('ClosetNavigation').props.searchOpen).toBe(true);
-  expect(node('SearchField').props.autoFocus).toBe(false);
+  expect(node('ClosetNavigation').props.query).toBe('Weekend');
+});
+it('deduplicates equivalent filters and clears only the draft from the input control', () => {
+  act(() => node('ClosetNavigation').props.onSearch());
+  act(() => node('SearchField').props.onChangeText('LINEN'));
+  act(() => node('SearchField').props.onSubmitEditing());
+  act(() => node('SearchField').props.onChangeText('  LíNEN!!!  '));
+  act(() => node('SearchField').props.onSubmitEditing());
+  expect(renderer.root.findAll(n => n.props.accessibilityLabel === 'Remove search filter LINEN')).toHaveLength(1);
+  expect(node('ClosetNavigation').props.query).toBe('LINEN');
+  act(() => node('SearchField').props.onChangeText('shirt'));
+  act(() => node('SearchField').props.onChangeText(''));
+  expect(node('SearchField').props.value).toBe('');
+  expect(node('ClosetNavigation').props.query).toBe('LINEN');
+});
+it('offers recent searches only while focused and empty, and applies them on tap', () => {
+  mockRecent = ['Bottoms'];
+  act(() => node('ClosetNavigation').props.onSearch());
+  act(() => button('Search Bottoms').props.onPress());
+  expect(renderer.root.findAllByType('SearchField' as any)).toHaveLength(0);
+  expect(node('ClosetNavigation').props.query).toBe('Bottoms');
+  expect(node('ClosetGrid').props.items.map((i: any) => i.id)).toEqual([2]);
+  expect(button('Search Bottoms')).toBeUndefined();
+});
+it('removes categories without clearing the query', () => {
+  act(() => button('Tops').props.onPress());
+  act(() => node('ClosetNavigation').props.onSearch());
+  act(() => node('SearchField').props.onChangeText('trousers'));
+  act(() => button('Search all categories').props.onPress());
+  expect(node('SearchField').props.value).toBe('trousers');
+  expect(node('ClosetGrid').props.items.map((i: any) => i.id)).toEqual([2]);
+});
+it('clears query and field visibility when the account changes', () => {
+  act(() => node('ClosetNavigation').props.onSearch());
+  act(() => node('SearchField').props.onChangeText('shirt'));
+  act(() => button('Done searching').props.onPress());
+  mockAccount = 'account-b';
+  act(() => renderer.update(<ClosetScreen navigation={{ navigate: jest.fn(), setParams: jest.fn() } as any} route={{ params: {} } as any} />));
+  expect(node('ClosetNavigation').props.query).toBe('');
+  expect(button('Remove search filter shirt')).toBeUndefined();
+  expect(renderer.root.findAllByType('SearchField' as any)).toHaveLength(0);
+  mockAccount = 'account-a';
 });
 it('keeps category feedback in quick chips and offers clear without duplicate tokens', () => {
   const labelStyle = () => StyleSheet.flatten(button('Tops').findByType('Text' as any).props.style);
@@ -159,4 +224,39 @@ it('restores the scrolled garment after search changes the measured header', asy
     act(() => node('SearchField').props.onChangeText('shirt'));
     expect(mockList.scrollToOffset).toHaveBeenLastCalledWith({ offset: 0, animated: false });
   } finally { frameSpy.mockRestore(); }
+});
+
+it('retains board search when the collection drops below the entry threshold', () => {
+  mockBoards = Array.from({ length: 6 }, (_, i) => ({ id: i, name: `Board ${i}` }));
+  act(() => node('ClosetNavigation').props.onChange('boards'));
+  expect(node('ClosetNavigation').props.searchAvailable).toBe(true);
+  act(() => node('ClosetNavigation').props.onSearch());
+  act(() => node('SearchField').props.onChangeText('Board'));
+  mockBoards = [mockBoards[0]];
+  act(() => node('SearchField').props.onSubmitEditing());
+  expect(node('SearchField').props.value).toBe('');
+  expect(node('ClosetNavigation').props.query).toBe('Board');
+  expect(node('ClosetNavigation').props.searchAvailable).toBe(true);
+});
+it('resets results to the top when typing also changes the header height', async () => {
+  const frames: FrameRequestCallback[] = [];
+  const spy = jest.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => { frames.push(callback); return frames.length; });
+  try {
+    act(() => node('ClosetNavigation').props.onSearch());
+    mockList.getAbsoluteLastScrollOffset.mockReturnValue(300);
+    act(() => node('SearchField').props.onChangeText('shirt'));
+    act(() => node('ClosetHeader').props.onMeasure(168, 20));
+    await act(async () => { frames.splice(0).forEach(callback => callback(0)); });
+    await act(async () => { frames.splice(0).forEach(callback => callback(0)); });
+    expect(mockList.scrollToOffset).toHaveBeenLastCalledWith({ offset: 0, animated: false });
+  } finally { spy.mockRestore(); }
+});
+it('hides the browsing controls while recent searches are visible and restores them when typing', () => {
+  mockRecent = ['linen'];
+  expect(node('ClosetGrid').props.ListHeaderComponent).not.toBeNull();
+  act(() => node('ClosetNavigation').props.onSearch());
+  expect(node('SearchField').props.placeholder).toBe('Search your pieces');
+  expect(node('ClosetGrid').props.ListHeaderComponent).toBeNull();
+  act(() => node('SearchField').props.onChangeText('linen'));
+  expect(node('ClosetGrid').props.ListHeaderComponent).not.toBeNull();
 });
