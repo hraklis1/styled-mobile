@@ -30,12 +30,15 @@ import { useCameraLaunch, useLibraryLaunch } from '../../hooks/useCameraLaunch';
 import {
   useScanVisionPose,
   scanItemDirect,
-  useCreateItem,
+  createItemsBatch,
+  applySavedItems,
   useBrandSuggestions,
+  type BatchCreateItemInput,
   type PoseScanItem,
 } from '../../hooks/useItems';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../contexts/AuthContext';
-import { api } from '../../lib/api';
+import { api, apiErrorMessage } from '../../lib/api';
 import { colors, spacing, typography, radii } from '../../theme';
 import { CATEGORY_LABELS, SEASON_OPTIONS, SEASON_LABELS, type Item, type ItemCategory, type SleeveLength } from '../../types/item';
 import { BrandAutocompleteInput } from '../primitives/BrandAutocompleteInput';
@@ -47,7 +50,13 @@ import { CutoutReviewThumb } from './CutoutReviewThumb';
 import { cropImage } from '../../lib/cropImage';
 import { tryRequestCutout } from '../../lib/cutout';
 import { mapWithConcurrency } from '../../lib/asyncPool';
-import { uploadImageToR2 } from '../../lib/uploadImage';
+import {
+  createExtractionCache,
+  extractionKey,
+  type ExtractionCache,
+  type ExtractionRequest,
+} from '../../lib/extractionPrefetch';
+import { isDataUri, uploadDataUrlsToR2 } from '../../lib/uploadImage';
 import { capturePhotoLocation } from '../../lib/photoLocation';
 import { track } from '../../lib/analytics';
 import { resolveExtractedIdentity } from '../../lib/scan-review';
@@ -126,6 +135,11 @@ interface ScanItemSheetProps {
 
 const SCAN_DRAFT_KEY = 'scan_review_draft';
 const EXTRACTION_CONCURRENCY = 4;
+/** Long edge of the frame sent to /api/scan-vision-pose; matches batch import. */
+const POSE_FRAME_MAX_DIM = 1024;
+// How long the pre-extract review has to sit still before extraction starts
+// in the background, so typing a name doesn't send a request per keystroke.
+const PREFETCH_DEBOUNCE_MS = 900;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -139,6 +153,74 @@ async function buildUploadImage(item: {
     if (hqCrop) return hqCrop;
   }
   return item.croppedImage;
+}
+
+/** The attribute-extraction request for one piece, keyed on everything the user can edit about it. */
+function extractionRequestFor(
+  preItem: PreExtractItemData,
+  preItems: PreExtractItemData[],
+  fullImageDataUrl: string,
+): ExtractionRequest {
+  const otherItems = preItems
+    .filter((other) => other.tempId !== preItem.tempId)
+    .map((other) => `${other.name} (${other.category})`)
+    .join(', ');
+  return {
+    imageData: preItem.targetImage ?? preItem.croppedImage ?? fullImageDataUrl,
+    outfitContext: otherItems || undefined,
+    brandHint: preItem.brandHint || undefined,
+    targetName: preItem.name || undefined,
+    targetCategory: preItem.category || undefined,
+    // Hashes the name, category, brand hint and crop, so an edit made during
+    // review gets a fresh extraction instead of the server's cached answer
+    // for the old inputs. A manual retry reuses the key and can join the
+    // original server work or its cached result.
+    idempotencyKey: extractionKey(preItem.tempId, {
+      targetName: preItem.name,
+      targetCategory: preItem.category,
+      brandHint: preItem.brandHint,
+      bbox: preItem.bbox,
+    }),
+  };
+}
+
+function toBatchCreateInput(
+  item: EditableItem,
+  imageUrl: string | null,
+  cutoutUrl: string | null,
+): BatchCreateItemInput {
+  // Progressive profiling: flag items whose enrichment fields are sparse so
+  // the backend (and future UI prompts) know to ask for more details later.
+  const needsDetails = [item.brand, item.material, item.fit, item.subcategory].filter(Boolean).length === 0;
+  return {
+    clientImportId: item.tempId,
+    name: item.name.trim() || 'Untitled',
+    brand: item.brand || null,
+    category: (item.category as ItemCategory) || null,
+    subcategory: item.subcategory || null,
+    // The server requires a colour; the scan always names one.
+    color: item.color || '',
+    style: item.style || null,
+    seasons: item.seasons.length > 0 ? item.seasons : [],
+    occasions: item.occasions.length > 0 ? item.occasions : [],
+    colorNormalized: item.colorNormalized ?? null,
+    colorTemperature: item.colorTemperature ?? null,
+    warmthRating: item.warmthRating ?? null,
+    material: item.material || null,
+    fit: item.fit || null,
+    pattern: item.pattern || null,
+    neckline: item.neckline || null,
+    sleeveLength: item.sleeveLength || null,
+    care: item.care || null,
+    notableDetails: item.notableDetails.length > 0 ? item.notableDetails : undefined,
+    colorPalette: item.colorPalette.length > 0 ? item.colorPalette : undefined,
+    imageUrl,
+    cutoutUrl,
+    coverImageVariant: item.useCutout && cutoutUrl ? 'cutout' : 'original',
+    sizeProfile: item.sizeProfile ?? null,
+    purchaseLocation: item.purchaseLocation ?? null,
+    needsDetails,
+  };
 }
 
 function normalizePoseBbox(
@@ -160,7 +242,7 @@ async function buildPreExtractItemFromPose(
   const targetBbox = normalizePoseBbox(poseItem.targetBbox_pct ?? poseItem.bbox_pct);
   const previewBbox = normalizePoseBbox(poseItem.previewBbox_pct) ?? targetBbox;
   // Crop locally from the full-resolution capture rather than the server's
-  // preview, which is cut from the 512px frame sent for pose detection and
+  // preview, which is cut from the smaller frame sent for pose detection and
   // looks soft once stretched to fill the review hero.
   const serverPreview = poseItem.croppedWebP
     ? `data:image/webp;base64,${poseItem.croppedWebP}`
@@ -178,7 +260,8 @@ async function buildPreExtractItemFromPose(
     croppedImage: previewImage,
     // Comes back with the scan itself — the pipeline reuses a mask it already
     // computed, so there's no extra request and nothing to wait on here.
-    cutoutImage: poseItem.cutoutWebP ? `data:image/webp;base64,${poseItem.cutoutWebP}` : null,
+    cutoutImage: poseItem.cutoutUrl
+      ?? (poseItem.cutoutWebP ? `data:image/webp;base64,${poseItem.cutoutWebP}` : null),
     useCutout: false,
     targetImage,
     bbox: targetBbox,
@@ -199,7 +282,16 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
   const [detectedItems, setDetectedItems] = useState<EditableItem[]>([]);
   const [failedItems, setFailedItems] = useState<PreExtractItemData[]>([]);
   const [extractionProgress, setExtractionProgress] = useState({ current: 0, total: 0 });
+  // Bumped when a scan starts or is discarded, so work still in flight from
+  // an earlier scan can recognise that it no longer applies.
   const sessionRef = useRef(0);
+  // Extractions started during pre-extract review, shared with runExtraction.
+  // Reset with the session.
+  const extractionCacheRef = useRef<ExtractionCache | null>(null);
+  const extractionCache = () => {
+    extractionCacheRef.current ??= createExtractionCache(scanItemDirect, EXTRACTION_CONCURRENCY);
+    return extractionCacheRef.current;
+  };
   const reviewTrackedRef = useRef(false);
   // Guards the handoff from the idle picker sheet to the full-screen scan
   // workspace: set right before a programmatic `.dismiss()` so `handleDismiss`
@@ -216,7 +308,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
   const [preExtractItems, setPreExtractItems] = useState<PreExtractItemData[]>([]);
   const { user } = useAuth();
   const poseScan = useScanVisionPose();
-  const createItem = useCreateItem();
+  const queryClient = useQueryClient();
   const launchCamera = useCameraLaunch();
   const launchLibrary = useLibraryLaunch();
   const brandSuggestions = useBrandSuggestions();
@@ -300,7 +392,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
         photoLocationRef.current = loc;
       });
       setImageDataUrl(captured.dataUrl);
-      await runPoseScan(captured.uri, captured.dataUrl);
+      await runPoseScan(captured.uri, captured.dataUrl, captured);
     })();
     return () => { active = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -331,6 +423,8 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
   // bottom sheet dismiss animation to wait on since the sheet was already
   // dismissed (or never presented) by the time scanning started.
   const finishClose = useCallback(() => {
+    sessionRef.current += 1;
+    extractionCacheRef.current?.clear();
     AsyncStorage.removeItem(SCAN_DRAFT_KEY);
     poseScan.reset();
     setPreExtractItems([]);
@@ -353,10 +447,17 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
   // If the flow bounces back to `idle` after having started (no items
   // detected, scan failed, last piece removed), re-present the picker sheet
   // — it was dismissed when scanning began and won't come back on its own.
+  //
+  // An auto-launched scan (camera/library picked from AddActionSheet) never
+  // had a picker sheet, so there is nothing to go back to: end the scan
+  // instead. Re-presenting left this component mounted but invisible, and
+  // since GlobalScanContext still counted it as open, every later "Choose
+  // from Photos" did nothing until the app was restarted.
   useEffect(() => {
-    if (phase === 'idle' && hasStartedRef.current) {
-      bottomSheetRef.current?.present();
-    }
+    if (phase !== 'idle' || !hasStartedRef.current) return;
+    if (autoLaunch) finishClose();
+    else bottomSheetRef.current?.present();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
 
@@ -367,112 +468,101 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
       return;
     }
     const session = sessionRef.current;
+    const items = detectedItems;
     setPhase('saving');
 
-    const savedItems: Item[] = [];
-    const savedIds = new Set<string>();
-    let uploadFailures = 0;
+    // Pieces that didn't make it, with why. They stay in review so "Add"
+    // retries exactly those; the create is idempotent on tempId, so a retry
+    // after a lost response can't duplicate the ones that did.
+    const failures = new Map<string, string>();
 
-    for (const item of detectedItems) {
-      // Progressive profiling: flag items whose enrichment fields are sparse so
-      // the backend (and future UI prompts) know to ask for more details later.
-      const enrichmentFields = [item.brand, item.material, item.fit, item.subcategory];
-      const needsDetails = enrichmentFields.filter(Boolean).length === 0;
-
-      let imageUrl: string | null = null;
-      const imageToUpload = await buildUploadImage(item);
-      if (imageToUpload) {
-        try {
-          imageUrl = await uploadImageToR2(imageToUpload, user!.id);
-        } catch {
-          // Never fall back to storing the data URL: base64 in Postgres ships
-          // with every closet payload. Keep the piece in review to retry.
-          uploadFailures += 1;
-          continue;
-        }
+    // ── Uploads: one presign round trip, then native PUTs four at a time ──
+    const photos = await Promise.all(items.map((item) => buildUploadImage(item)));
+    const imageUrls = new Map<string, string>();
+    const cutoutUrls = new Map<string, string>();
+    const uploads: { tempId: string; kind: 'image' | 'cutout'; dataUrl: string }[] = [];
+    items.forEach((item, index) => {
+      const photo = photos[index];
+      if (photo && isDataUri(photo)) uploads.push({ tempId: item.tempId, kind: 'image', dataUrl: photo });
+      else if (photo) imageUrls.set(item.tempId, photo);
+      if (item.cutoutImage && isDataUri(item.cutoutImage)) {
+        uploads.push({ tempId: item.tempId, kind: 'cutout', dataUrl: item.cutoutImage });
+      } else if (item.cutoutImage) {
+        cutoutUrls.set(item.tempId, item.cutoutImage);
       }
+    });
 
-      // The cutout is a separate, much smaller object (~30 KB) so the original
-      // stays authoritative and the item is still complete without it. A failed
-      // cutout upload is dropped rather than inlined as base64: unlike the photo
-      // it's optional, and inlining would put a data URL in every closet payload.
-      let cutoutUrl: string | null = null;
-      if (item.cutoutImage) {
-        try {
-          cutoutUrl = await uploadImageToR2(item.cutoutImage, user!.id);
-        } catch {
-          cutoutUrl = null;
-        }
+    let uploaded: PromiseSettledResult<string>[];
+    try {
+      uploaded = await uploadDataUrlsToR2(uploads.map((u) => u.dataUrl));
+    } catch (reason) {
+      uploaded = uploads.map(() => ({ status: 'rejected' as const, reason }));
+    }
+    if (sessionRef.current !== session) return;
+    uploads.forEach((upload, index) => {
+      const result = uploaded[index];
+      if (result.status === 'fulfilled') {
+        (upload.kind === 'image' ? imageUrls : cutoutUrls).set(upload.tempId, result.value);
+      } else if (upload.kind === 'image') {
+        // Never fall back to storing the data URL: base64 in Postgres ships
+        // with every closet payload.
+        failures.set(upload.tempId, "Couldn't upload this photo.");
       }
+      // A failed cutout is dropped rather than failing the piece: it's an
+      // optional companion (~30 KB) and the photo stays authoritative.
+    });
 
+    // ── Create: every uploaded piece in one idempotent request ───────────
+    const ready = items.filter((item) => !failures.has(item.tempId));
+    let savedItems: Item[] = [];
+    if (ready.length > 0) {
       try {
-        const created = await new Promise<Item>((resolve, reject) => {
-          createItem.mutate(
-            {
-              name: item.name.trim() || 'Untitled',
-              brand: item.brand || null,
-              category: (item.category as ItemCategory) || null,
-              subcategory: item.subcategory || null,
-              color: item.color || null,
-              style: item.style || null,
-              seasons: item.seasons.length > 0 ? item.seasons : [],
-              occasions: item.occasions.length > 0 ? item.occasions : [],
-              colorNormalized: item.colorNormalized ?? null,
-              colorTemperature: item.colorTemperature ?? null,
-              warmthRating: item.warmthRating ?? null,
-              material: item.material || null,
-              fit: item.fit || null,
-              pattern: item.pattern || null,
-              neckline: item.neckline || null,
-              sleeveLength: item.sleeveLength || null,
-              care: item.care || null,
-              notableDetails: item.notableDetails.length > 0 ? item.notableDetails : undefined,
-              colorPalette: item.colorPalette.length > 0 ? item.colorPalette : undefined,
-              imageUrl,
-              cutoutUrl,
-              coverImageVariant: item.useCutout && cutoutUrl ? 'cutout' : 'original',
-              sizeProfile: item.sizeProfile ?? null,
-              purchaseLocation: item.purchaseLocation ?? null,
-              needsDetails,
-            },
-            { onSuccess: resolve, onError: reject },
-          );
-        });
-        if (sessionRef.current !== session) return;
-        savedItems.push(created);
-        savedIds.add(item.tempId);
-      } catch {
-        // individual failures are silently skipped
+        const result = await createItemsBatch(ready.map((item) => toBatchCreateInput(
+          item,
+          imageUrls.get(item.tempId) ?? null,
+          cutoutUrls.get(item.tempId) ?? null,
+        )));
+        // Applied even if the session moved on: the rows exist either way.
+        applySavedItems(queryClient, result.items);
+        savedItems = result.items;
+        for (const rejected of result.rejected) {
+          if (rejected.clientImportId) failures.set(rejected.clientImportId, rejected.message);
+        }
+      } catch (err) {
+        // 402s (credits, free cap) are already surfaced by the api interceptor.
+        const message = apiErrorMessage(err, "Couldn't add this piece.");
+        for (const item of ready) failures.set(item.tempId, message);
       }
     }
-
     if (sessionRef.current !== session) return;
 
-    if (uploadFailures > 0) {
-      // Keep only what didn't make it, so "Add" retries those without
-      // creating the saved ones twice.
+    const savedIds = new Set(savedItems.map((item) => item.clientImportId));
+    for (const item of ready) {
+      if (!savedIds.has(item.tempId) && !failures.has(item.tempId)) {
+        failures.set(item.tempId, "Couldn't add this piece.");
+      }
+    }
+    for (const item of savedItems) track('item_added', { category: item.category });
+
+    if (failures.size > 0) {
       setDetectedItems((current) => current.filter((it) => !savedIds.has(it.tempId)));
       if (savedItems.length > 0) onItemsSaved?.(savedItems);
+      const [firstMessage] = failures.values();
       Alert.alert(
-        'Upload failed',
-        uploadFailures === 1
-          ? "1 photo couldn't be uploaded. Check your connection and tap Add to try again."
-          : `${uploadFailures} photos couldn't be uploaded. Check your connection and tap Add to try again.`,
+        savedItems.length > 0 ? 'Some pieces weren\'t added' : 'Save failed',
+        failures.size === 1
+          ? `${firstMessage} Tap Add to try again.`
+          : `${failures.size} pieces couldn't be added. Tap Add to try again.`,
       );
       setPhase('review');
       return;
     }
 
-    if (savedItems.length > 0) {
-      AsyncStorage.removeItem(SCAN_DRAFT_KEY);
-      track('wardrobe_items_added', { item_count: savedItems.length });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      onItemsSaved?.(savedItems);
-      onClose();
-    } else {
-      Alert.alert('Save failed', 'Could not save any items. Please try again.');
-      setPhase('review');
-    }
+    AsyncStorage.removeItem(SCAN_DRAFT_KEY);
+    track('wardrobe_items_added', { item_count: savedItems.length });
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    onItemsSaved?.(savedItems);
+    onClose();
   };
 
   const runExtraction = async (
@@ -490,26 +580,15 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     const settled = await mapWithConcurrency(
       preItems,
       EXTRACTION_CONCURRENCY,
-      async (preItem, idx) => {
+      async (preItem) => {
         if (sessionRef.current !== session) throw new Error('session_changed');
 
-        const imageData = preItem.targetImage ?? preItem.croppedImage ?? fullImageDataUrl;
-        const otherItems = preItems
-          .filter((_, i) => i !== idx)
-          .map((other) => `${other.name} (${other.category})`)
-          .join(', ');
-
         try {
-          const result = await scanItemDirect({
-            imageData,
-            outfitContext: otherItems || undefined,
-            brandHint: preItem.brandHint || undefined,
-            targetName: preItem.name || undefined,
-            targetCategory: preItem.category || undefined,
-            // A manual retry can join the original server work or use its cached
-            // result instead of starting and billing another extraction.
-            idempotencyKey: preItem.tempId,
-          });
+          // Usually already running (or done) — started in the background
+          // while the user reviewed this piece.
+          const result = await extractionCache().get(
+            extractionRequestFor(preItem, preItems, fullImageDataUrl),
+          );
 
           if (sessionRef.current !== session) throw new Error('session_changed');
 
@@ -615,6 +694,22 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     setPhase('review');
   };
 
+  // Start extraction in the background while the user reviews detections.
+  // Pieces whose inputs haven't changed since keep their earlier request (the
+  // cache is keyed on name, category, brand hint and crop), so each pause in
+  // editing only starts work for what was actually edited.
+  useEffect(() => {
+    if (phase !== 'pre-extract' || !imageDataUrl || preExtractItems.length === 0) return;
+    const timer = setTimeout(() => {
+      for (const item of preExtractItems) {
+        // Failures are retried when the user continues; nothing to show here.
+        extractionCache().get(extractionRequestFor(item, preExtractItems, imageDataUrl)).catch(() => {});
+      }
+    }, PREFETCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, preExtractItems, imageDataUrl]);
+
   const handleStartExtraction = useCallback(async () => {
     if (preExtractItems.length === 0 || !imageDataUrl) return;
     const session = sessionRef.current;
@@ -709,11 +804,17 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
 
     setImageDataUrl(captured.dataUrl);
     // Pass the local file URI so runPoseScan can downscale without re-encoding the data URL
-    await runPoseScan(captured.uri, captured.dataUrl);
+    await runPoseScan(captured.uri, captured.dataUrl, captured);
   };
 
-  const runPoseScan = async (sourceUri: string, displayDataUrl: string) => {
+  const runPoseScan = async (
+    sourceUri: string,
+    displayDataUrl: string,
+    size: { width: number; height: number },
+  ) => {
+    sessionRef.current += 1;
     const session = sessionRef.current;
+    extractionCacheRef.current?.clear();
     setDetectedItems([]);
     setFailedItems([]);
     hasStartedRef.current = true;
@@ -721,11 +822,18 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     bottomSheetRef.current?.dismiss();
     setPhase('scanning');
 
-    // Downscale to 512 px for pose detection — bounding boxes don't benefit from higher res
-    // and this roughly halves token cost at the OpenAI Vision "low" detail tier.
+    // Long edge 1024 px, the same frame batch import sends (SCAN_MAX_DIM), so
+    // both entry points get the same detections. SAM 3 is priced per request,
+    // so the size costs nothing extra; the cutouts are cut from this frame, so
+    // it sets their resolution too. Benched 2026-09-29 on the 25-case set:
+    // recall 0.965 at width 512 vs 0.976 here, +~0.3s median.
     const poseFrame = await ImageManipulator.manipulateAsync(
       sourceUri,
-      [{ resize: { width: 512 } }],
+      Math.max(size.width, size.height) > POSE_FRAME_MAX_DIM
+        ? [size.width >= size.height
+          ? { resize: { width: POSE_FRAME_MAX_DIM } }
+          : { resize: { height: POSE_FRAME_MAX_DIM } }]
+        : [],
       { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG, base64: true },
     );
     const base64 = poseFrame.base64!;
@@ -762,7 +870,9 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
       if (sessionRef.current !== session) return;
       Alert.alert(
         'Scan failed',
-        err?.message || 'Something went wrong. Please try again.',
+        // The server's own message when it sent one — a 503 LABEL_UNAVAILABLE
+        // says the photo couldn't be read and that no credits were taken.
+        apiErrorMessage(err, err?.message || 'Something went wrong. Please try again.'),
         [{ text: 'OK', onPress: () => { setPhase('idle'); setImageDataUrl(null); } }],
       );
     }

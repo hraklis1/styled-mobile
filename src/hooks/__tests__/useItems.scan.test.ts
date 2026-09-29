@@ -9,8 +9,14 @@ jest.mock('../../lib/analytics', () => ({ track: jest.fn() }));
 jest.mock('../useOutfits', () => ({ OUTFITS_QUERY_KEY: ['outfits'] }));
 jest.mock('../useShoppingBrief', () => ({ invalidateShoppingBriefQueries: jest.fn() }));
 
-import { api } from '../../lib/api';
-import { ITEM_SCAN_TIMEOUT_MS, POSE_SCAN_TIMEOUT_MS, scanItemDirect, scanVisionPoseDirect } from '../useItems';
+import { api, isNetworkError } from '../../lib/api';
+import {
+  ITEM_SCAN_TIMEOUT_MS,
+  POSE_SCAN_TIMEOUT_MS,
+  isRetryableScanError,
+  scanItemDirect,
+  scanVisionPoseDirect,
+} from '../useItems';
 
 const mockPost = jest.mocked(api.post);
 
@@ -68,5 +74,38 @@ describe('scanVisionPoseDirect', () => {
 
     const keys = mockPost.mock.calls.map((call) => (call[2] as { headers: Record<string, string> }).headers['Idempotency-Key']);
     expect(keys).toEqual(['scan-photo-1', 'scan-photo-1']);
+  });
+
+  it('asks for the v2 shape, with hosted cutouts instead of inline base64', async () => {
+    mockPost.mockResolvedValue({ data: { format: 2, items: [] } });
+
+    await scanVisionPoseDirect('photo', 'scan-photo-1');
+
+    const headers = (mockPost.mock.calls[0][2] as { headers: Record<string, string> }).headers;
+    expect(headers['X-Scan-Format']).toBe('2');
+  });
+});
+
+describe('isRetryableScanError', () => {
+  const status = (code: number) => ({ response: { status: code } });
+
+  beforeEach(() => {
+    jest.mocked(isNetworkError).mockReturnValue(false);
+  });
+
+  it('retries a refunded label failure and other transient gateway errors', () => {
+    expect(isRetryableScanError(status(503))).toBe(true);
+    expect(isRetryableScanError(status(502))).toBe(true);
+  });
+
+  it('retries a dropped connection', () => {
+    jest.mocked(isNetworkError).mockReturnValue(true);
+    expect(isRetryableScanError(new Error('Network Error'))).toBe(true);
+  });
+
+  it('does not retry refusals that would be refused again', () => {
+    for (const code of [400, 402, 429, 500]) {
+      expect(isRetryableScanError(status(code))).toBe(false);
+    }
   });
 });

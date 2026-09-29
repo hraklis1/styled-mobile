@@ -9,6 +9,9 @@ export type CompressedImage = {
   uri: string;
   /** Base64 data URL — use for image preview or legacy JSON uploads. */
   dataUrl: string;
+  /** Pixel size of the compressed image. */
+  width: number;
+  height: number;
 };
 
 export async function compressImageToDataUrl(
@@ -36,5 +39,7 @@ export async function compressImageToDataUrl(
   return {
     uri: result.uri,
     dataUrl: `data:image/jpeg;base64,${result.base64}`,
+    width: result.width,
+    height: result.height,
   };
 }

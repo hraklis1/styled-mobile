@@ -6,6 +6,9 @@ import { compressImageToDataUrl } from '../lib/compressImage';
 export type CapturedImage = {
   uri: string;
   dataUrl: string;
+  /** Pixel size of the compressed image. */
+  width: number;
+  height: number;
   /** Raw EXIF data from the image, present when captureExif option is true. */
   exif?: Record<string, unknown> | null;
 };

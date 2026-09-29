@@ -21,16 +21,24 @@ export type PoseScanItem = {
   description?: string;
   croppedWebP?: string | null;
   /**
-   * Background-removed thumbnail, base64 WebP with alpha. Produced inline by
-   * the scan (it reuses a mask the pipeline already computed), so it costs no
-   * extra round trip. Null when segmentation failed the server's quality gate.
+   * Background-removed thumbnail, base64 WebP with alpha — v1 responses only.
+   * Produced inline by the scan (it reuses a mask the pipeline already
+   * computed), so it costs no extra round trip.
    */
   cutoutWebP?: string | null;
+  /**
+   * v2 responses: the same cutout, already hosted by the server (under a
+   * temporary folder it promotes when the item is created). Read this first
+   * and fall back to cutoutWebP, so a server without v2 still works.
+   */
+  cutoutUrl?: string | null;
   bbox_pct?: PoseScanBbox | null;
   targetBbox_pct?: PoseScanBbox | null;
   previewBbox_pct?: PoseScanBbox | null;
   scene?: string | null;
   detectionSource?: string | null;
+  pairGroup?: number | null;
+  regionCount?: number;
 };
 
 export const ITEMS_QUERY_KEY = ['items'] as const;
@@ -82,6 +90,13 @@ export type CreateItemInput = {
 function idempotencyHeaders(key?: string) {
   return { 'Idempotency-Key': key ?? Crypto.randomUUID() };
 }
+
+/**
+ * Ask /api/scan-vision-pose for its v2 shape: cutout URLs instead of inline
+ * base64, one box per item. A server without v2 ignores the header and sends
+ * v1, which PoseScanItem still describes.
+ */
+const POSE_SCAN_HEADERS = { 'X-Scan-Format': '2' } as const;
 
 /** Direct API call for parallel multi-item extraction (no hook — avoids shared mutation state). */
 export const ITEM_SCAN_TIMEOUT_MS = 120_000;
@@ -140,14 +155,23 @@ export function useScanVisionPose() {
       api
         .post<{ items: PoseScanItem[] }>('/api/scan-vision-pose', { imageBase64 }, {
           timeout: POSE_SCAN_TIMEOUT_MS,
-          headers: idempotencyHeaders(idempotencyKey),
+          headers: { ...POSE_SCAN_HEADERS, ...idempotencyHeaders(idempotencyKey) },
         })
         .then((r) => r.data),
     // Reusing the caller's key lets a retry join the original in-flight scan
-    // server-side rather than paying for a second one.
-    retry: (failureCount, error) => isNetworkError(error) && failureCount < 2,
+    // server-side rather than paying for a second one. 502/503 are retried too:
+    // a failed label call answers 503 LABEL_UNAVAILABLE (refunded), and the
+    // server keeps the segmentation for this key, so the retry only re-labels.
+    retry: (failureCount, error) => isRetryableScanError(error) && failureCount < 2,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
   });
+}
+
+/** Transient failures a same-key pose-scan retry can fix without a second charge. */
+export function isRetryableScanError(error: unknown): boolean {
+  if (isNetworkError(error)) return true;
+  const status = (error as { response?: { status?: number } })?.response?.status;
+  return status === 502 || status === 503;
 }
 
 /**
@@ -164,7 +188,7 @@ export async function scanVisionPoseDirect(
   return api
     .post<{ items: PoseScanItem[] }>('/api/scan-vision-pose', { imageBase64 }, {
       timeout: POSE_SCAN_TIMEOUT_MS,
-      headers: idempotencyHeaders(idempotencyKey),
+      headers: { ...POSE_SCAN_HEADERS, ...idempotencyHeaders(idempotencyKey) },
     })
     .then((r) => r.data);
 }

@@ -58,7 +58,7 @@ export function BatchImportWorkspace() {
         name: piece.name,
         brand: piece.brand ?? '',
         photo: piece.previewUri,
-        cutout: piece.cutoutUri,
+        cutout: piece.cutoutUri ?? piece.cutoutUrl,
         useCutout: piece.useCutout,
         canAdjustCrop: Boolean(piece.bbox && photo?.masterUri),
         cropSource: photo?.masterUri ?? null,

@@ -138,7 +138,10 @@ export async function scanPhoto(batchId: string, photo: PhotoJob): Promise<Piece
     const previewUri = previewBbox
       ? await cropRegion(photo.masterUri, size, previewBbox, { maxDim: 800, compress: 0.82 }, { dir, name: `${id}-preview.jpg` })
       : null;
-    const cutoutUri = item.cutoutWebP
+    // v2 scans return the cutout already hosted; v1 inlines it as base64,
+    // which is written to disk and uploaded at save time.
+    const cutoutUrl = item.cutoutUrl ?? null;
+    const cutoutUri = !cutoutUrl && item.cutoutWebP
       ? await writeBase64(dir, `${id}-cutout.webp`, item.cutoutWebP)
       : null;
     pieces.push({
@@ -161,7 +164,7 @@ export async function scanPhoto(batchId: string, photo: PhotoJob): Promise<Piece
       notBefore: 0,
       error: null,
       imageUrl: null,
-      cutoutUrl: null,
+      cutoutUrl,
     });
   }
   return pieces;

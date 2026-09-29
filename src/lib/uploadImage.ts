@@ -1,6 +1,7 @@
 import { api } from './api';
 import * as Crypto from 'expo-crypto';
-import { File } from 'expo-file-system';
+import { File, Paths } from 'expo-file-system';
+import { mapWithConcurrency } from './asyncPool';
 
 /** True for inline base64 data URIs (vs hosted http/https URLs). */
 export function isDataUri(url: string | null | undefined): boolean {
@@ -98,4 +99,38 @@ export async function uploadFileToR2(
     throw Object.assign(new Error(`R2 upload failed: ${result.status}`), { status: result.status });
   }
   return upload.publicUrl;
+}
+
+/**
+ * Upload several data-URL images with one presign round trip and native PUTs,
+ * `concurrency` at a time. Each image is written to a cache file first, which
+ * is a native base64 decode — the JS-thread loop in uploadImageToR2 is what
+ * this avoids — and deleted once its PUT settles.
+ *
+ * Returns one settled result per input, in order, so the caller can tell a
+ * failed photo from a failed cutout. Throws only if presigning fails, since
+ * then nothing could have been uploaded.
+ */
+export async function uploadDataUrlsToR2(
+  dataUrls: string[],
+  concurrency = 4,
+): Promise<PromiseSettledResult<string>[]> {
+  if (dataUrls.length === 0) return [];
+  const parsed = dataUrls.map((dataUrl) => {
+    const commaIdx = dataUrl.indexOf(',');
+    const contentType = dataUrl.slice(5, commaIdx).replace(';base64', '') || 'image/jpeg';
+    return { contentType, base64: dataUrl.slice(commaIdx + 1) };
+  });
+  const uploads = await requestUploadUrls(parsed.map((p) => p.contentType));
+  return mapWithConcurrency(parsed, concurrency, async ({ contentType, base64 }, index) => {
+    const ext = contentType.includes('webp') ? 'webp' : contentType.includes('png') ? 'png' : 'jpg';
+    const file = new File(Paths.cache, `upload-${Crypto.randomUUID()}.${ext}`);
+    file.create();
+    file.write(base64, { encoding: 'base64' });
+    try {
+      return await uploadFileToR2(file.uri, contentType, uploads[index]);
+    } finally {
+      try { file.delete(); } catch { /* cache dir; the OS reclaims it */ }
+    }
+  });
 }
