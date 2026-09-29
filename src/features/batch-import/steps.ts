@@ -224,5 +224,7 @@ export function applyExtraction(piece: Piece, result: ScanResult): Partial<Piece
     warmthRating: result.warmthRating ?? null,
   };
   for (const key of piece.edited) delete extracted[key];
-  return { ...extracted, status: 'ready', failedStep: null, error: null };
+  const lowConfidenceFields = (result.lowConfidenceFields ?? [])
+    .filter((field) => !piece.edited.includes(field as keyof PieceFields));
+  return { ...extracted, lowConfidenceFields, status: 'ready', failedStep: null, error: null };
 }

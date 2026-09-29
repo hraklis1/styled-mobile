@@ -66,6 +66,7 @@ export function BatchImportWorkspace() {
         category: piece.category,
         subcategory: piece.subcategory,
         color: piece.color,
+        colorNormalized: piece.colorNormalized,
         style: piece.style,
         seasons: piece.seasons,
         occasions: piece.occasions,
@@ -73,6 +74,10 @@ export function BatchImportWorkspace() {
         fit: piece.fit,
         sizeProfile: piece.sizeProfile,
         sleeveLength: piece.sleeveLength,
+        // A field the user has since edited is no longer the model's guess.
+        lowConfidenceFields: (piece.lowConfidenceFields ?? [])
+          .filter((field) => !piece.edited.includes(field as keyof PieceFields)),
+        extractFailed: piece.status === 'failed' && piece.failedStep === 'extract',
       };
     });
   }, [batch]);
@@ -84,6 +89,7 @@ export function BatchImportWorkspace() {
     if (patch.category !== undefined) edit.category = patch.category;
     if (patch.subcategory !== undefined) edit.subcategory = patch.subcategory;
     if (patch.color !== undefined) edit.color = patch.color;
+    if (patch.colorNormalized !== undefined) edit.colorNormalized = patch.colorNormalized ?? null;
     if (patch.style !== undefined) edit.style = patch.style;
     if (patch.seasons !== undefined) edit.seasons = patch.seasons;
     if (patch.occasions !== undefined) edit.occasions = patch.occasions;

@@ -1,88 +1,51 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  FlatList,
   KeyboardAvoidingView,
   Modal,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
   useWindowDimensions,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import Animated, {
-  Easing,
-  runOnJS,
-  useAnimatedScrollHandler,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
-} from 'react-native-reanimated';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { TaxonomySelector } from '../primitives/TaxonomySelector';
-import { SizeProfileInput } from '../primitives/SizeProfileInput';
-import { AnimatedProgressBar } from '../primitives/AnimatedProgressBar';
 import { CropAdjustEditor, type Bbox } from './CropAdjustModal';
-import type { SizeProfile } from '../../lib/sizes';
 import {
-  filterBrandSuggestions,
-  nextUnreviewedPieceId,
+  loupeHeroHeight,
+  nextFlaggedPieceId,
+  pieceReviewState,
   resolvedActivePieceId,
-  reviewCarouselIndex,
-  reviewCarouselMetrics,
-  reviewHeroHeight,
-  scanReviewPrimaryAction,
-  scanReviewPrimaryLabel,
-  SCAN_MESSAGES,
-  type ScanReviewPrimaryAction,
+  reviewSummary,
+  sheetGuidance,
+  usesContactSheet,
+  type PieceReviewState,
 } from '../../lib/scan-review';
-import { colors, radii, spacing, typography } from '../../theme';
-import { SEASON_LABELS, SEASON_OPTIONS, type SleeveLength } from '../../types/item';
+import { colors, spacing, stroke, typography } from '../../theme';
+import { ActionBar, type ActionBarMode } from './scan-review/ActionBar';
+import { ContactSheet, PieceLine, type SheetFilter } from './scan-review/ContactSheet';
+import { DetectionState, ExtractionState } from './scan-review/LoadingStates';
+import { Loupe } from './scan-review/Loupe';
+import { ConfirmationPanel, UndoToast } from './scan-review/overlays';
+import { BrandPicker, CategoryPicker, MaterialPicker, SeasonPicker, SheetButton } from './scan-review/pickers';
+import { TextLink } from './scan-review/atoms';
+import { WorkspaceSheet } from './scan-review/WorkspaceSheet';
+import {
+  isReviewStage,
+  pieceCountLabel,
+  type ExtractTrigger,
+  type PiecePatch,
+  type ScanReviewPiece,
+  type ScanReviewStage,
+  type SheetRequest,
+} from './scan-review/types';
 
-export type ScanReviewStage = 'scanning' | 'pre-extract' | 'extracting' | 'review' | 'saving';
-
-export type ScanReviewPiece = {
-  id: string;
-  name: string;
-  brand: string;
-  photo: string | null;
-  cutout: string | null;
-  useCutout: boolean;
-  canAdjustCrop: boolean;
-  cropSource: string | null;
-  cropBbox: Bbox | null;
-  category: string | null;
-  subcategory: string | null;
-  color: string | null;
-  style: string | null;
-  seasons: string[];
-  occasions: string[];
-  material: string | null;
-  fit: string | null;
-  sizeProfile: SizeProfile | null;
-  sleeveLength: SleeveLength | null;
-};
-
-type ExtractTrigger = 'completed_review' | 'extract_now';
-type WorkspaceMode =
-  | { kind: 'review' }
-  | { kind: 'brand-search'; pieceId: string }
-  | { kind: 'crop-editor'; pieceId: string }
-  | { kind: 'confirm-remove'; pieceId: string }
-  | { kind: 'confirm-close' };
+export type { ScanReviewPiece, ScanReviewStage } from './scan-review/types';
 
 type Props = {
   visible: boolean;
@@ -116,12 +79,23 @@ type Props = {
   onMinimize?: () => void;
 };
 
-const SEASON_CHIPS = SEASON_OPTIONS.map((value) => ({ value, label: SEASON_LABELS[value] }));
+type View_ = 'sheet' | 'loupe';
+type PendingRemoval = { ids: string[]; message: string };
+type Deferred = { action: 'save' | 'extract'; waitFor: string[] };
 
-function displayCount(count: number) {
-  return count === 1 ? '1 piece' : `${count} pieces`;
-}
+const UNDO_MS = 4000;
 
+/**
+ * Closet scan review, in two levels:
+ *
+ *   Contact sheet — every piece at once. Triage ("12 ready · 4 to check"),
+ *                   bulk edits, removal. Skipped for three pieces or fewer.
+ *   Loupe         — one piece, large, with its spec sheet. Swipe the plate or
+ *                   drag the tick rail to travel.
+ *
+ * Nothing forces a pass over every piece: the AI marks what it was unsure of,
+ * "Add all" is always one tap, and the flagged walk visits only the marked.
+ */
 export function ScanReviewWorkspace({
   visible,
   stage,
@@ -141,191 +115,334 @@ export function ScanReviewWorkspace({
   onMinimize,
 }: Props) {
   const insets = useSafeAreaInsets();
-  const { width, height } = useWindowDimensions();
+  const { height } = useWindowDimensions();
   const reduceMotion = useReducedMotion();
-  const carouselRef = useRef<FlatList<ScanReviewPiece>>(null);
-  const detailsScrollRef = useRef<ScrollView>(null);
-  const [activeId, setActiveId] = useState<string | null>(pieces[0]?.id ?? null);
-  const [reviewedIds, setReviewedIds] = useState<Set<string>>(() => new Set());
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
-  const [mode, setMode] = useState<WorkspaceMode>({ kind: 'review' });
-
-  const metrics = useMemo(() => reviewCarouselMetrics(width), [width]);
-  // The carousel offset drives the panel below it, so the hero and its
-  // fields read as one card sliding across rather than an image that moves
-  // and a form that catches up when the scroll finally settles.
-  const scrollX = useSharedValue(0);
-  const trackedIndex = useSharedValue(0);
-  const isReviewStage = stage === 'review' || stage === 'saving';
-  const heroHeight = reviewHeroHeight(height, isReviewStage);
-  const pieceIds = useMemo(() => pieces.map((piece) => piece.id), [pieces]);
-  const activeResolvedId = resolvedActivePieceId(pieceIds, activeId);
-  const activeIndex = Math.max(0, pieceIds.indexOf(activeResolvedId ?? ''));
-  const activePiece = pieces[activeIndex] ?? pieces[0] ?? null;
+  const review = isReviewStage(stage);
   const busy = stage === 'scanning' || stage === 'extracting' || stage === 'saving';
   const closeDisabled = onMinimize ? stage === 'saving' : busy;
-  const modePiece = mode.kind === 'brand-search' || mode.kind === 'crop-editor' || mode.kind === 'confirm-remove'
-    ? pieces.find((piece) => piece.id === mode.pieceId) ?? null
-    : null;
+
+  const [view, setView] = useState<View_>('sheet');
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<SheetFilter>('all');
+  const [confirmedIds, setConfirmedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [openedIds, setOpenedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [selection, setSelection] = useState<ReadonlySet<string> | null>(null);
+  const [walk, setWalk] = useState<string[] | null>(null);
+  const [sheet, setSheet] = useState<SheetRequest | null>(null);
+  const [sheetDismissed, setSheetDismissed] = useState(false);
+  const [seasonDraft, setSeasonDraft] = useState<string[]>([]);
+  const [cropId, setCropId] = useState<string | null>(null);
+  const [confirmClose, setConfirmClose] = useState(false);
+  const [pendingRemoval, setPendingRemoval] = useState<PendingRemoval | null>(null);
+  const [deferred, setDeferred] = useState<Deferred | null>(null);
+  const [sheetLatched, setSheetLatched] = useState(false);
+  const [actionBarHeight, setActionBarHeight] = useState(0);
+
+  // ── Derived ────────────────────────────────────────────────────────────────
+
+  const visiblePieces = useMemo(
+    () => (pendingRemoval ? pieces.filter((piece) => !pendingRemoval.ids.includes(piece.id)) : pieces),
+    [pendingRemoval, pieces],
+  );
+  const states = useMemo(() => {
+    const map: Record<string, PieceReviewState> = {};
+    if (review) for (const piece of visiblePieces) map[piece.id] = pieceReviewState(piece, confirmedIds);
+    return map;
+  }, [confirmedIds, review, visiblePieces]);
+  const summary = useMemo(() => reviewSummary(Object.values(states)), [states]);
+  const checkCount = summary.check;
+
+  // Once the overview has been shown it stays, even if removals bring the
+  // scan down to three — swapping the whole screen out mid-task would be the
+  // more jarring thing.
+  const sheetEnabled = sheetLatched || usesContactSheet(visiblePieces.length);
+  const effectiveView: View_ = sheetEnabled ? view : 'loupe';
+  const sheetPieces = filter === 'check' && review
+    ? visiblePieces.filter((piece) => states[piece.id] === 'check')
+    : visiblePieces;
+  const loupePieces = useMemo(
+    () => (walk ? visiblePieces.filter((piece) => walk.includes(piece.id)) : visiblePieces),
+    [visiblePieces, walk],
+  );
+  const loupeIds = useMemo(() => loupePieces.map((piece) => piece.id), [loupePieces]);
+  const activeResolvedId = resolvedActivePieceId(loupeIds, activeId);
+  const activeIndex = activeResolvedId ? loupeIds.indexOf(activeResolvedId) : -1;
+
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (activeResolvedId === activeId) return;
-    setActiveId(activeResolvedId);
-    const index = pieceIds.indexOf(activeResolvedId ?? '');
-    if (index >= 0) {
-      trackedIndex.value = index;
-      scrollX.value = index * metrics.snapInterval;
-      carouselRef.current?.scrollToOffset({ offset: index * metrics.snapInterval, animated: false });
+    if (usesContactSheet(visiblePieces.length) && !sheetLatched) setSheetLatched(true);
+  }, [sheetLatched, visiblePieces.length]);
+
+  // A fresh open starts from a clean slate.
+  useEffect(() => {
+    if (visible) return;
+    setView('sheet');
+    setActiveId(null);
+    setFilter('all');
+    setConfirmedIds(new Set());
+    setOpenedIds(new Set());
+    setSelection(null);
+    setWalk(null);
+    setSheet(null);
+    setCropId(null);
+    setConfirmClose(false);
+    setSheetLatched(false);
+  }, [visible]);
+
+  // Extraction replaces the pieces wholesale: come back to the overview.
+  const previousStage = useRef(stage);
+  useEffect(() => {
+    const before = previousStage.current;
+    previousStage.current = stage;
+    if (stage === before) return;
+    if (stage === 'review' && before !== 'saving') {
+      setView('sheet');
+      setWalk(null);
+      setFilter('all');
     }
-  }, [activeId, activeResolvedId, metrics.snapInterval, pieceIds, scrollX, trackedIndex]);
+    if (busy) {
+      setSelection(null);
+      setSheet(null);
+      setCropId(null);
+    }
+  }, [busy, stage]);
 
   useEffect(() => {
-    setReviewedIds((current) => new Set([...current].filter((id) => pieceIds.includes(id))));
-    setExpandedIds((current) => new Set([...current].filter((id) => pieceIds.includes(id))));
-    if (modePiece && !pieceIds.includes(modePiece.id)) setMode({ kind: 'review' });
-  }, [modePiece, pieceIds]);
+    if (filter === 'check' && checkCount === 0) setFilter('all');
+  }, [checkCount, filter]);
 
   useEffect(() => {
-    if (!visible || stage === 'extracting') setMode({ kind: 'review' });
-  }, [stage, visible]);
+    if (effectiveView !== 'loupe' || !activeResolvedId || openedIds.has(activeResolvedId)) return;
+    setOpenedIds((current) => new Set(current).add(activeResolvedId));
+  }, [activeResolvedId, effectiveView, openedIds]);
 
-  const scrollToPiece = useCallback((id: string, animated = true) => {
-    const index = pieceIds.indexOf(id);
-    if (index < 0) return;
-    setActiveId(id);
-    trackedIndex.value = index;
-    carouselRef.current?.scrollToOffset({
-      offset: index * metrics.snapInterval,
-      animated: reduceMotion ? false : animated,
-    });
-  }, [metrics.snapInterval, pieceIds, reduceMotion, trackedIndex]);
+  // A walk whose pieces were all removed has nothing left to show.
+  useEffect(() => {
+    if (effectiveView === 'loupe' && loupePieces.length === 0 && sheetEnabled && visiblePieces.length > 0) {
+      setWalk(null);
+      setView('sheet');
+    }
+  }, [effectiveView, loupePieces.length, sheetEnabled, visiblePieces.length]);
 
-  const requestClose = useCallback(() => {
-    if (closeDisabled) return;
-    if (mode.kind !== 'review') {
-      setMode({ kind: 'review' });
+  // ── Removal with undo ─────────────────────────────────────────────────────
+
+  const commitRemoval = useCallback((pending: PendingRemoval | null) => {
+    if (!pending) return;
+    for (const id of pending.ids) onRemove(id);
+    setPendingRemoval((current) => (current === pending ? null : current));
+  }, [onRemove]);
+
+  useEffect(() => {
+    if (!pendingRemoval) return;
+    const timer = setTimeout(() => commitRemoval(pendingRemoval), UNDO_MS);
+    return () => clearTimeout(timer);
+  }, [commitRemoval, pendingRemoval]);
+
+  // Save and extract read the host's piece list, so a removal still waiting
+  // on its undo has to land first — and the host has to re-render with it —
+  // before either may run.
+  const runAfterRemovals = useCallback((action: Deferred['action']) => {
+    if (!pendingRemoval) {
+      if (action === 'save') onSave();
+      else setDeferred({ action, waitFor: [] });
       return;
     }
-    setMode({ kind: 'confirm-close' });
-  }, [closeDisabled, mode.kind]);
+    const waitFor = pendingRemoval.ids;
+    commitRemoval(pendingRemoval);
+    setDeferred({ action, waitFor });
+  }, [commitRemoval, onSave, pendingRemoval]);
 
-  // Android back / iOS swipe: put a background batch away rather than asking
-  // to discard it.
-  const requestSystemClose = useCallback(() => {
-    if (onMinimize && mode.kind === 'review') onMinimize();
-    else requestClose();
-  }, [mode.kind, onMinimize, requestClose]);
-
-  const extract = useCallback((trigger: ExtractTrigger, reviewed: Set<string>) => {
-    const brandCount = pieces.filter((piece) => piece.brand.trim().length > 0).length;
-    onExtract(trigger, reviewed.size, brandCount);
-  }, [onExtract, pieces]);
-
-  const handlePrimary = useCallback(() => {
-    if (!activeResolvedId || stage !== 'pre-extract') return;
-    const nextReviewed = new Set(reviewedIds);
-    nextReviewed.add(activeResolvedId);
-    setReviewedIds(nextReviewed);
-
-    if (scanReviewPrimaryAction(pieceIds, reviewedIds, activeResolvedId) === 'extract') {
-      extract('completed_review', nextReviewed);
-      return;
-    }
-
+  const removeWithUndo = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const nextId = nextUnreviewedPieceId(pieceIds, nextReviewed, activeResolvedId);
-    if (nextId) scrollToPiece(nextId);
-  }, [activeResolvedId, extract, pieceIds, reviewedIds, scrollToPiece, stage]);
+    if (pendingRemoval) commitRemoval(pendingRemoval);
+    const remaining = visiblePieces.filter((piece) => !ids.includes(piece.id));
 
-  // The scroll handler already swaps the active piece at the halfway point;
-  // this is the backstop for offsets that never produce a crossing (a short
-  // drag that springs back, or a programmatic jump).
-  const handleMomentumEnd = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const index = reviewCarouselIndex(event.nativeEvent.contentOffset.x, metrics.snapInterval, pieces.length);
-    const piece = pieces[index];
-    if (piece) setActiveId(piece.id);
-  }, [metrics.snapInterval, pieces]);
+    if (activeResolvedId && ids.includes(activeResolvedId)) {
+      const index = loupeIds.indexOf(activeResolvedId);
+      const after = loupeIds.slice(index + 1).find((id) => !ids.includes(id));
+      const before = loupeIds.slice(0, index).reverse().find((id) => !ids.includes(id));
+      setActiveId(after ?? before ?? null);
+    }
+    setSelection(null);
 
-  const selectIndex = useCallback((index: number) => {
-    const piece = pieces[index];
-    if (piece) setActiveId(piece.id);
+    // Emptying the scan has nothing to show under an undo toast; let the
+    // host close it straight away.
+    if (remaining.length === 0) {
+      for (const id of ids) onRemove(id);
+      return;
+    }
+    const named = ids.length === 1 ? pieces.find((piece) => piece.id === ids[0]) : null;
+    setPendingRemoval({
+      ids,
+      message: named ? `Removed ${named.name || 'piece'}` : `Removed ${pieceCountLabel(ids.length)}`,
+    });
+  }, [activeResolvedId, commitRemoval, loupeIds, onRemove, pendingRemoval, pieces, visiblePieces]);
+
+  // ── Actions ────────────────────────────────────────────────────────────────
+
+  const update = useCallback((id: string, patch: PiecePatch) => {
+    onUpdate(id, patch);
+    // Touching a piece is the strongest "I've looked at this" there is.
+    if (review) setConfirmedIds((current) => (current.has(id) ? current : new Set(current).add(id)));
+  }, [onUpdate, review]);
+
+  const openPiece = useCallback((id: string) => {
+    setWalk(filter === 'check' && review ? sheetPieces.map((piece) => piece.id) : null);
+    setActiveId(id);
+    setView('loupe');
+  }, [filter, review, sheetPieces]);
+
+  const startFlaggedWalk = useCallback(() => {
+    const flagged = visiblePieces.filter((piece) => states[piece.id] === 'check').map((piece) => piece.id);
+    if (flagged.length === 0) return;
+    setWalk(flagged);
+    setActiveId(flagged[0]);
+    setView('loupe');
+  }, [states, visiblePieces]);
+
+  const finishWalk = useCallback(() => {
+    setWalk(null);
+    setFilter('all');
+    if (sheetEnabled) setView('sheet');
+  }, [sheetEnabled]);
+
+  // The walk visits only what was flagged. Browsing outside it goes to the
+  // next flagged piece while any remain, then simply onward, piece by piece.
+  const nextAfterConfirm = useMemo(() => {
+    if (!activeResolvedId) return null;
+    const flagged = nextFlaggedPieceId(loupeIds, { ...states, [activeResolvedId]: 'confirmed' }, activeResolvedId);
+    if (flagged || walk) return flagged;
+    return loupeIds[loupeIds.indexOf(activeResolvedId) + 1] ?? null;
+  }, [activeResolvedId, loupeIds, states, walk]);
+
+  const confirmActive = useCallback(() => {
+    if (!activeResolvedId) return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setConfirmedIds((current) => new Set(current).add(activeResolvedId));
+    if (nextAfterConfirm) setActiveId(nextAfterConfirm);
+    else finishWalk();
+  }, [activeResolvedId, finishWalk, nextAfterConfirm]);
+
+  const extract = useCallback(() => {
+    runAfterRemovals('extract');
+  }, [runAfterRemovals]);
+
+  useEffect(() => {
+    if (!deferred) return;
+    if (pieces.some((piece) => deferred.waitFor.includes(piece.id))) return;
+    setDeferred(null);
+    if (deferred.action === 'save') {
+      onSave();
+      return;
+    }
+    const brandCount = pieces.filter((piece) => piece.brand.trim().length > 0).length;
+    const opened = pieces.filter((piece) => openedIds.has(piece.id)).length;
+    onExtract(opened >= pieces.length ? 'completed_review' : 'extract_now', opened, brandCount);
+  }, [deferred, onExtract, onSave, openedIds, pieces]);
+
+  const openSheet = useCallback((request: SheetRequest) => {
+    setSheetDismissed(false);
+    if (request.kind === 'season') {
+      const targets = pieces.filter((piece) => request.target.includes(piece.id));
+      const shared = targets.length > 0
+        ? targets[0].seasons.filter((season) => targets.every((piece) => piece.seasons.includes(season)))
+        : [];
+      setSeasonDraft(shared);
+    }
+    setSheet(request);
   }, [pieces]);
 
-  const carouselScroll = useAnimatedScrollHandler(
-    {
-      onScroll: (event) => {
-        const offset = event.contentOffset.x;
-        scrollX.value = offset;
-        if (metrics.snapInterval <= 0 || pieces.length <= 0) return;
-        const index = Math.min(pieces.length - 1, Math.max(0, Math.round(offset / metrics.snapInterval)));
-        if (index !== trackedIndex.value) {
-          trackedIndex.value = index;
-          runOnJS(selectIndex)(index);
-        }
-      },
-    },
-    [metrics.snapInterval, pieces.length, selectIndex],
-  );
+  const dismissSheet = useCallback(() => setSheetDismissed(true), []);
 
-  // Slide-and-dip tied to the carousel offset: the panel leaves with the
-  // outgoing hero, its contents swap at the halfway point where it is nearly
-  // invisible, and it settles back in under the incoming one.
-  const coupledPanelStyle = useAnimatedStyle(() => {
-    const half = Math.max(1, metrics.snapInterval / 2);
-    const delta = scrollX.value - trackedIndex.value * metrics.snapInterval;
-    const clamped = Math.max(-half, Math.min(half, delta));
-    if (reduceMotion) return { transform: [{ translateX: 0 }], opacity: 1 };
-    return {
-      transform: [{ translateX: -clamped * 0.5 }],
-      opacity: 1 - (Math.abs(clamped) / half) * 0.8,
-    };
-  }, [metrics.snapInterval, reduceMotion]);
+  const endSelection = useCallback(() => setSelection(null), []);
 
-  const toggleExpanded = useCallback((id: string) => {
-    setExpandedIds((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
+  const requestSystemClose = useCallback(() => {
+    if (sheet) return dismissSheet();
+    if (confirmClose) return setConfirmClose(false);
+    if (selection) return setSelection(null);
+    if (effectiveView === 'loupe' && sheetEnabled) {
+      setWalk(null);
+      return setView('sheet');
+    }
+    if (onMinimize) {
+      commitRemoval(pendingRemoval);
+      return onMinimize();
+    }
+    if (!closeDisabled) setConfirmClose(true);
+  }, [closeDisabled, commitRemoval, confirmClose, dismissSheet, effectiveView, onMinimize, pendingRemoval, selection, sheet, sheetEnabled]);
 
-  if (mode.kind === 'crop-editor' && modePiece?.cropSource && modePiece.cropBbox) {
+  // ── Crop editor (full screen: precise manipulation earns the takeover) ─────
+
+  const cropPiece = cropId ? pieces.find((piece) => piece.id === cropId) ?? null : null;
+  if (cropPiece?.cropSource && cropPiece.cropBbox) {
     return (
-      <Modal visible={visible} presentationStyle="fullScreen" animationType="none" onRequestClose={requestSystemClose}>
-        <CropAdjustEditor
-          sourceImage={modePiece.cropSource}
-          initialBbox={modePiece.cropBbox}
-          itemName={modePiece.name}
-          onApply={(bbox) => {
-            onApplyCrop(modePiece.id, bbox);
-            setMode({ kind: 'review' });
-          }}
-          onCancel={() => setMode({ kind: 'review' })}
-        />
+      <Modal visible={visible} presentationStyle="fullScreen" animationType="none" onRequestClose={() => setCropId(null)}>
+        <GestureHandlerRootView style={styles.root}>
+          <CropAdjustEditor
+            sourceImage={cropPiece.cropSource}
+            initialBbox={cropPiece.cropBbox}
+            itemName={cropPiece.name}
+            onApply={(bbox) => {
+              onApplyCrop(cropPiece.id, bbox);
+              setCropId(null);
+            }}
+            onCancel={() => setCropId(null)}
+          />
+        </GestureHandlerRootView>
       </Modal>
     );
   }
 
-  if (mode.kind === 'brand-search' && modePiece) {
-    return (
-      <Modal visible={visible} presentationStyle="fullScreen" animationType="none" onRequestClose={requestSystemClose}>
-        <BrandSearch
-          piece={modePiece}
-          suggestions={brandSuggestions}
-          onSelect={(brand) => {
-            onUpdate(modePiece.id, { brand });
-            setMode({ kind: 'review' });
-          }}
-          onCancel={() => setMode({ kind: 'review' })}
-        />
-      </Modal>
-    );
-  }
+  // ── Render ─────────────────────────────────────────────────────────────────
 
-  const preExtractLabel = scanReviewPrimaryLabel(pieceIds, reviewedIds, activeResolvedId);
-  const primaryAction = scanReviewPrimaryAction(pieceIds, reviewedIds, activeResolvedId);
-  const showExtractNow = stage === 'pre-extract' && primaryAction === 'next';
+  const heroHeight = loupeHeroHeight(height);
+  const contentBottom = spacing.xxl + (pendingRemoval ? 56 : 0);
+  const selecting = selection !== null && !busy;
+
+  const actionMode: ActionBarMode = stage === 'scanning'
+    ? { kind: 'busy', label: 'Looking at your photo…' }
+    : stage === 'extracting'
+      ? { kind: 'busy', label: `Extracting details for ${pieceCountLabel(visiblePieces.length)}…` }
+      : stage === 'saving'
+        ? { kind: 'busy', label: 'Adding to closet…' }
+        : selecting
+          ? {
+            kind: 'selecting',
+            count: selection.size,
+            review,
+            onBrand: () => openSheet({ kind: 'brand', target: [...selection] }),
+            onSeason: () => openSheet({ kind: 'season', target: [...selection] }),
+            onConfirm: () => {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setConfirmedIds((current) => new Set([...current, ...selection]));
+              setSelection(null);
+            },
+            onRemove: () => removeWithUndo([...selection]),
+          }
+          : stage === 'pre-extract'
+            ? { kind: 'extract', count: visiblePieces.length, onExtract: extract }
+            : effectiveView === 'loupe' && sheetEnabled
+              ? {
+                kind: 'confirm',
+                last: nextAfterConfirm === null,
+                onConfirm: confirmActive,
+                onSkip: activeIndex >= 0 && activeIndex < loupeIds.length - 1
+                  ? () => setActiveId(loupeIds[activeIndex + 1])
+                  : null,
+              }
+              : {
+                kind: 'save',
+                count: visiblePieces.length,
+                flagged: sheetEnabled ? checkCount : 0,
+                onSave: () => runAfterRemovals('save'),
+                onReviewFlagged: startFlaggedWalk,
+              };
+
+  const sheetTargets = sheet ? pieces.filter((piece) => sheet.target.includes(piece.id)) : [];
+  const singleTarget = sheetTargets.length === 1 ? sheetTargets[0] : null;
+  const scanBrands = [...new Set(pieces.map((piece) => piece.brand.trim()).filter(Boolean))];
 
   return (
     <Modal
@@ -334,819 +451,255 @@ export function ScanReviewWorkspace({
       animationType={reduceMotion ? 'fade' : 'slide'}
       onRequestClose={requestSystemClose}
     >
-      <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <WorkspaceHeader
-          stage={stage}
-          activeIndex={activeIndex}
-          pieceCount={pieces.length}
-          showCounter={stage !== 'scanning' && !(isReviewStage && pieces.length > 1)}
-          closeDisabled={closeDisabled}
-          topInset={insets.top}
-          onClose={requestClose}
-          onMinimize={onMinimize}
-        />
+      <GestureHandlerRootView style={styles.root}>
+        <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <WorkspaceHeader
+            stage={stage}
+            view={effectiveView}
+            canGoBack={effectiveView === 'loupe' && sheetEnabled && !busy}
+            position={effectiveView === 'loupe' && activeIndex >= 0 ? { index: activeIndex, count: loupeIds.length, walk: Boolean(walk) } : null}
+            batch={Boolean(onMinimize)}
+            closeDisabled={closeDisabled}
+            topInset={insets.top}
+            onBack={() => { setWalk(null); setView('sheet'); }}
+            onClose={() => setConfirmClose(true)}
+            onMinimize={onMinimize ? () => { commitRemoval(pendingRemoval); onMinimize(); } : undefined}
+          />
 
-        {failure ? (
-          <View style={styles.failureBanner} accessibilityRole="alert">
-            <Ionicons name="alert-circle-outline" size={18} color={colors.action} />
-            <Text style={styles.failureText}>{failure.message}</Text>
-            <TouchableOpacity style={styles.retryButton} onPress={failure.onRetry} disabled={busy}>
-              <Text style={styles.retryText}>{failure.retryLabel ?? 'Retry'}</Text>
-            </TouchableOpacity>
+          {failure ? (
+            <View style={styles.failureBanner} accessibilityRole="alert">
+              <Ionicons name="alert-circle-outline" size={18} color={colors.action} />
+              <Text style={styles.failureText}>{failure.message}</Text>
+              <TextLink label={failure.retryLabel ?? 'Retry'} onPress={failure.onRetry} disabled={busy} />
+            </View>
+          ) : null}
+
+          {stage === 'scanning' ? (
+            <DetectionState previewImage={previewImage} progress={scanProgress} heroHeight={heroHeight} reduceMotion={reduceMotion} />
+          ) : stage === 'extracting' ? (
+            <ExtractionState piece={visiblePieces[0] ?? null} progress={extractionProgress} heroHeight={heroHeight} reduceMotion={reduceMotion} />
+          ) : effectiveView === 'sheet' ? (
+            <ContactSheet
+              pieces={sheetPieces}
+              totalCount={visiblePieces.length}
+              stage={stage}
+              states={states}
+              guidance={sheetGuidance(review ? 'review' : 'pre-extract', summary)}
+              checkCount={checkCount}
+              filter={filter}
+              selection={selecting ? selection : null}
+              disabled={stage === 'saving'}
+              reduceMotion={reduceMotion}
+              bottomPadding={contentBottom}
+              onFilterChange={setFilter}
+              onOpen={openPiece}
+              onStartSelect={(id) => setSelection(new Set(id ? [id] : []))}
+              onToggleSelect={(id) => setSelection((current) => {
+                const next = new Set(current ?? []);
+                if (next.has(id)) next.delete(id);
+                else next.add(id);
+                return next;
+              })}
+              onSelectAll={() => setSelection(new Set(sheetPieces.map((piece) => piece.id)))}
+              onEndSelect={endSelection}
+            />
+          ) : activeResolvedId ? (
+            <Loupe
+              key={walk ? `walk:${walk.join(',')}` : 'all'}
+              pieces={loupePieces}
+              stage={stage}
+              states={states}
+              activeId={activeResolvedId}
+              disabled={stage === 'saving'}
+              reduceMotion={reduceMotion}
+              bottomPadding={contentBottom}
+              onActiveChange={setActiveId}
+              onUpdate={update}
+              onOpenSheet={(kind, id) => openSheet({ kind, target: [id] })}
+              onCrop={setCropId}
+              onToggleCutout={onToggleCutout}
+              onRemove={(id) => removeWithUndo([id])}
+            />
+          ) : <View style={styles.root} />}
+
+          <View onLayout={(event) => setActionBarHeight(event.nativeEvent.layout.height)}>
+            <ActionBar mode={actionMode} bottomInset={insets.bottom} />
           </View>
+        </KeyboardAvoidingView>
+
+        {pendingRemoval ? (
+          <UndoToast
+            key={pendingRemoval.ids.join(',')}
+            message={pendingRemoval.message}
+            bottom={actionBarHeight + spacing.sm}
+            reduceMotion={reduceMotion}
+            onUndo={() => setPendingRemoval(null)}
+          />
         ) : null}
 
-        {stage === 'scanning' ? (
-          <DetectionState previewImage={previewImage} progress={scanProgress} heroHeight={heroHeight} reduceMotion={reduceMotion} />
-        ) : stage === 'extracting' ? (
-          <ExtractionState piece={activePiece} progress={extractionProgress} heroHeight={heroHeight} reduceMotion={reduceMotion} />
-        ) : (
-          <ScrollView
-            ref={detailsScrollRef}
-            style={styles.mainScroll}
-            contentContainerStyle={styles.mainContent}
-            showsVerticalScrollIndicator={false}
-            keyboardDismissMode="interactive"
-            keyboardShouldPersistTaps="handled"
-          >
-            {stage === 'pre-extract' ? (
-              <Text style={styles.guidance}>Check each piece before we extract the details.</Text>
-            ) : null}
-
-            <Animated.FlatList
-              ref={carouselRef}
-              data={pieces}
-              keyExtractor={(item) => item.id}
-              horizontal
-              bounces={false}
-              decelerationRate="fast"
-              disableIntervalMomentum
-              snapToInterval={metrics.snapInterval}
-              snapToAlignment="start"
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: metrics.sidePadding }}
-              getItemLayout={(_, index) => ({ length: metrics.snapInterval, offset: metrics.snapInterval * index, index })}
-              onScroll={carouselScroll}
-              scrollEventThrottle={16}
-              onMomentumScrollEnd={handleMomentumEnd}
-              onScrollToIndexFailed={({ index }) => {
-                carouselRef.current?.scrollToOffset({ offset: index * metrics.snapInterval, animated: false });
-              }}
-              renderItem={({ item }) => (
-                <HeroCard
-                  piece={item}
-                  stage={stage}
-                  width={metrics.cardWidth}
-                  height={heroHeight}
-                  gap={metrics.gap}
-                />
-              )}
-            />
-
-            {activePiece ? (
-              <Animated.View style={coupledPanelStyle}>
-                <HeroUtilityRow
-                  piece={activePiece}
-                  stage={stage}
-                  disabled={stage === 'saving'}
-                  onToggleCutout={() => onToggleCutout(activePiece.id)}
-                  onAdjustCrop={() => setMode({ kind: 'crop-editor', pieceId: activePiece.id })}
-                  onRemove={() => setMode({ kind: 'confirm-remove', pieceId: activePiece.id })}
-                />
-              </Animated.View>
-            ) : null}
-
-            {pieces.length > 3 ? (
-              <Filmstrip
-                pieces={pieces}
-                stage={stage}
-                activeId={activeResolvedId}
-                reviewedIds={reviewedIds}
-                disabled={busy}
-                onSelect={scrollToPiece}
+        {sheet ? (
+          <WorkspaceSheet
+            title={sheet.kind === 'brand' ? 'Brand' : sheet.kind === 'material' ? 'Material' : sheet.kind === 'category' ? 'Category' : 'Season'}
+            subtitle={singleTarget ? <PieceLine piece={singleTarget} /> : <Text style={styles.sheetSubtitle}>{pieceCountLabel(sheetTargets.length)}</Text>}
+            reduceMotion={reduceMotion}
+            dismissed={sheetDismissed}
+            onClose={() => { setSheet(null); setSheetDismissed(false); }}
+            footer={sheet.kind === 'category' ? (
+              <SheetButton label="Done" onPress={dismissSheet} />
+            ) : sheet.kind === 'season' ? (
+              <SheetButton
+                label={`Apply to ${pieceCountLabel(sheetTargets.length)}`}
+                onPress={() => {
+                  for (const piece of sheetTargets) update(piece.id, { seasons: seasonDraft });
+                  setSelection(null);
+                  dismissSheet();
+                }}
               />
+            ) : undefined}
+          >
+            {sheet.kind === 'brand' ? (
+              <BrandPicker
+                current={singleTarget?.brand ?? (sheetTargets.every((piece) => piece.brand === sheetTargets[0]?.brand) ? sheetTargets[0]?.brand ?? '' : '')}
+                suggestions={brandSuggestions}
+                scanBrands={scanBrands}
+                onSelect={(brand) => {
+                  for (const piece of sheetTargets) update(piece.id, { brand });
+                  setSelection(null);
+                  dismissSheet();
+                }}
+              />
+            ) : sheet.kind === 'material' && singleTarget ? (
+              <MaterialPicker
+                current={singleTarget.material}
+                onSelect={(material) => {
+                  update(singleTarget.id, { material });
+                  dismissSheet();
+                }}
+              />
+            ) : sheet.kind === 'category' && singleTarget ? (
+              <CategoryPicker
+                category={singleTarget.category}
+                subcategory={singleTarget.subcategory}
+                style={singleTarget.style}
+                onChange={(patch) => update(singleTarget.id, patch)}
+              />
+            ) : sheet.kind === 'season' ? (
+              <SeasonPicker value={seasonDraft} onChange={setSeasonDraft} />
             ) : null}
+          </WorkspaceSheet>
+        ) : null}
 
-            {activePiece ? (
-              <Animated.View style={coupledPanelStyle}>
-                <ActivePieceForm
-                  piece={activePiece}
-                  stage={stage}
-                  disabled={stage === 'saving'}
-                  detailsExpanded={expandedIds.has(activePiece.id)}
-                  onToggleDetails={() => toggleExpanded(activePiece.id)}
-                  onUpdate={(patch) => onUpdate(activePiece.id, patch)}
-                  onOpenBrand={() => setMode({ kind: 'brand-search', pieceId: activePiece.id })}
-                  onNameFocus={() => setTimeout(() => detailsScrollRef.current?.scrollToEnd({ animated: !reduceMotion }), 120)}
-                />
-              </Animated.View>
-            ) : null}
-          </ScrollView>
-        )}
-
-        <WorkspaceFooter
-          stage={stage}
-          pieceCount={pieces.length}
-          bottomInset={insets.bottom}
-          preExtractLabel={preExtractLabel}
-          primaryAction={primaryAction}
-          showExtractNow={showExtractNow}
-          onPrimary={handlePrimary}
-          onExtractNow={() => extract('extract_now', reviewedIds)}
-          onSave={onSave}
-        />
-
-        {mode.kind === 'confirm-remove' && modePiece ? (
-          <ConfirmationPanel
-            title="Remove this piece?"
-            message={`${modePiece.name || 'This piece'} will be removed from this scan.`}
-            confirmLabel="Remove piece"
-            destructive
-            bottomInset={insets.bottom}
-            onCancel={() => setMode({ kind: 'review' })}
-            onConfirm={() => {
-              setMode({ kind: 'review' });
-              onRemove(modePiece.id);
-            }}
-          />
-        ) : mode.kind === 'confirm-close' ? (
+        {confirmClose ? (
           <ConfirmationPanel
             title="Discard this scan?"
             message={onMinimize
               ? 'Every photo in this batch, its detected pieces and your edits will be removed.'
               : 'Your detected pieces and edits in this review will be removed.'}
             confirmLabel="Discard scan"
-            destructive
             bottomInset={insets.bottom}
-            onCancel={() => setMode({ kind: 'review' })}
-            onConfirm={onClose}
+            onCancel={() => setConfirmClose(false)}
+            onConfirm={() => {
+              setConfirmClose(false);
+              setPendingRemoval(null);
+              onClose();
+            }}
           />
         ) : null}
-      </KeyboardAvoidingView>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
 
-function WorkspaceHeader({ stage, activeIndex, pieceCount, showCounter, closeDisabled, topInset, onClose, onMinimize }: {
+function WorkspaceHeader({ stage, view, canGoBack, position, batch, closeDisabled, topInset, onBack, onClose, onMinimize }: {
   stage: ScanReviewStage;
-  activeIndex: number;
-  pieceCount: number;
-  showCounter: boolean;
+  view: View_;
+  canGoBack: boolean;
+  position: { index: number; count: number; walk: boolean } | null;
+  batch: boolean;
   closeDisabled: boolean;
   topInset: number;
+  onBack: () => void;
   onClose: () => void;
   onMinimize?: () => void;
 }) {
+  const title = stage === 'scanning'
+    ? 'Scanning'
+    : stage === 'extracting'
+      ? 'Reading details'
+      : batch ? 'Batch import' : 'Closet scan';
+  const showPosition = view === 'loupe' && position && position.count > 1 && (stage === 'review' || stage === 'saving' || stage === 'pre-extract');
+
   return (
-    <>
-      <View style={[styles.header, { paddingTop: topInset + spacing.sm }]}>
-      <View style={styles.headerCopy}>
-        <Text style={styles.title} numberOfLines={1}>
-          {stage === 'review' || stage === 'saving'
-            ? 'Review details'
-            : stage === 'scanning'
-              ? 'Scanning outfit'
-              : stage === 'extracting'
-                ? 'Extracting details'
-                : 'Review your pieces'}
-        </Text>
-        {showCounter ? (
-          <Text style={styles.counter} accessibilityLabel={`Piece ${activeIndex + 1} of ${pieceCount}`}>
-            {activeIndex + 1} of {pieceCount}
-          </Text>
+    <View style={[styles.header, { paddingTop: topInset + spacing.xs }]}>
+      <View style={styles.headerSide}>
+        {canGoBack ? (
+          <TouchableOpacity style={styles.back} onPress={onBack} accessibilityRole="button" accessibilityLabel="Back to all pieces">
+            <Ionicons name="chevron-back" size={18} color={colors.foreground} />
+            <Text style={styles.backText}>All</Text>
+          </TouchableOpacity>
         ) : null}
       </View>
-      {onMinimize ? (
+      <View style={styles.headerCenter}>
+        {showPosition ? (
+          <Text style={styles.position} accessibilityLabel={`Piece ${position.index + 1} of ${position.count}${position.walk ? ' to check' : ''}`}>
+            {position.index + 1} of {position.count}{position.walk ? ' to check' : ''}
+          </Text>
+        ) : (
+          <Text style={styles.masthead} accessibilityRole="header">{title}</Text>
+        )}
+      </View>
+      <View style={[styles.headerSide, styles.headerSideEnd]}>
+        {onMinimize ? (
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={onMinimize}
+            accessibilityRole="button"
+            accessibilityLabel="Hide batch import"
+            accessibilityHint="The batch keeps running in the background"
+          >
+            <Ionicons name="chevron-down" size={22} color={colors.foreground} />
+          </TouchableOpacity>
+        ) : null}
         <TouchableOpacity
           style={styles.headerButton}
-          onPress={onMinimize}
+          onPress={onClose}
+          disabled={closeDisabled}
           accessibilityRole="button"
-          accessibilityLabel="Hide batch import"
-          accessibilityHint="The batch keeps running in the background"
+          accessibilityLabel={onMinimize ? 'Discard batch import' : 'Close closet scan'}
         >
-          <Ionicons name="chevron-down" size={24} color={colors.foreground} />
+          <Ionicons name="close" size={22} color={closeDisabled ? colors.border : colors.foreground} />
         </TouchableOpacity>
-      ) : null}
-      <TouchableOpacity
-        style={styles.headerButton}
-        onPress={onClose}
-        disabled={closeDisabled}
-        accessibilityRole="button"
-        accessibilityLabel={onMinimize ? 'Discard batch import' : 'Close closet scan'}
-      >
-        <Ionicons name="close" size={24} color={closeDisabled ? colors.border : colors.foreground} />
-      </TouchableOpacity>
       </View>
-      {/* Decorative twin of the "N of M" counter — the counter stays the
-          accessible source of truth, this just gives the flow a sense of
-          forward motion. */}
-      {showCounter && pieceCount > 1 ? (
-        <View style={styles.headerProgress} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          <AnimatedProgressBar
-            progress={((activeIndex + 1) / pieceCount) * 100}
-            height={2}
-            trackColor={colors.hairline}
-            color={colors.primary}
-            style={styles.headerProgressBar}
-          />
-        </View>
-      ) : null}
-    </>
-  );
-}
-
-function HeroCard({ piece, stage, width, height, gap }: {
-  piece: ScanReviewPiece;
-  stage: ScanReviewStage;
-  width: number;
-  height: number;
-  gap: number;
-}) {
-  const isReview = stage === 'review' || stage === 'saving';
-  const showingCutout = isReview && Boolean(piece.cutout && piece.useCutout);
-  const imageUri = showingCutout ? piece.cutout : piece.photo;
-
-  return (
-    <View style={[styles.hero, !isReview && styles.heroPreExtract, { width, height, marginRight: gap }]}>
-      {imageUri ? (
-        <Image
-          source={{ uri: imageUri }}
-          style={styles.heroImage}
-          contentFit="contain"
-          contentPosition="center"
-          cachePolicy="memory-disk"
-          recyclingKey={`${piece.id}-${showingCutout ? 'cutout' : 'photo'}`}
-          transition={150}
-          accessibilityLabel={`Photo of ${piece.name}`}
-        />
-      ) : (
-        <Ionicons name="shirt-outline" size={54} color={colors.mutedForeground} />
-      )}
-    </View>
-  );
-}
-
-// The hero's controls live beneath the image rather than floating on it: a
-// cream pill on a cream garment is unreadable, and this screen's whole job is
-// judging the photo. The row reads from the *active* piece, so it follows the
-// carousel instead of belonging to any one card.
-function HeroUtilityRow({ piece, stage, disabled, onToggleCutout, onAdjustCrop, onRemove }: {
-  piece: ScanReviewPiece;
-  stage: ScanReviewStage;
-  disabled: boolean;
-  onToggleCutout: () => void;
-  onAdjustCrop: () => void;
-  onRemove: () => void;
-}) {
-  const isReview = stage === 'review' || stage === 'saving';
-  const showingCutout = isReview && Boolean(piece.cutout && piece.useCutout);
-  const canAdjustCrop = piece.canAdjustCrop && Boolean(piece.cropSource) && Boolean(piece.cropBbox);
-
-  return (
-    <View style={styles.utilityRow}>
-      {canAdjustCrop ? (
-        <TouchableOpacity
-          style={styles.utilityButton}
-          onPress={onAdjustCrop}
-          disabled={disabled}
-          accessibilityRole="button"
-          accessibilityLabel={`Adjust crop for ${piece.name}`}
-        >
-          <Ionicons name="crop-outline" size={16} color={colors.foreground} />
-          <Text style={styles.utilityButtonText}>Adjust crop</Text>
-        </TouchableOpacity>
-      ) : null}
-
-      {isReview && piece.cutout ? (
-        <TouchableOpacity
-          style={[styles.utilityButton, showingCutout && styles.utilityButtonActive]}
-          onPress={onToggleCutout}
-          disabled={disabled}
-          accessibilityRole="switch"
-          accessibilityState={{ checked: showingCutout }}
-          accessibilityLabel={showingCutout ? 'Using cutout cover' : 'Using photo cover'}
-        >
-          <Ionicons name={showingCutout ? 'cut-outline' : 'image-outline'} size={16} color={showingCutout ? colors.primaryForeground : colors.foreground} />
-          <Text style={[styles.utilityButtonText, showingCutout && styles.utilityButtonTextActive]}>
-            {showingCutout ? 'Cutout' : 'Photo'}
-          </Text>
-        </TouchableOpacity>
-      ) : null}
-
-      <View style={styles.utilitySpacer} />
-
-      <TouchableOpacity
-        style={styles.removeButton}
-        onPress={onRemove}
-        disabled={disabled}
-        accessibilityRole="button"
-        accessibilityLabel={`Remove ${piece.name}`}
-      >
-        <Ionicons name="trash-outline" size={19} color={colors.action} />
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-function Filmstrip({ pieces, stage, activeId, reviewedIds, disabled, onSelect }: {
-  pieces: ScanReviewPiece[];
-  stage: ScanReviewStage;
-  activeId: string | null;
-  reviewedIds: ReadonlySet<string>;
-  disabled: boolean;
-  onSelect: (id: string) => void;
-}) {
-  const canUseCutout = stage === 'review' || stage === 'saving';
-  return (
-    <View style={styles.filmstripFrame}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filmstrip} keyboardShouldPersistTaps="handled">
-        {pieces.map((piece, index) => {
-          const selected = piece.id === activeId;
-          const reviewed = reviewedIds.has(piece.id);
-          const showingCutout = canUseCutout && piece.useCutout && piece.cutout;
-          const uri = showingCutout ? piece.cutout : piece.photo;
-          return (
-            <TouchableOpacity
-              key={piece.id}
-              style={[styles.filmstripThumb, selected && styles.filmstripThumbSelected]}
-              onPress={() => onSelect(piece.id)}
-              disabled={disabled}
-              accessibilityRole="button"
-              accessibilityLabel={`View piece ${index + 1} of ${pieces.length}: ${piece.name}${reviewed ? ', reviewed' : ''}`}
-              accessibilityState={{ selected }}
-            >
-              {uri ? <Image source={{ uri }} style={[styles.filmstripImage, !selected && styles.filmstripImageResting]} contentFit="contain" cachePolicy="memory-disk" recyclingKey={`filmstrip-${piece.id}`} /> : <Ionicons name="shirt-outline" size={24} color={colors.mutedForeground} />}
-              {reviewed ? <View style={styles.reviewedBadge}><Ionicons name="checkmark" size={11} color={colors.white} /></View> : null}
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-    </View>
-  );
-}
-
-function ActivePieceForm({ piece, stage, disabled, detailsExpanded, onToggleDetails, onUpdate, onOpenBrand, onNameFocus }: {
-  piece: ScanReviewPiece;
-  stage: ScanReviewStage;
-  disabled: boolean;
-  detailsExpanded: boolean;
-  onToggleDetails: () => void;
-  onUpdate: (patch: Partial<ScanReviewPiece>) => void;
-  onOpenBrand: () => void;
-  onNameFocus: () => void;
-}) {
-  const isReview = stage === 'review' || stage === 'saving';
-  return (
-    <View style={styles.formCard}>
-      <Field label="Item name">
-        <TextInput
-          value={piece.name}
-          onChangeText={(name) => onUpdate({ name })}
-          onFocus={onNameFocus}
-          editable={!disabled}
-          autoCapitalize="words"
-          style={styles.input}
-          accessibilityLabel="Item name"
-        />
-      </Field>
-
-      <Field label="Brand (optional)">
-        <TouchableOpacity
-          style={styles.brandRow}
-          onPress={onOpenBrand}
-          disabled={disabled}
-          accessibilityRole="button"
-          accessibilityLabel={piece.brand ? `Brand, ${piece.brand}` : 'Choose a brand, optional'}
-        >
-          <Text style={[styles.brandValue, !piece.brand && styles.brandPlaceholder]} numberOfLines={1}>
-            {piece.brand || 'Search or enter a brand'}
-          </Text>
-          <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
-        </TouchableOpacity>
-        {stage === 'pre-extract' ? <Text style={styles.fieldHint}>Adding a brand can improve detail accuracy. Not sure? Leave it blank.</Text> : null}
-      </Field>
-
-      {isReview ? (
-        <>
-          {piece.category ? (
-            <View style={styles.categorySummary}>
-              <Text style={styles.categoryLabel}>Category</Text>
-              <Text style={styles.categoryValue}>{piece.subcategory || piece.category}</Text>
-            </View>
-          ) : null}
-          <View style={styles.twoColumnFields}>
-            <View style={styles.flexField}><Field label="Colour"><TextInput value={piece.color ?? ''} onChangeText={(color) => onUpdate({ color: color || null })} editable={!disabled} placeholder="e.g. Navy" placeholderTextColor={colors.mutedForeground} style={styles.input} /></Field></View>
-            <View style={styles.flexField}><Field label="Material"><TextInput value={piece.material ?? ''} onChangeText={(material) => onUpdate({ material: material || null })} editable={!disabled} placeholder="e.g. Cotton" placeholderTextColor={colors.mutedForeground} style={styles.input} /></Field></View>
-          </View>
-          <TouchableOpacity style={styles.moreDetailsButton} onPress={onToggleDetails} disabled={disabled} accessibilityRole="button" accessibilityState={{ expanded: detailsExpanded }}>
-            <Text style={styles.moreDetailsText}>More details</Text>
-            <Ionicons name={detailsExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.primary} />
-          </TouchableOpacity>
-          {detailsExpanded ? <MoreDetails piece={piece} disabled={disabled} onUpdate={onUpdate} /> : null}
-        </>
-      ) : null}
-    </View>
-  );
-}
-
-function MoreDetails({ piece, disabled, onUpdate }: { piece: ScanReviewPiece; disabled: boolean; onUpdate: (patch: Partial<ScanReviewPiece>) => void }) {
-  return (
-    <View style={styles.detailsPanel}>
-      <TaxonomySelector
-        category={piece.category}
-        subcategory={piece.subcategory}
-        style={piece.style}
-        onCategoryChange={(category) => onUpdate({ category: category || null, subcategory: null, style: null })}
-        onSubcategoryChange={(subcategory) => onUpdate({ subcategory: subcategory || null, style: null })}
-        onStyleChange={(style) => onUpdate({ style: style || null })}
-        disabled={disabled}
-      />
-      <Field label="Season">
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.pillRow}>
-            {SEASON_CHIPS.map(({ value, label }) => {
-              const selected = piece.seasons.includes(value);
-              return (
-                <TouchableOpacity key={value} style={[styles.pill, selected && styles.pillActive]} onPress={() => onUpdate({ seasons: selected ? piece.seasons.filter((season) => season !== value) : [...piece.seasons, value] })} disabled={disabled}>
-                  <Text style={[styles.pillText, selected && styles.pillTextActive]}>{label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </ScrollView>
-      </Field>
-      <Field label="Fit"><TextInput value={piece.fit ?? ''} onChangeText={(fit) => onUpdate({ fit: fit || null })} editable={!disabled} placeholder="e.g. Relaxed" placeholderTextColor={colors.mutedForeground} style={styles.input} /></Field>
-      <SizeProfileInput category={piece.category} subcategory={piece.subcategory} style={piece.style} formalityValues={piece.occasions} value={piece.sizeProfile} onChange={(sizeProfile) => onUpdate({ sizeProfile })} />
-    </View>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <View style={styles.field}><Text style={styles.fieldLabel}>{label}</Text>{children}</View>;
-}
-
-function BrandSearch({ piece, suggestions, onSelect, onCancel }: {
-  piece: ScanReviewPiece;
-  suggestions: string[];
-  onSelect: (brand: string) => void;
-  onCancel: () => void;
-}) {
-  const insets = useSafeAreaInsets();
-  const [query, setQuery] = useState(piece.brand);
-  const filtered = useMemo(() => filterBrandSuggestions(suggestions, query), [query, suggestions]);
-  const trimmed = query.trim();
-  const exactMatch = suggestions.some((brand) => brand.toLocaleLowerCase() === trimmed.toLocaleLowerCase());
-
-  return (
-    <KeyboardAvoidingView style={styles.brandSearchRoot} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={[styles.brandSearchHeader, { paddingTop: insets.top + spacing.sm }]}>
-        <TouchableOpacity style={styles.headerButton} onPress={onCancel} accessibilityLabel="Back to piece review"><Ionicons name="chevron-back" size={24} color={colors.foreground} /></TouchableOpacity>
-        <View style={styles.brandSearchTitleWrap}><Text style={styles.title}>Choose a brand</Text><Text style={styles.counter} numberOfLines={1}>{piece.name}</Text></View>
-        <View style={styles.headerButton} />
-      </View>
-      <View style={styles.brandSearchInputWrap}>
-        <Ionicons name="search" size={20} color={colors.mutedForeground} />
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search or enter a brand"
-          placeholderTextColor={colors.mutedForeground}
-          autoFocus
-          autoCorrect={false}
-          autoCapitalize="words"
-          returnKeyType="done"
-          onSubmitEditing={() => { if (trimmed) onSelect(trimmed); }}
-          style={styles.brandSearchInput}
-          accessibilityLabel="Search brands"
-        />
-        {query ? <TouchableOpacity style={styles.clearSearchButton} onPress={() => setQuery('')} accessibilityLabel="Clear brand search"><Ionicons name="close-circle" size={20} color={colors.mutedForeground} /></TouchableOpacity> : null}
-      </View>
-      <FlatList
-        data={filtered}
-        keyExtractor={(brand) => brand.toLocaleLowerCase()}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="interactive"
-        contentContainerStyle={[styles.brandResults, { paddingBottom: insets.bottom + spacing.xl }]}
-        ListHeaderComponent={
-          <>
-            {trimmed && !exactMatch ? <BrandResult icon="add" label={`Use “${trimmed}”`} onPress={() => onSelect(trimmed)} /> : null}
-            <BrandResult icon="close-circle-outline" label="No brand" muted onPress={() => onSelect('')} />
-            <Text style={styles.brandResultsLabel}>{trimmed ? 'Matching brands' : 'Suggested brands'}</Text>
-          </>
-        }
-        ListEmptyComponent={<Text style={styles.emptyBrands}>No matching brands. You can still use the name you typed.</Text>}
-        renderItem={({ item }) => <BrandResult icon="pricetag-outline" label={item} onPress={() => onSelect(item)} />}
-      />
-    </KeyboardAvoidingView>
-  );
-}
-
-function BrandResult({ icon, label, muted, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; muted?: boolean; onPress: () => void }) {
-  return (
-    <TouchableOpacity style={styles.brandResult} onPress={onPress} accessibilityRole="button">
-      <View style={styles.brandResultIcon}><Ionicons name={icon} size={19} color={muted ? colors.mutedForeground : colors.primary} /></View>
-      <Text style={[styles.brandResultText, muted && styles.brandResultMuted]} numberOfLines={1}>{label}</Text>
-      <Ionicons name="chevron-forward" size={17} color={colors.mutedForeground} />
-    </TouchableOpacity>
-  );
-}
-
-function ConfirmationPanel({ title, message, confirmLabel, destructive, bottomInset, onCancel, onConfirm }: {
-  title: string;
-  message: string;
-  confirmLabel: string;
-  destructive?: boolean;
-  bottomInset: number;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <View style={styles.confirmationLayer} accessibilityViewIsModal>
-      <TouchableOpacity style={styles.confirmationBackdrop} activeOpacity={1} onPress={onCancel} accessibilityLabel="Cancel" />
-      <View style={[styles.confirmationCard, { paddingBottom: Math.max(bottomInset, spacing.lg) }]}>
-        <View style={styles.confirmationHandle} />
-        <Text style={styles.confirmationTitle}>{title}</Text>
-        <Text style={styles.confirmationMessage}>{message}</Text>
-        <TouchableOpacity style={[styles.confirmButton, destructive && styles.destructiveButton]} onPress={onConfirm} accessibilityRole="button">
-          <Text style={[styles.confirmButtonText, destructive && styles.destructiveButtonText]}>{confirmLabel}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.confirmCancelButton} onPress={onCancel} accessibilityRole="button"><Text style={styles.confirmCancelText}>Keep reviewing</Text></TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-function WorkspaceFooter({ stage, pieceCount, bottomInset, preExtractLabel, primaryAction, showExtractNow, onPrimary, onExtractNow, onSave }: {
-  stage: ScanReviewStage;
-  pieceCount: number;
-  bottomInset: number;
-  preExtractLabel: string;
-  primaryAction: ScanReviewPrimaryAction;
-  showExtractNow: boolean;
-  onPrimary: () => void;
-  onExtractNow: () => void;
-  onSave: () => void;
-}) {
-  return (
-    <View style={[styles.footer, { paddingBottom: Math.max(bottomInset, spacing.md) }]}>
-      {stage === 'pre-extract' ? (
-        <>
-          {/* The sparkle is reserved for the action that actually spends
-              credits; advancing the carousel gets a plain arrow. */}
-          <TouchableOpacity style={styles.primaryButton} onPress={onPrimary} accessibilityRole="button"><Ionicons name={primaryAction === 'extract' ? 'sparkles' : 'arrow-forward'} size={19} color={colors.primaryForeground} /><Text style={styles.primaryButtonText}>{preExtractLabel}</Text></TouchableOpacity>
-          {showExtractNow ? <TouchableOpacity style={styles.secondaryButton} onPress={onExtractNow} accessibilityRole="button"><Text style={styles.secondaryButtonText}>Skip ahead</Text></TouchableOpacity> : null}
-        </>
-      ) : stage === 'review' || stage === 'saving' ? (
-        <TouchableOpacity style={[styles.primaryButton, stage === 'saving' && styles.primaryButtonDisabled]} onPress={onSave} disabled={stage === 'saving'} accessibilityRole="button">
-          {stage === 'saving' ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Ionicons name="checkmark" size={20} color={colors.primaryForeground} />}
-          <Text style={styles.primaryButtonText}>{stage === 'saving' ? 'Adding to closet…' : pieceCount === 1 ? 'Add to closet' : `Add all ${pieceCount} to closet`}</Text>
-        </TouchableOpacity>
-      ) : stage === 'scanning' ? (
-        <View style={styles.extractingFooter}><ActivityIndicator size="small" color={colors.primary} /><Text style={styles.extractingFooterText}>Looking at your photo…</Text></View>
-      ) : (
-        <View style={styles.extractingFooter}><ActivityIndicator size="small" color={colors.primary} /><Text style={styles.extractingFooterText}>Extracting details for {displayCount(pieceCount)}…</Text></View>
-      )}
-    </View>
-  );
-}
-
-const SWEEP_BAND_HEIGHT = 90;
-
-function useCyclingScanStatus(): string {
-  const [idx, setIdx] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setIdx((i) => (i + 1) % SCAN_MESSAGES.length), 2500);
-    return () => clearInterval(id);
-  }, []);
-  return SCAN_MESSAGES[idx];
-}
-
-// The hero's own detection animation — a warm sweep + soft pulse over the
-// photo, standing in for "the AI is looking at this." There's no real
-// per-item signal yet (pose-scan is a single non-streamed request), so this
-// is deliberately a choreographed effect rather than data-driven, same as
-// the cycling status copy above.
-function DetectionState({ previewImage, progress, heroHeight, reduceMotion }: {
-  previewImage: string | null;
-  progress: { current: number; total: number };
-  heroHeight: number;
-  reduceMotion: boolean;
-}) {
-  const statusMsg = useCyclingScanStatus();
-  const pulse = useSharedValue(0.08);
-  const sweep = useSharedValue(0);
-
-  useEffect(() => {
-    if (reduceMotion) {
-      pulse.set(0.16);
-      return;
-    }
-    pulse.set(withRepeat(withSequence(
-      withTiming(0.2, { duration: 900 }),
-      withTiming(0.08, { duration: 900 }),
-    ), -1, true));
-    sweep.set(withRepeat(
-      withTiming(1, { duration: 2200, easing: Easing.inOut(Easing.quad) }),
-      -1,
-      false,
-    ));
-  }, [reduceMotion, pulse, sweep]);
-
-  const scrimStyle = useAnimatedStyle(() => ({ opacity: pulse.get() }));
-  const sweepStyle = useAnimatedStyle(() => ({
-    opacity: reduceMotion ? 0 : 1,
-    transform: [{ translateY: -SWEEP_BAND_HEIGHT + sweep.get() * (heroHeight + SWEEP_BAND_HEIGHT) }],
-  }), [heroHeight, reduceMotion]);
-
-  return (
-    <View style={styles.extractionState} accessibilityLiveRegion="polite">
-      <View style={[styles.extractionHero, { height: heroHeight }]}>
-        {previewImage ? (
-          <Image source={{ uri: previewImage }} style={styles.heroImage} contentFit="contain" cachePolicy="memory-disk" />
-        ) : null}
-        <Animated.View style={[styles.detectScrim, scrimStyle]} pointerEvents="none" />
-        <Animated.View style={[styles.detectSweep, { height: SWEEP_BAND_HEIGHT }, sweepStyle]} pointerEvents="none">
-          <LinearGradient colors={[`${colors.accent}00`, `${colors.accent}CC`, `${colors.accent}00`]} style={StyleSheet.absoluteFill} />
-        </Animated.View>
-        <View style={styles.detectFrame} pointerEvents="none" />
-      </View>
-      <Text style={styles.extractionTitle}>Detecting your pieces</Text>
-      <Text style={styles.extractionCopy}>{statusMsg}</Text>
-      <ScanStepTrack stage="scanning" progress={progress} reduceMotion={reduceMotion} />
-    </View>
-  );
-}
-
-function ExtractionState({ piece, progress, heroHeight, reduceMotion }: { piece: ScanReviewPiece | null; progress: { current: number; total: number }; heroHeight: number; reduceMotion: boolean }) {
-  const uri = piece?.photo;
-  return (
-    <View style={styles.extractionState} accessibilityLiveRegion="polite">
-      <View style={[styles.extractionHero, { height: heroHeight }]}>{uri ? <Image source={{ uri }} style={styles.heroImage} contentFit="contain" cachePolicy="memory-disk" /> : null}</View>
-      <Text style={styles.extractionTitle}>Refining your pieces</Text>
-      <Text style={styles.extractionCopy}>Adding colour, material, fit, and styling details.</Text>
-      <ScanStepTrack stage="extracting" progress={progress} reduceMotion={reduceMotion} />
-    </View>
-  );
-}
-
-const SCAN_TRACK_STEPS: { key: 'detect' | 'extract'; label: string }[] = [
-  { key: 'detect', label: 'Detect' },
-  { key: 'extract', label: 'Extract' },
-];
-
-// Replaces the old dot-circle-and-line tracker: a single ruled line whose
-// fill spans the whole Detect→Extract journey (0–50% during Detect, 50–100%
-// during Extract, the latter driven by real extraction progress) instead of
-// two disconnected per-step widgets.
-function ScanStepTrack({ stage, progress, reduceMotion }: {
-  stage: 'scanning' | 'extracting';
-  progress: { current: number; total: number };
-  reduceMotion: boolean;
-}) {
-  // Detect owns the first half of the rule. A single-photo scan has no real
-  // signal inside it, so it sits at a token 0.1; a batch has one tick per
-  // photo and fills the half for real.
-  const targetFraction = stage === 'scanning'
-    ? (progress.total > 0 ? 0.1 + (progress.current / progress.total) * 0.4 : 0.1)
-    : 0.5 + (progress.total > 0 ? (progress.current / progress.total) * 0.5 : 0);
-
-  const fill = useSharedValue(targetFraction);
-  useEffect(() => {
-    fill.set(reduceMotion ? targetFraction : withTiming(targetFraction, { duration: 350 }));
-  }, [targetFraction, reduceMotion, fill]);
-
-  const fillStyle = useAnimatedStyle(() => ({ width: `${fill.get() * 100}%` }));
-
-  return (
-    <View style={styles.trackWrap}>
-      <View style={styles.trackLabelRow}>
-        {SCAN_TRACK_STEPS.map((step) => {
-          const isDone = stage === 'extracting' && step.key === 'detect';
-          const isActive = (stage === 'scanning' && step.key === 'detect') || (stage === 'extracting' && step.key === 'extract');
-          return (
-            <View key={step.key} style={styles.trackLabelItem}>
-              {isDone ? <Ionicons name="checkmark" size={11} color={colors.primary} /> : null}
-              <Text style={[styles.trackLabel, isActive && styles.trackLabelActive]}>{step.label}</Text>
-            </View>
-          );
-        })}
-      </View>
-      <View style={styles.trackRule}>
-        <Animated.View style={[styles.trackRuleFill, fillStyle]} />
-      </View>
-      {stage === 'extracting' || progress.total > 1 ? (
-        <Text style={styles.trackCount}>{progress.current}/{progress.total}</Text>
-      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline },
-  headerCopy: { flex: 1, alignItems: 'center', gap: 1, paddingLeft: 44 },
-  title: { ...typography.text.editorialCompact, color: colors.foreground },
-  counter: { ...typography.text.caption, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingBottom: spacing.xs,
+    borderBottomWidth: stroke.hairline,
+    borderBottomColor: colors.hairline,
+  },
+  headerSide: { width: 96, flexDirection: 'row', alignItems: 'center' },
+  headerSideEnd: { justifyContent: 'flex-end' },
+  headerCenter: { flex: 1, alignItems: 'center' },
   headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerProgress: { height: 2, backgroundColor: colors.background },
-  headerProgressBar: { borderRadius: 0 },
-  failureBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, backgroundColor: colors.surfaceSelected },
+  back: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: spacing.sm },
+  backText: { ...typography.text.label, color: colors.foreground },
+  masthead: { ...typography.text.masthead, color: colors.mutedForeground },
+  position: { ...typography.text.meta, color: colors.foreground, fontVariant: ['tabular-nums'] },
+  failureBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
+    backgroundColor: colors.surfaceSelected,
+  },
   failureText: { ...typography.text.bodySmall, color: colors.inkSubtle, flex: 1 },
-  retryButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.sm },
-  retryText: { ...typography.text.label, color: colors.action },
-  mainScroll: { flex: 1 },
-  mainContent: { paddingTop: spacing.sm, paddingBottom: spacing.xxl, gap: spacing.sm },
-  guidance: { ...typography.text.bodySmall, color: colors.mutedForeground, textAlign: 'center', paddingHorizontal: spacing.xl },
-  hero: { overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card, borderRadius: radii.xl, borderCurve: 'continuous', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, boxShadow: '0 6px 20px rgba(61,48,38,0.08)' },
-  // At pre-extract the plate steps away from the page ivory so the letterbox
-  // reads as the plate and the crop's own edges stay visible.
-  heroPreExtract: { backgroundColor: colors.surfaceSelected },
-  heroImage: { width: '100%', height: '100%' },
-  utilityRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginHorizontal: spacing.lg, minHeight: 44 },
-  utilitySpacer: { flex: 1 },
-  utilityButton: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, borderRadius: radii.full, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.surfaceElevated },
-  utilityButtonActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  utilityButtonText: { ...typography.text.caption, fontWeight: typography.weight.semibold, color: colors.foreground },
-  utilityButtonTextActive: { color: colors.primaryForeground },
-  removeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  filmstripFrame: { height: 92, flexShrink: 0, justifyContent: 'center' },
-  filmstrip: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
-  // Selected reads as a lifted primary ring; reviewed reads as a green tick in
-  // the opposite corner — the two states must never be confusable.
-  filmstripThumb: { width: 68, height: 86, alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, borderCurve: 'continuous', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
-  filmstripThumbSelected: { borderWidth: 2, borderColor: colors.primary, backgroundColor: colors.surfaceElevated, boxShadow: '0 4px 12px rgba(61,48,38,0.16)' },
-  filmstripImage: { width: '100%', height: '100%', borderRadius: radii.md - 1 },
-  filmstripImageResting: { opacity: 0.78 },
-  reviewedBadge: { position: 'absolute', top: -5, right: -5, width: 20, height: 20, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.success, borderWidth: 2, borderColor: colors.background },
-  formCard: { gap: spacing.md, marginHorizontal: spacing.lg, padding: spacing.md, backgroundColor: colors.surfaceElevated, borderRadius: radii.xl, borderCurve: 'continuous', borderWidth: 1, borderColor: colors.border },
-  field: { gap: spacing.xs },
-  fieldLabel: { ...typography.text.eyebrow, color: colors.mutedForeground },
-  fieldHint: { ...typography.text.caption, color: colors.mutedForeground },
-  input: { minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: radii.md, paddingHorizontal: spacing.md, fontSize: typography.text.body.fontSize, color: colors.foreground, backgroundColor: colors.background },
-  // Deliberately NOT styled like `input` — this row pushes a fullscreen brand
-  // search, so it borrows the app's "tap opens something" surface instead.
-  brandRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.md, backgroundColor: colors.surfaceSubtle },
-  brandValue: { ...typography.text.body, color: colors.foreground, flex: 1 },
-  brandPlaceholder: { color: colors.mutedForeground },
-  categorySummary: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingHorizontal: spacing.md, borderRadius: radii.md, backgroundColor: colors.surfaceSubtle },
-  categoryLabel: { ...typography.text.eyebrow, color: colors.mutedForeground },
-  categoryValue: { ...typography.text.bodySmall, color: colors.foreground, flex: 1, textAlign: 'right' },
-  twoColumnFields: { flexDirection: 'row', gap: spacing.md },
-  flexField: { flex: 1 },
-  moreDetailsButton: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, borderRadius: radii.md, backgroundColor: colors.surfaceSubtle },
-  moreDetailsText: { ...typography.text.label, color: colors.primary },
-  detailsPanel: { gap: spacing.lg, paddingTop: spacing.xs },
-  pillRow: { flexDirection: 'row', gap: spacing.sm },
-  pill: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radii.full, backgroundColor: colors.secondary },
-  pillActive: { backgroundColor: colors.primary },
-  pillText: { ...typography.text.bodySmall, fontWeight: typography.weight.medium, color: colors.foreground },
-  pillTextActive: { color: colors.primaryForeground },
-  footer: { gap: spacing.xs, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline, backgroundColor: colors.background },
-  primaryButton: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radii.xl, borderCurve: 'continuous', backgroundColor: colors.primary },
-  primaryButtonDisabled: { opacity: 0.72 },
-  primaryButtonText: { ...typography.text.sectionTitle, color: colors.primaryForeground },
-  secondaryButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  secondaryButtonText: { ...typography.text.label, color: colors.action },
-  extractingFooter: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  extractingFooterText: { ...typography.text.bodySmall, color: colors.mutedForeground },
-  extractionState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl },
-  extractionHero: { width: '100%', overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderRadius: radii.xl, borderCurve: 'continuous', backgroundColor: colors.card },
-  extractionTitle: { ...typography.text.editorialSection, color: colors.foreground },
-  extractionCopy: { ...typography.text.bodySmall, color: colors.mutedForeground, textAlign: 'center' },
-  detectScrim: { ...StyleSheet.absoluteFill, backgroundColor: colors.primary },
-  detectSweep: { position: 'absolute', left: 0, right: 0, top: 0 },
-  detectFrame: { position: 'absolute', top: 10, left: 10, right: 10, bottom: 10, borderRadius: radii.lg, borderCurve: 'continuous', borderWidth: 1.5, borderColor: colors.primary, opacity: 0.3 },
-  trackWrap: { width: '100%', maxWidth: 300, gap: spacing.xs },
-  trackLabelRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  trackLabelItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  trackLabel: { ...typography.text.eyebrow, color: colors.mutedForeground },
-  trackLabelActive: { color: colors.primary },
-  trackRule: { height: 2, borderRadius: 1, backgroundColor: colors.border, overflow: 'hidden' },
-  trackRuleFill: { height: '100%', borderRadius: 1, backgroundColor: colors.primary },
-  trackCount: { ...typography.text.caption, color: colors.mutedForeground, textAlign: 'right', fontVariant: ['tabular-nums'] },
-  brandSearchRoot: { flex: 1, backgroundColor: colors.background },
-  brandSearchHeader: { minHeight: 84, flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline },
-  brandSearchTitleWrap: { flex: 1, alignItems: 'center', gap: 1 },
-  brandSearchInputWrap: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, margin: spacing.lg, paddingHorizontal: spacing.md, borderRadius: radii.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceElevated },
-  brandSearchInput: { flex: 1, minHeight: 50, ...typography.text.body, color: colors.foreground },
-  clearSearchButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  brandResults: { paddingHorizontal: spacing.lg, gap: spacing.xs },
-  brandResultsLabel: { ...typography.text.eyebrow, color: colors.mutedForeground, paddingTop: spacing.lg, paddingBottom: spacing.sm },
-  brandResult: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md, borderRadius: radii.lg, backgroundColor: colors.surfaceElevated },
-  brandResultIcon: { width: 32, height: 32, borderRadius: radii.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceSubtle },
-  brandResultText: { ...typography.text.body, color: colors.foreground, flex: 1 },
-  brandResultMuted: { color: colors.mutedForeground },
-  emptyBrands: { ...typography.text.bodySmall, color: colors.mutedForeground, textAlign: 'center', padding: spacing.xl },
-  confirmationLayer: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, justifyContent: 'flex-end', zIndex: 100 },
-  confirmationBackdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(31,26,22,0.36)' },
-  confirmationCard: { gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, borderCurve: 'continuous', backgroundColor: colors.background, boxShadow: '0 -8px 28px rgba(31,26,22,0.12)' },
-  confirmationHandle: { width: 38, height: 4, alignSelf: 'center', borderRadius: radii.full, backgroundColor: colors.border },
-  confirmationTitle: { ...typography.text.editorialSection, color: colors.foreground, textAlign: 'center' },
-  confirmationMessage: { ...typography.text.bodySmall, color: colors.mutedForeground, textAlign: 'center' },
-  confirmButton: { minHeight: 54, alignItems: 'center', justifyContent: 'center', borderRadius: radii.xl, backgroundColor: colors.primary },
-  destructiveButton: { backgroundColor: colors.surfaceSelected, borderWidth: 1, borderColor: colors.action },
-  confirmButtonText: { ...typography.text.label, color: colors.primaryForeground },
-  destructiveButtonText: { color: colors.action },
-  confirmCancelButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center' },
-  confirmCancelText: { ...typography.text.label, color: colors.foreground },
+  sheetSubtitle: { ...typography.text.meta, color: colors.mutedForeground },
 });

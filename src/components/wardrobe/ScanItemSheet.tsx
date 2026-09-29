@@ -4,9 +4,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
-  TextInput,
-  ActivityIndicator,
   LayoutAnimation,
   Platform,
   UIManager,
@@ -19,10 +16,7 @@ import {
   BottomSheetModal,
   BottomSheetScrollView,
   BottomSheetBackdrop,
-  BottomSheetFooter,
-  type BottomSheetFooterProps,
 } from '@gorhom/bottom-sheet';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Crypto from 'expo-crypto';
@@ -38,15 +32,11 @@ import {
 } from '../../hooks/useItems';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../contexts/AuthContext';
-import { api, apiErrorMessage } from '../../lib/api';
+import { apiErrorMessage } from '../../lib/api';
 import { colors, spacing, typography, radii } from '../../theme';
-import { CATEGORY_LABELS, SEASON_OPTIONS, SEASON_LABELS, type Item, type ItemCategory, type SleeveLength } from '../../types/item';
-import { BrandAutocompleteInput } from '../primitives/BrandAutocompleteInput';
-import { TaxonomySelector } from '../primitives/TaxonomySelector';
-import { SizeProfileInput } from '../primitives/SizeProfileInput';
+import { type Item, type ItemCategory, type SleeveLength } from '../../types/item';
 import type { SizeProfile } from '../../lib/sizes';
 import { type Bbox } from './CropAdjustModal';
-import { CutoutReviewThumb } from './CutoutReviewThumb';
 import { cropImage } from '../../lib/cropImage';
 import { tryRequestCutout } from '../../lib/cutout';
 import { mapWithConcurrency } from '../../lib/asyncPool';
@@ -100,11 +90,12 @@ type EditableItem = {
   cutoutImage: string | null;
   /** True when the user selects the cutout as the initial cover. */
   useCutout: boolean;
-  expanded: boolean;
   sizeProfile: SizeProfile | null;
   bbox: Bbox | null;
   sourceImage: string | null;
   purchaseLocation: string | null;
+  /** Fields the extraction was unsure of; dropped one by one as the user edits them. */
+  lowConfidenceFields?: string[];
 };
 
 type PreExtractItemData = {
@@ -276,7 +267,6 @@ async function buildPreExtractItemFromPose(
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: ScanItemSheetProps) {
-  const insets = useSafeAreaInsets();
   const [phase, setPhase] = useState<Phase>('idle');
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [detectedItems, setDetectedItems] = useState<EditableItem[]>([]);
@@ -660,10 +650,10 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
         colorNormalized: result.colorNormalized ?? null,
         colorTemperature: result.colorTemperature ?? null,
         warmthRating: result.warmthRating ?? null,
+        lowConfidenceFields: result.lowConfidenceFields ?? [],
         croppedImage,
         cutoutImage,
         useCutout,
-        expanded: false,
         sizeProfile: null,
         bbox,
         sourceImage: fullImageDataUrl,
@@ -734,55 +724,6 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
       />
     ),
     [canClose],
-  );
-
-  const renderFooter = useCallback(
-    (props: BottomSheetFooterProps) => {
-      if (phase === 'pre-extract' && preExtractItems.length > 0) {
-        return (
-          <BottomSheetFooter {...props} bottomInset={insets.bottom}>
-            <View style={styles.footer}>
-              <TouchableOpacity
-                style={styles.saveBtn}
-                onPress={handleStartExtraction}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="sparkles" size={20} color={colors.primaryForeground} />
-                <Text style={styles.saveBtnText}>Extract Details</Text>
-              </TouchableOpacity>
-            </View>
-          </BottomSheetFooter>
-        );
-      }
-
-      if ((phase !== 'review' && phase !== 'saving') || detectedItems.length === 0) return null;
-      return (
-        <BottomSheetFooter {...props} bottomInset={insets.bottom}>
-          <View style={styles.footer}>
-            <TouchableOpacity
-              style={[styles.saveBtn, phase === 'saving' && styles.saveBtnBusy]}
-              onPress={handleSaveAll}
-              disabled={phase === 'saving'}
-              activeOpacity={0.85}
-            >
-              {phase === 'saving' ? (
-                <ActivityIndicator size="small" color={colors.primaryForeground} />
-              ) : (
-                <Ionicons name="checkmark" size={20} color={colors.primaryForeground} />
-              )}
-              <Text style={styles.saveBtnText}>
-                {phase === 'saving'
-                  ? 'Adding to closet…'
-                  : detectedItems.length === 1
-                  ? 'Add to closet'
-                  : `Add all ${detectedItems.length} to closet`}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </BottomSheetFooter>
-      );
-    },
-    [phase, preExtractItems.length, detectedItems.length, handleStartExtraction, handleSaveAll, insets.bottom],
   );
 
   const pickImage = async (source: 'camera' | 'library') => {
@@ -969,6 +910,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
         category: item.category,
         subcategory: item.subcategory,
         color: item.color,
+        colorNormalized: item.colorNormalized,
         style: item.style,
         seasons: item.seasons,
         occasions: item.occasions,
@@ -976,6 +918,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
         fit: item.fit,
         sizeProfile: item.sizeProfile,
         sleeveLength: item.sleeveLength,
+        lowConfidenceFields: item.lowConfidenceFields,
       }));
     }
     return preExtractItems.map((item) => ({
@@ -1009,19 +952,23 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
       });
       return;
     }
+    const item = detectedItems.find((candidate) => candidate.tempId === tempId);
+    const lowConfidenceFields = item?.lowConfidenceFields?.filter((field) => !(field in patch));
     updateItem(tempId, {
+      ...(lowConfidenceFields ? { lowConfidenceFields } : {}),
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.brand !== undefined ? { brand: patch.brand || null } : {}),
       ...(patch.category !== undefined ? { category: patch.category } : {}),
       ...(patch.subcategory !== undefined ? { subcategory: patch.subcategory } : {}),
       ...(patch.color !== undefined ? { color: patch.color } : {}),
+      ...(patch.colorNormalized !== undefined ? { colorNormalized: patch.colorNormalized ?? null } : {}),
       ...(patch.style !== undefined ? { style: patch.style } : {}),
       ...(patch.seasons !== undefined ? { seasons: patch.seasons } : {}),
       ...(patch.material !== undefined ? { material: patch.material } : {}),
       ...(patch.fit !== undefined ? { fit: patch.fit } : {}),
       ...(patch.sizeProfile !== undefined ? { sizeProfile: patch.sizeProfile } : {}),
     });
-  }, [phase, updateItem, updatePreExtractItem]);
+  }, [detectedItems, phase, updateItem, updatePreExtractItem]);
 
   return (
     <>
@@ -1030,7 +977,6 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
         snapPoints={snapPoints}
         onDismiss={handleDismiss}
         backdropComponent={renderBackdrop}
-        footerComponent={renderFooter}
         handleIndicatorStyle={styles.handle}
         backgroundStyle={styles.sheetBackground}
         enablePanDownToClose={canClose}
@@ -1041,7 +987,6 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.bodyContent}
-          enableFooterMarginAdjustment
           stickyHeaderIndices={[0]}
         >
           {/* Sticky header */}
@@ -1183,479 +1128,6 @@ const idleStyles = StyleSheet.create({
   },
 });
 
-// ─── PreExtractList ───────────────────────────────────────────────────────────
-
-function PreExtractList({
-  items,
-  brandSuggestions,
-  onUpdateItem,
-  onRemoveItem,
-  onAdjustCrop,
-}: {
-  items: PreExtractItemData[];
-  brandSuggestions: string[];
-  onUpdateItem: (id: string, patch: Partial<PreExtractItemData>) => void;
-  onRemoveItem: (id: string) => void;
-  onAdjustCrop: (id: string) => void;
-}) {
-  return (
-    <View style={preExtractStyles.container}>
-      <Text style={preExtractStyles.hint}>
-        Optionally enter the brand to improve AI accuracy, then tap Extract Details.
-      </Text>
-      {items.map((item, idx) => (
-        <View key={item.tempId} style={{ zIndex: items.length - idx }}>
-          <PreExtractCard
-            item={item}
-            brandSuggestions={brandSuggestions}
-            onUpdate={(patch) => onUpdateItem(item.tempId, patch)}
-            onRemove={() => onRemoveItem(item.tempId)}
-            onAdjustCrop={() => onAdjustCrop(item.tempId)}
-          />
-        </View>
-      ))}
-    </View>
-  );
-}
-
-function PreExtractCard({
-  item,
-  brandSuggestions,
-  onUpdate,
-  onRemove,
-  onAdjustCrop,
-}: {
-  item: PreExtractItemData;
-  brandSuggestions: string[];
-  onUpdate: (patch: Partial<PreExtractItemData>) => void;
-  onRemove: () => void;
-  onAdjustCrop: () => void;
-}) {
-  return (
-    <View style={preExtractCardStyles.card}>
-      {/* Thumbnail with cutout toggle and optional crop-adjust button */}
-      <CutoutReviewThumb
-        style={cardStyles.thumb}
-        croppedImage={item.croppedImage}
-        cutoutImage={item.cutoutImage}
-        useCutout={item.useCutout}
-        onToggleCutout={() => onUpdate({ useCutout: !item.useCutout })}
-      >
-        {item.bbox && (
-          <TouchableOpacity
-            style={cardStyles.cropBtn}
-            onPress={onAdjustCrop}
-            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-            accessibilityLabel="Adjust crop"
-          >
-            <Ionicons name="crop-outline" size={11} color={colors.white} />
-          </TouchableOpacity>
-        )}
-      </CutoutReviewThumb>
-
-      {/* Right column: detected name + brand input */}
-      <View style={preExtractCardStyles.content}>
-        <Text style={preExtractCardStyles.itemName} numberOfLines={1}>{item.name}</Text>
-        <BrandAutocompleteInput
-          value={item.brandHint}
-          onChangeText={(v) => onUpdate({ brandHint: v })}
-          onSelect={(v) => onUpdate({ brandHint: v })}
-          suggestions={brandSuggestions}
-          placeholder="Brand (optional)"
-        />
-      </View>
-
-      {/* Remove button */}
-      <TouchableOpacity
-        onPress={onRemove}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        accessibilityLabel="Remove item"
-      >
-        <Ionicons name="trash-outline" size={18} color={colors.error} />
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-const preExtractStyles = StyleSheet.create({
-  container: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, gap: spacing.sm },
-  hint: {
-    fontSize: typography.text.bodySmall.fontSize,
-    color: colors.mutedForeground,
-    lineHeight: typography.text.bodySmall.fontSize * 1.5,
-    marginBottom: spacing.xs,
-  },
-});
-
-const preExtractCardStyles = StyleSheet.create({
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.card,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-  },
-  content: {
-    flex: 1,
-    gap: spacing.xs,
-  },
-  itemName: {
-    fontSize: typography.text.bodySmall.fontSize,
-    color: colors.mutedForeground,
-    fontWeight: typography.weight.medium,
-  },
-});
-
-// ─── ReviewList ───────────────────────────────────────────────────────────────
-
-function ReviewList({
-  items,
-  brandSuggestions,
-  onUpdateItem,
-  onRemoveItem,
-  onAdjustCrop,
-  disabled,
-}: {
-  items: EditableItem[];
-  brandSuggestions: string[];
-  onUpdateItem: (id: string, patch: Partial<EditableItem>) => void;
-  onRemoveItem: (id: string) => void;
-  onAdjustCrop: (id: string) => void;
-  disabled: boolean;
-}) {
-  return (
-    <View style={reviewStyles.container}>
-      <Text style={reviewStyles.hint}>
-        AI has extracted clothing details — tap any item to review or add more.
-      </Text>
-      {items.map((item, idx) => (
-        <View key={item.tempId} style={{ zIndex: items.length - idx }}>
-          <ItemCard
-            item={item}
-            index={idx}
-            disabled={disabled}
-            brandSuggestions={brandSuggestions}
-            onUpdate={(patch) => onUpdateItem(item.tempId, patch)}
-            onRemove={() => onRemoveItem(item.tempId)}
-            onAdjustCrop={() => onAdjustCrop(item.tempId)}
-          />
-        </View>
-      ))}
-    </View>
-  );
-}
-
-const reviewStyles = StyleSheet.create({
-  container: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, gap: spacing.sm },
-  hint: {
-    fontSize: typography.text.bodySmall.fontSize,
-    color: colors.mutedForeground,
-    lineHeight: typography.text.bodySmall.fontSize * 1.5,
-    marginBottom: spacing.xs,
-  },
-});
-
-// ─── ItemCard ─────────────────────────────────────────────────────────────────
-
-function ItemCard({
-  item,
-  index,
-  disabled,
-  brandSuggestions,
-  onUpdate,
-  onRemove,
-  onAdjustCrop,
-}: {
-  item: EditableItem;
-  index: number;
-  disabled: boolean;
-  brandSuggestions: string[];
-  onUpdate: (patch: Partial<EditableItem>) => void;
-  onRemove: () => void;
-  onAdjustCrop: () => void;
-}) {
-  const toggleExpand = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    onUpdate({ expanded: !item.expanded });
-  };
-
-  const categoryLabel = item.category
-    ? (CATEGORY_LABELS[item.category as ItemCategory] ?? item.category)
-    : null;
-
-  const metaLine = [categoryLabel, item.subcategory, item.color].filter(Boolean).join(' · ');
-
-  return (
-    <View style={cardStyles.card}>
-      {/* Collapsed row */}
-      <View style={cardStyles.row}>
-        {/* Thumbnail with cutout toggle */}
-        <CutoutReviewThumb
-          style={cardStyles.thumb}
-          croppedImage={item.croppedImage}
-          cutoutImage={item.cutoutImage}
-          useCutout={item.useCutout}
-          onToggleCutout={() => !disabled && onUpdate({ useCutout: !item.useCutout })}
-        >
-          {!disabled && item.sourceImage && item.bbox && (
-            <TouchableOpacity
-              style={cardStyles.cropBtn}
-              onPress={onAdjustCrop}
-              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-              accessibilityLabel="Adjust crop"
-            >
-              <Ionicons name="crop-outline" size={11} color={colors.white} />
-            </TouchableOpacity>
-          )}
-        </CutoutReviewThumb>
-
-        {/* Info — tappable to toggle expand */}
-        <TouchableOpacity style={cardStyles.info} onPress={toggleExpand} activeOpacity={0.7}>
-          <Text style={cardStyles.name} numberOfLines={1}>{item.name}</Text>
-          {metaLine.length > 0 && (
-            <Text style={cardStyles.meta} numberOfLines={1}>{metaLine}</Text>
-          )}
-        </TouchableOpacity>
-
-        {/* Actions */}
-        <TouchableOpacity onPress={toggleExpand} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons
-            name={item.expanded ? 'chevron-up' : 'chevron-down'}
-            size={18}
-            color={colors.mutedForeground}
-          />
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={onRemove}
-          disabled={disabled}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons name="trash-outline" size={18} color={colors.error} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Expanded edit form */}
-      {item.expanded && (
-        <View style={cardStyles.editForm}>
-          <Field label="Name">
-            <TextInput
-              style={cardStyles.input}
-              value={item.name}
-              onChangeText={(v) => onUpdate({ name: v })}
-              autoCapitalize="words"
-              editable={!disabled}
-            />
-          </Field>
-
-          <Field label="Brand">
-            <BrandAutocompleteInput
-              value={item.brand ?? ''}
-              onChangeText={(v) => onUpdate({ brand: v || null })}
-              onSelect={(v) => onUpdate({ brand: v || null })}
-              suggestions={brandSuggestions}
-              placeholder="e.g. Uniqlo"
-              style={disabled ? cardStyles.inputDisabled : undefined}
-            />
-          </Field>
-
-          <Field label="Colour">
-            <TextInput
-              style={cardStyles.input}
-              value={item.color ?? ''}
-              onChangeText={(v) => onUpdate({ color: v || null })}
-              autoCapitalize="words"
-              placeholder="e.g. Navy Blue"
-              placeholderTextColor={colors.mutedForeground}
-              editable={!disabled}
-            />
-          </Field>
-
-          <TaxonomySelector
-            category={item.category ?? null}
-            subcategory={item.subcategory ?? null}
-            style={item.style ?? null}
-            onCategoryChange={(v) => onUpdate({ category: v || null, subcategory: null, style: null })}
-            onSubcategoryChange={(v) => onUpdate({ subcategory: v || null, style: null })}
-            onStyleChange={(v) => onUpdate({ style: v || null })}
-            disabled={disabled}
-          />
-
-          <View style={cardStyles.fieldRow}>
-            <View style={{ flex: 1 }}>
-              <Field label="Season">
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={cardStyles.pillRow}>
-                    {SEASON_CHIPS.map(({ label, value }) => {
-                      const active = (item.seasons ?? []).includes(value);
-                      return (
-                        <TouchableOpacity
-                          key={value}
-                          style={[cardStyles.pill, active && cardStyles.pillActive]}
-                          onPress={() => {
-                            const cur = item.seasons ?? [];
-                            onUpdate({ seasons: active ? cur.filter((s) => s !== value) : [...cur, value] });
-                          }}
-                          disabled={disabled}
-                        >
-                          <Text style={[cardStyles.pillText, active && cardStyles.pillTextActive]}>
-                            {label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </ScrollView>
-              </Field>
-            </View>
-          </View>
-
-          <View style={cardStyles.twoCol}>
-            <View style={{ flex: 1 }}>
-              <Field label="Fit">
-                <TextInput
-                  style={cardStyles.input}
-                  value={item.fit ?? ''}
-                  onChangeText={(v) => onUpdate({ fit: v || null })}
-                  placeholder="e.g. Slim"
-                  placeholderTextColor={colors.mutedForeground}
-                  editable={!disabled}
-                />
-              </Field>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Field label="Material">
-                <TextInput
-                  style={cardStyles.input}
-                  value={item.material ?? ''}
-                  onChangeText={(v) => onUpdate({ material: v || null })}
-                  placeholder="e.g. Cotton"
-                  placeholderTextColor={colors.mutedForeground}
-                  editable={!disabled}
-                />
-              </Field>
-            </View>
-          </View>
-
-          <SizeProfileInput
-            category={item.category}
-            subcategory={item.subcategory}
-            style={item.style}
-            formalityValues={item.occasions}
-            value={item.sizeProfile}
-            onChange={(p) => onUpdate({ sizeProfile: p })}
-          />
-        </View>
-      )}
-    </View>
-  );
-}
-
-// Derived from the shared vocabulary rather than restated. Named CHIPS
-// because the shared export is the value list; this is its presentation.
-const SEASON_CHIPS = SEASON_OPTIONS.map((value) => ({ value, label: SEASON_LABELS[value] }));
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <View style={fieldStyles.container}>
-      <Text style={fieldStyles.label}>{label}</Text>
-      {children}
-    </View>
-  );
-}
-
-const fieldStyles = StyleSheet.create({
-  container: { gap: spacing.xs },
-  label: {
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.mutedForeground,
-    textTransform: 'uppercase',
-    letterSpacing: typography.tracking.label,
-  },
-});
-
-const cardStyles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.md,
-    gap: spacing.sm,
-  },
-  thumb: {
-    width: 56,
-    height: 56,
-    borderRadius: radii.md,
-    backgroundColor: colors.muted,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  thumbImg: { width: '100%', height: '100%' },
-  cropBtn: {
-    position: 'absolute',
-    bottom: 2,
-    right: 2,
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  info: { flex: 1, gap: 3 },
-  name: {
-    fontSize: typography.text.body.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  meta: { fontSize: typography.text.bodySmall.fontSize, color: colors.mutedForeground },
-  editForm: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    padding: spacing.md,
-    gap: spacing.md,
-  },
-  input: {
-    height: 42,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    fontSize: typography.text.body.fontSize,
-    color: colors.foreground,
-    backgroundColor: colors.background,
-  },
-  inputDisabled: { opacity: 0.5 },
-  pillRow: { flexDirection: 'row', gap: spacing.xs },
-  pill: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radii.full,
-    backgroundColor: colors.muted,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  pillActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  pillText: {
-    fontSize: typography.text.bodySmall.fontSize,
-    color: colors.foreground,
-    fontWeight: typography.weight.medium,
-  },
-  pillTextActive: { color: colors.primaryForeground },
-  fieldRow: { flexDirection: 'row', gap: spacing.md },
-  twoCol: { flexDirection: 'row', gap: spacing.md },
-});
-
 // ─── Sheet styles ─────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
@@ -1682,25 +1154,4 @@ const styles = StyleSheet.create({
     color: colors.foreground,
   },
   bodyContent: { paddingBottom: spacing.xl },
-  footer: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-  saveBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.primary,
-    borderRadius: radii.lg,
-    paddingVertical: spacing.lg,
-  },
-  saveBtnBusy: { opacity: 0.7 },
-  saveBtnText: {
-    fontSize: typography.text.body.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.primaryForeground,
-  },
 });

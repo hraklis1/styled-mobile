@@ -93,6 +93,11 @@ export type ScanResult = {
   colorNormalized: string | null;
   colorTemperature: string | null;
   warmthRating: number | null;
+  /**
+   * Fields the model was unsure of, for the review's "worth a look" mark.
+   * Absent on responses from servers that predate it.
+   */
+  lowConfidenceFields?: string[];
 };
 
 export type Item = {

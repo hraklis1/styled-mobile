@@ -91,6 +91,11 @@ export type Piece = PieceFields & {
    * (a retry, or a resume after an app kill) must not overwrite them.
    */
   edited: (keyof PieceFields)[];
+  /**
+   * Fields the extraction was unsure of. Optional so a batch persisted
+   * before the field existed still loads.
+   */
+  lowConfidenceFields?: string[];
   status: PieceStatus;
   /** Which step a `failed` piece failed at, so Retry knows where to resume. */
   failedStep: 'extract' | 'save' | null;
