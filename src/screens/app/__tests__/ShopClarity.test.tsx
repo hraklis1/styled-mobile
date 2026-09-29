@@ -61,7 +61,13 @@ jest.mock('../../../hooks/useAssignShoppingStore', () => ({ useAssignShoppingSto
 jest.mock('../../../lib/deleteShoppingSnaps', () => ({ deleteShoppingSnaps: jest.fn() }));
 const mockAccount = { view: 'visits', snaps: [], operations: [] };
 jest.mock('../../../stores/useShoppingOfflineStore', () => ({ useShoppingOfflineStore: (selector: any) => selector({ accounts: { 'test-user': mockAccount } }), emptyShoppingAccount: mockAccount }));
-jest.mock('@gorhom/bottom-sheet', () => ({ BottomSheetModal: 'BottomSheetModal', BottomSheetView: 'BottomSheetView', BottomSheetBackdrop: 'BottomSheetBackdrop' }));
+jest.mock('@gorhom/bottom-sheet', () => ({
+  BottomSheetModal: 'BottomSheetModal',
+  BottomSheetView: 'BottomSheetView',
+  BottomSheetBackdrop: 'BottomSheetBackdrop',
+  BottomSheetScrollView: require('react-native').ScrollView,
+  BottomSheetTextInput: require('react-native').TextInput,
+}));
 import { ShoppingGalleryScreen } from '../ShoppingGalleryScreen';
 import { SavedLooksScreen, SavedShoppingScreen } from '../ShopScreen';
 import { ShopOverviewScreen } from '../ShopOverviewScreen';
