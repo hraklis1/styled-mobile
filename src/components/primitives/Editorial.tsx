@@ -15,6 +15,8 @@ import { AppText } from './AppText';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
+const EDITORIAL_ACTION_HIT_SLOP = { top: 14, bottom: 10, left: 4, right: 4 };
+
 type HeaderAction = {
   label: string;
   icon: IconName;
@@ -156,6 +158,7 @@ export function EditorialSection({
             haptic={false}
             onPress={onAction}
             motion="crisp" scaleTo={0.985}
+            hitSlop={editorialHeading ? EDITORIAL_ACTION_HIT_SLOP : undefined}
             pressedContentStyle={editorialHeading ? undefined : styles.controlPressed}
             contentStyle={editorialHeading ? styles.editorialSectionAction : styles.sectionAction}
             accessibilityRole="button"
@@ -454,10 +457,12 @@ const styles = StyleSheet.create({
   sectionActionText: {
     flexShrink: 1,
   },
-  // Same 44pt hit target, laid out so its text sits on the eyebrow's baseline
-  // rather than in a plate above it.
+  // Text sits on the eyebrow's baseline rather than in a plate above it. The
+  // 44pt hit target comes from hitSlop, not layout height: a 44pt box made
+  // every header with a link ~22pt taller than one without, so the gaps
+  // between sections depended on whether the next one had a link.
   editorialSectionAction: {
-    minHeight: 44, justifyContent: 'flex-end', paddingLeft: spacing.md,
+    justifyContent: 'flex-end', paddingLeft: spacing.md,
   },
   segment: {
     flexDirection: 'row',

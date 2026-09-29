@@ -15,6 +15,10 @@ export const colors = {
   muted:               '#EFEEE9',
   mutedForeground:     '#625F59',
   accent:              '#E8DED1',
+  // Walnut ink for small signals only (today markers, countdowns, the "why"
+  // label on Home). Never a fill or a large area: the page stays monochrome
+  // and this is the one warm note in it.
+  accentInk:           '#6F5948',
   // Quiet action text; pair with an underline or directional icon.
   action:              '#242422',
   border:              '#DEDCD6',
@@ -154,6 +158,12 @@ export const typography = {
       fontFamily: editorialFamily.editorialMedium,
       fontSize: 22,
       lineHeight: 28,
+    },
+    /** A serif title inside a compact card, e.g. an event in a rail. */
+    editorialCard: {
+      fontFamily: editorialFamily.editorialRegular,
+      fontSize: 17,
+      lineHeight: 22,
     },
     /**
      * Editorial prose — a whole sentence in the app's own voice, as opposed to

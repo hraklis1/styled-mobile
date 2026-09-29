@@ -18,6 +18,8 @@ type Props = {
 /**
  * Home's wardrobe-intelligence chapter. The brief supplies the editorial
  * read; an active shortlist can sit beneath it as the concrete decision queue.
+ * Neither half carries its own sub-label: one section label per chapter, and
+ * the serif headline and the shortlist card each say what they are.
  *
  * Home fetches the brief itself rather than waiting for Shop to populate the
  * cache, so a premium user sees it on the first screen of the day without
@@ -42,7 +44,6 @@ export function HomeWardrobeEdit({ onBriefPress, shortlist, style }: Props) {
     <EditorialSection variant="ruled" headingStyle="editorial" title="Wardrobe Edit" style={style}>
       {hasBrief ? (
         <View style={styles.briefGroup}>
-          <AppText variant="eyebrow" tone="muted">The Read</AppText>
           <AppText variant="editorialCompact" tone="primary" numberOfLines={2}>{brief.headline}</AppText>
           <PressableScale
             haptic={false}
@@ -58,10 +59,7 @@ export function HomeWardrobeEdit({ onBriefPress, shortlist, style }: Props) {
       ) : null}
       {hasBrief && shortlist ? <View style={styles.divider} /> : null}
       {shortlist ? (
-        <View style={styles.shortlistGroup}>
-          <AppText variant="eyebrow" tone="muted">The Shortlist</AppText>
-          {shortlist}
-        </View>
+        <View style={styles.shortlistGroup}>{shortlist}</View>
       ) : null}
     </EditorialSection>
   );
