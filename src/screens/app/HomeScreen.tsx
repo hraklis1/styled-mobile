@@ -1060,9 +1060,11 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           track('shop_section_opened', { section: 'home_brief' });
           navigation.navigate('Shop', { screen: 'ShoppingBriefDetail' });
         }}
-        shortlist={shortlist.awaitingDecision.length > 0 ? (
+        shortlist={shortlist.awaitingDecision.length > 0 ? ({ header, cardStyle }) => (
           <ShortlistDecisionCard
             variant="row"
+            header={header}
+            contentStyle={cardStyle}
             items={shortlist.awaitingDecision}
             storeNames={shortlist.decisionStores}
             onPress={() => {

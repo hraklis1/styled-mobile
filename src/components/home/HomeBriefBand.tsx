@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -11,20 +11,43 @@ import { AppText } from '../primitives/AppText';
 
 type Props = {
   onBriefPress: () => void;
-  shortlist?: ReactNode;
+  /**
+   * Renders the shortlist card. It gets the kicker to show inside its own
+   * pressable, above its row, and the card surface so it matches the brief.
+   */
+  shortlist?: (slot: { header: ReactNode; cardStyle: StyleProp<ViewStyle> }) => ReactNode;
   style?: StyleProp<ViewStyle>;
 };
 
 /**
- * Home's wardrobe-intelligence chapter. The brief supplies the editorial
- * read; an active shortlist can sit beneath it as the concrete decision queue.
- * Neither half carries its own sub-label: one section label per chapter, and
- * the serif headline and the shortlist card each say what they are.
- *
- * It is one floating folio — a single white sheet holding the read and the
- * decision queue, split by an inset hairline — so the chapter is one object
- * rather than a card inside a band inside a section. It echoes the matted
- * print above it: Home alternates mat, canvas, folio, canvas.
+ * Names the Shop destination a Wardrobe Edit card opens, in the words Shop's
+ * own section headings use, with a line on what it is for. The two cards lead
+ * to different places, so each carries its own sign rather than sharing one.
+ */
+function WardrobeEditKicker({ icon, label, purpose }: {
+  icon: ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  purpose: string;
+}) {
+  return (
+    <View style={styles.kicker}>
+      <View style={styles.kickerIcon}>
+        <Ionicons name={icon} size={14} color={colors.accentInk} />
+      </View>
+      <View style={styles.kickerCopy}>
+        <AppText variant="eyebrow" tone="secondary" numberOfLines={1}>{label}</AppText>
+        <AppText variant="meta" tone="muted" numberOfLines={1}>{purpose}</AppText>
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Home's window into Shop. The brief supplies the editorial read of what to
+ * buy next; an active shortlist is the queue of finds still waiting on a
+ * decision. They open different Shop screens, so they are two cards, not one
+ * folio split by a hairline — sharing a sheet made them read as one feature.
+ * Each card is wholly tappable and leads with a kicker naming where it goes.
  *
  * Home fetches the brief itself rather than waiting for Shop to populate the
  * cache, so a premium user sees it on the first screen of the day without
@@ -46,37 +69,53 @@ export function HomeWardrobeEdit({ onBriefPress, shortlist, style }: Props) {
   if (!hasBrief && !shortlist) return null;
 
   return (
-    <EditorialSection variant="ruled" headingStyle="masthead" title="Wardrobe Edit" style={style}>
-      {/* Shortlist only: the row carries its own vertical padding. */}
-      <View style={[styles.folio, !hasBrief && styles.folioRowOnly]}>
+    <EditorialSection
+      variant="ruled"
+      headingStyle="masthead"
+      title="Wardrobe Edit"
+      description="Shortcuts into your Shop tab."
+      style={style}
+    >
+      <View style={styles.cards}>
         {hasBrief ? (
-          <View style={styles.briefGroup}>
+          <PressableScale
+            haptic={false}
+            scaleTo={0.99}
+            contentStyle={[styles.card, styles.briefCard]}
+            onPress={onBriefPress}
+            accessibilityRole="button"
+            accessibilityLabel={`Your shopping brief: ${brief.headline}. Opens the brief in Shop`}
+          >
+            <WardrobeEditKicker
+              icon="sparkles-outline"
+              label="Your shopping brief"
+              purpose="What your wardrobe needs next"
+            />
             <AppText variant="editorialCompact" tone="primary" numberOfLines={2}>{brief.headline}</AppText>
-            <PressableScale
-              haptic={false}
-              contentStyle={styles.link}
-              onPress={onBriefPress}
-              accessibilityRole="button"
-              accessibilityLabel="Read your full shopping brief"
-            >
+            <View style={styles.link}>
               <AppText variant="label" tone="action">Read the brief</AppText>
               <Ionicons name="arrow-forward" size={13} color={colors.action} />
-            </PressableScale>
-          </View>
+            </View>
+          </PressableScale>
         ) : null}
-        {shortlist ? (
-          <View style={[styles.shortlistGroup, hasBrief && styles.shortlistAfterBrief]}>{shortlist}</View>
-        ) : null}
+        {shortlist?.({
+          header: (
+            <WardrobeEditKicker
+              icon="bookmark-outline"
+              label="Your shortlist"
+              purpose="Finds you saved while shopping"
+            />
+          ),
+          cardStyle: [styles.card, styles.shortlistCard],
+        })}
       </View>
     </EditorialSection>
   );
 }
 
 const styles = StyleSheet.create({
-  folio: {
-    paddingHorizontal: spacing.control,
-    paddingTop: spacing.control,
-    paddingBottom: spacing.xs,
+  cards: { gap: spacing.md },
+  card: {
     backgroundColor: colors.card,
     borderRadius: radii.panel,
     borderCurve: 'continuous',
@@ -84,20 +123,32 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     ...shadows.ambient,
   },
-  folioRowOnly: { paddingTop: 0 },
-  briefGroup: { gap: spacing.sm },
+  briefCard: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.control,
+    paddingTop: spacing.control,
+    paddingBottom: spacing.lg,
+  },
+  // The row below the kicker brings its own vertical padding.
+  shortlistCard: {
+    paddingHorizontal: spacing.control,
+    paddingTop: spacing.control,
+    paddingBottom: spacing.xs,
+  },
+  kicker: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  kickerIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent,
+  },
+  kickerCopy: { flex: 1 },
   link: {
-    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 5,
-  },
-  shortlistGroup: { gap: spacing.sm },
-  // An inset hairline, not a second card, separates the read from the queue.
-  shortlistAfterBrief: {
-    marginTop: spacing.xs,
-    borderTopWidth: stroke.hairline,
-    borderTopColor: colors.border,
   },
 });

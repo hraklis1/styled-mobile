@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View } from 'react-native';
+import type { ReactNode } from 'react';
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -16,9 +17,13 @@ type Props = {
   style?: object;
   /**
    * `card` — its own white surface. `row` — no surface of its own, for when
-   * it already sits inside a folio (Home's Wardrobe Edit).
+   * the host supplies one (Home's Wardrobe Edit).
    */
   variant?: 'card' | 'row';
+  /** Shown above the row, inside the pressable, e.g. Home's destination kicker. */
+  header?: ReactNode;
+  /** Replaces the surface of the pressed content, for a host with its own card. */
+  contentStyle?: StyleProp<ViewStyle>;
 };
 
 /**
@@ -26,7 +31,7 @@ type Props = {
  * decision, absent once they are settled. Home stays about today, so this is a
  * status line — Shop carries the pieces themselves, in `ShortlistCarousel`.
  */
-export function ShortlistDecisionCard({ items, storeNames, onPress, style, variant = 'card' }: Props) {
+export function ShortlistDecisionCard({ items, storeNames, onPress, style, variant = 'card', header, contentStyle }: Props) {
   if (items.length === 0) return null;
 
   const thumbs = items.slice(0, THUMB_LIMIT);
@@ -35,12 +40,13 @@ export function ShortlistDecisionCard({ items, storeNames, onPress, style, varia
   return (
     <PressableScale
       style={style}
-      contentStyle={variant === 'row' ? undefined : styles.card}
+      contentStyle={contentStyle ?? (variant === 'row' ? undefined : styles.card)}
       scaleTo={variant === 'row' ? 0.99 : undefined}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`The shortlist. ${items.length} piece${items.length === 1 ? '' : 's'} waiting on a decision. Opens your shortlist`}
+      accessibilityLabel={`Your shortlist. ${items.length} piece${items.length === 1 ? '' : 's'} waiting on a decision. Opens your shortlist in Shop`}
     >
+      {header}
       <View style={[styles.row, variant === 'row' && styles.rowBare]}>
         <View style={[styles.stack, { width: 46 + (thumbs.length - 1) * 24 }]}>
           {thumbs.map((item, index) => (
@@ -70,8 +76,7 @@ export function ShortlistDecisionCard({ items, storeNames, onPress, style, varia
 }
 
 const styles = StyleSheet.create({
-  // A white card on Home's Wardrobe Edit tint band. Its label lives in the
-  // surrounding editorial section, not inside.
+  // A white card with no label of its own; a host can pass one as `header`.
   card: {
     overflow: 'hidden',
     borderRadius: radii.xl,
