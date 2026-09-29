@@ -63,7 +63,6 @@ import {
   LookMatAction,
   LookMatEmpty,
   LookMatPreparing,
-  WhyThisLook,
   lookPlateSize,
 } from '../../components/home/TodaysLookPlate';
 import { StylingLocationSheet } from '../../components/home/StylingLocationSheet';
@@ -876,9 +875,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               ? 'One piece away'
               : generatedCandidate.readinessStatus === 'priority'
                 ? 'Highest-impact gap'
-                : 'Styled for you today'}
+                : undefined}
             title={generatedCandidate.name}
-            reason={generatedCandidate.reason}
+            note={featuredExplanation ?? generatedCandidate.reason}
             onOpen={() => {
               track('daily_look_detail_opened', { candidateId: generatedCandidate.id });
               setDailyLookSheetVisible(true);
@@ -916,14 +915,13 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                 borderRadius={0}
               />
             )}
-            eyebrow="Styled for you today"
             title={featuredOutfit.name}
-            reason={featuredReason}
+            note={featuredExplanation ?? featuredReason}
             onOpen={() => navigation.navigate('Closet', {
               screen: 'OutfitDetail',
               params: { outfitId: featuredOutfit.id, returnTo: 'Home' },
             })}
-            accessibilityLabel={featuredOutfit.name}
+            accessibilityLabel={`${featuredOutfit.name}. ${featuredExplanation ?? featuredReason}`}
           />
         ) : (
           <LookMatEmpty
@@ -946,7 +944,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             } : undefined}
           />
         )}
-        {featuredExplanation ? <WhyThisLook explanation={featuredExplanation} /> : null}
       </EditorialSection>
 
       {/* ── On the Calendar ───────────────────────────────────────── */}

@@ -25,15 +25,20 @@ const matLayout = LinearTransition.duration(motion.base).reduceMotion(ReduceMoti
 type LookMatProps = {
   /** The photograph or collage, already sized to `lookPlateSize`. */
   plate: ReactNode;
-  eyebrow: string;
+  /**
+   * A status kicker ("One piece away"). Only for looks that need one — the
+   * section heading already says "Today's Look", so a plain pick has none.
+   */
+  eyebrow?: string;
   title: string;
-  reason?: string;
+  /** The stylist's note on why this look, set as an italic standfirst. */
+  note?: string;
   onOpen: () => void;
   /** Label for the plate (and the whole mat when there is no `action`). */
   accessibilityLabel: string;
   /** Label for the caption when it is its own target beside an `action`. */
   captionAccessibilityLabel?: string;
-  /** A trailing control (save / find). Without one, the mat shows "Open". */
+  /** A trailing control (save / find). Without one, the whole mat is the target. */
   action?: ReactNode;
   largeText?: boolean;
 };
@@ -44,17 +49,21 @@ type LookMatProps = {
  * canvas rather than laid over the image, so type never lands on a hem or a
  * shoe and the flat lay reads whole.
  *
+ * The caption is set like a magazine spread's credit: a serif title and one
+ * italic line in the stylist's voice. Nothing restates the section heading,
+ * and there is no "Open" link — the plate itself is the way in.
+ *
  * It bleeds out of the page's gutter itself, so callers place it like any
  * other section content.
  */
 export function LookMat({
-  plate, eyebrow, title, reason, onOpen, accessibilityLabel, captionAccessibilityLabel, action, largeText,
+  plate, eyebrow, title, note, onOpen, accessibilityLabel, captionAccessibilityLabel, action, largeText,
 }: LookMatProps) {
   const caption = (
     <>
-      <Text style={styles.eyebrow} numberOfLines={1}>{eyebrow}</Text>
-      <Text style={styles.title} numberOfLines={largeText ? 2 : 1}>{title}</Text>
-      {reason ? <Text style={styles.reason} numberOfLines={largeText ? 2 : 1}>{reason}</Text> : null}
+      {eyebrow ? <Text style={styles.eyebrow} numberOfLines={1}>{eyebrow}</Text> : null}
+      <Text style={styles.title} numberOfLines={largeText ? 3 : 2}>{title}</Text>
+      {note ? <Text style={styles.note} numberOfLines={largeText ? 4 : 2}>{note}</Text> : null}
     </>
   );
 
@@ -71,11 +80,7 @@ export function LookMat({
         >
           <View style={styles.plate}>{plate}</View>
           <View style={styles.captionBar}>
-            <View style={styles.captionCopy}>{caption}</View>
-            <View style={styles.openLink}>
-              <Text style={styles.openLinkText}>Open</Text>
-              <Ionicons name="chevron-forward" size={13} color={colors.mutedForeground} />
-            </View>
+            <View style={[styles.captionCopy, styles.captionCopyInner]}>{caption}</View>
           </View>
         </PressableScale>
       </Animated.View>
@@ -170,9 +175,9 @@ export function LookMatPreparing({ width, height }: { width: number; height: num
         </View>
       </View>
       <View style={styles.captionSkeleton}>
-        <SkeletonBlock width={96} height={10} borderRadius={2} />
-        <SkeletonBlock width={Math.min(200, width * 0.6)} height={22} borderRadius={2} />
-        <SkeletonBlock width={Math.min(150, width * 0.45)} height={12} borderRadius={2} />
+        <SkeletonBlock width={Math.min(220, width * 0.6)} height={22} borderRadius={2} />
+        <SkeletonBlock width={Math.min(280, width * 0.75)} height={14} borderRadius={2} />
+        <SkeletonBlock width={Math.min(180, width * 0.5)} height={14} borderRadius={2} />
       </View>
     </Animated.View>
   );
@@ -217,21 +222,6 @@ export function LookMatEmpty({ width, height, title, subtitle, cta }: LookMatEmp
   );
 }
 
-/**
- * The stylist's reasoning, set as a pull-quote under the mat. The walnut
- * rule is one of the page's few warm notes, so it stays a single hairline.
- */
-export function WhyThisLook({ explanation }: { explanation: string }) {
-  return (
-    <View style={styles.why} accessible accessibilityLabel={`Why this look: ${explanation}`}>
-      <Text style={styles.whyText} numberOfLines={3}>
-        <Text style={styles.whyLabel}>Why this look · </Text>
-        {explanation}
-      </Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   // Bleeds out of the section's page gutter to the screen edges.
   mat: {
@@ -243,34 +233,27 @@ const styles = StyleSheet.create({
   },
   captionBar: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: spacing.md,
     paddingHorizontal: GUTTER,
-    paddingTop: 14,
+    paddingTop: spacing.lg,
   },
   captionCopy: { flex: 1, minWidth: 0 },
-  captionCopyInner: { gap: 2 },
+  captionCopyInner: { gap: 6 },
   eyebrow: {
     ...typography.text.masthead,
-    color: colors.mutedForeground,
+    color: colors.accentInk,
     marginBottom: 2,
   },
   title: {
     ...typography.text.editorialSection,
     color: colors.foreground,
   },
-  reason: {
-    ...typography.text.meta,
+  note: {
+    ...typography.text.editorialItalic,
+    fontSize: 16,
+    lineHeight: 22,
     color: colors.inkSubtle,
-  },
-  openLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  openLinkText: {
-    ...typography.text.meta,
-    color: colors.mutedForeground,
   },
   actionRound: {
     width: 40,
@@ -310,9 +293,9 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
   },
   captionSkeleton: {
-    gap: 6,
+    gap: 8,
     paddingHorizontal: GUTTER,
-    paddingTop: 14,
+    paddingTop: spacing.lg,
     paddingBottom: 6,
   },
   emptyPlate: {
@@ -351,20 +334,4 @@ const styles = StyleSheet.create({
   },
   emptyCtaPressed: { backgroundColor: colors.primarySoftPressed },
   emptyCtaText: { ...typography.text.label, color: colors.primaryForeground },
-  why: {
-    marginTop: spacing.lg,
-    paddingLeft: spacing.md,
-    borderLeftWidth: stroke.fine,
-    borderLeftColor: colors.accentInk,
-  },
-  whyLabel: {
-    fontFamily: typography.family.editorialMedium,
-    color: colors.accentInk,
-  },
-  whyText: {
-    fontFamily: typography.family.editorialRegular,
-    fontSize: typography.text.body.fontSize,
-    lineHeight: typography.text.body.lineHeight,
-    color: colors.inkSubtle,
-  },
 });
