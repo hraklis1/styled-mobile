@@ -50,7 +50,7 @@ describe('scanVisionPoseDirect', () => {
   it('outlives the axios default, which the multi-model scan regularly exceeds', async () => {
     mockPost.mockResolvedValue({ data: { items: [] } });
 
-    await scanVisionPoseDirect('data:image/jpeg;base64,photo');
+    await scanVisionPoseDirect('data:image/jpeg;base64,photo', 'scan-photo-1');
 
     expect(POSE_SCAN_TIMEOUT_MS).toBeGreaterThan(15_000);
     expect(mockPost).toHaveBeenCalledWith(
@@ -58,5 +58,15 @@ describe('scanVisionPoseDirect', () => {
       { imageBase64: 'data:image/jpeg;base64,photo' },
       expect.objectContaining({ timeout: POSE_SCAN_TIMEOUT_MS }),
     );
+  });
+
+  it("reuses the caller's key so a retry never pays for a second scan", async () => {
+    mockPost.mockResolvedValue({ data: { items: [] } });
+
+    await scanVisionPoseDirect('photo', 'scan-photo-1');
+    await scanVisionPoseDirect('photo', 'scan-photo-1');
+
+    const keys = mockPost.mock.calls.map((call) => (call[2] as { headers: Record<string, string> }).headers['Idempotency-Key']);
+    expect(keys).toEqual(['scan-photo-1', 'scan-photo-1']);
   });
 });

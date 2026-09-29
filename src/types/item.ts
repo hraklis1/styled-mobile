@@ -97,6 +97,8 @@ export type ScanResult = {
 
 export type Item = {
   sourceShoppingFindId?: string | null;
+  /** Set on pieces saved by batch import; makes that save idempotent. */
+  clientImportId?: string | null;
   purchaseCurrency?: string | null;
   id: number;
   name: string;

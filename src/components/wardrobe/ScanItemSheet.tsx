@@ -370,6 +370,8 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     setPhase('saving');
 
     const savedItems: Item[] = [];
+    const savedIds = new Set<string>();
+    let uploadFailures = 0;
 
     for (const item of detectedItems) {
       // Progressive profiling: flag items whose enrichment fields are sparse so
@@ -383,9 +385,10 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
         try {
           imageUrl = await uploadImageToR2(imageToUpload, user!.id);
         } catch {
-          // R2 upload failed — fall back to storing the base64 data URL directly
-          // so the item always has a photo even if cloud storage is unavailable.
-          imageUrl = imageToUpload;
+          // Never fall back to storing the data URL: base64 in Postgres ships
+          // with every closet payload. Keep the piece in review to retry.
+          uploadFailures += 1;
+          continue;
         }
       }
 
@@ -437,12 +440,28 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
         });
         if (sessionRef.current !== session) return;
         savedItems.push(created);
+        savedIds.add(item.tempId);
       } catch {
         // individual failures are silently skipped
       }
     }
 
     if (sessionRef.current !== session) return;
+
+    if (uploadFailures > 0) {
+      // Keep only what didn't make it, so "Add" retries those without
+      // creating the saved ones twice.
+      setDetectedItems((current) => current.filter((it) => !savedIds.has(it.tempId)));
+      if (savedItems.length > 0) onItemsSaved?.(savedItems);
+      Alert.alert(
+        'Upload failed',
+        uploadFailures === 1
+          ? "1 photo couldn't be uploaded. Check your connection and tap Add to try again."
+          : `${uploadFailures} photos couldn't be uploaded. Check your connection and tap Add to try again.`,
+      );
+      setPhase('review');
+      return;
+    }
 
     if (savedItems.length > 0) {
       AsyncStorage.removeItem(SCAN_DRAFT_KEY);

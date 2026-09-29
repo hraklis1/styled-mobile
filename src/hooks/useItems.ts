@@ -150,14 +150,50 @@ export function useScanVisionPose() {
   });
 }
 
-/** Direct API call for batch processing (no shared mutation state). */
-export async function scanVisionPoseDirect(imageBase64: string): Promise<{ items: PoseScanItem[] }> {
+/**
+ * Direct API call for batch processing (no shared mutation state).
+ *
+ * Pass a key that is stable for the photo across retries and app restarts: the
+ * server then replays the first paid result, or at worst reruns it without
+ * charging again. A fresh key per call made every retry a new 4-credit scan.
+ */
+export async function scanVisionPoseDirect(
+  imageBase64: string,
+  idempotencyKey: string,
+): Promise<{ items: PoseScanItem[] }> {
   return api
     .post<{ items: PoseScanItem[] }>('/api/scan-vision-pose', { imageBase64 }, {
       timeout: POSE_SCAN_TIMEOUT_MS,
-      headers: idempotencyHeaders(),
+      headers: idempotencyHeaders(idempotencyKey),
     })
     .then((r) => r.data);
+}
+
+export type BatchCreateItemInput = CreateItemInput & { clientImportId: string };
+export type BatchCreateResult = {
+  items: Item[];
+  rejected: { clientImportId: string | null; message: string }[];
+};
+
+/**
+ * Save a reviewed batch in one request. Idempotent per clientImportId, so a
+ * retry after a lost response returns the rows already created instead of
+ * duplicating them. The caller updates the items cache once for the batch.
+ */
+export async function createItemsBatch(items: BatchCreateItemInput[]): Promise<BatchCreateResult> {
+  return api
+    .post<BatchCreateResult>('/api/items/batch', { items }, { timeout: 30_000 })
+    .then((r) => r.data);
+}
+
+/** Merge a saved batch into the items cache with one refetch, not one per item. */
+export function applySavedItems(qc: ReturnType<typeof useQueryClient>, saved: Item[]) {
+  if (saved.length === 0) return;
+  qc.setQueryData<Item[]>(ITEMS_QUERY_KEY, (old = []) => {
+    const ids = new Set(saved.map((item) => item.id));
+    return [...saved, ...old.filter((item) => !ids.has(item.id))];
+  });
+  invalidateItemQueries(qc);
 }
 
 export function useItems() {

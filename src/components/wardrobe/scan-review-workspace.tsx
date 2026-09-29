@@ -107,6 +107,13 @@ type Props = {
   onExtract: (trigger: ExtractTrigger, reviewedCount: number, brandCount: number) => void;
   onSave: () => void;
   onClose: () => void;
+  /**
+   * Batch import runs in the background, so its workspace can be put away at
+   * any stage without stopping anything. When set, a minimise control hides
+   * the workspace (and the system back gesture does the same), and close
+   * becomes "discard", available at every stage except mid-save.
+   */
+  onMinimize?: () => void;
 };
 
 const SEASON_CHIPS = SEASON_OPTIONS.map((value) => ({ value, label: SEASON_LABELS[value] }));
@@ -131,6 +138,7 @@ export function ScanReviewWorkspace({
   onExtract,
   onSave,
   onClose,
+  onMinimize,
 }: Props) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -155,6 +163,7 @@ export function ScanReviewWorkspace({
   const activeIndex = Math.max(0, pieceIds.indexOf(activeResolvedId ?? ''));
   const activePiece = pieces[activeIndex] ?? pieces[0] ?? null;
   const busy = stage === 'scanning' || stage === 'extracting' || stage === 'saving';
+  const closeDisabled = onMinimize ? stage === 'saving' : busy;
   const modePiece = mode.kind === 'brand-search' || mode.kind === 'crop-editor' || mode.kind === 'confirm-remove'
     ? pieces.find((piece) => piece.id === mode.pieceId) ?? null
     : null;
@@ -192,13 +201,20 @@ export function ScanReviewWorkspace({
   }, [metrics.snapInterval, pieceIds, reduceMotion, trackedIndex]);
 
   const requestClose = useCallback(() => {
-    if (busy) return;
+    if (closeDisabled) return;
     if (mode.kind !== 'review') {
       setMode({ kind: 'review' });
       return;
     }
     setMode({ kind: 'confirm-close' });
-  }, [busy, mode.kind]);
+  }, [closeDisabled, mode.kind]);
+
+  // Android back / iOS swipe: put a background batch away rather than asking
+  // to discard it.
+  const requestSystemClose = useCallback(() => {
+    if (onMinimize && mode.kind === 'review') onMinimize();
+    else requestClose();
+  }, [mode.kind, onMinimize, requestClose]);
 
   const extract = useCallback((trigger: ExtractTrigger, reviewed: Set<string>) => {
     const brandCount = pieces.filter((piece) => piece.brand.trim().length > 0).length;
@@ -276,7 +292,7 @@ export function ScanReviewWorkspace({
 
   if (mode.kind === 'crop-editor' && modePiece?.cropSource && modePiece.cropBbox) {
     return (
-      <Modal visible={visible} presentationStyle="fullScreen" animationType="none" onRequestClose={requestClose}>
+      <Modal visible={visible} presentationStyle="fullScreen" animationType="none" onRequestClose={requestSystemClose}>
         <CropAdjustEditor
           sourceImage={modePiece.cropSource}
           initialBbox={modePiece.cropBbox}
@@ -293,7 +309,7 @@ export function ScanReviewWorkspace({
 
   if (mode.kind === 'brand-search' && modePiece) {
     return (
-      <Modal visible={visible} presentationStyle="fullScreen" animationType="none" onRequestClose={requestClose}>
+      <Modal visible={visible} presentationStyle="fullScreen" animationType="none" onRequestClose={requestSystemClose}>
         <BrandSearch
           piece={modePiece}
           suggestions={brandSuggestions}
@@ -316,7 +332,7 @@ export function ScanReviewWorkspace({
       visible={visible}
       presentationStyle="fullScreen"
       animationType={reduceMotion ? 'fade' : 'slide'}
-      onRequestClose={requestClose}
+      onRequestClose={requestSystemClose}
     >
       <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <WorkspaceHeader
@@ -324,9 +340,10 @@ export function ScanReviewWorkspace({
           activeIndex={activeIndex}
           pieceCount={pieces.length}
           showCounter={stage !== 'scanning' && !(isReviewStage && pieces.length > 1)}
-          busy={busy}
+          closeDisabled={closeDisabled}
           topInset={insets.top}
           onClose={requestClose}
+          onMinimize={onMinimize}
         />
 
         {failure ? (
@@ -455,7 +472,9 @@ export function ScanReviewWorkspace({
         ) : mode.kind === 'confirm-close' ? (
           <ConfirmationPanel
             title="Discard this scan?"
-            message="Your detected pieces and edits in this review will be removed."
+            message={onMinimize
+              ? 'Every photo in this batch, its detected pieces and your edits will be removed.'
+              : 'Your detected pieces and edits in this review will be removed.'}
             confirmLabel="Discard scan"
             destructive
             bottomInset={insets.bottom}
@@ -468,14 +487,15 @@ export function ScanReviewWorkspace({
   );
 }
 
-function WorkspaceHeader({ stage, activeIndex, pieceCount, showCounter, busy, topInset, onClose }: {
+function WorkspaceHeader({ stage, activeIndex, pieceCount, showCounter, closeDisabled, topInset, onClose, onMinimize }: {
   stage: ScanReviewStage;
   activeIndex: number;
   pieceCount: number;
   showCounter: boolean;
-  busy: boolean;
+  closeDisabled: boolean;
   topInset: number;
   onClose: () => void;
+  onMinimize?: () => void;
 }) {
   return (
     <>
@@ -496,14 +516,25 @@ function WorkspaceHeader({ stage, activeIndex, pieceCount, showCounter, busy, to
           </Text>
         ) : null}
       </View>
+      {onMinimize ? (
+        <TouchableOpacity
+          style={styles.headerButton}
+          onPress={onMinimize}
+          accessibilityRole="button"
+          accessibilityLabel="Hide batch import"
+          accessibilityHint="The batch keeps running in the background"
+        >
+          <Ionicons name="chevron-down" size={24} color={colors.foreground} />
+        </TouchableOpacity>
+      ) : null}
       <TouchableOpacity
         style={styles.headerButton}
         onPress={onClose}
-        disabled={busy}
+        disabled={closeDisabled}
         accessibilityRole="button"
-        accessibilityLabel="Close closet scan"
+        accessibilityLabel={onMinimize ? 'Discard batch import' : 'Close closet scan'}
       >
-        <Ionicons name="close" size={24} color={busy ? colors.border : colors.foreground} />
+        <Ionicons name="close" size={24} color={closeDisabled ? colors.border : colors.foreground} />
       </TouchableOpacity>
       </View>
       {/* Decorative twin of the "N of M" counter — the counter stays the
