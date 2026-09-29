@@ -15,6 +15,8 @@ type Props = {
   style?: StyleProp<ViewStyle>;
   /** Horizontal offset of the caret from the callout's right edge, lined up with the button it points at. */
   caretRight?: number;
+  /** Offset of the caret from the callout's left edge, for anchors on the left. Wins over `caretRight`. */
+  caretLeft?: number;
   /** Spoken when the scrim behind the callout is tapped to dismiss it. */
   scrimAccessibilityLabel?: string;
 };
@@ -37,6 +39,7 @@ export function AiActionCoachmark({
   onDismiss,
   style,
   caretRight = 22,
+  caretLeft,
   scrimAccessibilityLabel = 'Dismiss this tip',
 }: Props) {
   const opacity = useRef(new Animated.Value(0)).current;
@@ -66,7 +69,7 @@ export function AiActionCoachmark({
           style={[styles.container, style, { opacity, transform: [{ translateY }] }]}
           pointerEvents="box-none"
         >
-          <View style={[styles.caret, { right: caretRight }]} />
+          <View style={[styles.caret, caretLeft !== undefined ? { left: caretLeft } : { right: caretRight }]} />
           <View style={styles.card}>
             <Text style={styles.title}>{title}</Text>
             <Text style={styles.body}>{body}</Text>

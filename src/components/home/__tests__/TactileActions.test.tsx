@@ -2,7 +2,7 @@ import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { Pressable, StyleSheet, Text } from 'react-native';
 import { AskStylistButton } from '../AskStylistButton';
-import { AddToClosetCard } from '../AddToClosetCard';
+import { AddToClosetButton } from '../AddToClosetButton';
 import { ShoppingPriorityRow } from '../../shopping/ShoppingPriorityRow';
 import { PressableScale } from '../../primitives/PressableScale';
 import type { ShoppingBriefPriority } from '../../../lib/shopDecisionWorkspace';
@@ -43,7 +43,7 @@ function render(element: React.ReactElement) {
 }
 afterEach(() => { act(() => { mounted.splice(0).forEach((renderer) => renderer.unmount()); }); });
 
-it.each([AskStylistButton, AddToClosetCard])('keeps the launcher callback and disabled semantics', (Component) => {
+it.each([AskStylistButton, AddToClosetButton])('keeps the launcher callback and disabled semantics', (Component) => {
   const onPress = jest.fn();
   const renderer = render(<Component onPress={onPress} />);
   const button = renderer.root.findByType(Pressable);

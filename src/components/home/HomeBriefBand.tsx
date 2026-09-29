@@ -21,6 +21,10 @@ type Props = {
  * Neither half carries its own sub-label: one section label per chapter, and
  * the serif headline and the shortlist card each say what they are.
  *
+ * It is the page's one full-bleed tint band — Home alternates image, canvas,
+ * tint, canvas — so the change of ground marks the chapter boundary without
+ * another rule. Keep the tint to this insert or it stops meaning anything.
+ *
  * Home fetches the brief itself rather than waiting for Shop to populate the
  * cache, so a premium user sees it on the first screen of the day without
  * having to visit Shop first. The generation is cheap enough to justify
@@ -41,7 +45,8 @@ export function HomeWardrobeEdit({ onBriefPress, shortlist, style }: Props) {
   if (!hasBrief && !shortlist) return null;
 
   return (
-    <EditorialSection variant="ruled" headingStyle="editorial" title="Wardrobe Edit" style={style}>
+    <View style={[styles.band, style]}>
+    <EditorialSection variant="ruled" headingStyle="editorial" title="Wardrobe Edit" style={styles.section}>
       {hasBrief ? (
         <View style={styles.briefGroup}>
           <AppText variant="editorialCompact" tone="primary" numberOfLines={2}>{brief.headline}</AppText>
@@ -57,15 +62,24 @@ export function HomeWardrobeEdit({ onBriefPress, shortlist, style }: Props) {
           </PressableScale>
         </View>
       ) : null}
-      {hasBrief && shortlist ? <View style={styles.divider} /> : null}
       {shortlist ? (
-        <View style={styles.shortlistGroup}>{shortlist}</View>
+        <View style={[styles.shortlistGroup, hasBrief && styles.shortlistAfterBrief]}>{shortlist}</View>
       ) : null}
     </EditorialSection>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  band: {
+    marginHorizontal: -spacing.page,
+    paddingHorizontal: spacing.page,
+    marginTop: spacing.xxl,
+    paddingBottom: spacing.xl,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  // The band supplies the air; the section's own canvas padding would double it.
+  section: { paddingTop: spacing.xl, paddingBottom: 0 },
   briefGroup: { gap: spacing.sm },
   link: {
     minHeight: 44,
@@ -74,10 +88,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     gap: 5,
   },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    marginVertical: spacing.md,
-    backgroundColor: colors.border,
-  },
   shortlistGroup: { gap: spacing.sm },
+  // The white card is the separation from the brief above it.
+  shortlistAfterBrief: { marginTop: spacing.sm },
 });

@@ -1,5 +1,5 @@
 import { AskStylistButton } from '../../components/home/AskStylistButton';
-import { AddToClosetCard } from '../../components/home/AddToClosetCard';
+import { AddToClosetButton } from '../../components/home/AddToClosetButton';
 import { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
@@ -52,6 +52,9 @@ import { StylingLocationSheet } from '../../components/home/StylingLocationSheet
 import { HomeWardrobeEdit } from '../../components/home/HomeBriefBand';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { track } from '../../lib/analytics';
+import { hasSeenAiActionCoach, markAiActionCoachSeen } from '../../lib/aiActionCoach';
+import { hasSeenShortcutCoach } from '../../lib/shortcutCoach';
+import { AiActionCoachmark } from '../../components/primitives/AiActionCoachmark';
 import { formatTemp, resolveTempUnit } from '../../lib/temperature';
 import type { StylistMissingEssential } from '../../features/stylist/types';
 import {
@@ -254,14 +257,60 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const heroWidth = width;
   const heroHeight = Math.round(heroWidth / editorial.outfitAspectRatio);
 
+  // ── First-run "Add to my closet" coachmark ──────────────────────────────
+  // The button lost its standing caption when it shrank to match the stylist
+  // pill, so what it does is explained once, pointed at the button itself.
+  // It waits for the tab bar's shortcut coach (which opens over Home on first
+  // run) to be settled, so the two never stack; checking on focus means it
+  // lands on the next visit to Home after that.
+  const addButtonRef = useRef<View>(null);
+  const [addCoach, setAddCoach] = useState<{ top: number; left: number } | null>(null);
+  const homeSheetOpenRef = useRef(false);
+  useEffect(() => {
+    homeSheetOpenRef.current = dailyLookSheetVisible || locationSheetVisible || wearLogMenuEntry !== null;
+  }, [dailyLookSheetVisible, locationSheetVisible, wearLogMenuEntry]);
+
+  useFocusEffect(useCallback(() => {
+    const userId = user?.id;
+    if (!userId) return undefined;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    Promise.all([hasSeenAiActionCoach('home_add_to_closet', userId), hasSeenShortcutCoach(userId)])
+      .then(([seenAdd, seenShortcut]) => {
+        if (!active || seenAdd || !seenShortcut) return;
+        timer = setTimeout(() => {
+          if (!active || lastHomeScrollY.current > 10 || homeSheetOpenRef.current) return;
+          addButtonRef.current?.measureInWindow((x, y, _w, h) => {
+            if (!active || h === 0) return;
+            track('ai_action_coach_shown', { surface: 'home_add_to_closet' });
+            setAddCoach({ top: y + h + 10, left: x });
+          });
+        }, 700);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [user?.id]));
+
+  const dismissAddCoach = useCallback((reason: 'got_it' | 'button_tap') => {
+    if (!addCoach) return;
+    const userId = user?.id;
+    setAddCoach(null);
+    track('ai_action_coach_dismissed', { surface: 'home_add_to_closet', reason });
+    if (userId) void markAiActionCoachSeen('home_add_to_closet', userId);
+  }, [addCoach, user?.id]);
+
   const handleAddToCloset = useCallback(() => {
+    dismissAddCoach('button_tap');
     track('home_wardrobe_action_tapped', { action: 'add_clothes_menu' });
     openAddSheet({
       onTakePhoto: () => openScanItem('camera'),
       onFromLibrary: () => openScanItem('library'),
       onBatchImport: openBatchScan,
     });
-  }, [openAddSheet, openBatchScan, openScanItem]);
+  }, [dismissAddCoach, openAddSheet, openBatchScan, openScanItem]);
 
   const handleRecordWear = useCallback(() => {
     track('home_wardrobe_action_tapped', { action: 'record_wear', source: 'week_in_wear' });
@@ -712,7 +761,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           },
         })}
       />
-      <AddToClosetCard onPress={handleAddToCloset} />
+      <View ref={addButtonRef} collapsable={false} style={styles.closetEntry}>
+        <AddToClosetButton onPress={handleAddToCloset} />
+      </View>
 
       {/* ── Featured outfit ────────────────────────────────────── */}
       <EditorialSection
@@ -958,7 +1009,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                 style={styles.carousel}
                 contentContainerStyle={styles.carouselContent}
               >
-                {carouselEvents.map((event) => {
+                {carouselEvents.map((event, index) => {
                   const presentation = presentCalendarEvent(event);
                   const dateLabel = formatEventDate(event.date);
                   const isToday = dateLabel === 'Today';
@@ -967,6 +1018,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                   return (
                     <PressableScale
                       key={event.id}
+                      style={index > 0 && styles.eventColumnRule}
                       contentStyle={[styles.eventCard, isToday && styles.eventCardToday]}
                       onPress={() => navigation.navigate('Calendar', { eventId: event.id })}
                       accessibilityRole="button"
@@ -976,7 +1028,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                         <Text style={styles.eventDay}>{presentation.dayLabel}</Text>
                         <Text style={styles.eventMonth}>{presentation.monthLabel}</Text>
                       </View>
-                      <Text style={styles.eventTitle} numberOfLines={2}>{event.title.trim()}</Text>
+                      <Text style={[styles.eventTitle, !largeText && styles.eventTitleTwoLine]} numberOfLines={2}>{event.title.trim()}</Text>
                       <Text style={styles.eventMeta} numberOfLines={largeText ? 2 : 1}>
                         {occasionLabel(event.occasion)} · <Text style={styles.eventWhen}>{when}</Text>
                       </Text>
@@ -1000,7 +1052,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
       {/* ── Wardrobe intelligence ─────────────────────────────────── */}
       <HomeWardrobeEdit
-        style={styles.compactEditorialSection}
         onBriefPress={() => {
           track('shop_section_opened', { section: 'home_brief' });
           navigation.navigate('Shop', { screen: 'ShoppingBriefDetail' });
@@ -1023,16 +1074,14 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       {/* ── Your Week in Wear ─────────────────────────────────────── */}
       {/*
         The section is the home of outfit logging now, so it renders even with
-        nothing in it — its header action and today's tile are the entry
-        points on this screen, and hiding them would leave first-run users with
-        no way to start a diary.
+        nothing in it — today's tile is the entry point on this screen (the
+        header carries no duplicate link), and hiding it would leave first-run
+        users with no way to start a diary.
       */}
       <EditorialSection
         variant="ruled"
         headingStyle="editorial"
         title="Your Week in Wear"
-        actionLabel="Log today"
-        onAction={handleRecordWear}
         style={styles.compactEditorialSection}
       >
         <WearWeekStrip
@@ -1042,7 +1091,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           onLogDay={handleLogPastDay}
           onOpenEntry={setWearLogMenuEntry}
           disabled={deleteLog.isPending}
-          formatLogDate={formatLogDate}
         />
       </EditorialSection>
 
@@ -1050,6 +1098,12 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       <View
         pointerEvents="none"
         style={[styles.statusBarMask, { height: insets.top }]}
+      />
+      {/* Content fades out under the status bar instead of a hard crop. */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={[colors.background, 'rgba(246,245,242,0)']}
+        style={[styles.statusBarFade, { top: insets.top }]}
       />
       <DailyLookDetailSheet
         visible={dailyLookSheetVisible && !!generatedCandidate}
@@ -1090,6 +1144,14 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           onClose={() => setLocationSheetVisible(false)}
         />
       )}
+      <AiActionCoachmark
+        visible={!!addCoach}
+        title="Add to my closet"
+        body="Photograph pieces you own, pick from your library, or import several at once. Every look is styled from what you add."
+        onDismiss={() => dismissAddCoach('got_it')}
+        style={addCoach ? { top: addCoach.top, left: addCoach.left } : undefined}
+        caretLeft={spacing.control + 5}
+      />
     </View>
   );
 }
@@ -1113,6 +1175,13 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 50,
     backgroundColor: colors.background,
+  },
+  statusBarFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 16,
+    zIndex: 50,
   },
   content: {
     paddingHorizontal: SIDE_PAD,
@@ -1185,7 +1254,9 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
 
-  stylistEntry: { marginBottom: spacing.lg },
+  // The two launchers read as a pair, then hand off to the first section.
+  stylistEntry: { marginBottom: spacing.md },
+  closetEntry: { marginBottom: spacing.sm },
 
   // Empty wardrobe nudge
   nudgeCard: {
@@ -1250,11 +1321,14 @@ const styles = StyleSheet.create({
   // Events carousel
   carousel: { marginHorizontal: -SIDE_PAD },
   carouselContent: { paddingHorizontal: SIDE_PAD, gap: COL_GAP },
-  // Flat tint, no border and no shadow: the same container the wardrobe
-  // actions and Next Up wear. Home has exactly two container shapes —
-  // full-bleed image, and this.
   eventCard: {
     width: 148, paddingBottom: spacing.sm, gap: spacing.xs,
+  },
+  // A magazine column rule between events — typography, not a container.
+  eventColumnRule: {
+    paddingLeft: COL_GAP,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: colors.border,
   },
   eventCardToday: {
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.accentInk,
@@ -1276,6 +1350,11 @@ const styles = StyleSheet.create({
   eventTitle: {
     ...typography.text.editorialCard,
     color: colors.foreground,
+  },
+  // Titles always take their two lines, so the occasion and status rows sit
+  // on shared baselines across columns whether or not a title wraps.
+  eventTitleTwoLine: {
+    minHeight: typography.text.editorialCard.lineHeight * 2,
   },
   eventMeta: {
     ...typography.text.caption,

@@ -25,7 +25,7 @@ export function formatCountdown(d: Date): string | null {
   const diff = Math.round((day.getTime() - today.getTime()) / 86400000);
   if (diff <= 1) return null;
   if (diff < 7) return `in ${diff} days`;
-  if (diff < 14) return 'in 1 week';
+  // Rounded, so 11–13 days reads "in 2 weeks" rather than "in 1 week".
   const weeks = Math.round(diff / 7);
   if (weeks < 5) return `in ${weeks} week${weeks !== 1 ? 's' : ''}`;
   const months = Math.round(diff / 30);

@@ -20,7 +20,6 @@ type Props = {
   onLogDay: (dateKey: string) => void;
   onOpenEntry: (log: OutfitLog) => void;
   disabled?: boolean;
-  formatLogDate: (dateKey: string) => string;
 };
 
 function longDay(date: Date): string {
@@ -28,12 +27,13 @@ function longDay(date: Date): string {
 }
 
 /**
- * Home's wear diary at a glance: the current Monday–Sunday week, one column
- * per day. A filled tile is a logged day; today's empty tile invites a log.
- * It reads as a week even when the user hasn't logged in a while, which a
- * rail of past entries never could.
+ * Home's wear diary at a glance: the last seven days, today on the right, one
+ * column per day. A filled tile is a logged day; every empty tile can be
+ * tapped to log it, today's marked as the obvious one. It reads as a week even
+ * when the user hasn't logged in a while, which a rail of past entries never
+ * could, and the summary invites rather than reports how long it's been.
  */
-export function WearWeekStrip({ logs, items, onLogToday, onLogDay, onOpenEntry, disabled, formatLogDate }: Props) {
+export function WearWeekStrip({ logs, items, onLogToday, onLogDay, onOpenEntry, disabled }: Props) {
   const { width } = useWindowDimensions();
   const week = useMemo(() => buildWearWeek(logs), [logs]);
   const itemsById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
@@ -42,9 +42,9 @@ export function WearWeekStrip({ logs, items, onLogToday, onLogDay, onOpenEntry, 
   const tileHeight = Math.round(tileWidth / editorial.garmentAspectRatio);
 
   const summary = week.loggedCount > 0
-    ? `${week.loggedCount} of 7 days logged this week`
+    ? `${week.loggedCount} of the last 7 days logged`
     : week.lastLog
-      ? `Last logged ${formatLogDate(week.lastLog.date.slice(0, 10))}`
+      ? 'Tap today to log what you’re wearing'
       : 'Start your wear diary — tap today';
 
   const renderDay = (day: WearWeekDay) => {
@@ -54,9 +54,7 @@ export function WearWeekStrip({ logs, items, onLogToday, onLogDay, onOpenEntry, 
     const pieceCount = day.log?.itemIds.filter((id) => itemsById.has(id)).length ?? 0;
     const label = day.log
       ? `${longDay(day.date)}, ${pieceCount} piece${pieceCount === 1 ? '' : 's'}. Open entry options`
-      : day.isFuture
-        ? `${longDay(day.date)}, upcoming`
-        : `${day.isToday ? 'Today, ' : ''}${longDay(day.date)}, not logged. Tap to log`;
+      : `${day.isToday ? 'Today, ' : ''}${longDay(day.date)}, not logged. Tap to log`;
 
     const onPress = day.log
       ? () => onOpenEntry(day.log!)
@@ -78,7 +76,6 @@ export function WearWeekStrip({ logs, items, onLogToday, onLogDay, onOpenEntry, 
           styles.plate,
           { width: tileWidth, height: tileHeight },
           day.isToday && styles.todayPlate,
-          day.isFuture && styles.futurePlate,
         ]}
       >
         {day.isToday ? <Ionicons name="add" size={18} color={colors.accentInk} /> : null}
@@ -94,11 +91,11 @@ export function WearWeekStrip({ logs, items, onLogToday, onLogDay, onOpenEntry, 
           contentStyle={styles.tilePressable}
           onPress={onPress}
           onLongPress={day.log ? () => onOpenEntry(day.log!) : undefined}
-          disabled={disabled || day.isFuture}
+          disabled={disabled}
           scaleTo={0.94}
           accessibilityRole="button"
           accessibilityLabel={label}
-          accessibilityState={{ disabled: disabled || day.isFuture }}
+          accessibilityState={{ disabled: !!disabled }}
         >
           {tile}
         </PressableScale>
@@ -137,7 +134,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.accentInk,
   },
-  futurePlate: { opacity: 0.45 },
   dayNumber: {
     ...typography.text.caption,
     fontVariant: ['tabular-nums'],

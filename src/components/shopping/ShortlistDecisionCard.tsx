@@ -47,6 +47,7 @@ export function ShortlistDecisionCard({ items, storeNames, onPress, style }: Pro
                 recyclingKey={item.primarySnap.id}
                 transition={180}
               />
+              <View style={styles.thumbOutline} pointerEvents="none" />
             </View>
           ))}
         </View>
@@ -63,13 +64,13 @@ export function ShortlistDecisionCard({ items, storeNames, onPress, style }: Pro
 }
 
 const styles = StyleSheet.create({
-  // The flat tint block Home uses for every non-image container. Its
-  // "The Shortlist" label lives in the surrounding editorial section, not inside.
+  // A white card on Home's Wardrobe Edit tint band. Its label lives in the
+  // surrounding editorial section, not inside.
   card: {
     overflow: 'hidden',
     borderRadius: radii.xl,
     borderCurve: 'continuous',
-    backgroundColor: colors.surfaceSubtle,
+    backgroundColor: colors.surfaceElevated,
   },
   row: {
     minHeight: 84,
@@ -88,9 +89,17 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderRadius: radii.sm,
     borderCurve: 'continuous',
+    // The ring matches the card so each thumb cuts cleanly out of the one
+    // behind it; the hairline keeps white product shots from merging.
     borderWidth: 1.5,
-    borderColor: colors.surfaceSubtle,
-    backgroundColor: colors.muted,
+    borderColor: colors.surfaceElevated,
+    backgroundColor: colors.surfaceElevated,
+  },
+  thumbOutline: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: radii.sm - 1.5,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
   },
   copy: { flex: 1, gap: 2 },
   title: { ...typography.text.cardTitle, color: colors.foreground },
