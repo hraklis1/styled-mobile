@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-nati
 import type { ScrollView as ScrollViewType } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { FadeIn, FadeOut, LinearTransition, runOnJS } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 import { toDateStr } from './calendarUtils';
 import { colors, spacing, typography, radii } from '../../theme';
 import { PressableScale } from '../primitives/PressableScale';
@@ -17,6 +17,10 @@ export function WeekStrip({
   onToday,
   eventDateSet,
   weekOffset,
+  expanded,
+  monthOffset,
+  onToggleExpanded,
+  onChangeMonthOffset,
 }: {
   weekDays: Date[];
   selectedDate: string | null;
@@ -26,9 +30,11 @@ export function WeekStrip({
   onToday: () => void;
   eventDateSet: Set<string>;
   weekOffset: number;
+  expanded: boolean;
+  monthOffset: number;
+  onToggleExpanded: () => void;
+  onChangeMonthOffset: (delta: number) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const [monthOffset, setMonthOffset] = useState(0);
   const [containerWidth, setContainerWidth] = useState(0);
   const scrollRef = useRef<ScrollViewType>(null);
   const todayStr = toDateStr(new Date());
@@ -76,16 +82,11 @@ export function WeekStrip({
     }
   }, [monthOffset, containerWidth, expanded]);
 
-  const handleToggle = () => {
-    if (expanded) setMonthOffset(0);
-    setExpanded((v) => !v);
-  };
-
   const handleScrollEnd = (e: { nativeEvent: { contentOffset: { x: number } } }) => {
     if (containerWidth === 0) return;
     const page = Math.round(e.nativeEvent.contentOffset.x / containerWidth);
-    if (page === 0) setMonthOffset((o) => o - 1);
-    else if (page === 2) setMonthOffset((o) => o + 1);
+    if (page === 0) onChangeMonthOffset(-1);
+    else if (page === 2) onChangeMonthOffset(1);
   };
 
   const weekGesture = useMemo(
@@ -95,8 +96,8 @@ export function WeekStrip({
       .onEnd(({ translationX, velocityX }) => {
         const intent = Math.abs(translationX) > 48 || Math.abs(velocityX) > 480;
         if (!intent) return;
-        if (translationX < 0) runOnJS(onNextWeek)();
-        else runOnJS(onPrevWeek)();
+        if (translationX < 0) scheduleOnRN(onNextWeek);
+        else scheduleOnRN(onPrevWeek);
       }),
     [onNextWeek, onPrevWeek],
   );
@@ -109,7 +110,7 @@ export function WeekStrip({
     return (
       <PressableScale
         key={str}
-        style={compact ? undefined : s.dayOuter}
+        style={compact ? s.compactOuter : s.dayOuter}
         contentStyle={[
           compact ? s.compactBtn : s.dayBtn,
           isSel && s.dayBtnSel,
@@ -118,7 +119,8 @@ export function WeekStrip({
         onPress={() => onSelectDate(str)}
         scaleTo={0.94}
         accessibilityRole="button"
-        accessibilityLabel={d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+        accessibilityLabel={`${isToday ? 'Today, ' : ''}${d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}${hasEvent ? ', event planned' : ''}`}
+        accessibilityHint="Show this date in the agenda"
         accessibilityState={{ selected: isSel }}
       >
         {!compact && (
@@ -134,8 +136,12 @@ export function WeekStrip({
     );
   };
 
-  const renderGrid = (rows: (Date | null)[][]) => (
-    <View style={{ width: containerWidth }}>
+  const renderGrid = (rows: (Date | null)[][], isCurrent: boolean) => (
+    <View
+      style={{ width: containerWidth }}
+      accessibilityElementsHidden={!isCurrent}
+      importantForAccessibility={isCurrent ? 'auto' : 'no-hide-descendants'}
+    >
       {rows.map((row, ri) => (
         <View key={ri} style={s.monthRow}>
           {row.map((d, ci) => (
@@ -153,17 +159,17 @@ export function WeekStrip({
       <View style={s.header}>
         <PressableScale
           contentStyle={s.monthButton}
-          onPress={handleToggle}
+          onPress={onToggleExpanded}
           scaleTo={0.98}
           accessibilityRole="button"
-          accessibilityLabel={expanded ? 'Collapse month calendar' : 'Expand month calendar'}
+          accessibilityLabel={`${expanded ? 'Collapse' : 'Expand'} month calendar, ${expanded ? displayMonthLabel : weekLabel}`}
           accessibilityState={{ expanded }}
         >
-          <Text style={s.monthLabel}>{expanded ? displayMonthLabel : weekLabel}</Text>
+          <Text style={s.monthLabel} numberOfLines={1}>{expanded ? displayMonthLabel : weekLabel}</Text>
           <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={13} color={colors.mutedForeground} />
         </PressableScale>
         <View style={s.navRow}>
-          {weekOffset !== 0 && !expanded && (
+          {(weekOffset !== 0 || (selectedDate !== null && selectedDate !== todayStr)) && (
             <TouchableOpacity onPress={onToday} style={s.todayBtn} accessibilityRole="button" accessibilityLabel="Return to today">
               <Text style={s.todayText}>Today</Text>
             </TouchableOpacity>
@@ -180,10 +186,10 @@ export function WeekStrip({
           )}
           {expanded && (
             <>
-              <TouchableOpacity onPress={() => setMonthOffset((o) => o - 1)} style={s.navBtn} accessibilityRole="button" accessibilityLabel="Previous month">
+              <TouchableOpacity onPress={() => onChangeMonthOffset(-1)} style={s.navBtn} accessibilityRole="button" accessibilityLabel="Previous month">
                 <Ionicons name="chevron-back" size={16} color={colors.mutedForeground} />
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setMonthOffset((o) => o + 1)} style={s.navBtn} accessibilityRole="button" accessibilityLabel="Next month">
+              <TouchableOpacity onPress={() => onChangeMonthOffset(1)} style={s.navBtn} accessibilityRole="button" accessibilityLabel="Next month">
                 <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
               </TouchableOpacity>
             </>
@@ -193,24 +199,17 @@ export function WeekStrip({
 
       {!expanded && (
         <GestureDetector gesture={weekGesture}>
-          <Animated.View
-            key={`week-${weekDays[0]?.toISOString()}`}
+          <View
             style={s.days}
-            entering={FadeIn.duration(160)}
-            exiting={FadeOut.duration(120)}
-            layout={LinearTransition.duration(180)}
           >
             {weekDays.map((d) => renderDay(d, false))}
-          </Animated.View>
+          </View>
         </GestureDetector>
       )}
 
       {expanded && (
-        <Animated.View
+        <View
           onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
-          entering={FadeIn.duration(180)}
-          exiting={FadeOut.duration(120)}
-          layout={LinearTransition.duration(180)}
         >
           <View style={s.colHeaders}>
             {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map((h) => (
@@ -227,12 +226,12 @@ export function WeekStrip({
               onMomentumScrollEnd={handleScrollEnd}
               directionalLockEnabled
             >
-              {renderGrid(prevRows)}
-              {renderGrid(currRows)}
-              {renderGrid(nextRows)}
+              {renderGrid(prevRows, false)}
+              {renderGrid(currRows, true)}
+              {renderGrid(nextRows, false)}
             </ScrollView>
           )}
-        </Animated.View>
+        </View>
       )}
     </View>
   );
@@ -245,10 +244,10 @@ const s = StyleSheet.create({
     minHeight: 44,
     marginBottom: spacing.xs,
   },
-  monthButton: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  monthButton: { minHeight: 44, minWidth: 0, flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   monthLabel: {
     fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold,
-    color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: typography.tracking.meta,
+    color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: typography.tracking.meta, flexShrink: 1,
   },
   navRow: { flexDirection: 'row', alignItems: 'center' },
   todayBtn: {
@@ -269,21 +268,21 @@ const s = StyleSheet.create({
     borderCurve: 'continuous',
   },
   dayBtnSel: {
-    borderWidth: 1, borderColor: colors.primary, backgroundColor: 'transparent',
+    borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.primary,
   },
   dayBtnToday: { borderWidth: 1, borderColor: colors.primary },
   dayAbbrev: { ...typography.text.caption, fontWeight: typography.weight.semibold, color: colors.mutedForeground, textTransform: 'uppercase' },
   dayNum: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.bold, color: colors.mutedForeground },
   dayTextSel: {
-    color: colors.primary,
+    color: colors.primaryForeground,
   },
   dayTextToday: { color: colors.primary },
   dot: {
-    width: 3, height: 3, borderRadius: 1.5, backgroundColor: 'transparent',
+    width: 4, height: 4, borderRadius: 2, backgroundColor: 'transparent',
   },
   dotVis: { backgroundColor: colors.primary },
   dotSel: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryForeground,
   },
   dotHidden: { opacity: 0 },
   colHeaders: { flexDirection: 'row', marginBottom: 4 },
@@ -296,6 +295,7 @@ const s = StyleSheet.create({
   },
   monthRow: { flexDirection: 'row', marginBottom: 2 },
   monthCell: { flex: 1, alignItems: 'center' },
+  compactOuter: { width: '100%' },
   compactBtn: {
     width: '100%', minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radii.action, gap: 1, borderCurve: 'continuous',
   },

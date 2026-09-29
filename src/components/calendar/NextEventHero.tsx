@@ -8,8 +8,6 @@ import { formatTempRange } from '../../lib/temperature';
 import { EventLookCollage } from './EventLookCollage';
 import {
   OCCASIONS,
-  formatDayLabel,
-  formatCountdown,
   formatTime,
 } from './calendarUtils';
 import { colors, spacing, typography, radii, editorial } from '../../theme';
@@ -29,6 +27,7 @@ export function NextEventHero({
   onOpenOutfit,
   isPlanning,
   outfit,
+  highlighted = false,
 }: {
   event: Event;
   allItems: Item[];
@@ -38,9 +37,10 @@ export function NextEventHero({
   onPlanOutfit: () => void;
   onOpenOutfit: () => void;
   isPlanning: boolean;
+  highlighted?: boolean;
 }) {
   const { width: heroWidth } = useWindowDimensions();
-  const heroHeight = Math.round(heroWidth / editorial.lifestyleAspectRatio);
+  const heroHeight = Math.round(heroWidth / editorial.lifestyleAspectRatio * 0.75);
 
   const forecast = useEventWeatherForecast(
     event.location,
@@ -50,9 +50,7 @@ export function NextEventHero({
   const tempUnit = useTempUnit();
 
   const d = new Date(event.date);
-  const dayLabel = formatDayLabel(d);
-  const countdown = formatCountdown(d) ?? (dayLabel === 'Today' || dayLabel === 'Tomorrow' ? dayLabel : null);
-  const eyebrowLine = countdown ? `Up next · ${countdown}` : 'Up next';
+  const eyebrowLine = 'Up next';
   const occasionMeta = OCCASIONS.find((o) => o.id === event.occasion);
   const presentation = presentCalendarEvent(event);
   const hasOutfit = presentation.hasOutfit;
@@ -65,7 +63,6 @@ export function NextEventHero({
   const contextParts = [
     occasionMeta?.label,
     forecast.data ? formatTempRange(forecast.data, tempUnit) : null,
-    event.location,
   ].filter((part): part is string => !!part);
 
   const openOutfitLabel = `${event.outfitId == null ? 'View details' : 'View outfit'} for ${event.title}, ${presentation.readinessLabel}, ${pieceCount} ${pieceCount === 1 ? 'piece' : 'pieces'}`;
@@ -97,7 +94,7 @@ export function NextEventHero({
             <>
               <LinearGradient
                 pointerEvents="none"
-                colors={['transparent', 'rgba(29,27,24,0.34)']}
+                colors={['transparent', 'rgba(29,27,24,0.64)']}
                 style={s.heroScrim}
               />
               <View style={s.heroCaptionOverlay}>
@@ -110,7 +107,7 @@ export function NextEventHero({
       </PressableScale>
 
       <PressableScale
-        contentStyle={s.captionBlock}
+        contentStyle={[s.captionBlock, highlighted && s.captionHighlight]}
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel={openDetailLabel}
@@ -124,8 +121,9 @@ export function NextEventHero({
         <Text style={s.meta}>
           {d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · {formatTime(d)}
         </Text>
+        {event.location ? <Text style={s.location} numberOfLines={2}>{event.location}</Text> : null}
         {contextParts.length > 0 && (
-          <Text style={s.context} numberOfLines={1}>{contextParts.join(' · ')}</Text>
+          <Text style={s.context} numberOfLines={2}>{contextParts.join(' · ')}</Text>
         )}
       </PressableScale>
 
@@ -190,6 +188,12 @@ const s = StyleSheet.create({
     paddingTop: spacing.md,
     gap: 3,
   },
+  captionHighlight: {
+    marginHorizontal: -spacing.page,
+    paddingHorizontal: spacing.page,
+    paddingBottom: spacing.sm,
+    backgroundColor: colors.surfaceSelected,
+  },
   upNext: {
     ...typography.text.eyebrowLarge,
     color: colors.primary,
@@ -199,13 +203,13 @@ const s = StyleSheet.create({
     color: colors.foreground,
   },
   meta: {
-    ...typography.text.meta, color: colors.mutedForeground,
+    ...typography.text.meta, color: colors.foreground,
   },
+  location: { ...typography.text.caption, color: colors.mutedForeground },
   context: {
     ...typography.text.caption,
     color: colors.mutedForeground,
     fontWeight: typography.weight.medium,
-    textTransform: 'capitalize',
   },
 
   planRow: {
