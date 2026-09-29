@@ -841,7 +841,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       {/* ── Featured outfit ────────────────────────────────────── */}
       <EditorialSection
         variant="ruled"
-        headingStyle="masthead"
+        headingStyle="chapter"
         title={dailyLookPresentation.kind === 'priority' ? 'Today’s Priority' : 'Today’s Look'}
         actionLabel={dailyLookPresentation.kind === 'owned' || dailyLookPresentation.kind === 'ready' ? 'All outfits' : undefined}
         onAction={dailyLookPresentation.kind === 'owned' || dailyLookPresentation.kind === 'ready' ? () => navigation.navigate('Closet', {
@@ -952,7 +952,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       {/* ── On the Calendar ───────────────────────────────────────── */}
       <EditorialSection
         variant="ruled"
-        headingStyle="masthead"
+        headingStyle="chapter"
         title="On the Calendar"
         actionLabel="View all"
         onAction={() => navigation.navigate('Calendar')}
@@ -1087,7 +1087,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       */}
       <EditorialSection
         variant="ruled"
-        headingStyle="masthead"
+        headingStyle="chapter"
         title="Your Week in Wear"
       >
         <WearWeekStrip

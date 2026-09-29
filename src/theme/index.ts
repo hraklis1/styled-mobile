@@ -178,6 +178,16 @@ export const typography = {
       lineHeight: 34,
       letterSpacing: -0.15,
     },
+    /**
+     * A section title on a lookbook screen (Home). Sits a clear step under
+     * the 34pt greeting and over the 22pt ledes inside each section.
+     */
+    editorialChapter: {
+      fontFamily: editorialFamily.editorialRegular,
+      fontSize: 26,
+      lineHeight: 32,
+      letterSpacing: -0.1,
+    },
     editorialSection: {
       fontFamily: editorialFamily.editorialRegular,
       fontSize: 22,

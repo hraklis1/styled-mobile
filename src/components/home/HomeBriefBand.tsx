@@ -21,7 +21,9 @@ type Props = {
 
 /**
  * Names the Shop destination a Wardrobe Edit card opens, in the words Shop's
- * own section headings use, with a line on what it is for. The two cards lead
+ * own section headings use, with a line on what it is for. Sentence case, not
+ * tracked caps: the section's serif title is the heading here, and a caps
+ * kicker read as its peer. The two cards lead
  * to different places, so each carries its own sign rather than sharing one.
  */
 function WardrobeEditKicker({ icon, label, purpose }: {
@@ -35,7 +37,7 @@ function WardrobeEditKicker({ icon, label, purpose }: {
         <Ionicons name={icon} size={14} color={colors.accentInk} />
       </View>
       <View style={styles.kickerCopy}>
-        <AppText variant="eyebrow" tone="secondary" numberOfLines={1}>{label}</AppText>
+        <AppText variant="label" tone="primary" numberOfLines={1}>{label}</AppText>
         <AppText variant="meta" tone="muted" numberOfLines={1}>{purpose}</AppText>
       </View>
     </View>
@@ -71,9 +73,8 @@ export function HomeWardrobeEdit({ onBriefPress, shortlist, style }: Props) {
   return (
     <EditorialSection
       variant="ruled"
-      headingStyle="masthead"
+      headingStyle="chapter"
       title="Wardrobe Edit"
-      description="Shortcuts into your Shop tab."
       style={style}
     >
       <View style={styles.cards}>
