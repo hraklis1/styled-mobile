@@ -1058,7 +1058,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       <HomeWardrobeEdit
         onBriefPress={() => {
           track('shop_section_opened', { section: 'home_brief' });
-          navigation.navigate('Shop', { screen: 'ShoppingBriefDetail' });
+          navigation.navigate('Shop', { screen: 'ShoppingBriefDetail', params: { returnTo: 'Home' } });
         }}
         shortlist={shortlist.awaitingDecision.length > 0 ? ({ header, cardStyle }) => (
           <ShortlistDecisionCard

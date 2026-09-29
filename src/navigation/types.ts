@@ -84,7 +84,7 @@ export type ShopStackParamList = {
   ShoppingHaulDetail: { groupKey: string };
   ShoppingCamera: undefined;
   ShoppingVisitReview: { sessionId: string };
-  ShoppingBriefDetail: undefined;
+  ShoppingBriefDetail: { returnTo?: 'Home' } | undefined;
   ShoppingPriorityEdit: {
     priority: ShoppingBriefPriority;
     source?: 'home_daily_look';

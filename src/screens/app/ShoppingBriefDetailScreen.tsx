@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EditorialSection } from '../../components/primitives/Editorial';
@@ -9,23 +9,21 @@ import { useEntitlement } from '../../hooks/useEntitlement';
 import { useItems } from '../../hooks/useItems';
 import { useShoppingBrief } from '../../hooks/useShoppingBrief';
 import { useShoppingFeedback } from '../../hooks/useShoppingFeedback';
+import { useReturnToTab } from '../../hooks/useReturnToTab';
 import { toLocalDateKey } from '../../lib/dailyStylistPick';
 import { shoppingSurfaces, colors, spacing, typography } from '../../theme';
 import { shoppingPriorityRoute, wearableWardrobe, withoutOutfitCount } from '../../lib/shopClarity';
 import { track } from '../../lib/analytics';
 import type { ShoppingBriefDetailScreenProps } from '../../navigation/types';
 
-export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScreenProps) {
+export function ShoppingBriefDetailScreen({ navigation, route }: ShoppingBriefDetailScreenProps) {
   const { isPremium } = useEntitlement();
   const brief = useShoppingBrief(isPremium);
   const feedback = useShoppingFeedback();
   const { data: items = [] } = useItems();
   const wardrobe = useMemo(() => wearableWardrobe(items), [items]);
   const insets = useSafeAreaInsets();
-  const goBack = useCallback(() => {
-    if (navigation.canGoBack()) navigation.goBack();
-    else navigation.replace('ShopMain');
-  }, [navigation]);
+  const goBack = useReturnToTab(navigation, route.params?.returnTo);
   const data = brief.data;
   const pending = feedback.pending.filter(
     (entry) =>
@@ -45,6 +43,7 @@ export function ShoppingBriefDetailScreen({ navigation }: ShoppingBriefDetailScr
           eyebrow="YOUR SHOPPING BRIEF"
           title={data?.headline ?? 'Your shopping brief'}
           onBack={goBack}
+          backLabel={route.params?.returnTo ? `Back to ${route.params.returnTo}` : undefined}
           style={styles.header}
         />
         {!data ? (

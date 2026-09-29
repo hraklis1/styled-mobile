@@ -26,7 +26,6 @@ import {
 } from '@gorhom/bottom-sheet';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
-import { CommonActions, usePreventRemove } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeOut, useReducedMotion } from 'react-native-reanimated';
 
@@ -71,6 +70,7 @@ import {
 import { SHORTLIST_COPY } from '../../lib/shoppingVocabulary';
 import { deleteShoppingSnaps as deleteShoppingSnapsService } from '../../lib/deleteShoppingSnaps';
 import type { ShoppingGalleryScreenProps } from '../../navigation/types';
+import { useReturnToTab } from '../../hooks/useReturnToTab';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import { colors, radii, spacing, typography } from '../../theme';
 import type { ShoppingFindCatalogStatus, ShoppingSnap } from '../../types/shoppingSnap';
@@ -116,7 +116,6 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(() => new Set());
   const [isDeletingSelection, setIsDeletingSelection] = useState(false);
-  const [returningToTab, setReturningToTab] = useState(false);
   const [storeAssignmentTarget, setStoreAssignmentTarget] = useState<ShoppingStoreAssignmentTarget | null>(null);
   const assignShoppingStore = useAssignShoppingStore();
   const [heroHeight, setHeroHeight] = useState(0);
@@ -138,43 +137,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   const reviewReasonFilter: ShoppingReviewReasonKey | 'all' =
     attentionFilter === 'all' || attentionFilter === 'on-this-phone' ? 'all' : attentionFilter;
 
-  // Opened from another tab (Home): backing or swiping out should land there,
-  // not on the Shop tab this screen happens to live in.
-  const returnTo = route.params?.returnTo;
-  usePreventRemove(returnTo != null && !returningToTab, () => {
-    setReturningToTab(true);
-  });
-
-  // Reached from another tab, this screen is the only route on the Shop stack,
-  // so popping it would leave that tab with nothing to render. Put ShopMain in
-  // its place before handing focus back.
-  useEffect(() => {
-    if (!returningToTab || !returnTo) return;
-
-    // Switch tabs first to return focus to the source tab immediately.
-    navigation.dispatch(CommonActions.navigate({ name: returnTo }));
-
-    // Reset the stack of the Shop tab to ShopMain silently in the background
-    // after the tab switch has initiated, avoiding animation transition races.
-    const timeout = setTimeout(() => {
-      navigation.dispatch(
-        CommonActions.reset({
-          index: 0,
-          routes: [{ name: 'ShopMain' }],
-        })
-      );
-    }, 100);
-    return () => clearTimeout(timeout);
-  }, [navigation, returningToTab, returnTo]);
-
-  const goBack = useCallback(() => {
-    if (returnTo) {
-      setReturningToTab(true);
-      return;
-    }
-    if (navigation.canGoBack()) navigation.goBack();
-    else navigation.replace('ShopMain');
-  }, [navigation, returnTo]);
+  const goBack = useReturnToTab(navigation, route.params?.returnTo);
 
   useEffect(() => {
     if (route.params?.resetFilters) {
@@ -537,6 +500,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
             : 'Pieces you photographed while shopping, kept here while you decide.'}
           eyebrow={null}
           onBack={goBack}
+          backLabel={route.params?.returnTo ? `Back to ${route.params.returnTo}` : undefined}
           actions={headerActions}
           style={styles.heroHeader}
         />
@@ -689,6 +653,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
             subtitle={compactState}
             eyebrow={null}
             onBack={goBack}
+            backLabel={route.params?.returnTo ? `Back to ${route.params.returnTo}` : undefined}
             actions={headerActions}
             style={styles.stickyHeaderContent}
           />
