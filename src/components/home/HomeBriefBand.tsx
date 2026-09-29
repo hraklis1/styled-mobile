@@ -6,7 +6,7 @@ import { EditorialSection } from '../primitives/Editorial';
 import { PressableScale } from '../primitives/PressableScale';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useShoppingBrief } from '../../hooks/useShoppingBrief';
-import { colors, spacing } from '../../theme';
+import { colors, radii, shadows, spacing, stroke } from '../../theme';
 import { AppText } from '../primitives/AppText';
 
 type Props = {
@@ -21,9 +21,10 @@ type Props = {
  * Neither half carries its own sub-label: one section label per chapter, and
  * the serif headline and the shortlist card each say what they are.
  *
- * It is the page's one full-bleed tint band — Home alternates image, canvas,
- * tint, canvas — so the change of ground marks the chapter boundary without
- * another rule. Keep the tint to this insert or it stops meaning anything.
+ * It is one floating folio — a single white sheet holding the read and the
+ * decision queue, split by an inset hairline — so the chapter is one object
+ * rather than a card inside a band inside a section. It echoes the matted
+ * print above it: Home alternates mat, canvas, folio, canvas.
  *
  * Home fetches the brief itself rather than waiting for Shop to populate the
  * cache, so a premium user sees it on the first screen of the day without
@@ -45,41 +46,45 @@ export function HomeWardrobeEdit({ onBriefPress, shortlist, style }: Props) {
   if (!hasBrief && !shortlist) return null;
 
   return (
-    <View style={[styles.band, style]}>
-    <EditorialSection variant="ruled" headingStyle="editorial" title="Wardrobe Edit" style={styles.section}>
-      {hasBrief ? (
-        <View style={styles.briefGroup}>
-          <AppText variant="editorialCompact" tone="primary" numberOfLines={2}>{brief.headline}</AppText>
-          <PressableScale
-            haptic={false}
-            contentStyle={styles.link}
-            onPress={onBriefPress}
-            accessibilityRole="button"
-            accessibilityLabel="Read your full shopping brief"
-          >
-            <AppText variant="label" tone="action">Read the brief</AppText>
-            <Ionicons name="arrow-forward" size={13} color={colors.action} />
-          </PressableScale>
-        </View>
-      ) : null}
-      {shortlist ? (
-        <View style={[styles.shortlistGroup, hasBrief && styles.shortlistAfterBrief]}>{shortlist}</View>
-      ) : null}
+    <EditorialSection variant="ruled" headingStyle="masthead" title="Wardrobe Edit" style={style}>
+      {/* Shortlist only: the row carries its own vertical padding. */}
+      <View style={[styles.folio, !hasBrief && styles.folioRowOnly]}>
+        {hasBrief ? (
+          <View style={styles.briefGroup}>
+            <AppText variant="editorialCompact" tone="primary" numberOfLines={2}>{brief.headline}</AppText>
+            <PressableScale
+              haptic={false}
+              contentStyle={styles.link}
+              onPress={onBriefPress}
+              accessibilityRole="button"
+              accessibilityLabel="Read your full shopping brief"
+            >
+              <AppText variant="label" tone="action">Read the brief</AppText>
+              <Ionicons name="arrow-forward" size={13} color={colors.action} />
+            </PressableScale>
+          </View>
+        ) : null}
+        {shortlist ? (
+          <View style={[styles.shortlistGroup, hasBrief && styles.shortlistAfterBrief]}>{shortlist}</View>
+        ) : null}
+      </View>
     </EditorialSection>
-    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  band: {
-    marginHorizontal: -spacing.page,
-    paddingHorizontal: spacing.page,
-    marginTop: spacing.xxl,
-    paddingBottom: spacing.xl,
-    backgroundColor: colors.surfaceSubtle,
+  folio: {
+    paddingHorizontal: spacing.control,
+    paddingTop: spacing.control,
+    paddingBottom: spacing.xs,
+    backgroundColor: colors.card,
+    borderRadius: radii.panel,
+    borderCurve: 'continuous',
+    borderWidth: stroke.hairline,
+    borderColor: colors.border,
+    ...shadows.ambient,
   },
-  // The band supplies the air; the section's own canvas padding would double it.
-  section: { paddingTop: spacing.xl, paddingBottom: 0 },
+  folioRowOnly: { paddingTop: 0 },
   briefGroup: { gap: spacing.sm },
   link: {
     minHeight: 44,
@@ -89,6 +94,10 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   shortlistGroup: { gap: spacing.sm },
-  // The white card is the separation from the brief above it.
-  shortlistAfterBrief: { marginTop: spacing.sm },
+  // An inset hairline, not a second card, separates the read from the queue.
+  shortlistAfterBrief: {
+    marginTop: spacing.xs,
+    borderTopWidth: stroke.hairline,
+    borderTopColor: colors.border,
+  },
 });

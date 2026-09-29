@@ -2,8 +2,10 @@ import { AskStylistButton } from '../../components/home/AskStylistButton';
 import { AddToClosetButton } from '../../components/home/AddToClosetButton';
 import { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import {
+  AccessibilityInfo,
   View,
   Text,
+  Platform,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
@@ -12,8 +14,16 @@ import {
   Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { BlurView } from 'expo-blur';
+import Animated, {
+  Extrapolation,
+  interpolate,
+  runOnJS,
+  useAnimatedProps,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
@@ -48,6 +58,14 @@ import { useEntitlement } from '../../hooks/useEntitlement';
 import { useDismissDailyLook, useResolveDailyLook, useSaveDailyLook, type DailyLookCandidate, type DailyLookResolveInput } from '../../hooks/useDailyLook';
 import { DailyLookDetailSheet } from '../../components/home/DailyLookDetailSheet';
 import { DailyLookCandidateVisual } from '../../components/home/DailyLookCandidateVisual';
+import {
+  LookMat,
+  LookMatAction,
+  LookMatEmpty,
+  LookMatPreparing,
+  WhyThisLook,
+  lookPlateSize,
+} from '../../components/home/TodaysLookPlate';
 import { StylingLocationSheet } from '../../components/home/StylingLocationSheet';
 import { HomeWardrobeEdit } from '../../components/home/HomeBriefBand';
 import { resolveImageUri } from '../../lib/resolveImageUri';
@@ -79,7 +97,7 @@ import {
   recordDailyPick,
   saveDailyPickHistory,
 } from '../../lib/dailyPickHistory';
-import { colors, spacing, typography, radii, editorial } from '../../theme';
+import { colors, spacing, typography, radii } from '../../theme';
 import { PressableScale } from '../../components/primitives/PressableScale';
 import { ActionMenuSheet } from '../../components/primitives/ActionMenuSheet';
 import { ScreenHeader, EditorialSection } from '../../components/primitives/Editorial';
@@ -91,6 +109,8 @@ import type { Outfit } from '../../types/outfit';
 
 const SIDE_PAD = spacing.page;
 const COL_GAP  = spacing.md;
+/** Width of one event column in the calendar rail (before its rule inset). */
+const EVENT_COL_W = 148;
 
 const WEATHER_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
   sunny: 'sunny-outline',
@@ -99,7 +119,16 @@ const WEATHER_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
   mild:  'partly-sunny-outline',
 };
 
+const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/** The masthead dateline over the greeting, e.g. "Monday 28 September". */
+function formatDateline(date: Date): string {
+  const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
+  const month = date.toLocaleDateString('en-US', { month: 'long' });
+  return `${weekday} ${date.getDate()} ${month}`;
+}
 
 function getGreeting(name?: string | null): string {
   const h = new Date().getHours();
@@ -165,6 +194,27 @@ function monogram(name?: string | null): string | undefined {
   return initial ? initial.toUpperCase() : undefined;
 }
 
+/**
+ * A newspaper dateline: weekday and month as a tracked masthead over a serif
+ * numeral. Today swaps the weekday for a walnut "Today" and a small dot, the
+ * one warm signal in the rail.
+ */
+function Dateline({ date, month, day, compact = false }: { date: string; month: string; day: string; compact?: boolean }) {
+  const isToday = formatEventDate(date) === 'Today';
+  const weekday = new Date(date).toLocaleDateString('en-US', { weekday: 'short' });
+  return (
+    <View style={[styles.dateline, compact && styles.datelineCompact]}>
+      <View style={styles.datelineMastRow}>
+        {isToday ? <View style={styles.todayDot} /> : null}
+        <Text style={[styles.datelineMast, isToday && styles.datelineMastToday]} numberOfLines={1}>
+          {isToday ? 'Today' : compact ? month : `${weekday} · ${month}`}
+        </Text>
+      </View>
+      <Text style={[styles.datelineDay, compact && styles.datelineDayCompact]}>{day}</Text>
+    </View>
+  );
+}
+
 export function HomeScreen({ navigation }: HomeScreenProps) {
   const { user } = useAuth();
   const { isPremium } = useEntitlement();
@@ -188,7 +238,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const { fabCollapsed } = useFabScroll();
   const insets = useSafeAreaInsets();
   const lastHomeScrollY = useRef(0);
-  const fabIsCollapsed = useRef(false);
   const [dailyPickDate, setDailyPickDate] = useState(() => toLocalDateKey(new Date()));
   const [dailyPickHistory, setDailyPickHistory] = useState<DailyPickHistoryEntry[]>([]);
   const [dailyPickHistoryLoaded, setDailyPickHistoryLoaded] = useState(false);
@@ -204,7 +253,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   );
 
   useFocusEffect(useCallback(() => {
-    fabIsCollapsed.current = false;
     fabCollapsed.value = 0;
     setDailyPickDate(toLocalDateKey(new Date()));
   }, [fabCollapsed]));
@@ -233,29 +281,57 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     return () => { active = false; };
   }, [user?.id]);
 
-  const handleHomeScroll = useCallback((e: any) => {
-    const y = e.nativeEvent.contentOffset.y;
-    const delta = y - lastHomeScrollY.current;
-    lastHomeScrollY.current = y;
-    if (y <= 10 || delta < -6) {
-      if (fabIsCollapsed.current) {
-        fabIsCollapsed.current = false;
-        fabCollapsed.value = 0;
+  // Scroll runs on the UI thread: it drives the FAB collapse and the status
+  // bar chrome every frame. The JS-side offset (read by the coachmark gate)
+  // only needs to be right once the page settles, so it syncs on drag and
+  // momentum end rather than per frame.
+  const scrollY = useSharedValue(0);
+  const lastScrollY = useSharedValue(0);
+  const syncHomeScrollY = useCallback((y: number) => { lastHomeScrollY.current = y; }, []);
+  const handleHomeScroll = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      const y = event.contentOffset.y;
+      const delta = y - lastScrollY.value;
+      lastScrollY.value = y;
+      scrollY.value = y;
+      if (y <= 10 || delta < -6) {
+        if (fabCollapsed.value !== 0) fabCollapsed.value = 0;
+      } else if (delta > 6) {
+        if (fabCollapsed.value !== 1) fabCollapsed.value = 1;
       }
-    } else if (delta > 6) {
-      if (!fabIsCollapsed.current) {
-        fabIsCollapsed.current = true;
-        fabCollapsed.value = 1;
-      }
-    }
-  }, [fabCollapsed]);
+    },
+    onEndDrag: (event) => { runOnJS(syncHomeScrollY)(event.contentOffset.y); },
+    onMomentumEnd: (event) => { runOnJS(syncHomeScrollY)(event.contentOffset.y); },
+  });
+
+  // Status-bar chrome: clear at rest, frosted as content slides beneath the
+  // Dynamic Island, with a hairline once the page is properly under way.
+  const chromeBlurProps = useAnimatedProps(() => ({
+    intensity: interpolate(scrollY.value, [0, 24], [0, 40], Extrapolation.CLAMP),
+  }));
+  const chromeTintStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scrollY.value, [0, 24], [0, 1], Extrapolation.CLAMP),
+  }));
+  const chromeRuleStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scrollY.value, [32, 64], [0, 1], Extrapolation.CLAMP),
+  }));
+  const [reduceTransparency, setReduceTransparency] = useState(false);
+  useEffect(() => {
+    let active = true;
+    AccessibilityInfo.isReduceTransparencyEnabled()
+      .then((enabled) => { if (active) setReduceTransparency(enabled); })
+      .catch(() => undefined);
+    const subscription = AccessibilityInfo.addEventListener('reduceTransparencyChanged', setReduceTransparency);
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, []);
   const { width, fontScale } = useWindowDimensions();
   const largeText = fontScale > 1.3;
-  // Full-bleed: the hero runs edge to edge rather than sitting inset like the
-  // rest of the page's cards, at the same portrait ratio outfit photography
-  // uses everywhere else in the app.
-  const heroWidth = width;
-  const heroHeight = Math.round(heroWidth / editorial.outfitAspectRatio);
+  // Today's Look runs full-bleed, edge to edge, at the same portrait ratio
+  // outfit photography uses everywhere else in the app.
+  const plate = lookPlateSize(width);
 
   // ── First-run "Add to my closet" coachmark ──────────────────────────────
   // The button lost its standing caption when it shrank to match the stylist
@@ -358,6 +434,15 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     [showNextUpCard, upcomingEvents, nextUpEvent],
   );
 
+  // Snap each column's rule to the page gutter. The first column has no rule
+  // inset; every later one carries COL_GAP of left padding before its rule.
+  const carouselSnapOffsets = useMemo(
+    () => carouselEvents.map((_, index) => (
+      index === 0 ? 0 : EVENT_COL_W + COL_GAP + (index - 1) * (EVENT_COL_W + COL_GAP * 2)
+    )),
+    [carouselEvents],
+  );
+
   const recentOutfits = useMemo(
     () => outfits
       .filter((outfit) => isCompleteWearableOutfit(outfit, items))
@@ -380,10 +465,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     : compactActiveLocation
       ? 'location-outline'
       : undefined;
-  const weatherTempLabel = weather.data ? formatTemp(weather.data.current, tempUnit) : undefined;
-  const weatherPlaceLabel = compactActiveLocation
-    ? [compactActiveLocation, locationBadge].filter(Boolean).join(' · ')
-    : undefined;
   const weatherLocationLine = weather.data
     ? [formatTemp(weather.data.current, tempUnit), compactActiveLocation, locationBadge].filter(Boolean).join(' · ')
     : compactActiveLocation
@@ -525,7 +606,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const candidateGap = dailyLookPresentation.kind === 'incomplete' || dailyLookPresentation.kind === 'priority'
     ? dailyLookPresentation.gap
     : undefined;
-  const hasFeaturedAiImage = !!featuredOutfit?.aiGeneratedImageUrl;
 
   useEffect(() => {
     if (dailyLookDecision.shouldGenerate && dailyLookDecision.trigger) {
@@ -665,10 +745,12 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top + spacing.lg }}>
         <View style={{ paddingHorizontal: SIDE_PAD, gap: spacing.sm, marginBottom: spacing.xl }}>
+          <SkeletonBlock width={140} height={12} borderRadius={2} />
           <SkeletonBlock width={220} height={32} borderRadius={6} />
           <SkeletonBlock width={150} height={16} borderRadius={4} />
         </View>
-        <SkeletonBlock width={pillWidth} height={52} borderRadius={100} style={{ marginHorizontal: SIDE_PAD, marginBottom: spacing.xl }} />
+        <SkeletonBlock width={pillWidth} height={52} borderRadius={100} style={{ marginHorizontal: SIDE_PAD, marginBottom: spacing.md }} />
+        <View style={[styles.skeletonGhostPill, { width: pillWidth }]} />
         <View style={{ paddingHorizontal: SIDE_PAD, marginBottom: spacing.md }}>
           <SkeletonBlock width={120} height={16} borderRadius={4} />
         </View>
@@ -679,7 +761,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
   return (
     <View style={styles.screenRoot}>
-    <ScrollView
+    <Animated.ScrollView
       style={styles.root}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}
       showsVerticalScrollIndicator={false}
@@ -690,6 +772,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       <View style={[styles.headerRow, largeText && styles.headerRowLarge]}>
         <ScreenHeader
           title={getGreeting(user?.displayName)}
+          eyebrow={formatDateline(new Date())}
           titleVariant="display"
           safeTop={false}
           style={[styles.greetingHeader, largeText && styles.greetingHeaderLarge]}
@@ -703,23 +786,13 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               accessibilityLabel={locationAccessibilityLabel}
             >
               {weatherLocationIcon ? (
-                <Ionicons name={weatherLocationIcon} size={13} color={colors.primary} />
+                <Ionicons name={weatherLocationIcon} size={13} color={colors.inkSubtle} />
               ) : null}
-              {weatherTempLabel && weatherPlaceLabel ? (
-                <>
-                  <AppText variant="caption" tone="brand">{weatherTempLabel} · </AppText>
-                  {/* The pin marks the place as the thing the chevron changes. */}
-                  <Ionicons name="location-outline" size={12} color={colors.primary} />
-                  <AppText variant="caption" tone="brand" style={styles.weatherLocationText} numberOfLines={1}>
-                    {weatherPlaceLabel}
-                  </AppText>
-                </>
-              ) : (
-                <AppText variant="caption" tone="brand" style={styles.weatherLocationText} numberOfLines={1}>
-                  {weatherLocationLine}
-                </AppText>
-              )}
-              <Ionicons name="chevron-down" size={13} color={colors.primary} />
+              {/* One chevron marks the whole line as the thing that changes. */}
+              <AppText variant="meta" tone="secondary" style={styles.weatherLocationText} numberOfLines={1}>
+                {weatherLocationLine}
+              </AppText>
+              <Ionicons name="chevron-down" size={12} color={colors.inkSubtle} />
             </TouchableOpacity>
           )}
         />
@@ -768,230 +841,157 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       {/* ── Featured outfit ────────────────────────────────────── */}
       <EditorialSection
         variant="ruled"
-        headingStyle="editorial"
+        headingStyle="masthead"
         title={dailyLookPresentation.kind === 'priority' ? 'Today’s Priority' : 'Today’s Look'}
         actionLabel={dailyLookPresentation.kind === 'owned' || dailyLookPresentation.kind === 'ready' ? 'All outfits' : undefined}
         onAction={dailyLookPresentation.kind === 'owned' || dailyLookPresentation.kind === 'ready' ? () => navigation.navigate('Closet', {
           screen: 'ClosetMain',
           params: { segment: 'outfits' },
         }) : undefined}
-        style={styles.compactEditorialSection}
       >
         {dailyLookIsPreparing ? (
-          <View
-            style={[styles.curatingPlaceholder, { height: heroHeight }]}
-            accessibilityLiveRegion="polite"
-            accessibilityLabel="Curating today’s look"
-          >
-            <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.primary} />
-            <Text style={styles.curatingPlaceholderText}>Curating today’s look…</Text>
-          </View>
+          <LookMatPreparing width={plate.width} height={plate.height} />
         ) : generatedCandidate ? (
-          <Animated.View entering={FadeIn.duration(260)} exiting={FadeOut.duration(200)}>
-          <View style={styles.featuredOutfit}>
-            <PressableScale
-              contentStyle={styles.generatedHeroPressable}
-              onPress={() => {
-                track('daily_look_detail_opened', { candidateId: generatedCandidate.id });
-                setDailyLookSheetVisible(true);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel={`${generatedCandidate.name}. ${generatedCandidate.reason}. Open details`}
-            >
-              <View style={{ width: heroWidth, height: candidateGap && generatedCandidate.readinessStatus === 'priority' ? Math.round(heroHeight * 0.72) : heroHeight }}>
-                {candidateGap ? (
-                  <DailyLookCandidateVisual
-                    candidate={generatedCandidate}
-                    gap={candidateGap}
-                    items={items}
-                    width={heroWidth}
-                    height={generatedCandidate.readinessStatus === 'priority' ? Math.round(heroHeight * 0.72) : heroHeight}
-                    borderRadius={0}
-                  />
-                ) : (
-                  <OutfitCollage
-                    outfit={generatedPreviewOutfit(generatedCandidate)}
-                    size={heroWidth}
-                    height={heroHeight}
-                    borderRadius={0}
-                  />
-                )}
-              </View>
-            </PressableScale>
-            <View style={styles.generatedCaption}>
-              <PressableScale
-                style={styles.generatedCaptionCopy}
-                contentStyle={styles.generatedCaptionCopyInner}
-                haptic={false}
-                scaleTo={0.99}
-                onPress={() => {
-                  track('daily_look_detail_opened', { candidateId: generatedCandidate.id });
-                  setDailyLookSheetVisible(true);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel={`Open ${generatedCandidate.name}`}
-              >
-                <Text style={styles.featuredEyebrow} numberOfLines={1}>
-                  {generatedCandidate.readinessStatus === 'incomplete'
-                    ? 'One piece away'
-                    : generatedCandidate.readinessStatus === 'priority'
-                      ? 'Highest-impact wardrobe gap'
-                      : 'Styled for you today'}
-                </Text>
-                <Text style={styles.featuredOutfitName} numberOfLines={1}>{generatedCandidate.name}</Text>
-                <Text style={styles.generatedReason} numberOfLines={1}>{generatedCandidate.reason}</Text>
-                <View style={styles.openLookHint}>
-                  <Text style={styles.openLookHintText}>Open look</Text>
-                  <Ionicons name="chevron-forward" size={13} color={colors.action} />
-                </View>
-              </PressableScale>
-              <PressableScale
-                contentStyle={styles.saveLookControl}
-                onPress={candidateGap ? handleDailyLookFindPiece : handleDailyLookSave}
+          <LookMat
+            key={`candidate-${generatedCandidate.id}`}
+            largeText={largeText}
+            plate={candidateGap ? (
+              <DailyLookCandidateVisual
+                candidate={generatedCandidate}
+                gap={candidateGap}
+                items={items}
+                width={plate.width}
+                height={generatedCandidate.readinessStatus === 'priority' ? Math.round(plate.height * 0.72) : plate.height}
+                borderRadius={0}
+              />
+            ) : (
+              <OutfitCollage
+                outfit={generatedPreviewOutfit(generatedCandidate)}
+                size={plate.width}
+                height={plate.height}
+                borderRadius={0}
+              />
+            )}
+            eyebrow={generatedCandidate.readinessStatus === 'incomplete'
+              ? 'One piece away'
+              : generatedCandidate.readinessStatus === 'priority'
+                ? 'Highest-impact gap'
+                : 'Styled for you today'}
+            title={generatedCandidate.name}
+            reason={generatedCandidate.reason}
+            onOpen={() => {
+              track('daily_look_detail_opened', { candidateId: generatedCandidate.id });
+              setDailyLookSheetVisible(true);
+            }}
+            accessibilityLabel={`${generatedCandidate.name}. ${generatedCandidate.reason}. Open details`}
+            captionAccessibilityLabel={`Open ${generatedCandidate.name}`}
+            action={candidateGap ? (
+              <LookMatAction
+                icon="search-outline"
+                label={`Find ${candidateGap.label.replaceAll('_', ' ')}`}
+                onPress={handleDailyLookFindPiece}
                 disabled={saveDailyLook.isPending}
-                accessibilityRole="button"
-                accessibilityLabel={candidateGap ? `Find ${candidateGap.label}, suggested and not in your closet` : 'Save look'}
-                accessibilityHint={candidateGap ? 'Open a shopping edit for this missing piece' : 'Save this curated look to your outfits'}
-              >
-                <Ionicons name={candidateGap ? 'search-outline' : 'bookmark-outline'} size={17} color={colors.action} />
-                <Text style={styles.saveLookLabel}>{candidateGap ? `Find ${candidateGap.label.replaceAll('_', ' ')}` : 'Save look'}</Text>
-              </PressableScale>
-            </View>
-          </View>
-          </Animated.View>
+                accessibilityLabel={`Find ${candidateGap.label}, suggested and not in your closet`}
+                accessibilityHint="Open a shopping edit for this missing piece"
+              />
+            ) : (
+              <LookMatAction
+                icon="bookmark-outline"
+                onPress={handleDailyLookSave}
+                disabled={saveDailyLook.isPending}
+                accessibilityLabel="Save look"
+                accessibilityHint="Save this curated look to your outfits"
+              />
+            )}
+          />
         ) : featuredOutfit ? (
-          <Animated.View entering={FadeIn.duration(260)} exiting={FadeOut.duration(200)}>
-          <PressableScale
-            contentStyle={styles.featuredOutfit}
-            onPress={() => navigation.navigate('Closet', {
+          <LookMat
+            key={`outfit-${featuredOutfit.id}`}
+            largeText={largeText}
+            plate={(
+              <OutfitCollage
+                outfit={featuredOutfit}
+                size={plate.width}
+                height={plate.height}
+                borderRadius={0}
+              />
+            )}
+            eyebrow="Styled for you today"
+            title={featuredOutfit.name}
+            reason={featuredReason}
+            onOpen={() => navigation.navigate('Closet', {
               screen: 'OutfitDetail',
               params: { outfitId: featuredOutfit.id, returnTo: 'Home' },
             })}
-            accessibilityRole="button"
             accessibilityLabel={featuredOutfit.name}
-          >
-            <View style={{ width: heroWidth, height: heroHeight }}>
-              <OutfitCollage
-                outfit={featuredOutfit}
-                size={heroWidth}
-                height={heroHeight}
-                borderRadius={0}
-              />
-              {/*
-                Scrim only over a real photo — the mosaic path renders a flat
-                board and a dark-to-transparent ramp over a solid fill bands
-                badly (same rule OutfitHero uses on the detail screen).
-              */}
-              {hasFeaturedAiImage && (
-                <>
-                  <LinearGradient
-                    pointerEvents="none"
-                    colors={['transparent', 'rgba(29,27,24,0.28)', 'rgba(29,27,24,0.62)']}
-                    locations={[0, 0.45, 1]}
-                    style={[styles.heroScrim, { height: Math.round(heroHeight * 0.45) }]}
-                  />
-                  <View style={styles.heroCaptionOverlay}>
-                    <Text style={styles.featuredEyebrowOverlay} numberOfLines={1}>{featuredReason}</Text>
-                    <Text style={styles.featuredOutfitNameOverlay} numberOfLines={1}>{featuredOutfit.name}</Text>
-                    <View style={styles.openLookHint}>
-                      <Text style={styles.openLookHintOverlayText}>Open look</Text>
-                      <Ionicons name="chevron-forward" size={13} color={colors.white} />
-                    </View>
-                  </View>
-                </>
-              )}
-            </View>
-            {!hasFeaturedAiImage && (
-              <View style={styles.featuredOutfitInfo}>
-                <Text style={styles.featuredEyebrow} numberOfLines={1}>{featuredReason}</Text>
-                <Text style={styles.featuredOutfitName} numberOfLines={1}>{featuredOutfit.name}</Text>
-                <View style={styles.openLookHint}>
-                  <Text style={styles.openLookHintText}>Open look</Text>
-                  <Ionicons name="chevron-forward" size={13} color={colors.action} />
-                </View>
-              </View>
-            )}
-          </PressableScale>
-          </Animated.View>
+          />
         ) : (
-          <View style={styles.emptyOutfits}>
-            <View style={[styles.emptyOutfitIcon, { backgroundColor: `${colors.primary}18` }]}>
-              <Ionicons name="layers-outline" size={28} color={colors.primary} />
-            </View>
-            <Text style={styles.emptyOutfitTitle}>
-              {items.length === 0
-                ? 'Your closet is ready for its first look'
-                : outfits.length > 0
-                  ? 'No suitable look for today'
-                  : 'No saved outfits yet'}
-            </Text>
-            <Text style={styles.emptyOutfitSub}>
-              {items.length === 0
-                ? 'Add a few pieces to unlock personalized outfit suggestions.'
-                : outfits.length > 0
-                  ? 'Your stylist won’t force a combination that misses today’s needs.'
-                  : 'Build an outfit from your closet to see it here'}
-            </Text>
-            {items.length === 0 && (
-              <PressableScale
-                contentStyle={styles.emptyOutfitButton}
-                onPress={handleAddToCloset}
-                accessibilityRole="button"
-                accessibilityLabel="Add clothes to unlock outfit suggestions"
-              >
-                <Ionicons name="add" size={16} color={colors.primaryForeground} />
-                <Text style={styles.emptyOutfitButtonText}>Add clothes</Text>
-              </PressableScale>
-            )}
-          </View>
+          <LookMatEmpty
+            width={plate.width}
+            height={Math.round(plate.height * 0.6)}
+            title={items.length === 0
+              ? 'Your closet is ready for its first look'
+              : outfits.length > 0
+                ? 'No suitable look for today'
+                : 'No saved outfits yet'}
+            subtitle={items.length === 0
+              ? 'Add a few pieces to unlock personalized outfit suggestions.'
+              : outfits.length > 0
+                ? 'Your stylist won’t force a combination that misses today’s needs.'
+                : 'Build an outfit from your closet to see it here'}
+            cta={items.length === 0 ? {
+              label: 'Add clothes',
+              accessibilityLabel: 'Add clothes to unlock outfit suggestions',
+              onPress: handleAddToCloset,
+            } : undefined}
+          />
         )}
-        {featuredExplanation ? (
-          <View style={styles.dailyLookExplanation} accessible accessibilityLabel={`Why this look: ${featuredExplanation}`}>
-            <Text style={styles.dailyLookExplanationText} numberOfLines={3}>
-              <Text style={styles.dailyLookExplanationLabel}>Why this look · </Text>
-              {featuredExplanation}
-            </Text>
-          </View>
-        ) : null}
+        {featuredExplanation ? <WhyThisLook explanation={featuredExplanation} /> : null}
       </EditorialSection>
 
       {/* ── On the Calendar ───────────────────────────────────────── */}
       <EditorialSection
         variant="ruled"
-        headingStyle="editorial"
+        headingStyle="masthead"
         title="On the Calendar"
         actionLabel="View all"
         onAction={() => navigation.navigate('Calendar')}
-        style={styles.compactEditorialSection}
       >
         {upcomingEvents.length === 0 ? (
           <PressableScale
-            contentStyle={styles.emptyCard}
+            contentStyle={styles.calendarEmpty}
+            scaleTo={0.99}
+            motion="crisp"
+            haptic={false}
             onPress={() => navigation.navigate('Calendar')}
             accessibilityRole="button"
             accessibilityLabel="No upcoming events. Tap to add one"
           >
-            <View style={styles.emptyIcon}>
-              <Ionicons name="calendar-outline" size={18} color={colors.mutedForeground} />
+            <Text style={styles.calendarEmptyTitle}>Nothing on the calendar yet</Text>
+            <View style={styles.inlineLink}>
+              <Text style={styles.inlineLinkText}>Add an occasion</Text>
+              <Ionicons name="arrow-forward" size={12} color={colors.action} />
             </View>
-            <View style={styles.emptyText}>
-              <Text style={styles.emptyTitle}>No upcoming events</Text>
-              <Text style={styles.emptySubtitle}>Add events to plan outfits ahead</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
           </PressableScale>
         ) : (
           <View style={styles.calendarStack}>
             {showNextUpCard ? (
               <PressableScale
                 contentStyle={styles.nextUpCard}
+                scaleTo={0.99}
+                motion="crisp"
+                haptic={false}
                 onPress={() => navigation.navigate('Calendar', { eventId: nextUpEvent!.id })}
                 accessibilityRole="button"
                 accessibilityLabel={`${nextUpEvent!.title}, ${formatEventDate(nextUpEvent!.date)}. Open in Calendar`}
               >
                 <View style={styles.nextUpDate}>
-                  <Text style={styles.nextUpDay}>{nextUpPresentation!.dayLabel}</Text>
-                  <Text style={styles.eventMonth}>{nextUpPresentation!.monthLabel}</Text>
+                  <Dateline
+                    date={nextUpEvent!.date}
+                    month={nextUpPresentation!.monthLabel}
+                    day={nextUpPresentation!.dayLabel}
+                    compact
+                  />
                 </View>
                 <View style={styles.nextUpCopy}>
                   <Text style={styles.nextUpTitle} numberOfLines={1}>{nextUpEvent!.title}</Text>
@@ -999,7 +999,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                     {nextUpEvent!.outfitId || (nextUpEvent!.itemIds?.length ?? 0) > 0 ? 'Your look is planned' : 'Plan a look for your next occasion'} · {formatEventDate(nextUpEvent!.date)}
                   </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={17} color={colors.primary} />
+                <Ionicons name="chevron-forward" size={15} color={colors.mutedForeground} />
               </PressableScale>
             ) : null}
             {carouselEvents.length > 0 ? (
@@ -1008,37 +1008,41 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                 showsHorizontalScrollIndicator={false}
                 style={styles.carousel}
                 contentContainerStyle={styles.carouselContent}
+                snapToOffsets={carouselSnapOffsets}
+                decelerationRate="fast"
               >
                 {carouselEvents.map((event, index) => {
                   const presentation = presentCalendarEvent(event);
                   const dateLabel = formatEventDate(event.date);
-                  const isToday = dateLabel === 'Today';
                   const when = formatCountdown(new Date(event.date)) ?? dateLabel;
                   const planned = !!event.outfitId || presentation.hasOutfit;
                   return (
                     <PressableScale
                       key={event.id}
                       style={index > 0 && styles.eventColumnRule}
-                      contentStyle={[styles.eventCard, isToday && styles.eventCardToday]}
+                      contentStyle={styles.eventCard}
+                      scaleTo={0.98}
+                      motion="crisp"
+                      haptic={false}
                       onPress={() => navigation.navigate('Calendar', { eventId: event.id })}
                       accessibilityRole="button"
                       accessibilityLabel={`${event.title}, ${dateLabel}, ${occasionLabel(event.occasion)}. ${planned ? 'Look planned' : 'No look planned yet'}`}
                     >
-                      <View style={styles.eventDate}>
-                        <Text style={styles.eventDay}>{presentation.dayLabel}</Text>
-                        <Text style={styles.eventMonth}>{presentation.monthLabel}</Text>
-                      </View>
+                      <Dateline date={event.date} month={presentation.monthLabel} day={presentation.dayLabel} />
                       <Text style={[styles.eventTitle, !largeText && styles.eventTitleTwoLine]} numberOfLines={2}>{event.title.trim()}</Text>
                       <Text style={styles.eventMeta} numberOfLines={largeText ? 2 : 1}>
                         {occasionLabel(event.occasion)} · <Text style={styles.eventWhen}>{when}</Text>
                       </Text>
                       {planned ? (
-                        <View style={styles.eventStatus}>
-                          <Ionicons name="checkmark" size={13} color={colors.mutedForeground} />
-                          <Text style={styles.eventPlanned}>Planned</Text>
+                        <View style={styles.plannedChip}>
+                          <Ionicons name="checkmark" size={11} color={colors.inkSubtle} />
+                          <Text style={styles.plannedChipText}>Planned</Text>
                         </View>
                       ) : (
-                        <Text style={styles.eventPlan}>Plan the look →</Text>
+                        <View style={styles.inlineLink}>
+                          <Text style={styles.inlineLinkText}>Plan the look</Text>
+                          <Ionicons name="arrow-forward" size={12} color={colors.action} />
+                        </View>
                       )}
                     </PressableScale>
                   );
@@ -1058,6 +1062,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         }}
         shortlist={shortlist.awaitingDecision.length > 0 ? (
           <ShortlistDecisionCard
+            variant="row"
             items={shortlist.awaitingDecision}
             storeNames={shortlist.decisionStores}
             onPress={() => {
@@ -1080,9 +1085,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       */}
       <EditorialSection
         variant="ruled"
-        headingStyle="editorial"
+        headingStyle="masthead"
         title="Your Week in Wear"
-        style={styles.compactEditorialSection}
       >
         <WearWeekStrip
           logs={logs}
@@ -1094,17 +1098,21 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         />
       </EditorialSection>
 
-    </ScrollView>
-      <View
-        pointerEvents="none"
-        style={[styles.statusBarMask, { height: insets.top }]}
-      />
-      {/* Content fades out under the status bar instead of a hard crop. */}
-      <LinearGradient
-        pointerEvents="none"
-        colors={[colors.background, 'rgba(246,245,242,0)']}
-        style={[styles.statusBarFade, { top: insets.top }]}
-      />
+    </Animated.ScrollView>
+      {/* Status-bar chrome: content glides under a frosted band, not a hard crop. */}
+      <View pointerEvents="none" style={[styles.chrome, { height: insets.top }]}>
+        {reduceTransparency ? (
+          <Animated.View style={[StyleSheet.absoluteFill, styles.chromeSolid, chromeTintStyle]} />
+        ) : (
+          <AnimatedBlurView
+            animatedProps={chromeBlurProps}
+            tint="systemThinMaterialLight"
+            style={StyleSheet.absoluteFill}
+            {...(Platform.OS === 'android' && { blurMethod: 'dimezisBlurViewSdk31Plus' as const })}
+          />
+        )}
+        <Animated.View style={[styles.chromeRule, chromeRuleStyle]} />
+      </View>
       <DailyLookDetailSheet
         visible={dailyLookSheetVisible && !!generatedCandidate}
         candidate={generatedCandidate}
@@ -1158,55 +1166,53 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
 // ── Styles ───────────────────────────────────────────────────────────────────
 
-// Lifts white overlay type off busy flat lays without a visible halo.
-const overlayTextShadow = {
-  textShadowColor: 'rgba(0,0,0,0.25)',
-  textShadowOffset: { width: 0, height: 1 },
-  textShadowRadius: 8,
-};
-
 const styles = StyleSheet.create({
   screenRoot: { flex: 1, backgroundColor: colors.background },
   root: { flex: 1, backgroundColor: colors.background },
-  statusBarMask: {
+  chrome: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     zIndex: 50,
-    backgroundColor: colors.background,
   },
-  statusBarFade: {
+  chromeSolid: { backgroundColor: colors.chromeTint },
+  chromeRule: {
     position: 'absolute',
     left: 0,
     right: 0,
-    height: 16,
-    zIndex: 50,
+    bottom: 0,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.hairline,
+  },
+  skeletonGhostPill: {
+    height: 52,
+    marginHorizontal: SIDE_PAD,
+    marginBottom: spacing.xl,
+    borderRadius: radii.full,
+    borderWidth: 1,
+    borderColor: colors.ghostStroke,
   },
   content: {
     paddingHorizontal: SIDE_PAD,
     paddingBottom: spacing.xxxl * 2,
   },
-  // One rhythm for every section: ~40pt from the end of one section's content
-  // to the next rule. Cards inside carry no min-heights of their own, so this
-  // is the only thing setting the gap.
-  compactEditorialSection: {
-    paddingTop: spacing.xxl, paddingBottom: spacing.sm,
-  },
+  // An itinerary line between two hairlines, not a floating card.
   nextUpCard: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+    paddingVertical: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
   },
   nextUpDate: {
-    width: 40, alignItems: 'center',
-  },
-  nextUpDay: {
-    ...typography.text.editorialSection,
-    color: colors.foreground,
-    fontVariant: ['tabular-nums'],
+    minWidth: 44,
   },
   nextUpCopy: { flex: 1, gap: 2 },
-  nextUpTitle: { ...typography.text.cardTitle, color: colors.foreground },
-  nextUpSubtitle: { ...typography.text.caption, color: colors.mutedForeground },
+  nextUpTitle: { ...typography.text.editorialCard, color: colors.foreground },
+  nextUpSubtitle: { ...typography.text.meta, color: colors.mutedForeground },
   calendarStack: { gap: spacing.md },
 
   // Greeting
@@ -1289,40 +1295,36 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
   },
 
-  // Empty card (events / generic)
-  emptyCard: {
+  // No events: a ruled line of copy with a way forward, not a grey box.
+  calendarEmpty: {
+    gap: spacing.xs,
+    paddingVertical: spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  calendarEmptyTitle: {
+    ...typography.text.editorialItalic,
+    color: colors.inkSubtle,
+  },
+  inlineLink: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radii.xl,
-    borderCurve: 'continuous',
-    padding: spacing.lg,
+    alignSelf: 'flex-start',
+    gap: 4,
+    paddingTop: 2,
   },
-  emptyIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radii.md,
-    backgroundColor: colors.muted,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyText: { flex: 1, gap: 2 },
-  emptyTitle: {
-    ...typography.text.cardTitle,
-    color: colors.mutedForeground,
-  },
-  emptySubtitle: {
+  inlineLinkText: {
     ...typography.text.caption,
-    color: colors.mutedForeground,
-    opacity: 0.7,
+    fontWeight: typography.weight.semibold,
+    color: colors.action,
   },
 
   // Events carousel
   carousel: { marginHorizontal: -SIDE_PAD },
   carouselContent: { paddingHorizontal: SIDE_PAD, gap: COL_GAP },
   eventCard: {
-    width: 148, paddingBottom: spacing.sm, gap: spacing.xs,
+    width: EVENT_COL_W, paddingBottom: spacing.xs, gap: spacing.xs,
   },
   // A magazine column rule between events — typography, not a container.
   eventColumnRule: {
@@ -1330,22 +1332,33 @@ const styles = StyleSheet.create({
     borderLeftWidth: StyleSheet.hairlineWidth,
     borderLeftColor: colors.border,
   },
-  eventCardToday: {
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.accentInk,
+  // A dateline, not an icon: the serif numeral is what makes the rail
+  // scannable at a glance, the masthead above it says which day.
+  dateline: { gap: 0, marginBottom: 2 },
+  datelineCompact: { alignItems: 'flex-start' },
+  datelineMastRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  datelineMast: {
+    ...typography.text.masthead,
+    letterSpacing: 1.6,
+    color: colors.mutedForeground,
   },
-  // A dateline, not an icon: the serif day numeral is what makes the rail
-  // scannable at a glance.
-  eventDate: {
-    flexDirection: 'row', alignItems: 'baseline', gap: spacing.xs, marginBottom: 2,
+  datelineMastToday: { color: colors.accentInk },
+  todayDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.accentInk,
   },
-  eventDay: {
-    ...typography.text.editorialTitle,
+  datelineDay: {
+    fontFamily: typography.family.editorialRegular,
+    fontSize: 30,
+    lineHeight: 36,
     color: colors.foreground,
     fontVariant: ['tabular-nums'],
   },
-  eventMonth: {
-    ...typography.text.eyebrow,
-    color: colors.mutedForeground,
+  datelineDayCompact: {
+    fontSize: 26,
+    lineHeight: 30,
   },
   eventTitle: {
     ...typography.text.editorialCard,
@@ -1363,180 +1376,21 @@ const styles = StyleSheet.create({
   eventWhen: {
     color: colors.accentInk,
   },
-  eventStatus: {
-    flexDirection: 'row', alignItems: 'center', gap: 3, paddingTop: 2,
-  },
-  eventPlanned: {
-    ...typography.text.caption,
-    color: colors.mutedForeground,
-  },
-  eventPlan: {
-    ...typography.text.caption,
-    fontWeight: typography.weight.semibold,
-    color: colors.action,
-    paddingTop: 2,
-  },
-
-  // Today's Look hero — full-bleed against the screen's own SIDE_PAD inset,
-  // at the app's portrait outfit ratio. No card chrome: it's meant to read
-  // as a photograph, not a container.
-  featuredOutfit: {
-    marginHorizontal: -SIDE_PAD,
-  },
-  generatedHeroPressable: {
-    width: '100%',
-  },
-  generatedCaption: {
-    paddingHorizontal: SIDE_PAD,
-    paddingTop: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  generatedCaptionCopy: {
-    flex: 1,
-  },
-  generatedCaptionCopyInner: {
-    gap: 2,
-  },
-  generatedReason: {
-    ...typography.text.caption,
-    color: colors.mutedForeground,
-  },
-  saveLookControl: {
-    minHeight: 44,
-    paddingHorizontal: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  saveLookLabel: {
-    ...typography.text.label,
-    color: colors.action,
-  },
-  curatingPlaceholder: {
-    minHeight: 120,
-    marginHorizontal: -SIDE_PAD,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.card,
-  },
-  curatingPlaceholderText: {
-    ...typography.text.caption,
-    color: colors.mutedForeground,
-  },
-  // Scrim + overlaid caption path — AI-generated flat lays only. See the
-  // comment above where hasFeaturedAiImage is checked in the JSX.
-  // Height is set inline (~45% of the hero) so the ramp starts well above the
-  // caption on any image; the three stops keep the top of the look untouched.
-  heroScrim: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  heroCaptionOverlay: {
-    position: 'absolute',
-    left: SIDE_PAD,
-    right: SIDE_PAD,
-    bottom: spacing.lg,
-    gap: 2,
-  },
-  openLookHint: {
-    minHeight: 24,
+  plannedChip: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    gap: 2,
-    paddingTop: 2,
+    gap: 3,
+    marginTop: 2,
+    paddingHorizontal: spacing.sm,
+    height: 22,
+    borderRadius: radii.full,
+    borderWidth: 1,
+    borderColor: colors.ghostStroke,
   },
-  openLookHintText: {
+  plannedChipText: {
     ...typography.text.caption,
-    color: colors.action,
-    fontWeight: typography.weight.semibold,
-  },
-  openLookHintOverlayText: {
-    ...typography.text.caption,
-    ...overlayTextShadow,
-    color: colors.white,
-    fontWeight: typography.weight.semibold,
-  },
-  featuredEyebrowOverlay: {
-    ...typography.text.caption,
-    ...overlayTextShadow,
-    color: colors.white,
-    fontWeight: typography.weight.medium,
-  },
-  featuredOutfitNameOverlay: {
-    ...typography.text.editorialTitle,
-    ...overlayTextShadow,
-    color: colors.white,
-  },
-  // Caption-below-image path — the mosaic board, whose flat fill a scrim
-  // would band against.
-  featuredOutfitInfo: {
-    gap: 2,
-    paddingHorizontal: SIDE_PAD,
-    paddingTop: spacing.md,
-  },
-  // Sentence-case meta. Uppercase tracked type is reserved for section
-  // labels now, so it stays a reliable signal for "a new section starts here".
-  featuredEyebrow: {
-    ...typography.text.caption,
-    color: colors.mutedForeground,
-  },
-  featuredOutfitName: {
-    ...typography.text.editorialTitle,
-    color: colors.foreground,
-  },
-  // On the canvas, not in a band — the hero is the only full-bleed block.
-  dailyLookExplanation: {
-    paddingTop: spacing.md,
-  },
-  dailyLookExplanationLabel: {
-    fontFamily: typography.family.editorialMedium,
-    color: colors.accentInk,
-  },
-  dailyLookExplanationText: {
-    fontFamily: typography.family.editorialRegular,
-    fontSize: typography.text.body.fontSize,
-    lineHeight: typography.text.body.lineHeight,
     color: colors.inkSubtle,
   },
 
-  // Empty outfits
-  emptyOutfits: {
-    alignItems: 'center',
-    paddingVertical: spacing.xl,
-    gap: spacing.sm,
-  },
-  emptyOutfitIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: radii.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyOutfitTitle: {
-    ...typography.text.cardTitle,
-    color: colors.foreground,
-    textAlign: 'center',
-  },
-  emptyOutfitSub: {
-    ...typography.text.caption,
-    color: colors.mutedForeground,
-    textAlign: 'center',
-    maxWidth: 220,
-  },
-  emptyOutfitButton: {
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.full,
-    backgroundColor: colors.primary,
-  },
-  emptyOutfitButtonText: { ...typography.text.label, color: colors.primaryForeground },
 });

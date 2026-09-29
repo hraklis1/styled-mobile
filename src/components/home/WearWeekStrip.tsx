@@ -1,11 +1,19 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, {
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { GarmentImage } from '../wardrobe/garment-image';
 import { PressableScale } from '../primitives/PressableScale';
 import { buildWearWeek, type WearWeekDay } from '../../lib/wearWeek';
-import { colors, editorial, radii, spacing, typography } from '../../theme';
+import { colors, editorial, radii, spacing, stroke, surfaces, typography } from '../../theme';
 import type { OutfitLog } from '../../hooks/useOutfitLogs';
 import type { Item } from '../../types/item';
 
@@ -21,6 +29,8 @@ type Props = {
   onOpenEntry: (log: OutfitLog) => void;
   disabled?: boolean;
 };
+
+const COUNT_WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven'];
 
 function longDay(date: Date): string {
   return date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
@@ -42,7 +52,7 @@ export function WearWeekStrip({ logs, items, onLogToday, onLogDay, onOpenEntry, 
   const tileHeight = Math.round(tileWidth / editorial.garmentAspectRatio);
 
   const summary = week.loggedCount > 0
-    ? `${week.loggedCount} of the last 7 days logged`
+    ? `${COUNT_WORDS[week.loggedCount] ?? week.loggedCount} of the last seven days logged`
     : week.lastLog
       ? 'Tap today to log what you’re wearing'
       : 'Start your wear diary — tap today';
@@ -63,23 +73,18 @@ export function WearWeekStrip({ logs, items, onLogToday, onLogDay, onOpenEntry, 
         : () => onLogDay(day.dateKey);
 
     const tile = day.log ? (
-      firstItem ? (
-        <GarmentImage item={firstItem} width={tileWidth} height={tileHeight} borderRadius={radii.sm} placeholderIconSize={14} />
-      ) : (
-        <View style={[styles.plate, { width: tileWidth, height: tileHeight }]}>
+      <View style={[styles.loggedPlate, { width: tileWidth, height: tileHeight }]}>
+        {firstItem ? (
+          <GarmentImage item={firstItem} width={tileWidth} height={tileHeight} borderRadius={radii.photo} placeholderIconSize={14} />
+        ) : (
           <Ionicons name="shirt-outline" size={14} color={colors.mutedForeground} />
-        </View>
-      )
-    ) : (
-      <View
-        style={[
-          styles.plate,
-          { width: tileWidth, height: tileHeight },
-          day.isToday && styles.todayPlate,
-        ]}
-      >
-        {day.isToday ? <Ionicons name="add" size={18} color={colors.accentInk} /> : null}
+        )}
       </View>
+    ) : day.isToday ? (
+      <TodaySlot width={tileWidth} height={tileHeight} />
+    ) : (
+      // An empty day is a stitched outline waiting to be filled, not a grey block.
+      <View style={[styles.slot, { width: tileWidth, height: tileHeight }]} />
     );
 
     return (
@@ -89,6 +94,7 @@ export function WearWeekStrip({ logs, items, onLogToday, onLogDay, onOpenEntry, 
         </Text>
         <PressableScale
           contentStyle={styles.tilePressable}
+          pressedContentStyle={!day.log ? styles.slotPressed : undefined}
           onPress={onPress}
           onLongPress={day.log ? () => onOpenEntry(day.log!) : undefined}
           disabled={disabled}
@@ -113,25 +119,59 @@ export function WearWeekStrip({ logs, items, onLogToday, onLogDay, onOpenEntry, 
   );
 }
 
+/**
+ * Today's open slot. It breathes twice when the strip first appears, the one
+ * cue on the page that says "this is the tile to tap", then settles.
+ */
+function TodaySlot({ width, height }: { width: number; height: number }) {
+  const reduceMotion = useReducedMotion();
+  const opacity = useSharedValue(1);
+  useEffect(() => {
+    if (reduceMotion) return;
+    opacity.value = withRepeat(
+      withSequence(withTiming(0.5, { duration: 1200 }), withTiming(1, { duration: 1200 })),
+      2,
+    );
+  }, [opacity, reduceMotion]);
+  const breath = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return (
+    <Animated.View style={[styles.slot, styles.todaySlot, { width, height }, breath]}>
+      <Ionicons name="add" size={18} color={colors.accentInk} />
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { gap: spacing.md },
   row: { flexDirection: 'row', justifyContent: 'space-between' },
   column: { alignItems: 'center', gap: spacing.xs },
   weekday: {
-    ...typography.text.eyebrow,
+    ...typography.text.masthead,
+    letterSpacing: 1.6,
     color: colors.mutedForeground,
   },
-  tilePressable: { borderRadius: radii.sm },
-  plate: {
+  tilePressable: { borderRadius: radii.photo },
+  loggedPlate: {
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radii.sm,
-    borderCurve: 'continuous',
-    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radii.photo,
+    borderWidth: stroke.hairline,
+    borderColor: colors.border,
+    backgroundColor: surfaces.plate,
   },
-  todayPlate: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
+  // Dashed at 1pt, not hairline: dashed hairlines render broken on iOS.
+  slot: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.photo,
+    borderWidth: stroke.fine,
+    borderStyle: 'dashed',
+    borderColor: colors.stitch,
+  },
+  slotPressed: { backgroundColor: colors.surfaceSubtle },
+  todaySlot: {
+    borderStyle: 'solid',
     borderColor: colors.accentInk,
   },
   dayNumber: {
@@ -151,7 +191,9 @@ const styles = StyleSheet.create({
   },
   hidden: { opacity: 0 },
   summary: {
-    ...typography.text.meta,
-    color: colors.mutedForeground,
+    fontFamily: typography.family.editorialItalic,
+    fontSize: 15,
+    lineHeight: 20,
+    color: colors.inkSubtle,
   },
 });

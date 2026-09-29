@@ -1,4 +1,4 @@
-import { Platform, type TextStyle } from 'react-native';
+import { Platform, StyleSheet, type TextStyle } from 'react-native';
 
 // Shared light palette: warm stone canvas, white surfaces, obsidian actions.
 export const colors = {
@@ -31,6 +31,34 @@ export const colors = {
   tertiary:            '#76716A',
   primaryPressed:      '#3A3A37',
   white:               '#FFFFFF',
+  // Warm charcoal for a filled launcher that sits *in* the page rather than
+  // over it: the stylist entry on Home, which shares a screen with outfit
+  // photography that obsidian ink would outweigh.
+  primarySoft:         '#34322E',
+  primarySoftPressed:  '#2B2926',
+  onPrimarySoftMuted:  'rgba(255,255,255,0.72)',
+  // The 1pt outline on a transparent control sitting on the canvas.
+  ghostStroke:         'rgba(36,36,34,0.22)',
+  // Dashed "stitch line" for an empty slot waiting to be filled.
+  stitch:              'rgba(36,36,34,0.18)',
+  // Translucent chrome when blur is unavailable or Reduce Transparency is on.
+  chromeTint:          'rgba(246,245,242,0.94)',
+} as const;
+
+/**
+ * Line weights. Two, not an ad-hoc mix of 1 / 1.5 / hairline: hairlines rule
+ * and divide, `fine` draws a control's outline or an empty slot.
+ */
+export const stroke = {
+  hairline: StyleSheet.hairlineWidth,
+  fine: 1,
+} as const;
+
+/** Motion durations (ms). Consumers build their own easing. */
+export const motion = {
+  quick: 160,
+  base: 240,
+  slow: 420,
 } as const;
 
 /** Original image/placeholder colors stay independent of control styling. */
@@ -89,6 +117,7 @@ const weight = {
 const editorialFamily = {
   editorialRegular: 'Newsreader_400Regular',
   editorialMedium: 'Newsreader_500Medium',
+  editorialItalic: 'Newsreader_400Regular_Italic',
 } as const;
 
 const tracking = {
@@ -238,6 +267,26 @@ export const typography = {
     eyebrowLarge: {
       fontSize: 12, lineHeight: 17, fontWeight: weight.medium, letterSpacing: 1.2, textTransform: 'uppercase' as const,
     },
+    /**
+     * A magazine department label: small, widely tracked, set in a muted
+     * tone. It is findable because nothing else on the page is tracked this
+     * wide, not because it is big.
+     */
+    masthead: {
+      fontSize: 11, lineHeight: 14, fontWeight: weight.medium, letterSpacing: 2, textTransform: 'uppercase' as const,
+    },
+    /** An italic serif line: a placeholder prompt or a quiet aside. */
+    editorialItalic: {
+      fontFamily: editorialFamily.editorialItalic,
+      fontSize: 17,
+      lineHeight: 22,
+    },
+    /** A single serif initial in a small disc. */
+    monogram: {
+      fontFamily: editorialFamily.editorialMedium,
+      fontSize: 14,
+      lineHeight: 17,
+    },
     /** Sentence-case supporting metadata; uppercase is reserved for eyebrows. */
     meta: {
       fontSize: 12, lineHeight: 17, fontWeight: weight.regular, letterSpacing: 0.2,
@@ -271,6 +320,8 @@ export const radii = {
    * corner treatment. Just enough to take the hard pixel off the corner.
    */
   photo: 2,
+  /** The passe-partout around a featured photograph: square like its plate. */
+  mat: 2,
   action: 9999,
   field: 12,
   bubble: 8,
@@ -354,6 +405,14 @@ export const shadows = {
   actionCard: {
     shadowColor: '#242422', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08, shadowRadius: 12, elevation: 3,
+  },
+  /**
+   * Gallery light: a tight contact shadow plus a wide, faint falloff, so a
+   * mat or folio lifts off the canvas without reading as a floating card.
+   * Layered `boxShadow` renders on both platforms under the new architecture.
+   */
+  ambient: {
+    boxShadow: '0 1px 2px rgba(40,35,31,0.05), 0 14px 32px rgba(40,35,31,0.07)',
   },
   xs: Platform.select({
     ios: {

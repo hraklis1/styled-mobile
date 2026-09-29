@@ -61,7 +61,14 @@ export function ScreenHeader({
   return (
     <View style={[styles.header, safeTop && { paddingTop: insets.top + spacing.md }, stacked && styles.headerStacked, style]}>
       <View style={[styles.headerCopy, stacked && styles.headerCopyStacked]}>
-        {eyebrow ? <AppText variant="eyebrow" tone="brand">{eyebrow}</AppText> : null}
+        {eyebrow ? (
+          <AppText
+            variant={titleVariant === 'display' ? 'masthead' : 'eyebrow'}
+            tone={titleVariant === 'display' ? 'secondary' : 'brand'}
+          >
+            {eyebrow}
+          </AppText>
+        ) : null}
         <AppText
           variant={titleVariant === 'display' ? 'editorialHero' : 'pageTitle'}
           tone="primary"
@@ -123,7 +130,13 @@ export function EditorialSection({
    * label is findable because nothing else on the page looks like it, not
    * because it is the biggest thing around.
    */
-  headingStyle?: 'default' | 'editorial';
+  /**
+   * `masthead` is the lookbook variant of `editorial`: a smaller, wider-
+   * tracked label in a muted ink, more air above the rule, and a quieter
+   * link. Opt-in per screen (Home first) so `editorial` stays as it is
+   * everywhere else.
+   */
+  headingStyle?: 'default' | 'editorial' | 'masthead';
   /** Rendered in the header row in place of an action, e.g. a status badge. */
   trailing?: ReactNode;
   children: ReactNode;
@@ -132,23 +145,28 @@ export function EditorialSection({
   const { width, fontScale } = useWindowDimensions();
   const stacked = width < 360 || fontScale > 1.3;
   const ruled = variant === 'ruled';
-  const editorialHeading = headingStyle === 'editorial';
+  const masthead = headingStyle === 'masthead';
+  const editorialHeading = headingStyle === 'editorial' || masthead;
 
   return (
     <View style={[
-      editorialHeading ? styles.editorialSection : ruled ? styles.ruledSection : styles.section,
+      masthead ? styles.mastheadSection : editorialHeading ? styles.editorialSection : ruled ? styles.ruledSection : styles.section,
       style,
     ]}>
       <View style={[
         styles.sectionHeader,
         editorialHeading ? styles.editorialSectionHeader : null,
+        masthead ? styles.mastheadSectionHeader : null,
         description ? styles.sectionHeaderTight : null,
         stacked && styles.sectionHeaderStacked,
       ]}>
         <AppText
-          variant={editorialHeading ? 'eyebrowLarge' : ruled ? 'eyebrow' : 'sectionTitle'}
-          tone={editorialHeading ? 'primary' : ruled ? 'muted' : 'primary'}
-          style={editorialHeading ? styles.editorialSectionTitle : ruled ? styles.ruledSectionTitle : undefined}
+          variant={masthead ? 'masthead' : editorialHeading ? 'eyebrowLarge' : ruled ? 'eyebrow' : 'sectionTitle'}
+          tone={masthead ? 'secondary' : editorialHeading ? 'primary' : ruled ? 'muted' : 'primary'}
+          style={[
+            editorialHeading ? styles.editorialSectionTitle : ruled ? styles.ruledSectionTitle : undefined,
+            masthead && stacked ? styles.mastheadTitleStacked : undefined,
+          ]}
         >
           {title}
         </AppText>
@@ -170,8 +188,8 @@ export function EditorialSection({
             {/* Quieter than the label it serves: the heading names the
                 section, the link is a way out of it. */}
             <AppText
-              variant={editorialHeading ? 'bodySmall' : 'label'}
-              tone={editorialHeading ? 'secondary' : 'action'}
+              variant={masthead ? 'meta' : editorialHeading ? 'bodySmall' : 'label'}
+              tone={masthead ? 'muted' : editorialHeading ? 'secondary' : 'action'}
               style={styles.sectionActionText}
             >
               {actionLabel}{editorialHeading ? ' →' : ''}
@@ -431,6 +449,18 @@ const styles = StyleSheet.create({
   editorialSectionHeader: {
     minHeight: 22, alignItems: 'flex-end', paddingBottom: spacing.sm, marginBottom: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border,
   },
+  // Lookbook rhythm: more air between chapters, and the label sits a touch
+  // further off its rule so the tracked caps have room to breathe.
+  mastheadSection: {
+    paddingTop: 40,
+    paddingBottom: spacing.lg,
+  },
+  mastheadSectionHeader: {
+    minHeight: 18, paddingBottom: 10, marginBottom: spacing.lg,
+  },
+  // Stacked headers (narrow or large text) give the label its own line, so
+  // pull the tracking in a little to keep long titles on one line at 320pt.
+  mastheadTitleStacked: { letterSpacing: 1.6 },
   sectionHeader: {
     minHeight: 28,
     flexDirection: 'row',

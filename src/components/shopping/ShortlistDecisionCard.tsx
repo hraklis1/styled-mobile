@@ -14,6 +14,11 @@ type Props = {
   storeNames: string[];
   onPress: () => void;
   style?: object;
+  /**
+   * `card` — its own white surface. `row` — no surface of its own, for when
+   * it already sits inside a folio (Home's Wardrobe Edit).
+   */
+  variant?: 'card' | 'row';
 };
 
 /**
@@ -21,7 +26,7 @@ type Props = {
  * decision, absent once they are settled. Home stays about today, so this is a
  * status line — Shop carries the pieces themselves, in `ShortlistCarousel`.
  */
-export function ShortlistDecisionCard({ items, storeNames, onPress, style }: Props) {
+export function ShortlistDecisionCard({ items, storeNames, onPress, style, variant = 'card' }: Props) {
   if (items.length === 0) return null;
 
   const thumbs = items.slice(0, THUMB_LIMIT);
@@ -30,12 +35,13 @@ export function ShortlistDecisionCard({ items, storeNames, onPress, style }: Pro
   return (
     <PressableScale
       style={style}
-      contentStyle={styles.card}
+      contentStyle={variant === 'row' ? undefined : styles.card}
+      scaleTo={variant === 'row' ? 0.99 : undefined}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`The shortlist. ${items.length} piece${items.length === 1 ? '' : 's'} waiting on a decision. Opens your shortlist`}
     >
-      <View style={styles.row}>
+      <View style={[styles.row, variant === 'row' && styles.rowBare]}>
         <View style={[styles.stack, { width: 46 + (thumbs.length - 1) * 24 }]}>
           {thumbs.map((item, index) => (
             <View key={item.id} style={[styles.thumb, { left: index * 24, zIndex: THUMB_LIMIT - index }]}>
@@ -57,7 +63,7 @@ export function ShortlistDecisionCard({ items, storeNames, onPress, style }: Pro
           </Text>
           <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>
         </View>
-        <Ionicons name="chevron-forward" size={17} color={colors.primary} />
+        <Ionicons name="chevron-forward" size={15} color={colors.mutedForeground} />
       </View>
     </PressableScale>
   );
@@ -80,6 +86,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
+  rowBare: { minHeight: 0, paddingHorizontal: 0, paddingVertical: spacing.lg },
   stack: { height: 58 },
   thumb: {
     position: 'absolute',

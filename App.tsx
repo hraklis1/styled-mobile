@@ -4,6 +4,7 @@ import {
   useFonts,
   Newsreader_400Regular,
   Newsreader_500Medium,
+  Newsreader_400Regular_Italic,
 } from '@expo-google-fonts/newsreader';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -39,6 +40,7 @@ function App() {
   const [fontsLoaded, fontError] = useFonts({
     Newsreader_400Regular,
     Newsreader_500Medium,
+    Newsreader_400Regular_Italic,
   });
 
   if (!fontsLoaded && !fontError) return null;
