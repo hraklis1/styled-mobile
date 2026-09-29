@@ -11,8 +11,6 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  TextInput,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -21,7 +19,8 @@ import {
 import {
   BottomSheetBackdrop,
   BottomSheetModal,
-  BottomSheetView,
+  BottomSheetScrollView,
+  BottomSheetTextInput,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 import * as Haptics from 'expo-haptics';
@@ -691,19 +690,23 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
         ref={filterSheetRef}
         index={0}
         snapPoints={['70%']}
+        enableDynamicSizing={false}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
         backdropComponent={renderBackdrop}
         enablePanDownToClose
         backgroundStyle={styles.filterSheetBackground}
         handleIndicatorStyle={styles.filterSheetHandle}
       >
-        <BottomSheetView style={{ flex: 1 }}><ScrollView contentContainerStyle={styles.filterSheetContent} keyboardShouldPersistTaps="handled">
+        <BottomSheetScrollView contentContainerStyle={styles.filterSheetContent} keyboardShouldPersistTaps="handled">
           <AppText variant="sheetTitle" tone="primary">Refine your shortlist</AppText>
 
           <AppText variant="eyebrow" tone="muted">CATEGORY</AppText>
           <OptionChips options={[{ value: '', label: 'All categories' }, ...[...new Set(allItems.map((item) => item.category).filter((value): value is string => Boolean(value)))].map((value) => ({ value, label: value }))]} value={category} onSelect={setCategory} />
           <AppText variant="eyebrow" tone="muted">PRICE AND CURRENCY</AppText>
-          <TextInput value={currency} onChangeText={(value) => setCurrency(value.toUpperCase())} autoCapitalize="characters" maxLength={3} placeholder="Currency, e.g. CAD" accessibilityLabel="Price filter currency" style={{ minHeight: 44, color: colors.foreground }} />
-          <View style={{ flexDirection: 'row', gap: 12 }}>{[{ value: minimum, set: setMinimum, label: 'Minimum' }, { value: maximum, set: setMaximum, label: 'Maximum' }].map((field) => <TextInput key={field.label} value={field.value} onChangeText={field.set} editable={currency.length === 3} keyboardType="decimal-pad" placeholder={field.label} accessibilityLabel={field.label + ' price'} style={{ flex: 1, minHeight: 44, color: colors.foreground }} />)}</View>
+          <BottomSheetTextInput value={currency} onChangeText={(value) => setCurrency(value.toUpperCase())} autoCapitalize="characters" maxLength={3} placeholder="Currency, e.g. CAD" accessibilityLabel="Price filter currency" style={{ minHeight: 44, color: colors.foreground }} />
+          <View style={{ flexDirection: 'row', gap: 12 }}>{[{ value: minimum, set: setMinimum, label: 'Minimum' }, { value: maximum, set: setMaximum, label: 'Maximum' }].map((field) => <BottomSheetTextInput key={field.label} value={field.value} onChangeText={field.set} editable={currency.length === 3} keyboardType="decimal-pad" placeholder={field.label} accessibilityLabel={field.label + ' price'} style={{ flex: 1, minHeight: 44, color: colors.foreground }} />)}</View>
           <OptionChips options={[{ value: 'newest', label: 'Newest first' }, { value: 'oldest', label: 'Oldest first' }]} value={oldest ? 'oldest' : 'newest'} onSelect={(value) => setOldest(value === 'oldest')} />
           <AppText variant="eyebrow" tone="muted" style={styles.filterGroupLabel}>WHEN</AppText>
           <OptionChips
@@ -747,7 +750,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
           <TouchableOpacity style={styles.doneButton} onPress={() => filterSheetRef.current?.dismiss()}>
             <Text style={styles.doneButtonText}>Show {filteredItems.length} piece{filteredItems.length === 1 ? '' : 's'}</Text>
           </TouchableOpacity>
-        </ScrollView></BottomSheetView>
+        </BottomSheetScrollView>
       </BottomSheetModal>
 
       <ShoppingStoreFilterSheet
