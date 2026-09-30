@@ -20,6 +20,7 @@ export type RowActions = {
   confirm: (detectionId: string, itemId: number) => void;
   findInCloset: (detectionId: string) => void;
   addAsNew: (detectionId: string) => void;
+  editNew: (detectionId: string) => void;
   dismiss: (detectionId: string) => void;
   restore: (detectionId: string) => void;
   clear: (detectionId: string) => void;
@@ -111,7 +112,10 @@ export const PairingRow = memo(function PairingRow({
 }) {
   const swipe = useRef<SwipeableMethods>(null);
   const id = detection.id;
-  const hold = holdCopy(detection, occluder);
+  // Why the match was held back only matters while the match is still in question.
+  const hold = resolution.kind === 'unresolved' || (resolution.kind === 'matched' && resolution.source === 'suggested')
+    ? holdCopy(detection, occluder)
+    : null;
   const indent = detection.occludedBy != null;
 
   if (resolution.kind === 'dismissed') {
@@ -161,15 +165,24 @@ export const PairingRow = memo(function PairingRow({
       </View>
     );
   } else if (resolution.kind === 'new') {
+    const { draft } = resolution;
     right = (
       <View style={styles.side}>
-        <View style={[styles.slot, styles.slotNew]}>
-          <Ionicons name="add" size={18} color={colors.foreground} />
-        </View>
-        <Text style={styles.itemName}>New to your closet</Text>
-        <Text style={styles.meta}>Added when you log</Text>
-        <View style={styles.links}>
-          <TextLink label="Undo" tone="muted" onPress={() => actions.clear(id)} />
+        <View style={styles.matchLine}>
+          <View style={[styles.slot, styles.slotNew]}>
+            <Ionicons name="add" size={18} color={colors.foreground} />
+          </View>
+          <View style={styles.matchText}>
+            <Text style={styles.itemName} numberOfLines={2}>{draft.name || detection.attributes.name}</Text>
+            <Text style={styles.meta} numberOfLines={1}>
+              {[draft.brand || null, 'New piece'].filter(Boolean).join(' · ')}
+            </Text>
+            <View style={styles.links}>
+              <TextLink label="Edit details" onPress={() => actions.editNew(id)} />
+              <Middot />
+              <TextLink label="Undo" tone="muted" onPress={() => actions.clear(id)} accessibilityLabel={`Don’t add ${draft.name} as new`} />
+            </View>
+          </View>
         </View>
       </View>
     );

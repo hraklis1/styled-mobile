@@ -22,6 +22,7 @@ import { discardWearFlow, retryWearScan } from '../../../features/wear-log/runne
 import { dispatchWear, useWearLogStore } from '../../../features/wear-log/store';
 import type { ReviewFlow } from '../../../features/wear-log/types';
 import { ClosetMatchSheet } from './ClosetMatchSheet';
+import { NewPieceSheet } from './NewPieceSheet';
 import { PairingRow, type RowActions } from './PairingRow';
 import { PhotoHero } from './PhotoHero';
 
@@ -169,6 +170,7 @@ function Review({ flow, heroHeight, width, insets, reduceMotion, onClose }: {
     confirm: (detectionId, itemId) => dispatchWear({ type: 'confirm', detectionId, itemId }),
     findInCloset: (detectionId) => dispatchWear({ type: 'openResolve', detectionId, mode: 'library' }),
     addAsNew: (detectionId) => dispatchWear({ type: 'markNew', detectionId }),
+    editNew: (detectionId) => dispatchWear({ type: 'openResolve', detectionId, mode: 'new' }),
     clear: (detectionId) => dispatchWear({ type: 'clear', detectionId }),
     dismiss: (detectionId) => {
       dispatchWear({ type: 'dismiss', detectionId });
@@ -205,6 +207,9 @@ function Review({ flow, heroHeight, width, insets, reduceMotion, onClose }: {
     }
   }, [qc]);
 
+  const scanBrands = useMemo(() => [...new Set(
+    Object.values(flow.resolutions).flatMap((r) => (r.kind === 'new' && r.draft.brand ? [r.draft.brand] : [])),
+  )], [flow.resolutions]);
   const resolving = flow.resolving ? byId.get(flow.resolving.detectionId) : undefined;
   const resolvingCurrent = flow.resolving ? flow.resolutions[flow.resolving.detectionId] : undefined;
   const choice = dateChoice(flow.date);
@@ -223,8 +228,13 @@ function Review({ flow, heroHeight, width, insets, reduceMotion, onClose }: {
         onClose={onClose}
         right={<TextLink label="Retake" tone="muted" onPress={() => { discardWearFlow(); onClose(); }} />}
       />
+      {/* Content in its own flex box: the sheet hosts below are siblings of
+          it, as in the Add Clothing workspace, so presenting one never takes
+          layout from the list. */}
+      <View style={styles.body}>
       <FlatList
         ref={listRef}
+        style={styles.body}
         data={visible}
         keyExtractor={(d) => d.id}
         onScrollToIndexFailed={() => {}}
@@ -313,7 +323,11 @@ function Review({ flow, heroHeight, width, insets, reduceMotion, onClose }: {
           }}
         />
       </View>
+      </View>
 
+      {/* The native sheet host is zero-size and out of flow: in the logger's
+          page sheet a sibling host otherwise takes the list's height. */}
+      <View style={styles.sheetHost} pointerEvents="box-none">
       {resolving && flow.resolving?.mode === 'library' ? (
         <ClosetMatchSheet
           key={resolving.id}
@@ -322,9 +336,21 @@ function Review({ flow, heroHeight, width, insets, reduceMotion, onClose }: {
           currentItemId={resolvingCurrent?.kind === 'matched' ? resolvingCurrent.itemId : null}
           reduceMotion={reduceMotion}
           onPick={(itemId) => dispatchWear({ type: 'confirm', detectionId: resolving.id, itemId })}
+          onAddNew={() => dispatchWear({ type: 'markNew', detectionId: resolving.id })}
+          onClose={() => dispatchWear({ type: 'closeResolve' })}
+        />
+      ) : resolving && flow.resolving?.mode === 'new' && resolvingCurrent?.kind === 'new' ? (
+        <NewPieceSheet
+          key={resolving.id}
+          detection={resolving}
+          draft={resolvingCurrent.draft}
+          scanBrands={scanBrands}
+          reduceMotion={reduceMotion}
+          onChange={(patch) => dispatchWear({ type: 'editDraft', detectionId: resolving.id, patch })}
           onClose={() => dispatchWear({ type: 'closeResolve' })}
         />
       ) : null}
+      </View>
     </GestureHandlerRootView>
   );
 }
@@ -354,6 +380,8 @@ function Logged({ flow, topInset, onDone }: {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
+  body: { flex: 1 },
+  sheetHost: { position: 'absolute', width: 0, height: 0 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

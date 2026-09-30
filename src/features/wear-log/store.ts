@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { createMMKV } from 'react-native-mmkv';
-import { IDLE, reduce } from './reducer';
-import type { WearEvent, WearFlow } from './types';
+import { draftFrom, IDLE, reduce } from './reducer';
+import type { Resolution, ReviewFlow, WearEvent, WearFlow } from './types';
 
 const mmkv = createMMKV({ id: 'styled.wear-log' });
 
@@ -17,11 +17,21 @@ export const REVIEW_MAX_AGE_MS = 24 * 60 * 60 * 1000;
  */
 export function rehydrateFlow(flow: WearFlow | undefined, now: number): WearFlow {
   if (!flow) return IDLE;
-  if (flow.status === 'saving') return { ...flow, status: 'reviewing', resolving: null };
+  if (flow.status === 'saving') return withDrafts({ ...flow, status: 'reviewing', resolving: null });
   if (flow.status === 'reviewing') {
-    return now - flow.updatedAt > REVIEW_MAX_AGE_MS ? IDLE : { ...flow, resolving: null };
+    return now - flow.updatedAt > REVIEW_MAX_AGE_MS ? IDLE : withDrafts({ ...flow, resolving: null });
   }
   return IDLE;
+}
+
+/** Reviews saved before drafts existed hold `{ kind: 'new' }` alone. */
+function withDrafts(flow: ReviewFlow): ReviewFlow {
+  const resolutions: Record<string, Resolution> = {};
+  for (const d of flow.scan.detections) {
+    const r = flow.resolutions[d.id] as Resolution | { kind: 'new'; draft?: undefined } | undefined;
+    resolutions[d.id] = r?.kind === 'new' && !r.draft ? { kind: 'new', draft: draftFrom(d) } : (r ?? { kind: 'unresolved' }) as Resolution;
+  }
+  return { ...flow, resolutions };
 }
 
 type WearLogState = {

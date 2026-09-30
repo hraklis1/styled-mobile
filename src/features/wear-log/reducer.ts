@@ -1,4 +1,5 @@
-import type { Resolution, ReviewFlow, WearDetection, WearEvent, WearFlow, WearScan } from './types';
+import { normalizeScanCategory } from '../../lib/outfit-log-scan';
+import type { Resolution, ReviewFlow, WearDetection, WearDraft, WearEvent, WearFlow, WearScan } from './types';
 
 export const IDLE: WearFlow = { status: 'idle' };
 
@@ -8,6 +9,25 @@ export function initialResolution(d: WearDetection): Resolution {
   if (d.match.band === 'high') return { kind: 'matched', itemId: d.match.itemId, source: 'auto' };
   if (d.match.band === 'medium') return { kind: 'matched', itemId: d.match.itemId, source: 'suggested' };
   return { kind: 'unresolved' };
+}
+
+/** A new piece starts as what the scan saw; everything else is left for the user. */
+export function draftFrom(d: WearDetection): WearDraft {
+  return {
+    name: d.attributes.name,
+    brand: '',
+    category: normalizeScanCategory(d.attributes.category),
+    subcategory: null,
+    color: d.attributes.color || null,
+    colorNormalized: null,
+    style: null,
+    seasons: [],
+    occasions: [],
+    material: null,
+    fit: null,
+    sizeProfile: null,
+    sleeveLength: null,
+  };
 }
 
 export function initialResolutions(scan: WearScan): Record<string, Resolution> {
@@ -66,9 +86,29 @@ export function reduce(flow: WearFlow, event: WearEvent): WearFlow {
       if (!inReview(flow)) return flow;
       return resolve(flow, event.detectionId, { kind: 'matched', itemId: event.itemId, source: 'user' });
 
-    case 'markNew':
+    case 'markNew': {
       if (!inReview(flow)) return flow;
-      return resolve(flow, event.detectionId, { kind: 'new' });
+      const current = flow.resolutions[event.detectionId];
+      const detection = flow.scan.detections.find((d) => d.id === event.detectionId);
+      if (!detection) return flow;
+      // Re-choosing "Add as new" keeps the edits already made to the draft.
+      const draft = current?.kind === 'new' ? current.draft : draftFrom(detection);
+      return {
+        ...resolve(flow, event.detectionId, { kind: 'new', draft }),
+        resolving: { detectionId: event.detectionId, mode: 'new' },
+      };
+    }
+
+    case 'editDraft': {
+      if (!inReview(flow)) return flow;
+      const current = flow.resolutions[event.detectionId];
+      if (current?.kind !== 'new') return flow;
+      return {
+        ...flow,
+        resolutions: { ...flow.resolutions, [event.detectionId]: { kind: 'new', draft: { ...current.draft, ...event.patch } } },
+        saveError: null,
+      };
+    }
 
     case 'clear':
       if (!inReview(flow)) return flow;

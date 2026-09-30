@@ -1,3 +1,6 @@
+import type { SizeProfile } from '../../lib/sizes';
+import type { SleeveLength } from '../../types/item';
+
 // The outfit-log scan's v2 contract (server/vision/wearScan.ts in ../Styled)
 // and the review flow built on it.
 
@@ -29,6 +32,27 @@ export type WearScan = {
 };
 
 /**
+ * A new closet piece being described before it's logged: the Add Clothing
+ * spec fields, seeded from what the scan saw. Saved with the review, so an
+ * edit survives closing the app, and only created when the log is saved.
+ */
+export type WearDraft = {
+  name: string;
+  brand: string;
+  category: string | null;
+  subcategory: string | null;
+  color: string | null;
+  colorNormalized: string | null;
+  style: string | null;
+  seasons: string[];
+  occasions: string[];
+  material: string | null;
+  fit: string | null;
+  sizeProfile: SizeProfile | null;
+  sleeveLength: SleeveLength | null;
+};
+
+/**
  * What the user has decided for one detection. `suggested` is a medium match
  * applied on the user's behalf: it logs as a match, but the Check filter keeps
  * it in view until confirmed or changed.
@@ -36,7 +60,7 @@ export type WearScan = {
 export type Resolution =
   | { kind: 'unresolved' }
   | { kind: 'matched'; itemId: number; source: 'auto' | 'suggested' | 'user' }
-  | { kind: 'new' }
+  | { kind: 'new'; draft: WearDraft }
   | { kind: 'dismissed'; previous: Exclude<Resolution, { kind: 'dismissed' }> };
 
 export type ResolveMode = 'library' | 'new';
@@ -68,6 +92,7 @@ export type WearEvent =
   | { type: 'openResolve'; detectionId: string; mode: ResolveMode }
   | { type: 'closeResolve' }
   | { type: 'markNew'; detectionId: string }
+  | { type: 'editDraft'; detectionId: string; patch: Partial<WearDraft> }
   | { type: 'clear'; detectionId: string }
   | { type: 'dismiss'; detectionId: string }
   | { type: 'restore'; detectionId: string }

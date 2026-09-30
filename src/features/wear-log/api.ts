@@ -2,8 +2,8 @@ import { api } from '../../lib/api';
 import { createItemsBatch, type BatchCreateItemInput } from '../../hooks/useItems';
 import { normalizeScanCategory } from '../../lib/outfit-log-scan';
 import type { Item } from '../../types/item';
-import { clientImportIdFor, matchedItemIds, newDetections } from './reducer';
-import type { ReviewFlow, WearDetection, WearScan } from './types';
+import { clientImportIdFor, draftFrom, matchedItemIds, newDetections } from './reducer';
+import type { ReviewFlow, WearDetection, WearDraft, WearScan } from './types';
 
 /** SAM 3 + matching; same budget as the closet scan's extraction. */
 const WEAR_SCAN_TIMEOUT_MS = 120_000;
@@ -24,18 +24,26 @@ export async function scanWear(flowId: string, imageData: string): Promise<WearS
   return data;
 }
 
-/** A new closet item seeded from what the scan saw. */
-export function newItemInput(flowId: string, d: WearDetection): BatchCreateItemInput {
+/** The closet item a "new" row becomes: the user's draft plus the scan's cutout. */
+export function newItemInput(flowId: string, d: WearDetection, draft: WearDraft): BatchCreateItemInput {
   return {
     clientImportId: clientImportIdFor(flowId, d.id),
-    name: d.attributes.name,
-    category: normalizeScanCategory(d.attributes.category),
-    color: d.attributes.color || null,
+    name: draft.name.trim() || d.attributes.name,
+    brand: draft.brand.trim() || null,
+    category: normalizeScanCategory(draft.category ?? d.attributes.category),
+    subcategory: draft.subcategory,
+    color: draft.color,
+    colorNormalized: draft.colorNormalized,
+    style: draft.style,
+    seasons: draft.seasons,
+    occasions: draft.occasions,
+    material: draft.material,
+    fit: draft.fit,
+    sizeProfile: draft.sizeProfile,
+    sleeveLength: draft.sleeveLength,
     notes: d.attributes.description || null,
     cutoutUrl: d.cutoutUrl,
     coverImageVariant: d.cutoutUrl ? 'cutout' : 'original',
-    seasons: [],
-    occasions: [],
   };
 }
 
@@ -55,7 +63,10 @@ export async function saveWearLog(flow: ReviewFlow): Promise<WearLogSaved> {
   const drafts = newDetections(flow);
   let createdItems: Item[] = [];
   if (drafts.length) {
-    const result = await createItemsBatch(drafts.map((d) => newItemInput(flow.id, d)));
+    const result = await createItemsBatch(drafts.map((d) => {
+      const r = flow.resolutions[d.id];
+      return newItemInput(flow.id, d, r.kind === 'new' ? r.draft : draftFrom(d));
+    }));
     if (result.rejected.length) throw new Error(result.rejected[0].message || 'Couldn’t add a new piece.');
     createdItems = result.items;
   }

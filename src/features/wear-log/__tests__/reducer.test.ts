@@ -2,7 +2,7 @@ jest.mock('react-native-mmkv', () => ({
   createMMKV: () => ({ getString: jest.fn(), set: jest.fn(), remove: jest.fn() }),
 }));
 
-import { canLog, clientImportIdFor, IDLE, matchedItemIds, needsCheck, orderedDetections, reduce, reviewCounts, sharedMatch } from '../reducer';
+import { canLog, clientImportIdFor, draftFrom, IDLE, matchedItemIds, needsCheck, orderedDetections, reduce, reviewCounts, sharedMatch } from '../reducer';
 import { REVIEW_MAX_AGE_MS, rehydrateFlow } from '../store';
 import type { ReviewFlow, WearDetection, WearFlow, WearScan } from '../types';
 
@@ -86,6 +86,30 @@ describe('wear-log reducer', () => {
     expect(reviewCounts(flow)).toMatchObject({ unresolved: 0, toCheck: 1, logging: 4, newItems: 1 });
   });
 
+  it('Add as new seeds a draft from the scan and opens it for editing', () => {
+    const flow = reduce(reviewing(), { type: 'markNew', detectionId: 'd2' }) as ReviewFlow;
+    expect(flow.resolving).toEqual({ detectionId: 'd2', mode: 'new' });
+    expect(flow.resolutions.d2).toMatchObject({ kind: 'new', draft: { name: 'd2', category: 'top', color: 'black', brand: '' } });
+  });
+
+  it('draft edits persist, and re-choosing Add as new keeps them', () => {
+    let flow = reduce(reviewing(), { type: 'markNew', detectionId: 'd2' }) as ReviewFlow;
+    flow = reduce(flow, { type: 'editDraft', detectionId: 'd2', patch: { brand: 'COS', material: 'Wool' } }) as ReviewFlow;
+    flow = reduce(flow, { type: 'clear', detectionId: 'd2' }) as ReviewFlow;
+    expect(flow.resolutions.d2).toEqual({ kind: 'unresolved' });
+    flow = reduce(flow, { type: 'markNew', detectionId: 'd2' }) as ReviewFlow;
+    // Clearing drops the draft; only an uncleared re-open keeps it.
+    expect(flow.resolutions.d2).toMatchObject({ draft: { brand: '' } });
+    flow = reduce(flow, { type: 'editDraft', detectionId: 'd2', patch: { brand: 'COS' } }) as ReviewFlow;
+    flow = reduce(flow, { type: 'markNew', detectionId: 'd2' }) as ReviewFlow;
+    expect(flow.resolutions.d2).toMatchObject({ draft: { brand: 'COS' } });
+  });
+
+  it('editDraft is ignored for rows that are not new', () => {
+    const before = reviewing();
+    expect(reduce(before, { type: 'editDraft', detectionId: 'd0', patch: { brand: 'X' } })).toBe(before);
+  });
+
   it('a failed save returns to review with nothing lost', () => {
     const ready = reduce(reviewing(), { type: 'dismiss', detectionId: 'd2' }) as ReviewFlow;
     const saving = reduce(ready, { type: 'saveStarted' });
@@ -118,7 +142,7 @@ describe('wear-log reducer', () => {
     expect(needsCheck({ kind: 'unresolved' })).toBe(true);
     expect(needsCheck({ kind: 'matched', itemId: 1, source: 'suggested' })).toBe(true);
     expect(needsCheck({ kind: 'matched', itemId: 1, source: 'user' })).toBe(false);
-    expect(needsCheck({ kind: 'new' })).toBe(false);
+    expect(needsCheck({ kind: 'new', draft: draftFrom(det('d9', 'low', null)) })).toBe(false);
   });
 });
 
@@ -133,6 +157,13 @@ describe('wear-log persistence', () => {
     const flow = reviewing();
     expect(rehydrateFlow(flow, flow.updatedAt + REVIEW_MAX_AGE_MS + 1)).toEqual(IDLE);
     expect(rehydrateFlow({ status: 'processing', id: 'a', photoUri: 'x', date: 'd', startedAt: 1 }, 2)).toEqual(IDLE);
+  });
+
+  it('gives a draft to a new piece saved before drafts existed', () => {
+    const flow = reviewing();
+    const legacy = { ...flow, resolutions: { ...flow.resolutions, d2: { kind: 'new' } } } as unknown as WearFlow;
+    const restored = rehydrateFlow(legacy, flow.updatedAt) as ReviewFlow;
+    expect(restored.resolutions.d2).toMatchObject({ kind: 'new', draft: { name: 'd2' } });
   });
 
   it('builds import ids the server accepts', () => {

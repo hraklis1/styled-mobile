@@ -3,7 +3,7 @@ import { FlatList, Pressable, StyleSheet, Text, TextInput, View, useWindowDimens
 import { Image } from 'expo-image';
 
 import { WorkspaceSheet } from '../../wardrobe/scan-review/WorkspaceSheet';
-import { TextSegment } from '../../wardrobe/scan-review/atoms';
+import { TextLink, TextSegment } from '../../wardrobe/scan-review/atoms';
 import { selectionFeedback } from '../../wardrobe/scan-review/feedback';
 import { itemImageContentFit, itemImageUri } from '../../../lib/itemImage';
 import { normalizeScanCategory } from '../../../lib/outfit-log-scan';
@@ -21,18 +21,21 @@ type Scope = 'category' | 'all';
  * default, with the scan's own candidates first. One tap decides the row and
  * closes the sheet; Done closes it without changing anything.
  */
-export function ClosetMatchSheet({ detection, items, currentItemId, reduceMotion, onPick, onClose }: {
+export function ClosetMatchSheet({ detection, items, currentItemId, reduceMotion, onPick, onAddNew, onClose }: {
   detection: WearDetection;
   items: Item[];
   currentItemId: number | null;
   reduceMotion: boolean;
   onPick: (itemId: number) => void;
+  /** Runs after this sheet has finished closing, so the next one can present. */
+  onAddNew: () => void;
   onClose: () => void;
 }) {
   const { width } = useWindowDimensions();
   const [query, setQuery] = useState('');
   const [scope, setScope] = useState<Scope>('category');
   const [dismissed, setDismissed] = useState(false);
+  const [addNewAfterClose, setAddNewAfterClose] = useState(false);
   const category = normalizeScanCategory(detection.attributes.category);
   const tile = (width - spacing.lg * 2 - GAP * (COLS - 1)) / COLS;
 
@@ -63,7 +66,13 @@ export function ClosetMatchSheet({ detection, items, currentItemId, reduceMotion
       detent="large"
       reduceMotion={reduceMotion}
       dismissed={dismissed}
-      onClose={onClose}
+      onClose={addNewAfterClose ? onAddNew : onClose}
+      footer={
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>Not in your closet?</Text>
+          <TextLink label="Add it as new" onPress={() => { setAddNewAfterClose(true); setDismissed(true); }} />
+        </View>
+      }
     >
       <View style={styles.controls}>
         <TextInput
@@ -138,5 +147,7 @@ const styles = StyleSheet.create({
   plateSelected: { borderWidth: stroke.fine, borderColor: colors.foreground },
   name: { ...typography.text.meta, color: colors.foreground, marginTop: spacing.xs },
   hint: { ...typography.text.meta, fontSize: 11, color: colors.accentInk },
+  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  footerText: { ...typography.text.meta, color: colors.mutedForeground },
   empty: { ...typography.text.bodySmall, color: colors.mutedForeground, textAlign: 'center', paddingTop: spacing.xl },
 });
