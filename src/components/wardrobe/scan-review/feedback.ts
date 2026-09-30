@@ -11,3 +11,6 @@ export function bulkFeedback() {
 export function cropFeedback(success: boolean) {
   void Haptics.notificationAsync(success ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error).catch(() => {});
 }
+export function warningFeedback() {
+  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+}
