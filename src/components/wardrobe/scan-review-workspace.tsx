@@ -36,11 +36,12 @@ import { DetectionState, ExtractionState } from './scan-review/LoadingStates';
 import { ItemInspectionModal } from './scan-review/ItemInspectionModal';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { BrandSearchSheet } from './scan-review/BrandSearchSheet';
-import { selectionFeedback, bulkFeedback, cropFeedback, warningFeedback } from './scan-review/feedback';
+import { selectionFeedback, bulkFeedback, cropFeedback } from './scan-review/feedback';
 import { ConfirmationPanel } from './scan-review/overlays';
 import { CategoryPicker, MaterialPicker, SeasonPicker, SheetButton } from './scan-review/pickers';
 import { TextLink } from './scan-review/atoms';
 import { WorkspaceSheet } from './scan-review/WorkspaceSheet';
+import { ArmedDiscardRow, MenuRow } from './scan-review/MenuRows';
 import {
   isReviewStage,
   pieceCountLabel,
@@ -628,58 +629,6 @@ export function ScanReviewWorkspace({
         </KeyboardProvider>
       </GestureHandlerRootView>
     </Modal>
-  );
-}
-
-function MenuRow({ icon, label, onPress, disabled, destructive }: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-  destructive?: boolean;
-}) {
-  const tint = destructive ? colors.destructive : colors.foreground;
-  return (
-    <Pressable onPress={onPress} disabled={disabled} accessibilityRole="button" accessibilityState={{ disabled }}
-      style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: colors.surfaceSelected }, disabled && { opacity: 0.4 }]}>
-      <Ionicons name={icon} size={20} color={tint} />
-      <Text style={[styles.menuLabel, { color: tint }]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-const DISARM_MS = 3500;
-
-/**
- * Destructive row that confirms in place: the first tap arms it (the row
- * turns red and says what will go), the second discards. Leaving it alone
- * disarms it. Saves a stacked confirmation screen on top of the sheet.
- */
-function ArmedDiscardRow({ detail, onConfirm }: { detail: string; onConfirm: () => void }) {
-  const [armed, setArmed] = useState(false);
-  useEffect(() => {
-    if (!armed) return;
-    const timer = setTimeout(() => setArmed(false), DISARM_MS);
-    return () => clearTimeout(timer);
-  }, [armed]);
-  const tint = armed ? colors.background : colors.destructive;
-  return (
-    <Pressable
-      onPress={() => {
-        if (armed) return onConfirm();
-        warningFeedback();
-        setArmed(true);
-      }}
-      accessibilityRole="button"
-      accessibilityLabel={armed ? `Confirm discard. ${detail} will be removed` : 'Discard import'}
-      accessibilityHint={armed ? undefined : 'Tap again to confirm'}
-      style={({ pressed }) => [styles.menuRow, armed && styles.discardArmed, pressed && { opacity: 0.85 }]}>
-      <Ionicons name="trash-outline" size={20} color={tint} />
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.menuLabel, { flex: 0, color: tint }]}>{armed ? 'Tap again to discard' : 'Discard import'}</Text>
-        {armed ? <Animated.Text entering={FadeInDown.duration(160)} style={[styles.discardDetail, { color: tint }]}>{detail}</Animated.Text> : null}
-      </View>
-    </Pressable>
   );
 }
 

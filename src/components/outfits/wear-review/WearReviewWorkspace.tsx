@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { Platform, SectionList, Pressable, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,15 +20,16 @@ import { saveWearLog } from '../../../features/wear-log/api';
 import { canLog, matchedItemIds, orderedDetections, reviewCounts, reviewQueue, selectedItemIds, sharedMatch } from '../../../features/wear-log/reducer';
 import { discardWearFlow, retryWearScan } from '../../../features/wear-log/runner';
 import { dispatchWear, useWearLogStore } from '../../../features/wear-log/store';
-import type { ReviewFlow } from '../../../features/wear-log/types';
+import type { ReviewFlow, WearDetection } from '../../../features/wear-log/types';
 import { ClosetPicker } from './ClosetMatchSheet';
 import { WorkspaceSheet } from '../../wardrobe/scan-review/WorkspaceSheet';
+import { ArmedDiscardRow, MenuRow } from '../../wardrobe/scan-review/MenuRows';
 import { WearResolveSheet } from './WearResolveSheet';
 import { PieceImage } from './PieceImage';
 import { WornDateSheet } from './WornDateSheet';
 import { PairingRow } from './PairingRow';
 
-type Surface = { kind: 'resolve'; queue: string[]; initialPhoto?: boolean } | { kind: 'add' } | { kind: 'date' };
+type Surface = { kind: 'resolve'; queue: string[]; startIndex?: number; initialPhoto?: boolean } | { kind: 'add' } | { kind: 'date' };
 
 /** After this long a scan offers to carry on without the user watching. */
 const SLOW_SCAN_MS = 8_000;
@@ -96,7 +97,7 @@ export function WearReviewWorkspace({ onClose, onMinimize, onLogged, onPickManua
   if (flow.status === 'processing' || flow.status === 'failed') {
     return (
       <View style={[styles.root, { paddingTop: insets.top }]}>
-        <Header title="Log today’s wear" onClose={onClose} />
+        <Header title="Log today’s wear" onClose={onClose} right={<ScanOptions detail="This photo and its scan" reduceMotion={reduceMotion} onMinimize={onMinimize} onDiscard={onClose} />} />
         {flow.status === 'processing' ? (
           <DetectionState
             previewImage={flow.photoUri}
@@ -151,8 +152,30 @@ export function WearReviewWorkspace({ onClose, onMinimize, onLogged, onPickManua
       insets={insets}
       reduceMotion={reduceMotion}
       onClose={onClose}
+      onMinimize={onMinimize}
     />
   );
+}
+
+/** "⋯" in the header, as in the closet scan: keep for later, or discard with a second tap. */
+function ScanOptions({ detail, disabled, reduceMotion, onMinimize, onDiscard }: {
+  detail: string; disabled?: boolean; reduceMotion: boolean; onMinimize: () => void; onDiscard: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const then = (fn: () => void) => { setDismissed(true); fn(); };
+  return <>
+    <Pressable onPress={() => { setDismissed(false); setOpen(true); }} disabled={disabled} style={styles.more} hitSlop={4}
+      accessibilityRole="button" accessibilityLabel="More options" accessibilityState={{ disabled }}>
+      <Ionicons name="ellipsis-horizontal" size={22} color={colors.foreground} />
+    </Pressable>
+    {open ? <View style={styles.sheetHost} pointerEvents="box-none">
+      <WorkspaceSheet title="Outfit options" reduceMotion={reduceMotion} dismissed={dismissed} onClose={() => setOpen(false)}>
+        <MenuRow icon="chevron-down" label="Keep for later" onPress={() => then(onMinimize)} />
+        <ArmedDiscardRow label="Discard scan" detail={detail} onConfirm={() => then(() => { discardWearFlow(); onDiscard(); })} />
+      </WorkspaceSheet>
+    </View> : null}
+  </>;
 }
 
 function Header({ title, onClose, right }: { title: string; onClose: () => void; right?: React.ReactNode }) {
@@ -167,13 +190,14 @@ function Header({ title, onClose, right }: { title: string; onClose: () => void;
   );
 }
 
-function Review({ flow, heroHeight, width, insets, reduceMotion, onClose }: {
+function Review({ flow, heroHeight, width, insets, reduceMotion, onClose, onMinimize }: {
   flow: ReviewFlow;
   heroHeight: number;
   width: number;
   insets: { top: number; bottom: number };
   reduceMotion: boolean;
   onClose: () => void;
+  onMinimize: () => void;
 }) {
   const qc = useQueryClient();
   const { data: items = [], isSuccess, isError, refetch } = useItems();
@@ -186,7 +210,35 @@ function Review({ flow, heroHeight, width, insets, reduceMotion, onClose }: {
   const queue = reviewQueue(flow, isSuccess ? availableIds : undefined);
   const missingAdditional = isSuccess ? flow.additionalItemIds.filter((id) => !availableIds.has(id)) : [];
   const saving = flow.status === 'saving';
-  const openPiece = (id: string) => { if (!saving) setSurface({ kind: 'resolve', queue: [id] }); };
+  // Crop the hero to the pieces rather than letterboxing the whole photo.
+  const heroFocus = useMemo(() => {
+    const boxes = flow.scan.detections.flatMap((d) => (d.bbox_pct ? [d.bbox_pct] : []));
+    if (!boxes.length) return 'center' as const;
+    const left = Math.min(...boxes.map((b) => b.x)), right = Math.max(...boxes.map((b) => b.x + b.width));
+    const top = Math.min(...boxes.map((b) => b.y)), bottom = Math.max(...boxes.map((b) => b.y + b.height));
+    return { left: `${(left + right) / 2}%`, top: `${(top + bottom) / 2}%` } as const;
+  }, [flow.scan.detections]);
+  const [accessoriesOpen, setAccessoriesOpen] = useState(false);
+  const sections = useMemo(() => {
+    const accessories = ordered.filter((d) => d.layer === 'accessory');
+    // Three or more small pieces fold into one row so the list reads as clothes first.
+    const fold = accessories.length >= 3;
+    const rest = fold ? ordered.filter((d) => d.layer !== 'accessory') : ordered;
+    const toConfirm = rest.filter((d) => queue.includes(d.id));
+    const done = rest.filter((d) => !queue.includes(d.id));
+    return [
+      ...(toConfirm.length ? [{ key: 'confirm', title: 'To confirm', quiet: true, data: toConfirm }] : []),
+      ...(done.length ? [{ key: 'ready', title: toConfirm.length ? 'Ready' : '', quiet: !!toConfirm.length, data: done }] : []),
+      ...(fold ? [{ key: 'accessories', title: 'Accessories', quiet: false, data: accessoriesOpen ? accessories : [], all: accessories }] : []),
+    ];
+  }, [ordered, queue, accessoriesOpen]);
+  const ready = ordered.filter((d) => !queue.includes(d.id) && flow.resolutions[d.id]?.kind !== 'dismissed').length;
+  const openPiece = (id: string) => {
+    if (saving) return;
+    // Tapping a queued row starts the guided review there instead of a one-piece queue.
+    const at = queue.indexOf(id);
+    setSurface(at >= 0 ? { kind: 'resolve', queue, startIndex: at } : { kind: 'resolve', queue: [id] });
+  };
   const closeSurface = () => { dispatchWear({ type: 'closeResolve' }); setSurface(null); };
 
   const save = useCallback(async () => {
@@ -216,24 +268,27 @@ function Review({ flow, heroHeight, width, insets, reduceMotion, onClose }: {
   }, [qc, availableIds, isSuccess]);
   const dateLabel = dateChoice(flow.date) === 'today' ? 'Worn today' : dateChoice(flow.date) === 'yesterday' ? 'Worn yesterday' : `Worn ${shortDate(flow.date)}`;
   const buttonLabel = saving ? 'Logging…' : queue.length ? `Review ${pieces(queue.length)}` : 'Log outfit';
-  const status = queue.length ? `${pieces(queue.length)} ${queue.length === 1 ? 'needs' : 'need'} review`
+  const status = queue.length ? `${queue.length} to confirm${ready ? ` · ${ready} ready` : ''}`
     : counts.newItems ? `${pieces(counts.logging)} selected` : `${pieces(counts.logging)} matched`;
   return (
     <GestureHandlerRootView style={[styles.root, { paddingTop: insets.top }]}>
-      <Header title="Review outfit" onClose={onClose} right={<TextLink label="Retake" tone="muted" disabled={saving} onPress={() => { discardWearFlow(); onClose(); }} />} />
+      <Header title="Review outfit" onClose={onClose} right={<ScanOptions detail="This photo and your review" disabled={saving} reduceMotion={reduceMotion} onMinimize={onMinimize} onDiscard={onClose} />} />
       <View style={styles.body}>
-        <FlatList data={ordered} keyExtractor={(d) => d.id} style={styles.body}
+        <SectionList sections={sections} keyExtractor={(d) => d.id} style={styles.body} stickySectionHeadersEnabled={false}
           ListHeaderComponent={<View>
             <Pressable disabled={saving} onPress={() => setSurface({ kind: 'resolve', queue: [], initialPhoto: true })} accessibilityRole="button" accessibilityLabel="View outfit photo and detected pieces">
-              <Image source={{ uri: flow.photoUri }} style={{ width, height: heroHeight, backgroundColor: colors.surfaceSubtle }} contentFit="contain" />
+              <Image source={{ uri: flow.photoUri }} style={{ width, height: heroHeight, backgroundColor: colors.surfaceSubtle }} contentFit="cover" contentPosition={heroFocus} />
+              <View style={styles.expand}><Ionicons name="expand-outline" size={16} color={colors.foreground} /></View>
             </Pressable>
             <View style={styles.summary}>
               <Text style={styles.summaryTitle} accessibilityLiveRegion="polite">{status}</Text>
-              <TextLink label="View photo" tone="muted" disabled={saving} onPress={() => setSurface({ kind: 'resolve', queue: [], initialPhoto: true })} />
             </View>
             {ordered.length === 0 ? <Text style={styles.failedCopy}>We couldn’t make out any clothes. Add pieces from your closet, or retake the photo.</Text> : null}
           </View>}
-          renderItem={({ item: d }) => <PairingRow detection={d} resolution={flow.resolutions[d.id]} itemsById={itemsById} sharedWith={sharedMatch(flow, d.id).map((id) => numbers[id])} wardrobeReady={!!isSuccess} disabled={saving}
+          renderSectionHeader={({ section }) => section.key === 'accessories'
+            ? <AccessoriesHeader pieces={section.all ?? []} open={accessoriesOpen} toConfirm={(section.all ?? []).filter((d) => queue.includes(d.id)).length} onToggle={() => setAccessoriesOpen((o) => !o)} />
+            : section.title ? <Text style={styles.sectionTitle}>{section.title}</Text> : null}
+          renderItem={({ item: d, section }) => <PairingRow detection={d} quiet={section.quiet} resolution={flow.resolutions[d.id]} itemsById={itemsById} sharedWith={sharedMatch(flow, d.id).map((id) => numbers[id])} wardrobeReady={!!isSuccess} disabled={saving}
             onOpen={() => openPiece(d.id)} onRestore={() => dispatchWear({ type: 'restore', detectionId: d.id })} />}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListFooterComponent={<View>
@@ -265,12 +320,26 @@ function Review({ flow, heroHeight, width, insets, reduceMotion, onClose }: {
         </View>
       </View>
       <View style={styles.sheetHost} pointerEvents="box-none">
-        {surface?.kind === 'resolve' ? <WearResolveSheet queue={surface.queue} initialPhoto={surface.initialPhoto} flow={flow} items={items} reduceMotion={reduceMotion} onClose={closeSurface} />
+        {surface?.kind === 'resolve' ? <WearResolveSheet queue={surface.queue} startIndex={surface.startIndex} reviewIds={queue} initialPhoto={surface.initialPhoto} flow={flow} items={items} reduceMotion={reduceMotion} onClose={closeSurface} />
           : surface?.kind === 'add' ? <AdditionalPieceSheet items={items} selectedIds={selectedItemIds(flow)} reduceMotion={reduceMotion} onClose={closeSurface} />
           : surface?.kind === 'date' ? <WornDateSheet date={flow.date} reduceMotion={reduceMotion} onSelect={(date) => dispatchWear({ type: 'setDate', date })} onClose={closeSurface} /> : null}
       </View>
     </GestureHandlerRootView>
   );
+}
+
+function AccessoriesHeader({ pieces: list, open, toConfirm, onToggle }: {
+  pieces: WearDetection[]; open: boolean; toConfirm: number; onToggle: () => void;
+}) {
+  return <Pressable style={styles.accessories} onPress={onToggle} accessibilityRole="button" accessibilityState={{ expanded: open }}
+    accessibilityLabel={`Accessories, ${list.length} pieces${toConfirm ? `, ${toConfirm} to confirm` : ''}`}>
+    <View style={styles.accessoryCopy}>
+      <Text style={styles.itemName}>Accessories · {list.length}</Text>
+      {toConfirm ? <Text style={styles.meta}>{toConfirm} to confirm</Text> : null}
+    </View>
+    {!open ? <View style={styles.accessoryStrip}>{list.slice(0, 4).map((d) => <PieceImage key={d.id} cropUrl={d.cropUrl} cutoutUrl={d.cutoutUrl} width={32} height={40} />)}</View> : null}
+    <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={colors.mutedForeground} />
+  </Pressable>;
 }
 
 function AdditionalPieceSheet({ items, selectedIds, reduceMotion, onClose }: {
@@ -317,6 +386,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   headerTitle: { ...typography.text.editorialSection, color: colors.foreground, flex: 1 },
+  more: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerRight: { minWidth: 44, alignItems: 'flex-end' },
   summary: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
   summaryTitle: { ...typography.text.editorialSection, color: colors.foreground, flexGrow: 1 },
@@ -326,6 +396,11 @@ const styles = StyleSheet.create({
   meta: { ...typography.text.meta, color: colors.mutedForeground },
   addRow: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   loadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  expand: { position: 'absolute', right: spacing.md, bottom: spacing.md, width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.85)', alignItems: 'center', justifyContent: 'center' },
+  sectionTitle: { ...typography.text.meta, color: colors.mutedForeground, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xs },
+  accessories: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, minHeight: 64, marginTop: spacing.sm, borderTopWidth: stroke.hairline, borderTopColor: colors.hairline },
+  accessoryCopy: { flex: 1, gap: 4 },
+  accessoryStrip: { flexDirection: 'row', gap: spacing.xs },
   separator: { height: stroke.hairline, backgroundColor: colors.hairline, marginLeft: spacing.lg },
   bar: {
     gap: spacing.xs,

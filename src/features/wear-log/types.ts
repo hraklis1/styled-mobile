@@ -15,6 +15,8 @@ export type WearDetection = {
   id: string;
   bbox_pct: BboxPct | null;
   cutoutUrl: string | null;
+  /** Background-intact crop for thumbnails; absent on scans from before it existed. */
+  cropUrl?: string | null;
   layer: WearLayer;
   occludedBy?: string;
   attributes: { name: string; category: string; color: string; description: string };

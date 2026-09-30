@@ -167,7 +167,7 @@ export function PhotoSourceSheet({
             ) : null}
 
             <TouchableOpacity
-              style={[styles.option, variant === 'quick-log' && styles.quickLibraryOption]}
+              style={styles.option}
               onPress={() => select(onLibrary)}
               activeOpacity={0.75}
               accessibilityRole="button"
@@ -177,7 +177,7 @@ export function PhotoSourceSheet({
                 <Ionicons name="image-outline" size={22} color={colors.primary} />
               </View>
               <View style={styles.optionText}>
-                <Text style={[styles.optionTitle, variant === 'quick-log' && styles.quickLibraryTitle]}>{libraryLabel}</Text>
+                <Text style={styles.optionTitle}>{libraryLabel}</Text>
                 <Text style={styles.optionSub}>{libraryHint}</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
@@ -281,14 +281,6 @@ const styles = StyleSheet.create({
   },
   quickPrimarySub: {
     color: colors.mutedForeground,
-  },
-  quickLibraryOption: {
-    borderColor: colors.hairline,
-    backgroundColor: colors.surfaceSubtle,
-  },
-  quickLibraryTitle: {
-    color: colors.mutedForeground,
-    fontWeight: typography.weight.medium,
   },
   // Not one of the options — a way out of the sheet for someone who meant to
   // open the other flow. Deliberately borderless so it never reads as a

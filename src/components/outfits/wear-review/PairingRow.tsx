@@ -8,8 +8,10 @@ import type { Item } from '../../../types/item';
 import { colors, spacing, typography } from '../../../theme';
 import { PieceImage } from './PieceImage';
 
-export const PairingRow = memo(function PairingRow({ detection, resolution, itemsById, sharedWith, wardrobeReady, disabled, onOpen, onRestore }: {
+export const PairingRow = memo(function PairingRow({ detection, quiet = false, resolution, itemsById, sharedWith, wardrobeReady, disabled, onOpen, onRestore }: {
   detection: WearDetection;
+  /** The section header already says "To confirm" or "Ready", so the row doesn't repeat it. */
+  quiet?: boolean;
   resolution: Resolution;
   itemsById: Map<number, Item>;
   sharedWith: number[];
@@ -31,11 +33,12 @@ export const PairingRow = memo(function PairingRow({ detection, resolution, item
   const brand = resolution.kind === 'new' ? resolution.draft.brand : item?.brand;
   const status = missing ? 'Choose another piece' : uncertain ? 'Needs review' : resolution.kind === 'new' ? 'New piece' : 'Matched';
   return <Pressable style={styles.row} onPress={onOpen} disabled={disabled} accessibilityRole="button" accessibilityLabel={`${name}, ${status}`} accessibilityHint="Review or change this piece" accessibilityState={{ disabled }}>
-    <PieceImage item={uncertain ? undefined : item} cutoutUrl={detection.cutoutUrl} />
+    <PieceImage item={uncertain ? undefined : item} cropUrl={detection.cropUrl} cutoutUrl={detection.cutoutUrl} />
     <View style={styles.copy}>
       <Text style={styles.name} numberOfLines={2}>{name}</Text>
-      <Text style={[styles.meta, uncertain && styles.attention]}>{[brand, status].filter(Boolean).join(' · ')}</Text>
-      {sharedWith.length ? <Text style={styles.attention}>Also matched in {sharedWith.join(', ')} · logged once</Text> : null}
+      {(() => { const meta = [brand, quiet && (status === 'Needs review' || status === 'Matched') ? null : status].filter(Boolean).join(' · ');
+        return meta ? <Text style={[styles.meta, uncertain && !quiet && styles.attention, missing && styles.attention]}>{meta}</Text> : null; })()}
+      {sharedWith.length ? <Text style={styles.meta}>Same piece as another row · logged once</Text> : null}
     </View>
     <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
   </Pressable>;

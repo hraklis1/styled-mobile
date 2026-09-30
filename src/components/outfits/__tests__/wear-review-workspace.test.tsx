@@ -17,6 +17,7 @@ jest.mock('../wear-review/PairingRow', () => ({ PairingRow: 'PairingRow' }));
 jest.mock('../wear-review/ClosetMatchSheet', () => ({ ClosetPicker: 'ClosetPicker' }));
 jest.mock('../wear-review/WearResolveSheet', () => ({ WearResolveSheet: 'WearResolveSheet' }));
 jest.mock('../wear-review/WornDateSheet', () => ({ WornDateSheet: 'WornDateSheet' }));
+jest.mock('../../wardrobe/scan-review/MenuRows', () => ({ MenuRow: 'MenuRow', ArmedDiscardRow: 'ArmedDiscardRow' }));
 jest.mock('../../wardrobe/scan-review/WorkspaceSheet', () => ({ WorkspaceSheet: 'WorkspaceSheet' }));
 jest.mock('../wear-review/NewPieceSheet', () => ({ NewPieceSheet: 'NewPieceSheet', NewPieceEditor: 'NewPieceEditor' }));
 jest.mock('../../../features/wear-log/runner', () => ({ discardWearFlow: jest.fn(), retryWearScan: jest.fn() }));
@@ -74,6 +75,21 @@ describe('WearReviewWorkspace while processing', () => {
     expect(useWearLogStore.getState().workspaceOpen).toBe(false);
   });
 
+  it('the options menu discards mid-scan only after the armed second tap', () => {
+    const onClose = jest.fn();
+    let tree!: TestRenderer.ReactTestRenderer;
+    act(() => {
+      tree = TestRenderer.create(<WearReviewWorkspace onClose={onClose} onMinimize={jest.fn()} onLogged={jest.fn()} onPickManually={jest.fn()} />);
+    });
+    act(() => tree.root.find((n) => n.props.accessibilityLabel === 'More options' && typeof n.props.onPress === 'function').props.onPress());
+    const discard = tree.root.find((n) => (n.type as unknown) === 'ArmedDiscardRow');
+    expect(discard.props.label).toBe('Discard scan');
+    act(() => discard.props.onConfirm());
+    expect(jest.requireMock('../../../features/wear-log/runner').discardWearFlow).toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
+    act(() => { tree.unmount(); });
+  });
+
   it('an offline failure offers to keep the photo for later', () => {
     useWearLogStore.setState({
       flow: { status: 'failed', id: 'flow-1', photoUri: 'file:///p.jpg', date: '2026-09-30', message: 'offline', offline: true },
@@ -114,15 +130,29 @@ describe('compact outfit overview', () => {
     act(() => tree.unmount());
   });
 
-  it('builds a guided queue from uncertain pieces and opens individual rows separately', () => {
+  it('builds a guided queue from uncertain pieces and opens a row at its place in the queue', () => {
     useWearLogStore.setState({ flow: reviewFixture() });
     const tree = mountReview();
     act(() => named(tree, 'PrimaryButton', 'Review 2 pieces').props.onPress());
     expect(named(tree, 'WearResolveSheet').props.queue).toEqual(['d0', 'd1']);
     act(() => named(tree, 'WearResolveSheet').props.onClose());
     const rows = tree.root.findAll((n) => (n.type as unknown) === 'PairingRow');
-    act(() => rows[0].props.onOpen());
-    expect(named(tree, 'WearResolveSheet').props.queue).toEqual(['d0']);
+    act(() => rows[1].props.onOpen());
+    expect(named(tree, 'WearResolveSheet').props).toMatchObject({ queue: ['d0', 'd1'], startIndex: 1 });
+    act(() => tree.unmount());
+  });
+
+  it('groups rows by what still needs confirming and folds three or more accessories', () => {
+    const acc = (id: string) => ({ ...detection(id), layer: 'accessory' as const });
+    useWearLogStore.setState({ flow: reviewFixture([detection('d0'), detection('d1', 'high'), acc('d2'), acc('d3'), acc('d4')]) });
+    const tree = mountReview();
+    const texts = tree.root.findAll((n) => (n.type as unknown) === 'Text').map((n) => [n.props.children].flat().join(''));
+    expect(texts).toEqual(expect.arrayContaining(['To confirm', 'Ready']));
+    const rows = () => tree.root.findAll((n) => (n.type as unknown) === 'PairingRow').map((n) => n.props.detection.id);
+    expect(rows()).toEqual(['d0', 'd1']);
+    const fold = tree.root.find((n) => n.props.accessibilityState?.expanded === false && typeof n.props.onPress === 'function');
+    act(() => fold.props.onPress());
+    expect(rows()).toEqual(['d0', 'd1', 'd2', 'd3', 'd4']);
     act(() => tree.unmount());
   });
 

@@ -25,16 +25,22 @@ import { closetItems, detection, reviewFixture } from '../../../features/wear-lo
 function node(tree: TestRenderer.ReactTestRenderer, type: string, label?: string) {
   return tree.root.find((n) => (n.type as unknown) === type && (!label || n.props.label === label));
 }
+function tap(tree: TestRenderer.ReactTestRenderer, label: string) {
+  act(() => tree.root.find((n) => n.props.accessibilityRole === 'button' && n.props.accessibilityLabel === label && typeof n.props.onPress === 'function').props.onPress());
+}
+function closeSheet(tree: TestRenderer.ReactTestRenderer) {
+  act(() => node(tree, 'WorkspaceSheet').props.onClose());
+}
 function press(tree: TestRenderer.ReactTestRenderer, type: string, label: string) {
   act(() => node(tree, type, label).props.onPress());
 }
 const mounted: TestRenderer.ReactTestRenderer[] = [];
 afterEach(() => { act(() => { for (const tree of mounted.splice(0)) tree.unmount(); }); });
 
-function mount(queue: string[], initialPhoto = false) {
+function mount(queue: string[], initialPhoto = false, reviewIds: string[] = queue) {
   function Harness() {
     const flow = useWearLogStore((s) => s.flow);
-    return flow.status === 'reviewing' ? <WearResolveSheet queue={queue} initialPhoto={initialPhoto} flow={flow} items={closetItems} reduceMotion onClose={jest.fn()} /> : null;
+    return flow.status === 'reviewing' ? <WearResolveSheet queue={queue} reviewIds={reviewIds} initialPhoto={initialPhoto} flow={flow} items={closetItems} reduceMotion onClose={jest.fn()} /> : null;
   }
   let tree!: TestRenderer.ReactTestRenderer;
   act(() => { tree = TestRenderer.create(<Harness />); });
@@ -69,7 +75,7 @@ describe('guided piece review', () => {
     press(tree, 'PrimaryButton', 'Confirm & next');
     const candidate = tree.root.find((n) => n.props.accessibilityRole === 'button' && n.props.accessibilityLabel === 'Cotton shirt, COS');
     act(() => candidate.props.onPress());
-    press(tree, 'TextLink', 'Done');
+    closeSheet(tree);
     expect(resolutions().d0).toMatchObject({ source: 'user' });
     expect(resolutions().d1.kind).toBe('unresolved');
     act(() => tree.unmount());
@@ -80,7 +86,7 @@ describe('guided piece review', () => {
 
   it('closet browsing commits immediately without losing the rest of the queue', () => {
     const tree = mount(['d0', 'd1']);
-    press(tree, 'TextLink', 'Browse closet');
+    tap(tree, 'Browse closet');
     act(() => node(tree, 'ClosetPicker').props.onPick(3));
     expect(resolutions().d0).toMatchObject({ itemId: 3, source: 'user' });
     expect(node(tree, 'PrimaryButton').props.label).toBe('Confirm & finish');
@@ -92,7 +98,7 @@ describe('guided piece review', () => {
     const tree = mount(['d0']);
     const candidate = tree.root.find((n) => n.props.accessibilityRole === 'button' && n.props.accessibilityLabel === 'Cotton shirt, COS');
     act(() => candidate.props.onPress());
-    press(tree, 'TextLink', 'Browse closet');
+    tap(tree, 'Browse closet');
     press(tree, 'TextLink', 'Back to comparison');
     expect(resolutions().d0).toMatchObject({ itemId: 1, source: 'suggested' });
     press(tree, 'PrimaryButton', 'Confirm & finish');
@@ -102,16 +108,16 @@ describe('guided piece review', () => {
 
   it('browsing back and closing leave the suggestion unchanged', () => {
     const tree = mount(['d0']);
-    press(tree, 'TextLink', 'Browse closet');
+    tap(tree, 'Browse closet');
     press(tree, 'TextLink', 'Back to comparison');
-    press(tree, 'TextLink', 'Done');
+    closeSheet(tree);
     expect(resolutions().d0).toMatchObject({ itemId: 1, source: 'suggested' });
     act(() => tree.unmount());
   });
 
   it('edits new pieces in the same sheet and Done advances', () => {
     const tree = mount(['d0', 'd1']);
-    press(tree, 'TextLink', 'Add as new');
+    tap(tree, 'Add as a new piece');
     act(() => node(tree, 'NewPieceEditor').props.onChange({ brand: 'Arket', name: 'Summer shirt' }));
     expect(resolutions().d0).toMatchObject({ kind: 'new', draft: { brand: 'Arket', name: 'Summer shirt' } });
     press(tree, 'TextLink', 'Done');
@@ -122,8 +128,9 @@ describe('guided piece review', () => {
 
   it('individual correction finishes without stepping through unrelated pieces', () => {
     useWearLogStore.setState({ flow: reviewFixture([detection('d0', 'high'), detection('d1')]) });
-    const tree = mount(['d0']);
-    press(tree, 'PrimaryButton', 'Confirm & finish');
+    const tree = mount(['d0'], false, []);
+    expect(node(tree, 'WorkspaceSheet').props.title).toBe('Edit piece');
+    press(tree, 'PrimaryButton', 'Save');
     expect(node(tree, 'WorkspaceSheet').props.dismissed).toBe(true);
     expect(resolutions().d1).toMatchObject({ source: 'suggested' });
     act(() => dispatchWear({ type: 'dismiss', detectionId: 'd0' }));
@@ -133,10 +140,18 @@ describe('guided piece review', () => {
   });
 
   it('photo boxes open a focused correction within the same presentation', () => {
-    const tree = mount([], true);
-    act(() => node(tree, 'PhotoHero').props.onPressBox('d1'));
+    const tree = mount([], true, ['d0', 'd1']);
+    act(() => node(tree, 'PhotoHero').props.onOpen('d1'));
     expect(node(tree, 'WorkspaceSheet').props.title).toBe('Match your pieces');
     expect(node(tree, 'PrimaryButton').props.label).toBe('Confirm & finish');
+    act(() => tree.unmount());
+  });
+
+  it('review mode has no header Done and offers new as a tile', () => {
+    const tree = mount(['d0']);
+    expect(node(tree, 'WorkspaceSheet').props.headerAction.props.label).toBeUndefined();
+    tap(tree, 'Add as a new piece');
+    expect(resolutions().d0.kind).toBe('new');
     act(() => tree.unmount());
   });
 

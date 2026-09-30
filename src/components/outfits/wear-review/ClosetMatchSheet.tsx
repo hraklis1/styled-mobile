@@ -45,7 +45,7 @@ export function ClosetPicker({ detection, items, currentItemId, unavailableIds =
   }, [items, detection, scope, category, query]);
   return <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     {detection ? <View style={styles.context}>
-      <PieceImage cutoutUrl={detection.cutoutUrl} width={48} height={60} />
+      <PieceImage cropUrl={detection.cropUrl} cutoutUrl={detection.cutoutUrl} width={48} height={60} />
       <View style={styles.copy}><Text style={styles.name}>{detection.attributes.name}</Text><Text style={styles.meta}>Detected from your photo</Text></View>
     </View> : null}
     <View style={styles.controls}>

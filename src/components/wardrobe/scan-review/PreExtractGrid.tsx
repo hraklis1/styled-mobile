@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeOut, LinearTransition } from 'react-native-reanimated';
 
 import { dismissBrandTip, isBrandTipDismissed } from '../../../lib/scanBrandTip';
+import { dismissCropTip, isCropTipDismissed } from '../../../lib/scanCropTip';
 
 import { type PieceReviewState, type SheetGuidance } from '../../../lib/scan-review';
 import { colors, radii, spacing, typography } from '../../../theme';
@@ -65,8 +66,17 @@ export function PreExtractGrid({
   onAddBrand,
 }: Props) {
   const [tipDismissed, setTipDismissed] = useState(true);
-  useEffect(() => { void isBrandTipDismissed().then(setTipDismissed); }, []);
-  const showTip = Boolean(onAddBrand) && !tipDismissed && pieces.some(piece => !piece.brand);
+  const [cropTipDismissed, setCropTipDismissed] = useState(true);
+  useEffect(() => {
+    void isBrandTipDismissed().then(setTipDismissed);
+    void isCropTipDismissed().then(setCropTipDismissed);
+  }, []);
+  // One tip at a time: the crop tip first, since a bad crop spoils
+  // extraction and brands are optional.
+  const showCropTip = Boolean(onRemove) && !cropTipDismissed && pieces.length > 0;
+  const showTip = !showCropTip && Boolean(onAddBrand) && !tipDismissed && pieces.some(piece => !piece.brand);
+  const putAwayCropTip = () => { setCropTipDismissed(true); void dismissCropTip(); };
+  const openPiece = (id: string) => { if (showCropTip) putAwayCropTip(); onOpen(id); };
   const { width, fontScale } = useWindowDimensions();
   const columns = reviewColumns(width, fontScale);
   const gap = spacing.md;
@@ -94,6 +104,15 @@ export function PreExtractGrid({
       extraData={{ selection, states, disabled, brandFeedback }}
       ListHeaderComponent={
         <View style={styles.masthead}>
+          {showCropTip ? (
+            <View style={styles.tip}>
+              <Ionicons name="crop-outline" size={15} color={colors.foreground} />
+              <Text style={styles.tipText}>Tap a piece to check and fix its crop.</Text>
+              <Pressable hitSlop={12} onPress={putAwayCropTip} accessibilityRole="button" accessibilityLabel="Dismiss tip">
+                <Ionicons name="close" size={16} color={colors.mutedForeground} />
+              </Pressable>
+            </View>
+          ) : null}
           {showTip ? (
             // A plain View: an exiting animation here leaves the list header
             // at its old height, stranding a blank band above the grid.
@@ -120,7 +139,7 @@ export function PreExtractGrid({
             selected={selection?.has(piece.id) ?? false}
             selecting={selecting} disabled={disabled} reduceMotion={reduceMotion}
             restoreFocus={piece.id === focusId}
-            onPress={() => selecting ? onToggleSelect(piece.id) : onOpen(piece.id)}
+            onPress={() => selecting ? onToggleSelect(piece.id) : openPiece(piece.id)}
             brandRevision={brandFeedback?.ids.has(piece.id) ? brandFeedback.revision : 0}
             onToggle={() => selecting ? onToggleSelect(piece.id) : onToggleIncluded(piece.id)}
             onRemove={onRemove ? () => onRemove(piece.id) : undefined}
