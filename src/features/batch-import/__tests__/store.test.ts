@@ -303,3 +303,22 @@ describe('explicit extraction review', () => {
     expect(restored.pieces[2].extractionApproved).toBeUndefined();
   });
 });
+
+describe('workspace presentation', () => {
+  it('opens new batches full-screen and preserves explicit minimization during progress', () => {
+    store().start(batch({ photos: [photo('a', { status: 'pending' })] }));
+    expect(store().workspaceOpen).toBe(true);
+
+    store().closeWorkspace();
+    store().patchPhoto('a', { status: 'preparing' });
+    expect(store().workspaceOpen).toBe(false);
+    expect(store().batch?.photos[0].status).toBe('preparing');
+
+    store().openWorkspace();
+    expect(store().workspaceOpen).toBe(true);
+
+    store().closeWorkspace();
+    store().start(batch({ photos: [photo('b', { status: 'pending' })] }));
+    expect(store().workspaceOpen).toBe(true);
+  });
+});

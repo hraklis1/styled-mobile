@@ -7,7 +7,7 @@ import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from 'react-nativ
 import { scrubberIndex, type PieceReviewState } from '../../../lib/scan-review';
 import { colors, radii, spacing, stroke, surfaces } from '../../../theme';
 
-const RAIL_HEIGHT = 28;
+const RAIL_HEIGHT = 44;
 const PREVIEW = 56;
 
 /**

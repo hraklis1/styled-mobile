@@ -51,7 +51,7 @@ function colourValue(color: string | null): string | null {
  * right, hairline rules between. Only the name is typed; everything else is
  * picked, inline when the choices are few, in a sheet when they need search.
  */
-export function SpecSheet({ piece, stage, flags, expandedRow, disabled, onExpand, onUpdate, onOpenSheet, onNameFocus }: {
+export function SpecSheet({ piece, stage, flags, expandedRow, disabled, onExpand, onUpdate, onOpenSheet }: {
   piece: ScanReviewPiece;
   stage: ScanReviewStage;
   flags: readonly ReviewField[];
@@ -60,7 +60,6 @@ export function SpecSheet({ piece, stage, flags, expandedRow, disabled, onExpand
   onExpand: (row: ExpandableRow | null) => void;
   onUpdate: (patch: PiecePatch) => void;
   onOpenSheet: (kind: SheetKind) => void;
-  onNameFocus: () => void;
 }) {
   const review = isReviewStage(stage);
   const flagged = (field: ReviewField) => review && flags.includes(field);
@@ -77,7 +76,6 @@ export function SpecSheet({ piece, stage, flags, expandedRow, disabled, onExpand
           flagged={flagged('name')}
           disabled={disabled}
           onChange={(name) => onUpdate({ name })}
-          onFocus={onNameFocus}
         />
         {!review ? (
           <Text style={styles.hint}>A brand you know sharpens the details we read. Not sure? Leave it.</Text>
@@ -164,12 +162,11 @@ function BrandEyebrow({ brand, flagged, disabled, onPress }: {
   );
 }
 
-function EditableTitle({ value, flagged, disabled, onChange, onFocus }: {
+function EditableTitle({ value, flagged, disabled, onChange }: {
   value: string;
   flagged: boolean;
   disabled: boolean;
   onChange: (value: string) => void;
-  onFocus: () => void;
 }) {
   const [focused, setFocused] = useState(false);
   return (
@@ -177,7 +174,7 @@ function EditableTitle({ value, flagged, disabled, onChange, onFocus }: {
       <TextInput
         value={value}
         onChangeText={onChange}
-        onFocus={() => { setFocused(true); onFocus(); }}
+        onFocus={() => { setFocused(true); }}
         onBlur={() => setFocused(false)}
         editable={!disabled}
         autoCapitalize="words"
@@ -327,11 +324,12 @@ function DetailsPanel({ piece, disabled, onUpdate }: {
 const styles = StyleSheet.create({
   root: { marginHorizontal: spacing.lg, gap: spacing.md },
   identity: { gap: 2 },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'flex-start', minHeight: 24 },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'flex-start', minHeight: 44 },
   brand: { ...typography.text.eyebrow, color: colors.foreground },
   brandEmpty: { ...typography.text.editorialItalic, fontSize: 15, lineHeight: 20, color: colors.mutedForeground },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   title: {
+    minHeight: 44,
     ...typography.text.editorialSection,
     flex: 1,
     color: colors.foreground,
@@ -355,7 +353,7 @@ const styles = StyleSheet.create({
   valueSwatch: { width: 12, height: 12, borderRadius: 6, borderWidth: stroke.hairline, borderColor: colors.ghostStroke },
   rowBody: { paddingBottom: spacing.lg },
   swatches: { gap: spacing.sm, paddingVertical: 2 },
-  swatchRing: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', borderWidth: stroke.fine, borderColor: 'transparent' },
+  swatchRing: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', borderWidth: stroke.fine, borderColor: 'transparent' },
   swatchRingOn: { borderColor: colors.foreground },
   swatch: { width: 30, height: 30, borderRadius: 15 },
   swatchLight: { borderWidth: stroke.hairline, borderColor: colors.ghostStroke },

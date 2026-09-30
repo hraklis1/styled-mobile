@@ -513,3 +513,6 @@ export const shoppingSurfaces = {
   panelShadow: '0 2px 4px rgba(48,43,37,0.025), 0 10px 28px rgba(48,43,37,0.045)',
   buttonShadow: '0 2px 5px rgba(48,43,37,0.10)',
 } as const;
+
+/** Shared ingestion feedback; image dimming never affects labels. */
+export const ingestion = { activeBorder: 1, excludedOpacity: 0.45, pressedScale: 0.98 } as const;

@@ -2,9 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
+  Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -12,7 +11,6 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useReviewReducedMotion } from '../../hooks/useReviewReducedMotion';
 import { useBatchExtractionReview } from '../../hooks/useBatchExtractionReview';
@@ -30,13 +28,16 @@ import {
   sheetGuidance,
   type PieceReviewState,
 } from '../../lib/scan-review';
-import { colors, spacing, stroke, typography } from '../../theme';
+import { colors, radii, spacing, stroke, typography } from '../../theme';
 import { ActionBar, type ActionBarMode } from './scan-review/ActionBar';
-import { ContactSheet, PieceLine, type SheetFilter } from './scan-review/ContactSheet';
+import { PreExtractGrid, PieceLine, type SheetFilter } from './scan-review/PreExtractGrid';
 import { DetectionState, ExtractionState } from './scan-review/LoadingStates';
-import { Loupe } from './scan-review/Loupe';
+import { ItemInspectionModal } from './scan-review/ItemInspectionModal';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
+import { BrandSearchSheet } from './scan-review/BrandSearchSheet';
+import { selectionFeedback, bulkFeedback, cropFeedback } from './scan-review/feedback';
 import { ConfirmationPanel } from './scan-review/overlays';
-import { BrandPicker, CategoryPicker, MaterialPicker, SeasonPicker, SheetButton } from './scan-review/pickers';
+import { CategoryPicker, MaterialPicker, SeasonPicker, SheetButton } from './scan-review/pickers';
 import { TextLink } from './scan-review/atoms';
 import { WorkspaceSheet } from './scan-review/WorkspaceSheet';
 import {
@@ -124,10 +125,10 @@ export function ScanReviewWorkspace({
 
   const [view, setView] = useState<View_>('sheet');
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [footerHeight, setFooterHeight] = useState(0);
   const [filter, setFilter] = useState<SheetFilter>('all');
   const [confirmedIds, setConfirmedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [openedIds, setOpenedIds] = useState<ReadonlySet<string>>(() => new Set());
-  const [selection, setSelection] = useState<ReadonlySet<string> | null>(null);
   const [walk, setWalk] = useState<string[] | null>(null);
   const [sheet, setSheet] = useState<SheetRequest | null>(null);
   const [sheetDismissed, setSheetDismissed] = useState(false);
@@ -138,7 +139,7 @@ export function ScanReviewWorkspace({
   const [confirmClose, setConfirmClose] = useState(false);
   const inclusion = useBatchExtractionReview(pieces, busy, onInclusionChange);
   const gridOffset = useRef(0);
-
+  const [brandFeedback, setBrandFeedback] = useState({ revision: 0, ids: new Set<string>() });
   // ── Derived ────────────────────────────────────────────────────────────────
 
   const visiblePieces = pieces;
@@ -175,7 +176,6 @@ export function ScanReviewWorkspace({
     setFilter('all');
     setConfirmedIds(new Set());
     setOpenedIds(new Set());
-    setSelection(null);
     setWalk(null);
     setSheet(null);
     setCropId(null);
@@ -196,8 +196,7 @@ export function ScanReviewWorkspace({
       setFilter('all');
     }
     if (busy) {
-      setSelection(null);
-      setSheet(null);
+        setSheet(null);
       setCropId(null);
     }
   }, [busy, stage]);
@@ -255,7 +254,7 @@ export function ScanReviewWorkspace({
 
   const confirmActive = useCallback(() => {
     if (!activeResolvedId) return;
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    bulkFeedback();
     setConfirmedIds((current) => new Set(current).add(activeResolvedId));
     if (nextAfterConfirm) setActiveId(nextAfterConfirm);
     else finishWalk();
@@ -293,12 +292,10 @@ export function ScanReviewWorkspace({
 
   const dismissSheet = useCallback(() => setSheetDismissed(true), []);
 
-  const endSelection = useCallback(() => setSelection(null), []);
 
   const requestSystemClose = useCallback(() => {
     if (sheet) return dismissSheet();
     if (confirmClose) return setConfirmClose(false);
-    if (selection) return setSelection(null);
     if (effectiveView === 'loupe' && sheetEnabled) {
       setWalk(null);
       return setView('sheet');
@@ -307,7 +304,7 @@ export function ScanReviewWorkspace({
       return onMinimize();
     }
     if (!closeDisabled) setConfirmClose(true);
-  }, [closeDisabled, confirmClose, dismissSheet, effectiveView, onMinimize, selection, sheet, sheetEnabled]);
+  }, [closeDisabled, confirmClose, dismissSheet, effectiveView, onMinimize, sheet, sheetEnabled]);
 
   // ── Crop editor (full screen: precise manipulation earns the takeover) ─────
 
@@ -326,8 +323,10 @@ export function ScanReviewWorkspace({
               setCropApplying(true);
               try {
                 await onApplyCrop(cropPiece.id, bbox);
+                cropFeedback(true);
                 setCropId(null);
               } catch {
+                cropFeedback(false);
                 Alert.alert('Couldn’t adjust crop', 'Please try again.');
               } finally {
                 cropBusy.current = false;
@@ -346,7 +345,6 @@ export function ScanReviewWorkspace({
 
   const heroHeight = loupeHeroHeight(height);
   const contentBottom = spacing.xxl;
-  const selecting = selection !== null && !busy;
 
   const actionMode: ActionBarMode = stage === 'scanning'
     ? { kind: 'busy', label: 'Looking at your photo…' }
@@ -354,23 +352,7 @@ export function ScanReviewWorkspace({
       ? { kind: 'busy', label: `Extracting details for ${pieceCountLabel(extractionProgress.total)}…` }
       : stage === 'saving'
         ? { kind: 'busy', label: 'Adding to closet…' }
-        : selecting
-          ? {
-            kind: 'selecting',
-            count: selection.size,
-            review: review && [...selection].every(id => pieces.find(p => p.id === id)?.extraction === 'ready'),
-            onBrand: () => openSheet({ kind: 'brand', target: [...selection] }),
-            onSeason: () => openSheet({ kind: 'season', target: [...selection] }),
-            onConfirm: () => {
-              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setConfirmedIds((current) => new Set([...current, ...selection]));
-              setSelection(null);
-            },
-            onDone: endSelection,
-            onSelectAll: () => setSelection(new Set(sheetPieces.map(p => p.id))),
-            onClear: () => setSelection(new Set()),
-          }
-          : inclusion.included.some(p => p.extraction === 'failed')
+        : inclusion.included.some(p => p.extraction === 'failed')
             ? { kind: 'failed', count: inclusion.included.filter(p => p.extraction === 'failed').length, onRetry: extract, onKeepBasic: () => onKeepBasic(inclusion.included.filter(p => p.extraction === 'failed').map(p => p.id)) }
           : (stage === 'pre-extract' && !pieces.some(p => p.extraction === 'ready')) || inclusion.included.some(p => p.extraction === 'not-started')
             ? { kind: 'extract', count: inclusion.included.length, onExtract: extract, extractionCount: inclusion.included.filter(p => p.extraction === 'not-started').length, additional: pieces.some(p => p.extraction === 'ready') }
@@ -391,7 +373,7 @@ export function ScanReviewWorkspace({
                 onReviewFlagged: startFlaggedWalk,
               };
 
-  const sheetTargets = sheet ? pieces.filter((piece) => sheet.target.includes(piece.id)) : [];
+  const sheetTargets = sheet ? pieces.filter((piece) => sheet.target.includes(piece.id) && (!(sheet.kind === 'brand' && sheet.includedOnly) || piece.included !== false)) : [];
   const singleTarget = sheetTargets.length === 1 ? sheetTargets[0] : null;
   const scanBrands = [...new Set(pieces.map((piece) => piece.brand.trim()).filter(Boolean))];
 
@@ -403,16 +385,19 @@ export function ScanReviewWorkspace({
       onRequestClose={requestSystemClose}
     >
       <GestureHandlerRootView style={styles.root}>
-        <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardProvider>
+        <View style={styles.root} accessibilityElementsHidden={Boolean(sheet)} importantForAccessibility={sheet ? "no-hide-descendants" : "auto"}>
           <WorkspaceHeader
             stage={stage}
             view={effectiveView}
             canGoBack={effectiveView === 'loupe' && sheetEnabled && !busy}
             position={effectiveView === 'loupe' && activeIndex >= 0 ? { index: activeIndex, count: loupeIds.length, walk: Boolean(walk) } : null}
-            selecting={selecting}
             includedCount={inclusion.included.length}
             totalCount={pieces.length}
-            onDone={endSelection}
+            onMore={onMinimize ? () => Alert.alert('Import options', undefined, [
+                { text: 'Discard import', style: 'destructive', onPress: () => setConfirmClose(true) },
+                { text: 'Cancel', style: 'cancel' },
+              ]) : undefined}
             closeDisabled={closeDisabled}
             topInset={insets.top}
             onBack={() => { setWalk(null); setView('sheet'); }}
@@ -433,7 +418,7 @@ export function ScanReviewWorkspace({
           ) : stage === 'extracting' ? (
             <ExtractionState piece={visiblePieces[0] ?? null} progress={extractionProgress} heroHeight={heroHeight} reduceMotion={reduceMotion} />
           ) : effectiveView === 'sheet' ? (
-            <ContactSheet
+            <PreExtractGrid
               pieces={sheetPieces}
               totalCount={visiblePieces.length}
               stage={stage}
@@ -441,28 +426,27 @@ export function ScanReviewWorkspace({
               guidance={sheetGuidance(review ? 'review' : 'pre-extract', summary)}
               checkCount={checkCount}
               filter={filter}
-              selection={selecting ? selection : null}
+              selection={null}
               disabled={stage === 'saving'}
               reduceMotion={reduceMotion}
               bottomPadding={contentBottom}
               onFilterChange={setFilter}
               onOpen={openPiece}
               scrollOffset={gridOffset}
-              focusId={activeId}
+              brandFeedback={brandFeedback}
+              onClearBrand={id => { selectionFeedback(); update(id, { brand: '' }); }}
+              focusId={sheet ? null : activeId}
+              onBrand={id => { setActiveId(id); openSheet({ kind: 'brand', target: [id] }); }}
               onToggleIncluded={id => {
+                selectionFeedback();
                 const piece = inclusion.snapshot().find(p => p.id === id);
                 inclusion.change([id], !piece);
                 track('scan_review_inclusion_changed', { mode: onMinimize ? 'batch' : 'single', included: !piece });
               }}
-              onToggleSelect={(id) => setSelection((current) => {
-                const next = new Set(current ?? []);
-                if (next.has(id)) next.delete(id);
-                else next.add(id);
-                return next;
-              })}
+              onToggleSelect={() => {}}
             />
           ) : activeResolvedId ? (
-            <Loupe
+            <ItemInspectionModal
               key={walk ? `walk:${walk.join(',')}` : 'all'}
               pieces={loupePieces}
               stage={stage}
@@ -475,53 +459,65 @@ export function ScanReviewWorkspace({
               onUpdate={update}
               onOpenSheet={(kind, id) => openSheet({ kind, target: [id] })}
               onCrop={setCropId}
+              onToggleIncluded={id => {
+                selectionFeedback();
+                inclusion.change([id], !inclusion.snapshot().some(p => p.id === id));
+              }}
               onToggleCutout={onToggleCutout}
-              onToggleIncluded={id => inclusion.change([id], !inclusion.snapshot().some(p => p.id === id))}
+              footerHeight={footerHeight}
             />
           ) : <View style={styles.root} />}
 
-          <View>
-            {!busy && !selecting && effectiveView === 'sheet' ? (
+          <View onLayout={event => setFooterHeight(event.nativeEvent.layout.height)}>
+            {!busy && effectiveView === 'sheet' ? (
               <View style={styles.shortcuts}>
-                <TextLink label={inclusion.included.length === pieces.length && pieces.length > 0 ? 'Exclude all' : 'Include all'} onPress={() => inclusion.change(pieces.map(p => p.id), inclusion.included.length !== pieces.length)} />
-                <TextLink label="Edit several" onPress={() => setSelection(new Set())} disabled={pieces.length === 0} />
+                <Text style={styles.toolbarCount}>{inclusion.included.length} included</Text>
+                <Pressable accessibilityRole="button" style={({ pressed }) => [styles.toolbarButton, pressed && { backgroundColor: colors.surfaceSelected }]} onPress={() => { bulkFeedback(); inclusion.change(pieces.map(p => p.id), inclusion.included.length !== pieces.length); }} disabled={!pieces.length} accessibilityState={{ disabled: !pieces.length }}>
+                  <Text style={styles.toolbarLabel}>{inclusion.included.length === pieces.length && pieces.length > 0 ? 'Exclude all' : 'Include all'}</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" style={({ pressed }) => [styles.toolbarButton, pressed && { backgroundColor: colors.surfaceSelected }]} onPress={() => {
+                  const target = inclusion.snapshot().map(piece => piece.id);
+                  if (target.length) openSheet({ kind: 'brand', target, includedOnly: true });
+                }} disabled={!inclusion.included.length} accessibilityState={{ disabled: !inclusion.included.length }}>
+                  <Ionicons name="pricetag-outline" size={16} color={colors.foreground} />
+                  <Text style={styles.toolbarLabel}>Brand</Text>
+                </Pressable>
               </View>
             ) : null}
             <ActionBar mode={actionMode} bottomInset={insets.bottom} />
           </View>
 
-        </KeyboardAvoidingView>
+        </View>
 
-        {sheet ? (
+        {sheet?.kind === 'brand' ? (
+          <BrandSearchSheet targetIds={sheet.target} current={singleTarget?.brand ?? (sheetTargets.every(piece => piece.brand === sheetTargets[0]?.brand) ? sheetTargets[0]?.brand ?? '' : '')}
+            suggestions={brandSuggestions} scanBrands={scanBrands} subtitle={singleTarget ? <PieceLine piece={singleTarget} /> : <Text>{pieceCountLabel(sheetTargets.length)}</Text>}
+            reduceMotion={reduceMotion} dismissed={sheetDismissed} onClose={() => { setSheet(null); setSheetDismissed(false); }}
+            onSelect={(ids, brand) => {
+              const targets = ids.filter(id => pieces.some(p => p.id === id && (!sheet.includedOnly || p.included !== false)));
+              for (const id of targets) update(id, { brand });
+              setBrandFeedback(current => ({ revision: current.revision + 1, ids: new Set(targets) }));
+              dismissSheet();
+            }} />
+        ) : sheet ? (
           <WorkspaceSheet
-            title={sheet.kind === 'brand' ? 'Brand' : sheet.kind === 'material' ? 'Material' : sheet.kind === 'category' ? 'Category' : 'Season'}
+            title={sheet.kind === 'material' ? 'Material' : sheet.kind === 'category' ? 'Category' : 'Season'}
             subtitle={singleTarget ? <PieceLine piece={singleTarget} /> : <Text style={styles.sheetSubtitle}>{pieceCountLabel(sheetTargets.length)}</Text>}
             reduceMotion={reduceMotion}
             dismissed={sheetDismissed}
             onClose={() => { setSheet(null); setSheetDismissed(false); }}
-            footer={sheet.kind === 'category' ? (
-              <SheetButton label="Done" onPress={dismissSheet} />
-            ) : sheet.kind === 'season' ? (
+            footer={sheet.kind === 'season' ? (
               <SheetButton
                 label={`Apply to ${pieceCountLabel(sheetTargets.length)}`}
                 onPress={() => {
+                  bulkFeedback();
                   for (const piece of sheetTargets) update(piece.id, { seasons: seasonDraft });
                   dismissSheet();
                 }}
               />
             ) : undefined}
           >
-            {sheet.kind === 'brand' ? (
-              <BrandPicker
-                current={singleTarget?.brand ?? (sheetTargets.every((piece) => piece.brand === sheetTargets[0]?.brand) ? sheetTargets[0]?.brand ?? '' : '')}
-                suggestions={brandSuggestions}
-                scanBrands={scanBrands}
-                onSelect={(brand) => {
-                  for (const piece of sheetTargets) update(piece.id, { brand });
-                  dismissSheet();
-                }}
-              />
-            ) : sheet.kind === 'material' && singleTarget ? (
+            {sheet.kind === 'material' && singleTarget ? (
               <MaterialPicker
                 current={singleTarget.material}
                 onSelect={(material) => {
@@ -558,20 +554,20 @@ export function ScanReviewWorkspace({
             }}
           />
         ) : null}
+        </KeyboardProvider>
       </GestureHandlerRootView>
     </Modal>
   );
 }
 
-function WorkspaceHeader({ stage, view, canGoBack, position, selecting, includedCount, totalCount, onDone, closeDisabled, topInset, onBack, onClose, onMinimize }: {
+function WorkspaceHeader({ stage, view, canGoBack, position, includedCount, totalCount, onMore, closeDisabled, topInset, onBack, onClose, onMinimize }: {
   stage: ScanReviewStage;
   view: View_;
   canGoBack: boolean;
   position: { index: number; count: number; walk: boolean } | null;
-  selecting: boolean;
   includedCount: number;
   totalCount: number;
-  onDone: () => void;
+  onMore?: () => void;
   closeDisabled: boolean;
   topInset: number;
   onBack: () => void;
@@ -582,7 +578,7 @@ function WorkspaceHeader({ stage, view, canGoBack, position, selecting, included
     ? 'Scanning'
     : stage === 'extracting'
       ? 'Reading details'
-      : selecting ? 'Select pieces to edit' : stage === 'pre-extract' ? 'Choose pieces' : 'Review details';
+      : stage === 'pre-extract' ? 'Choose pieces' : 'Review details';
   const showPosition = view === 'loupe' && position && position.count > 1 && (stage === 'review' || stage === 'saving' || stage === 'pre-extract');
 
   return (
@@ -601,11 +597,11 @@ function WorkspaceHeader({ stage, view, canGoBack, position, selecting, included
             {position.index + 1} of {position.count}{position.walk ? ' to check' : ''}
           </Text>
         ) : (
-          <View><Text style={styles.masthead} accessibilityRole="header">{title}</Text>{!selecting && (stage === 'pre-extract' || stage === 'review') ? <Text style={styles.position}>{includedCount} of {totalCount} included</Text> : null}</View>
+          <View><Text style={styles.masthead} accessibilityRole="header">{title}</Text>{(stage === 'pre-extract' || stage === 'review') ? <Text style={styles.position}>{includedCount} of {totalCount} included</Text> : null}</View>
         )}
       </View>
       <View style={[styles.headerSide, styles.headerSideEnd]}>
-        {selecting ? <TextLink label="Done" onPress={onDone} /> : null}
+        {onMore ? <Pressable onPress={onMore} style={styles.headerButton} accessibilityRole="button" accessibilityLabel="More options"><Ionicons name="ellipsis-horizontal" size={22} color={colors.foreground} /></Pressable> : null}
         {onMinimize ? (
           <TouchableOpacity
             style={styles.headerButton}
@@ -617,7 +613,7 @@ function WorkspaceHeader({ stage, view, canGoBack, position, selecting, included
             <Ionicons name="chevron-down" size={22} color={colors.foreground} />
           </TouchableOpacity>
         ) : null}
-        <TouchableOpacity
+        {!onMinimize ? <TouchableOpacity
           style={styles.headerButton}
           onPress={onClose}
           disabled={closeDisabled}
@@ -625,24 +621,29 @@ function WorkspaceHeader({ stage, view, canGoBack, position, selecting, included
           accessibilityLabel={onMinimize ? 'Discard batch import' : 'Close closet scan'}
         >
           <Ionicons name="close" size={22} color={closeDisabled ? colors.border : colors.foreground} />
-        </TouchableOpacity>
+        </TouchableOpacity> : null}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  shortcuts: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: spacing.lg },
+  shortcuts: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+  toolbarCount: { ...typography.text.caption, color: colors.mutedForeground, flexGrow: 1 },
+  toolbarButton: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, minWidth: 44, paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.surfaceSubtle, justifyContent: 'center' },
+  toolbarLabel: { ...typography.text.label, color: colors.foreground },
+  inclusionControl: { minHeight: 44, marginHorizontal: spacing.lg, marginVertical: spacing.sm },
   root: { flex: 1, backgroundColor: colors.background },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.sm,
     paddingHorizontal: spacing.sm,
     paddingBottom: spacing.xs,
     borderBottomWidth: stroke.hairline,
     borderBottomColor: colors.hairline,
   },
-  headerSide: { width: 96, flexDirection: 'row', alignItems: 'center' },
+  headerSide: { flexShrink: 0, flexDirection: 'row', alignItems: 'center' },
   headerSideEnd: { justifyContent: 'flex-end' },
   headerCenter: { flex: 1, alignItems: 'center' },
   headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },

@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Pressable, Text, ScrollView, StyleSheet, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { AccessibilityInfo, FlatList, Pressable, Text, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
+import { BlurView } from 'expo-blur';
+import { scheduleOnRN } from 'react-native-worklets';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { selectionFeedback } from './feedback';
 import Animated, {
   interpolate,
-  runOnJS,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
@@ -13,16 +15,13 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import {
-  loupeHeroHeight,
   pieceFlags,
-  reviewCarouselIndex,
   reviewCarouselMetrics,
   type PieceReviewState,
 } from '../../../lib/scan-review';
-import { colors, cutoutScaleFor, radii, spacing, surfaces } from '../../../theme';
-import { IndexScrubber } from './IndexScrubber';
+import { colors, cutoutScaleFor, radii, spacing, surfaces, typography } from '../../../theme';
 import { SpecSheet, type ExpandableRow, type SheetKind } from './SpecSheet';
-import { Middot, TextLink, TextSegment } from './atoms';
+import { TextSegment } from './atoms';
 import { coverUri, isReviewStage, type PiecePatch, type ScanReviewPiece, type ScanReviewStage } from './types';
 
 type Props = {
@@ -39,14 +38,14 @@ type Props = {
   onCrop: (id: string) => void;
   onToggleCutout: (id: string) => void;
   onToggleIncluded: (id: string) => void;
+  footerHeight: number;
 };
 
 /**
- * One piece at a time, large. Two ways to travel — swipe the plate or drag
- * the tick rail — and both drive the same offset, so there is nothing to keep
- * in sync.
+ * Shared inspection content within the workspace modal. Swipe navigation
+ * commits metadata targets when the page settles.
  */
-export function Loupe({
+export function ItemInspectionModal({
   pieces,
   stage,
   states,
@@ -58,14 +57,13 @@ export function Loupe({
   onUpdate,
   onOpenSheet,
   onCrop,
-  onToggleCutout,
-  onToggleIncluded,
+  onToggleCutout, onToggleIncluded,
+  footerHeight,
 }: Props) {
-  const { width, height } = useWindowDimensions();
+  const { width } = useWindowDimensions();
   const metrics = useMemo(() => reviewCarouselMetrics(width), [width]);
-  const heroHeight = loupeHeroHeight(height);
+  const heroHeight = metrics.cardWidth * 4 / 3;
   const carouselRef = useRef<FlatList<ScanReviewPiece>>(null);
-  const scrollRef = useRef<ScrollView>(null);
   const ids = useMemo(() => pieces.map((piece) => piece.id), [pieces]);
   const activeIndex = Math.max(0, ids.indexOf(activeId));
   const active = pieces[activeIndex] ?? null;
@@ -75,14 +73,15 @@ export function Loupe({
   const scrollX = useSharedValue(initialIndex * metrics.snapInterval);
   const trackedIndex = useSharedValue(initialIndex);
   const dragging = useSharedValue(false);
-  // The next programmatic move should jump, not glide — set by the scrubber,
-  // where the finger is already doing the travelling.
+  const dragStartIndex = useSharedValue(initialIndex);
+  // Accessible paging jumps directly; automatic review navigation may animate.
   const jumpNext = useRef(false);
+  const [paging, setPaging] = useState(false);
   const [expandedRow, setExpandedRow] = useState<ExpandableRow | null>(null);
 
   useEffect(() => { setExpandedRow(null); }, [activeId]);
 
-  // Parent-driven moves ("Looks right" → next flagged, the scrubber, a
+  // Parent-driven moves ("Looks right" → next flagged, accessible paging, a
   // removal): scroll the pager to wherever the active piece now sits.
   useEffect(() => {
     const index = ids.indexOf(activeId);
@@ -98,62 +97,62 @@ export function Loupe({
   const selectIndex = useCallback((index: number, fromDrag: boolean) => {
     const piece = pieces[index];
     if (!piece) return;
-    if (fromDrag) void Haptics.selectionAsync();
+    setPaging(false);
+    if (fromDrag) selectionFeedback();
     onActiveChange(piece.id);
   }, [onActiveChange, pieces]);
 
   const onScroll = useAnimatedScrollHandler({
-    onBeginDrag: () => { dragging.value = true; },
+    onBeginDrag: () => { scheduleOnRN(setPaging, true); dragging.value = true; dragStartIndex.value = trackedIndex.value; },
     onScroll: (event) => {
       scrollX.value = event.contentOffset.x;
       if (metrics.snapInterval <= 0 || pieces.length === 0) return;
       const index = Math.min(pieces.length - 1, Math.max(0, Math.round(event.contentOffset.x / metrics.snapInterval)));
       if (index !== trackedIndex.value) {
         trackedIndex.value = index;
-        runOnJS(selectIndex)(index, dragging.value);
+
       }
     },
-    onMomentumEnd: () => { dragging.value = false; },
+    onEndDrag: (event) => {
+      if (!event.velocity?.x) {
+        const index = Math.min(pieces.length - 1, Math.max(0, Math.round(event.contentOffset.x / metrics.snapInterval)));
+        scheduleOnRN(selectIndex, index, dragging.value && index !== dragStartIndex.value);
+        dragging.value = false;
+      }
+    },
+    onMomentumEnd: (event) => {
+      const index = Math.min(pieces.length - 1, Math.max(0, Math.round(event.contentOffset.x / metrics.snapInterval)));
+      scheduleOnRN(selectIndex, index, dragging.value && index !== dragStartIndex.value);
+      dragging.value = false;
+    },
   }, [metrics.snapInterval, pieces.length, selectIndex]);
-
-  // Backstop for a short drag that springs back without a halfway crossing.
-  const onMomentumEnd = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const index = reviewCarouselIndex(event.nativeEvent.contentOffset.x, metrics.snapInterval, pieces.length);
-    const piece = pieces[index];
-    if (piece && piece.id !== activeId) onActiveChange(piece.id);
-  }, [activeId, metrics.snapInterval, onActiveChange, pieces]);
 
   const seek = useCallback((index: number) => {
     const piece = pieces[index];
     if (!piece || piece.id === activeId) return;
-    void Haptics.selectionAsync();
+    selectionFeedback();
     jumpNext.current = true;
     onActiveChange(piece.id);
   }, [activeId, onActiveChange, pieces]);
 
-  // The panel leaves with the outgoing plate, swaps at the halfway point
-  // where it is nearly invisible, and settles under the incoming one.
+  // Quiet the metadata while the image moves; editing is disabled until settled.
   const coupledStyle = useAnimatedStyle(() => {
     if (reduceMotion) return { opacity: 1, transform: [{ translateX: 0 }] };
     const half = Math.max(1, metrics.snapInterval / 2);
-    const delta = scrollX.value - trackedIndex.value * metrics.snapInterval;
+    const delta = scrollX.value - activeIndex * metrics.snapInterval;
     const clamped = Math.max(-half, Math.min(half, delta));
     return {
       opacity: 1 - (Math.abs(clamped) / half) * 0.8,
       transform: [{ translateX: -clamped * 0.5 }],
     };
-  }, [metrics.snapInterval, reduceMotion]);
-
-  const scrubberStates = useMemo(() => pieces.map((piece) => (review ? states[piece.id] ?? 'ready' : null)), [pieces, review, states]);
-  const thumbs = useMemo(() => pieces.map((piece) => coverUri(piece, stage)), [pieces, stage]);
+  }, [activeIndex, metrics.snapInterval, reduceMotion]);
 
   if (!active) return null;
-  const canCrop = active.canAdjustCrop && Boolean(active.cropSource && active.cropBbox);
   const hasCutout = review && Boolean(active.cutout);
 
   return (
-    <ScrollView
-      ref={scrollRef}
+    <KeyboardAwareScrollView
+      bottomOffset={footerHeight + spacing.md}
       style={styles.scroll}
       contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}
       showsVerticalScrollIndicator={false}
@@ -176,13 +175,14 @@ export function Loupe({
         getItemLayout={(_, index) => ({ length: metrics.snapInterval, offset: metrics.snapInterval * index, index })}
         onScroll={onScroll}
         scrollEventThrottle={16}
-        onMomentumScrollEnd={onMomentumEnd}
         onScrollToIndexFailed={({ index }) => {
           carouselRef.current?.scrollToOffset({ offset: index * metrics.snapInterval, animated: false });
         }}
         renderItem={({ item, index }) => (
           <LoupeHero
             piece={item}
+            disabled={disabled || paging}
+            onCrop={() => onCrop(item.id)}
             index={index}
             stage={stage}
             width={metrics.cardWidth}
@@ -195,37 +195,37 @@ export function Loupe({
         )}
       />
 
-      {pieces.length > 1 ? (
-        <IndexScrubber
-          count={pieces.length}
-          activeIndex={activeIndex}
-          states={scrubberStates}
-          thumbs={thumbs}
-          onSeek={seek}
-          disabled={disabled}
-        />
-      ) : null}
+      {pieces.length > 1 ? <View style={styles.dots} accessible accessibilityRole="adjustable"
+        accessibilityLabel={`Piece ${activeIndex + 1} of ${pieces.length}`}
+        accessibilityValue={{ min: 1, max: pieces.length, now: activeIndex + 1 }}
+        accessibilityActions={[{ name: 'increment', label: 'Next piece' }, { name: 'decrement', label: 'Previous piece' }]}
+        onAccessibilityAction={event => {
+          if (!disabled && !paging) seek(Math.max(0, Math.min(pieces.length - 1, activeIndex + (event.nativeEvent.actionName === 'increment' ? 1 : -1))));
+        }}>
+        {Array.from({ length: Math.min(7, pieces.length) }, (_, offset) => {
+          const index = Math.max(0, Math.min(activeIndex - 3, pieces.length - 7)) + offset;
+          return <View key={index} style={[styles.dot, index === activeIndex && styles.activeDot]} />;
+        })}
+      </View> : null}
 
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: spacing.lg }}>
-        <TextLink label="Previous" disabled={disabled || activeIndex === 0} onPress={() => seek(activeIndex - 1)} />
-        <TextLink label="Next" disabled={disabled || activeIndex === pieces.length - 1} onPress={() => seek(activeIndex + 1)} />
-      </View>
+      <Pressable accessibilityRole="switch" accessibilityLabel="Include this piece"
+        accessibilityState={{ checked: active.included !== false, disabled: disabled || paging }}
+        disabled={disabled || paging} onPress={() => onToggleIncluded(active.id)} style={styles.status}>
+        <Ionicons name={active.included !== false ? 'checkmark-circle' : 'ellipse-outline'} size={18} color={colors.foreground} />
+        <Text style={styles.cropText}>{active.included !== false ? 'Included' : 'Skipped'}</Text>
+      </Pressable>
       <Animated.View style={[styles.utilities, coupledStyle]}>
-        {canCrop ? <TextLink label="Crop" onPress={() => onCrop(active.id)} disabled={disabled} accessibilityLabel={`Adjust crop for ${active.name}`} /> : null}
-        {canCrop && hasCutout ? <Middot /> : null}
         {hasCutout ? (
           <TextSegment
             options={[{ value: 'cutout' as const, label: 'Cutout' }, { value: 'photo' as const, label: 'Original' }]}
             value={active.useCutout ? 'cutout' : 'photo'}
             onChange={() => onToggleCutout(active.id)}
-            disabled={disabled}
+            disabled={disabled || paging}
             accessibilityLabel="Cover image"
           />
         ) : null}
         <View style={styles.spacer} />
-        <Pressable style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }} onPress={() => onToggleIncluded(active.id)} disabled={disabled} accessibilityRole="checkbox" accessibilityState={{ checked: active.included !== false, disabled }} accessibilityLabel="Include this piece">
-          <Ionicons name={active.included !== false ? 'checkbox' : 'square-outline'} size={22} color={colors.foreground} /><Text>Include this piece</Text>
-        </Pressable>
+
       </Animated.View>
 
       <Animated.View style={coupledStyle}>
@@ -235,24 +235,20 @@ export function Loupe({
           // A confirmed piece has been looked at; its field marks retire with it.
           flags={states[active.id] === 'confirmed' ? [] : pieceFlags(active)}
           expandedRow={expandedRow}
-          disabled={disabled}
-          onExpand={(row) => {
-            setExpandedRow(row);
-            // The expandable rows sit at the foot of the sheet; bring what
-            // just opened into view instead of leaving it under the bar.
-            if (row) setTimeout(() => scrollRef.current?.scrollToEnd({ animated: !reduceMotion }), 220);
-          }}
+          disabled={disabled || paging}
+          onExpand={setExpandedRow}
           onUpdate={(patch) => onUpdate(active.id, patch)}
           onOpenSheet={(kind) => onOpenSheet(kind, active.id)}
-          onNameFocus={() => setTimeout(() => scrollRef.current?.scrollTo({ y: heroHeight * 0.6, animated: !reduceMotion }), 120)}
         />
       </Animated.View>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 
-function LoupeHero({ piece, index, stage, width, height, gap, snapInterval, scrollX, reduceMotion }: {
+function LoupeHero({ piece, disabled, onCrop, index, stage, width, height, gap, snapInterval, scrollX, reduceMotion }: {
   piece: ScanReviewPiece;
+  disabled: boolean;
+  onCrop: () => void;
   index: number;
   stage: ScanReviewStage;
   width: number;
@@ -262,6 +258,12 @@ function LoupeHero({ piece, index, stage, width, height, gap, snapInterval, scro
   scrollX: SharedValue<number>;
   reduceMotion: boolean;
 }) {
+  const [opaque, setOpaque] = useState(false);
+  useEffect(() => {
+    void AccessibilityInfo.isReduceTransparencyEnabled().then(setOpaque);
+    const listener = AccessibilityInfo.addEventListener('reduceTransparencyChanged', setOpaque);
+    return () => listener.remove();
+  }, []);
   const uri = coverUri(piece, stage);
   const isCutout = uri !== null && uri === piece.cutout;
   const scale = isCutout ? cutoutScaleFor(piece.category) : 1;
@@ -291,7 +293,7 @@ function LoupeHero({ piece, index, stage, width, height, gap, snapInterval, scro
         <Image
           source={{ uri }}
           style={{ width: `${scale * 100}%`, height: `${scale * 100}%` }}
-          contentFit="contain"
+          contentFit={isCutout ? "contain" : "cover"}
           cachePolicy="memory-disk"
           recyclingKey={`${piece.id}-${isCutout ? 'cutout' : 'photo'}`}
           transition={150}
@@ -300,11 +302,25 @@ function LoupeHero({ piece, index, stage, width, height, gap, snapInterval, scro
       ) : (
         <Ionicons name="shirt-outline" size={54} color={colors.mutedForeground} />
       )}
+      {piece.canAdjustCrop && piece.cropSource && piece.cropBbox ? (
+        <Pressable onPress={onCrop} disabled={disabled} accessibilityRole="button" accessibilityLabel={`Adjust crop for ${piece.name}`}
+          style={({ pressed }) => [styles.crop, { backgroundColor: opaque ? colors.background : 'rgba(246,245,242,0.45)' }, pressed && { backgroundColor: colors.surfaceSelected }]}>
+          {!opaque ? <BlurView pointerEvents="none" tint="light" intensity={45} style={StyleSheet.absoluteFill} /> : null}
+          <Ionicons name="crop-outline" size={18} color={colors.foreground} />
+          <Text style={styles.cropText}>Crop</Text>
+        </Pressable>
+      ) : null}
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
+  dots: { minHeight: 44, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center' },
+  dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.border },
+  activeDot: { backgroundColor: colors.foreground, width: 6, height: 6 },
+  status: { alignSelf: 'flex-start', marginHorizontal: spacing.lg, minHeight: 44, paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.surfaceSubtle, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  crop: { overflow: 'hidden', position: 'absolute', bottom: spacing.md, right: spacing.md, minHeight: 44, minWidth: 44, paddingHorizontal: spacing.lg, borderRadius: radii.full, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  cropText: { ...typography.text.label, color: colors.foreground },
   scroll: { flex: 1 },
   content: { paddingTop: spacing.md, gap: spacing.sm },
   hero: {

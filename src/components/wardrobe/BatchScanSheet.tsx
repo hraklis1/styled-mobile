@@ -153,7 +153,7 @@ export function BatchScanSheet({ onClose, onStarted }: BatchScanSheetProps) {
         <View style={styles.content}>
           <Text style={styles.subtitle}>
             Select up to {MAX_PHOTOS} photos. We&apos;ll find every piece and read its details in the
-            background — keep using the app and review when it&apos;s ready.
+            background. Follow the progress here, or minimize to keep using the app.
           </Text>
           <TouchableOpacity style={styles.pickBtn} onPress={pickPhotos} activeOpacity={0.85} accessibilityRole="button">
             <Ionicons name="images-outline" size={22} color={colors.primaryForeground} />

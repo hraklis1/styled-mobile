@@ -92,7 +92,7 @@ export const useBatchImportStore = create<BatchImportState>()(
     (set, get) => ({
       batch: null,
       workspaceOpen: false,
-      start: (batch) => set({ batch: withPhase(batch), workspaceOpen: false }),
+      start: (batch) => set({ batch: withPhase(batch), workspaceOpen: true }),
       discard: () => set({ batch: null, workspaceOpen: false }),
       openWorkspace: () => set({ workspaceOpen: true }),
       closeWorkspace: () => set({ workspaceOpen: false }),

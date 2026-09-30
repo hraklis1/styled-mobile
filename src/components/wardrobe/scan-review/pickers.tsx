@@ -45,9 +45,10 @@ function SearchBar({ value, onChange, placeholder, onSubmit, autoFocus }: {
   onSubmit?: () => void;
   autoFocus?: boolean;
 }) {
+  const [laidOut, setLaidOut] = useState(false);
   return (
-    <View style={styles.searchRow}>
-      <SearchField
+    <View style={styles.searchRow} onLayout={() => setLaidOut(true)}>
+      {(!autoFocus || laidOut) && <SearchField
         value={value}
         onChangeText={onChange}
         placeholder={placeholder}
@@ -56,7 +57,7 @@ function SearchBar({ value, onChange, placeholder, onSubmit, autoFocus }: {
         returnKeyType="done"
         onSubmitEditing={onSubmit}
         autoFocus={autoFocus}
-      />
+      />}
     </View>
   );
 }
@@ -84,7 +85,7 @@ export function BrandPicker({ current, suggestions, scanBrands, onSelect }: {
         data={filtered}
         keyExtractor={(brand) => brand.toLocaleLowerCase()}
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
+        keyboardDismissMode="interactive"
         contentContainerStyle={styles.list}
         ListHeaderComponent={
           <>
@@ -130,7 +131,7 @@ export function MaterialPicker({ current, onSelect }: {
         data={options}
         keyExtractor={(material) => material}
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
+        keyboardDismissMode="interactive"
         contentContainerStyle={styles.list}
         ListHeaderComponent={current && !query ? <OptionRow icon="close" label="Not sure" muted onPress={() => onSelect(null)} /> : null}
         ListEmptyComponent={<Text style={styles.empty}>No material by that name.</Text>}
@@ -207,7 +208,7 @@ export function SheetButton({ label, onPress, disabled }: { label: string; onPre
 }
 
 const styles = StyleSheet.create({
-  fill: { flex: 1 },
+  fill: { flex: 1, minHeight: 0 },
   searchRow: { flexDirection: 'row', paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.sm },
   list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
   section: { gap: spacing.sm, paddingTop: spacing.sm, paddingBottom: spacing.md },

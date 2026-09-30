@@ -41,7 +41,7 @@ export type PiecePatch = Partial<ScanReviewPiece>;
 
 /** Which in-tree sheet is open, and what it edits. */
 export type SheetRequest =
-  | { kind: 'brand'; target: string[] }
+  | { kind: 'brand'; target: string[]; includedOnly?: boolean }
   | { kind: 'material'; target: string[] }
   | { kind: 'category'; target: string[] }
   | { kind: 'season'; target: string[] };

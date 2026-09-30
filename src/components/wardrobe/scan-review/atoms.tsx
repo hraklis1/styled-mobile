@@ -135,7 +135,7 @@ export function ChipRow<T extends string>({ label, options, isSelected, onToggle
 }
 
 const styles = StyleSheet.create({
-  link: { minHeight: 32, justifyContent: 'center' },
+  link: { minWidth: 44, minHeight: 44, justifyContent: 'center' },
   linkText: { ...typography.text.meta, fontWeight: typography.weight.medium, color: colors.foreground },
   linkMuted: { color: colors.mutedForeground },
   linkDisabled: { opacity: 0.4 },
@@ -144,7 +144,9 @@ const styles = StyleSheet.create({
   segmentRule: { width: stroke.hairline, height: 12, backgroundColor: colors.controlOutline },
   segmentSelected: { textDecorationLine: 'underline', textDecorationColor: colors.foreground },
   chip: {
-    height: 32,
+    minHeight: 44,
+    minWidth: 44,
+    paddingVertical: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
