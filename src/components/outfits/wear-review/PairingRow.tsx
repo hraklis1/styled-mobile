@@ -159,9 +159,8 @@ export const PairingRow = memo(function PairingRow({
             </View>
           </View>
         </View>
-        {suggested ? (
-          <CandidateStrip detection={detection} itemsById={itemsById} selectedId={matched.id} onPick={(itemId) => actions.confirm(id, itemId)} />
-        ) : null}
+        {/* Stays up after confirming so a wrong pick can be swapped for another candidate. */}
+        <CandidateStrip detection={detection} itemsById={itemsById} selectedId={matched.id} onPick={(itemId) => actions.confirm(id, itemId)} />
       </View>
     );
   } else if (resolution.kind === 'new') {
