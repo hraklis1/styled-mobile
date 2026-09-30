@@ -69,6 +69,7 @@ export function reduce(flow: WearFlow, event: WearEvent): WearFlow {
         date: flow.date,
         scan: event.scan,
         resolutions: initialResolutions(event.scan),
+        additionalItemIds: [],
         resolving: null,
         saveError: null,
         updatedAt: event.now,
@@ -85,6 +86,14 @@ export function reduce(flow: WearFlow, event: WearEvent): WearFlow {
     case 'confirm':
       if (!inReview(flow)) return flow;
       return resolve(flow, event.detectionId, { kind: 'matched', itemId: event.itemId, source: 'user' });
+
+    case 'addAdditionalItem':
+      if (!inReview(flow) || selectedItemIds(flow).includes(event.itemId)) return flow;
+      return { ...flow, additionalItemIds: [...flow.additionalItemIds, event.itemId], saveError: null };
+
+    case 'removeAdditionalItem':
+      if (!inReview(flow) || !flow.additionalItemIds.includes(event.itemId)) return flow;
+      return { ...flow, additionalItemIds: flow.additionalItemIds.filter((id) => id !== event.itemId), saveError: null };
 
     case 'markNew': {
       if (!inReview(flow)) return flow;
@@ -175,10 +184,10 @@ export function needsCheck(r: Resolution): boolean {
 export function reviewCounts(flow: ReviewFlow) {
   const all = Object.values(flow.resolutions);
   return {
-    total: all.length,
+    total: all.length + flow.additionalItemIds.length,
     toCheck: all.filter(needsCheck).length,
     unresolved: all.filter((r) => r.kind === 'unresolved').length,
-    logging: all.filter((r) => r.kind === 'matched' || r.kind === 'new').length,
+    logging: selectedItemIds(flow).length + all.filter((r) => r.kind === 'new').length,
     newItems: all.filter((r) => r.kind === 'new').length,
   };
 }
@@ -200,6 +209,19 @@ export function matchedItemIds(flow: ReviewFlow): number[] {
     if (r.kind === 'matched' && !ids.includes(r.itemId)) ids.push(r.itemId);
   }
   return ids;
+}
+
+/** Unique closet IDs, including manually added garments. */
+export function selectedItemIds(flow: ReviewFlow): number[] {
+  return [...new Set([...matchedItemIds(flow), ...flow.additionalItemIds])];
+}
+
+/** A removed closet item must be corrected after the wardrobe has loaded. */
+export function reviewQueue(flow: ReviewFlow, availableIds?: ReadonlySet<number>): string[] {
+  return orderedDetections(flow.scan).filter((d) => {
+    const r = flow.resolutions[d.id];
+    return needsCheck(r) || (r.kind === 'matched' && availableIds != null && !availableIds.has(r.itemId));
+  }).map((d) => d.id);
 }
 
 export function newDetections(flow: ReviewFlow): WearDetection[] {

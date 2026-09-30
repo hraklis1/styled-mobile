@@ -48,14 +48,12 @@ function toDraftPatch(patch: PiecePatch): Partial<WearDraft> {
  * Every edit is saved to the review as it's made; nothing is created until
  * the outfit is logged.
  */
-export function NewPieceSheet({ detection, draft, scanBrands, reduceMotion, onChange, onClose }: {
+export function NewPieceEditor({ detection, draft, scanBrands, onChange }: {
   detection: WearDetection;
   draft: WearDraft;
   /** Brands already chosen for other new pieces in this review. */
   scanBrands: string[];
-  reduceMotion: boolean;
   onChange: (patch: Partial<WearDraft>) => void;
-  onClose: () => void;
 }) {
   const [picker, setPicker] = useState<SheetKind | null>(null);
   const [expandedRow, setExpandedRow] = useState<ExpandableRow | null>(null);
@@ -72,15 +70,13 @@ export function NewPieceSheet({ detection, draft, scanBrands, reduceMotion, onCh
   const title = picker === 'brand' ? 'Brand' : picker === 'material' ? 'Material' : picker === 'category' ? 'Category' : 'New piece';
 
   return (
-    <WorkspaceSheet
-      title={title}
-      subtitle={picker
-        ? <TextLink label="Back" tone="muted" onPress={() => setPicker(null)} accessibilityLabel="Back to the piece" />
-        : <Text style={styles.subtitle}>Added to your closet when you log</Text>}
-      detent="large"
-      reduceMotion={reduceMotion}
-      onClose={onClose}
-    >
+    <View style={styles.root}>
+      {picker ? (
+        <View style={styles.pad}>
+          <Text style={styles.title}>{title}</Text>
+          <TextLink label="Back to piece details" onPress={() => setPicker(null)} />
+        </View>
+      ) : <Text style={[styles.subtitle, styles.pad]}>Added to your closet when you log</Text>}
       {picker === 'brand' ? (
         <BrandPicker current={draft.brand} suggestions={brandSuggestions} scanBrands={scanBrands} onSelect={(brand) => pick({ brand })} />
       ) : picker === 'material' ? (
@@ -113,11 +109,21 @@ export function NewPieceSheet({ detection, draft, scanBrands, reduceMotion, onCh
           />
         </ScrollView>
       )}
+    </View>
+  );
+}
+
+export function NewPieceSheet(props: React.ComponentProps<typeof NewPieceEditor> & { reduceMotion: boolean; onClose: () => void }) {
+  return (
+    <WorkspaceSheet title="New piece" detent="large" reduceMotion={props.reduceMotion} onClose={props.onClose}>
+      <NewPieceEditor {...props} />
     </WorkspaceSheet>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
+  title: { ...typography.text.editorialSection, color: colors.foreground },
   subtitle: { ...typography.text.meta, color: colors.mutedForeground },
   content: { paddingBottom: spacing.xl, gap: spacing.lg },
   pad: { paddingHorizontal: spacing.lg },

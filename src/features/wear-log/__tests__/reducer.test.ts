@@ -185,3 +185,46 @@ describe('wear-log persistence', () => {
     expect(clientImportIdFor('3f2a-uuid', 'd1')).toMatch(/^[A-Za-z0-9_-]{8,128}$/);
   });
 });
+
+describe('manual closet additions', () => {
+  it('deduplicates additions against manual and detected selections', () => {
+    const before = reviewing();
+    expect(reduce(before, { type: 'addAdditionalItem', itemId: 1 })).toBe(before);
+    const added = reduce(before, { type: 'addAdditionalItem', itemId: 9 }) as ReviewFlow;
+    expect(added.additionalItemIds).toEqual([9]);
+    expect(reduce(added, { type: 'addAdditionalItem', itemId: 9 })).toBe(added);
+    expect(reviewCounts(added).logging).toBe(4);
+    const removed = reduce(added, { type: 'removeAdditionalItem', itemId: 9 }) as ReviewFlow;
+    expect(removed.additionalItemIds).toEqual([]);
+    expect(removed.resolutions).toBe(before.resolutions);
+  });
+
+  it('logs an outfit consisting entirely of manual selections', () => {
+    const empty = { ...reviewing(), scan: { ...scan, detections: [] }, resolutions: {} };
+    expect(canLog(empty)).toBe(false);
+    const added = reduce(empty, { type: 'addAdditionalItem', itemId: 9 }) as ReviewFlow;
+    expect(canLog(added)).toBe(true);
+    expect(reviewCounts(added).logging).toBe(1);
+    const saving = reduce(added, { type: 'saveStarted' });
+    expect(reduce(saving, { type: 'addAdditionalItem', itemId: 10 })).toBe(saving);
+    expect(reduce(saving, { type: 'removeAdditionalItem', itemId: 9 })).toBe(saving);
+  });
+
+  it('counts a later duplicate scan match once, and removal leaves that match', () => {
+    let flow = reduce(reviewing(), { type: 'addAdditionalItem', itemId: 9 }) as ReviewFlow;
+    flow = reduce(flow, { type: 'confirm', detectionId: 'd2', itemId: 9 }) as ReviewFlow;
+    expect(reviewCounts(flow).logging).toBe(4);
+    flow = reduce(flow, { type: 'removeAdditionalItem', itemId: 9 }) as ReviewFlow;
+    expect(reviewCounts(flow).logging).toBe(4);
+    expect(flow.resolutions.d2).toMatchObject({ itemId: 9 });
+  });
+
+  it('normalizes older persisted reviews and preserves additions after a save failure', () => {
+    const before = reviewing();
+    const { additionalItemIds: _ids, ...legacy } = before;
+    expect((rehydrateFlow(legacy as ReviewFlow, before.updatedAt) as ReviewFlow).additionalItemIds).toEqual([]);
+    const added = { ...before, additionalItemIds: [9] };
+    expect((rehydrateFlow({ ...added, status: 'saving' }, before.updatedAt) as ReviewFlow).additionalItemIds).toEqual([9]);
+    expect((reduce({ ...added, status: 'saving' }, { type: 'saveFailed', message: 'offline' }) as ReviewFlow).additionalItemIds).toEqual([9]);
+  });
+});

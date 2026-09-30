@@ -2,7 +2,7 @@ import { api } from '../../lib/api';
 import { createItemsBatch, type BatchCreateItemInput } from '../../hooks/useItems';
 import { normalizeScanCategory } from '../../lib/outfit-log-scan';
 import type { Item } from '../../types/item';
-import { clientImportIdFor, draftFrom, matchedItemIds, newDetections } from './reducer';
+import { clientImportIdFor, draftFrom, selectedItemIds, newDetections } from './reducer';
 import type { ReviewFlow, WearDetection, WearDraft, WearScan } from './types';
 
 /** SAM 3 + matching; same budget as the closet scan's extraction. */
@@ -71,7 +71,7 @@ export async function saveWearLog(flow: ReviewFlow): Promise<WearLogSaved> {
     createdItems = result.items;
   }
 
-  const itemIds = [...new Set([...matchedItemIds(flow), ...createdItems.map((i) => i.id)])];
+  const itemIds = [...new Set([...selectedItemIds(flow), ...createdItems.map((i) => i.id)])];
   const { data } = await api.post<{ id: number; alreadyLoggedItemIds?: number[] }>('/api/outfit-logs', {
     clientLogId: flow.id,
     date: flow.date,

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Platform, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FlatList, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,25 +8,27 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { DetectionState } from '../../wardrobe/scan-review/LoadingStates';
 import { PrimaryButton } from '../../wardrobe/scan-review/ActionBar';
-import { TextLink, TextSegment } from '../../wardrobe/scan-review/atoms';
+import { TextLink } from '../../wardrobe/scan-review/atoms';
 import { cropFeedback } from '../../wardrobe/scan-review/feedback';
 import { useReviewReducedMotion } from '../../../hooks/useReviewReducedMotion';
 import { applySavedItems, useItems } from '../../../hooks/useItems';
 import { OUTFIT_LOGS_QUERY_KEY } from '../../../hooks/useOutfitLogs';
 import { track } from '../../../lib/analytics';
-import { colors, ingestion, spacing, stroke, typography } from '../../../theme';
+import { colors, spacing, stroke, typography } from '../../../theme';
 import type { Item } from '../../../types/item';
 import { saveWearLog } from '../../../features/wear-log/api';
-import { canLog, needsCheck, orderedDetections, reviewCounts, sharedMatch } from '../../../features/wear-log/reducer';
+import { canLog, matchedItemIds, orderedDetections, reviewCounts, reviewQueue, selectedItemIds, sharedMatch } from '../../../features/wear-log/reducer';
 import { discardWearFlow, retryWearScan } from '../../../features/wear-log/runner';
 import { dispatchWear, useWearLogStore } from '../../../features/wear-log/store';
 import type { ReviewFlow } from '../../../features/wear-log/types';
-import { ClosetMatchSheet } from './ClosetMatchSheet';
-import { NewPieceSheet } from './NewPieceSheet';
-import { PairingRow, type RowActions } from './PairingRow';
-import { PhotoHero } from './PhotoHero';
+import { ClosetPicker } from './ClosetMatchSheet';
+import { WorkspaceSheet } from '../../wardrobe/scan-review/WorkspaceSheet';
+import { WearResolveSheet } from './WearResolveSheet';
+import { PieceImage } from './PieceImage';
+import { WornDateSheet } from './WornDateSheet';
+import { PairingRow } from './PairingRow';
 
-type Filter = 'all' | 'check';
+type Surface = { kind: 'resolve'; queue: string[]; initialPhoto?: boolean } | { kind: 'add' } | { kind: 'date' };
 
 /** After this long a scan offers to carry on without the user watching. */
 const SLOW_SCAN_MS = 8_000;
@@ -144,7 +146,7 @@ export function WearReviewWorkspace({ onClose, onMinimize, onLogged, onPickManua
   return (
     <Review
       flow={flow}
-      heroHeight={heroHeight}
+      heroHeight={Math.min(Math.round(height * 0.28), 240)}
       width={width}
       insets={insets}
       reduceMotion={reduceMotion}
@@ -156,7 +158,7 @@ export function WearReviewWorkspace({ onClose, onMinimize, onLogged, onPickManua
 function Header({ title, onClose, right }: { title: string; onClose: () => void; right?: React.ReactNode }) {
   return (
     <View style={styles.header}>
-      <TouchableOpacity onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close">
+      <TouchableOpacity onPress={onClose} style={{ minWidth: 44, minHeight: 44, justifyContent: 'center' }} hitSlop={4} accessibilityRole="button" accessibilityLabel="Close">
         <Ionicons name="close" size={24} color={colors.foreground} />
       </TouchableOpacity>
       <Text style={styles.headerTitle} accessibilityRole="header">{title}</Text>
@@ -174,54 +176,23 @@ function Review({ flow, heroHeight, width, insets, reduceMotion, onClose }: {
   onClose: () => void;
 }) {
   const qc = useQueryClient();
-  const { data: items = [] } = useItems();
+  const { data: items = [], isSuccess, isError, refetch } = useItems();
   const itemsById = useMemo(() => new Map<number, Item>(items.map((i) => [i.id, i])), [items]);
-  const [filter, setFilter] = useState<Filter>('all');
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [undo, setUndo] = useState<{ detectionId: string; name: string } | null>(null);
-  const listRef = useRef<FlatList>(null);
-
+  const availableIds = useMemo(() => new Set(items.map((i) => i.id)), [items]);
+  const [surface, setSurface] = useState<Surface | null>(null);
   const ordered = useMemo(() => orderedDetections(flow.scan), [flow.scan]);
   const numbers = useMemo(() => Object.fromEntries(ordered.map((d, i) => [d.id, i + 1])), [ordered]);
-  const byId = useMemo(() => new Map(ordered.map((d) => [d.id, d])), [ordered]);
   const counts = reviewCounts(flow);
-  const visible = filter === 'check' ? ordered.filter((d) => needsCheck(flow.resolutions[d.id])) : ordered;
-  const dimmed = useMemo(
-    () => new Set(ordered.filter((d) => flow.resolutions[d.id]?.kind === 'dismissed').map((d) => d.id)),
-    [flow.resolutions, ordered],
-  );
-
-  // Nothing left to check: fall back to the whole list rather than an empty one.
-  useEffect(() => { if (filter === 'check' && counts.toCheck === 0) setFilter('all'); }, [counts.toCheck, filter]);
-  useEffect(() => {
-    if (!undo) return;
-    const t = setTimeout(() => setUndo(null), ingestion.undoMs);
-    return () => clearTimeout(t);
-  }, [undo]);
-
-  const focus = useCallback((id: string) => {
-    setActiveId(id);
-    const index = visible.findIndex((d) => d.id === id);
-    if (index >= 0) listRef.current?.scrollToIndex({ index, viewPosition: 0.3, animated: !reduceMotion });
-  }, [reduceMotion, visible]);
-
-  const actions = useMemo<RowActions>(() => ({
-    confirm: (detectionId, itemId) => dispatchWear({ type: 'confirm', detectionId, itemId }),
-    findInCloset: (detectionId) => dispatchWear({ type: 'openResolve', detectionId, mode: 'library' }),
-    addAsNew: (detectionId) => dispatchWear({ type: 'markNew', detectionId }),
-    editNew: (detectionId) => dispatchWear({ type: 'openResolve', detectionId, mode: 'new' }),
-    clear: (detectionId) => dispatchWear({ type: 'clear', detectionId }),
-    dismiss: (detectionId) => {
-      dispatchWear({ type: 'dismiss', detectionId });
-      setUndo({ detectionId, name: byId.get(detectionId)?.attributes.name ?? 'Piece' });
-    },
-    restore: (detectionId) => { dispatchWear({ type: 'restore', detectionId }); setUndo(null); },
-    focus: (detectionId) => setActiveId(detectionId),
-  }), [byId]);
+  const queue = reviewQueue(flow, isSuccess ? availableIds : undefined);
+  const missingAdditional = isSuccess ? flow.additionalItemIds.filter((id) => !availableIds.has(id)) : [];
+  const saving = flow.status === 'saving';
+  const openPiece = (id: string) => { if (!saving) setSurface({ kind: 'resolve', queue: [id] }); };
+  const closeSurface = () => { dispatchWear({ type: 'closeResolve' }); setSurface(null); };
 
   const save = useCallback(async () => {
     const current = useWearLogStore.getState().flow;
-    if (current.status !== 'reviewing' || !canLog(current)) return;
+    if (current.status !== 'reviewing' || !canLog(current) || !isSuccess
+      || selectedItemIds(current).some((id) => !availableIds.has(id))) return;
     dispatchWear({ type: 'saveStarted' });
     try {
       const saved = await saveWearLog(current);
@@ -230,8 +201,9 @@ function Review({ flow, heroHeight, width, insets, reduceMotion, onClose }: {
       void qc.invalidateQueries({ queryKey: ['items'] });
       cropFeedback(true);
       track('outfit_scan_review_completed', {
-        matched_count: saved.itemIds.length - saved.createdItems.length,
+        matched_count: matchedItemIds(current).length,
         new_count: saved.createdItems.length,
+        manually_added_count: current.additionalItemIds.length,
         skipped_count: Object.values(current.resolutions).filter((r) => r.kind === 'dismissed').length,
         already_logged_count: saved.alreadyLoggedItemIds.length,
       });
@@ -239,159 +211,75 @@ function Review({ flow, heroHeight, width, insets, reduceMotion, onClose }: {
     } catch (err) {
       cropFeedback(false);
       const offline = !(err as { response?: unknown })?.response;
-      dispatchWear({
-        type: 'saveFailed',
-        message: offline ? 'You’re offline. Your review is saved — log it when you’re back.' : 'Couldn’t log this outfit. Try again.',
-      });
+      dispatchWear({ type: 'saveFailed', message: offline ? 'You’re offline. Your review is saved — log it when you’re back.' : 'Couldn’t log this outfit. Try again.' });
     }
-  }, [qc]);
-
-  const scanBrands = useMemo(() => [...new Set(
-    Object.values(flow.resolutions).flatMap((r) => (r.kind === 'new' && r.draft.brand ? [r.draft.brand] : [])),
-  )], [flow.resolutions]);
-  const resolving = flow.resolving ? byId.get(flow.resolving.detectionId) : undefined;
-  const resolvingCurrent = flow.resolving ? flow.resolutions[flow.resolving.detectionId] : undefined;
-  const choice = dateChoice(flow.date);
-  const saving = flow.status === 'saving';
-
-  const buttonLabel = counts.toCheck > 0
-    ? `Check ${counts.toCheck} more ${counts.toCheck === 1 ? 'piece' : 'pieces'}`
-    : counts.logging === 0
-      ? 'Nothing to log'
-      : saving ? 'Logging…' : `Log outfit · ${pieces(counts.logging)}`;
-
+  }, [qc, availableIds, isSuccess]);
+  const dateLabel = dateChoice(flow.date) === 'today' ? 'Worn today' : dateChoice(flow.date) === 'yesterday' ? 'Worn yesterday' : `Worn ${shortDate(flow.date)}`;
+  const buttonLabel = saving ? 'Logging…' : queue.length ? `Review ${pieces(queue.length)}` : 'Log outfit';
+  const status = queue.length ? `${pieces(queue.length)} ${queue.length === 1 ? 'needs' : 'need'} review`
+    : counts.newItems ? `${pieces(counts.logging)} selected` : `${pieces(counts.logging)} matched`;
   return (
     <GestureHandlerRootView style={[styles.root, { paddingTop: insets.top }]}>
-      <Header
-        title={flow.scan.detections.length ? `We found ${pieces(flow.scan.detections.length)}` : 'No pieces found'}
-        onClose={onClose}
-        right={<TextLink label="Retake" tone="muted" onPress={() => { discardWearFlow(); onClose(); }} />}
-      />
-      {/* Content in its own flex box: the sheet hosts below are siblings of
-          it, as in the Add Clothing workspace, so presenting one never takes
-          layout from the list. */}
+      <Header title="Review outfit" onClose={onClose} right={<TextLink label="Retake" tone="muted" disabled={saving} onPress={() => { discardWearFlow(); onClose(); }} />} />
       <View style={styles.body}>
-      <FlatList
-        ref={listRef}
-        style={styles.body}
-        data={visible}
-        keyExtractor={(d) => d.id}
-        onScrollToIndexFailed={() => {}}
-        ListHeaderComponent={
-          <View>
-            <PhotoHero
-              uri={flow.photoUri}
-              height={heroHeight}
-              width={width}
-              detections={ordered}
-              numbers={numbers}
-              activeId={activeId}
-              dimmedIds={dimmed}
-              onPressBox={focus}
-            />
-            <View style={styles.filterRow}>
-              <TextSegment
-                options={[
-                  { value: 'all', label: `All ${counts.total}` },
-                  { value: 'check', label: counts.toCheck ? `Check ${counts.toCheck}` : 'All checked' },
-                ]}
-                value={filter}
-                onChange={setFilter}
-                disabled={counts.toCheck === 0}
-                accessibilityLabel="Which pieces to show"
-              />
+        <FlatList data={ordered} keyExtractor={(d) => d.id} style={styles.body}
+          ListHeaderComponent={<View>
+            <Pressable disabled={saving} onPress={() => setSurface({ kind: 'resolve', queue: [], initialPhoto: true })} accessibilityRole="button" accessibilityLabel="View outfit photo and detected pieces">
+              <Image source={{ uri: flow.photoUri }} style={{ width, height: heroHeight, backgroundColor: colors.surfaceSubtle }} contentFit="contain" />
+            </Pressable>
+            <View style={styles.summary}>
+              <Text style={styles.summaryTitle} accessibilityLiveRegion="polite">{status}</Text>
+              <TextLink label="View photo" tone="muted" disabled={saving} onPress={() => setSurface({ kind: 'resolve', queue: [], initialPhoto: true })} />
             </View>
-          </View>
-        }
-        ListEmptyComponent={
-          flow.scan.detections.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.failedTitle}>We couldn’t make out any clothes</Text>
-              <Text style={styles.failedCopy}>A full-length photo in good light works best.</Text>
-            </View>
-          ) : null
-        }
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        renderItem={({ item: d }) => (
-          <PairingRow
-            detection={d}
-            number={numbers[d.id]}
-            resolution={flow.resolutions[d.id]}
-            occluder={d.occludedBy ? byId.get(d.occludedBy) : undefined}
-            itemsById={itemsById}
-            sharedWith={sharedMatch(flow, d.id).map((id) => numbers[id])}
-            active={d.id === activeId}
-            actions={actions}
-          />
-        )}
-        contentContainerStyle={{ paddingBottom: spacing.xl }}
-      />
-
-      <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
-        {undo ? (
-          <View style={styles.toast} accessibilityLiveRegion="polite">
-            <Text style={styles.toastText} numberOfLines={1}>{undo.name} won’t be logged</Text>
-            <TextLink label="Undo" onPress={() => actions.restore(undo.detectionId)} />
-          </View>
-        ) : null}
-        {flow.saveError ? <Text style={styles.error} accessibilityLiveRegion="assertive">{flow.saveError}</Text> : null}
-        <View style={styles.dateRow}>
-          <Text style={styles.dateLabel}>Worn</Text>
-          <TextSegment<DateChoice>
-            options={[
-              { value: 'today', label: 'Today' },
-              { value: 'yesterday', label: 'Yesterday' },
-              ...(choice === 'other' ? [{ value: 'other' as const, label: shortDate(flow.date) }] : []),
-            ]}
-            value={choice}
-            onChange={(v) => dispatchWear({ type: 'setDate', date: v === 'today' ? isoDay(0) : isoDay(-1) })}
-            disabled={saving}
-            accessibilityLabel="Day worn"
-          />
+            {ordered.length === 0 ? <Text style={styles.failedCopy}>We couldn’t make out any clothes. Add pieces from your closet, or retake the photo.</Text> : null}
+          </View>}
+          renderItem={({ item: d }) => <PairingRow detection={d} resolution={flow.resolutions[d.id]} itemsById={itemsById} sharedWith={sharedMatch(flow, d.id).map((id) => numbers[id])} wardrobeReady={!!isSuccess} disabled={saving}
+            onOpen={() => openPiece(d.id)} onRestore={() => dispatchWear({ type: 'restore', detectionId: d.id })} />}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListFooterComponent={<View>
+            {flow.additionalItemIds.map((id) => {
+              const item = itemsById.get(id);
+              const missing = isSuccess && !item;
+              const duplicated = matchedItemIds(flow).includes(id);
+              return <View style={styles.additionalRow} key={id}>
+                <PieceImage item={item} />
+                <View style={styles.additionalCopy}><Text style={styles.itemName} numberOfLines={2}>{item?.name ?? (missing ? 'Piece no longer in your closet' : 'Loading piece…')}</Text>
+                  <Text style={[styles.meta, missing && styles.error]}>{missing ? 'Remove this piece to continue' : [item?.brand, 'Added manually'].filter(Boolean).join(' · ')}</Text>
+                  {duplicated ? <Text style={styles.meta}>Also matched in your photo · logged once</Text> : null}
+                </View>
+                <TextLink label="Remove" disabled={saving} onPress={() => dispatchWear({ type: 'removeAdditionalItem', itemId: id })} accessibilityLabel={`Remove ${item?.name ?? 'missing piece'}`} />
+              </View>;
+            })}
+            <View style={styles.addRow}><TextLink label="+ Add missing piece" disabled={saving || !isSuccess} onPress={() => setSurface({ kind: 'add' })} /></View>
+          </View>}
+          contentContainerStyle={{ paddingBottom: spacing.lg }} />
+        <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+          {flow.saveError ? <Text style={styles.error} accessibilityLiveRegion="assertive">{flow.saveError}</Text> : null}
+          {missingAdditional.length ? <Text style={styles.error}>Remove unavailable pieces before logging.</Text> : null}
+          {!isSuccess ? <View style={styles.loadingRow}><Text style={styles.meta}>{isError ? 'Couldn’t load your closet' : 'Loading your closet…'}</Text>{isError ? <TextLink label="Try again" onPress={() => { void refetch(); }} /> : null}</View> : null}
+          <Pressable style={styles.dateRow} disabled={saving} onPress={() => setSurface({ kind: 'date' })} accessibilityRole="button" accessibilityLabel={`${dateLabel}. Change date`}>
+            <Ionicons name="calendar-outline" size={18} color={colors.mutedForeground} /><Text style={styles.dateText}>{dateLabel}</Text><Ionicons name="chevron-down" size={16} color={colors.mutedForeground} />
+          </Pressable>
+          <PrimaryButton label={buttonLabel} disabled={saving || !isSuccess || (!queue.length && (!canLog(flow) || missingAdditional.length > 0))}
+            onPress={() => { if (queue.length) setSurface({ kind: 'resolve', queue }); else void save(); }} />
         </View>
-        <PrimaryButton
-          label={buttonLabel}
-          // Pieces still to check don't disable the button: it jumps to them.
-          disabled={saving || (counts.toCheck === 0 && !canLog(flow))}
-          onPress={() => {
-            if (counts.toCheck > 0) {
-              setFilter('check');
-              return;
-            }
-            void save();
-          }}
-        />
       </View>
-      </View>
-
-      {/* The native sheet host is zero-size and out of flow: in the logger's
-          page sheet a sibling host otherwise takes the list's height. */}
       <View style={styles.sheetHost} pointerEvents="box-none">
-      {resolving && flow.resolving?.mode === 'library' ? (
-        <ClosetMatchSheet
-          key={resolving.id}
-          detection={resolving}
-          items={items}
-          currentItemId={resolvingCurrent?.kind === 'matched' ? resolvingCurrent.itemId : null}
-          reduceMotion={reduceMotion}
-          onPick={(itemId) => dispatchWear({ type: 'confirm', detectionId: resolving.id, itemId })}
-          onAddNew={() => dispatchWear({ type: 'markNew', detectionId: resolving.id })}
-          onClose={() => dispatchWear({ type: 'closeResolve' })}
-        />
-      ) : resolving && flow.resolving?.mode === 'new' && resolvingCurrent?.kind === 'new' ? (
-        <NewPieceSheet
-          key={resolving.id}
-          detection={resolving}
-          draft={resolvingCurrent.draft}
-          scanBrands={scanBrands}
-          reduceMotion={reduceMotion}
-          onChange={(patch) => dispatchWear({ type: 'editDraft', detectionId: resolving.id, patch })}
-          onClose={() => dispatchWear({ type: 'closeResolve' })}
-        />
-      ) : null}
+        {surface?.kind === 'resolve' ? <WearResolveSheet queue={surface.queue} initialPhoto={surface.initialPhoto} flow={flow} items={items} reduceMotion={reduceMotion} onClose={closeSurface} />
+          : surface?.kind === 'add' ? <AdditionalPieceSheet items={items} selectedIds={selectedItemIds(flow)} reduceMotion={reduceMotion} onClose={closeSurface} />
+          : surface?.kind === 'date' ? <WornDateSheet date={flow.date} reduceMotion={reduceMotion} onSelect={(date) => dispatchWear({ type: 'setDate', date })} onClose={closeSurface} /> : null}
       </View>
     </GestureHandlerRootView>
   );
+}
+
+function AdditionalPieceSheet({ items, selectedIds, reduceMotion, onClose }: {
+  items: Item[]; selectedIds: number[]; reduceMotion: boolean; onClose: () => void;
+}) {
+  const [dismissed, setDismissed] = useState(false);
+  return <WorkspaceSheet title="Add missing piece" detent="large" reduceMotion={reduceMotion} dismissed={dismissed} onClose={onClose}>
+    <ClosetPicker items={items} unavailableIds={selectedIds} onPick={(itemId) => { dispatchWear({ type: 'addAdditionalItem', itemId }); setDismissed(true); }} />
+  </WorkspaceSheet>;
 }
 
 function Logged({ flow, topInset, onDone }: {
@@ -430,7 +318,14 @@ const styles = StyleSheet.create({
   },
   headerTitle: { ...typography.text.editorialSection, color: colors.foreground, flex: 1 },
   headerRight: { minWidth: 44, alignItems: 'flex-end' },
-  filterRow: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
+  summary: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
+  summaryTitle: { ...typography.text.editorialSection, color: colors.foreground, flexGrow: 1 },
+  additionalRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderTopWidth: stroke.hairline, borderTopColor: colors.hairline },
+  additionalCopy: { flex: 1, gap: 4 },
+  itemName: { ...typography.text.bodySmall, color: colors.foreground },
+  meta: { ...typography.text.meta, color: colors.mutedForeground },
+  addRow: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+  loadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   separator: { height: stroke.hairline, backgroundColor: colors.hairline, marginLeft: spacing.lg },
   bar: {
     gap: spacing.xs,
@@ -440,19 +335,15 @@ const styles = StyleSheet.create({
     borderTopColor: colors.hairline,
     backgroundColor: colors.background,
   },
-  dateRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  dateLabel: { ...typography.text.eyebrow, color: colors.mutedForeground },
+  dateRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44 },
+  dateText: { ...typography.text.meta, color: colors.foreground, flex: 1 },
   error: { ...typography.text.meta, color: colors.error },
-  // Sits in the footer, over the date line, so it never covers a row.
-  toast: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  toastText: { ...typography.text.bodySmall, color: colors.foreground, flex: 1 },
   failed: { flex: 1, alignItems: 'center', gap: spacing.sm },
   failedTitle: { ...typography.text.editorialSection, color: colors.foreground, textAlign: 'center', marginTop: spacing.lg },
   failedCopy: { ...typography.text.bodySmall, color: colors.mutedForeground, textAlign: 'center', paddingHorizontal: spacing.xl },
   center: { alignItems: 'center' },
   bottom: { marginTop: 'auto', alignSelf: 'stretch' },
   slowText: { ...typography.text.meta, color: colors.mutedForeground },
-  emptyState: { paddingVertical: spacing.xxl, gap: spacing.sm },
   logged: { alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   loggedTitle: { ...typography.text.editorialSection, color: colors.foreground },
 });

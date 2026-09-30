@@ -7,7 +7,7 @@ import { colors, spacing, typography } from '../../../theme';
 export type SheetDetent = 'medium' | 'large';
 
 /** Native presentation is anchored inside the review modal, not the app portal. */
-export function WorkspaceSheet({ title, subtitle, detent = 'medium', dismissed = false, onClose, children, footer }: {
+export function WorkspaceSheet({ title, subtitle, detent = 'medium', dismissed = false, onClose, children, footer, headerAction }: {
   title: string;
   subtitle?: ReactNode;
   detent?: SheetDetent;
@@ -16,6 +16,8 @@ export function WorkspaceSheet({ title, subtitle, detent = 'medium', dismissed =
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
+  /** Optional in-place action, e.g. finishing one step without dismissing. */
+  headerAction?: ReactNode;
 }) {
   const [presented, setPresented] = useState(true);
   useEffect(() => {
@@ -35,9 +37,9 @@ export function WorkspaceSheet({ title, subtitle, detent = 'medium', dismissed =
                 <Text style={styles.title} accessibilityRole="header">{title}</Text>
                 {subtitle}
               </View>
-              <Pressable onPress={close} accessibilityRole="button" accessibilityLabel={`Close ${title}`} style={styles.close}>
+              {headerAction ?? <Pressable onPress={close} accessibilityRole="button" accessibilityLabel={`Close ${title}`} style={styles.close}>
                 <Text style={styles.closeText}>Done</Text>
-              </Pressable>
+              </Pressable>}
             </View>
             <View style={styles.body}>{children}</View>
             {footer ? <View style={styles.footer}>{footer}</View> : null}

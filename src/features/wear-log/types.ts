@@ -76,6 +76,8 @@ export type WearFlow =
       status: 'reviewing' | 'saving';
       scan: WearScan;
       resolutions: Record<string, Resolution>;
+      /** Existing closet items the photo scan missed. */
+      additionalItemIds: number[];
       resolving: { detectionId: string; mode: ResolveMode } | null;
       saveError: string | null;
       updatedAt: number;
@@ -90,6 +92,8 @@ export type WearEvent =
   | { type: 'scanFailed'; id: string; message: string; offline?: boolean }
   | { type: 'retry'; now: number }
   | { type: 'confirm'; detectionId: string; itemId: number }
+  | { type: 'addAdditionalItem'; itemId: number }
+  | { type: 'removeAdditionalItem'; itemId: number }
   | { type: 'openResolve'; detectionId: string; mode: ResolveMode }
   | { type: 'closeResolve' }
   | { type: 'markNew'; detectionId: string }

@@ -48,12 +48,15 @@ export function PhotoHero({ uri, height, width, detections, numbers, activeId, d
         const b = d.bbox_pct;
         if (!b) return null;
         const active = d.id === activeId;
+        const horizontalHitSlop = Math.max(0, (44 - (b.width / 100) * rect.width) / 2);
+        const verticalHitSlop = Math.max(0, (44 - (b.height / 100) * rect.height) / 2);
         return (
           <Pressable
             key={d.id}
             onPress={() => onPressBox(d.id)}
             accessibilityRole="button"
             accessibilityLabel={`Piece ${numbers[d.id]}, ${d.attributes.name}`}
+            hitSlop={{ left: horizontalHitSlop, right: horizontalHitSlop, top: verticalHitSlop, bottom: verticalHitSlop }}
             style={[
               styles.box,
               {

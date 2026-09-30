@@ -34,7 +34,7 @@ function withDrafts(flow: ReviewFlow): ReviewFlow {
     const r = flow.resolutions[d.id] as Resolution | { kind: 'new'; draft?: undefined } | undefined;
     resolutions[d.id] = r?.kind === 'new' && !r.draft ? { kind: 'new', draft: draftFrom(d) } : (r ?? { kind: 'unresolved' }) as Resolution;
   }
-  return { ...flow, resolutions };
+  return { ...flow, resolutions, additionalItemIds: [...new Set(flow.additionalItemIds ?? [])] };
 }
 
 type WearLogState = {
