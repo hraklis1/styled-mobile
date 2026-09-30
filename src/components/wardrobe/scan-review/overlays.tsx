@@ -1,32 +1,6 @@
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 
 import { colors, radii, spacing, typography } from '../../../theme';
-
-/**
- * Removal is instant and undoable rather than confirmed up front — the
- * "are you sure?" step cost a tap on every removal to save one in a hundred.
- */
-export function UndoToast({ message, bottom, reduceMotion, onUndo }: {
-  message: string;
-  bottom: number;
-  reduceMotion: boolean;
-  onUndo: () => void;
-}) {
-  return (
-    <Animated.View
-      entering={reduceMotion ? undefined : FadeInDown.duration(200)}
-      exiting={reduceMotion ? undefined : FadeOutDown.duration(160)}
-      style={[styles.toast, { bottom }]}
-      accessibilityLiveRegion="polite"
-    >
-      <Text style={styles.toastText} numberOfLines={1}>{message}</Text>
-      <TouchableOpacity onPress={onUndo} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button" accessibilityLabel="Undo removal">
-        <Text style={styles.undo}>Undo</Text>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-}
 
 export function ConfirmationPanel({ title, message, confirmLabel, bottomInset, onCancel, onConfirm }: {
   title: string;
@@ -55,22 +29,6 @@ export function ConfirmationPanel({ title, message, confirmLabel, bottomInset, o
 }
 
 const styles = StyleSheet.create({
-  toast: {
-    position: 'absolute',
-    left: spacing.lg,
-    right: spacing.lg,
-    minHeight: 48,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.lg,
-    borderCurve: 'continuous',
-    backgroundColor: colors.primary,
-    boxShadow: '0 8px 24px rgba(31,26,22,0.18)',
-  },
-  toastText: { ...typography.text.bodySmall, color: colors.primaryForeground, flex: 1 },
-  undo: { ...typography.text.label, color: colors.primaryForeground, textDecorationLine: 'underline' },
   layer: { ...StyleSheet.absoluteFill, justifyContent: 'flex-end', zIndex: 100 },
   backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(31,26,22,0.36)' },
   card: {

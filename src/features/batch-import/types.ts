@@ -1,3 +1,4 @@
+import type { ReviewSubmission } from '../../lib/extraction-review';
 import type { SleeveLength } from '../../types/item';
 import type { SizeProfile } from '../../lib/sizes';
 
@@ -75,6 +76,11 @@ export type PieceFields = {
 };
 
 export type Piece = PieceFields & {
+  included?: boolean;
+  basicDetails?: boolean;
+  /** Only an explicit user submission can authorize a worker. */
+  extractionApproved?: boolean;
+  extractionInput?: { piece: Piece; photo: PhotoJob; siblings: Piece[] };
   id: string;
   photoId: string;
   /** The label pass's answer, kept for the extraction prompt. */
@@ -110,10 +116,10 @@ export type Piece = PieceFields & {
 export type BlockReason = 'credits' | 'free_limit';
 
 /**
- * `phase` is the user-facing step. `processing` and `review` are derived from
- * the jobs; `saving` is entered explicitly when the user taps Save.
+ * Detection settles at pre-extract. Only approved jobs run; saving is
+ * entered explicitly with a fixed list of included targets.
  */
-export type BatchPhase = 'processing' | 'review' | 'saving';
+export type BatchPhase = 'processing' | 'pre-extract' | 'review' | 'saving';
 
 export type Batch = {
   id: string;
@@ -129,5 +135,8 @@ export type Batch = {
   savedCount: number;
   /** Save failed after automatic retries — the user has to act. */
   saveError: string | null;
+  saveIds?: string[];
+  revision?: number;
+  submission?: ReviewSubmission;
 };
 

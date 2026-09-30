@@ -96,7 +96,7 @@ function toCreateInput(piece: Piece): BatchCreateItemInput {
     cutoutUrl: piece.cutoutUrl,
     coverImageVariant: piece.useCutout && piece.cutoutUrl ? 'cutout' : 'original',
     sizeProfile: piece.sizeProfile,
-    needsDetails: !enriched,
+    needsDetails: Boolean(piece.basicDetails) || !enriched,
   };
 }
 
@@ -113,7 +113,7 @@ export async function runSave(batchId: string): Promise<void> {
   const batch = store.batch;
   if (!batch || batch.id !== batchId) return;
 
-  const pieces = batch.pieces.filter((p) => p.status === 'ready' || p.status === 'saving');
+  const pieces = batch.pieces.filter((p) => batch.saveIds?.includes(p.id) && p.included !== false && (p.status === 'ready' || p.status === 'saving'));
   if (pieces.length === 0) {
     store.finishSave([], []);
     return;
@@ -156,7 +156,7 @@ export async function runSave(batchId: string): Promise<void> {
 
     // ── Commit ──────────────────────────────────────────────────────────
     const ready = (batchImport.batch()?.pieces ?? []).filter(
-      (p) => p.status === 'saving' && p.imageUrl && !failures.has(p.id),
+      (p) => batch.saveIds?.includes(p.id) && p.status === 'saving' && p.imageUrl && !failures.has(p.id),
     );
     const savedIds: string[] = [];
     if (ready.length) {

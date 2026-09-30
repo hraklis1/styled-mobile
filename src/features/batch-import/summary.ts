@@ -23,9 +23,10 @@ export function photoCounts(batch: Batch) {
 }
 
 export function pieceCounts(batch: Batch) {
-  const total = batch.pieces.length;
-  const ready = batch.pieces.filter((p) => p.status === 'ready').length;
-  const failed = batch.pieces.filter((p) => p.status === 'failed').length;
+  const active = batch.pieces.filter(p => p.included !== false);
+  const total = active.length;
+  const ready = active.filter((p) => p.status === 'ready').length;
+  const failed = active.filter((p) => p.status === 'failed').length;
   return { total, ready, failed, settled: ready + failed };
 }
 
@@ -33,6 +34,8 @@ export function pieceCounts(batch: Batch) {
 export function summarizeBatch(batch: Batch): BatchSummary {
   const photos = photoCounts(batch);
   const pieces = pieceCounts(batch);
+
+  if (batch.phase === 'pre-extract') return { tone: 'ready', title: 'Choose pieces to extract', detail: `${pieces.total} included`, progress: null, action: 'open' };
 
   if (batch.phase === 'saving') {
     return {
@@ -68,7 +71,7 @@ export function summarizeBatch(batch: Batch): BatchSummary {
   }
 
   // review
-  if (pieces.total === 0) {
+  if (batch.pieces.length === 0) {
     if (batch.savedCount > 0) {
       return {
         tone: 'done',

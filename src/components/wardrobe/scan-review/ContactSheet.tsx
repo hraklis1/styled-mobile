@@ -1,13 +1,14 @@
-import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useEffect, useRef, useState, type MutableRefObject } from 'react';
+import { AccessibilityInfo, findNodeHandle, FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 
-import { PressableScale } from '../../primitives/PressableScale';
-import { contactSheetColumns, type PieceReviewState, type SheetGuidance } from '../../../lib/scan-review';
+import { type PieceReviewState, type SheetGuidance } from '../../../lib/scan-review';
 import { colors, cutoutScaleFor, editorial, radii, spacing, stroke, surfaces, typography } from '../../../theme';
-import { FlagDot, Middot, TextLink, TextSegment } from './atoms';
-import { coverUri, isReviewStage, pieceCountLabel, type ScanReviewPiece, type ScanReviewStage } from './types';
+import { Middot, TextSegment } from './atoms';
+import { reviewColumns } from '../../../lib/extraction-review';
+import { coverUri, isReviewStage, type ScanReviewPiece, type ScanReviewStage } from './types';
 
 export type SheetFilter = 'all' | 'check';
 
@@ -26,13 +27,14 @@ type Props = {
   bottomPadding: number;
   onFilterChange: (filter: SheetFilter) => void;
   onOpen: (id: string) => void;
-  onStartSelect: (id?: string) => void;
+  onToggleIncluded: (id: string) => void;
+  scrollOffset: MutableRefObject<number>;
+  focusId: string | null;
   onToggleSelect: (id: string) => void;
-  onSelectAll: () => void;
-  onEndSelect: () => void;
+
 };
 
-const GAP = { 2: spacing.md, 3: spacing.sm + 2 } as const;
+
 
 /**
  * The overview: every piece at once, as a lookbook contact sheet. Triage,
@@ -40,7 +42,6 @@ const GAP = { 2: spacing.md, 3: spacing.sm + 2 } as const;
  */
 export function ContactSheet({
   pieces,
-  totalCount,
   stage,
   states,
   guidance,
@@ -52,102 +53,63 @@ export function ContactSheet({
   bottomPadding,
   onFilterChange,
   onOpen,
-  onStartSelect,
+  onToggleIncluded,
+  scrollOffset,
+  focusId,
   onToggleSelect,
-  onSelectAll,
-  onEndSelect,
+
 }: Props) {
-  const { width } = useWindowDimensions();
-  const columns = contactSheetColumns(totalCount);
-  const gap = GAP[columns];
+  const { width, fontScale } = useWindowDimensions();
+  const columns = reviewColumns(width, fontScale);
+  const gap = spacing.md;
   const tileWidth = Math.floor((width - spacing.lg * 2 - gap * (columns - 1)) / columns);
   const review = isReviewStage(stage);
   const selecting = selection !== null;
-  const layout = reduceMotion ? undefined : LinearTransition.duration(220);
-  const showFilter = review && checkCount > 0 && !selecting;
-
+  const list = useRef<FlatList<ScanReviewPiece>>(null);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => list.current?.scrollToOffset({ offset: scrollOffset.current, animated: false }));
+    return () => cancelAnimationFrame(frame);
+  }, [columns, scrollOffset]);
   return (
-    <ScrollView
+    <FlatList
+      ref={list}
+      key={columns}
+      data={pieces}
+      numColumns={columns}
+      keyExtractor={piece => piece.id}
       style={styles.scroll}
       contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={[styles.masthead, !showFilter && styles.ruled]}>
-        <Text style={styles.title} accessibilityRole="header">
-          {selecting ? (selection.size === 0 ? 'Select pieces' : `${pieceCountLabel(selection.size)} selected`) : pieceCountLabel(totalCount)}
-        </Text>
-        {/* One line of state, one of guidance — never a tip card. The hint's
-            real job is saying that opening every piece is optional. */}
-        <View style={styles.subRow}>
-          <View style={styles.subCopy}>
-            {selecting ? (
-              <Text style={styles.hint}>Tap pieces to add them to the selection.</Text>
-            ) : (
-              <>
-                {guidance.lead ? <Text style={styles.lead}>{guidance.lead}</Text> : null}
-                <Text style={styles.hint}>{guidance.hint}</Text>
-              </>
-            )}
-          </View>
-          <View style={styles.controlsEnd}>
-            {selecting ? (
-              <>
-                <TextLink label="Select all" onPress={onSelectAll} disabled={disabled} />
-                <Middot />
-                <TextLink label="Done" onPress={onEndSelect} />
-              </>
-            ) : (
-              <TextLink label="Select" onPress={() => onStartSelect()} disabled={disabled} />
-            )}
-          </View>
+      columnWrapperStyle={columns > 1 ? { gap } : undefined}
+      onScroll={event => { scrollOffset.current = event.nativeEvent.contentOffset.y; }}
+      scrollEventThrottle={32}
+      extraData={{ selection, states, disabled }}
+      ListHeaderComponent={
+        <View style={styles.masthead}>
+          <Text style={styles.hint}>{selecting ? 'Select pieces to edit their details. Inclusion stays unchanged.' : review ? guidance.hint : 'Uncheck pieces you don’t want. Tap a photo to inspect or add a brand.'}</Text>
+          {review && checkCount > 0 && !selecting ? <TextSegment
+            options={[{ value: 'all' as const, label: 'All' }, { value: 'check' as const, label: `To check · ${checkCount}` }]}
+            value={filter} onChange={onFilterChange} accessibilityLabel="Filter pieces"
+          /> : null}
         </View>
-      </View>
-
-      {showFilter ? (
-        <View style={[styles.controls, styles.ruled]}>
-          <TextSegment
-            options={[
-              { value: 'all' as const, label: 'All' },
-              { value: 'check' as const, label: `To check · ${checkCount}` },
-            ]}
-            value={filter}
-            onChange={onFilterChange}
-            accessibilityLabel="Filter pieces"
+      }
+      ListEmptyComponent={<Text style={styles.hint}>No pieces found. Try another photo or retry the scan.</Text>}
+      renderItem={({ item: piece, index }) => (
+        <View style={{ width: tileWidth }}>
+          <PieceTile piece={piece} index={index} count={pieces.length} stage={stage}
+            state={review ? states[piece.id] ?? 'ready' : null} width={tileWidth}
+            compact={columns === 3} selected={selection?.has(piece.id) ?? false}
+            selecting={selecting} disabled={disabled} reduceMotion={reduceMotion}
+            restoreFocus={piece.id === focusId}
+            onPress={() => selecting ? onToggleSelect(piece.id) : onOpen(piece.id)}
+            onToggle={() => selecting ? onToggleSelect(piece.id) : onToggleIncluded(piece.id)}
           />
         </View>
-      ) : null}
-
-      <View style={[styles.grid, { gap }]}>
-        {pieces.map((piece, index) => (
-          <Animated.View
-            key={piece.id}
-            layout={layout}
-            entering={reduceMotion ? undefined : FadeIn.duration(180)}
-            exiting={reduceMotion ? undefined : FadeOut.duration(160)}
-            style={{ width: tileWidth }}
-          >
-            <PieceTile
-              piece={piece}
-              index={index}
-              count={pieces.length}
-              stage={stage}
-              state={review ? states[piece.id] ?? 'ready' : null}
-              width={tileWidth}
-              compact={columns === 3}
-              selected={selection?.has(piece.id) ?? false}
-              selecting={selecting}
-              disabled={disabled}
-              onPress={() => (selecting ? onToggleSelect(piece.id) : onOpen(piece.id))}
-              onLongPress={() => (selecting ? onToggleSelect(piece.id) : onStartSelect(piece.id))}
-            />
-          </Animated.View>
-        ))}
-      </View>
-    </ScrollView>
+      )}
+    />
   );
 }
 
-function PieceTile({ piece, index, count, stage, state, width, compact, selected, selecting, disabled, onPress, onLongPress }: {
+function PieceTile({ piece, index, count, stage, state, width, compact, selected, selecting, disabled, reduceMotion, restoreFocus, onPress, onToggle }: {
   piece: ScanReviewPiece;
   index: number;
   count: number;
@@ -159,7 +121,9 @@ function PieceTile({ piece, index, count, stage, state, width, compact, selected
   selecting: boolean;
   disabled: boolean;
   onPress: () => void;
-  onLongPress: () => void;
+  onToggle: () => void;
+  reduceMotion: boolean;
+  restoreFocus: boolean;
 }) {
   const uri = coverUri(piece, stage);
   const isCutout = uri !== null && uri === piece.cutout;
@@ -170,54 +134,49 @@ function PieceTile({ piece, index, count, stage, state, width, compact, selected
   const fit = isCutout || !isReviewStage(stage) ? 'contain' : 'cover';
   const stateLabel = state === 'check' ? ', worth a look' : state === 'confirmed' ? ', confirmed' : '';
 
+  const target = useRef<View>(null);
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    if (!restoreFocus) return;
+    const timer = setTimeout(() => {
+      const handle = findNodeHandle(target.current);
+      if (handle) AccessibilityInfo.setAccessibilityFocus(handle);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [restoreFocus]);
+  const checked = selecting ? selected : piece.included !== false;
   return (
-    <PressableScale
-      onPress={onPress}
-      onLongPress={onLongPress}
-      delayLongPress={320}
-      disabled={disabled}
-      scaleTo={0.97}
-      motion="crisp"
-      haptic={false}
-      accessibilityRole={selecting ? 'checkbox' : 'button'}
-      accessibilityState={selecting ? { checked: selected } : undefined}
-      accessibilityLabel={`${piece.brand ? `${piece.brand}, ` : ''}${piece.name || 'Unnamed piece'}, ${index + 1} of ${count}${stateLabel}`}
-      accessibilityHint={selecting ? undefined : 'Opens the piece. Long press to select several.'}
-    >
-      <View style={[styles.plate, { height: plateHeight }, selected && styles.plateSelected]}>
-        {uri ? (
-          <Image
-            source={{ uri }}
-            style={{ width: inset, height: inset }}
-            contentFit={fit}
-            cachePolicy="memory-disk"
-            recyclingKey={`tile-${piece.id}-${isCutout ? 'c' : 'p'}`}
-            transition={120}
-          />
-        ) : (
-          <Ionicons name="shirt-outline" size={28} color={colors.mutedForeground} />
-        )}
-        {/* Marks sit on a small canvas-coloured disc so they read on a navy
-            tie as well as on a cream knit. */}
-        {state === 'check' ? <View style={[styles.cornerMark, styles.markDisc]}><FlagDot size={7} /></View> : null}
-        {state === 'confirmed' ? (
-          <View style={[styles.cornerMark, styles.markDisc]}><Ionicons name="checkmark" size={12} color={colors.foreground} /></View>
-        ) : null}
-        {selecting ? (
-          <View style={[styles.selectRing, selected && styles.selectRingOn]}>
-            {selected ? <Ionicons name="checkmark" size={12} color={colors.primaryForeground} /> : null}
+    <View>
+      <Pressable ref={target} onPress={onPress} disabled={disabled}
+        onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+        style={({ pressed }) => ({ outlineWidth: focused ? 2 : 0, outlineColor: colors.foreground, backgroundColor: pressed ? colors.surfaceSelected : 'transparent' })}
+        accessibilityRole="button" accessibilityLabel={`${piece.name || 'Unnamed piece'}, ${index + 1} of ${count}${stateLabel}`}
+        accessibilityHint={selecting ? 'Select for metadata editing' : 'Inspect photos, brand and details'}>
+        <View>
+          <View style={[styles.plate, { height: plateHeight }, selecting && selected && styles.plateSelected]}>
+            <Animated.View style={{ width: inset, height: inset, opacity: piece.included === false && !selecting ? 0.45 : 1,
+              transitionProperty: 'opacity', transitionDuration: reduceMotion ? 0 : 120, alignItems: 'center', justifyContent: 'center' }}>
+              {uri ? <Image source={{ uri }} style={{ width: '100%', height: '100%' }} contentFit={fit} cachePolicy="memory-disk" recyclingKey={piece.id} />
+                : <Ionicons name="shirt-outline" size={28} color={colors.mutedForeground} />}
+            </Animated.View>
           </View>
-        ) : null}
-      </View>
-      <View style={styles.caption}>
-        <Text style={[styles.brand, !piece.brand && styles.brandEmpty]} numberOfLines={1}>
-          {piece.brand || '—'}
-        </Text>
-        <Text style={[styles.name, compact && styles.nameCompact]} numberOfLines={compact ? 2 : 1}>
-          {piece.name || 'Unnamed piece'}
-        </Text>
-      </View>
-    </PressableScale>
+          <View style={styles.caption}>
+            {piece.sourceLabel ? <Text style={styles.hint}>{piece.sourceLabel}</Text> : null}
+            <Text style={styles.brand}>{piece.brand || 'Add brand'}</Text>
+            <Text style={[styles.name, compact && styles.nameCompact]}>{piece.name || 'Unnamed piece'}</Text>
+            <Text style={styles.hint}>{piece.included === false ? 'Excluded · ' : ''}{selecting ? 'Edit details' : 'Inspect ›'}</Text>
+            {state === 'check' ? <Text style={styles.hint}>Check details</Text> : null}
+          </View>
+        </View>
+      </Pressable>
+      <Pressable onPress={onToggle} disabled={disabled} accessibilityRole="checkbox"
+        accessibilityLabel={`${selecting ? 'Edit' : 'Keep'} ${piece.name}`}
+        accessibilityState={{ checked, disabled }} style={styles.checkTarget}>
+        <View style={[styles.selectRing, checked && styles.selectRingOn]}>
+          {checked ? <Ionicons name="checkmark" size={14} color={colors.primaryForeground} /> : null}
+        </View>
+      </Pressable>
+    </View>
   );
 }
 
@@ -262,10 +221,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.chromeTint,
   },
+  checkTarget: { position: 'absolute', top: 0, right: 0, width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   selectRing: {
-    position: 'absolute',
-    top: spacing.sm,
-    left: spacing.sm,
     width: 20,
     height: 20,
     borderRadius: 10,

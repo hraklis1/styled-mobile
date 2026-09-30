@@ -1,16 +1,7 @@
-// Attribute extraction started while the user is still reviewing detections.
-//
-// The pre-extract review (names, crops, brand hints) used to be followed by a
-// separate "Extracting details…" wait. Extraction is not credit-metered and is
-// cached server-side per Idempotency-Key, so it can start as soon as the
-// detections land; by the time the user taps Continue most results are in.
-//
-// The catch is the key. The server replays whatever it cached for a key for
-// ten minutes, so a key that ignores an edit would hand back the result for
-// the old name or the old crop. Keys therefore hash every input the user can
-// change about THIS piece. The sibling list (outfitContext) is deliberately
-// left out: it is a disambiguation hint, and keying on it would re-extract
-// every piece whenever any one of them is renamed or removed.
+// Deduplicate explicitly approved attribute extraction by its editable inputs.
+// Failed requests are evicted; successful retries reuse the same server key.
+// Sibling context is intentionally not part of the key: changing another
+// piece must not invalidate this piece's completed extraction.
 
 import type { ScanResult } from '../types/item';
 

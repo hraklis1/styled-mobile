@@ -106,10 +106,10 @@ describe('scan review helpers', () => {
       });
     });
 
-    it('explains the dot once pieces are flagged, and instructs before extraction', () => {
+    it('explains the detail label once pieces are flagged, and instructs before extraction', () => {
       expect(sheetGuidance('review', { ready: 13, check: 3, confirmed: 0 })).toEqual({
         lead: '13 ready · 3 to check',
-        hint: 'Pieces with a dot are worth a look.',
+        hint: 'Pieces marked “Check details” are worth a look.',
       });
       expect(sheetGuidance('pre-extract', { ready: 0, check: 0, confirmed: 0 }).lead).toBeNull();
     });

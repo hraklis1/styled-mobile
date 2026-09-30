@@ -5,7 +5,7 @@ jest.mock('expo-file-system', () => ({
   Paths: { document: { uri: 'file:///var/mobile/Containers/Data/Application/NEW/Documents/' } },
 }));
 
-import { derivePhase, resetInFlight, useBatchImportStore } from '../store';
+import { derivePhase, resetInFlight, migrateReviewBatch, useBatchImportStore } from '../store';
 import { batchCost } from '../cost';
 import { summarizeBatch } from '../summary';
 import type { Batch, Piece, PhotoJob } from '../types';
@@ -98,7 +98,7 @@ describe('derivePhase', () => {
     expect(derivePhase(batch({ photos: [photo('a', { status: 'scanning' })] }))).toBe('processing');
     expect(derivePhase(batch({
       photos: [photo('a', { status: 'done' })],
-      pieces: [piece('a-0', 'a', { status: 'extracting' })],
+      pieces: [piece('a-0', 'a', { status: 'extracting', extractionApproved: true })],
     }))).toBe('processing');
   });
 
@@ -122,7 +122,7 @@ describe('resetInFlight', () => {
         photo('b', { status: 'scanning', masterUri: 'm', scanUri: 's' }),
         photo('c', { status: 'done' }),
       ],
-      pieces: [piece('c-0', 'c', { status: 'extracting' }), piece('c-1', 'c', { status: 'saving' })],
+      pieces: [piece('c-0', 'c', { status: 'extracting', extractionApproved: true }), piece('c-1', 'c', { status: 'saving' })],
     }));
     expect(reset.photos.map((p) => [p.id, p.status])).toEqual([['a', 'pending'], ['b', 'ready'], ['c', 'done']]);
     expect(reset.pieces.map((p) => [p.id, p.status])).toEqual([['c-0', 'pending'], ['c-1', 'ready']]);
@@ -164,7 +164,7 @@ describe('store actions', () => {
     store().start(batch({
       photos: [photo('a', { status: 'failed', masterUri: 'm', scanUri: 's', attempts: 3 }), photo('b', { status: 'done' })],
       pieces: [
-        piece('b-0', 'b', { status: 'failed', failedStep: 'extract', attempts: 3 }),
+        piece('b-0', 'b', { status: 'failed', failedStep: 'extract', attempts: 3, extractionApproved: true }),
         piece('b-1', 'b', { status: 'failed', failedStep: 'save' }),
       ],
     }));
@@ -202,7 +202,7 @@ describe('summarizeBatch', () => {
   it('switches to details once every photo is scanned', () => {
     const s = summarizeBatch(batch({
       photos: [photo('a', { status: 'done', masterUri: 'm' })],
-      pieces: [piece('a-0', 'a', { status: 'ready' }), piece('a-1', 'a', { status: 'extracting' })],
+      pieces: [piece('a-0', 'a', { status: 'ready' }), piece('a-1', 'a', { status: 'extracting', extractionApproved: true })],
     }));
     expect(s.title).toBe('Reading details 2 of 2');
     expect(s.progress).toBeCloseTo(0.75);
@@ -235,5 +235,71 @@ describe('batchCost', () => {
   it('never blocks on an unknown balance or a free meter', () => {
     expect(batchCost(8, 4, null).sufficient).toBe(true);
     expect(batchCost(8, 0, 0).sufficient).toBe(true);
+  });
+});
+
+
+describe('explicit extraction review', () => {
+  function detected() {
+    return batch({ photos: [photo('a', { status: 'done' })], pieces: Array.from({ length: 6 }, (_, i) => piece(`a-${i}`, 'a')) });
+  }
+  it('excludes four and snapshots exactly two, guarding duplicate submissions', () => {
+    store().start(detected());
+    expect(store().batch?.phase).toBe('pre-extract');
+    store().setInclusion([0, 1, 2, 3].map(i => ({ id: `a-${i}`, included: false })));
+    expect(store().beginExtraction(['a-0', 'a-4', 'a-5'])).toBe(true);
+    expect(store().batch?.pieces.filter(p => p.extractionApproved).map(p => p.id)).toEqual(['a-4', 'a-5']);
+    expect(store().beginExtraction(['a-4', 'a-5'])).toBe(false);
+    expect(store().batch?.pieces[4].extractionInput?.piece.id).toBe('a-4');
+  });
+  it('preserves all cards at zero included; restoring does not authorize work', () => {
+    store().start(detected());
+    store().setInclusion(store().batch!.pieces.map(p => ({ id: p.id, included: false })));
+    expect(store().batch?.pieces).toHaveLength(6);
+    expect(store().beginExtraction(['a-0'])).toBe(false);
+    store().setInclusion([{ id: 'a-0', included: true }]);
+    expect(store().batch?.pieces.every(p => !p.extractionApproved)).toBe(true);
+  });
+  it('preserves edits and inclusion when a detection is replayed', () => {
+    store().start(detected());
+    store().editPiece('a-0', { brand: 'COS' });
+    store().setInclusion([{ id: 'a-0', included: false }]);
+    store().completeScan('a', detected().pieces);
+    expect(store().batch?.pieces[0]).toMatchObject({ brand: 'COS', included: false });
+  });
+  it('requires explicit acceptance of failed basic details before saving', () => {
+    store().start(batch({ photos: [photo('a', { status: 'done' })], pieces: [piece('a-0', 'a', { status: 'failed', failedStep: 'extract' })] }));
+    store().beginSave(['a-0']);
+    expect(store().batch?.phase).toBe('review');
+    store().keepBasicDetails(['a-0']);
+    store().beginSave(['a-0']);
+    expect(store().batch).toMatchObject({ phase: 'saving', saveIds: ['a-0'] });
+  });
+  it('finishes selected saves even with excluded pending detections', () => {
+    const b = detected();
+    b.pieces = b.pieces.map((p, i) => ({ ...p, included: i === 0, status: i === 0 ? 'ready' : 'pending' }));
+    store().start(b);
+    store().beginSave(['a-0']);
+    store().finishSave(['a-0'], []);
+    expect(store().batch).toMatchObject({ pieces: [], savedCount: 1 });
+    expect(summarizeBatch(store().batch!).tone).toBe('done');
+  });
+  it('migrates legacy saving targets but leaves pending extraction unapproved', () => {
+    const legacy = detected();
+    const migrated = migrateReviewBatch({ batch: legacy }).batch!;
+    expect(migrated.pieces.every(p => p.included && !p.extractionApproved)).toBe(true);
+    expect(derivePhase(migrated)).toBe('pre-extract');
+    const saving = migrateReviewBatch({ batch: { ...legacy, phase: 'saving' } }).batch!;
+    expect(saving.saveIds).toHaveLength(6);
+  });
+  it('restores approved jobs and preserves excluded pieces across restart', () => {
+    store().start(detected());
+    store().setInclusion([{ id: 'a-0', included: false }]);
+    store().beginExtraction(['a-1']);
+    store().patchPiece('a-1', { status: 'extracting' });
+    const restored = resetInFlight(JSON.parse(JSON.stringify(store().batch)));
+    expect(restored.pieces[0].included).toBe(false);
+    expect(restored.pieces[1]).toMatchObject({ status: 'pending', extractionApproved: true });
+    expect(restored.pieces[2].extractionApproved).toBeUndefined();
   });
 });

@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  LayoutAnimation,
   Platform,
   UIManager,
   Alert,
@@ -49,6 +48,7 @@ import {
 import { isDataUri, uploadDataUrlsToR2 } from '../../lib/uploadImage';
 import { capturePhotoLocation } from '../../lib/photoLocation';
 import { track } from '../../lib/analytics';
+import { applyInclusionChanges } from '../../lib/extraction-review';
 import { resolveExtractedIdentity } from '../../lib/scan-review';
 import * as Haptics from 'expo-haptics';
 import {
@@ -65,6 +65,8 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 type Phase = 'idle' | 'scanning' | 'pre-extract' | 'extracting' | 'review' | 'saving';
 
 type EditableItem = {
+  included?: boolean;
+  basicDetails?: boolean;
   tempId: string;
   name: string;
   brand: string | null;
@@ -99,6 +101,7 @@ type EditableItem = {
 };
 
 type PreExtractItemData = {
+  included?: boolean;
   tempId: string;
   name: string;
   category: string;
@@ -128,9 +131,6 @@ const SCAN_DRAFT_KEY = 'scan_review_draft';
 const EXTRACTION_CONCURRENCY = 4;
 /** Long edge of the frame sent to /api/scan-vision-pose; matches batch import. */
 const POSE_FRAME_MAX_DIM = 1024;
-// How long the pre-extract review has to sit still before extraction starts
-// in the background, so typing a name doesn't send a request per keystroke.
-const PREFETCH_DEBOUNCE_MS = 900;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -182,7 +182,7 @@ function toBatchCreateInput(
 ): BatchCreateItemInput {
   // Progressive profiling: flag items whose enrichment fields are sparse so
   // the backend (and future UI prompts) know to ask for more details later.
-  const needsDetails = [item.brand, item.material, item.fit, item.subcategory].filter(Boolean).length === 0;
+  const needsDetails = Boolean(item.basicDetails) || [item.brand, item.material, item.fit, item.subcategory].filter(Boolean).length === 0;
   return {
     clientImportId: item.tempId,
     name: item.name.trim() || 'Untitled',
@@ -275,8 +275,12 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
   // Bumped when a scan starts or is discarded, so work still in flight from
   // an earlier scan can recognise that it no longer applies.
   const sessionRef = useRef(0);
-  // Extractions started during pre-extract review, shared with runExtraction.
-  // Reset with the session.
+  const operationRef = useRef(false);
+  const approvedIds = useRef<string[]>([]);
+  const draftClosed = useRef(false);
+  const [draftChoice, setDraftChoice] = useState<'loading' | 'new' | 'resumed'>('loading');
+  const [resumeIds, setResumeIds] = useState<string[] | null>(null);
+  // Cache only explicitly approved extraction requests; reset with the session.
   const extractionCacheRef = useRef<ExtractionCache | null>(null);
   const extractionCache = () => {
     extractionCacheRef.current ??= createExtractionCache(scanItemDirect, EXTRACTION_CONCURRENCY);
@@ -308,30 +312,39 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
   // On mount: offer to restore a saved draft if one exists
   useEffect(() => {
     AsyncStorage.getItem(SCAN_DRAFT_KEY).then((raw) => {
-      if (!raw) return;
+      if (!raw) { setDraftChoice('new'); return; }
       try {
-        const saved: EditableItem[] = JSON.parse(raw);
-        if (!saved.length) return;
+        const parsed = JSON.parse(raw);
+        const draft = Array.isArray(parsed) ? { ready: parsed as EditableItem[], pending: [] as PreExtractItemData[], image: null as string | null, failedIds: [] as string[], approvedIds: [] as string[] } : parsed;
+        if (!draft || !Array.isArray(draft.ready) || !Array.isArray(draft.pending)) { setDraftChoice('new'); return; }
+        const count = new Set([...draft.ready, ...draft.pending].map((p: { tempId: string }) => p.tempId)).size;
+        if (!count) { setDraftChoice('new'); return; }
         Alert.alert(
           'Resume previous scan?',
-          `You have ${saved.length} item${saved.length !== 1 ? 's' : ''} from a previous scan. Continue editing?`,
+          `You have ${count} pieces from a previous scan. Continue editing?`,
           [
             {
               text: 'Discard',
               style: 'destructive',
-              onPress: () => AsyncStorage.removeItem(SCAN_DRAFT_KEY),
+              onPress: () => { void AsyncStorage.removeItem(SCAN_DRAFT_KEY); setDraftChoice('new'); },
             },
             {
               text: 'Resume',
               onPress: () => {
-                setDetectedItems(saved);
-                setPhase('review');
+                setDraftChoice('resumed');
+                const pending = draft.pending.map((p: PreExtractItemData) => ({ ...p, sourceImage: draft.image ?? p.sourceImage }));
+                setDetectedItems(draft.ready.map((p: EditableItem) => ({ ...p, sourceImage: draft.image ?? p.sourceImage })));
+                setPreExtractItems(pending);
+                setFailedItems(pending.filter((p: PreExtractItemData) => draft.failedIds?.includes(p.tempId)));
+                setImageDataUrl(draft.image);
+                setPhase(draft.ready.length ? 'review' : 'pre-extract');
+                if (draft.approvedIds?.length && draft.image) setResumeIds(draft.approvedIds);
               },
             },
           ],
         );
-      } catch { AsyncStorage.removeItem(SCAN_DRAFT_KEY); }
-    });
+      } catch { void AsyncStorage.removeItem(SCAN_DRAFT_KEY); setDraftChoice('new'); }
+    }).catch(() => setDraftChoice('new'));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -342,29 +355,29 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     track('closet_scan_review_started', { mode: 'single', item_count: preExtractItems.length });
   }, [phase, preExtractItems.length]);
 
-  // Save review state to AsyncStorage whenever the app backgrounds during review
-  const phaseRef = useRef(phase);
-  phaseRef.current = phase;
-  const detectedItemsRef = useRef(detectedItems);
-  detectedItemsRef.current = detectedItems;
-
-  useEffect(() => {
-    const handler = (nextState: AppStateStatus) => {
-      if (nextState === 'background' && phaseRef.current === 'review' && detectedItemsRef.current.length > 0) {
-        // Persist metadata only — skip croppedImage to avoid large writes
-        const slim = detectedItemsRef.current.map(({ croppedImage: _img, ...rest }) => rest);
-        AsyncStorage.setItem(SCAN_DRAFT_KEY, JSON.stringify(slim));
-      }
-    };
-    const sub = AppState.addEventListener('change', handler);
-    return () => sub.remove();
+  // Retain source photo once, plus edits, inclusion and approved targets.
+  const draftRef = useRef({ phase, image: imageDataUrl, ready: detectedItems, pending: preExtractItems, failedIds: failedItems.map(p => p.tempId) });
+  draftRef.current = { phase, image: imageDataUrl, ready: detectedItems, pending: preExtractItems, failedIds: failedItems.map(p => p.tempId) };
+  const persistDraft = useCallback(() => {
+    const draft = draftRef.current;
+    if (draftClosed.current || draft.phase === 'idle' || draft.phase === 'scanning') return;
+    const withoutSource = <T extends { sourceImage: string | null }>(items: T[]) => items.map(({ sourceImage: _source, ...item }) => item);
+    void AsyncStorage.setItem(SCAN_DRAFT_KEY, JSON.stringify({ version: 2, ...draft,
+      ready: draft.image ? withoutSource(draft.ready) : draft.ready, pending: draft.image ? withoutSource(draft.pending) : draft.pending, approvedIds: approvedIds.current,
+    })).catch(() => { /* A failed local draft write does not block review. */ });
   }, []);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state: AppStateStatus) => { if (state === 'background') persistDraft(); });
+    return () => sub.remove();
+  }, [persistDraft]);
+  useEffect(() => { persistDraft(); }, [phase, detectedItems, preExtractItems, failedItems, persistDraft]);
 
   // ── BottomSheetModal ──────────────────────────────────────────────────────────
   const bottomSheetRef = useRef<BottomSheetModal>(null);
   const snapPoints = useMemo(() => ['90%'], []);
 
   useEffect(() => {
+    if (draftChoice !== 'new') return;
     if (!autoLaunch) {
       bottomSheetRef.current?.present();
       return;
@@ -386,7 +399,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     })();
     return () => { active = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [draftChoice]);
 
   const canClose = phase === 'idle' || phase === 'review' || phase === 'pre-extract';
 
@@ -413,6 +426,9 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
   // bottom sheet dismiss animation to wait on since the sheet was already
   // dismissed (or never presented) by the time scanning started.
   const finishClose = useCallback(() => {
+    draftClosed.current = true;
+    operationRef.current = false;
+    approvedIds.current = [];
     sessionRef.current += 1;
     extractionCacheRef.current?.clear();
     AsyncStorage.removeItem(SCAN_DRAFT_KEY);
@@ -451,14 +467,15 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
   }, [phase]);
 
 
-  const handleSaveAll = async () => {
-    if (detectedItems.length === 0) return;
+  const handleSaveAll = async (ids: string[]) => {
+    const items = detectedItems.filter(item => ids.includes(item.tempId));
+    if (items.length === 0 || operationRef.current) return;
     if (!user) {
       console.error('User not authenticated');
       return;
     }
     const session = sessionRef.current;
-    const items = detectedItems;
+    operationRef.current = true;
     setPhase('saving');
 
     // Pieces that didn't make it, with why. They stay in review so "Add"
@@ -544,10 +561,14 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
           ? `${firstMessage} Tap Add to try again.`
           : `${failures.size} pieces couldn't be added. Tap Add to try again.`,
       );
+      setPreExtractItems(current => current.filter(item => !savedIds.has(item.tempId)));
+      operationRef.current = false;
       setPhase('review');
       return;
     }
 
+    operationRef.current = false;
+    draftClosed.current = true;
     AsyncStorage.removeItem(SCAN_DRAFT_KEY);
     track('wardrobe_items_added', { item_count: savedItems.length });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -559,7 +580,6 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     preItems: PreExtractItemData[],
     fullImageDataUrl: string,
     session: number,
-    mode: 'initial' | 'retry' = 'initial',
   ) => {
     const total = preItems.length;
     setPhase('extracting');
@@ -574,8 +594,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
         if (sessionRef.current !== session) throw new Error('session_changed');
 
         try {
-          // Usually already running (or done) — started in the background
-          // while the user reviewed this piece.
+          // Reuse a successful approved request when retrying unchanged inputs.
           const result = await extractionCache().get(
             extractionRequestFor(preItem, preItems, fullImageDataUrl),
           );
@@ -583,6 +602,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
           if (sessionRef.current !== session) throw new Error('session_changed');
 
           return {
+            included: preItem.included,
             tempId: preItem.tempId,
             initialName: preItem.name,
             nameEdited: preItem.nameEdited,
@@ -613,6 +633,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
       }
       const {
         tempId,
+        included,
         initialName,
         nameEdited,
         brandHint,
@@ -630,6 +651,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
         extractedBrand: result.brand,
       });
       extracted.push({
+        included,
         tempId,
         name: identity.name,
         brand: identity.brand,
@@ -661,57 +683,33 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
       });
     });
 
-    setFailedItems(failed);
-
-    if (mode === 'initial' && extracted.length === 0) {
-      Alert.alert(
-        'Extraction failed',
-        "Couldn't extract details for any items. Please try again.",
-        [{ text: 'OK', onPress: () => setPhase('pre-extract') }],
-      );
-      return;
-    }
-
-    if (extracted.length > 0) {
-      setDetectedItems((current) => mode === 'retry' ? [...current, ...extracted] : extracted);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } else {
-      Alert.alert(
-        'Still unavailable',
-        "Couldn't extract those items — the service may be busy. Try again in a moment.",
-      );
-    }
+    const attempted = new Set(preItems.map(p => p.tempId));
+    setFailedItems(current => [...current.filter(p => !attempted.has(p.tempId)), ...failed]);
+    setDetectedItems(current => [...current.filter(p => !attempted.has(p.tempId)), ...extracted]);
+    operationRef.current = false;
+    approvedIds.current = [];
     setPhase('review');
   };
 
-  // Start extraction in the background while the user reviews detections.
-  // Pieces whose inputs haven't changed since keep their earlier request (the
-  // cache is keyed on name, category, brand hint and crop), so each pause in
-  // editing only starts work for what was actually edited.
+  const handleStartExtraction = async (ids: string[]) => {
+    if (operationRef.current || !imageDataUrl) return;
+    const targets = preExtractItems.filter(item => ids.includes(item.tempId) && !detectedItems.some(done => done.tempId === item.tempId)).map(item => ({ ...item, included: true }));
+    if (!targets.length) return;
+    operationRef.current = true;
+    approvedIds.current = targets.map(item => item.tempId);
+    await runExtraction(targets, imageDataUrl, sessionRef.current);
+  };
+  const retryFailedExtractions = () => {
+    void handleStartExtraction(failedItems.filter(item => item.included !== false).map(item => item.tempId));
+  };
+
   useEffect(() => {
-    if (phase !== 'pre-extract' || !imageDataUrl || preExtractItems.length === 0) return;
-    const timer = setTimeout(() => {
-      for (const item of preExtractItems) {
-        // Failures are retried when the user continues; nothing to show here.
-        extractionCache().get(extractionRequestFor(item, preExtractItems, imageDataUrl)).catch(() => {});
-      }
-    }, PREFETCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
+    if (!resumeIds || !imageDataUrl || operationRef.current) return;
+    setResumeIds(null);
+    void handleStartExtraction(resumeIds);
+  // Approved snapshots alone may resume; inclusion changes never trigger work.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, preExtractItems, imageDataUrl]);
-
-  const handleStartExtraction = useCallback(async () => {
-    if (preExtractItems.length === 0 || !imageDataUrl) return;
-    const session = sessionRef.current;
-    await runExtraction(preExtractItems, imageDataUrl, session);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preExtractItems, imageDataUrl]);
-
-  const retryFailedExtractions = useCallback(async () => {
-    if (failedItems.length === 0 || !imageDataUrl) return;
-    await runExtraction(failedItems, imageDataUrl, sessionRef.current, 'retry');
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [failedItems, imageDataUrl]);
+  }, [resumeIds, imageDataUrl]);
 
   const renderBackdrop = useCallback(
     (props: any) => (
@@ -753,6 +751,8 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     displayDataUrl: string,
     size: { width: number; height: number },
   ) => {
+    operationRef.current = false;
+    approvedIds.current = [];
     sessionRef.current += 1;
     const session = sessionRef.current;
     extractionCacheRef.current?.clear();
@@ -825,34 +825,10 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
     );
   }, []);
 
-  const removeItem = useCallback((tempId: string) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setDetectedItems((prev) => {
-      const next = prev.filter((it) => it.tempId !== tempId);
-      if (next.length === 0) {
-        setPhase('idle');
-        setImageDataUrl(null);
-      }
-      return next;
-    });
-  }, []);
-
   const updatePreExtractItem = useCallback((tempId: string, patch: Partial<PreExtractItemData>) => {
     setPreExtractItems((prev) =>
       prev.map((it) => (it.tempId === tempId ? { ...it, ...patch } : it)),
     );
-  }, []);
-
-  const removePreExtractItem = useCallback((tempId: string) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setPreExtractItems((prev) => {
-      const next = prev.filter((it) => it.tempId !== tempId);
-      if (next.length === 0) {
-        setPhase('idle');
-        setImageDataUrl(null);
-      }
-      return next;
-    });
   }, []);
 
   const handleWorkspaceCropApply = useCallback(async (tempId: string, newBbox: Bbox) => {
@@ -896,9 +872,10 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
   }, [detectedItems, preExtractItems, updatePreExtractItem, updateItem]);
 
   const workspacePieces = useMemo<ScanReviewPiece[]>(() => {
-    if (phase === 'review' || phase === 'saving') {
-      return detectedItems.map((item) => ({
+    const readyPieces: ScanReviewPiece[] = detectedItems.map((item) => ({
         id: item.tempId,
+        included: item.included !== false,
+        extraction: 'ready',
         name: item.name,
         brand: item.brand ?? '',
         photo: item.croppedImage,
@@ -920,9 +897,10 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
         sleeveLength: item.sleeveLength,
         lowConfidenceFields: item.lowConfidenceFields,
       }));
-    }
-    return preExtractItems.map((item) => ({
+    const pendingPieces: ScanReviewPiece[] = preExtractItems.map((item) => ({
       id: item.tempId,
+      included: item.included !== false,
+      extraction: failedItems.some(f => f.tempId === item.tempId) ? 'failed' : 'not-started',
       name: item.name,
       brand: item.brandHint,
       photo: item.croppedImage,
@@ -942,10 +920,13 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
       sizeProfile: null,
       sleeveLength: null,
     }));
-  }, [detectedItems, phase, preExtractItems]);
+    const byId = new Map([...pendingPieces, ...readyPieces].map(p => [p.id, p]));
+    const order = [...new Set([...preExtractItems.map(p => p.tempId), ...detectedItems.map(p => p.tempId)])];
+    return order.map(id => byId.get(id)!);
+  }, [detectedItems, failedItems, preExtractItems]);
 
   const handleWorkspaceUpdate = useCallback((tempId: string, patch: Partial<ScanReviewPiece>) => {
-    if (phase === 'pre-extract' || phase === 'extracting') {
+    if (!detectedItems.some(item => item.tempId === tempId)) {
       updatePreExtractItem(tempId, {
         ...(patch.name !== undefined ? { name: patch.name, nameEdited: true } : {}),
         ...(patch.brand !== undefined ? { brandHint: patch.brand } : {}),
@@ -968,7 +949,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
       ...(patch.fit !== undefined ? { fit: patch.fit } : {}),
       ...(patch.sizeProfile !== undefined ? { sizeProfile: patch.sizeProfile } : {}),
     });
-  }, [detectedItems, phase, updateItem, updatePreExtractItem]);
+  }, [detectedItems, updateItem, updatePreExtractItem]);
 
   return (
     <>
@@ -1025,7 +1006,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
         } : null}
         onUpdate={handleWorkspaceUpdate}
         onToggleCutout={(tempId) => {
-          if (phase === 'review' || phase === 'saving') {
+          if (detectedItems.some(candidate => candidate.tempId === tempId)) {
             const item = detectedItems.find((candidate) => candidate.tempId === tempId);
             if (item) updateItem(tempId, { useCutout: !item.useCutout });
           } else {
@@ -1034,21 +1015,37 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
           }
         }}
         onApplyCrop={handleWorkspaceCropApply}
-        onRemove={(tempId) => {
-          if (phase === 'review' || phase === 'saving') removeItem(tempId);
-          else removePreExtractItem(tempId);
+        onInclusionChange={changes => {
+          const apply = <T extends { tempId: string; included?: boolean }>(items: T[]) =>
+            applyInclusionChanges(items.map(item => ({ ...item, id: item.tempId })), changes);
+          setPreExtractItems(apply);
+          setDetectedItems(apply);
+          setFailedItems(apply);
         }}
-        onExtract={(trigger, reviewedCount, brandCount) => {
+        onKeepBasic={ids => {
+          const basics: EditableItem[] = preExtractItems.filter(item => ids.includes(item.tempId)).map(item => ({
+            ...item, basicDetails: true, brand: item.brandHint || null, subcategory: null, color: '', style: null, seasons: [], occasions: [], material: null,
+            fit: null, pattern: null, neckline: null, sleeveLength: null, care: null, notableDetails: [], colorPalette: [],
+            colorNormalized: null, colorTemperature: null, warmthRating: null, sizeProfile: null, purchaseLocation: photoLocationRef.current,
+          }));
+          setDetectedItems(current => [...current.filter(item => !ids.includes(item.tempId)), ...basics]);
+          setFailedItems(current => current.filter(item => !ids.includes(item.tempId)));
+        }}
+        onExtract={(ids, trigger, reviewedCount, brandCount) => {
           track('closet_scan_extraction_started', {
             mode: 'single',
             trigger,
             reviewed_count: reviewedCount,
-            item_count: preExtractItems.length,
+            item_count: ids.length,
             brand_count: brandCount,
           });
-          void handleStartExtraction();
+          void handleStartExtraction(ids);
         }}
-        onSave={() => { void handleSaveAll(); }}
+        onSave={ids => { void handleSaveAll(ids).catch(() => {
+          operationRef.current = false;
+          setPhase('review');
+          Alert.alert('Couldn’t add these pieces', 'Your edits are safe. Please try again.');
+        }); }}
         onClose={handleWorkspaceDiscard}
       />
 

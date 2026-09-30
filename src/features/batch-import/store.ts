@@ -1,3 +1,4 @@
+import { applyInclusionChanges, type InclusionChange } from '../../lib/extraction-review';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { createMMKV } from 'react-native-mmkv';
@@ -13,14 +14,17 @@ const PHOTO_TERMINAL = new Set<PhotoJob['status']>(['done', 'failed', 'blocked']
 const PIECE_ACTIVE = new Set<Piece['status']>(['pending', 'extracting']);
 
 /**
- * `processing` until nothing is left to run automatically, then `review`.
+ * Processing covers detection and explicitly approved extraction jobs.
  * `saving` is sticky: only the save step moves out of it.
  */
 export function derivePhase(batch: Pick<Batch, 'phase' | 'photos' | 'pieces'>): BatchPhase {
   if (batch.phase === 'saving') return 'saving';
-  const running = batch.photos.some((p) => !PHOTO_TERMINAL.has(p.status))
-    || batch.pieces.some((p) => PIECE_ACTIVE.has(p.status));
-  return running ? 'processing' : 'review';
+  const detecting = batch.photos.some(p => !PHOTO_TERMINAL.has(p.status));
+  const extracting = batch.pieces.some(p => p.included !== false && p.extractionApproved && PIECE_ACTIVE.has(p.status));
+  if (detecting || extracting) return 'processing';
+  if (batch.pieces.some(p => p.status === 'pending' && p.included !== false)
+    || (batch.pieces.length > 0 && batch.pieces.every(p => p.status === 'pending'))) return 'pre-extract';
+  return 'review';
 }
 
 function withPhase(batch: Batch): Batch {
@@ -56,17 +60,20 @@ type BatchImportState = {
   openWorkspace: () => void;
   closeWorkspace: () => void;
   patchPhoto: (id: string, patch: Partial<PhotoJob>) => void;
-  /** Record a photo's scan result: its pieces join the extraction queue. */
+  /** Record detections without authorizing their extraction. */
   completeScan: (photoId: string, pieces: Piece[]) => void;
   patchPiece: (id: string, patch: Partial<Piece>) => void;
   /** A change made by the user in review; remembered so extraction won't clobber it. */
   editPiece: (id: string, patch: Partial<PieceFields> & Partial<Pick<Piece, 'useCutout'>>) => void;
   removePiece: (id: string) => void;
+  setInclusion: (changes: InclusionChange[]) => void;
+  beginExtraction: (ids: readonly string[]) => boolean;
+  keepBasicDetails: (ids: readonly string[]) => void;
   block: (reason: BlockReason) => void;
   unblock: () => void;
   /** Put failed photos/pieces back in the queue for another round of attempts. */
   retryFailed: () => void;
-  beginSave: () => void;
+  beginSave: (ids?: readonly string[]) => void;
   /** Saved pieces leave the batch; the batch ends once nothing is left. */
   finishSave: (savedIds: string[], failures: { id: string; message: string }[]) => void;
   failSave: (message: string) => void;
@@ -82,7 +89,7 @@ function update(
 
 export const useBatchImportStore = create<BatchImportState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       batch: null,
       workspaceOpen: false,
       start: (batch) => set({ batch: withPhase(batch), workspaceOpen: false }),
@@ -98,7 +105,9 @@ export const useBatchImportStore = create<BatchImportState>()(
         photos: b.photos.map((p) =>
           p.id === photoId ? { ...p, status: 'done', error: null, pieceCount: pieces.length } : p),
         // A resumed scan can replay: never add the same photo's pieces twice.
-        pieces: [...b.pieces.filter((p) => p.photoId !== photoId), ...pieces],
+        pieces: b.photos.flatMap(photo => photo.id === photoId
+          ? pieces.map(piece => b.pieces.find(old => old.id === piece.id) ?? { ...piece, included: true, extractionApproved: false })
+          : b.pieces.filter(piece => piece.photoId === photo.id)),
       }))),
       patchPiece: (id, patch) => set((s) => update(s, (b) => ({
         ...b,
@@ -109,9 +118,30 @@ export const useBatchImportStore = create<BatchImportState>()(
         pieces: b.pieces.map((p) => {
           if (p.id !== id) return p;
           const keys = Object.keys(patch).filter((k) => k !== 'useCutout') as (keyof PieceFields)[];
-          return { ...p, ...patch, edited: [...new Set([...p.edited, ...keys])] };
+          return { ...p, ...patch, extractionInput: undefined, edited: [...new Set([...p.edited, ...keys])] };
         }),
       }))),
+      setInclusion: (changes) => set(s => update(s, b => b.phase === 'saving' || b.phase === 'processing' ? b : ({
+        ...b, revision: (b.revision ?? 0) + 1, pieces: applyInclusionChanges(b.pieces, changes),
+      }))),
+      beginExtraction: (ids) => {
+        const b = get().batch;
+        if (!b || b.phase === 'saving' || b.phase === 'processing') return false;
+        const targets = b.pieces.filter(p => ids.includes(p.id) && p.included !== false && (p.status === 'pending' || (p.status === 'failed' && p.failedStep === 'extract')));
+        if (!targets.length) return false;
+        const targetIds = new Set(targets.map(p => p.id));
+        set(s => update(s, current => ({ ...current, submission: { sessionId: current.id, revision: current.revision ?? 0, pieceIds: [...targetIds] }, pieces: current.pieces.map(p => {
+          if (!targetIds.has(p.id)) return p;
+          const { extractionInput: _old, ...input } = p;
+          return { ...p, status: 'pending', extractionApproved: true, failedStep: null, error: null, attempts: 0, notBefore: 0,
+            extractionInput: { piece: input, photo: current.photos.find(photo => photo.id === p.photoId)!,
+              siblings: current.pieces.filter(sibling => sibling.photoId === p.photoId).map(({ extractionInput: _snapshot, ...sibling }) => sibling) } };
+        }) })));
+        return true;
+      },
+      keepBasicDetails: (ids) => set(s => update(s, b => b.phase === 'processing' || b.phase === 'saving' ? b : ({ ...b, pieces: b.pieces.map(p =>
+        ids.includes(p.id) && p.status === 'failed' && p.failedStep === 'extract'
+          ? { ...p, basicDetails: true, status: 'ready', failedStep: null, error: null } : p) }))),
       removePiece: (id) => set((s) => update(s, (b) => ({
         ...b,
         pieces: b.pieces.filter((p) => p.id !== id),
@@ -139,20 +169,19 @@ export const useBatchImportStore = create<BatchImportState>()(
             ? { ...p, status: p.masterUri && p.scanUri ? 'ready' : 'pending', attempts: 0, notBefore: 0, error: null }
             : p),
         pieces: b.pieces.map((p) =>
-          p.status === 'failed'
+          p.status === 'failed' && p.included !== false && (p.failedStep !== 'extract' || p.extractionApproved)
             ? { ...p, status: p.failedStep === 'extract' ? 'pending' : 'ready', failedStep: null, attempts: 0, notBefore: 0, error: null }
             : p),
       }))),
-      beginSave: () => set((s) => update(s, (b) => ({
-        ...b,
-        phase: 'saving',
-        saveError: null,
-        // A piece whose extraction failed is still saved, with the name,
-        // category and colour the scan found and needsDetails set.
-        pieces: b.pieces.map((p) => (p.status === 'failed'
-          ? { ...p, status: 'ready', failedStep: null, attempts: 0, notBefore: 0, error: null }
-          : p)),
-      }))),
+      beginSave: (ids) => {
+        const b = get().batch;
+        if (!b || b.phase !== 'review') return;
+        const selected = b.pieces.filter(p => p.included !== false && (!ids || ids.includes(p.id)));
+        if (!selected.length || selected.some(p => p.status !== 'ready' && !(p.status === 'failed' && p.failedStep === 'save'))) return;
+        set(s => update(s, current => ({ ...current, phase: 'saving', saveError: null,
+          saveIds: selected.map(p => p.id), pieces: current.pieces.map(p => selected.some(t => t.id === p.id)
+            ? { ...p, status: 'ready', failedStep: null, error: null } : p) })));
+      },
       finishSave: (savedIds, failures) => set((s) => {
         if (!s.batch) return {};
         const saved = new Set(savedIds);
@@ -165,7 +194,8 @@ export const useBatchImportStore = create<BatchImportState>()(
         return {
           batch: {
             ...s.batch,
-            pieces,
+            pieces: failures.length ? pieces : [],
+            saveIds: failures.map(f => f.id),
             phase: 'review',
             savedCount: s.batch.savedCount + saved.size,
             saveError: failures.length
@@ -182,7 +212,7 @@ export const useBatchImportStore = create<BatchImportState>()(
     }),
     {
       name: 'batch-import-v1',
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => ({
         getItem: (key) => mmkv.getString(key) ?? null,
         setItem: (key, value) => mmkv.set(key, value),
@@ -190,7 +220,7 @@ export const useBatchImportStore = create<BatchImportState>()(
       })),
       partialize: (s) => ({ batch: s.batch }),
       migrate: (persisted, version) =>
-        (version === 1 ? persisted : { batch: null }) as { batch: Batch | null },
+        (version === 1 || version === 2 ? migrateReviewBatch(persisted) : { batch: null }) as { batch: Batch | null },
       merge: (persisted, current) => {
         const stored = (persisted as { batch?: Batch | null } | undefined)?.batch ?? null;
         const fresh = stored && Date.now() - stored.createdAt < BATCH_MAX_AGE_MS ? stored : null;
@@ -208,3 +238,13 @@ export const batchImport = {
   get: () => useBatchImportStore.getState(),
   batch: () => useBatchImportStore.getState().batch,
 };
+
+/** Existing results survive; old unapproved pending jobs require review. */
+export function migrateReviewBatch(value: unknown): { batch: Batch | null } {
+  const batch = (value as { batch?: Batch } | null)?.batch;
+  if (!batch) return { batch: null };
+  return { batch: { ...batch,
+    saveIds: batch.phase === 'saving' ? batch.saveIds ?? batch.pieces.filter(p => p.included !== false).map(p => p.id) : batch.saveIds,
+    pieces: batch.pieces.map(p => ({ ...p, included: p.included !== false,
+      extractionApproved: p.extractionApproved ?? false })) } };
+}

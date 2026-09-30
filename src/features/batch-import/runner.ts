@@ -12,10 +12,8 @@ import type { Bbox, Piece, PhotoJob } from './types';
 
 /**
  * Lanes and their widths. Preparing decodes a full-resolution original, so it
- * runs one at a time to bound memory. Scans stay at 3 (10 photos then sit
- * well inside the 20/min scan limit) and extraction starts per garment the
- * moment its photo is scanned, overlapping the remaining scans — at most six
- * requests in flight.
+ * runs one at a time to bound memory. Scans stay at 3. Detected garments
+ * wait for review; the extraction lane consumes explicitly approved inputs.
  */
 const LANES = { prepare: 1, scan: 3, extract: 3 } as const;
 type Lane = keyof typeof LANES;
@@ -93,7 +91,8 @@ async function runExtract(batchId: string, piece: Piece) {
   if (!batch || !photo) return;
   try {
     const siblings = batch.pieces.filter((p) => p.photoId === piece.photoId);
-    const result = await extractPiece(piece, photo, siblings);
+    const input = piece.extractionInput;
+    const result = await extractPiece(input?.piece ?? piece, input?.photo ?? photo, input?.siblings ?? siblings);
     if (!isCurrent(batchId)) return;
     // Re-read: the user may have edited the piece while the request ran.
     const latest = batchImport.batch()?.pieces.find((p) => p.id === piece.id);
@@ -179,7 +178,7 @@ function kickOnce(): void {
     }
   }
   for (const piece of batch.pieces) {
-    if (piece.status === 'pending' && inFlight.extract < LANES.extract && due(piece)) {
+    if (piece.status === 'pending' && piece.extractionApproved && piece.included !== false && inFlight.extract < LANES.extract && due(piece)) {
       store.patchPiece(piece.id, { status: 'extracting' });
       start('extract', () => runExtract(batch.id, piece));
     }
@@ -256,6 +255,7 @@ export async function applyPieceCrop(pieceId: string, bbox: Bbox): Promise<void>
   deleteFile(piece.previewUri);
   deleteFile(piece.cutoutUri);
   batchImport.get().patchPiece(pieceId, {
+    extractionInput: undefined,
     bbox,
     previewUri,
     cutoutUri: null,

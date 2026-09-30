@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, ScrollView, StyleSheet, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { FlatList, Pressable, Text, ScrollView, StyleSheet, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -38,7 +38,7 @@ type Props = {
   onOpenSheet: (kind: SheetKind, id: string) => void;
   onCrop: (id: string) => void;
   onToggleCutout: (id: string) => void;
-  onRemove: (id: string) => void;
+  onToggleIncluded: (id: string) => void;
 };
 
 /**
@@ -59,7 +59,7 @@ export function Loupe({
   onOpenSheet,
   onCrop,
   onToggleCutout,
-  onRemove,
+  onToggleIncluded,
 }: Props) {
   const { width, height } = useWindowDimensions();
   const metrics = useMemo(() => reviewCarouselMetrics(width), [width]);
@@ -206,6 +206,10 @@ export function Loupe({
         />
       ) : null}
 
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: spacing.lg }}>
+        <TextLink label="Previous" disabled={disabled || activeIndex === 0} onPress={() => seek(activeIndex - 1)} />
+        <TextLink label="Next" disabled={disabled || activeIndex === pieces.length - 1} onPress={() => seek(activeIndex + 1)} />
+      </View>
       <Animated.View style={[styles.utilities, coupledStyle]}>
         {canCrop ? <TextLink label="Crop" onPress={() => onCrop(active.id)} disabled={disabled} accessibilityLabel={`Adjust crop for ${active.name}`} /> : null}
         {canCrop && hasCutout ? <Middot /> : null}
@@ -219,13 +223,15 @@ export function Loupe({
           />
         ) : null}
         <View style={styles.spacer} />
-        <TextLink label="Remove" tone="muted" onPress={() => onRemove(active.id)} disabled={disabled} accessibilityLabel={`Remove ${active.name}`} />
+        <Pressable style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }} onPress={() => onToggleIncluded(active.id)} disabled={disabled} accessibilityRole="checkbox" accessibilityState={{ checked: active.included !== false, disabled }} accessibilityLabel="Include this piece">
+          <Ionicons name={active.included !== false ? 'checkbox' : 'square-outline'} size={22} color={colors.foreground} /><Text>Include this piece</Text>
+        </Pressable>
       </Animated.View>
 
       <Animated.View style={coupledStyle}>
         <SpecSheet
           piece={active}
-          stage={stage}
+          stage={active.extraction === 'not-started' || active.extraction === 'failed' ? 'pre-extract' : stage}
           // A confirmed piece has been looked at; its field marks retire with it.
           flags={states[active.id] === 'confirmed' ? [] : pieceFlags(active)}
           expandedRow={expandedRow}

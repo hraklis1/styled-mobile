@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -12,7 +14,10 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { useReducedMotion } from 'react-native-reanimated';
+import { useReviewReducedMotion } from '../../hooks/useReviewReducedMotion';
+import { useBatchExtractionReview } from '../../hooks/useBatchExtractionReview';
+import type { InclusionChange } from '../../lib/extraction-review';
+import { track } from '../../lib/analytics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CropAdjustEditor, type Bbox } from './CropAdjustModal';
@@ -23,7 +28,6 @@ import {
   resolvedActivePieceId,
   reviewSummary,
   sheetGuidance,
-  usesContactSheet,
   type PieceReviewState,
 } from '../../lib/scan-review';
 import { colors, spacing, stroke, typography } from '../../theme';
@@ -31,7 +35,7 @@ import { ActionBar, type ActionBarMode } from './scan-review/ActionBar';
 import { ContactSheet, PieceLine, type SheetFilter } from './scan-review/ContactSheet';
 import { DetectionState, ExtractionState } from './scan-review/LoadingStates';
 import { Loupe } from './scan-review/Loupe';
-import { ConfirmationPanel, UndoToast } from './scan-review/overlays';
+import { ConfirmationPanel } from './scan-review/overlays';
 import { BrandPicker, CategoryPicker, MaterialPicker, SeasonPicker, SheetButton } from './scan-review/pickers';
 import { TextLink } from './scan-review/atoms';
 import { WorkspaceSheet } from './scan-review/WorkspaceSheet';
@@ -65,10 +69,11 @@ type Props = {
   failure?: { message: string; retryLabel?: string; onRetry: () => void } | null;
   onUpdate: (id: string, patch: Partial<ScanReviewPiece>) => void;
   onToggleCutout: (id: string) => void;
-  onApplyCrop: (id: string, bbox: Bbox) => void;
-  onRemove: (id: string) => void;
-  onExtract: (trigger: ExtractTrigger, reviewedCount: number, brandCount: number) => void;
-  onSave: () => void;
+  onApplyCrop: (id: string, bbox: Bbox) => void | Promise<void>;
+  onInclusionChange: (changes: InclusionChange[]) => void;
+  onKeepBasic: (ids: string[]) => void;
+  onExtract: (ids: string[], trigger: ExtractTrigger, reviewedCount: number, brandCount: number) => void;
+  onSave: (ids: string[]) => void;
   onClose: () => void;
   /**
    * Batch import runs in the background, so its workspace can be put away at
@@ -80,16 +85,11 @@ type Props = {
 };
 
 type View_ = 'sheet' | 'loupe';
-type PendingRemoval = { ids: string[]; message: string };
-type Deferred = { action: 'save' | 'extract'; waitFor: string[] };
-
-const UNDO_MS = 4000;
-
 /**
  * Closet scan review, in two levels:
  *
  *   Contact sheet — every piece at once. Triage ("12 ready · 4 to check"),
- *                   bulk edits, removal. Skipped for three pieces or fewer.
+ *                   inclusion and bulk metadata edits for every scan size.
  *   Loupe         — one piece, large, with its spec sheet. Swipe the plate or
  *                   drag the tick rail to travel.
  *
@@ -108,7 +108,8 @@ export function ScanReviewWorkspace({
   onUpdate,
   onToggleCutout,
   onApplyCrop,
-  onRemove,
+  onInclusionChange,
+  onKeepBasic,
   onExtract,
   onSave,
   onClose,
@@ -116,7 +117,7 @@ export function ScanReviewWorkspace({
 }: Props) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = useReviewReducedMotion();
   const review = isReviewStage(stage);
   const busy = stage === 'scanning' || stage === 'extracting' || stage === 'saving';
   const closeDisabled = onMinimize ? stage === 'saving' : busy;
@@ -131,32 +132,28 @@ export function ScanReviewWorkspace({
   const [sheet, setSheet] = useState<SheetRequest | null>(null);
   const [sheetDismissed, setSheetDismissed] = useState(false);
   const [seasonDraft, setSeasonDraft] = useState<string[]>([]);
+  const cropBusy = useRef(false);
+  const [cropApplying, setCropApplying] = useState(false);
   const [cropId, setCropId] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
-  const [pendingRemoval, setPendingRemoval] = useState<PendingRemoval | null>(null);
-  const [deferred, setDeferred] = useState<Deferred | null>(null);
-  const [sheetLatched, setSheetLatched] = useState(false);
-  const [actionBarHeight, setActionBarHeight] = useState(0);
+  const inclusion = useBatchExtractionReview(pieces, busy, onInclusionChange);
+  const gridOffset = useRef(0);
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
-  const visiblePieces = useMemo(
-    () => (pendingRemoval ? pieces.filter((piece) => !pendingRemoval.ids.includes(piece.id)) : pieces),
-    [pendingRemoval, pieces],
-  );
+  const visiblePieces = pieces;
   const states = useMemo(() => {
     const map: Record<string, PieceReviewState> = {};
-    if (review) for (const piece of visiblePieces) map[piece.id] = pieceReviewState(piece, confirmedIds);
+    if (review) for (const piece of visiblePieces) {
+      if (piece.included !== false && (piece.extraction === 'ready' || piece.extraction === 'failed')) map[piece.id] = pieceReviewState(piece, confirmedIds);
+    }
     return map;
   }, [confirmedIds, review, visiblePieces]);
   const summary = useMemo(() => reviewSummary(Object.values(states)), [states]);
   const checkCount = summary.check;
 
-  // Once the overview has been shown it stays, even if removals bring the
-  // scan down to three — swapping the whole screen out mid-task would be the
-  // more jarring thing.
-  const sheetEnabled = sheetLatched || usesContactSheet(visiblePieces.length);
-  const effectiveView: View_ = sheetEnabled ? view : 'loupe';
+  const sheetEnabled = true;
+  const effectiveView: View_ = view;
   const sheetPieces = filter === 'check' && review
     ? visiblePieces.filter((piece) => states[piece.id] === 'check')
     : visiblePieces;
@@ -170,13 +167,9 @@ export function ScanReviewWorkspace({
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
+  // A new scan resets navigation; minimizing a batch retains its place.
   useEffect(() => {
-    if (usesContactSheet(visiblePieces.length) && !sheetLatched) setSheetLatched(true);
-  }, [sheetLatched, visiblePieces.length]);
-
-  // A fresh open starts from a clean slate.
-  useEffect(() => {
-    if (visible) return;
+    if (stage !== 'scanning' && (visible || onMinimize)) return;
     setView('sheet');
     setActiveId(null);
     setFilter('all');
@@ -187,10 +180,11 @@ export function ScanReviewWorkspace({
     setSheet(null);
     setCropId(null);
     setConfirmClose(false);
-    setSheetLatched(false);
-  }, [visible]);
 
-  // Extraction replaces the pieces wholesale: come back to the overview.
+    gridOffset.current = 0;
+  }, [visible, stage, onMinimize]);
+
+  // Return to the overview when approved extraction finishes.
   const previousStage = useRef(stage);
   useEffect(() => {
     const before = previousStage.current;
@@ -225,74 +219,16 @@ export function ScanReviewWorkspace({
     }
   }, [effectiveView, loupePieces.length, sheetEnabled, visiblePieces.length]);
 
-  // ── Removal with undo ─────────────────────────────────────────────────────
-
-  const commitRemoval = useCallback((pending: PendingRemoval | null) => {
-    if (!pending) return;
-    for (const id of pending.ids) onRemove(id);
-    setPendingRemoval((current) => (current === pending ? null : current));
-  }, [onRemove]);
-
-  useEffect(() => {
-    if (!pendingRemoval) return;
-    const timer = setTimeout(() => commitRemoval(pendingRemoval), UNDO_MS);
-    return () => clearTimeout(timer);
-  }, [commitRemoval, pendingRemoval]);
-
-  // Save and extract read the host's piece list, so a removal still waiting
-  // on its undo has to land first — and the host has to re-render with it —
-  // before either may run.
-  const runAfterRemovals = useCallback((action: Deferred['action']) => {
-    if (!pendingRemoval) {
-      if (action === 'save') onSave();
-      else setDeferred({ action, waitFor: [] });
-      return;
-    }
-    const waitFor = pendingRemoval.ids;
-    commitRemoval(pendingRemoval);
-    setDeferred({ action, waitFor });
-  }, [commitRemoval, onSave, pendingRemoval]);
-
-  const removeWithUndo = useCallback((ids: string[]) => {
-    if (ids.length === 0) return;
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (pendingRemoval) commitRemoval(pendingRemoval);
-    const remaining = visiblePieces.filter((piece) => !ids.includes(piece.id));
-
-    if (activeResolvedId && ids.includes(activeResolvedId)) {
-      const index = loupeIds.indexOf(activeResolvedId);
-      const after = loupeIds.slice(index + 1).find((id) => !ids.includes(id));
-      const before = loupeIds.slice(0, index).reverse().find((id) => !ids.includes(id));
-      setActiveId(after ?? before ?? null);
-    }
-    setSelection(null);
-
-    // Emptying the scan has nothing to show under an undo toast; let the
-    // host close it straight away.
-    if (remaining.length === 0) {
-      for (const id of ids) onRemove(id);
-      return;
-    }
-    const named = ids.length === 1 ? pieces.find((piece) => piece.id === ids[0]) : null;
-    setPendingRemoval({
-      ids,
-      message: named ? `Removed ${named.name || 'piece'}` : `Removed ${pieceCountLabel(ids.length)}`,
-    });
-  }, [activeResolvedId, commitRemoval, loupeIds, onRemove, pendingRemoval, pieces, visiblePieces]);
-
-  // ── Actions ────────────────────────────────────────────────────────────────
-
   const update = useCallback((id: string, patch: PiecePatch) => {
     onUpdate(id, patch);
-    // Touching a piece is the strongest "I've looked at this" there is.
-    if (review) setConfirmedIds((current) => (current.has(id) ? current : new Set(current).add(id)));
-  }, [onUpdate, review]);
+  }, [onUpdate]);
 
   const openPiece = useCallback((id: string) => {
     setWalk(filter === 'check' && review ? sheetPieces.map((piece) => piece.id) : null);
+    track('scan_review_inspected', { mode: onMinimize ? 'batch' : 'single' });
     setActiveId(id);
     setView('loupe');
-  }, [filter, review, sheetPieces]);
+  }, [filter, review, sheetPieces, onMinimize]);
 
   const startFlaggedWalk = useCallback(() => {
     const flagged = visiblePieces.filter((piece) => states[piece.id] === 'check').map((piece) => piece.id);
@@ -325,22 +261,23 @@ export function ScanReviewWorkspace({
     else finishWalk();
   }, [activeResolvedId, finishWalk, nextAfterConfirm]);
 
-  const extract = useCallback(() => {
-    runAfterRemovals('extract');
-  }, [runAfterRemovals]);
-
-  useEffect(() => {
-    if (!deferred) return;
-    if (pieces.some((piece) => deferred.waitFor.includes(piece.id))) return;
-    setDeferred(null);
-    if (deferred.action === 'save') {
-      onSave();
-      return;
-    }
-    const brandCount = pieces.filter((piece) => piece.brand.trim().length > 0).length;
-    const opened = pieces.filter((piece) => openedIds.has(piece.id)).length;
-    onExtract(opened >= pieces.length ? 'completed_review' : 'extract_now', opened, brandCount);
-  }, [deferred, onExtract, onSave, openedIds, pieces]);
+  const extract = () => {
+    if (busy) return;
+    const snapshot = inclusion.snapshot();
+    const retrying = snapshot.some(p => p.extraction === 'failed');
+    const targets = snapshot.filter(p => p.extraction === (retrying ? 'failed' : 'not-started'));
+    if (!targets.length) return;
+    const opened = targets.filter(p => openedIds.has(p.id)).length;
+    track('scan_review_extraction_approved', { mode: onMinimize ? 'batch' : 'single', included_count: snapshot.length, extraction_count: targets.length, detected_count: pieces.length });
+    onExtract(targets.map(p => p.id), opened === targets.length ? 'completed_review' : 'extract_now', opened, targets.filter(p => p.brand.trim()).length);
+  };
+  const save = () => {
+    if (busy) return;
+    const targets = inclusion.snapshot();
+    if (!targets.length || targets.some(p => p.extraction !== 'ready')) return;
+    track('scan_review_save_approved', { mode: onMinimize ? 'batch' : 'single', item_count: targets.length });
+    onSave(targets.map(p => p.id));
+  };
 
   const openSheet = useCallback((request: SheetRequest) => {
     setSheetDismissed(false);
@@ -367,29 +304,39 @@ export function ScanReviewWorkspace({
       return setView('sheet');
     }
     if (onMinimize) {
-      commitRemoval(pendingRemoval);
       return onMinimize();
     }
     if (!closeDisabled) setConfirmClose(true);
-  }, [closeDisabled, commitRemoval, confirmClose, dismissSheet, effectiveView, onMinimize, pendingRemoval, selection, sheet, sheetEnabled]);
+  }, [closeDisabled, confirmClose, dismissSheet, effectiveView, onMinimize, selection, sheet, sheetEnabled]);
 
   // ── Crop editor (full screen: precise manipulation earns the takeover) ─────
 
   const cropPiece = cropId ? pieces.find((piece) => piece.id === cropId) ?? null : null;
   if (cropPiece?.cropSource && cropPiece.cropBbox) {
     return (
-      <Modal visible={visible} presentationStyle="fullScreen" animationType="none" onRequestClose={() => setCropId(null)}>
+      <Modal visible={visible} presentationStyle="fullScreen" animationType="none" onRequestClose={() => { if (!cropBusy.current) setCropId(null); }}>
         <GestureHandlerRootView style={styles.root}>
           <CropAdjustEditor
             sourceImage={cropPiece.cropSource}
             initialBbox={cropPiece.cropBbox}
             itemName={cropPiece.name}
-            onApply={(bbox) => {
-              onApplyCrop(cropPiece.id, bbox);
-              setCropId(null);
+            onApply={async (bbox) => {
+              if (cropBusy.current) return;
+              cropBusy.current = true;
+              setCropApplying(true);
+              try {
+                await onApplyCrop(cropPiece.id, bbox);
+                setCropId(null);
+              } catch {
+                Alert.alert('Couldn’t adjust crop', 'Please try again.');
+              } finally {
+                cropBusy.current = false;
+                setCropApplying(false);
+              }
             }}
-            onCancel={() => setCropId(null)}
+            onCancel={() => { if (!cropBusy.current) setCropId(null); }}
           />
+          {cropApplying ? <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.chromeTint }]} accessibilityRole="alert"><ActivityIndicator /><Text>Updating crop…</Text></View> : null}
         </GestureHandlerRootView>
       </Modal>
     );
@@ -398,20 +345,20 @@ export function ScanReviewWorkspace({
   // ── Render ─────────────────────────────────────────────────────────────────
 
   const heroHeight = loupeHeroHeight(height);
-  const contentBottom = spacing.xxl + (pendingRemoval ? 56 : 0);
+  const contentBottom = spacing.xxl;
   const selecting = selection !== null && !busy;
 
   const actionMode: ActionBarMode = stage === 'scanning'
     ? { kind: 'busy', label: 'Looking at your photo…' }
     : stage === 'extracting'
-      ? { kind: 'busy', label: `Extracting details for ${pieceCountLabel(visiblePieces.length)}…` }
+      ? { kind: 'busy', label: `Extracting details for ${pieceCountLabel(extractionProgress.total)}…` }
       : stage === 'saving'
         ? { kind: 'busy', label: 'Adding to closet…' }
         : selecting
           ? {
             kind: 'selecting',
             count: selection.size,
-            review,
+            review: review && [...selection].every(id => pieces.find(p => p.id === id)?.extraction === 'ready'),
             onBrand: () => openSheet({ kind: 'brand', target: [...selection] }),
             onSeason: () => openSheet({ kind: 'season', target: [...selection] }),
             onConfirm: () => {
@@ -419,11 +366,15 @@ export function ScanReviewWorkspace({
               setConfirmedIds((current) => new Set([...current, ...selection]));
               setSelection(null);
             },
-            onRemove: () => removeWithUndo([...selection]),
+            onDone: endSelection,
+            onSelectAll: () => setSelection(new Set(sheetPieces.map(p => p.id))),
+            onClear: () => setSelection(new Set()),
           }
-          : stage === 'pre-extract'
-            ? { kind: 'extract', count: visiblePieces.length, onExtract: extract }
-            : effectiveView === 'loupe' && sheetEnabled
+          : inclusion.included.some(p => p.extraction === 'failed')
+            ? { kind: 'failed', count: inclusion.included.filter(p => p.extraction === 'failed').length, onRetry: extract, onKeepBasic: () => onKeepBasic(inclusion.included.filter(p => p.extraction === 'failed').map(p => p.id)) }
+          : (stage === 'pre-extract' && !pieces.some(p => p.extraction === 'ready')) || inclusion.included.some(p => p.extraction === 'not-started')
+            ? { kind: 'extract', count: inclusion.included.length, onExtract: extract, extractionCount: inclusion.included.filter(p => p.extraction === 'not-started').length, additional: pieces.some(p => p.extraction === 'ready') }
+            : effectiveView === 'loupe' && pieces.find(p => p.id === activeResolvedId)?.extraction === 'ready'
               ? {
                 kind: 'confirm',
                 last: nextAfterConfirm === null,
@@ -434,9 +385,9 @@ export function ScanReviewWorkspace({
               }
               : {
                 kind: 'save',
-                count: visiblePieces.length,
+                count: inclusion.included.length,
                 flagged: sheetEnabled ? checkCount : 0,
-                onSave: () => runAfterRemovals('save'),
+                onSave: save,
                 onReviewFlagged: startFlaggedWalk,
               };
 
@@ -458,12 +409,15 @@ export function ScanReviewWorkspace({
             view={effectiveView}
             canGoBack={effectiveView === 'loupe' && sheetEnabled && !busy}
             position={effectiveView === 'loupe' && activeIndex >= 0 ? { index: activeIndex, count: loupeIds.length, walk: Boolean(walk) } : null}
-            batch={Boolean(onMinimize)}
+            selecting={selecting}
+            includedCount={inclusion.included.length}
+            totalCount={pieces.length}
+            onDone={endSelection}
             closeDisabled={closeDisabled}
             topInset={insets.top}
             onBack={() => { setWalk(null); setView('sheet'); }}
             onClose={() => setConfirmClose(true)}
-            onMinimize={onMinimize ? () => { commitRemoval(pendingRemoval); onMinimize(); } : undefined}
+            onMinimize={onMinimize}
           />
 
           {failure ? (
@@ -493,15 +447,19 @@ export function ScanReviewWorkspace({
               bottomPadding={contentBottom}
               onFilterChange={setFilter}
               onOpen={openPiece}
-              onStartSelect={(id) => setSelection(new Set(id ? [id] : []))}
+              scrollOffset={gridOffset}
+              focusId={activeId}
+              onToggleIncluded={id => {
+                const piece = inclusion.snapshot().find(p => p.id === id);
+                inclusion.change([id], !piece);
+                track('scan_review_inclusion_changed', { mode: onMinimize ? 'batch' : 'single', included: !piece });
+              }}
               onToggleSelect={(id) => setSelection((current) => {
                 const next = new Set(current ?? []);
                 if (next.has(id)) next.delete(id);
                 else next.add(id);
                 return next;
               })}
-              onSelectAll={() => setSelection(new Set(sheetPieces.map((piece) => piece.id)))}
-              onEndSelect={endSelection}
             />
           ) : activeResolvedId ? (
             <Loupe
@@ -518,24 +476,21 @@ export function ScanReviewWorkspace({
               onOpenSheet={(kind, id) => openSheet({ kind, target: [id] })}
               onCrop={setCropId}
               onToggleCutout={onToggleCutout}
-              onRemove={(id) => removeWithUndo([id])}
+              onToggleIncluded={id => inclusion.change([id], !inclusion.snapshot().some(p => p.id === id))}
             />
           ) : <View style={styles.root} />}
 
-          <View onLayout={(event) => setActionBarHeight(event.nativeEvent.layout.height)}>
+          <View>
+            {!busy && !selecting && effectiveView === 'sheet' ? (
+              <View style={styles.shortcuts}>
+                <TextLink label={inclusion.included.length === pieces.length && pieces.length > 0 ? 'Exclude all' : 'Include all'} onPress={() => inclusion.change(pieces.map(p => p.id), inclusion.included.length !== pieces.length)} />
+                <TextLink label="Edit several" onPress={() => setSelection(new Set())} disabled={pieces.length === 0} />
+              </View>
+            ) : null}
             <ActionBar mode={actionMode} bottomInset={insets.bottom} />
           </View>
-        </KeyboardAvoidingView>
 
-        {pendingRemoval ? (
-          <UndoToast
-            key={pendingRemoval.ids.join(',')}
-            message={pendingRemoval.message}
-            bottom={actionBarHeight + spacing.sm}
-            reduceMotion={reduceMotion}
-            onUndo={() => setPendingRemoval(null)}
-          />
-        ) : null}
+        </KeyboardAvoidingView>
 
         {sheet ? (
           <WorkspaceSheet
@@ -551,7 +506,6 @@ export function ScanReviewWorkspace({
                 label={`Apply to ${pieceCountLabel(sheetTargets.length)}`}
                 onPress={() => {
                   for (const piece of sheetTargets) update(piece.id, { seasons: seasonDraft });
-                  setSelection(null);
                   dismissSheet();
                 }}
               />
@@ -564,7 +518,6 @@ export function ScanReviewWorkspace({
                 scanBrands={scanBrands}
                 onSelect={(brand) => {
                   for (const piece of sheetTargets) update(piece.id, { brand });
-                  setSelection(null);
                   dismissSheet();
                 }}
               />
@@ -600,7 +553,7 @@ export function ScanReviewWorkspace({
             onCancel={() => setConfirmClose(false)}
             onConfirm={() => {
               setConfirmClose(false);
-              setPendingRemoval(null);
+              track('scan_review_discarded', { mode: onMinimize ? 'batch' : 'single', included_count: inclusion.included.length, detected_count: pieces.length });
               onClose();
             }}
           />
@@ -610,12 +563,15 @@ export function ScanReviewWorkspace({
   );
 }
 
-function WorkspaceHeader({ stage, view, canGoBack, position, batch, closeDisabled, topInset, onBack, onClose, onMinimize }: {
+function WorkspaceHeader({ stage, view, canGoBack, position, selecting, includedCount, totalCount, onDone, closeDisabled, topInset, onBack, onClose, onMinimize }: {
   stage: ScanReviewStage;
   view: View_;
   canGoBack: boolean;
   position: { index: number; count: number; walk: boolean } | null;
-  batch: boolean;
+  selecting: boolean;
+  includedCount: number;
+  totalCount: number;
+  onDone: () => void;
   closeDisabled: boolean;
   topInset: number;
   onBack: () => void;
@@ -626,7 +582,7 @@ function WorkspaceHeader({ stage, view, canGoBack, position, batch, closeDisable
     ? 'Scanning'
     : stage === 'extracting'
       ? 'Reading details'
-      : batch ? 'Batch import' : 'Closet scan';
+      : selecting ? 'Select pieces to edit' : stage === 'pre-extract' ? 'Choose pieces' : 'Review details';
   const showPosition = view === 'loupe' && position && position.count > 1 && (stage === 'review' || stage === 'saving' || stage === 'pre-extract');
 
   return (
@@ -635,7 +591,7 @@ function WorkspaceHeader({ stage, view, canGoBack, position, batch, closeDisable
         {canGoBack ? (
           <TouchableOpacity style={styles.back} onPress={onBack} accessibilityRole="button" accessibilityLabel="Back to all pieces">
             <Ionicons name="chevron-back" size={18} color={colors.foreground} />
-            <Text style={styles.backText}>All</Text>
+            <Text style={styles.backText}>Pieces</Text>
           </TouchableOpacity>
         ) : null}
       </View>
@@ -645,10 +601,11 @@ function WorkspaceHeader({ stage, view, canGoBack, position, batch, closeDisable
             {position.index + 1} of {position.count}{position.walk ? ' to check' : ''}
           </Text>
         ) : (
-          <Text style={styles.masthead} accessibilityRole="header">{title}</Text>
+          <View><Text style={styles.masthead} accessibilityRole="header">{title}</Text>{!selecting && (stage === 'pre-extract' || stage === 'review') ? <Text style={styles.position}>{includedCount} of {totalCount} included</Text> : null}</View>
         )}
       </View>
       <View style={[styles.headerSide, styles.headerSideEnd]}>
+        {selecting ? <TextLink label="Done" onPress={onDone} /> : null}
         {onMinimize ? (
           <TouchableOpacity
             style={styles.headerButton}
@@ -675,6 +632,7 @@ function WorkspaceHeader({ stage, view, canGoBack, position, batch, closeDisable
 }
 
 const styles = StyleSheet.create({
+  shortcuts: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: spacing.lg },
   root: { flex: 1, backgroundColor: colors.background },
   header: {
     flexDirection: 'row',

@@ -6,6 +6,9 @@ export type ScanReviewStage = 'scanning' | 'pre-extract' | 'extracting' | 'revie
 
 export type ScanReviewPiece = {
   id: string;
+  included?: boolean;
+  extraction?: 'not-started' | 'running' | 'ready' | 'failed';
+  sourceLabel?: string;
   name: string;
   brand: string;
   photo: string | null;

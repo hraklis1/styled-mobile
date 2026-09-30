@@ -6,10 +6,11 @@ import { TextLink } from './atoms';
 import { pieceCountLabel } from './types';
 
 export type ActionBarMode =
-  | { kind: 'extract'; count: number; onExtract: () => void }
+  | { kind: 'extract'; count: number; extractionCount: number; additional?: boolean; onExtract: () => void }
   | { kind: 'save'; count: number; flagged: number; onSave: () => void; onReviewFlagged: () => void }
   | { kind: 'confirm'; last: boolean; onConfirm: () => void; onSkip: (() => void) | null }
-  | { kind: 'selecting'; count: number; review: boolean; onBrand: () => void; onSeason: () => void; onConfirm: () => void; onRemove: () => void }
+  | { kind: 'selecting'; count: number; review: boolean; onBrand: () => void; onSeason: () => void; onConfirm: () => void; onDone: () => void; onSelectAll: () => void; onClear: () => void }
+  | { kind: 'failed'; count: number; onRetry: () => void; onKeepBasic: () => void }
   | { kind: 'busy'; label: string };
 
 /**
@@ -22,11 +23,10 @@ export function ActionBar({ mode, bottomInset }: { mode: ActionBarMode; bottomIn
   return (
     <View style={[styles.bar, { paddingBottom: Math.max(bottomInset, spacing.md) }]}>
       {mode.kind === 'extract' ? (
-        // The sparkle is reserved for the action that spends credits.
-        <PrimaryButton label={`Extract details for ${mode.count === 1 ? 'this piece' : `all ${mode.count}`}`} icon="sparkles" onPress={mode.onExtract} />
+        <PrimaryButton disabled={mode.count === 0} label={mode.count === 0 ? 'Choose at least 1 piece' : mode.additional ? `Extract details for ${mode.extractionCount} new ${mode.extractionCount === 1 ? 'piece' : 'pieces'}` : `Extract ${pieceCountLabel(mode.extractionCount)}`} icon="sparkles" onPress={mode.onExtract} />
       ) : mode.kind === 'save' ? (
         <>
-          <PrimaryButton label={mode.count === 1 ? 'Add to closet' : `Add ${pieceCountLabel(mode.count)} to closet`} onPress={mode.onSave} />
+          <PrimaryButton disabled={mode.count === 0} label={mode.count === 0 ? 'Choose at least 1 piece' : mode.count === 1 ? 'Add to closet' : `Add ${pieceCountLabel(mode.count)} to closet`} onPress={mode.onSave} />
           {mode.flagged > 0 ? (
             <View style={styles.secondary}>
               <TextLink
@@ -48,13 +48,15 @@ export function ActionBar({ mode, bottomInset }: { mode: ActionBarMode; bottomIn
             </TouchableOpacity>
           ) : null}
         </View>
+      ) : mode.kind === 'failed' ? (
+        <><PrimaryButton label={`Retry ${pieceCountLabel(mode.count)}`} onPress={mode.onRetry} /><TextLink label="Keep basic details" onPress={mode.onKeepBasic} /></>
       ) : mode.kind === 'selecting' ? (
-        <View style={styles.bulkRow}>
+        <><View style={styles.bulkRow}><Text style={styles.bulkText}>{mode.count} selected</Text><TextLink label="Select all shown" onPress={mode.onSelectAll} /><TextLink label="Clear selection" onPress={mode.onClear} /></View><View style={styles.bulkRow}>
           <BulkAction icon="pricetag-outline" label="Brand" disabled={mode.count === 0} onPress={mode.onBrand} />
           <BulkAction icon="leaf-outline" label="Season" disabled={mode.count === 0 || !mode.review} onPress={mode.onSeason} hidden={!mode.review} />
-          <BulkAction icon="checkmark" label="Confirm" disabled={mode.count === 0} onPress={mode.onConfirm} hidden={!mode.review} />
-          <BulkAction icon="trash-outline" label="Remove" disabled={mode.count === 0} onPress={mode.onRemove} />
-        </View>
+          <BulkAction icon="checkmark" label="Mark reviewed" disabled={mode.count === 0} onPress={mode.onConfirm} hidden={!mode.review} />
+          <BulkAction icon="checkmark-done" label="Done" disabled={false} onPress={mode.onDone} />
+        </View></>
       ) : (
         <View style={styles.busy} accessibilityLiveRegion="polite">
           <ActivityIndicator size="small" color={colors.primary} />
@@ -65,11 +67,11 @@ export function ActionBar({ mode, bottomInset }: { mode: ActionBarMode; bottomIn
   );
 }
 
-function PrimaryButton({ label, icon, onPress }: { label: string; icon?: keyof typeof Ionicons.glyphMap; onPress: () => void }) {
+function PrimaryButton({ label, icon, onPress, disabled = false }: { disabled?: boolean; label: string; icon?: keyof typeof Ionicons.glyphMap; onPress: () => void }) {
   return (
-    <TouchableOpacity style={styles.primary} onPress={onPress} accessibilityRole="button" activeOpacity={0.85}>
+    <TouchableOpacity disabled={disabled} accessibilityState={{ disabled }} style={[styles.primary, disabled && styles.bulkDisabled]} onPress={onPress} accessibilityRole="button" activeOpacity={0.85}>
       {icon ? <Ionicons name={icon} size={17} color={colors.primaryForeground} /> : null}
-      <Text style={styles.primaryText} numberOfLines={1}>{label}</Text>
+      <Text style={styles.primaryText}>{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -116,7 +118,7 @@ const styles = StyleSheet.create({
     borderCurve: 'continuous',
     backgroundColor: colors.primary,
   },
-  primaryText: { ...typography.text.sectionTitle, color: colors.primaryForeground },
+  primaryText: { textAlign: 'center', ...typography.text.sectionTitle, color: colors.primaryForeground },
   secondary: { alignItems: 'center', minHeight: 36, justifyContent: 'center' },
   confirmRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   flex: { flex: 1 },

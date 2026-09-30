@@ -10,6 +10,7 @@ import { track } from '../../lib/analytics';
 
 function stageFor(batch: Batch): ScanReviewStage {
   if (batch.phase === 'saving') return 'saving';
+  if (batch.phase === 'pre-extract') return 'pre-extract';
   if (batch.phase === 'review') return 'review';
   const photos = photoCounts(batch);
   return photos.settled < photos.total ? 'scanning' : 'extracting';
@@ -29,7 +30,7 @@ function failureFor(batch: Batch, retry: () => void, getCredits: () => void) {
   }
   const photos = photoCounts(batch);
   const pieces = pieceCounts(batch);
-  if (batch.phase !== 'review' || (!photos.failed && !pieces.failed)) return null;
+  if ((batch.phase !== 'review' && batch.phase !== 'pre-extract') || (!photos.failed && !pieces.failed)) return null;
   const parts = [
     photos.failed ? `${photos.failed} photo${photos.failed === 1 ? '' : 's'} couldn't be scanned` : null,
     pieces.failed ? `${pieces.failed} piece${pieces.failed === 1 ? '' : 's'} couldn't be enriched` : null,
@@ -55,6 +56,9 @@ export function BatchImportWorkspace() {
       const photo = photos.get(piece.photoId);
       return {
         id: piece.id,
+        included: piece.included !== false,
+        sourceLabel: `Photo ${batch.photos.findIndex(p => p.id === piece.photoId) + 1} of ${batch.photos.length}`,
+        extraction: piece.status === 'pending' ? 'not-started' : piece.status === 'extracting' ? 'running' : piece.status === 'failed' && piece.failedStep === 'extract' ? 'failed' : 'ready',
         name: piece.name,
         brand: piece.brand ?? '',
         photo: piece.previewUri,
@@ -100,13 +104,6 @@ export function BatchImportWorkspace() {
     store().editPiece(id, edit);
   }, [store]);
 
-  const onRemove = useCallback((id: string) => {
-    store().removePiece(id);
-    const next = store().batch;
-    // Removing the last piece of a finished batch leaves nothing to do.
-    if (next && next.pieces.length === 0 && next.phase === 'review' && !next.blocked) discardBatch();
-  }, [store]);
-
   const getCredits = useCallback(async () => {
     const purchased = await presentPaywall();
     if (purchased) store().unblock();
@@ -140,13 +137,13 @@ export function BatchImportWorkspace() {
         const piece = batch.pieces.find((p) => p.id === id);
         if (piece) store().editPiece(id, { useCutout: !piece.useCutout });
       }}
-      onApplyCrop={(id, bbox) => { void applyPieceCrop(id, bbox); }}
-      onRemove={onRemove}
-      // Batch import has no pre-extract step: details are read automatically.
-      onExtract={() => {}}
-      onSave={() => {
-        track('closet_batch_save_started', { item_count: batch.pieces.length });
-        store().beginSave();
+      onApplyCrop={(id, bbox) => applyPieceCrop(id, bbox)}
+      onInclusionChange={changes => store().setInclusion(changes)}
+      onKeepBasic={ids => store().keepBasicDetails(ids)}
+      onExtract={ids => { store().beginExtraction(ids); }}
+      onSave={(ids) => {
+        track('closet_batch_save_started', { item_count: ids.length });
+        store().beginSave(ids);
         store().closeWorkspace();
       }}
       onMinimize={store().closeWorkspace}

@@ -98,14 +98,18 @@ async function runUntilSettled() {
   await drain();
 }
 
-it('carries a batch through prepare, scan and extract to review', async () => {
+it('pauses after detection and extracts only explicitly approved pieces', async () => {
   startBatch(3);
   kick();
   await runUntilSettled();
   const batch = useBatchImportStore.getState().batch!;
-  expect(batch.phase).toBe('review');
+  expect(batch.phase).toBe('pre-extract');
   expect(batch.photos.every((p) => p.status === 'done')).toBe(true);
-  expect(batch.pieces.map((p) => p.status)).toEqual(['ready', 'ready', 'ready']);
+  expect(extract).not.toHaveBeenCalled();
+  useBatchImportStore.getState().beginExtraction(['p0-0', 'p2-0']);
+  await runUntilSettled();
+  expect(extract.mock.calls.map(([p]) => p.id)).toEqual(['p0-0', 'p2-0']);
+  expect(useBatchImportStore.getState().batch!.pieces.map(p => p.status)).toEqual(['ready', 'pending', 'ready']);
 });
 
 it('finishes the other nine when one photo keeps failing', async () => {
@@ -117,7 +121,7 @@ it('finishes the other nine when one photo keeps failing', async () => {
   kick();
   await runUntilSettled();
   const batch = useBatchImportStore.getState().batch!;
-  expect(batch.phase).toBe('review');
+  expect(batch.phase).toBe('pre-extract');
   expect(batch.photos.filter((p) => p.status === 'done')).toHaveLength(9);
   expect(batch.photos.find((p) => p.id === 'p4')).toMatchObject({ status: 'failed' });
   // Three automatic attempts, each with the same photo (and so the same idempotency key).
@@ -137,7 +141,7 @@ it('stops scanning the moment the server says the credits are gone', async () =>
   await runUntilSettled();
   const batch = useBatchImportStore.getState().batch!;
   expect(batch.blocked).toBe('credits');
-  expect(batch.phase).toBe('review');
+  expect(batch.phase).toBe('pre-extract');
   // Only the scans already in flight when the refusal arrived were attempted.
   expect(scan.mock.calls.length).toBeLessThanOrEqual(5);
   expect(batch.photos.filter((p) => p.status === 'blocked').length).toBeGreaterThanOrEqual(5);
@@ -168,10 +172,10 @@ it('never runs more than three scans or one prepare at a time', async () => {
   expect(maxPrepares).toBe(1);
   expect(maxScans).toBeLessThanOrEqual(3);
   expect(maxScans).toBeGreaterThan(1);
-  expect(useBatchImportStore.getState().batch!.phase).toBe('review');
+  expect(useBatchImportStore.getState().batch!.phase).toBe('pre-extract');
 });
 
-it('starts extracting a photo\'s pieces before the remaining photos are scanned', async () => {
+it('does not extract while scanning or after detection without approval', async () => {
   const order: string[] = [];
   scan.mockImplementation(async (_batchId: string, p: PhotoJob) => {
     order.push(`scan:${p.id}`);
@@ -185,5 +189,10 @@ it('starts extracting a photo\'s pieces before the remaining photos are scanned'
   startBatch(6);
   kick();
   await runUntilSettled();
-  expect(order.indexOf('extract:p0-0')).toBeLessThan(order.indexOf('scan:p5'));
+  expect(order).toHaveLength(6);
+  expect(extract).not.toHaveBeenCalled();
+  useBatchImportStore.getState().beginExtraction(['p0-0']);
+  await runUntilSettled();
+  expect(order.indexOf('extract:p0-0')).toBeGreaterThan(order.indexOf('scan:p5'));
+  expect(extract).toHaveBeenCalledTimes(1);
 });

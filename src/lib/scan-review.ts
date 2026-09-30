@@ -147,10 +147,10 @@ export type SheetGuidance = { lead: string | null; hint: string };
  */
 export function sheetGuidance(stage: 'pre-extract' | 'review', summary: ReviewSummary): SheetGuidance {
   if (stage === 'pre-extract') {
-    return { lead: null, hint: 'Remove anything that isn’t a piece, add brands you know, then extract.' };
+    return { lead: null, hint: 'Uncheck pieces you don’t want. Tap a photo to inspect or add a brand.' };
   }
   if (summary.check > 0) {
-    return { lead: reviewSummaryLabel(summary), hint: 'Pieces with a dot are worth a look.' };
+    return { lead: reviewSummaryLabel(summary), hint: 'Pieces marked “Check details” are worth a look.' };
   }
   const total = summary.ready + summary.confirmed;
   return {

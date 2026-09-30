@@ -1,3 +1,4 @@
+import { extractionKey } from '../../lib/extractionPrefetch';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import * as Crypto from 'expo-crypto';
 import { scanItemDirect, scanVisionPoseDirect, type PoseScanItem } from '../../hooks/useItems';
@@ -194,9 +195,9 @@ export async function extractPiece(piece: Piece, photo: PhotoJob, siblings: Piec
     imageData: imageData ?? `data:image/jpeg;base64,${await readBase64(photo.scanUri ?? photo.masterUri)}`,
     outfitContext: outfitContext || undefined,
     brandHint: piece.edited.includes('brand') && piece.brand ? piece.brand : undefined,
-    targetName: piece.detectedName || undefined,
-    targetCategory: piece.detectedCategory || undefined,
-    idempotencyKey: `attr-${piece.id}`,
+    targetName: piece.name || piece.detectedName || undefined,
+    targetCategory: piece.category || piece.detectedCategory || undefined,
+    idempotencyKey: extractionKey(piece.id, { targetName: piece.name || piece.detectedName, targetCategory: piece.category || piece.detectedCategory, brandHint: piece.brand ?? '', bbox: piece.bbox }),
   });
 }
 
