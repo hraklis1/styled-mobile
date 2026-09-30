@@ -133,10 +133,10 @@ export function PreExtractGrid({
 }
 
 /** "Brand · Name" as one quiet line, for sheet headers and toasts. */
-export function PieceLine({ piece }: { piece: ScanReviewPiece }) {
+export function PieceLine({ piece, hideBrand = false }: { piece: ScanReviewPiece; hideBrand?: boolean }) {
   return (
     <View style={styles.pieceLine}>
-      {piece.brand ? <><Text style={styles.brand}>{piece.brand}</Text><Middot /></> : null}
+      {piece.brand && !hideBrand ? <><Text style={styles.brand}>{piece.brand}</Text><Middot /></> : null}
       <Text style={styles.pieceLineName} numberOfLines={1}>{piece.name || 'Unnamed piece'}</Text>
     </View>
   );

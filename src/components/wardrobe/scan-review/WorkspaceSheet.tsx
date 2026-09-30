@@ -50,10 +50,12 @@ export function WorkspaceSheet({ title, subtitle, detent = 'medium', dismissed =
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+  // Top-aligned so Done sits on the title's line, not between title and subtitle.
+  header: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   heading: { flex: 1, minWidth: 0, gap: spacing.xs },
   title: { ...typography.text.editorialSection, color: colors.foreground },
-  close: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  // Centres the 44pt target on the title's 28pt line.
+  close: { minWidth: 44, minHeight: 44, marginTop: -8, alignItems: 'center', justifyContent: 'center' },
   closeText: { ...typography.text.label, color: colors.foreground },
   body: { flex: 1, minHeight: 0 },
   footer: { padding: spacing.lg },

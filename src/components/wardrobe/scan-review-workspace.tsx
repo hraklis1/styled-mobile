@@ -539,7 +539,7 @@ export function ScanReviewWorkspace({
 
         {sheet?.kind === 'brand' ? (
           <BrandSearchSheet targetIds={sheet.target} current={singleTarget?.brand ?? (sheetTargets.every(piece => piece.brand === sheetTargets[0]?.brand) ? sheetTargets[0]?.brand ?? '' : '')}
-            suggestions={brandSuggestions} scanBrands={scanBrands} subtitle={singleTarget ? <PieceLine piece={singleTarget} /> : <Text>{pieceCountLabel(sheetTargets.length)}</Text>}
+            suggestions={brandSuggestions} scanBrands={scanBrands} subtitle={singleTarget ? <PieceLine piece={singleTarget} hideBrand /> : <Text style={styles.sheetSubtitle}>{pieceCountLabel(sheetTargets.length)}</Text>}
             reduceMotion={reduceMotion} dismissed={sheetDismissed} onClose={closeSheet}
             onSelect={(ids, brand) => {
               const targets = ids.filter(id => pieces.some(p => p.id === id && (!sheet.includedOnly || p.included !== false)));

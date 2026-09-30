@@ -15,23 +15,40 @@ import {
 import { colors, radii, spacing, stroke, typography } from '../../../theme';
 import { ChipRow, QuietChip } from './atoms';
 
-function OptionRow({ label, selected, muted, icon, onPress }: {
+/** Splits a label around the first case-insensitive match of `query`. */
+function splitMatch(label: string, query: string): [string, string, string] | null {
+  const q = query.trim();
+  const at = q ? label.toLocaleLowerCase().indexOf(q.toLocaleLowerCase()) : -1;
+  return at < 0 ? null : [label.slice(0, at), label.slice(at, at + q.length), label.slice(at + q.length)];
+}
+
+function OptionRow({ label, selected, muted, icon, query, divided = true, onPress }: {
   label: string;
   selected?: boolean;
   muted?: boolean;
   icon?: keyof typeof Ionicons.glyphMap;
+  /** When set, the matched run is set in full ink and the rest recedes. */
+  query?: string;
+  divided?: boolean;
   onPress: () => void;
 }) {
+  const match = query ? splitMatch(label, query) : null;
   return (
     <TouchableOpacity
-      style={styles.option}
+      style={[styles.option, !divided && styles.optionLast]}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected: Boolean(selected) }}
     >
       {icon ? <Ionicons name={icon} size={16} color={muted ? colors.mutedForeground : colors.foreground} /> : null}
       <Text style={[styles.optionText, muted && styles.optionMuted, selected && styles.optionSelected]} numberOfLines={1}>
-        {label}
+        {match ? (
+          <>
+            <Text style={styles.optionRest}>{match[0]}</Text>
+            <Text style={styles.optionMatch}>{match[1]}</Text>
+            <Text style={styles.optionRest}>{match[2]}</Text>
+          </>
+        ) : label}
       </Text>
       {selected ? <Ionicons name="checkmark" size={16} color={colors.foreground} /> : null}
     </TouchableOpacity>
@@ -74,9 +91,17 @@ export function BrandPicker({ current, suggestions, scanBrands, onSelect }: {
   onSelect: (brand: string) => void;
 }) {
   const [query, setQuery] = useState('');
-  const filtered = useMemo(() => filterBrandSuggestions(suggestions, query), [query, suggestions]);
   const trimmed = query.trim();
+  // The current brand leads the list so the sheet opens on what's chosen.
+  const filtered = useMemo(() => {
+    const list = filterBrandSuggestions(suggestions, query);
+    if (!current || trimmed) return list;
+    return [current, ...list.filter((brand) => brand !== current)];
+  }, [current, query, suggestions, trimmed]);
   const exact = suggestions.some((brand) => brand.toLocaleLowerCase() === trimmed.toLocaleLowerCase());
+  const useTyped = Boolean(trimmed) && !exact;
+  // The chosen brand already leads the list with a check; the chips offer the others.
+  const otherScanBrands = scanBrands.filter((brand) => brand !== current);
 
   return (
     <View style={styles.fill}>
@@ -89,23 +114,38 @@ export function BrandPicker({ current, suggestions, scanBrands, onSelect }: {
         contentContainerStyle={styles.list}
         ListHeaderComponent={
           <>
-            {trimmed && !exact ? <OptionRow icon="add" label={`Use “${trimmed}”`} onPress={() => onSelect(trimmed)} /> : null}
-            {!trimmed && scanBrands.length > 0 ? (
+            {useTyped && filtered.length === 0 ? <OptionRow icon="add" label={`Use “${trimmed}”`} divided={false} onPress={() => onSelect(trimmed)} /> : null}
+            {!trimmed && otherScanBrands.length > 0 ? (
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>In this scan</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipLine} keyboardShouldPersistTaps="handled">
-                  {scanBrands.map((brand) => (
-                    <QuietChip key={brand} label={brand} selected={brand === current} onPress={() => onSelect(brand)} />
+                  {otherScanBrands.map((brand) => (
+                    <QuietChip key={brand} label={brand} selected={false} onPress={() => onSelect(brand)} />
                   ))}
                 </ScrollView>
               </View>
             ) : null}
             {current && !trimmed ? <OptionRow icon="close" label="No brand" muted onPress={() => onSelect('')} /> : null}
-            <Text style={[styles.sectionLabel, styles.listLabel]}>{trimmed ? 'Matching' : 'Suggested'}</Text>
+            {filtered.length > 0 ? (
+              <Text style={[styles.sectionLabel, styles.listLabel]}>{trimmed ? 'Matching' : 'Suggested'}</Text>
+            ) : null}
           </>
         }
-        ListEmptyComponent={<Text style={styles.empty}>No match. You can still use the name you typed.</Text>}
-        renderItem={({ item }) => <OptionRow label={item} selected={item === current} onPress={() => onSelect(item)} />}
+        // With matches on screen the typed name is the fallback, so it follows them.
+        ListFooterComponent={useTyped && filtered.length > 0 ? (
+          <View style={styles.useTypedAfter}>
+            <OptionRow icon="add" label={`Use “${trimmed}”`} divided={false} onPress={() => onSelect(trimmed)} />
+          </View>
+        ) : null}
+        renderItem={({ item, index }) => (
+          <OptionRow
+            label={item}
+            query={trimmed}
+            selected={item === current}
+            divided={index < filtered.length - 1}
+            onPress={() => onSelect(item)}
+          />
+        )}
       />
     </View>
   );
@@ -224,6 +264,10 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.hairline,
   },
   optionText: { ...typography.text.body, color: colors.foreground, flex: 1 },
+  useTypedAfter: { borderTopWidth: stroke.hairline, borderTopColor: colors.hairline },
+  optionLast: { borderBottomWidth: 0 },
+  optionRest: { color: colors.mutedForeground },
+  optionMatch: { fontWeight: typography.weight.medium },
   optionMuted: { color: colors.mutedForeground },
   optionSelected: { fontWeight: typography.weight.medium },
   empty: { ...typography.text.editorialItalic, fontSize: 15, color: colors.mutedForeground, paddingVertical: spacing.lg },
