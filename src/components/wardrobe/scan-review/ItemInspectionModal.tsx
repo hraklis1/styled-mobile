@@ -81,8 +81,16 @@ export function ItemInspectionModal({
   const jumpNext = useRef(false);
   const [paging, setPaging] = useState(false);
   const [expandedRow, setExpandedRow] = useState<ExpandableRow | null>(null);
+  // The page under the viewport's centre while swiping. The metadata follows it
+  // as soon as the swipe crosses the midpoint (where it is faded furthest), so
+  // the next piece's details are ready before the snap settles; the parent only
+  // hears about the move once the page comes to rest.
+  const [previewIndex, setPreviewIndex] = useState(activeIndex);
+  const shownIndex = paging ? Math.min(previewIndex, pieces.length - 1) : activeIndex;
+  const shown = pieces[shownIndex] ?? active;
 
-  useEffect(() => { setExpandedRow(null); }, [activeId]);
+  useEffect(() => { setPreviewIndex(activeIndex); }, [activeIndex]);
+  useEffect(() => { setExpandedRow(null); }, [activeId, shownIndex]);
 
   // Parent-driven moves ("Confirm & next" → next flagged, accessible paging, a
   // removal): scroll the pager to wherever the active piece now sits.
@@ -113,6 +121,7 @@ export function ItemInspectionModal({
       const index = Math.min(pieces.length - 1, Math.max(0, Math.round(event.contentOffset.x / metrics.snapInterval)));
       if (index !== trackedIndex.value) {
         trackedIndex.value = index;
+        scheduleOnRN(setPreviewIndex, index);
       }
     },
     onEndDrag: (event) => {
@@ -141,15 +150,15 @@ export function ItemInspectionModal({
   const coupledStyle = useAnimatedStyle(() => {
     if (reduceMotion) return { opacity: 1, transform: [{ translateX: 0 }] };
     const half = Math.max(1, metrics.snapInterval / 2);
-    const delta = scrollX.value - activeIndex * metrics.snapInterval;
+    const delta = scrollX.value - shownIndex * metrics.snapInterval;
     const clamped = Math.max(-half, Math.min(half, delta));
     return {
       opacity: 1 - (Math.abs(clamped) / half) * 0.8,
       transform: [{ translateX: -clamped * 0.5 }],
     };
-  }, [activeIndex, metrics.snapInterval, reduceMotion]);
+  }, [shownIndex, metrics.snapInterval, reduceMotion]);
 
-  if (!active) return null;
+  if (!active || !shown) return null;
 
   return (
     <KeyboardAwareScrollView
@@ -213,15 +222,15 @@ export function ItemInspectionModal({
 
       <Animated.View style={coupledStyle}>
         <SpecSheet
-          piece={active}
-          stage={active.extraction === 'not-started' || active.extraction === 'failed' ? 'pre-extract' : stage}
+          piece={shown}
+          stage={shown.extraction === 'not-started' || shown.extraction === 'failed' ? 'pre-extract' : stage}
           // A confirmed piece has been looked at; its field marks retire with it.
-          flags={states[active.id] === 'confirmed' ? [] : pieceFlags(active)}
+          flags={states[shown.id] === 'confirmed' ? [] : pieceFlags(shown)}
           expandedRow={expandedRow}
           disabled={disabled || paging}
           onExpand={setExpandedRow}
-          onUpdate={(patch) => onUpdate(active.id, patch)}
-          onOpenSheet={(kind) => onOpenSheet(kind, active.id)}
+          onUpdate={(patch) => onUpdate(shown.id, patch)}
+          onOpenSheet={(kind) => onOpenSheet(kind, shown.id)}
         />
       </Animated.View>
     </KeyboardAwareScrollView>
