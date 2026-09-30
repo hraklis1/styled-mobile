@@ -6,11 +6,13 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming, withSequence } from 'react-native-reanimated';
 
 import { type PieceReviewState } from '../../../lib/scan-review';
-import { colors, cutoutScaleFor, editorial, ingestion, motion, radii, spacing, stroke, surfaces, typography } from '../../../theme';
-import { coverUri, type ScanReviewPiece, type ScanReviewStage } from './types';
+import { colors, cutoutScaleFor, editorial, ingestion, motion, radii, spacing, surfaces, typography } from '../../../theme';
+import { FlagDot } from './atoms';
+import { RemoveBadge, SelectBadge } from './SelectBadge';
+import { coverUri, matteUri, type ScanReviewPiece, type ScanReviewStage } from './types';
 
 
-export const GridCard = memo(function GridCard({ piece, index, count, stage, state, width, selected, selecting, disabled, reduceMotion, restoreFocus, onPress, onToggle, onBrand, onClearBrand, brandRevision = 0 }: {
+export const GridCard = memo(function GridCard({ piece, index, count, stage, state, width, selected, selecting, disabled, reduceMotion, restoreFocus, onPress, onToggle, onRemove, onAddBrand, brandRevision = 0 }: {
   piece: ScanReviewPiece;
   index: number;
   count: number;
@@ -22,8 +24,11 @@ export const GridCard = memo(function GridCard({ piece, index, count, stage, sta
   disabled: boolean;
   onPress: () => void;
   onToggle: () => void;
-  onBrand: () => void;
-  onClearBrand?: () => void;
+  /** Before extraction a piece is removed, not unticked; the grid offers Undo. */
+  onRemove?: () => void;
+  /** Before extraction an empty brand slot is a quiet "+ Brand" link. */
+  onAddBrand?: () => void;
+  /** Bumped when a batch brand lands on this piece; flashes the overline. */
   brandRevision?: number;
   reduceMotion: boolean;
   restoreFocus: boolean;
@@ -32,8 +37,9 @@ export const GridCard = memo(function GridCard({ piece, index, count, stage, sta
   const isCutout = uri !== null && uri === piece.cutout;
   const plateHeight = Math.round(width / editorial.garmentAspectRatio);
   const inset = isCutout ? `${Math.round(cutoutScaleFor(piece.category) * 100)}%` as const : '100%' as const;
-  // Editorial photo framing is presentation-only; the crop editor uses the source.
-  const fit = isCutout ? 'contain' : 'cover';
+  // The crop is shown whole over its own matte; zooming to fill the 3:4
+  // plate cut wide crops (a pair of shoes) down to a heel.
+  const matte = matteUri(piece, stage);
   const stateLabel = state === 'check' ? ', worth a look' : state === 'confirmed' ? ', confirmed' : '';
 
   const target = useRef<View>(null);
@@ -50,14 +56,14 @@ export const GridCard = memo(function GridCard({ piece, index, count, stage, sta
   const pressed = useSharedValue(false);
   const included = piece.included !== false;
   const plateStyle = useAnimatedStyle(() => ({
-    borderColor: withTiming((selecting ? selected : included) ? colors.foreground : colors.border, { duration: reduceMotion ? 0 : motion.quick }),
+    borderColor: withTiming(selecting ? (selected ? colors.foreground : 'transparent') : onRemove ? colors.hairline : included ? colors.foreground : 'transparent', { duration: reduceMotion ? 0 : motion.quick }),
     transform: [{ scale: withTiming(pressed.value && !reduceMotion ? ingestion.pressedScale : 1, { duration: reduceMotion ? 0 : motion.quick }) }],
   }));
   const flash = useSharedValue(0);
   useEffect(() => {
     if (brandRevision) flash.value = reduceMotion ? 0 : withSequence(withTiming(1, { duration: 90 }), withTiming(0, { duration: 90 }));
   }, [brandRevision, flash, reduceMotion]);
-  const brandStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + flash.value * 0.025 }], backgroundColor: flash.value > 0.2 ? colors.surfaceSelected : colors.surfaceSubtle }));
+  const brandStyle = useAnimatedStyle(() => ({ opacity: 1 - flash.value * 0.6 }));
   const desaturatedStyle = useAnimatedStyle(() => ({ opacity: withTiming(included ? 0 : 1, { duration: reduceMotion ? 0 : motion.quick }) }));
   const imageStyle = useAnimatedStyle(() => ({ opacity: withTiming(included ? 1 : ingestion.excludedOpacity, { duration: reduceMotion ? 0 : motion.quick }) }));
   return (
@@ -70,53 +76,38 @@ export const GridCard = memo(function GridCard({ piece, index, count, stage, sta
         accessibilityHint={selecting ? 'Select for metadata editing' : 'Inspect photos, brand and details'}>
         <View>
           <Animated.View style={[styles.plate, { height: plateHeight }, plateStyle]}>
+            {matte ? <Image source={{ uri: matte }} style={[StyleSheet.absoluteFill, { opacity: ingestion.matte.opacity }]} contentFit="cover" blurRadius={ingestion.matte.blurRadius} cachePolicy="memory-disk" recyclingKey={`${piece.id}-matte`} accessible={false} /> : null}
             <Animated.View style={[{ width: inset, height: inset, alignItems: 'center', justifyContent: 'center' }, imageStyle]}>
-              {uri ? <Image source={{ uri }} style={{ width: '100%', height: '100%' }} contentFit={fit} cachePolicy="memory-disk" recyclingKey={piece.id} />
+              {uri ? <Image source={{ uri }} style={{ width: '100%', height: '100%' }} contentFit="contain" cachePolicy="memory-disk" recyclingKey={piece.id} />
                 : <Ionicons name="shirt-outline" size={28} color={colors.mutedForeground} />}
               {uri ? <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, desaturatedStyle]}>
                 <Svg width="100%" height="100%">
                   <Defs><Filter id="muted"><FeColorMatrix type="saturate" values="0.65" /></Filter></Defs>
-                  <SvgImage href={{ uri }} width="100%" height="100%" preserveAspectRatio={isCutout ? 'xMidYMid meet' : 'xMidYMid slice'} filter="url(#muted)" />
+                  <SvgImage href={{ uri }} width="100%" height="100%" preserveAspectRatio="xMidYMid meet" filter="url(#muted)" />
                 </Svg>
               </Animated.View> : null}
             </Animated.View>
           </Animated.View>
           <View style={styles.caption}>
-            {piece.sourceLabel ? <Text style={styles.hint}>{piece.sourceLabel}</Text> : null}
-            <Text style={styles.name}>{piece.name || 'Unnamed piece'}</Text>
-            {state === 'check' ? <Text style={styles.hint}>Check details</Text> : null}
+            {piece.brand ? <Animated.View style={brandStyle}><Text style={styles.brand} numberOfLines={1}>{piece.brand}</Text></Animated.View>
+              : onAddBrand ? <Pressable onPress={onAddBrand} disabled={disabled} hitSlop={{ top: 10, bottom: 6, right: 24 }} accessibilityRole="button"
+                accessibilityLabel={`Add a brand for ${piece.name || 'this piece'}, optional`} style={({ pressed }) => [styles.addBrand, pressed && { opacity: 0.5 }]}>
+                <Ionicons name="add" size={12} color={colors.tertiary} /><Text style={styles.addBrandText}>Brand</Text>
+              </Pressable> : null}
+            <Text style={[styles.name, !included && styles.nameMuted]} numberOfLines={2}>{piece.name || 'Unnamed piece'}</Text>
+            {!included ? <Text style={styles.hint}>Skipped</Text>
+              : state === 'check' ? <View style={styles.checkRow}><FlagDot /><Text style={styles.hint}>Check details</Text></View> : null}
           </View>
         </View>
       </Pressable>
-      <Animated.View style={[styles.brandPill, brandStyle]}>
-      <Pressable onPress={onBrand} disabled={disabled || selecting} accessibilityRole="button"
-        accessibilityState={{ disabled: disabled || selecting }}
-        accessibilityLabel={`Brand for ${piece.name}: ${piece.brand || 'Add brand'}`}
-        style={({ pressed }) => [styles.brandLabel, pressed && { backgroundColor: colors.surfaceSelected }]}>
-        <Ionicons name="pricetag-outline" size={14} color={colors.foreground} />
-        <Text style={styles.brand}>{piece.brand || 'Add brand'}</Text>
-      </Pressable>
-      {piece.brand ? <Pressable onPress={onClearBrand} disabled={disabled || selecting}
-        accessibilityRole="button" accessibilityLabel={`Clear brand for ${piece.name}`}
-        accessibilityState={{ disabled: disabled || selecting }} style={styles.clear} hitSlop={2}>
-        <Ionicons name="close" size={16} color={colors.foreground} />
-      </Pressable> : null}
-      </Animated.View>
-      <Pressable hitSlop={2} onPress={onToggle} disabled={disabled} accessibilityRole="checkbox"
-        accessibilityLabel={`${selecting ? 'Edit' : 'Keep'} ${piece.name}`}
-        accessibilityState={{ checked, disabled }} style={styles.checkTarget}>
-        <View style={[styles.selectRing, checked && styles.selectRingOn]}>
-          {checked ? <Ionicons name="checkmark" size={14} color={colors.primaryForeground} /> : null}
-        </View>
-      </Pressable>
+      {onRemove && !selecting ? <RemoveBadge onPress={onRemove} disabled={disabled} label={`Remove ${piece.name || 'piece'}`} style={styles.checkTarget} />
+        : <SelectBadge checked={checked} onPress={onToggle} disabled={disabled} reduceMotion={reduceMotion}
+          accessibilityLabel={`${selecting ? 'Edit' : 'Keep'} ${piece.name}`} style={styles.checkTarget} />}
     </View>
   );
 });
 
 const styles = StyleSheet.create({
-  brandLabel: { flex: 1, minWidth: 0, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  clear: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', marginLeft: 4 },
-  brandPill: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.surfaceSubtle, marginBottom: spacing.sm },
   hint: { ...typography.text.bodySmall, color: colors.mutedForeground },
   plate: {
     borderWidth: ingestion.activeBorder,
@@ -127,19 +118,12 @@ const styles = StyleSheet.create({
     borderRadius: radii.photo,
     backgroundColor: surfaces.plate,
   },
-  checkTarget: { position: 'absolute', top: 0, right: 0, width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
-  selectRing: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: stroke.fine,
-    borderColor: colors.controlOutline,
-    backgroundColor: colors.chromeTint,
-  },
-  selectRingOn: { borderColor: colors.primary, backgroundColor: colors.primary },
-  caption: { paddingTop: spacing.sm, paddingBottom: spacing.md, gap: 1 },
-  brand: { ...typography.text.label, color: colors.foreground, flexShrink: 1 },
+  checkTarget: { position: 'absolute', top: 2, right: 2 },
+  caption: { paddingTop: spacing.sm, paddingBottom: spacing.lg, gap: 2 },
+  checkRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  brand: { ...typography.text.eyebrow, color: colors.mutedForeground },
+  addBrand: { flexDirection: 'row', alignItems: 'center', gap: 2, alignSelf: 'flex-start' },
+  addBrandText: { ...typography.text.eyebrow, color: colors.tertiary },
   name: { ...typography.text.editorialCard, color: colors.foreground },
+  nameMuted: { color: colors.mutedForeground },
 });

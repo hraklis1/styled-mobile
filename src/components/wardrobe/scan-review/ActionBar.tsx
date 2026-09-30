@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -6,8 +7,8 @@ import { TextLink } from './atoms';
 import { pieceCountLabel } from './types';
 
 export type ActionBarMode =
-  | { kind: 'extract'; count: number; extractionCount: number; additional?: boolean; onExtract: () => void }
-  | { kind: 'save'; count: number; flagged: number; onSave: () => void; onReviewFlagged: () => void }
+  | { kind: 'extract'; count: number; extractionCount: number; additional?: boolean; onExtract: () => void; onBatch?: () => void }
+  | { kind: 'save'; count: number; flagged: number; onSave: () => void; onReviewFlagged: () => void; onBatch?: () => void }
   | { kind: 'confirm'; last: boolean; onConfirm: () => void; onSkip: (() => void) | null }
   | { kind: 'selecting'; count: number; review: boolean; onBrand: () => void; onSeason: () => void; onConfirm: () => void; onDone: () => void; onSelectAll: () => void; onClear: () => void }
   | { kind: 'failed'; count: number; onRetry: () => void; onKeepBasic: () => void }
@@ -23,10 +24,14 @@ export function ActionBar({ mode, bottomInset }: { mode: ActionBarMode; bottomIn
   return (
     <View style={[styles.bar, { paddingBottom: Math.max(bottomInset, spacing.md) }]}>
       {mode.kind === 'extract' ? (
-        <PrimaryButton disabled={mode.count === 0} label={mode.count === 0 ? 'Choose at least 1 piece' : mode.additional ? `Extract details for ${mode.extractionCount} new ${mode.extractionCount === 1 ? 'piece' : 'pieces'}` : `Extract ${pieceCountLabel(mode.extractionCount)}`} icon="sparkles" onPress={mode.onExtract} />
+        <WithBatch onBatch={mode.onBatch}>
+          <PrimaryButton disabled={mode.count === 0} label={mode.count === 0 ? 'Choose at least 1 piece' : mode.additional ? `Extract details for ${mode.extractionCount} new ${mode.extractionCount === 1 ? 'piece' : 'pieces'}` : `Extract ${pieceCountLabel(mode.extractionCount)}`} icon={mode.count === 0 ? undefined : 'sparkles'} onPress={mode.onExtract} />
+        </WithBatch>
       ) : mode.kind === 'save' ? (
         <>
-          <PrimaryButton disabled={mode.count === 0} label={mode.count === 0 ? 'Choose at least 1 piece' : mode.count === 1 ? 'Add to closet' : `Add ${pieceCountLabel(mode.count)} to closet`} onPress={mode.onSave} />
+          <WithBatch onBatch={mode.onBatch}>
+            <PrimaryButton disabled={mode.count === 0} label={mode.count === 0 ? 'Choose at least 1 piece' : mode.count === 1 ? 'Add to closet' : `Add ${pieceCountLabel(mode.count)} to closet`} onPress={mode.onSave} />
+          </WithBatch>
           {mode.flagged > 0 ? (
             <View style={styles.secondary}>
               <TextLink
@@ -38,15 +43,14 @@ export function ActionBar({ mode, bottomInset }: { mode: ActionBarMode; bottomIn
         </>
       ) : mode.kind === 'confirm' ? (
         <View style={styles.confirmRow}>
-          <View style={styles.flex}>
-            <PrimaryButton label={mode.last ? 'Looks right · Done' : 'Looks right'} onPress={mode.onConfirm} />
-          </View>
           {mode.onSkip ? (
-            <TouchableOpacity style={styles.skip} onPress={mode.onSkip} accessibilityRole="button" accessibilityLabel="Next piece, without confirming">
-              <Text style={styles.skipText}>Next</Text>
-              <Ionicons name="chevron-forward" size={14} color={colors.foreground} />
+            <TouchableOpacity style={styles.skip} onPress={mode.onSkip} accessibilityRole="button" accessibilityLabel="Skip to the next piece without confirming">
+              <Text style={styles.skipText}>Skip</Text>
             </TouchableOpacity>
           ) : null}
+          <View style={styles.flex}>
+            <PrimaryButton label={mode.last ? 'Confirm · Done' : 'Confirm & next'} onPress={mode.onConfirm} />
+          </View>
         </View>
       ) : mode.kind === 'failed' ? (
         <><PrimaryButton label={`Retry ${pieceCountLabel(mode.count)}`} onPress={mode.onRetry} /><TextLink label="Keep basic details" onPress={mode.onKeepBasic} /></>
@@ -67,11 +71,25 @@ export function ActionBar({ mode, bottomInset }: { mode: ActionBarMode; bottomIn
   );
 }
 
+/** The primary action with the batch-edit menu beside it, in one thumb row. */
+function WithBatch({ onBatch, children }: { onBatch?: () => void; children: ReactNode }) {
+  if (!onBatch) return <>{children}</>;
+  return (
+    <View style={styles.confirmRow}>
+      <View style={styles.flex}>{children}</View>
+      <TouchableOpacity style={styles.batch} onPress={onBatch} accessibilityRole="button" accessibilityLabel="Edit pieces" activeOpacity={0.7}>
+        <Ionicons name="ellipsis-horizontal" size={20} color={colors.foreground} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+/** Disabled reads as guidance, an outline, rather than a greyed-out button. */
 function PrimaryButton({ label, icon, onPress, disabled = false }: { disabled?: boolean; label: string; icon?: keyof typeof Ionicons.glyphMap; onPress: () => void }) {
   return (
-    <TouchableOpacity disabled={disabled} accessibilityState={{ disabled }} style={[styles.primary, disabled && styles.bulkDisabled]} onPress={onPress} accessibilityRole="button" activeOpacity={0.85}>
-      {icon ? <Ionicons name={icon} size={17} color={colors.primaryForeground} /> : null}
-      <Text style={styles.primaryText}>{label}</Text>
+    <TouchableOpacity disabled={disabled} accessibilityState={{ disabled }} style={[styles.primary, disabled && styles.primaryIdle]} onPress={onPress} accessibilityRole="button" activeOpacity={0.85}>
+      {icon ? <Ionicons name={icon} size={17} color={disabled ? colors.mutedForeground : colors.primaryForeground} /> : null}
+      <Text style={[styles.primaryText, disabled && styles.primaryIdleText]}>{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -118,12 +136,15 @@ const styles = StyleSheet.create({
     borderCurve: 'continuous',
     backgroundColor: colors.primary,
   },
+  primaryIdle: { backgroundColor: 'transparent', borderWidth: stroke.fine, borderColor: colors.controlOutline },
+  primaryIdleText: { color: colors.mutedForeground },
+  batch: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', borderWidth: stroke.fine, borderColor: colors.controlOutline },
   primaryText: { textAlign: 'center', ...typography.text.sectionTitle, color: colors.primaryForeground },
   secondary: { alignItems: 'center', minHeight: 36, justifyContent: 'center' },
   confirmRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   flex: { flex: 1 },
-  skip: { minHeight: 56, minWidth: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 2 },
-  skipText: { ...typography.text.label, color: colors.foreground },
+  skip: { minHeight: 56, minWidth: 64, paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center' },
+  skipText: { ...typography.text.label, color: colors.mutedForeground },
   bulkRow: { flexDirection: 'row', justifyContent: 'space-around', minHeight: 56 },
   bulk: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3, minHeight: 56 },
   bulkDisabled: { opacity: 0.35 },

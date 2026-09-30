@@ -44,7 +44,10 @@ export type SheetRequest =
   | { kind: 'brand'; target: string[]; includedOnly?: boolean }
   | { kind: 'material'; target: string[] }
   | { kind: 'category'; target: string[] }
-  | { kind: 'season'; target: string[] };
+  | { kind: 'season'; target: string[] }
+  /** Menus: the footer's batch edits and the header's import options. */
+  | { kind: 'batch'; target: string[] }
+  | { kind: 'options'; target: string[] };
 
 export function isReviewStage(stage: ScanReviewStage): boolean {
   return stage === 'review' || stage === 'saving';
@@ -53,6 +56,15 @@ export function isReviewStage(stage: ScanReviewStage): boolean {
 export function coverUri(piece: ScanReviewPiece, stage: ScanReviewStage): string | null {
   const showingCutout = isReviewStage(stage) && Boolean(piece.cutout && piece.useCutout);
   return showingCutout ? piece.cutout : piece.photo;
+}
+
+/**
+ * A reusable image for the plate's matte: a photo crop is framed whole over a
+ * blurred copy of itself. Cutouts sit on the plain plate and need none.
+ */
+export function matteUri(piece: ScanReviewPiece, stage: ScanReviewStage): string | null {
+  const uri = coverUri(piece, stage);
+  return uri !== null && uri !== piece.cutout ? uri : null;
 }
 
 export function pieceCountLabel(count: number): string {

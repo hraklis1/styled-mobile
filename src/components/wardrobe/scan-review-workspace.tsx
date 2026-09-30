@@ -28,7 +28,8 @@ import {
   sheetGuidance,
   type PieceReviewState,
 } from '../../lib/scan-review';
-import { colors, radii, spacing, stroke, typography } from '../../theme';
+import { colors, ingestion, radii, spacing, stroke, typography } from '../../theme';
+import Animated, { FadeInDown, FadeOut } from 'react-native-reanimated';
 import { ActionBar, type ActionBarMode } from './scan-review/ActionBar';
 import { PreExtractGrid, PieceLine, type SheetFilter } from './scan-review/PreExtractGrid';
 import { DetectionState, ExtractionState } from './scan-review/LoadingStates';
@@ -142,7 +143,36 @@ export function ScanReviewWorkspace({
   const [brandFeedback, setBrandFeedback] = useState({ revision: 0, ids: new Set<string>() });
   // ── Derived ────────────────────────────────────────────────────────────────
 
-  const visiblePieces = pieces;
+  // Before extraction a removed piece is gone from view; it stays in the
+  // scan as excluded only so Undo can bring it back.
+  const preExtract = stage === 'pre-extract';
+  // Removed before extraction means gone for good: such a piece was never
+  // extracted, so it never reappears as "Skipped" in review. Skipping an
+  // extracted piece in review is a separate, reversible choice.
+  const visiblePieces = useMemo(() => pieces.filter(piece =>
+    piece.included !== false || (!preExtract && piece.extraction !== 'not-started' && piece.extraction !== undefined)), [pieces, preExtract]);
+  const [removed, setRemoved] = useState<{ id: string; name: string } | null>(null);
+  useEffect(() => {
+    if (!removed) return;
+    const timer = setTimeout(() => setRemoved(null), ingestion.undoMs);
+    return () => clearTimeout(timer);
+  }, [removed]);
+  useEffect(() => { if (!preExtract) setRemoved(null); }, [preExtract]);
+  const removePiece = useCallback((id: string) => {
+    selectionFeedback();
+    const piece = pieces.find(p => p.id === id);
+    inclusion.change([id], false);
+    setRemoved({ id, name: piece?.name || 'Piece' });
+    track('scan_review_inclusion_changed', { mode: onMinimize ? 'batch' : 'single', included: false });
+  }, [inclusion, onMinimize, pieces]);
+  const undoRemove = useCallback(() => {
+    if (!removed) return;
+    selectionFeedback();
+    inclusion.change([removed.id], true);
+    // Go back to the restored piece, wherever the removal moved us on to.
+    setActiveId(removed.id);
+    setRemoved(null);
+  }, [inclusion, removed]);
   const states = useMemo(() => {
     const map: Record<string, PieceReviewState> = {};
     if (review) for (const piece of visiblePieces) {
@@ -291,6 +321,16 @@ export function ScanReviewWorkspace({
   }, [pieces]);
 
   const dismissSheet = useCallback(() => setSheetDismissed(true), []);
+  // A menu row that opens another sheet waits for the menu to finish closing.
+  const afterSheet = useRef<(() => void) | null>(null);
+  const thenDismiss = useCallback((next: () => void) => { afterSheet.current = next; setSheetDismissed(true); }, []);
+  const closeSheet = useCallback(() => {
+    setSheet(null);
+    setSheetDismissed(false);
+    const next = afterSheet.current;
+    afterSheet.current = null;
+    next?.();
+  }, []);
 
 
   const requestSystemClose = useCallback(() => {
@@ -346,6 +386,12 @@ export function ScanReviewWorkspace({
   const heroHeight = loupeHeroHeight(height);
   const contentBottom = spacing.xxl;
 
+  const batchMenu = effectiveView === 'sheet' && pieces.length > 0 ? () => openSheet({ kind: 'batch', target: [] }) : undefined;
+  // Pre-extract counts every detection, so "Restore removed" can find them;
+  // review counts only what it shows.
+  const inclusionScope = preExtract ? pieces : visiblePieces;
+  const allIncluded = inclusion.included.length === inclusionScope.length && inclusionScope.length > 0;
+
   const actionMode: ActionBarMode = stage === 'scanning'
     ? { kind: 'busy', label: 'Looking at your photo…' }
     : stage === 'extracting'
@@ -355,7 +401,7 @@ export function ScanReviewWorkspace({
         : inclusion.included.some(p => p.extraction === 'failed')
             ? { kind: 'failed', count: inclusion.included.filter(p => p.extraction === 'failed').length, onRetry: extract, onKeepBasic: () => onKeepBasic(inclusion.included.filter(p => p.extraction === 'failed').map(p => p.id)) }
           : (stage === 'pre-extract' && !pieces.some(p => p.extraction === 'ready')) || inclusion.included.some(p => p.extraction === 'not-started')
-            ? { kind: 'extract', count: inclusion.included.length, onExtract: extract, extractionCount: inclusion.included.filter(p => p.extraction === 'not-started').length, additional: pieces.some(p => p.extraction === 'ready') }
+            ? { kind: 'extract', count: inclusion.included.length, onExtract: extract, onBatch: batchMenu, extractionCount: inclusion.included.filter(p => p.extraction === 'not-started').length, additional: pieces.some(p => p.extraction === 'ready') }
             : effectiveView === 'loupe' && pieces.find(p => p.id === activeResolvedId)?.extraction === 'ready'
               ? {
                 kind: 'confirm',
@@ -371,6 +417,7 @@ export function ScanReviewWorkspace({
                 flagged: sheetEnabled ? checkCount : 0,
                 onSave: save,
                 onReviewFlagged: startFlaggedWalk,
+                onBatch: batchMenu,
               };
 
   const sheetTargets = sheet ? pieces.filter((piece) => sheet.target.includes(piece.id) && (!(sheet.kind === 'brand' && sheet.includedOnly) || piece.included !== false)) : [];
@@ -393,11 +440,8 @@ export function ScanReviewWorkspace({
             canGoBack={effectiveView === 'loupe' && sheetEnabled && !busy}
             position={effectiveView === 'loupe' && activeIndex >= 0 ? { index: activeIndex, count: loupeIds.length, walk: Boolean(walk) } : null}
             includedCount={inclusion.included.length}
-            totalCount={pieces.length}
-            onMore={onMinimize ? () => Alert.alert('Import options', undefined, [
-                { text: 'Discard import', style: 'destructive', onPress: () => setConfirmClose(true) },
-                { text: 'Cancel', style: 'cancel' },
-              ]) : undefined}
+            totalCount={visiblePieces.length}
+            onMore={onMinimize ? () => openSheet({ kind: 'options', target: [] }) : undefined}
             closeDisabled={closeDisabled}
             topInset={insets.top}
             onBack={() => { setWalk(null); setView('sheet'); }}
@@ -434,9 +478,7 @@ export function ScanReviewWorkspace({
               onOpen={openPiece}
               scrollOffset={gridOffset}
               brandFeedback={brandFeedback}
-              onClearBrand={id => { selectionFeedback(); update(id, { brand: '' }); }}
               focusId={sheet ? null : activeId}
-              onBrand={id => { setActiveId(id); openSheet({ kind: 'brand', target: [id] }); }}
               onToggleIncluded={id => {
                 selectionFeedback();
                 const piece = inclusion.snapshot().find(p => p.id === id);
@@ -444,6 +486,8 @@ export function ScanReviewWorkspace({
                 track('scan_review_inclusion_changed', { mode: onMinimize ? 'batch' : 'single', included: !piece });
               }}
               onToggleSelect={() => {}}
+              onRemove={preExtract ? removePiece : undefined}
+              onAddBrand={preExtract ? id => openSheet({ kind: 'brand', target: [id] }) : undefined}
             />
           ) : activeResolvedId ? (
             <ItemInspectionModal
@@ -464,26 +508,30 @@ export function ScanReviewWorkspace({
                 inclusion.change([id], !inclusion.snapshot().some(p => p.id === id));
               }}
               onToggleCutout={onToggleCutout}
+              onRemove={preExtract ? id => {
+                // Land on the next piece (or the previous, at the end); left
+                // alone, the vanished active id resolves to the first piece.
+                const index = loupeIds.indexOf(id);
+                const neighbour = loupeIds[index + 1] ?? loupeIds[index - 1] ?? null;
+                if (neighbour) setActiveId(neighbour);
+                removePiece(id);
+                if (loupePieces.length <= 1) { setWalk(null); setView('sheet'); }
+              } : undefined}
               footerHeight={footerHeight}
             />
           ) : <View style={styles.root} />}
 
+          {removed ? (
+            <Animated.View entering={reduceMotion ? undefined : FadeInDown.duration(180)} exiting={reduceMotion ? undefined : FadeOut.duration(140)}
+              style={[styles.undo, { bottom: footerHeight + spacing.sm }]} accessibilityLiveRegion="polite">
+              <Text style={styles.undoText} numberOfLines={1}>Removed {removed.name}</Text>
+              <TouchableOpacity onPress={undoRemove} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Undo removing ${removed.name}`}>
+                <Text style={styles.undoAction}>Undo</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          ) : null}
+
           <View onLayout={event => setFooterHeight(event.nativeEvent.layout.height)}>
-            {!busy && effectiveView === 'sheet' ? (
-              <View style={styles.shortcuts}>
-                <Text style={styles.toolbarCount}>{inclusion.included.length} included</Text>
-                <Pressable accessibilityRole="button" style={({ pressed }) => [styles.toolbarButton, pressed && { backgroundColor: colors.surfaceSelected }]} onPress={() => { bulkFeedback(); inclusion.change(pieces.map(p => p.id), inclusion.included.length !== pieces.length); }} disabled={!pieces.length} accessibilityState={{ disabled: !pieces.length }}>
-                  <Text style={styles.toolbarLabel}>{inclusion.included.length === pieces.length && pieces.length > 0 ? 'Exclude all' : 'Include all'}</Text>
-                </Pressable>
-                <Pressable accessibilityRole="button" style={({ pressed }) => [styles.toolbarButton, pressed && { backgroundColor: colors.surfaceSelected }]} onPress={() => {
-                  const target = inclusion.snapshot().map(piece => piece.id);
-                  if (target.length) openSheet({ kind: 'brand', target, includedOnly: true });
-                }} disabled={!inclusion.included.length} accessibilityState={{ disabled: !inclusion.included.length }}>
-                  <Ionicons name="pricetag-outline" size={16} color={colors.foreground} />
-                  <Text style={styles.toolbarLabel}>Brand</Text>
-                </Pressable>
-              </View>
-            ) : null}
             <ActionBar mode={actionMode} bottomInset={insets.bottom} />
           </View>
 
@@ -492,20 +540,37 @@ export function ScanReviewWorkspace({
         {sheet?.kind === 'brand' ? (
           <BrandSearchSheet targetIds={sheet.target} current={singleTarget?.brand ?? (sheetTargets.every(piece => piece.brand === sheetTargets[0]?.brand) ? sheetTargets[0]?.brand ?? '' : '')}
             suggestions={brandSuggestions} scanBrands={scanBrands} subtitle={singleTarget ? <PieceLine piece={singleTarget} /> : <Text>{pieceCountLabel(sheetTargets.length)}</Text>}
-            reduceMotion={reduceMotion} dismissed={sheetDismissed} onClose={() => { setSheet(null); setSheetDismissed(false); }}
+            reduceMotion={reduceMotion} dismissed={sheetDismissed} onClose={closeSheet}
             onSelect={(ids, brand) => {
               const targets = ids.filter(id => pieces.some(p => p.id === id && (!sheet.includedOnly || p.included !== false)));
               for (const id of targets) update(id, { brand });
               setBrandFeedback(current => ({ revision: current.revision + 1, ids: new Set(targets) }));
               dismissSheet();
             }} />
+        ) : sheet?.kind === 'batch' ? (
+          <WorkspaceSheet title="Edit pieces" subtitle={<Text style={styles.sheetSubtitle}>{preExtract ? pieceCountLabel(inclusion.included.length) : `${inclusion.included.length} of ${visiblePieces.length} included`}</Text>}
+            reduceMotion={reduceMotion} dismissed={sheetDismissed} onClose={closeSheet}>
+            {preExtract ? (!allIncluded ? <MenuRow icon="refresh-outline" label="Restore removed pieces"
+              onPress={() => { bulkFeedback(); inclusion.change(pieces.map(p => p.id), true); setRemoved(null); dismissSheet(); }} /> : null)
+              : <MenuRow icon={allIncluded ? 'remove-circle-outline' : 'checkmark-circle-outline'} label={allIncluded ? 'Exclude all' : 'Include all'}
+                onPress={() => { bulkFeedback(); inclusion.change(inclusionScope.map(p => p.id), !allIncluded); dismissSheet(); }} />}
+            <MenuRow icon="pricetag-outline" label="Brand for included pieces" disabled={!inclusion.included.length}
+              onPress={() => thenDismiss(() => openSheet({ kind: 'brand', target: inclusion.snapshot().map(p => p.id), includedOnly: true }))} />
+            {review ? <MenuRow icon="leaf-outline" label="Season for included pieces" disabled={!inclusion.included.length}
+              onPress={() => thenDismiss(() => openSheet({ kind: 'season', target: inclusion.snapshot().map(p => p.id) }))} /> : null}
+          </WorkspaceSheet>
+        ) : sheet?.kind === 'options' ? (
+          <WorkspaceSheet title="Import options" reduceMotion={reduceMotion} dismissed={sheetDismissed} onClose={closeSheet}>
+            {onMinimize ? <MenuRow icon="chevron-down" label="Keep running in the background" onPress={() => thenDismiss(onMinimize)} /> : null}
+            <MenuRow icon="trash-outline" label="Discard import" destructive onPress={() => thenDismiss(() => setConfirmClose(true))} />
+          </WorkspaceSheet>
         ) : sheet ? (
           <WorkspaceSheet
             title={sheet.kind === 'material' ? 'Material' : sheet.kind === 'category' ? 'Category' : 'Season'}
             subtitle={singleTarget ? <PieceLine piece={singleTarget} /> : <Text style={styles.sheetSubtitle}>{pieceCountLabel(sheetTargets.length)}</Text>}
             reduceMotion={reduceMotion}
             dismissed={sheetDismissed}
-            onClose={() => { setSheet(null); setSheetDismissed(false); }}
+            onClose={closeSheet}
             footer={sheet.kind === 'season' ? (
               <SheetButton
                 label={`Apply to ${pieceCountLabel(sheetTargets.length)}`}
@@ -560,6 +625,23 @@ export function ScanReviewWorkspace({
   );
 }
 
+function MenuRow({ icon, label, onPress, disabled, destructive }: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  destructive?: boolean;
+}) {
+  const tint = destructive ? colors.destructive : colors.foreground;
+  return (
+    <Pressable onPress={onPress} disabled={disabled} accessibilityRole="button" accessibilityState={{ disabled }}
+      style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: colors.surfaceSelected }, disabled && { opacity: 0.4 }]}>
+      <Ionicons name={icon} size={20} color={tint} />
+      <Text style={[styles.menuLabel, { color: tint }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 function WorkspaceHeader({ stage, view, canGoBack, position, includedCount, totalCount, onMore, closeDisabled, topInset, onBack, onClose, onMinimize }: {
   stage: ScanReviewStage;
   view: View_;
@@ -597,7 +679,7 @@ function WorkspaceHeader({ stage, view, canGoBack, position, includedCount, tota
             {position.index + 1} of {position.count}{position.walk ? ' to check' : ''}
           </Text>
         ) : (
-          <View><Text style={styles.masthead} accessibilityRole="header">{title}</Text>{(stage === 'pre-extract' || stage === 'review') ? <Text style={styles.position}>{includedCount} of {totalCount} included</Text> : null}</View>
+          <View><Text style={styles.masthead} accessibilityRole="header">{title}</Text>{(stage === 'pre-extract' || stage === 'review') ? <Text style={styles.position}>{stage === 'pre-extract' ? pieceCountLabel(totalCount) : `${includedCount} of ${totalCount} included`}</Text> : null}</View>
         )}
       </View>
       <View style={[styles.headerSide, styles.headerSideEnd]}>
@@ -628,10 +710,8 @@ function WorkspaceHeader({ stage, view, canGoBack, position, includedCount, tota
 }
 
 const styles = StyleSheet.create({
-  shortcuts: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
-  toolbarCount: { ...typography.text.caption, color: colors.mutedForeground, flexGrow: 1 },
-  toolbarButton: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, minWidth: 44, paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.surfaceSubtle, justifyContent: 'center' },
-  toolbarLabel: { ...typography.text.label, color: colors.foreground },
+  menuRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, borderBottomWidth: stroke.hairline, borderBottomColor: colors.hairline },
+  menuLabel: { ...typography.text.body, flex: 1 },
   inclusionControl: { minHeight: 44, marginHorizontal: spacing.lg, marginVertical: spacing.sm },
   root: { flex: 1, backgroundColor: colors.background },
   header: {
@@ -661,4 +741,12 @@ const styles = StyleSheet.create({
   },
   failureText: { ...typography.text.bodySmall, color: colors.inkSubtle, flex: 1 },
   sheetSubtitle: { ...typography.text.meta, color: colors.mutedForeground },
+  undo: {
+    position: 'absolute', left: spacing.lg, right: spacing.lg, zIndex: 20,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 48,
+    paddingHorizontal: spacing.lg, borderRadius: radii.xl, borderCurve: 'continuous',
+    backgroundColor: colors.foreground, boxShadow: '0 6px 20px rgba(31,26,22,0.18)',
+  },
+  undoText: { ...typography.text.bodySmall, color: colors.background, flex: 1 },
+  undoAction: { ...typography.text.label, color: colors.background, textDecorationLine: 'underline' },
 });

@@ -21,6 +21,11 @@ jest.mock('../../../lib/analytics', () => ({ track: jest.fn() }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Icon' }));
 jest.mock('react-native-gesture-handler', () => ({ GestureHandlerRootView: 'GestureRoot' }));
 jest.mock('react-native-keyboard-controller', () => ({ KeyboardProvider: ({ children }: { children: React.ReactNode }) => children }));
+jest.mock('react-native-reanimated', () => {
+  const { View } = jest.requireActual('react-native');
+  const anim = { duration: () => anim };
+  return { __esModule: true, default: { View }, FadeInDown: anim, FadeOut: anim };
+});
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) }));
 
 const fixture: ScanReviewPiece[] = Array.from({ length: 3 }, (_, i) => ({
@@ -30,12 +35,13 @@ const fixture: ScanReviewPiece[] = Array.from({ length: 3 }, (_, i) => ({
   material: null, fit: null, sizeProfile: null, sleeveLength: null,
 }));
 const applyCrop = jest.fn(async () => {});
+let stage: 'review' | 'pre-extract' = 'review';
 let latest: ScanReviewPiece[];
 let setItems: React.Dispatch<React.SetStateAction<ScanReviewPiece[]>>;
 function Harness() {
   const [pieces, setPieces] = useState(fixture);
   useLayoutEffect(() => { latest = pieces; setItems = setPieces; });
-  return <ScanReviewWorkspace visible stage="review" pieces={pieces} brandSuggestions={['COS']}
+  return <ScanReviewWorkspace visible stage={stage} pieces={pieces} brandSuggestions={['COS']}
     extractionProgress={{ current: 0, total: 0 }}
     onUpdate={(id, patch) => setPieces(ps => ps.map(p => p.id === id ? { ...p, ...patch } : p))}
     onInclusionChange={changes => setPieces(ps => applyInclusionChanges(ps, changes))}
@@ -43,12 +49,61 @@ function Harness() {
 }
 let renderer: TestRenderer.ReactTestRenderer;
 const node = (name: string) => renderer.root.findByType(name as never);
+const menuRow = (label: string) => renderer.root.findAll(n => n.props.onPress && n.findAll(child => child.type === Text && child.props.children === label).length > 0)[0];
 function openBrands() {
-  const button = renderer.root.findAll(n => n.props.onPress && n.findAll(child => child.type === Text && child.props.children === 'Brand').length > 0)[0];
-  act(() => button.props.onPress());
+  act(() => node('Actions').props.mode.onBatch());
+  act(() => menuRow('Brand for included pieces').props.onPress());
+  // The menu finishes closing before the brand sheet is presented.
+  expect(renderer.root.findAllByType('BrandSheet' as never)).toHaveLength(0);
+  act(() => node('Sheet').props.onClose());
 }
 beforeEach(() => { act(() => { renderer = TestRenderer.create(<Harness />); }); });
-afterEach(() => act(() => renderer.unmount()));
+afterEach(() => { act(() => renderer.unmount()); stage = 'review'; });
+
+it('never shows a piece removed before extraction once review begins', () => {
+  act(() => setItems(ps => ps.map(p => p.id === '2' ? { ...p, extraction: 'not-started' } : p)));
+  expect(node('Grid').props.pieces.map((p: ScanReviewPiece) => p.id)).toEqual(['0', '1']);
+  act(() => node('Actions').props.mode.onBatch());
+  act(() => menuRow('Exclude all').props.onPress());
+  act(() => node('Sheet').props.onClose());
+  act(() => node('Actions').props.mode.onBatch());
+  act(() => menuRow('Include all').props.onPress());
+  expect(latest.map(p => p.included)).toEqual([true, true, false]);
+});
+
+describe('before extraction', () => {
+  beforeEach(() => {
+    act(() => renderer.unmount());
+    stage = 'pre-extract';
+    act(() => { renderer = TestRenderer.create(<Harness />); });
+  });
+
+  it('removes a piece from view and brings it back with Undo', () => {
+    expect(node('Grid').props.pieces.map((p: ScanReviewPiece) => p.id)).toEqual(['0', '1']);
+    act(() => node('Grid').props.onRemove('0'));
+    expect(node('Grid').props.pieces.map((p: ScanReviewPiece) => p.id)).toEqual(['1']);
+    expect(latest[0].included).toBe(false);
+    const undo = renderer.root.findAll(n => n.props.accessibilityLabel === 'Undo removing Piece 0')[0];
+    act(() => undo.props.onPress());
+    expect(latest[0].included).toBe(true);
+    expect(renderer.root.findAll(n => n.props.accessibilityLabel === 'Undo removing Piece 0')).toHaveLength(0);
+  });
+
+  it('stays in place when the loupe removes the piece it is showing', () => {
+    act(() => node('Grid').props.onOpen('0'));
+    act(() => node('Inspection').props.onRemove('0'));
+    expect(node('Inspection').props.activeId).toBe('1');
+    const undo = renderer.root.findAll(n => n.props.accessibilityLabel === 'Undo removing Piece 0')[0];
+    act(() => undo.props.onPress());
+    expect(node('Inspection').props.activeId).toBe('0');
+  });
+
+  it('opens the brand sheet for one piece straight from its tile', () => {
+    act(() => node('Grid').props.onAddBrand('1'));
+    act(() => node('BrandSheet').props.onSelect(['1'], 'COS'));
+    expect(latest[1].brand).toBe('COS');
+  });
+});
 
 it('opens brand search directly for included pieces without another selection step', () => {
   act(() => node('Grid').props.onFilterChange('check'));
@@ -73,13 +128,15 @@ it('ignores removed or newly skipped targets when applying a shared brand', () =
 
 it('disables the Brand action when nothing is included', () => {
   act(() => setItems(ps => ps.map(p => ({ ...p, included: false }))));
-  const button = renderer.root.findAll(n => n.props.onPress && n.findAll(child => child.type === Text && child.props.children === 'Brand').length > 0)[0];
+  act(() => node('Actions').props.mode.onBatch());
+  const button = menuRow('Brand for included pieces');
   expect(button.props.disabled).toBe(true);
   expect(renderer.root.findAllByType('BrandSheet' as never)).toHaveLength(0);
 });
 
-it('still allows an individual skipped piece to be tagged from its capsule', () => {
-  act(() => node('Grid').props.onBrand('2'));
+it('still allows an individual skipped piece to be tagged from the loupe', () => {
+  act(() => node('Grid').props.onOpen('2'));
+  act(() => node('Inspection').props.onOpenSheet('brand', '2'));
   expect(node('BrandSheet').props.targetIds).toEqual(['2']);
   act(() => node('BrandSheet').props.onSelect(['2'], 'COS'));
   expect(latest[2]).toMatchObject({ included: false, brand: 'COS' });

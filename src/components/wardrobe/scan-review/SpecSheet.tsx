@@ -17,7 +17,7 @@ import {
   type ItemCategory,
   type NormalizedColor,
 } from '../../../types/item';
-import { colors, spacing, stroke, typography } from '../../../theme';
+import { colors, radii, spacing, stroke, typography } from '../../../theme';
 import { ChipRow, FlagDot } from './atoms';
 import { isReviewStage, type PiecePatch, type ScanReviewPiece, type ScanReviewStage } from './types';
 
@@ -70,15 +70,15 @@ export function SpecSheet({ piece, stage, flags, expandedRow, disabled, onExpand
   return (
     <View style={styles.root}>
       <View style={styles.identity}>
-        <BrandEyebrow brand={piece.brand} flagged={flagged('brand')} disabled={disabled} onPress={() => onOpenSheet('brand')} />
         <EditableTitle
           value={piece.name}
           flagged={flagged('name')}
           disabled={disabled}
           onChange={(name) => onUpdate({ name })}
         />
-        {!review ? (
-          <Text style={styles.hint}>A brand you know sharpens the details we read. Not sure? Leave it.</Text>
+        <BrandEyebrow brand={piece.brand} flagged={flagged('brand')} disabled={disabled} onPress={() => onOpenSheet('brand')} />
+        {!review && !piece.brand ? (
+          <Text style={styles.hint}>Optional. A brand helps us read the details.</Text>
         ) : piece.extractFailed ? (
           <Text style={styles.hint}>We couldn’t read the details for this piece. Add what you know, or retry above.</Text>
         ) : null}
@@ -122,7 +122,6 @@ export function SpecSheet({ piece, stage, flags, expandedRow, disabled, onExpand
             label="Details"
             value={details}
             placeholder="Style, season, fit"
-            italicValue
             flagged={flagged('fit')}
             expanded={expandedRow === 'details'}
             disabled={disabled}
@@ -155,7 +154,7 @@ function BrandEyebrow({ brand, flagged, disabled, onPress }: {
       {brand ? (
         <Text style={styles.brand} numberOfLines={1}>{brand}</Text>
       ) : (
-        <Text style={styles.brandEmpty}>Add brand</Text>
+        <Text style={styles.brandEmpty}>+ Add brand</Text>
       )}
       {flagged ? <FlagDot /> : null}
     </TouchableOpacity>
@@ -324,9 +323,9 @@ function DetailsPanel({ piece, disabled, onUpdate }: {
 const styles = StyleSheet.create({
   root: { marginHorizontal: spacing.lg, gap: spacing.md },
   identity: { gap: 2 },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'flex-start', minHeight: 44 },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'flex-start', minHeight: 36, marginVertical: 4, paddingHorizontal: spacing.md, borderRadius: radii.full, borderWidth: stroke.fine, borderColor: colors.controlOutline },
   brand: { ...typography.text.eyebrow, color: colors.foreground },
-  brandEmpty: { ...typography.text.editorialItalic, fontSize: 15, lineHeight: 20, color: colors.mutedForeground },
+  brandEmpty: { ...typography.text.eyebrow, color: colors.tertiary },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   title: {
     minHeight: 44,
@@ -343,11 +342,11 @@ const styles = StyleSheet.create({
   hint: { ...typography.text.bodySmall, color: colors.mutedForeground, paddingTop: spacing.xs },
   rows: { borderTopWidth: stroke.hairline, borderTopColor: colors.hairline },
   row: { borderBottomWidth: stroke.hairline, borderBottomColor: colors.hairline },
-  rowPress: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  rowPress: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   rowLabelWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, width: 96 },
   rowLabel: { ...typography.text.eyebrow, color: colors.mutedForeground },
   rowValueWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.sm },
-  rowValue: { ...typography.text.body, color: colors.foreground, flexShrink: 1, textAlign: 'right' },
+  rowValue: { ...typography.text.body, fontSize: 15, color: colors.foreground, flexShrink: 1, textAlign: 'right' },
   rowValueItalic: { ...typography.text.editorialItalic, fontSize: 16 },
   rowValueEmpty: { color: colors.tertiary },
   valueSwatch: { width: 12, height: 12, borderRadius: 6, borderWidth: stroke.hairline, borderColor: colors.ghostStroke },

@@ -1,8 +1,12 @@
-import { useEffect, useRef, type MutableRefObject } from 'react';
-import { FlatList, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useEffect, useRef, useState, type MutableRefObject } from 'react';
+import { FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import Animated, { FadeOut, LinearTransition } from 'react-native-reanimated';
+
+import { dismissBrandTip, isBrandTipDismissed } from '../../../lib/scanBrandTip';
 
 import { type PieceReviewState, type SheetGuidance } from '../../../lib/scan-review';
-import { colors, spacing, typography } from '../../../theme';
+import { colors, radii, spacing, typography } from '../../../theme';
 import { GridCard } from './GridCard';
 import { Middot, TextSegment } from './atoms';
 import { reviewColumns } from '../../../lib/extraction-review';
@@ -28,11 +32,11 @@ type Props = {
   onToggleIncluded: (id: string) => void;
   scrollOffset: MutableRefObject<number>;
   focusId: string | null;
-  onBrand: (id: string) => void;
-  onClearBrand?: (id: string) => void;
   brandFeedback?: { revision: number; ids: ReadonlySet<string> };
   onToggleSelect: (id: string) => void;
-
+  /** Present before extraction: tiles carry a remove mark and a "+ Brand" link. */
+  onRemove?: (id: string) => void;
+  onAddBrand?: (id: string) => void;
 };
 
 /**
@@ -56,9 +60,13 @@ export function PreExtractGrid({
   scrollOffset,
   focusId,
   onToggleSelect,
-  onBrand, onClearBrand, brandFeedback,
-
+  brandFeedback,
+  onRemove,
+  onAddBrand,
 }: Props) {
+  const [tipDismissed, setTipDismissed] = useState(true);
+  useEffect(() => { void isBrandTipDismissed().then(setTipDismissed); }, []);
+  const showTip = Boolean(onAddBrand) && !tipDismissed && pieces.some(piece => !piece.brand);
   const { width, fontScale } = useWindowDimensions();
   const columns = reviewColumns(width, fontScale);
   const gap = spacing.md;
@@ -86,6 +94,17 @@ export function PreExtractGrid({
       extraData={{ selection, states, disabled, brandFeedback }}
       ListHeaderComponent={
         <View style={styles.masthead}>
+          {showTip ? (
+            // A plain View: an exiting animation here leaves the list header
+            // at its old height, stranding a blank band above the grid.
+            <View style={styles.tip}>
+              <Ionicons name="pricetag-outline" size={15} color={colors.foreground} />
+              <Text style={styles.tipText}>Know the brands? Adding them sharpens the details we read.</Text>
+              <Pressable hitSlop={12} onPress={() => { setTipDismissed(true); void dismissBrandTip(); }} accessibilityRole="button" accessibilityLabel="Dismiss tip">
+                <Ionicons name="close" size={16} color={colors.mutedForeground} />
+              </Pressable>
+            </View>
+          ) : null}
 
           {review && checkCount > 0 && !selecting ? <TextSegment
             options={[{ value: 'all' as const, label: 'All' }, { value: 'check' as const, label: `To check · ${checkCount}` }]}
@@ -95,19 +114,19 @@ export function PreExtractGrid({
       }
       ListEmptyComponent={<Text style={styles.hint}>No pieces found. Try another photo or retry the scan.</Text>}
       renderItem={({ item: piece, index }) => (
-        <View style={{ width: tileWidth }}>
+        <Animated.View style={{ width: tileWidth }} layout={reduceMotion ? undefined : LinearTransition.duration(220)} exiting={reduceMotion ? undefined : FadeOut.duration(140)}>
           <GridCard piece={piece} index={index} count={displayedPieces.length} stage={stage}
             state={review ? states[piece.id] ?? 'ready' : null} width={tileWidth}
             selected={selection?.has(piece.id) ?? false}
             selecting={selecting} disabled={disabled} reduceMotion={reduceMotion}
             restoreFocus={piece.id === focusId}
             onPress={() => selecting ? onToggleSelect(piece.id) : onOpen(piece.id)}
-            onBrand={() => onBrand(piece.id)}
-            onClearBrand={() => onClearBrand?.(piece.id)}
             brandRevision={brandFeedback?.ids.has(piece.id) ? brandFeedback.revision : 0}
             onToggle={() => selecting ? onToggleSelect(piece.id) : onToggleIncluded(piece.id)}
+            onRemove={onRemove ? () => onRemove(piece.id) : undefined}
+            onAddBrand={onAddBrand ? () => onAddBrand(piece.id) : undefined}
           />
-        </View>
+        </Animated.View>
       )}
     />
   );
@@ -127,6 +146,8 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   content: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, gap: spacing.md },
   masthead: { gap: spacing.xs },
+  tip: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, marginBottom: spacing.xs, borderRadius: radii.lg, borderCurve: 'continuous', backgroundColor: colors.surfaceSubtle },
+  tipText: { ...typography.text.bodySmall, color: colors.foreground, flex: 1 },
   hint: { ...typography.text.bodySmall, color: colors.mutedForeground },
   brand: { ...typography.text.label, color: colors.foreground },
   pieceLine: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 },

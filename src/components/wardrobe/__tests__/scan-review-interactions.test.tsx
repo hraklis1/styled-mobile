@@ -8,7 +8,8 @@ import type { ScanReviewPiece } from '../scan-review/types';
 import { useBatchExtractionReview } from '../../../hooks/useBatchExtractionReview';
 import { applyInclusionChanges, reviewColumns } from '../../../lib/extraction-review';
 
-jest.mock('react-native-reanimated', () => ({ __esModule: true, default: { View: jest.requireActual('react-native').View }, useSharedValue: (value: unknown) => ({ value }), useAnimatedStyle: (fn: () => unknown) => fn(), withSequence: (...values: unknown[]) => values[values.length - 1], withTiming: (value: unknown) => value }));
+jest.mock('@react-native-async-storage/async-storage', () => ({ getItem: jest.fn(async () => '1'), setItem: jest.fn(async () => {}) }));
+jest.mock('react-native-reanimated', () => ({ __esModule: true, default: { View: jest.requireActual('react-native').View }, FadeOut: { duration: () => undefined }, LinearTransition: { duration: () => undefined }, useSharedValue: (value: unknown) => ({ value }), useAnimatedStyle: (fn: () => unknown) => fn(), withSequence: (...values: unknown[]) => values[values.length - 1], withTiming: (value: unknown) => value }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }));
 jest.mock('expo-image', () => ({ Image: 'Image' }));
 
@@ -22,7 +23,6 @@ const makePieces = (): ScanReviewPiece[] => Array.from({ length: 6 }, (_, i) => 
 let review!: ReturnType<typeof useBatchExtractionReview>;
 let editBrand!: (id: string) => void;
 const inspect = jest.fn();
-const brand = jest.fn();
 const submit = jest.fn();
 function Harness() {
   const [pieces, setPieces] = useState(makePieces);
@@ -36,7 +36,7 @@ function Harness() {
     <Text>{currentReview.included.length} of {pieces.length} included</Text>
     <ContactSheet pieces={pieces} totalCount={pieces.length} stage="pre-extract" states={{}} guidance={{ lead: null, hint: '' }}
       checkCount={0} filter="all" selection={null} disabled={false} reduceMotion bottomPadding={16}
-      onFilterChange={jest.fn()} onOpen={inspect} onBrand={brand} onToggleSelect={jest.fn()} scrollOffset={offset} focusId={null}
+      onFilterChange={jest.fn()} onOpen={inspect} onToggleSelect={jest.fn()} scrollOffset={offset} focusId={null}
       onToggleIncluded={id => currentReview.change([id], !currentReview.snapshot().some(p => p.id === id))} />
     <ActionBar mode={{ kind: 'extract', count: currentReview.included.length, extractionCount: currentReview.included.length,
       onExtract: () => submit(currentReview.snapshot().map(p => p.id)) }} bottomInset={0} />
@@ -92,14 +92,13 @@ it('keeps phone cards at two columns and adapts to large text', () => {
   expect(reviewColumns(768, 1)).toBe(3);
 });
 
-it('opens brand tagging without inspection or inclusion changes', () => {
+it('shows a set brand as a quiet overline with no per-card brand controls', () => {
+  act(() => editBrand('0'));
   const list = renderer.root.findByType(FlatList);
   let card!: TestRenderer.ReactTestRenderer;
   act(() => { card = TestRenderer.create(list.props.renderItem({ item: list.props.data[0], index: 0 })); });
-  act(() => card.root.findAll(n => n.props.accessibilityLabel === 'Brand for Piece 0: Add brand' && n.props.onPress)[0].props.onPress());
-  expect(brand).toHaveBeenCalledWith('0');
-  expect(inspect).not.toHaveBeenCalled();
-  expect(review.snapshot()).toHaveLength(6);
+  expect(card.root.findAllByType(Text).some(n => n.props.children === 'COS')).toBe(true);
+  expect(card.root.findAll(n => typeof n.props.accessibilityLabel === 'string' && n.props.accessibilityLabel.startsWith('Brand for'))).toHaveLength(0);
   act(() => card.unmount());
 });
 
@@ -113,14 +112,12 @@ it('bulk editing hides skipped pieces and selects only included pieces', () => {
   const list = grid.root.findByType(FlatList);
   expect(list.props.data.map((p: ScanReviewPiece) => p.id)).toEqual(['0']);
   act(() => { card = TestRenderer.create(list.props.renderItem({ item: pieces[0], index: 0 })); });
-  const edit = card.root.findAll(n => n.props.accessibilityLabel === 'Edit Piece 0' && n.props.onPress)[0];
+  const edit = card.root.findAll(n => n.props.accessibilityLabel === 'Edit Piece 0' && n.props.onPress && n.props.accessibilityState)[0];
   expect(edit.props.accessibilityState.checked).toBe(true);
   act(() => edit.props.onPress());
   expect(toggle).toHaveBeenCalledWith('0');
   expect(pieces[0]).toMatchObject({ included: true, brand: 'COS' });
   expect(inspect).not.toHaveBeenCalled();
-  const tag = card.root.findAll(n => n.props.accessibilityLabel === 'Brand for Piece 0: COS' && n.props.onPress)[0];
-  expect(tag.props.disabled).toBe(true);
   act(() => { card.unmount(); grid.unmount(); });
 });
 
@@ -133,21 +130,6 @@ it.each([0, 1, 35])('keeps %i pieces in stable order, including exclusions', cou
   expect(list.props.data.map((p: ScanReviewPiece) => p.id)).toEqual(pieces.map(p => p.id));
   if (count) expect(list.props.keyExtractor(pieces[count - 1])).toBe(String(count - 1));
   act(() => grid.unmount());
-});
-
-it('clears a populated brand without opening inspection or brand search', () => {
-  const props = renderer.root.findByType(ContactSheet).props as React.ComponentProps<typeof ContactSheet>;
-  const clear = jest.fn();
-  let grid!: TestRenderer.ReactTestRenderer;
-  let card!: TestRenderer.ReactTestRenderer;
-  act(() => { grid = TestRenderer.create(<ContactSheet {...props} pieces={[{ ...makePieces()[0], brand: 'A very long designer brand' }]} onClearBrand={clear} />); });
-  const list = grid.root.findByType(FlatList);
-  act(() => { card = TestRenderer.create(list.props.renderItem({ item: list.props.data[0], index: 0 })); });
-  act(() => card.root.findAll(n => n.props.accessibilityLabel === 'Clear brand for Piece 0' && n.props.onPress)[0].props.onPress());
-  expect(clear).toHaveBeenCalledWith('0');
-  expect(inspect).not.toHaveBeenCalled();
-  expect(brand).not.toHaveBeenCalled();
-  act(() => { card.unmount(); grid.unmount(); });
 });
 
 it('batch dock disables empty tagging and switches select all to deselect all', () => {
