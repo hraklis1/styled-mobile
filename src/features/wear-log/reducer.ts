@@ -76,7 +76,7 @@ export function reduce(flow: WearFlow, event: WearEvent): WearFlow {
 
     case 'scanFailed':
       if (flow.status !== 'processing' || flow.id !== event.id) return flow;
-      return { status: 'failed', id: flow.id, photoUri: flow.photoUri, date: flow.date, message: event.message };
+      return { status: 'failed', id: flow.id, photoUri: flow.photoUri, date: flow.date, message: event.message, offline: event.offline ?? false };
 
     case 'retry':
       if (flow.status !== 'failed') return flow;

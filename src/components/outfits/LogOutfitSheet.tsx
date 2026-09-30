@@ -82,7 +82,7 @@ type Props = {
   /** Image already selected by the Home quick-start native picker. */
   initialImage?: CapturedImage;
   /** Optional initial logger view selected from the Home capture chooser. */
-  initialView?: 'picker';
+  initialView?: 'picker' | 'scan-review';
   onClose: () => void;
   onSaved?: () => void;
   onAddToWardrobe?: (onItemsSaved: (items: Item[]) => void) => void;
@@ -269,6 +269,7 @@ export function LogOutfitSheet({
 
   useEffect(() => {
     if (visible && initialView === 'picker') setView('picker');
+    if (visible && initialView === 'scan-review') setView('scan-review');
   }, [initialView, visible]);
 
   const reset = useCallback(() => {
@@ -344,7 +345,7 @@ export function LogOutfitSheet({
   const pickerCardWidth =
     (screenWidth - PICKER_H_PAD * 2 - PICKER_GAP * (PICKER_COLS - 1)) / PICKER_COLS;
   const pickerCardHeight = pickerCardWidth * 1.3;
-  const resumable = wearStatus === 'reviewing';
+  const resumable = wearStatus === 'reviewing' || wearStatus === 'processing' || wearStatus === 'failed';
   const showAutoLaunchState = Boolean(
     initialLaunch &&
     view === 'form' &&
@@ -367,6 +368,9 @@ export function LogOutfitSheet({
       {view === 'scan-review' && wearStatus !== 'idle' ? (
         <WearReviewWorkspace
           onClose={handleClose}
+          // Plain close: the !visible effect resets the form after the sheet
+          // has gone, so it doesn't flash the form on the way out.
+          onMinimize={onClose}
           onLogged={() => {
             reset();
             onSaved?.();

@@ -27,6 +27,21 @@ import { PairingRow, type RowActions } from './PairingRow';
 import { PhotoHero } from './PhotoHero';
 
 type Filter = 'all' | 'check';
+
+/** After this long a scan offers to carry on without the user watching. */
+const SLOW_SCAN_MS = 8_000;
+
+/** True once `key` has stayed the same for `ms`; resets when it changes. */
+function useSlowFlag(key: string | null, ms: number): boolean {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    setSlow(false);
+    if (!key) return;
+    const t = setTimeout(() => setSlow(true), ms);
+    return () => clearTimeout(t);
+  }, [key, ms]);
+  return slow;
+}
 type DateChoice = 'today' | 'yesterday' | 'other';
 
 function isoDay(offset: number): string {
@@ -53,14 +68,22 @@ const pieces = (n: number) => (n === 1 ? '1 piece' : `${n} pieces`);
  * State lives in the wear-log store (persisted), so closing the logger or
  * the app mid-review resumes where it was; this component only renders it.
  */
-export function WearReviewWorkspace({ onClose, onLogged, onPickManually }: {
+export function WearReviewWorkspace({ onClose, onMinimize, onLogged, onPickManually }: {
   onClose: () => void;
+  /** Close the logger and let the scan finish; the tray stands in for it. */
+  onMinimize: () => void;
   onLogged: () => void;
   /** Leave the scan for the hand-picked logger (credits, a bad photo). */
   onPickManually: () => void;
 }) {
   const flow = useWearLogStore((s) => s.flow);
+  const setWorkspaceOpen = useWearLogStore((s) => s.setWorkspaceOpen);
   const reduceMotion = useReviewReducedMotion();
+  useEffect(() => {
+    setWorkspaceOpen(true);
+    return () => setWorkspaceOpen(false);
+  }, [setWorkspaceOpen]);
+  const slow = useSlowFlag(flow.status === 'processing' ? flow.id : null, SLOW_SCAN_MS);
   const safe = useSafeAreaInsets();
   // The logger is an iOS page sheet, which already starts below the status
   // bar; the window's top inset would push the header down a second time.
@@ -81,13 +104,29 @@ export function WearReviewWorkspace({ onClose, onLogged, onPickManually }: {
             title="Reading your outfit"
             stepLabels={['Detect', 'Match']}
           />
+        ) : null}
+        {flow.status === 'processing' ? (
+          <View style={[styles.bar, styles.bottom, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+            {slow ? (
+              <View style={styles.center} accessibilityLiveRegion="polite">
+                <Text style={styles.slowText}>Taking longer than usual</Text>
+                <TextLink label="Keep going in the background" onPress={onMinimize} />
+              </View>
+            ) : (
+              <View style={styles.center}>
+                <TextLink label="Pick the pieces yourself" tone="muted" onPress={onPickManually} />
+              </View>
+            )}
+          </View>
         ) : (
           <View style={styles.failed} accessibilityLiveRegion="polite">
             <Image source={{ uri: flow.photoUri }} style={{ width, height: heroHeight }} contentFit="contain" />
-            <Text style={styles.failedTitle}>That didn’t go through</Text>
+            <Text style={styles.failedTitle}>{flow.offline ? 'Saved for when you’re back online' : 'That didn’t go through'}</Text>
             <Text style={styles.failedCopy}>{flow.message}</Text>
             <View style={[styles.bar, styles.bottom, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
-              <PrimaryButton label="Try again" onPress={() => { if (!retryWearScan()) onPickManually(); }} />
+              {flow.offline
+                ? <PrimaryButton label="Keep it for later" onPress={onMinimize} />
+                : <PrimaryButton label="Try again" onPress={() => { if (!retryWearScan()) onPickManually(); }} />}
               <View style={styles.center}><TextLink label="Pick the pieces yourself" onPress={onPickManually} /></View>
             </View>
           </View>
@@ -412,6 +451,7 @@ const styles = StyleSheet.create({
   failedCopy: { ...typography.text.bodySmall, color: colors.mutedForeground, textAlign: 'center', paddingHorizontal: spacing.xl },
   center: { alignItems: 'center' },
   bottom: { marginTop: 'auto', alignSelf: 'stretch' },
+  slowText: { ...typography.text.meta, color: colors.mutedForeground },
   emptyState: { paddingVertical: spacing.xxl, gap: spacing.sm },
   logged: { alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   loggedTitle: { ...typography.text.editorialSection, color: colors.foreground },

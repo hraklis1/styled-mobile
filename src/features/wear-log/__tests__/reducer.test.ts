@@ -1,6 +1,9 @@
 jest.mock('react-native-mmkv', () => ({
   createMMKV: () => ({ getString: jest.fn(), set: jest.fn(), remove: jest.fn() }),
 }));
+jest.mock('expo-file-system', () => ({
+  Paths: { document: { uri: 'file:///var/mobile/Containers/Data/Application/NEW/Documents/' } },
+}));
 
 import { canLog, clientImportIdFor, draftFrom, IDLE, matchedItemIds, needsCheck, orderedDetections, reduce, reviewCounts, sharedMatch } from '../reducer';
 import { REVIEW_MAX_AGE_MS, rehydrateFlow } from '../store';
@@ -48,8 +51,8 @@ describe('wear-log reducer', () => {
 
   it('failure keeps the photo and retry goes back to processing', () => {
     let flow = reduce(IDLE, { type: 'capture', id: 'f', photoUri: 'x', date: '2026-09-30', now: 1 });
-    flow = reduce(flow, { type: 'scanFailed', id: 'f', message: 'offline' });
-    expect(flow).toMatchObject({ status: 'failed', photoUri: 'x' });
+    flow = reduce(flow, { type: 'scanFailed', id: 'f', message: 'offline', offline: true });
+    expect(flow).toMatchObject({ status: 'failed', photoUri: 'x', offline: true });
     expect(reduce(flow, { type: 'retry', now: 3 })).toMatchObject({ status: 'processing', id: 'f' });
   });
 
@@ -153,10 +156,18 @@ describe('wear-log persistence', () => {
     expect(rehydrateFlow({ ...flow, status: 'saving' }, flow.updatedAt).status).toBe('reviewing');
   });
 
-  it('drops stale reviews and anything that cannot resume', () => {
+  it('drops stale reviews and finished logs', () => {
     const flow = reviewing();
     expect(rehydrateFlow(flow, flow.updatedAt + REVIEW_MAX_AGE_MS + 1)).toEqual(IDLE);
-    expect(rehydrateFlow({ status: 'processing', id: 'a', photoUri: 'x', date: 'd', startedAt: 1 }, 2)).toEqual(IDLE);
+    expect(rehydrateFlow({ status: 'logged', id: 'a', photoUri: 'x', date: 'd', logId: 1, itemIds: [], alreadyLoggedItemIds: [] }, 2)).toEqual(IDLE);
+  });
+
+  it('keeps an interrupted or offline scan so the runner can resume it', () => {
+    const processing = { status: 'processing', id: 'a', photoUri: 'x', date: 'd', startedAt: 1 } as const;
+    expect(rehydrateFlow(processing, 5)).toMatchObject({ status: 'processing', id: 'a', startedAt: 5 });
+    expect(rehydrateFlow(processing, REVIEW_MAX_AGE_MS + 2)).toEqual(IDLE);
+    const offline = { status: 'failed', id: 'b', photoUri: 'x', date: 'd', message: 'm', offline: true } as const;
+    expect(rehydrateFlow(offline, 5)).toBe(offline);
   });
 
   it('gives a draft to a new piece saved before drafts existed', () => {

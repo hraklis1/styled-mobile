@@ -70,7 +70,8 @@ type Base = { id: string; photoUri: string; date: string };
 export type WearFlow =
   | { status: 'idle' }
   | (Base & { status: 'processing'; startedAt: number })
-  | (Base & { status: 'failed'; message: string })
+  /** `offline` failures wait for the connection and retry on their own. */
+  | (Base & { status: 'failed'; message: string; offline: boolean })
   | (Base & {
       status: 'reviewing' | 'saving';
       scan: WearScan;
@@ -86,7 +87,7 @@ export type ReviewFlow = Extract<WearFlow, { status: 'reviewing' | 'saving' }>;
 export type WearEvent =
   | { type: 'capture'; id: string; photoUri: string; date: string; now: number }
   | { type: 'scanSucceeded'; id: string; scan: WearScan; now: number }
-  | { type: 'scanFailed'; id: string; message: string }
+  | { type: 'scanFailed'; id: string; message: string; offline?: boolean }
   | { type: 'retry'; now: number }
   | { type: 'confirm'; detectionId: string; itemId: number }
   | { type: 'openResolve'; detectionId: string; mode: ResolveMode }

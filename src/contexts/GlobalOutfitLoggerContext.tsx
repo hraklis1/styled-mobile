@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useCallback, useRef } from 'react'
 import { View, StyleSheet } from 'react-native';
 
 import { LogOutfitSheet } from '../components/outfits/LogOutfitSheet';
+import { WearLogTray } from '../components/outfits/wear-review/WearLogTray';
 import { PhotoSourceSheet } from '../components/primitives/PhotoSourceSheet';
 import { useGlobalAddSheet } from './GlobalAddSheetContext';
 import { useGlobalScan } from './GlobalScanContext';
@@ -16,6 +17,8 @@ export type OpenLoggerOptions = {
   date?: string;
   /** Open the lightweight Home capture chooser instead of the full logger. */
   quickStart?: boolean;
+  /** Reopen straight onto the outfit scan in progress (the tray). */
+  resumeScan?: boolean;
 };
 
 export type OutfitLoggerLaunch = 'camera' | 'library' | 'closet';
@@ -51,7 +54,7 @@ export function GlobalOutfitLoggerProvider({ children }: Props) {
   const [quickStartVisible, setQuickStartVisible] = useState(false);
   const [dateRequest, setDateRequest] = useState<{ id: number; date?: string }>({ id: 0 });
   const [initialLaunch, setInitialLaunch] = useState<OutfitLoggerLaunch | undefined>();
-  const [initialView, setInitialView] = useState<'picker' | undefined>();
+  const [initialView, setInitialView] = useState<'picker' | 'scan-review' | undefined>();
   const [initialImage, setInitialImage] = useState<CapturedImage | undefined>();
   const [quickStartPending, setQuickStartPending] = useState<QuickStartPending | undefined>();
   const launchCamera = useCameraLaunch();
@@ -74,7 +77,7 @@ export function GlobalOutfitLoggerProvider({ children }: Props) {
     }
     setQuickStartVisible(false);
     setInitialLaunch(undefined);
-    setInitialView(undefined);
+    setInitialView(options?.resumeScan ? 'scan-review' : undefined);
     setInitialImage(undefined);
     setQuickStartPending(undefined);
     setVisible(true);
@@ -172,6 +175,7 @@ export function GlobalOutfitLoggerProvider({ children }: Props) {
     <GlobalOutfitLoggerContext.Provider value={{ openLogger }}>
       <View style={styles.root}>
         {children}
+        <WearLogTray onOpen={() => openLogger({ resumeScan: true })} />
       </View>
       <LogOutfitSheet
         visible={visible}
