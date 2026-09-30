@@ -3,22 +3,6 @@ import { Alert } from 'react-native';
 import { api } from '../lib/api';
 import { ITEMS_QUERY_KEY } from './useItems';
 
-export type OutfitScanResult = {
-  detected_type: string;
-  match_id: number | null;
-  confidence: 'High' | 'Medium' | 'Low';
-  suggested_metadata: {
-    name: string;
-    color: string;
-    category: string;
-    material?: string | null;
-    style?: string | null;
-  };
-  potential_match_ids: number[];
-  bbox: { x: number; y: number; width: number; height: number } | null;
-  crop: string | null;
-};
-
 export type OutfitLog = {
   id: number;
   userId: number;
@@ -27,6 +11,8 @@ export type OutfitLog = {
   notes: string | null;
   location: string | null;
   rating: number | null;
+  /** The scan photo, when the log came from one. */
+  imageUrl?: string | null;
   createdAt: string;
 };
 
@@ -60,15 +46,6 @@ export function useCreateOutfitLog() {
     onError: () => {
       Alert.alert('Error', "Couldn't log outfit. Please try again.");
     },
-  });
-}
-
-export function useScanOutfitLog() {
-  return useMutation({
-    mutationFn: (imageData: string) =>
-      api
-        .post<{ items: OutfitScanResult[] }>('/api/outfit-logs/scan', { imageData })
-        .then((r) => r.data.items),
   });
 }
 

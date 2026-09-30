@@ -85,7 +85,7 @@ function WithBatch({ onBatch, children }: { onBatch?: () => void; children: Reac
 }
 
 /** Disabled reads as guidance, an outline, rather than a greyed-out button. */
-function PrimaryButton({ label, icon, onPress, disabled = false }: { disabled?: boolean; label: string; icon?: keyof typeof Ionicons.glyphMap; onPress: () => void }) {
+export function PrimaryButton({ label, icon, onPress, disabled = false }: { disabled?: boolean; label: string; icon?: keyof typeof Ionicons.glyphMap; onPress: () => void }) {
   return (
     <TouchableOpacity disabled={disabled} accessibilityState={{ disabled }} style={[styles.primary, disabled && styles.primaryIdle]} onPress={onPress} accessibilityRole="button" activeOpacity={0.85}>
       {icon ? <Ionicons name={icon} size={17} color={disabled ? colors.mutedForeground : colors.primaryForeground} /> : null}

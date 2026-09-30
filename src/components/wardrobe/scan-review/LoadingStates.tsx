@@ -32,11 +32,14 @@ function useCyclingScanStatus(): string {
 // per-item signal yet (pose-scan is a single non-streamed request), so this
 // is deliberately a choreographed effect rather than data-driven, same as
 // the cycling status copy above.
-export function DetectionState({ previewImage, progress, heroHeight, reduceMotion }: {
+export function DetectionState({ previewImage, progress, heroHeight, reduceMotion, title = 'Detecting your pieces', stepLabels }: {
   previewImage: string | null;
   progress: { current: number; total: number };
   heroHeight: number;
   reduceMotion: boolean;
+  /** The outfit logger's copy; defaults are the closet scan's. */
+  title?: string;
+  stepLabels?: [string, string];
 }) {
   const statusMsg = useCyclingScanStatus();
   const pulse = useSharedValue(0.08);
@@ -76,9 +79,9 @@ export function DetectionState({ previewImage, progress, heroHeight, reduceMotio
         </Animated.View>
         <View style={styles.detectFrame} pointerEvents="none" />
       </View>
-      <Text style={styles.extractionTitle}>Detecting your pieces</Text>
+      <Text style={styles.extractionTitle}>{title}</Text>
       <Text style={styles.extractionCopy}>{statusMsg}</Text>
-      <ScanStepTrack stage="scanning" progress={progress} reduceMotion={reduceMotion} />
+      <ScanStepTrack stage="scanning" progress={progress} reduceMotion={reduceMotion} labels={stepLabels} />
     </View>
   );
 }
@@ -104,10 +107,11 @@ const SCAN_TRACK_STEPS: { key: 'detect' | 'extract'; label: string }[] = [
 // fill spans the whole Detect→Extract journey (0–50% during Detect, 50–100%
 // during Extract, the latter driven by real extraction progress) instead of
 // two disconnected per-step widgets.
-function ScanStepTrack({ stage, progress, reduceMotion }: {
+function ScanStepTrack({ stage, progress, reduceMotion, labels }: {
   stage: 'scanning' | 'extracting';
   progress: { current: number; total: number };
   reduceMotion: boolean;
+  labels?: [string, string];
 }) {
   // Detect owns the first half of the rule. A single-photo scan has no real
   // signal inside it, so it sits at a token 0.1; a batch has one tick per
@@ -132,7 +136,9 @@ function ScanStepTrack({ stage, progress, reduceMotion }: {
           return (
             <View key={step.key} style={styles.trackLabelItem}>
               {isDone ? <Ionicons name="checkmark" size={11} color={colors.primary} /> : null}
-              <Text style={[styles.trackLabel, isActive && styles.trackLabelActive]}>{step.label}</Text>
+              <Text style={[styles.trackLabel, isActive && styles.trackLabelActive]}>
+                {labels ? labels[step.key === 'detect' ? 0 : 1] : step.label}
+              </Text>
             </View>
           );
         })}
