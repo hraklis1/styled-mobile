@@ -97,13 +97,6 @@ export function GlobalOutfitLoggerProvider({ children }: Props) {
     setQuickStartPending(launch);
     setQuickStartVisible(false);
   }, []);
-  // The misfire signal: someone reached the log sheet wanting to add clothes.
-  // Tracked separately so the rate is measurable rather than anecdotal.
-  const bailToAddClothes = useCallback(() => {
-    track('outfit_log_bailed_to_add_clothes', { entry_point: 'home' });
-    setQuickStartPending('add');
-    setQuickStartVisible(false);
-  }, []);
   const handleQuickStartDismissed = useCallback(async () => {
     const launch = quickStartPending;
     if (!launch) return;
@@ -201,9 +194,6 @@ export function GlobalOutfitLoggerProvider({ children }: Props) {
         onCamera={() => launchQuickStart('camera')}
         onLibrary={() => launchQuickStart('library')}
         onManual={() => launchQuickStart('closet')}
-        escapeLabel="These aren’t in my closet yet"
-        escapeHint="Add new pieces to your closet instead"
-        onEscape={bailToAddClothes}
         onCancel={closeQuickStart}
         onDismiss={handleQuickStartDismissed}
       />
