@@ -54,8 +54,8 @@ export type WearDraft = {
 
 /**
  * What the user has decided for one detection. `suggested` is a medium match
- * applied on the user's behalf: it logs as a match, but the Check filter keeps
- * it in view until confirmed or changed.
+ * pre-filled on the user's behalf: it must be confirmed (or changed) before
+ * the outfit can be logged.
  */
 export type Resolution =
   | { kind: 'unresolved' }

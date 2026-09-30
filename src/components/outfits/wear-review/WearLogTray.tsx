@@ -31,7 +31,7 @@ function summarize(flow: WearFlow): Summary | null {
       const c = reviewCounts(flow);
       return {
         title: c.total === 1 ? '1 piece to review' : `${c.total} pieces to review`,
-        detail: c.unresolved ? `${c.unresolved} still to decide` : 'Ready to log',
+        detail: c.toCheck ? `${c.toCheck} still to check` : 'Ready to log',
         tone: 'ready',
       };
     }

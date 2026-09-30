@@ -254,8 +254,8 @@ function Review({ flow, heroHeight, width, insets, reduceMotion, onClose }: {
   const choice = dateChoice(flow.date);
   const saving = flow.status === 'saving';
 
-  const buttonLabel = counts.unresolved > 0
-    ? `Decide ${counts.unresolved} more ${counts.unresolved === 1 ? 'piece' : 'pieces'}`
+  const buttonLabel = counts.toCheck > 0
+    ? `Check ${counts.toCheck} more ${counts.toCheck === 1 ? 'piece' : 'pieces'}`
     : counts.logging === 0
       ? 'Nothing to log'
       : saving ? 'Logging…' : `Log outfit · ${pieces(counts.logging)}`;
@@ -351,10 +351,10 @@ function Review({ flow, heroHeight, width, insets, reduceMotion, onClose }: {
         </View>
         <PrimaryButton
           label={buttonLabel}
-          // Undecided pieces don't disable the button: it jumps to them.
-          disabled={saving || (counts.unresolved === 0 && !canLog(flow))}
+          // Pieces still to check don't disable the button: it jumps to them.
+          disabled={saving || (counts.toCheck === 0 && !canLog(flow))}
           onPress={() => {
-            if (counts.unresolved > 0) {
+            if (counts.toCheck > 0) {
               setFilter('check');
               return;
             }

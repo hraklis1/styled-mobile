@@ -85,8 +85,11 @@ describe('wear-log reducer', () => {
     expect(canLog(flow)).toBe(false);
     expect(reduce(flow, { type: 'saveStarted' })).toBe(flow);
     flow = reduce(flow, { type: 'markNew', detectionId: 'd2' }) as ReviewFlow;
-    expect(canLog(flow)).toBe(true);
+    // d1 is a medium match: suggested, not yet confirmed.
     expect(reviewCounts(flow)).toMatchObject({ unresolved: 0, toCheck: 1, logging: 4, newItems: 1 });
+    expect(canLog(flow)).toBe(false);
+    flow = reduce(flow, { type: 'confirm', detectionId: 'd1', itemId: 2 }) as ReviewFlow;
+    expect(canLog(flow)).toBe(true);
   });
 
   it('Add as new seeds a draft from the scan and opens it for editing', () => {
@@ -114,7 +117,7 @@ describe('wear-log reducer', () => {
   });
 
   it('a failed save returns to review with nothing lost', () => {
-    const ready = reduce(reviewing(), { type: 'dismiss', detectionId: 'd2' }) as ReviewFlow;
+    const ready = reduce(reduce(reviewing(), { type: 'dismiss', detectionId: 'd2' }), { type: 'confirm', detectionId: 'd1', itemId: 2 }) as ReviewFlow;
     const saving = reduce(ready, { type: 'saveStarted' });
     expect(saving.status).toBe('saving');
     const failed = reduce(saving, { type: 'saveFailed', message: 'offline' }) as ReviewFlow;
@@ -124,7 +127,8 @@ describe('wear-log reducer', () => {
   });
 
   it('saved → logged, and edits are ignored while saving', () => {
-    const saving = reduce(reduce(reviewing(), { type: 'dismiss', detectionId: 'd2' }), { type: 'saveStarted' });
+    const decided = reduce(reduce(reviewing(), { type: 'dismiss', detectionId: 'd2' }), { type: 'confirm', detectionId: 'd1', itemId: 2 });
+    const saving = reduce(decided, { type: 'saveStarted' });
     expect(reduce(saving, { type: 'confirm', detectionId: 'd0', itemId: 7 })).toBe(saving);
     expect(reduce(saving, { type: 'setDate', date: '2026-09-01' })).toBe(saving);
     const logged = reduce(saving, { type: 'saved', logId: 5, itemIds: [1, 2, 4], alreadyLoggedItemIds: [] });

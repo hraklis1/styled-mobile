@@ -183,10 +183,14 @@ export function reviewCounts(flow: ReviewFlow) {
   };
 }
 
-/** Log once nothing is undecided and at least one piece will be logged. */
+/**
+ * Log once every piece is decided — a medium match counts only after the
+ * user confirms it, so a wrong guess never inflates a wear count — and at
+ * least one piece will be logged.
+ */
 export function canLog(flow: ReviewFlow): boolean {
   const c = reviewCounts(flow);
-  return c.unresolved === 0 && c.logging > 0;
+  return c.toCheck === 0 && c.logging > 0;
 }
 
 /** Existing closet items to log, deduplicated (two rows can land on one item). */
