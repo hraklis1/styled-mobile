@@ -107,6 +107,7 @@ export function EditorialSection({
   onAction,
   variant = 'plain',
   headingStyle = 'default',
+  dividerPlacement = 'below-heading',
   trailing,
   children,
   style,
@@ -139,6 +140,8 @@ export function EditorialSection({
    * it is everywhere else.
    */
   headingStyle?: 'default' | 'editorial' | 'chapter';
+  /** Place the editorial hairline at the section boundary, as on Home. */
+  dividerPlacement?: 'below-heading' | 'above-heading';
   /** Rendered in the header row in place of an action, e.g. a status badge. */
   trailing?: ReactNode;
   children: ReactNode;
@@ -153,12 +156,14 @@ export function EditorialSection({
   return (
     <View style={[
       chapter ? styles.chapterSection : editorialHeading ? styles.editorialSection : ruled ? styles.ruledSection : styles.section,
+      editorialHeading && dividerPlacement === 'above-heading' && styles.sectionBoundaryRule,
       style,
     ]}>
       <View style={[
         styles.sectionHeader,
         editorialHeading ? styles.editorialSectionHeader : null,
         chapter ? styles.chapterSectionHeader : null,
+        editorialHeading && dividerPlacement === 'above-heading' && styles.headerWithoutRule,
         description ? styles.sectionHeaderTight : null,
         stacked && styles.sectionHeaderStacked,
       ]}>
@@ -457,6 +462,13 @@ const styles = StyleSheet.create({
   chapterSectionHeader: {
     minHeight: 34, alignItems: 'baseline', paddingBottom: spacing.md, marginBottom: spacing.lg,
   },
+  sectionBoundaryRule: {
+    marginTop: spacing.lg,
+    paddingTop: spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  headerWithoutRule: { borderBottomWidth: 0, paddingBottom: 0 },
   sectionHeader: {
     minHeight: 28,
     flexDirection: 'row',

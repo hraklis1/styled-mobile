@@ -392,6 +392,11 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     openLogger({ quickStart: true });
   }, [openLogger]);
 
+  const handleLogTodaysWear = useCallback(() => {
+    track('home_wardrobe_action_tapped', { action: 'record_wear', source: 'todays_wear' });
+    openLogger({ quickStart: true });
+  }, [openLogger]);
+
   const handleLogPastDay = useCallback((date: string) => {
     track('home_wardrobe_action_tapped', { action: 'record_wear', source: 'week_strip_past_day' });
     openLogger({ quickStart: true, date });
@@ -837,10 +842,36 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         <AddToClosetButton onPress={handleAddToCloset} />
       </View>
 
+      <PressableScale
+        style={styles.todaysWearEntry}
+        contentStyle={styles.todaysWearRow}
+        pressedContentStyle={styles.todaysWearPressed}
+        scaleTo={0.99}
+        motion="crisp"
+        haptic={false}
+        onPress={handleLogTodaysWear}
+        accessibilityRole="button"
+        accessibilityLabel="Today’s wear. Log outfit"
+        accessibilityHint="Record what you wore today"
+      >
+        <Ionicons name="calendar-outline" size={24} color={colors.foreground} accessible={false} />
+        <View style={[styles.todaysWearContent, largeText && styles.todaysWearContentLarge]}>
+          <View style={[styles.todaysWearCopy, largeText && styles.todaysWearCopyLarge]}>
+            <Text style={styles.todaysWearTitle}>Today’s wear</Text>
+            <Text style={styles.todaysWearSubtitle}>Record what you wore today</Text>
+          </View>
+          <View style={styles.todaysWearAction}>
+            <Text style={styles.todaysWearActionText}>Log outfit</Text>
+            <Ionicons name="arrow-forward" size={16} color={colors.action} accessible={false} />
+          </View>
+        </View>
+      </PressableScale>
+
       {/* ── Featured outfit ────────────────────────────────────── */}
       <EditorialSection
         variant="ruled"
         headingStyle="chapter"
+        dividerPlacement="above-heading"
         title={dailyLookPresentation.kind === 'priority' ? 'Today’s Priority' : 'Today’s Look'}
         actionLabel={dailyLookPresentation.kind === 'owned' || dailyLookPresentation.kind === 'ready' ? 'All outfits' : undefined}
         onAction={dailyLookPresentation.kind === 'owned' || dailyLookPresentation.kind === 'ready' ? () => navigation.navigate('Closet', {
@@ -950,6 +981,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       <EditorialSection
         variant="ruled"
         headingStyle="chapter"
+        dividerPlacement="above-heading"
         title="On the Calendar"
         actionLabel="View all"
         onAction={() => navigation.navigate('Calendar')}
@@ -1077,14 +1109,13 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
       {/* ── Your Week in Wear ─────────────────────────────────────── */}
       {/*
-        The section is the home of outfit logging now, so it renders even with
-        nothing in it — today's tile is the entry point on this screen (the
-        header carries no duplicate link), and hiding it would leave first-run
-        users with no way to start a diary.
+        Keep the diary visible even when empty. The upper Today's wear row is
+        the quick entry point; these tiles provide history and past-day logging.
       */}
       <EditorialSection
         variant="ruled"
         headingStyle="chapter"
+        dividerPlacement="above-heading"
         title="Your Week in Wear"
       >
         <WearWeekStrip
@@ -1262,6 +1293,29 @@ const styles = StyleSheet.create({
   // The two launchers read as a pair, then hand off to the first section.
   stylistEntry: { marginBottom: spacing.md },
   closetEntry: { marginBottom: spacing.sm },
+
+  todaysWearEntry: { marginTop: spacing.md },
+  todaysWearRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  todaysWearPressed: { backgroundColor: colors.surfaceSubtle },
+  todaysWearContent: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  todaysWearContentLarge: { flexDirection: 'column', alignItems: 'flex-start' },
+  todaysWearCopy: { flex: 1, gap: spacing.xs },
+  todaysWearCopyLarge: { flex: 0, alignSelf: 'stretch' },
+  todaysWearTitle: { ...typography.text.editorialSection, color: colors.foreground },
+  todaysWearSubtitle: { ...typography.text.caption, color: colors.mutedForeground },
+  todaysWearAction: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexShrink: 0 },
+  todaysWearActionText: {
+    ...typography.text.label,
+    fontWeight: typography.weight.medium,
+    color: colors.action,
+  },
 
   // Empty wardrobe nudge
   nudgeCard: {

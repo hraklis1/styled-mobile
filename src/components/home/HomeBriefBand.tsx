@@ -74,6 +74,7 @@ export function HomeWardrobeEdit({ onBriefPress, shortlist, style }: Props) {
     <EditorialSection
       variant="ruled"
       headingStyle="chapter"
+      dividerPlacement="above-heading"
       title="Wardrobe Edit"
       style={style}
     >
