@@ -52,10 +52,41 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// One refresh shared by every request that hits a 401 at the same moment (the
+// app fires several on resume), so a burst doesn't stampede the auth server.
+let refreshing: Promise<string | null> | null = null;
+function refreshAccessToken(): Promise<string | null> {
+  refreshing ??= supabase.auth
+    .refreshSession()
+    .then(({ data }) => {
+      _accessToken = data.session?.access_token ?? null;
+      return _accessToken;
+    })
+    .catch(() => null)
+    .finally(() => {
+      refreshing = null;
+    });
+  return refreshing;
+}
+
 api.interceptors.response.use(
   (res) => res,
-  (error: AxiosError<ApiErrorBody>) => {
+  async (error: AxiosError<ApiErrorBody>) => {
     const status = error.response?.status;
+
+    // An access token can expire while the app is backgrounded or mid-batch
+    // before auto-refresh catches up. Refresh once and replay the request;
+    // a second 401 is real and falls through to the caller.
+    const config = error.config as (typeof error.config & { _authRetried?: boolean }) | undefined;
+    if (status === 401 && config && !config._authRetried) {
+      config._authRetried = true;
+      const token = await refreshAccessToken();
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+        return api.request(config);
+      }
+    }
+
     const url = error.config?.url;
     console.warn(`[API] ${status ?? 'NETWORK_ERR'} ${url}`, error.message);
 

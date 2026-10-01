@@ -25,6 +25,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { compressImageToDataUrl } from '../../lib/compressImage';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../lib/api';
+import { supabase } from '../../lib/supabase';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { ProfileScreenProps } from '../../navigation/types';
 import { SectionCard } from '../../components/primitives/SectionCard';
@@ -544,8 +545,20 @@ export function ProfileScreen(_props: ProfileScreenProps) {
   };
 
   const deleteAccountMutation = useMutation({
-    mutationFn: (password?: string) =>
-      api.delete('/api/auth/account', { data: password ? { password } : {} }),
+    // The server requires a freshly issued token as proof of a recent sign-in.
+    // Email users re-enter their password; social users get a refreshed session.
+    mutationFn: async (password?: string) => {
+      const { data, error } =
+        password && user?.email
+          ? await supabase.auth.signInWithPassword({ email: user.email, password })
+          : await supabase.auth.refreshSession();
+      if (error || !data.session) {
+        throw new Error(password ? 'Incorrect password.' : 'Please sign in again to delete your account.');
+      }
+      return api.delete('/api/auth/account', {
+        headers: { Authorization: `Bearer ${data.session.access_token}` },
+      });
+    },
     onSuccess: () => logout(),
     onError: (err: Error) => Alert.alert('Error', err.message),
   });

@@ -27,6 +27,15 @@ describe('classifyError', () => {
     expect(decision).toEqual({ kind: 'retry', delayMs: 7000, countsAttempt: false });
   });
 
+  it('fails instead of spinning on a daily spend cap 429', () => {
+    const decision = classifyError(httpError(429, { code: 'DAILY_LIMIT', message: 'Limit reached.' }), 1);
+    expect(decision).toEqual({ kind: 'fail', message: 'Limit reached.' });
+  });
+
+  it('fails a 401 (session already refreshed by the client) without retrying', () => {
+    expect(classifyError(httpError(401), 1)).toMatchObject({ kind: 'fail' });
+  });
+
   it('falls back to the body retryAfterMs, then a default, for a 429', () => {
     expect(classifyError(httpError(429, { meta: { retryAfterMs: 1200 } }), 1)).toMatchObject({ delayMs: 1200 });
     expect(classifyError(httpError(429), 1)).toMatchObject({ kind: 'retry', delayMs: 5000 });

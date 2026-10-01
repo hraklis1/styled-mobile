@@ -53,6 +53,18 @@ export function classifyError(
     };
   }
 
+  // A per-user daily spend cap doesn't lift in seconds; retrying would spin.
+  if (status === 429 && apiErrorCode(error) === 'DAILY_LIMIT') {
+    return { kind: 'fail', message: apiErrorMessage(error, "You've reached today's limit. Try again tomorrow.") };
+  }
+
+  // The api client already refreshed the session and replayed once; a 401
+  // here means the session is gone. Fail without burning retries — the user's
+  // work stays in the queue for a hand retry after signing back in.
+  if (status === 401) {
+    return { kind: 'fail', message: 'Your session expired. Sign in again, then tap Retry.' };
+  }
+
   if (status === 429) {
     return {
       kind: 'retry',

@@ -110,7 +110,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const cached = await getDeviceValue(IS_PREMIUM_CACHE_KEY).catch(() => null);
         setUser({ ...mapped, isPremium: cached === 'true' });
         setIsLoading(false);
-        identify(mapped.id, { email: mapped.email, authProvider: mapped.authProvider });
+        // No email: analytics is keyed by the opaque id only.
+        identify(mapped.id, { authProvider: mapped.authProvider });
         track('user_logged_in', { provider: mapped.authProvider });
         hydrateRcPremium(mapped.id)
           .then((live) => {
