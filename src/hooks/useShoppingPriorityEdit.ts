@@ -25,8 +25,10 @@ export function shoppingPriorityEditQueryKey(
   ] as const;
 }
 
-const OFFER_REFETCH_INTERVAL_MS = 8_000;
-const OFFER_REFETCH_ATTEMPTS = 3;
+// Backs off rather than polling flat: the commerce provider soft-blocks for
+// ~60s after a burst, and every re-ask re-fires each missing search, so quick
+// retries both land inside the block and extend it. The last ask comes ~95s in.
+const OFFER_REFETCH_DELAYS_MS = [8_000, 25_000, 60_000];
 
 export function useShoppingPriorityEdit(
   priority: ShoppingBriefPriority,
@@ -45,11 +47,11 @@ export function useShoppingPriorityEdit(
     retry: 1,
     // Products can land in the server's offer cache a few seconds after the
     // guide is served (a slow search finishes in the background). Re-ask a
-    // few times so they appear without waiting out the 24h staleTime; repeat
+    // few times, backing off, so they appear without waiting out the 24h staleTime; repeat
     // asks hit the server's edit and offer caches, so they cost nothing.
     refetchInterval: (current) =>
-      current.state.data?.offersPending && current.state.dataUpdateCount < OFFER_REFETCH_ATTEMPTS + 1
-        ? OFFER_REFETCH_INTERVAL_MS
+      current.state.data?.offersPending
+        ? OFFER_REFETCH_DELAYS_MS[current.state.dataUpdateCount - 1] ?? false
         : false,
   });
 
