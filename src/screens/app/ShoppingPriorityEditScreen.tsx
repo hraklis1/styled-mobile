@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInUp, FadeOutDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CommonActions, usePreventRemove } from '@react-navigation/native';
 
 import { PressableScale } from '../../components/primitives/PressableScale';
 import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
@@ -98,6 +99,22 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
     },
     [],
   );
+
+  // Opened from Home's Today's Look: backing or swiping out should land on Home,
+  // not on whatever the Shop stack happens to hold beneath this screen.
+  const returnsHome = source === 'home_daily_look';
+  const [returningHome, setReturningHome] = useState(false);
+  usePreventRemove(returnsHome && !returningHome, () => {
+    setReturningHome(true);
+  });
+  useEffect(() => {
+    if (!returningHome) return;
+    const timeout = setTimeout(() => {
+      navigation.reset({ index: 0, routes: [{ name: 'ShopMain' }] });
+      navigation.dispatch(CommonActions.navigate({ name: 'Home' }));
+    }, 0);
+    return () => clearTimeout(timeout);
+  }, [navigation, returningHome]);
 
   const goBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();

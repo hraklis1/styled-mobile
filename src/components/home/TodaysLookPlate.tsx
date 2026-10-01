@@ -40,6 +40,12 @@ type LookMatProps = {
   captionAccessibilityLabel?: string;
   /** A trailing control (save / find). Without one, the whole mat is the target. */
   action?: ReactNode;
+  /**
+   * The plate handles its own touches (a swipeable pager). It is laid in
+   * place rather than wrapped in the mat's button, so swipes and per-page taps
+   * reach it.
+   */
+  interactivePlate?: boolean;
   largeText?: boolean;
 };
 
@@ -57,7 +63,7 @@ type LookMatProps = {
  * other section content.
  */
 export function LookMat({
-  plate, eyebrow, title, note, onOpen, accessibilityLabel, captionAccessibilityLabel, action, largeText,
+  plate, eyebrow, title, note, onOpen, accessibilityLabel, captionAccessibilityLabel, action, largeText, interactivePlate,
 }: LookMatProps) {
   const caption = (
     <>
@@ -67,7 +73,7 @@ export function LookMat({
     </>
   );
 
-  if (!action) {
+  if (!action && !interactivePlate) {
     return (
       <Animated.View layout={matLayout} entering={FadeIn.duration(260)} exiting={FadeOut.duration(200)} style={styles.mat}>
         <PressableScale
@@ -94,17 +100,21 @@ export function LookMat({
       exiting={FadeOut.duration(200)}
       style={styles.mat}
     >
-      <PressableScale
-        contentStyle={styles.plate}
-        scaleTo={0.99}
-        motion="crisp"
-        haptic={false}
-        onPress={onOpen}
-        accessibilityRole="button"
-        accessibilityLabel={accessibilityLabel}
-      >
-        {plate}
-      </PressableScale>
+      {interactivePlate ? (
+        <View style={styles.plate}>{plate}</View>
+      ) : (
+        <PressableScale
+          contentStyle={styles.plate}
+          scaleTo={0.99}
+          motion="crisp"
+          haptic={false}
+          onPress={onOpen}
+          accessibilityRole="button"
+          accessibilityLabel={accessibilityLabel}
+        >
+          {plate}
+        </PressableScale>
+      )}
       <View style={styles.captionBar}>
         <PressableScale
           style={styles.captionCopy}

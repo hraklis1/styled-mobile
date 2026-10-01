@@ -58,6 +58,7 @@ import { useEntitlement } from '../../hooks/useEntitlement';
 import { useDismissDailyLook, useResolveDailyLook, useSaveDailyLook, type DailyLookCandidate, type DailyLookResolveInput } from '../../hooks/useDailyLook';
 import { DailyLookDetailSheet } from '../../components/home/DailyLookDetailSheet';
 import { DailyLookCandidateVisual } from '../../components/home/DailyLookCandidateVisual';
+import { candidateTitle, capitalizeFirst, gapLabel } from '../../components/home/dailyLookCopy';
 import {
   LookMat,
   LookMatAction,
@@ -241,6 +242,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [dailyPickHistory, setDailyPickHistory] = useState<DailyPickHistoryEntry[]>([]);
   const [dailyPickHistoryLoaded, setDailyPickHistoryLoaded] = useState(false);
   const [dailyLookSheetVisible, setDailyLookSheetVisible] = useState(false);
+  /** The plate the user swiped to on Home; the sheet opens on the same piece. */
+  const [dailyLookPage, setDailyLookPage] = useState(0);
   const [savedDailyOutfit, setSavedDailyOutfit] = useState<Outfit | null>(null);
   const [savedDailyLookContext, setSavedDailyLookContext] = useState<SavedDailyLookContext | null>(null);
   const saveDailyLook = useSaveDailyLook();
@@ -610,6 +613,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const candidateGap = dailyLookPresentation.kind === 'incomplete' || dailyLookPresentation.kind === 'priority'
     ? dailyLookPresentation.gap
     : undefined;
+  const generatedCandidateId = generatedCandidate?.id;
+  useEffect(() => { setDailyLookPage(0); }, [generatedCandidateId]);
 
   useEffect(() => {
     if (dailyLookDecision.shouldGenerate && dailyLookDecision.trigger) {
@@ -714,6 +719,11 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       { onSuccess: () => setDailyLookSheetVisible(false) },
     );
   }, [dismissDailyLook, generatedCandidate]);
+
+  const openDailyLookSheet = useCallback(() => {
+    if (generatedCandidate) track('daily_look_detail_opened', { candidateId: generatedCandidate.id });
+    setDailyLookSheetVisible(true);
+  }, [generatedCandidate]);
 
   const handleDailyLookFindPiece = useCallback(() => {
     if (!generatedCandidate || !candidateGap) return;
@@ -887,15 +897,18 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           <LookMat
             key={`candidate-${generatedCandidate.id}`}
             largeText={largeText}
+            interactivePlate={!!candidateGap}
             plate={candidateGap ? (
               <DailyLookCandidateVisual
                 candidate={generatedCandidate}
                 gap={candidateGap}
                 items={items}
                 width={plate.width}
-                height={Math.round(plate.height * (generatedCandidate.readinessStatus === 'priority' ? 0.72 : 0.8))}
-                borderRadius={0}
-                onFindPiece={generatedCandidate.readinessStatus === 'incomplete' ? handleDailyLookFindPiece : undefined}
+                height={plate.height}
+                initialIndex={dailyLookPage}
+                onIndexChange={setDailyLookPage}
+                onOpen={openDailyLookSheet}
+                onFindPiece={handleDailyLookFindPiece}
               />
             ) : (
               <OutfitCollage
@@ -906,25 +919,22 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               />
             )}
             eyebrow={generatedCandidate.readinessStatus === 'incomplete'
-              ? generatedCandidate.name.toLowerCase() === 'one piece away' ? undefined : 'One piece away'
+              ? 'One piece away'
               : generatedCandidate.readinessStatus === 'priority'
                 ? 'Highest-impact gap'
                 : undefined}
-            title={generatedCandidate.name}
-            note={featuredExplanation ?? generatedCandidate.reason}
-            onOpen={() => {
-              track('daily_look_detail_opened', { candidateId: generatedCandidate.id });
-              setDailyLookSheetVisible(true);
-            }}
+            title={candidateTitle(generatedCandidate, candidateGap)}
+            note={capitalizeFirst(featuredExplanation ?? generatedCandidate.reason)}
+            onOpen={openDailyLookSheet}
             accessibilityLabel={`${generatedCandidate.name}. ${generatedCandidate.reason}. Open details`}
-            captionAccessibilityLabel={`Open ${generatedCandidate.name}`}
-            action={candidateGap?.label && generatedCandidate.readinessStatus === 'incomplete' ? undefined : candidateGap ? (
+            captionAccessibilityLabel={`Open ${candidateTitle(generatedCandidate, candidateGap)}`}
+            action={candidateGap ? (
               <LookMatAction
-                icon="search-outline"
-                label={`Find ${candidateGap.label.replaceAll('_', ' ')}`}
+                icon="bag-outline"
+                label="Find it"
                 onPress={handleDailyLookFindPiece}
                 disabled={saveDailyLook.isPending}
-                accessibilityLabel={`Find ${candidateGap.label}, suggested and not in your closet`}
+                accessibilityLabel={`Find ${gapLabel(candidateGap.label)}, suggested and not in your closet`}
                 accessibilityHint="Open a shopping edit for this missing piece"
               />
             ) : (
@@ -1156,6 +1166,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         onSave={handleDailyLookSave}
         onDismiss={handleDailyLookDismiss}
         onFindPiece={handleDailyLookFindPiece}
+        initialPage={dailyLookPage}
+        onPageChange={setDailyLookPage}
       />
       <ActionMenuSheet
         visible={wearLogMenuEntry !== null}
