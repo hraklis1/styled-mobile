@@ -25,6 +25,9 @@ export function shoppingPriorityEditQueryKey(
   ] as const;
 }
 
+const OFFER_REFETCH_INTERVAL_MS = 8_000;
+const OFFER_REFETCH_ATTEMPTS = 3;
+
 export function useShoppingPriorityEdit(
   priority: ShoppingBriefPriority,
   context: ShoppingPriorityEditRequestContext = {},
@@ -40,6 +43,14 @@ export function useShoppingPriorityEdit(
     }).then((response) => parseShoppingPriorityEdit(response.data)),
     staleTime: 24 * 60 * 60 * 1000,
     retry: 1,
+    // Products can land in the server's offer cache a few seconds after the
+    // guide is served (a slow search finishes in the background). Re-ask a
+    // few times so they appear without waiting out the 24h staleTime; repeat
+    // asks hit the server's edit and offer caches, so they cost nothing.
+    refetchInterval: (current) =>
+      current.state.data?.offersPending && current.state.dataUpdateCount < OFFER_REFETCH_ATTEMPTS + 1
+        ? OFFER_REFETCH_INTERVAL_MS
+        : false,
   });
 
   useEffect(() => {

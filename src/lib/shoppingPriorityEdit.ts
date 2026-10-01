@@ -61,6 +61,8 @@ export type ShoppingPriorityEdit = {
   noBuyReason: string | null;
   briefUpdated?: boolean;
   updatedBrief?: ShoppingBrief;
+  /** Some style has no products yet; the hook re-asks briefly. */
+  offersPending?: boolean;
 };
 
 function normalizeEditorialCopy(value: string): string {
@@ -315,6 +317,26 @@ export function parseShoppingPriorityEdit(value: unknown): ShoppingPriorityEdit 
     ...edit,
     targets,
     noBuyReason: edit.noBuyReason ?? null,
+    offersPending: edit.offersPending === true,
     ...(updatedBrief ? { updatedBrief } : {}),
   } as ShoppingPriorityEdit;
+}
+
+/**
+ * Saved guides persist to the wishlist table, so drop the base64 thumbnails
+ * Google Shopping inlines: we hold no licence to store them, and at ~15 KB
+ * each they would bloat every saved row. Links and prices are kept; the card
+ * falls back to its illustration.
+ */
+export function withoutInlineImages(edit: ShoppingPriorityEdit): ShoppingPriorityEdit {
+  const keep = (url: string | null | undefined) => (url && !url.startsWith('data:') ? url : undefined);
+  const { offersPending: _pending, ...rest } = edit;
+  return {
+    ...rest,
+    targets: edit.targets.map((target) => ({
+      ...target,
+      imageUrl: keep(target.imageUrl),
+      offers: target.offers?.map((offer) => ({ ...offer, imageUrl: keep(offer.imageUrl) ?? null })),
+    })),
+  };
 }

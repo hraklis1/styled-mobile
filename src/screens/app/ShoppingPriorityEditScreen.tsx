@@ -22,7 +22,7 @@ import { wearableWardrobe, withoutOutfitCount } from '../../lib/shopClarity';
 import { shoppingGarmentTitle, styleFollowupQuestions } from '../../lib/shoppingEditorial';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { track } from '../../lib/analytics';
-import { shoppingPriorityTargetDisplayTitle } from '../../lib/shoppingPriorityEdit';
+import { shoppingPriorityTargetDisplayTitle, withoutInlineImages } from '../../lib/shoppingPriorityEdit';
 import { shoppingSurfaces, colors, radii, spacing, typography } from '../../theme';
 import type { ShopOutfit } from '../../types/shop';
 import type { ShoppingPriorityEditScreenProps } from '../../navigation/types';
@@ -128,7 +128,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
     const outfit: ShopOutfit = {
       recommendationType: 'list',
       source: 'shopping_brief',
-      shoppingBrief: edit.data,
+      shoppingBrief: withoutInlineImages(edit.data),
       intro: shoppingGarmentTitle(priority.label),
       city: '',
       items: [],

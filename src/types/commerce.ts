@@ -6,7 +6,7 @@
  * affiliate disclosure, and treat an empty list as the normal resting state
  * rather than an error.
  */
-export type CommerceProviderName = 'none' | 'serpapi' | 'ebay' | 'skimlinks' | 'catalog';
+export type CommerceProviderName = 'none' | 'serpapi' | 'brightdata' | 'ebay' | 'skimlinks' | 'catalog';
 
 export type ProductOffer = {
   /** Stable within a provider — safe to use as a list key. */
@@ -28,6 +28,12 @@ export type ProductOffer = {
    */
   monetized: boolean;
 };
+
+/** https, or the small base64 thumbnails Google Shopping inlines. */
+function isDisplayableImage(value: unknown): value is string {
+  return typeof value === 'string'
+    && (value.startsWith('https://') || /^data:image\/(?:webp|jpeg|png);base64,/.test(value));
+}
 
 /**
  * Drop anything malformed instead of throwing.
@@ -60,7 +66,7 @@ export function parseProductOffers(value: unknown): ProductOffer[] {
       price: typeof offer.price === 'number' && Number.isFinite(offer.price) ? offer.price : null,
       currency: offer.currency,
       formattedPrice: offer.formattedPrice,
-      imageUrl: typeof offer.imageUrl === 'string' && offer.imageUrl.startsWith('https://') ? offer.imageUrl : null,
+      imageUrl: isDisplayableImage(offer.imageUrl) ? offer.imageUrl : null,
       url: offer.url,
       inStock: typeof offer.inStock === 'boolean' ? offer.inStock : null,
       monetized: offer.monetized,
