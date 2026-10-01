@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { ResolvedOutfitCollage, type ResolvedOutfitSlot } from '../outfits/ResolvedOutfitCollage';
 import { itemCoverPresentation } from '../../lib/itemImage';
-import { colors, radii, spacing, typography } from '../../theme';
+import { colors, radii, spacing, stroke, typography } from '../../theme';
 import type { DailyLookCandidate, DailyLookMissingEssential } from '../../hooks/useDailyLook';
 import type { Item } from '../../types/item';
 
@@ -84,6 +84,9 @@ export function DailyLookCandidateVisual({ candidate, gap, items, width, height,
     >
       <ResolvedOutfitCollage slots={slots} size={ownedWidth} height={height} borderRadius={0} />
       <View style={[styles.gapTile, { width: gapWidth }]}>
+        <View style={styles.gapRule} pointerEvents="none">
+          <View style={styles.gapRuleDashes} />
+        </View>
         <View style={styles.gapIcon}>
           <Ionicons name="add" size={24} color={colors.primary} />
         </View>
@@ -107,9 +110,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     gap: spacing.xs,
     backgroundColor: colors.card,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: colors.primary,
+  },
+  // Fabric only draws dashed borders when all four sides match, so a
+  // one-sided dashed rule is a uniformly dashed box clipped to its left edge.
+  gapRule: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: stroke.fine,
+    overflow: 'hidden',
+  },
+  gapRuleDashes: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 8,
+    borderWidth: stroke.fine,
     borderStyle: 'dashed',
+    borderColor: colors.primary,
   },
   gapIcon: {
     width: 46,
