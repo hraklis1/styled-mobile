@@ -354,6 +354,7 @@ export const radii = {
  * single source of truth.
  */
 export const surfaces = {
+  outfitMat: '#F4F1EA',
   plate:      colors.surfaceSubtle,
   userBubble: colors.surfaceSelected,
 } as const;

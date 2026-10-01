@@ -1,3 +1,4 @@
+import { CommonActions, usePreventRemove } from '@react-navigation/native';
 import { formatShoppingPrice } from '../../lib/shoppingPresentation';
 import { useState, useRef, useEffect, type ReactNode } from 'react';
 import {
@@ -129,6 +130,13 @@ function EditorialDetailList({ rows }: { rows: EditorialDetailRow[] }) {
 
 export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const { itemId, scanData, scanImageUrl } = route.params;
+  const [returningHome, setReturningHome] = useState(false);
+  usePreventRemove(route.params.returnTo === 'Home' && !returningHome, () => setReturningHome(true));
+  useEffect(() => {
+    if (!returningHome) return;
+    navigation.reset({ index: 0, routes: [{ name: 'ClosetMain' }] });
+    navigation.dispatch(CommonActions.navigate({ name: 'Home' }));
+  }, [returningHome, navigation]);
   const isCreateMode = !itemId && !!scanData;
 
   const { data: items = [], isError: itemsError, refetch: refetchItems } = useItems();

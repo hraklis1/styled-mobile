@@ -358,6 +358,7 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
           menuDisabled={isBusy || updateOutfit.isPending || visualize.isPending}
           menuOpen={menuOpen}
           onBack={handleBack}
+          onPressItem={(itemId) => navigation.navigate('ItemDetail', { itemId })}
           onMenu={openOutfitMenu}
           onGenerate={() => handleGenerate(false)}
           coachVisible={flatlayCoachVisible && !hasAiImage}

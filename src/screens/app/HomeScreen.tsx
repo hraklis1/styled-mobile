@@ -57,7 +57,8 @@ import { useCurrencyCode } from '../../hooks/useCurrencyCode';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useDismissDailyLook, useResolveDailyLook, useSaveDailyLook, type DailyLookCandidate, type DailyLookResolveInput } from '../../hooks/useDailyLook';
 import { DailyLookDetailSheet } from '../../components/home/DailyLookDetailSheet';
-import { DailyLookCandidateVisual } from '../../components/home/DailyLookCandidateVisual';
+import { EditorialOutfitBoard } from '../../components/outfits/EditorialOutfitBoard';
+import { resolveBoardPieces } from '../../components/outfits/editorialBoardLayout';
 import { candidateTitle, capitalizeFirst, gapLabel } from '../../components/home/dailyLookCopy';
 import {
   LookMat,
@@ -242,8 +243,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [dailyPickHistory, setDailyPickHistory] = useState<DailyPickHistoryEntry[]>([]);
   const [dailyPickHistoryLoaded, setDailyPickHistoryLoaded] = useState(false);
   const [dailyLookSheetVisible, setDailyLookSheetVisible] = useState(false);
-  /** The plate the user swiped to on Home; the sheet opens on the same piece. */
-  const [dailyLookPage, setDailyLookPage] = useState(0);
+  const resumeDailyLook = useRef(false);
+  const pendingDailyItem = useRef<number | null>(null);
   const [savedDailyOutfit, setSavedDailyOutfit] = useState<Outfit | null>(null);
   const [savedDailyLookContext, setSavedDailyLookContext] = useState<SavedDailyLookContext | null>(null);
   const saveDailyLook = useSaveDailyLook();
@@ -255,6 +256,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   );
 
   useFocusEffect(useCallback(() => {
+    if (resumeDailyLook.current) { resumeDailyLook.current = false; setDailyLookSheetVisible(true); }
     fabCollapsed.value = 0;
     setDailyPickDate(toLocalDateKey(new Date()));
   }, [fabCollapsed]));
@@ -613,8 +615,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const candidateGap = dailyLookPresentation.kind === 'incomplete' || dailyLookPresentation.kind === 'priority'
     ? dailyLookPresentation.gap
     : undefined;
-  const generatedCandidateId = generatedCandidate?.id;
-  useEffect(() => { setDailyLookPage(0); }, [generatedCandidateId]);
+
+
 
   useEffect(() => {
     if (dailyLookDecision.shouldGenerate && dailyLookDecision.trigger) {
@@ -670,7 +672,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     saveDailyPickHistory(user.id, next).catch(() => {});
   }, [dailyLookQuery.isFetching, dailyLookPresentation, dailyPickDate, dailyPickHistory, dailyPickHistoryLoaded, savedDailyOutfit, user?.id]);
 
-  const handleDailyLookSave = useCallback(() => {
+  const handleDailyLookSave = () => {
     if (!generatedCandidate || generatedCandidate.readinessStatus !== 'ready') return;
     track('daily_look_save_tapped', { candidateId: generatedCandidate.id });
     saveDailyLook.mutate(
@@ -710,22 +712,22 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         },
       },
     );
-  }, [dailyLookContextRevision, dailyLookLocation, dailyPickHistory, dailyPickDate, events, generatedCandidate, items, outfits, saveDailyLook, user, weather.data]);
+  };
 
-  const handleDailyLookDismiss = useCallback(() => {
+  const handleDailyLookDismiss = () => {
     if (!generatedCandidate) return;
     dismissDailyLook.mutate(
       { candidateId: generatedCandidate.id },
       { onSuccess: () => setDailyLookSheetVisible(false) },
     );
-  }, [dismissDailyLook, generatedCandidate]);
+  };
 
-  const openDailyLookSheet = useCallback(() => {
+  const openDailyLookSheet = () => {
     if (generatedCandidate) track('daily_look_detail_opened', { candidateId: generatedCandidate.id });
     setDailyLookSheetVisible(true);
-  }, [generatedCandidate]);
+  };
 
-  const handleDailyLookFindPiece = useCallback(() => {
+  const handleDailyLookFindPiece = () => {
     if (!generatedCandidate || !candidateGap) return;
     track('daily_look_missing_piece_tapped', {
       candidateId: generatedCandidate.id,
@@ -742,7 +744,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         priority: shoppingPriorityFromDailyLookGap(candidateGap),
       },
     });
-  }, [candidateGap, generatedCandidate, navigation]);
+  };
 
   if ((itemsError || outfitsError) && items.length === 0 && outfits.length === 0) {
     return (
@@ -897,31 +899,17 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           <LookMat
             key={`candidate-${generatedCandidate.id}`}
             largeText={largeText}
-            interactivePlate={!!candidateGap}
-            plate={candidateGap ? (
-              <DailyLookCandidateVisual
-                candidate={generatedCandidate}
-                gap={candidateGap}
-                items={items}
-                width={plate.width}
-                height={plate.height}
-                initialIndex={dailyLookPage}
-                onIndexChange={setDailyLookPage}
-                onOpen={openDailyLookSheet}
-                onFindPiece={handleDailyLookFindPiece}
-              />
+            plate={generatedCandidate.readinessStatus === 'ready' && generatedCandidate.aiGeneratedImageUrl ? (
+              <OutfitCollage outfit={generatedPreviewOutfit(generatedCandidate)} size={plate.width} height={plate.height} borderRadius={0} />
             ) : (
-              <OutfitCollage
-                outfit={generatedPreviewOutfit(generatedCandidate)}
-                size={plate.width}
-                height={plate.height}
-                borderRadius={0}
-              />
+              <View style={{ paddingHorizontal: spacing.page, backgroundColor: colors.background }}>
+                <EditorialOutfitBoard pieces={resolveBoardPieces(candidateGap ? generatedCandidate.foundationItemIds : generatedCandidate.itemIds, items)} width={plate.width - spacing.page * 2} />
+              </View>
             )}
             eyebrow={generatedCandidate.readinessStatus === 'incomplete'
-              ? 'One piece away'
+              ? 'Suggested addition'
               : generatedCandidate.readinessStatus === 'priority'
-                ? 'Highest-impact gap'
+                ? 'Suggested addition'
                 : undefined}
             title={candidateTitle(generatedCandidate, candidateGap)}
             note={capitalizeFirst(featuredExplanation ?? generatedCandidate.reason)}
@@ -952,12 +940,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             key={`outfit-${featuredOutfit.id}`}
             largeText={largeText}
             plate={(
-              <OutfitCollage
-                outfit={featuredOutfit}
-                size={plate.width}
-                height={plate.height}
-                borderRadius={0}
-              />
+              featuredOutfit.aiGeneratedImageUrl ? <OutfitCollage outfit={featuredOutfit} size={plate.width} height={plate.height} borderRadius={0} /> :
+              <View style={{ paddingHorizontal: spacing.page, backgroundColor: colors.background }}>
+                <EditorialOutfitBoard pieces={resolveBoardPieces(featuredOutfit.itemIds, items)} width={plate.width - spacing.page * 2} />
+              </View>
             )}
             title={featuredOutfit.name}
             note={featuredExplanation ?? featuredReason}
@@ -1166,8 +1152,14 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         onSave={handleDailyLookSave}
         onDismiss={handleDailyLookDismiss}
         onFindPiece={handleDailyLookFindPiece}
-        initialPage={dailyLookPage}
-        onPageChange={setDailyLookPage}
+        onOpenItem={(id) => { pendingDailyItem.current = id; setDailyLookSheetVisible(false); }}
+        onSheetDismissed={() => {
+          const id = pendingDailyItem.current;
+          if (id == null) return;
+          pendingDailyItem.current = null;
+          resumeDailyLook.current = true;
+          navigation.navigate('Closet', { screen: 'ItemDetail', params: { itemId: id, returnTo: 'Home' } });
+        }}
       />
       <ActionMenuSheet
         visible={wearLogMenuEntry !== null}

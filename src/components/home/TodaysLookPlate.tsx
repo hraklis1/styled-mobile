@@ -85,7 +85,7 @@ export function LookMat({
           accessibilityLabel={accessibilityLabel}
         >
           <View style={styles.plate}>{plate}</View>
-          <View style={styles.captionBar}>
+          <View style={[styles.captionBar, eyebrow && styles.suggestionBar]}>
             <View style={[styles.captionCopy, styles.captionCopyInner]}>{caption}</View>
           </View>
         </PressableScale>
@@ -115,7 +115,7 @@ export function LookMat({
           {plate}
         </PressableScale>
       )}
-      <View style={styles.captionBar}>
+      <View style={[styles.captionBar, eyebrow && styles.suggestionBar]}>
         <PressableScale
           style={styles.captionCopy}
           contentStyle={styles.captionCopyInner}
@@ -241,6 +241,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: surfaces.plate,
   },
+  suggestionBar: { marginHorizontal: GUTTER, paddingHorizontal: 0, marginTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   captionBar: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -266,8 +267,8 @@ const styles = StyleSheet.create({
     color: colors.inkSubtle,
   },
   actionRound: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: radii.full,
     borderWidth: stroke.fine,
     borderColor: colors.ghostStroke,
@@ -275,7 +276,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   actionPill: {
-    minHeight: 36,
+    minHeight: 44,
     maxWidth: 160,
     flexDirection: 'row',
     alignItems: 'center',

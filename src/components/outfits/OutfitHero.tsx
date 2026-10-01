@@ -13,6 +13,9 @@ import { colors, radii, spacing, typography } from '../../theme';
 import { PressableScale } from '../primitives/PressableScale';
 import { AiActionCoachmark } from '../primitives/AiActionCoachmark';
 import { OutfitCollage } from './OutfitCollage';
+import { EditorialOutfitBoard } from './EditorialOutfitBoard';
+import { resolveBoardPieces } from './editorialBoardLayout';
+import { useItems } from '../../hooks/useItems';
 import type { Outfit } from '../../types/outfit';
 
 const LOADING_PHRASES = [
@@ -77,6 +80,7 @@ type Props = {
   menuDisabled: boolean;
   menuOpen: boolean;
   onBack: () => void;
+  onPressItem: (id: number) => void;
   onMenu: () => void;
   onGenerate: () => void;
   coachVisible?: boolean;
@@ -92,6 +96,7 @@ export function OutfitHero({
   menuDisabled,
   menuOpen,
   onBack,
+  onPressItem,
   onMenu,
   onGenerate,
   coachVisible = false,
@@ -99,6 +104,7 @@ export function OutfitHero({
   onCoachDismiss,
 }: Props) {
   const insets = useSafeAreaInsets();
+  const { data: items = [] } = useItems();
 
   const generateLabel = isGenerating
     ? `Generating flat-lay for ${outfit.name}`
@@ -106,7 +112,10 @@ export function OutfitHero({
 
   return (
     <View style={styles.hero}>
-      <OutfitCollage outfit={outfit} size={width} borderRadius={0} />
+      {hasAiImage ? <OutfitCollage outfit={outfit} size={width} borderRadius={0} /> :
+        <View style={{ paddingTop: insets.top + 68, paddingHorizontal: spacing.page, paddingBottom: spacing.lg }}>
+          <EditorialOutfitBoard pieces={resolveBoardPieces(outfit.itemIds, items)} width={width - spacing.page * 2} onPressItem={onPressItem} />
+        </View>}
 
       {/*
         Scrims only over a real photo. The mosaic path renders a flat `colors.card`

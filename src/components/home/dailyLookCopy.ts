@@ -50,5 +50,5 @@ export function itemPhotoUri(item: Item | undefined, opts?: { thumb?: boolean })
   const cover = itemCoverPresentation(item, { preferThumb: opts?.thumb });
   if (cover.variant !== 'cutout') return cover.uri;
   if (opts?.thumb && item.thumbUrl) return resolveImageUri(item.thumbUrl);
-  return resolveImageUri(item.imageUrl ?? item.polishedUrl ?? item.cutoutUrl);
+  return resolveImageUri(item.imageUrl ?? item.polishedUrl);
 }

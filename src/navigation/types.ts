@@ -39,6 +39,7 @@ export type ClosetStackParamList = {
     category?: ItemCategory;
   } | undefined;
   ItemDetail: {
+    returnTo?: 'Home';
     itemId?: number;
     scanData?: ScanResult;
     scanImageUrl?: string;
