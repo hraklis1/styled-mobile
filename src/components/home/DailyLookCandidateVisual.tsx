@@ -1,8 +1,8 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 
-import { ResolvedOutfitCollage, type ResolvedOutfitSlot } from '../outfits/ResolvedOutfitCollage';
+import { LineSheetFrames } from '../outfits/LineSheetFrames';
 import { itemCoverPresentation } from '../../lib/itemImage';
 import { colors, radii, spacing, stroke, typography } from '../../theme';
 import type { DailyLookCandidate, DailyLookMissingEssential } from '../../hooks/useDailyLook';
@@ -15,24 +15,16 @@ type Props = {
   width: number;
   height: number;
   borderRadius?: number;
+  /** Makes the suggestion strip its own target (Home); the sheet has its own CTA. */
+  onFindPiece?: () => void;
 };
-
-function ownedSlots(candidate: DailyLookCandidate, items: Item[]): ResolvedOutfitSlot[] {
-  const itemMap = new Map(items.map((item) => [item.id, item]));
-  return candidate.foundationItemIds.map((entry) => {
-    const item = itemMap.get(entry.id);
-    const cover = itemCoverPresentation(item);
-    return { key: String(entry.id), uri: cover.uri, contentFit: cover.contentFit, ghost: !item };
-  });
-}
 
 function label(value: string): string {
   return value.replaceAll('_', ' ').trim();
 }
 
-export function DailyLookCandidateVisual({ candidate, gap, items, width, height, borderRadius = radii.lg }: Props) {
+export function DailyLookCandidateVisual({ candidate, gap, items, width, height, borderRadius = radii.lg, onFindPiece }: Props) {
   const itemMap = new Map(items.map((item) => [item.id, item]));
-  const slots = ownedSlots(candidate, items);
 
   if (candidate.readinessStatus === 'priority') {
     const anchors = candidate.foundationItemIds
@@ -74,70 +66,80 @@ export function DailyLookCandidateVisual({ candidate, gap, items, width, height,
     );
   }
 
-  const gapWidth = Math.max(116, Math.round(width * 0.34));
-  const ownedWidth = width - gapWidth;
+  const stripHeight = 72;
   return (
     <View
       style={[styles.incompleteBoard, { width, height, borderRadius }]}
-      accessible
+      accessible={!onFindPiece}
       accessibilityLabel={`${candidate.name}. ${candidate.foundationItemIds.length} pieces in your closet. Suggested ${label(gap.label)}, not in your closet.`}
     >
-      <ResolvedOutfitCollage slots={slots} size={ownedWidth} height={height} borderRadius={0} />
-      <View style={[styles.gapTile, { width: gapWidth }]}>
-        <View style={styles.gapRule} pointerEvents="none">
-          <View style={styles.gapRuleDashes} />
+      <LineSheetFrames
+        items={candidate.foundationItemIds.map((entry) => itemMap.get(entry.id))}
+        width={width}
+        height={height - stripHeight}
+      />
+      <Pressable
+        style={({ pressed }) => [styles.strip, { height: stripHeight }, pressed && onFindPiece ? styles.stripPressed : null]}
+        onPress={onFindPiece}
+        disabled={!onFindPiece}
+        accessibilityRole={onFindPiece ? 'button' : undefined}
+        accessibilityLabel={onFindPiece ? `Find ${label(gap.label)}, not in your closet` : undefined}
+      >
+        <View style={styles.stripIcon}>
+          <Ionicons name="add" size={20} color={colors.primary} />
         </View>
-        <View style={styles.gapIcon}>
-          <Ionicons name="add" size={24} color={colors.primary} />
+        <View style={styles.stripText}>
+          <Text style={styles.gapEyebrow}>COMPLETE THE LOOK</Text>
+          <Text style={styles.gapTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+            {sentenceCase(label(gap.label))}
+          </Text>
         </View>
-        <Text style={styles.gapEyebrow}>SUGGESTED</Text>
-        <Text style={styles.gapTitle} numberOfLines={3}>{label(gap.label)}</Text>
-        <Text style={styles.notOwned}>Not in your closet</Text>
-      </View>
+        <View style={styles.notOwnedTag}>
+          <Text style={styles.notOwned}>Not owned</Text>
+        </View>
+        {onFindPiece ? <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} /> : null}
+      </Pressable>
     </View>
   );
 }
 
+function sentenceCase(value: string): string {
+  const lower = value.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
+}
+
 const styles = StyleSheet.create({
   incompleteBoard: {
-    flexDirection: 'row',
     overflow: 'hidden',
     backgroundColor: colors.card,
   },
-  gapTile: {
+  strip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    backgroundColor: colors.card,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  stripPressed: { backgroundColor: colors.muted },
+  stripIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.md,
-    gap: spacing.xs,
-    backgroundColor: colors.card,
-  },
-  // Fabric only draws dashed borders when all four sides match, so a
-  // one-sided dashed rule is a uniformly dashed box clipped to its left edge.
-  gapRule: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: stroke.fine,
-    overflow: 'hidden',
-  },
-  gapRuleDashes: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 8,
     borderWidth: stroke.fine,
     borderStyle: 'dashed',
     borderColor: colors.primary,
   },
-  gapIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: `${colors.primary}18`,
+  stripText: { flex: 1, gap: 2 },
+  notOwnedTag: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radii.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
   },
   gapEyebrow: {
     ...typography.text.eyebrow,
@@ -146,13 +148,10 @@ const styles = StyleSheet.create({
   gapTitle: {
     ...typography.text.sectionTitle,
     color: colors.foreground,
-    textAlign: 'center',
-    textTransform: 'capitalize',
   },
   notOwned: {
     ...typography.text.caption,
     color: colors.mutedForeground,
-    textAlign: 'center',
   },
   priorityCard: {
     justifyContent: 'center',

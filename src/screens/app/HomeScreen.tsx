@@ -728,6 +728,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       screen: 'ShoppingPriorityEdit',
       params: {
         source: 'home_daily_look',
+        origin: 'daily_look',
         priority: shoppingPriorityFromDailyLookGap(candidateGap),
       },
     });
@@ -833,6 +834,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           onNavigateToShop: (gap?: StylistMissingEssential) => {
             if (!gap?.label) return;
             navigation.navigate('Shop', { screen: 'ShoppingPriorityEdit', params: {
+              origin: 'daily_look',
               priority: shoppingPriorityFromDailyLookGap(gap),
             }});
           },
@@ -891,8 +893,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                 gap={candidateGap}
                 items={items}
                 width={plate.width}
-                height={generatedCandidate.readinessStatus === 'priority' ? Math.round(plate.height * 0.72) : plate.height}
+                height={Math.round(plate.height * (generatedCandidate.readinessStatus === 'priority' ? 0.72 : 0.8))}
                 borderRadius={0}
+                onFindPiece={generatedCandidate.readinessStatus === 'incomplete' ? handleDailyLookFindPiece : undefined}
               />
             ) : (
               <OutfitCollage
@@ -903,7 +906,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               />
             )}
             eyebrow={generatedCandidate.readinessStatus === 'incomplete'
-              ? 'One piece away'
+              ? generatedCandidate.name.toLowerCase() === 'one piece away' ? undefined : 'One piece away'
               : generatedCandidate.readinessStatus === 'priority'
                 ? 'Highest-impact gap'
                 : undefined}
@@ -915,7 +918,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             }}
             accessibilityLabel={`${generatedCandidate.name}. ${generatedCandidate.reason}. Open details`}
             captionAccessibilityLabel={`Open ${generatedCandidate.name}`}
-            action={candidateGap ? (
+            action={candidateGap?.label && generatedCandidate.readinessStatus === 'incomplete' ? undefined : candidateGap ? (
               <LookMatAction
                 icon="search-outline"
                 label={`Find ${candidateGap.label.replaceAll('_', ' ')}`}

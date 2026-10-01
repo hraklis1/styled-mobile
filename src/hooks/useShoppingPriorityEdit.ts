@@ -8,7 +8,7 @@ import { SHOPPING_BRIEF_QUERY_KEY } from './useShoppingBrief';
 export const SHOPPING_PRIORITY_EDIT_QUERY_KEY = ['shop', 'brief', 'priority-edit'] as const;
 
 type ShoppingPriorityEditRequestContext = {
-  origin?: 'shopping_brief';
+  origin?: 'shopping_brief' | 'daily_look';
   briefGeneratedAt?: string;
 };
 

@@ -88,7 +88,7 @@ export type ShopStackParamList = {
   ShoppingPriorityEdit: {
     priority: ShoppingBriefPriority;
     source?: 'home_daily_look';
-    origin?: 'shopping_brief';
+    origin?: 'shopping_brief' | 'daily_look';
     briefGeneratedAt?: string;
   };
 };

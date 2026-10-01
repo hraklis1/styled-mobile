@@ -87,14 +87,14 @@ export function DailyLookDetailSheet({
               height={Math.round(imageSize * (candidate.readinessStatus === 'priority' ? 0.9 : 1.12))}
             />
           )}
-          <Text style={styles.eyebrow}>{isReady ? 'Styled for you today' : candidate.readinessStatus === 'incomplete' ? 'One piece away' : 'Highest-impact wardrobe gap'}</Text>
+          {candidate.readinessStatus === 'incomplete' && candidate.name.toLowerCase() === 'one piece away' ? null : <Text style={styles.eyebrow}>{isReady ? 'Styled for you today' : candidate.readinessStatus === 'incomplete' ? 'One piece away' : 'Highest-impact wardrobe gap'}</Text>}
           <Text style={styles.title}>{candidate.name}</Text>
-          <Text style={styles.reason}>{candidate.reason}</Text>
+          <Text style={styles.reason}>{candidate.reason.charAt(0).toUpperCase() + candidate.reason.slice(1)}</Text>
           {candidate.stylistNotes ? <Text style={styles.notes}>{candidate.stylistNotes}</Text> : null}
 
           {!isReady && gap ? (
             <View style={styles.gapBrief} accessible accessibilityLabel={`Suggested ${gap.label}, not in your closet. ${gap.context}`}>
-              <Text style={styles.gapBriefLabel}>COMPLETE IT WITH</Text>
+              <Text style={styles.gapBriefLabel}>COMPLETE THE LOOK</Text>
               <Text style={styles.gapBriefTitle}>{gap.label.replaceAll('_', ' ')}</Text>
               <Text style={styles.gapBriefContext}>{gap.context}</Text>
               {[gap.formality, gap.silhouette, gap.material, gap.preferredColors?.join(' · ')].filter(Boolean).length > 0 ? (
