@@ -33,7 +33,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Crypto from 'expo-crypto';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../lib/haptics';
 import { StatusBar, setStatusBarStyle } from 'expo-status-bar';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';

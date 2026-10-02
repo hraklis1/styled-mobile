@@ -22,7 +22,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
 import { Image as ExpoImage } from 'expo-image';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../lib/haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';

@@ -1,6 +1,6 @@
 import { AppState } from 'react-native';
 import * as Crypto from 'expo-crypto';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../lib/haptics';
 import { Directory, File, Paths } from 'expo-file-system';
 import NetInfo from '@react-native-community/netinfo';
 import { scanWear } from './api';

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, View, StyleSheet } from 'react-native';
 import type { BottomSheetModal } from '@gorhom/bottom-sheet';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../lib/haptics';
 
 import { ShoppingPhotoOrganizer } from '../../components/shopping/ShoppingPhotoOrganizer';
 import { ShoppingStoreAssignmentSheet } from '../../components/shopping/ShoppingStoreAssignmentSheet';

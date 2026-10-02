@@ -16,7 +16,7 @@ import {
   type BottomTabNavigationOptions,
 } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../lib/haptics';
 
 import { useAuth } from '../contexts/AuthContext';
 import { useProfile } from '../hooks/useProfile';
@@ -40,7 +40,8 @@ import { OutfitDetailScreen } from '../screens/app/OutfitDetailScreen';
 import { BoardDetailScreen } from '../screens/app/BoardDetailScreen';
 import { ClosetScreen } from '../screens/app/ClosetScreen';
 import { CalendarScreen } from '../screens/app/CalendarScreen';
-import { ProfileScreen } from '../screens/app/ProfileScreen';
+import { ProfileNavigator } from '../screens/profile/ProfileNavigator';
+import { AppPreferencesEffects } from '../features/preferences/AppPreferencesEffects';
 import { SuggestionsScreen } from '../screens/app/SuggestionsScreen';
 import { SavedLooksScreen, SavedShoppingScreen } from '../screens/app/ShopScreen';
 import { ShopOverviewScreen } from '../screens/app/ShopOverviewScreen';
@@ -81,6 +82,15 @@ const linking: LinkingOptions<RootStackParamList> = {
       } as any,
       App: {
         screens: {
+          // styled://home, styled://profile, styled://settings — targets for
+          // reminder notifications (lib/notifications.ts).
+          Home: {
+            screens: {
+              HomeMain: 'home',
+              Profile: { screens: { ProfileHome: 'profile', Settings: 'settings' } },
+            },
+          },
+          Calendar: 'calendar',
           Closet: { screens: { ItemDetail: { path: 'wardrobe-item/:itemId', parse: { itemId: Number } } } },
           Shop: {
             screens: {
@@ -159,7 +169,7 @@ function HomeNavigator() {
     <HomeStack.Navigator screenOptions={{ headerShown: false }}>
       <HomeStack.Screen name="HomeMain" component={HomeScreen} />
       <HomeStack.Screen name="Suggestions" component={SuggestionsScreen} />
-      <HomeStack.Screen name="Profile" component={ProfileScreen} options={{ presentation: 'modal' }} />
+      <HomeStack.Screen name="Profile" component={ProfileNavigator} options={{ presentation: 'modal' }} />
     </HomeStack.Navigator>
   );
 }
@@ -591,6 +601,7 @@ function AppGate() {
       <GlobalOutfitLoggerProvider>
         <GlobalAIStylistProvider>
           <FabScrollProvider>
+            <AppPreferencesEffects />
             <AppTabNavigator />
           </FabScrollProvider>
         </GlobalAIStylistProvider>

@@ -40,7 +40,7 @@ import { colors, spacing, typography, radii } from '../../theme';
 import { CATEGORY_LABELS, SEASON_LABELS } from '../../types/item';
 import type { CoverImageVariant, Item, Season } from '../../types/item';
 import type { ItemDetailScreenProps } from '../../navigation/types';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../lib/haptics';
 import * as Crypto from 'expo-crypto';
 import { useTagScanner } from '../../hooks/useTagScanner';
 import { EditItemModal } from '../../components/item/EditItemModal';

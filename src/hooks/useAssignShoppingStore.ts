@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { Alert } from 'react-native';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../lib/haptics';
 
 import { useAuth } from '../contexts/AuthContext';
 import { queryClient } from '../lib/queryClient';

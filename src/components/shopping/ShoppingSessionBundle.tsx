@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import Animated, { Easing, LinearTransition, useReducedMotion } from 'react-native-reanimated';
 import { Image } from 'expo-image';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../lib/haptics';
 import { Ionicons } from '@expo/vector-icons';
 
 import { PressableScale } from '../primitives/PressableScale';

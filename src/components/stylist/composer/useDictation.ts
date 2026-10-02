@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Linking, Platform } from 'react-native';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../../lib/haptics';
 import { useSharedValue, withTiming } from 'react-native-reanimated';
 import {
   ExpoSpeechRecognitionModule,

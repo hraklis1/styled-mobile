@@ -50,7 +50,7 @@ import { capturePhotoLocation } from '../../lib/photoLocation';
 import { track } from '../../lib/analytics';
 import { applyInclusionChanges } from '../../lib/extraction-review';
 import { resolveExtractedIdentity } from '../../lib/scan-review';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../lib/haptics';
 import {
   ScanReviewWorkspace,
   type ScanReviewPiece,

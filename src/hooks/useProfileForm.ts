@@ -13,7 +13,13 @@ import {
   uniqueClean,
 } from '../lib/profileOptions';
 import type { Profile, StyleProfileDetails } from '../types/profile';
+import { useQueryClient } from '@tanstack/react-query';
 import { useProfile, useUpdateProfile, type ProfileInput } from './useProfile';
+
+// Prefixes of DAILY_LOOK_QUERY_KEY (useDailyLook) and SHOPPING_BRIEF_QUERY_KEY
+// (useShoppingBrief). Inlined because importing those hooks drags the
+// Supabase client into this module, and into every test that imports it.
+const RECOMMENDATION_QUERY_KEYS = [['daily-look'], ['shop', 'brief']] as const;
 
 export type PickerKey = 'shoe' | 'waist' | 'inseam' | 'dress' | 'heightCm'
   | 'heightFt' | 'heightIn' | 'jacket' | 'jacketLen'
@@ -326,6 +332,10 @@ function snapshotKey(values: ProfileFormSnapshot): Record<string, unknown> {
 export function useProfileForm() {
   const { data: profile, isLoading } = useProfile();
   const updateProfile = useUpdateProfile();
+  const queryClient = useQueryClient();
+  // Bumped after a save re-baselines initialValues (a ref), so isDirty
+  // recomputes on the next render instead of staying stale until an edit.
+  const [savedVersion, setSavedVersion] = useState(0);
 
   const [displayName, setDisplayName] = useState('');
   const [stylePreference, setStylePreference] = useState<string[]>([]);
@@ -456,7 +466,8 @@ export function useProfileForm() {
     if (!Object.prototype.hasOwnProperty.call(iv, 'displayName')) return false;
     const snapshot = snapshotKey(currentSnapshot);
     return Object.keys(snapshot).some((key) => snapshot[key] !== iv[key]);
-  }, [currentSnapshot]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSnapshot, savedVersion]);
 
   const addRetailer = (name?: string) => {
     const t = (name ?? newRetailer).trim();
@@ -529,14 +540,20 @@ export function useProfileForm() {
     setStyleProfileDetails((current) => normalizeStyleProfileDetails(updater(normalizeStyleProfileDetails(current))));
   };
 
-  const handleSave = () => {
+  /**
+   * Saves the whole snapshot. Each Profile editor mounts its own form, so only
+   * that editor's fields can differ from the server copy. Recommendation
+   * queries are invalidated so Home, Shop and the stylist pick up the change
+   * on their next read instead of after their cache expires.
+   */
+  const handleSave = (onSaved?: () => void) => {
     const payload = buildProfileUpdatePayload(currentSnapshot);
     updateProfile.mutate(
       payload,
       {
         onSuccess: () => {
           track('profile_updated');
-          Alert.alert('Saved', 'Profile updated successfully.');
+          for (const queryKey of RECOMMENDATION_QUERY_KEYS) void queryClient.invalidateQueries({ queryKey });
           initialValues.current = snapshotKey({
             ...currentSnapshot,
             stylePreference: payload.stylePreference ?? [],
@@ -549,6 +566,8 @@ export function useProfileForm() {
             occasions: payload.occasions ?? [],
             retailers: payload.favoriteRetailers ?? [],
           });
+          setSavedVersion((value) => value + 1);
+          onSaved?.();
         },
         onError: (err: Error) => Alert.alert('Error', err.message),
       },

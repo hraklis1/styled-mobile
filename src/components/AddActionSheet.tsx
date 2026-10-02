@@ -17,7 +17,7 @@ import {
 } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../lib/haptics';
 import { track } from '../lib/analytics';
 import { useCreateItem, useUpdateItem, useBrandSuggestions } from '../hooks/useItems';
 import { useAuth } from '../contexts/AuthContext';

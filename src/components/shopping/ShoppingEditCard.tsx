@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Keyboard, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../lib/haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 

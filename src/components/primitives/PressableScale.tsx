@@ -15,7 +15,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../lib/haptics';
 
 type Props = Omit<PressableProps, 'children'> & {
   children?: React.ReactNode;

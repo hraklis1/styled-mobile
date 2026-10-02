@@ -92,6 +92,7 @@ export type Profile = {
   favoriteRetailers: string[] | null;
   stylistVoice: string | null;
   tempUnit: string | null;
+  appPreferences?: AppPreferences | null;
   occasions: string[] | null;
   fitNotes: string | null;
   sizeTop: string | null;
@@ -104,4 +105,22 @@ export type Profile = {
   measurementHips: string | null;
   measurementInseam: string | null;
   measurementHeight: string | null;
+};
+
+/** Mirrors appPreferencesSchema in ../Styled/shared/schema.ts. */
+export type StylistTone = 'concise' | 'balanced' | 'detailed';
+export type StylistAdventurousness = 'classic' | 'balanced' | 'experimental';
+export type AppPreferences = {
+  haptics: boolean;
+  reduceMotion: boolean;
+  currency: string | null;
+  stylistTone: StylistTone;
+  adventurousness: StylistAdventurousness;
+  shoppingLinksInAnswers: boolean;
+  analyticsOptOut: boolean;
+  notifications: {
+    dailyLook: { enabled: boolean; time: string };
+    wearLog: boolean;
+    events: boolean;
+  };
 };

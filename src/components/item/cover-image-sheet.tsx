@@ -7,7 +7,7 @@ import {
 } from '@gorhom/bottom-sheet';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../lib/haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { coverImageVariantLabel, itemCoverPresentation } from '../../lib/itemImage';

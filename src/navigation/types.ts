@@ -142,7 +142,6 @@ export type ShoppingPriorityEditScreenProps = CompositeScreenProps<
   BottomTabScreenProps<AppTabParamList>
 >;
 export type CalendarScreenProps = BottomTabScreenProps<AppTabParamList, 'Calendar'>;
-export type ProfileScreenProps = NativeStackScreenProps<HomeStackParamList, 'Profile'>;
 
 // Screens now registered in ClosetStack
 export type ItemDetailScreenProps = NativeStackScreenProps<ClosetStackParamList, 'ItemDetail'>;

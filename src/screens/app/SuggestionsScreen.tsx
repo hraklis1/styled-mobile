@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../lib/haptics';
 
 import { track } from '../../lib/analytics';
 import { OCCASIONS as SHARED_OCCASIONS, type OccasionId } from '../../lib/occasions';

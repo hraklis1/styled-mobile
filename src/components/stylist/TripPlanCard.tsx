@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../lib/haptics';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { itemImageContentFit, itemImageUri } from '../../lib/itemImage';
 import { ResolvedOutfitCollage } from '../outfits/ResolvedOutfitCollage';

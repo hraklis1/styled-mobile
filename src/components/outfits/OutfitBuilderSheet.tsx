@@ -29,7 +29,7 @@ import type { OccasionId } from '../../lib/occasions';
 import { OCCASION_LABELS, SEASON_LABELS } from '../../types/item';
 import type { Item, ItemCategory, Occasion, Season } from '../../types/item';
 import type { Outfit } from '../../types/outfit';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../lib/haptics';
 
 // ─── Slot config ──────────────────────────────────────────────────────────────
 

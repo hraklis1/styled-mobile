@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../lib/haptics';
 import Animated, { FadeInDown, FadeOutUp } from 'react-native-reanimated';
 import { track } from '../../lib/analytics';
 import { useCreateEvent, useUpdateEvent, type EventInput } from '../../hooks/useEvents';

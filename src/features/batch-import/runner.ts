@@ -1,6 +1,6 @@
 import { AppState, type AppStateStatus } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../lib/haptics';
 import { tryRequestCutout } from '../../lib/cutout';
 import { track } from '../../lib/analytics';
 import { batchDirectory, cropRegion, deleteBatchFiles, deleteFile, pruneBatchFiles, readBase64, writeBase64 } from './files';

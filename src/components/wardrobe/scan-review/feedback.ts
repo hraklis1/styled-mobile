@@ -1,4 +1,4 @@
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../../lib/haptics';
 
 /** Feedback never gates a state change or produces an unhandled rejection. */
 export function selectionFeedback() {

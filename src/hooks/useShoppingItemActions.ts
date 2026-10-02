@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../lib/haptics';
 
 import { useAuth } from '../contexts/AuthContext';
 import { useGlobalAIStylist } from '../contexts/GlobalAIStylistContext';

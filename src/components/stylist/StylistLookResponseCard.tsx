@@ -1,7 +1,7 @@
 import { StylistRichText } from './StylistRichText';
 import { useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../lib/haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 

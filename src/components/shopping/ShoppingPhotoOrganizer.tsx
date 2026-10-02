@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as Crypto from 'expo-crypto';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../../lib/haptics';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
   FadeIn,
