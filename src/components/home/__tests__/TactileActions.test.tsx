@@ -1,8 +1,7 @@
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { Pressable, StyleSheet, Text } from 'react-native';
-import { AskStylistButton } from '../AskStylistButton';
-import { AddToClosetButton } from '../AddToClosetButton';
+import { HomeActionRow } from '../HomeActionRow';
 import { ShoppingPriorityRow } from '../../shopping/ShoppingPriorityRow';
 import { PressableScale } from '../../primitives/PressableScale';
 import type { ShoppingBriefPriority } from '../../../lib/shopDecisionWorkspace';
@@ -43,16 +42,17 @@ function render(element: React.ReactElement) {
 }
 afterEach(() => { act(() => { mounted.splice(0).forEach((renderer) => renderer.unmount()); }); });
 
-it.each([AskStylistButton, AddToClosetButton])('keeps the launcher callback and disabled semantics', (Component) => {
-  const onPress = jest.fn();
-  const renderer = render(<Component onPress={onPress} />);
-  const button = renderer.root.findByType(Pressable);
-  act(() => button.props.onPress());
-  expect(onPress).toHaveBeenCalledTimes(1);
-  expect(button.props.accessibilityRole).toBe('button');
-  act(() => renderer.update(<Component onPress={onPress} disabled />));
-  expect(renderer.root.findByType(Pressable).props.disabled).toBe(true);
-  expect(renderer.root.findByType(Pressable).props.accessibilityState.disabled).toBe(true);
+it('routes each home action disc to its own callback', () => {
+  const onAskStylist = jest.fn(); const onAddToCloset = jest.fn(); const onLogWear = jest.fn();
+  const renderer = render(<HomeActionRow onAskStylist={onAskStylist} onAddToCloset={onAddToCloset} onLogWear={onLogWear} />);
+  const buttons = renderer.root.findAllByType(Pressable);
+  expect(buttons.map((button) => button.props.accessibilityLabel)).toEqual(['Ask your stylist', 'Add to my closet', 'Log today’s outfit']);
+  buttons.forEach((button) => act(() => button.props.onPress()));
+  expect(onAskStylist).toHaveBeenCalledTimes(1);
+  expect(onAddToCloset).toHaveBeenCalledTimes(1);
+  expect(onLogWear).toHaveBeenCalledTimes(1);
+  act(() => renderer.update(<HomeActionRow onAskStylist={onAskStylist} onAddToCloset={onAddToCloset} onLogWear={onLogWear} loggedToday />));
+  expect(renderer.root.findAllByType(Pressable)[2].props.accessibilityLabel).toBe('Today’s outfit logged');
 });
 
 it('exposes independent brief actions without a pressable ancestor around skip', () => {

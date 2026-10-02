@@ -55,6 +55,7 @@ export function getWishlistBoardLabel(entry: WishlistEntry): string {
 
 export function getWishlistMeta(entry: WishlistEntry): string {
   if (entry.outfit.shoppingBrief) return 'Shopping guide';
+  if (entry.outfit.product) return `Saved piece · ${entry.outfit.product.offer.formattedPrice || 'See price'} · saved price`;
   const count = entry.outfit.items.length;
   const type = getWishlistRecommendationType(entry);
   const countLabel = type === 'piece' ? '1 piece' : type === 'list' ? `${count} ${count === 1 ? 'option' : 'options'}` : `${count} ${count === 1 ? 'item' : 'items'}`;

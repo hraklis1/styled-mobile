@@ -16,8 +16,12 @@ export const queryClient = new QueryClient({
   },
 });
 
+let userCacheEpoch = 0;
+export function getUserCacheEpoch(): number { return userCacheEpoch; }
+
 // User-owned API responses must never survive an auth boundary.
 export async function clearUserQueryCache(): Promise<void> {
+  userCacheEpoch += 1;
   shoppingFeedbackQueue.clear();
   await queryClient.cancelQueries();
   queryClient.clear();

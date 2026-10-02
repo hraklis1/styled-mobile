@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'react-native';
 
 import { api } from '../lib/api';
-import { queryClient } from '../lib/queryClient';
+import { queryClient, getUserCacheEpoch } from '../lib/queryClient';
 import type { ShopOutfit } from '../types/shop';
 import type { WishlistEntry } from '../lib/wishlist';
 
@@ -65,4 +65,30 @@ export function useRemoveFromWishlist() {
     },
     onSettled: () => qc.invalidateQueries({ queryKey: WISHLIST_QUERY_KEY }),
   });
+}
+
+const productSaves = new Map<string, Promise<WishlistEntry>>();
+export function saveProductOffer(offer: import('../types/commerce').ProductOffer, context: import('../types/commerce').OfferContext): Promise<WishlistEntry> {
+  const epoch = getUserCacheEpoch();
+  const key = `${epoch}:${offer.provider}:${offer.id}`;
+  const existing = productSaves.get(key);
+  if (existing) return existing;
+  const request = (async () => {
+    const response = await api.post<WishlistEntry>('/api/wishlist', { id: newWishlistId(), recommendationType: 'piece', outfit: {}, product: { reference: context.reference, wishlistId: context.wishlistId, targetKey: context.targetKey, offerId: offer.id, conversationId: context.conversationId } });
+    const entry = response.data;
+    if (getUserCacheEpoch() === epoch) queryClient.setQueryData<WishlistEntry[]>(WISHLIST_QUERY_KEY, (old = []) => [entry, ...old.filter((saved) => saved.id !== entry.id)]);
+    return entry;
+  })();
+  productSaves.set(key, request);
+  void request.finally(() => productSaves.delete(key)).catch(() => {});
+  return request;
+}
+
+/** Remove one saved product only after the server confirms, preserving retry state. */
+export async function unsaveProductEntry(id: string): Promise<void> {
+  const epoch = getUserCacheEpoch();
+  await api.delete(`/api/wishlist/${id}`);
+  if (getUserCacheEpoch() === epoch) {
+    queryClient.setQueryData<WishlistEntry[]>(WISHLIST_QUERY_KEY, (old = []) => old.filter(entry => entry.id !== id));
+  }
 }

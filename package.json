@@ -86,7 +86,8 @@
     "eval:commerce": "node scripts/eval-commerce-provider.mjs --provider fixture",
     "eval:commerce:selftest": "node scripts/commerce-eval-selftest.mjs",
     "eval:commerce:sovrn": "node --env-file-if-exists=.env.local scripts/eval-commerce-provider.mjs --provider sovrn",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "eval:commerce:serper": "node scripts/eval-commerce-provider.mjs --provider serper"
   },
   "jest": {
     "preset": "jest-expo",

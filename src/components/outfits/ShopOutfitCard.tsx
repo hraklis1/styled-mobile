@@ -1,347 +1,44 @@
 import { useState } from 'react';
-import {
-  Image,
-  Linking,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { colors, radii, spacing, typography } from '../../theme';
-import type { ShopOutfit, ShopOutfitItem } from '../../types/shop';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { colors, curatedProducts, spacing, typography } from '../../theme';
+import type { ShopOutfit } from '../../types/shop';
+import { useProductOffers } from '../../hooks/useProductOffers';
+import { CuratedItemRail } from '../shopping/CuratedItemRail';
+import { openShoppingLink } from '../shopping/ShoppingRetailerLinks';
 
-type Props = {
-  outfit: ShopOutfit;
-  /** Show a remove button instead of save (used in ShopScreen wishlist) */
-  onRemove?: () => void;
-  /** Called after user taps Save — pass undefined to hide the button */
-  onSave?: () => Promise<void>;
-  /**
-   * Fired after a successful save. Lets the parent act on the freshly created
-   * wishlist entry (e.g. offer to board it) without this card — which is also
-   * used outside the stylist — having to know about boards.
-   */
-  onSaved?: () => void;
-  /** Override the default "Save" button label (e.g. "Save for <event>") */
-  saveLabel?: string;
-};
-
-const CATEGORY_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
-  top: 'shirt-outline',
-  bottom: 'pricetag-outline',
-  shoes: 'footsteps-outline',
-  outerwear: 'partly-sunny-outline',
-  accessory: 'diamond-outline',
-};
-
-const CATEGORY_COLOR: Record<string, string> = {
-  top: '#2563EB',
-  bottom: '#78716C',
-  shoes: '#D97706',
-  outerwear: '#16A34A',
-  accessory: '#7C3AED',
-};
-
-const CATEGORY_LABEL: Record<string, string> = {
-  top: 'Top',
-  bottom: 'Bottom',
-  shoes: 'Shoes',
-  outerwear: 'Outer',
-  accessory: 'Acc.',
-};
-
-function shopUrl(item: ShopOutfitItem) {
-  return item.retailerUrl || `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(`${item.brand} ${item.name}`)}`;
-}
-
-function ProductCard({ item, width }: { item: ShopOutfitItem; width: number }) {
-  const cat = item.category?.toLowerCase() ?? 'top';
-  const iconName = CATEGORY_ICON[cat] ?? 'bag-outline';
-  const accentColor = CATEGORY_COLOR[cat] ?? colors.primary;
-  const label = CATEGORY_LABEL[cat] ?? item.category;
-
-  return (
-    <View style={[styles.productCard, { width }]}>
-      <View style={styles.productImageWrap}>
-        {item.imageUrl ? (
-          <Image source={{ uri: item.imageUrl }} style={styles.productImage} resizeMode="cover" />
-        ) : (
-          <View style={[styles.productFallback, { backgroundColor: `${accentColor}10` }]}>
-            <Ionicons name={iconName} size={32} color={accentColor} />
-            <Text style={[styles.categoryLabel, { color: accentColor }]}>{label}</Text>
-          </View>
-        )}
-        <View style={styles.priceBadge}><Text style={styles.itemPrice}>{item.priceRange}</Text></View>
-      </View>
-      <View style={styles.itemInfo}>
-        <Text style={styles.itemBrand}>{item.brand.toUpperCase()}</Text>
-        <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
-        <Text style={styles.itemWhy} numberOfLines={2}>{item.whyItFitsYou}</Text>
-        <TouchableOpacity
-          style={styles.shopLink}
-          onPress={() => Linking.openURL(shopUrl(item))}
-          accessibilityLabel={`Shop ${item.name} by ${item.brand}`}
-        >
-          <Text style={styles.shopLinkText}>View at retailer</Text>
-          <Ionicons name="arrow-forward" size={13} color={colors.primaryForeground} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-export function ShopOutfitCard({ outfit, onRemove, onSave, onSaved, saveLabel }: Props) {
-  const { width } = useWindowDimensions();
+type Props = { outfit: ShopOutfit; onRemove?: () => void; onSave?: () => Promise<void>; onSaved?: () => void; saveLabel?: string; wishlistId?: string };
+export function ShopOutfitCard({ outfit, onRemove, onSave, onSaved, saveLabel, wishlistId }: Props) {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  const city = outfit.city?.trim();
-  const productWidth = Math.min(252, width - 72);
-  const defaultSaveLabel = outfit.recommendationType === 'piece'
-    ? 'Save this piece'
-    : outfit.recommendationType === 'list'
-      ? 'Save this list'
-      : 'Save this look';
-
-  async function handleSave() {
+  const [saveError, setSaveError] = useState(false);
+  const query = useProductOffers({ reference: outfit.commerceReference, conversationId: outfit.commerceConversationId, wishlistId, surface: 'stylist' });
+  async function save() {
     if (!onSave || saved || saving) return;
-    setSaving(true);
-    try {
-      await onSave();
-      setSaved(true);
-      onSaved?.();
-    } finally {
-      setSaving(false);
-    }
+    setSaving(true); setSaveError(false);
+    try { await onSave(); setSaved(true); onSaved?.(); } catch { setSaveError(true); } finally { setSaving(false); }
   }
-
-  return (
-    <View style={styles.card}>
-      {/* Header */}
-      <View style={styles.header}>
-        {!!city && (
-          <View style={styles.cityBadge}>
-            <Ionicons name="location-outline" size={11} color={colors.primary} />
-            <Text style={styles.cityText}>Stores near {city}</Text>
-          </View>
-        )}
-        <Text style={styles.intro}>{outfit.intro}</Text>
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.productRail}
-        snapToInterval={productWidth + spacing.md}
-        decelerationRate="fast"
-      >
-        {outfit.items.map((item, idx) => <ProductCard key={`${item.brand}-${item.name}-${idx}`} item={item} width={productWidth} />)}
-      </ScrollView>
-
-      {/* Footer */}
-      <View style={styles.footer}>
-        <View>
-          <Text style={styles.budgetLabel}>Est. total</Text>
-          <Text style={styles.budgetValue}>{outfit.totalBudget}</Text>
-        </View>
-
-        <View style={styles.footerActions}>
-          {onRemove && (
-            <Pressable style={[styles.footerBtn, styles.footerBtnDestructive]} onPress={onRemove}>
-              <Ionicons name="trash-outline" size={14} color={colors.error} />
-              <Text style={[styles.footerBtnText, { color: colors.error }]}>Remove</Text>
-            </Pressable>
-          )}
-          {onSave && (
-            <Pressable
-              style={[styles.footerBtn, saved && styles.footerBtnSaved]}
-              onPress={handleSave}
-              disabled={saved || saving}
-            >
-              <Ionicons
-                name={saved ? 'checkmark-outline' : 'bag-handle-outline'}
-                size={14}
-                color={saved ? '#16A34A' : colors.mutedForeground}
-              />
-              <Text style={[styles.footerBtnText, saved && styles.footerBtnTextSaved]}>
-                {saved ? 'In Saved recommendations' : saving ? 'Saving…' : saveLabel ?? defaultSaveLabel}
-              </Text>
-            </Pressable>
-          )}
-        </View>
-      </View>
-    </View>
-  );
+  return <View style={styles.root}>
+    <Text style={styles.intro}>{outfit.intro}</Text>
+    {outfit.items.map((item, index) => {
+      const key = item.key ?? `stylist-${index}`;
+      const state = query.data?.[key] ?? item.offerState;
+      const hasReference = !!(outfit.commerceReference || wishlistId);
+      return <View key={key} style={styles.direction}>
+        <Text style={styles.title}>{item.name}</Text>
+        {!!item.whyItFitsYou && <Text style={styles.copy}>{item.whyItFitsYou}</Text>}
+        {!!item.priceRange && <Text style={styles.copy}>Suggested budget {item.priceRange}</Text>}
+        {hasReference || item.offers?.length ? <CuratedItemRail browserTitle={item.name} reason={item.whyItFitsYou} offers={state?.offers ?? item.offers ?? []} status={query.isError || query.fetchStatus === 'paused' ? 'unavailable' : state?.status ?? 'pending'} context={{ reference: outfit.commerceReference, conversationId: outfit.commerceConversationId, wishlistId, targetKey: key, surface: 'stylist' }} onRetry={() => void query.refetch()} /> : <Pressable onPress={() => void openShoppingLink(`https://www.google.com/search?tbm=shop&q=${encodeURIComponent(`${item.brand} ${item.name}`)}`)} accessibilityRole="link" accessibilityLabel={`Search Google Shopping for ${item.name}`} style={styles.action}><Text style={styles.link}>Search for similar pieces ↗</Text></Pressable>}
+      </View>;
+    })}
+    {!!outfit.totalBudget && <Text style={styles.copy}>Suggested total budget {outfit.totalBudget}</Text>}
+    {onSave ? <Pressable onPress={() => void save()} disabled={saved || saving} accessibilityRole="button" accessibilityState={{ disabled: saved || saving, busy: saving }} style={styles.action}><Text style={styles.link}>{saved ? 'Saved' : saving ? 'Saving…' : saveLabel ?? `Save this ${outfit.recommendationType ?? 'look'}`}</Text></Pressable> : null}
+    {saveError ? <Text accessibilityRole="alert" style={styles.copy}>Couldn’t save. Try again.</Text> : null}
+    {onRemove ? <Pressable onPress={onRemove} accessibilityRole="button" style={styles.action}><Text style={styles.copy}>Remove</Text></Pressable> : null}
+  </View>;
 }
-
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: radii.xl,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: `${colors.primary}24`,
-    backgroundColor: colors.surfaceElevated,
-    overflow: 'hidden',
-  },
-  header: {
-    padding: spacing.lg,
-    gap: spacing.xs,
-  },
-  cityBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    alignSelf: 'flex-start',
-    backgroundColor: `${colors.primary}18`,
-    borderRadius: radii.full,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-  },
-  cityText: {
-    fontSize: typography.text.caption.fontSize - 1,
-    fontWeight: typography.weight.semibold,
-    color: colors.primary,
-    textTransform: 'uppercase',
-    letterSpacing: typography.tracking.label,
-  },
-  intro: {
-    fontSize: typography.text.body.fontSize,
-    color: colors.inkSubtle,
-    lineHeight: typography.text.body.fontSize * 1.6,
-  },
-  productRail: { gap: spacing.md, paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
-  productCard: { height: 430, overflow: 'hidden', borderRadius: radii.lg, backgroundColor: colors.background },
-  productImageWrap: { height: 220, position: 'relative', overflow: 'hidden', backgroundColor: colors.surfaceSubtle },
-  productImage: { width: '100%', height: '100%' },
-  productFallback: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  priceBadge: { position: 'absolute', right: spacing.sm, bottom: spacing.sm, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radii.full, backgroundColor: 'rgba(250,248,245,0.92)' },
-  itemRow: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  itemRowBorder: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  categoryBadge: {
-    width: 52,
-    flexShrink: 0,
-    borderRadius: radii.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.sm,
-    gap: 3,
-  },
-  categoryLabel: {
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.bold,
-    textTransform: 'uppercase',
-    letterSpacing: typography.tracking.compact,
-  },
-  itemInfo: {
-    flex: 1,
-    gap: spacing.xs,
-    padding: spacing.md,
-  },
-  itemNameRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: spacing.xs,
-  },
-  itemName: {
-    fontSize: typography.text.sectionTitle.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-    lineHeight: typography.text.sectionTitle.fontSize * 1.3,
-  },
-  itemPrice: {
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.medium,
-    color: colors.primary,
-  },
-  itemBrand: {
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.primary,
-    letterSpacing: typography.tracking.wide,
-  },
-  itemWhy: {
-    fontSize: typography.text.caption.fontSize,
-    color: colors.mutedForeground,
-    fontStyle: 'italic',
-    lineHeight: typography.text.caption.fontSize * 1.5,
-  },
-  shopLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    minHeight: 44,
-    marginTop: 'auto',
-    borderRadius: radii.full,
-    backgroundColor: colors.foreground,
-  },
-  shopLinkText: {
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.medium,
-    color: colors.primaryForeground,
-  },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    backgroundColor: colors.surfaceSubtle,
-  },
-  budgetLabel: {
-    fontSize: typography.text.caption.fontSize,
-    textTransform: 'uppercase',
-    letterSpacing: typography.tracking.meta,
-    color: colors.mutedForeground,
-    fontWeight: typography.weight.semibold,
-  },
-  budgetValue: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.bold,
-    color: colors.foreground,
-  },
-  footerActions: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-  },
-  footerBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-  },
-  footerBtnDestructive: {
-    borderColor: `${colors.error}40`,
-  },
-  footerBtnSaved: {
-    borderColor: '#16A34A40',
-    backgroundColor: '#F0FDF4',
-  },
-  footerBtnText: {
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.medium,
-    color: colors.mutedForeground,
-  },
-  footerBtnTextSaved: {
-    color: '#16A34A',
-  },
+  root: { gap: spacing.lg }, intro: { ...typography.text.body, color: colors.inkSubtle },
+  direction: { gap: spacing.md, paddingVertical: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline },
+  title: { ...typography.text.editorialCompact, color: colors.foreground }, copy: { ...typography.text.bodySmall, color: colors.mutedForeground },
+  action: { minHeight: 48, justifyContent: 'center' }, link: { ...typography.text.label, color: curatedProducts.accent },
 });

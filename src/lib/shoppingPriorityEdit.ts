@@ -1,4 +1,4 @@
-import { parseProductOffers, type ProductOffer } from '../types/commerce';
+import { parseOfferResult, parseProductOffers, type ProductOffer } from '../types/commerce';
 import {
   parseShoppingBrief,
   type ShoppingBrief,
@@ -26,7 +26,6 @@ export type ShoppingPriorityTarget = {
   priceRange: string;
   retailerExamples: string[];
   rationale: string;
-  editorialLabel?: string;
   shoppingNotes?: string[];
   unlocks: string[];
   outfitIdeas: ShoppingPriorityOutfitIdea[];
@@ -41,6 +40,7 @@ export type ShoppingPriorityTarget = {
   // configured. Real, buyable results for this target, best first; an empty
   // list is the normal resting state, never an error.
   offers?: ProductOffer[];
+  offerState?: import('../types/commerce').OfferResult;
   // Flat projection of offers[0], kept because ShoppingPriorityTargetCard
   // reads these directly today. Field names match ShopOutfitItem in
   // src/types/shop.ts.
@@ -63,6 +63,7 @@ export type ShoppingPriorityEdit = {
   updatedBrief?: ShoppingBrief;
   /** Some style has no products yet; the hook re-asks briefly. */
   offersPending?: boolean;
+  commerceReference?: string;
 };
 
 function normalizeEditorialCopy(value: string): string {
@@ -219,22 +220,6 @@ export function shoppingPriorityGapNarrative(
  * that literally appears in `categoryLabel`, never strips a title below two
  * words, and falls back to the original whenever it cannot do both.
  */
-export function shoppingPriorityTargetDisplayTitle(title: string, categoryLabel: string): string {
-  const normalizedTitle = normalizeEditorialCopy(title);
-  const haystack = ` ${normalizeEditorialCopy(categoryLabel).toLocaleLowerCase()} `;
-  if (!normalizedTitle || haystack.trim().length === 0) return normalizedTitle;
-
-  const words = normalizedTitle.split(' ');
-  // Longest match first, then fall back — "Everyday Leather Sneakers" against
-  // "everyday leather sneakers" must not strip two words and leave "Everyday".
-  for (const size of [2, 1]) {
-    if (words.length - size < 2) continue;
-    const tail = words.slice(-size).join(' ').toLocaleLowerCase();
-    if (haystack.includes(` ${tail} `)) return words.slice(0, -size).join(' ');
-  }
-  return normalizedTitle;
-}
-
 export function shoppingPriorityEditDisplayHeadline(headline: string, priorityLabel: string): string {
   const candidate = normalizeEditorialCopy(headline).replace(/\s+gap\b/gi, "");
   const wordCount = candidate ? candidate.split(' ').length : 0;
@@ -306,11 +291,10 @@ export function parseShoppingPriorityEdit(value: unknown): ShoppingPriorityEdit 
   // the edit — see parseProductOffers. A target with no offers still renders.
   const targets = (edit.targets as ShoppingPriorityTarget[]).map((target) => {
     const offers = parseProductOffers((target as { offers?: unknown }).offers);
-    const editorialLabel = typeof target.editorialLabel === 'string' ? target.editorialLabel.trim().slice(0, 48) : undefined;
     const shoppingNotes = Array.isArray(target.shoppingNotes)
       ? target.shoppingNotes.filter((note): note is string => typeof note === 'string' && !!note.trim()).slice(0, 3).map((note) => note.trim().slice(0, 160))
       : undefined;
-    return { ...target, offers, editorialLabel, shoppingNotes };
+    return { ...target, offers, offerState: target.offerState ? parseOfferResult(target.offerState) : undefined, shoppingNotes };
   });
 
   return {
@@ -335,6 +319,7 @@ export function withoutInlineImages(edit: ShoppingPriorityEdit): ShoppingPriorit
     ...rest,
     targets: edit.targets.map((target) => ({
       ...target,
+      offerState: undefined,
       imageUrl: keep(target.imageUrl),
       offers: target.offers?.map((offer) => ({ ...offer, imageUrl: keep(offer.imageUrl) ?? null })),
     })),

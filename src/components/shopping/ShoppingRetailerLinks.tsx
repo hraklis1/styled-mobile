@@ -7,7 +7,9 @@ import { track } from '../../lib/analytics';
 import { colors, shoppingSurfaces, spacing, typography } from '../../theme';
 
 export async function openShoppingLink(url: string): Promise<void> {
-  if (!/^https?:\/\//i.test(url)) {
+  let valid = false;
+  try { valid = new URL(url).protocol === 'https:'; } catch { /* malformed */ }
+  if (!valid) {
     Alert.alert('Link unavailable', 'Please try another retailer.');
     return;
   }

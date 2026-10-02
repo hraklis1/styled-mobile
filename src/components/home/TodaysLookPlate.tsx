@@ -46,6 +46,10 @@ type LookMatProps = {
    * reach it.
    */
   interactivePlate?: boolean;
+  /** Collage tiles own their taps; the caption exposes an explicit details link. */
+  collageCaption?: boolean;
+  /** Home's editorial treatment: introduction above, a single action below. */
+  editorialCollage?: boolean;
   largeText?: boolean;
 };
 
@@ -63,7 +67,7 @@ type LookMatProps = {
  * other section content.
  */
 export function LookMat({
-  plate, eyebrow, title, note, onOpen, accessibilityLabel, captionAccessibilityLabel, action, largeText, interactivePlate,
+  plate, eyebrow, title, note, onOpen, accessibilityLabel, captionAccessibilityLabel, action, largeText, interactivePlate, collageCaption, editorialCollage,
 }: LookMatProps) {
   const caption = (
     <>
@@ -72,6 +76,34 @@ export function LookMat({
       {note ? <Text style={styles.note} numberOfLines={largeText ? 4 : 2}>{note}</Text> : null}
     </>
   );
+
+  if (collageCaption) {
+    if (editorialCollage) {
+      return (
+        <Animated.View layout={matLayout} entering={FadeIn.duration(260)} exiting={FadeOut.duration(200)} style={styles.mat}>
+          {note ? <Text style={[styles.note, styles.collageIntroduction]}>{note}</Text> : null}
+          <View style={styles.plate}>{plate}</View>
+          {action ? <View style={styles.editorialFooter}>{action}</View> : null}
+        </Animated.View>
+      );
+    }
+    return (
+      <Animated.View layout={matLayout} entering={FadeIn.duration(260)} exiting={FadeOut.duration(200)} style={styles.mat}>
+        <View style={styles.plate}>{plate}</View>
+        <View style={styles.collageCaption}>
+          {!eyebrow ? <Text style={styles.title}>{title}</Text> : null}
+          {note ? <Text style={styles.note}>{note}</Text> : null}
+          <View style={styles.collageActions}>
+            <PressableScale onPress={onOpen} contentStyle={styles.detailsLink} accessibilityRole="button" accessibilityLabel={captionAccessibilityLabel ?? `Look details: ${title}`}>
+              <Text style={styles.actionLabel}>Look details</Text>
+              <Ionicons name="arrow-forward" size={16} color={colors.foreground} accessible={false} />
+            </PressableScale>
+            {action}
+          </View>
+        </View>
+      </Animated.View>
+    );
+  }
 
   if (!action && !interactivePlate) {
     return (
@@ -141,13 +173,16 @@ type LookMatActionProps = {
   disabled?: boolean;
   accessibilityLabel: string;
   accessibilityHint?: string;
+  multiline?: boolean;
+  variant?: 'outlined' | 'text';
 };
 
 /** A 1pt outlined control for the mat's caption bar. */
-export function LookMatAction({ icon, label, onPress, disabled, accessibilityLabel, accessibilityHint }: LookMatActionProps) {
+export function LookMatAction({ icon, label, onPress, disabled, accessibilityLabel, accessibilityHint, multiline, variant = 'outlined' }: LookMatActionProps) {
   return (
     <PressableScale
-      contentStyle={[label ? styles.actionPill : styles.actionRound, disabled && styles.actionDisabled]}
+      style={multiline ? { maxWidth: '100%' } : undefined}
+      contentStyle={[variant === 'text' ? styles.textAction : label ? styles.actionPill : styles.actionRound, multiline && styles.actionMultiline, disabled && styles.actionDisabled]}
       pressedContentStyle={styles.actionPressed}
       motion="crisp"
       scaleTo={0.96}
@@ -159,8 +194,9 @@ export function LookMatAction({ icon, label, onPress, disabled, accessibilityLab
       accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled: !!disabled }}
     >
-      <Ionicons name={icon} size={label ? 15 : 17} color={colors.foreground} />
-      {label ? <Text style={styles.actionLabel} numberOfLines={1}>{label}</Text> : null}
+      {variant !== 'text' ? <Ionicons name={icon} size={label ? 15 : 17} color={colors.foreground} /> : null}
+      {label ? <Text style={styles.actionLabel} numberOfLines={multiline ? undefined : 1}>{label}</Text> : null}
+      {variant === 'text' ? <Ionicons name="arrow-forward" size={17} color={colors.foreground} accessible={false} /> : null}
     </PressableScale>
   );
 }
@@ -250,6 +286,13 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
   },
   captionCopy: { flex: 1, minWidth: 0 },
+  collageCaption: { paddingHorizontal: GUTTER, paddingTop: spacing.lg, gap: spacing.sm },
+  collageIntroduction: { marginHorizontal: GUTTER, marginBottom: spacing.lg },
+  editorialFooter: { marginHorizontal: GUTTER, marginTop: spacing.lg, paddingTop: spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, alignItems: 'flex-end' },
+  textAction: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  collageActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.md },
+  detailsLink: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  actionMultiline: { maxWidth: '100%', paddingVertical: spacing.sm },
   captionCopyInner: { gap: 6 },
   eyebrow: {
     ...typography.text.masthead,

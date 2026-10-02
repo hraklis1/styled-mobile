@@ -54,6 +54,7 @@ import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
 import { conversationLocation, type StylingLocationContext } from '../../lib/stylingLocation';
 import { formatTemp, resolveTempUnit } from '../../lib/temperature';
 import { sanitizeStylistResponseText } from '../../lib/stylistResponseText';
+import { resolveShoppingAlternativeMode } from '../../features/stylist/shoppingIntent';
 import {
   useAcceptEventOutfitPlan,
   useCreateOutfit,
@@ -806,7 +807,10 @@ export function StylistChatView({
       const lastAssistant = [...messagesRef.current]
         .reverse()
         .find((message): message is Extract<ChatMessage, { role: 'assistant' }> => message.role === 'assistant');
-      const continuationMode = !workflow && !mode ? lastAssistant?.mode : undefined;
+      const requestMode = !workflow && (!mode || mode === 'advice')
+        ? resolveShoppingAlternativeMode(text) ?? mode
+        : mode;
+      const continuationMode = !workflow && !requestMode ? lastAssistant?.mode : undefined;
       const continuationItemIds = lastAssistant
         ? Array.from(new Set([
             ...(lastAssistant.suggestedItemIds ?? []),
@@ -844,7 +848,7 @@ export function StylistChatView({
         ...(conversationIdRef.current ? { conversationId: conversationIdRef.current } : {}),
         ...(source ? { source } : {}),
         ...(requestContext ? { context: requestContext } : {}),
-        ...(mode ? { mode } : {}),
+        ...(requestMode ? { mode: requestMode } : {}),
         history,
       };
 

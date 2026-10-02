@@ -1,0 +1,21 @@
+import React from 'react';
+import TestRenderer, { act } from 'react-test-renderer';
+import { CuratedProductBrowser } from '../CuratedProductBrowser';
+import type { ProductOffer } from '../../../types/commerce';
+const mockDimensions = { width: 420, height: 900, scale: 1, fontScale: 1 };
+jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({ __esModule: true, default: () => mockDimensions }));
+jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 20, bottom: 20, left: 0, right: 0 }) }));
+jest.mock('react-native-reanimated', () => ({ useReducedMotion: () => true }));
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Icon' }));
+const offer = { id: 'one', provider: 'serper' } as ProductOffer;
+let renderer: TestRenderer.ReactTestRenderer;
+afterEach(() => act(() => renderer?.unmount()));
+test.each([[420, 1, 2], [320, 1, 1], [420, 1.4, 1]])('width %s and font scale %s use %s columns', (width, fontScale, columns) => {
+  Object.assign(mockDimensions, { width, fontScale });
+  const renderCard = jest.fn((_offer: ProductOffer, _width: number) => null);
+  act(() => { renderer = TestRenderer.create(<CuratedProductBrowser visible title="Rain shell" offers={[offer]} status="ready" context={{ targetKey: 'shell', surface: 'daily_look' }} onClose={() => {}} renderCard={renderCard} />); });
+  const renderedWidth = renderCard.mock.calls[0][1];
+  expect(renderedWidth).toBeGreaterThanOrEqual(160);
+  if (columns === 2) expect(renderedWidth).toBeLessThan(width / 2);
+  else expect(renderedWidth).toBeGreaterThan(width / 2);
+});

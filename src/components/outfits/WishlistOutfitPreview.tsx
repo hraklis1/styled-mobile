@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -31,6 +32,12 @@ const categoryIcon = (category?: string): keyof typeof Ionicons.glyphMap => {
   return CATEGORY_ICON.find(([pattern]) => pattern.test(value))?.[1] ?? 'bag-outline';
 };
 
+function PreviewImage({ uri }: { uri: string }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [uri]);
+  return failed ? <Ionicons name="shirt-outline" size={24} color={colors.mutedForeground} /> : <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit={editorial.imageFit.garment} cachePolicy="memory" transition={150} onError={() => setFailed(true)} />;
+}
+
 export function WishlistOutfitPreview({ entry, style, scale = 'tile' }: Props) {
   const savedEdit = entry.outfit.shoppingBrief;
   const outfitItems = entry.outfit.items.map((item, index) => ({
@@ -47,12 +54,7 @@ export function WishlistOutfitPreview({ entry, style, scale = 'tile' }: Props) {
   const imageItems = items.filter((item) => Boolean(item.imageUrl));
   const renderCell = (item: (typeof items)[number], index: number, cellStyle: StyleProp<ViewStyle>) => (
     <View key={`${item.key}-${index}`} style={cellStyle}>
-      <Image
-        source={{ uri: item.imageUrl! }}
-        style={StyleSheet.absoluteFill}
-        contentFit={editorial.imageFit.garment}
-        transition={150}
-      />
+      <PreviewImage uri={item.imageUrl!} />
     </View>
   );
 

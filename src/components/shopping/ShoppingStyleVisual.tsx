@@ -43,7 +43,7 @@ export function ShoppingStyleVisual({ target }: { target: ShoppingPriorityTarget
           source={{ uri }}
           style={StyleSheet.absoluteFill}
           contentFit="contain"
-          cachePolicy="memory-disk"
+          cachePolicy="memory"
           transition={reduceMotion ? 0 : 150}
           onError={() => setFailed(true)}
         />

@@ -531,3 +531,10 @@ export const ingestion = {
   /** How long "Removed · Undo" stays before the removal settles. */
   undoMs: 5000,
 } as const;
+
+/** Shared product presentation across guides, Stylist, and daily-look details. */
+export const curatedProducts = {
+  minWidth: 160, maxWidth: 320, previewFraction: 0.78, gridFontScaleLimit: 1.3, imageAspectRatio: 0.8,
+  title: typography.text.bodySmall, metadata: typography.text.caption,
+  background: shoppingSurfaces.bone, accent: shoppingSurfaces.olive.accent,
+} as const;

@@ -1,5 +1,6 @@
-import { AskStylistButton } from '../../components/home/AskStylistButton';
-import { AddToClosetButton } from '../../components/home/AddToClosetButton';
+import { HomeActionRow, type HomeActionKey, type HomeActionRowHandle } from '../../components/home/HomeActionRow';
+import { buildWearWeek } from '../../lib/wearWeek';
+import { useShoppingPriorityEdit } from '../../hooks/useShoppingPriorityEdit';
 import { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
@@ -59,7 +60,7 @@ import { useDismissDailyLook, useResolveDailyLook, useSaveDailyLook, type DailyL
 import { DailyLookDetailSheet } from '../../components/home/DailyLookDetailSheet';
 import { EditorialOutfitBoard } from '../../components/outfits/EditorialOutfitBoard';
 import { resolveBoardPieces } from '../../components/outfits/editorialBoardLayout';
-import { candidateTitle, capitalizeFirst, gapLabel } from '../../components/home/dailyLookCopy';
+import { candidateTitle, sentenceCase, capitalizeFirst, gapLabel } from '../../components/home/dailyLookCopy';
 import {
   LookMat,
   LookMatAction,
@@ -244,6 +245,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [dailyPickHistoryLoaded, setDailyPickHistoryLoaded] = useState(false);
   const [dailyLookSheetVisible, setDailyLookSheetVisible] = useState(false);
   const resumeDailyLook = useRef(false);
+  const [dailyLookSheetMode, setDailyLookSheetMode] = useState<'look' | 'suggestion'>('look');
+  const [dailyLookSheetSession, setDailyLookSheetSession] = useState(0);
   const pendingDailyItem = useRef<number | null>(null);
   const [savedDailyOutfit, setSavedDailyOutfit] = useState<Outfit | null>(null);
   const [savedDailyLookContext, setSavedDailyLookContext] = useState<SavedDailyLookContext | null>(null);
@@ -337,34 +340,36 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   // outfit photography uses everywhere else in the app.
   const plate = lookPlateSize(width);
 
-  // ── First-run "Add to my closet" coachmark ──────────────────────────────
-  // The button lost its standing caption when it shrank to match the stylist
-  // pill, so what it does is explained once, pointed at the button itself.
-  // It waits for the tab bar's shortcut coach (which opens over Home on first
-  // run) to be settled, so the two never stack; checking on focus means it
-  // lands on the next visit to Home after that.
-  const addButtonRef = useRef<View>(null);
-  const [addCoach, setAddCoach] = useState<{ top: number; left: number } | null>(null);
+  // ── First-run action tour ────────────────────────────────────────────────
+  // The three Home actions are icon discs, so what each does is taught once,
+  // step by step, pointed at each disc in turn. It waits for the tab bar's
+  // shortcut coach (which opens over Home on first run) to be settled, so the
+  // two never stack; checking on focus means it lands on the next visit.
+  const actionRowRef = useRef<HomeActionRowHandle>(null);
+  const [tour, setTour] = useState<{ step: number; rect: { x: number; y: number; width: number; height: number } } | null>(null);
   const homeSheetOpenRef = useRef(false);
   useEffect(() => {
     homeSheetOpenRef.current = dailyLookSheetVisible || locationSheetVisible || wearLogMenuEntry !== null;
   }, [dailyLookSheetVisible, locationSheetVisible, wearLogMenuEntry]);
+
+  const showTourStep = useCallback(async (step: number) => {
+    const rect = await actionRowRef.current?.measure(HOME_TOUR_STEPS[step].key);
+    if (!rect) { setTour(null); return; }
+    track('home_action_tour_step', { step: step + 1 });
+    setTour({ step, rect });
+  }, []);
 
   useFocusEffect(useCallback(() => {
     const userId = user?.id;
     if (!userId) return undefined;
     let active = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    Promise.all([hasSeenAiActionCoach('home_add_to_closet', userId), hasSeenShortcutCoach(userId)])
-      .then(([seenAdd, seenShortcut]) => {
-        if (!active || seenAdd || !seenShortcut) return;
+    Promise.all([hasSeenAiActionCoach('home_action_tour', userId), hasSeenShortcutCoach(userId)])
+      .then(([seenTour, seenShortcut]) => {
+        if (!active || seenTour || !seenShortcut) return;
         timer = setTimeout(() => {
           if (!active || lastHomeScrollY.current > 10 || homeSheetOpenRef.current) return;
-          addButtonRef.current?.measureInWindow((x, y, _w, h) => {
-            if (!active || h === 0) return;
-            track('ai_action_coach_shown', { surface: 'home_add_to_closet' });
-            setAddCoach({ top: y + h + 10, left: x });
-          });
+          void showTourStep(0);
         }, 700);
       })
       .catch(() => undefined);
@@ -372,25 +377,33 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       active = false;
       if (timer) clearTimeout(timer);
     };
-  }, [user?.id]));
+  }, [user?.id, showTourStep]));
 
-  const dismissAddCoach = useCallback((reason: 'got_it' | 'button_tap') => {
-    if (!addCoach) return;
+  const endTour = useCallback((reason: 'done' | 'skip' | 'scrim' | 'button_tap') => {
+    if (!tour) return;
     const userId = user?.id;
-    setAddCoach(null);
-    track('ai_action_coach_dismissed', { surface: 'home_add_to_closet', reason });
-    if (userId) void markAiActionCoachSeen('home_add_to_closet', userId);
-  }, [addCoach, user?.id]);
+    setTour(null);
+    track('home_action_tour_dismissed', { reason, step: tour.step + 1 });
+    if (userId) void markAiActionCoachSeen('home_action_tour', userId);
+  }, [tour, user?.id]);
+
+  const advanceTour = useCallback(() => {
+    if (!tour) return;
+    if (tour.step + 1 >= HOME_TOUR_STEPS.length) endTour('done');
+    else void showTourStep(tour.step + 1);
+  }, [tour, endTour, showTourStep]);
+
+  const loggedToday = useMemo(() => !!buildWearWeek(logs).days[6]?.log, [logs]);
 
   const handleAddToCloset = useCallback(() => {
-    dismissAddCoach('button_tap');
+    endTour('button_tap');
     track('home_wardrobe_action_tapped', { action: 'add_clothes_menu' });
     openAddSheet({
       onTakePhoto: () => openScanItem('camera'),
       onFromLibrary: () => openScanItem('library'),
       onBatchImport: openBatchScan,
     });
-  }, [dismissAddCoach, openAddSheet, openBatchScan, openScanItem]);
+  }, [endTour, openAddSheet, openBatchScan, openScanItem]);
 
   const handleRecordWear = useCallback(() => {
     track('home_wardrobe_action_tapped', { action: 'record_wear', source: 'week_in_wear' });
@@ -398,9 +411,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   }, [openLogger]);
 
   const handleLogTodaysWear = useCallback(() => {
+    endTour('button_tap');
     track('home_wardrobe_action_tapped', { action: 'record_wear', source: 'todays_wear' });
     openLogger({ quickStart: true });
-  }, [openLogger]);
+  }, [endTour, openLogger]);
 
   const handleLogPastDay = useCallback((date: string) => {
     track('home_wardrobe_action_tapped', { action: 'record_wear', source: 'week_strip_past_day' });
@@ -615,6 +629,31 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const candidateGap = dailyLookPresentation.kind === 'incomplete' || dailyLookPresentation.kind === 'priority'
     ? dailyLookPresentation.gap
     : undefined;
+  const candidateHasFlatLay = generatedCandidate?.readinessStatus === 'ready' && !!generatedCandidate.aiGeneratedImageUrl;
+  // The board's suggestion tile shows a real, in-stock product when the edit
+  // has one. Same query (and cache entry) the daily-look sheet reads.
+  const gapEdit = useShoppingPriorityEdit(
+    shoppingPriorityFromDailyLookGap(candidateGap ?? IDLE_GAP),
+    { origin: 'daily_look', enabled: !!candidateGap && !candidateHasFlatLay },
+  );
+  const suggestionOffer = useMemo(() => {
+    if (gapEdit.data?.status === 'no_buy') return undefined;
+    for (const target of gapEdit.data?.targets ?? []) {
+      const offer = target.offers?.find((candidate) => candidate.inStock !== false && candidate.imageUrl);
+      if (offer?.imageUrl) return { imageUrl: offer.imageUrl, formattedPrice: offer.formattedPrice, brand: offer.brand ?? offer.merchant };
+    }
+    return undefined;
+  }, [gapEdit.data]);
+  const hasHomeCollage = !dailyLookIsPreparing && (generatedCandidate
+    ? !candidateHasFlatLay
+    : !!featuredOutfit && !featuredOutfit.aiGeneratedImageUrl);
+  useEffect(() => {
+    resumeDailyLook.current = false;
+    pendingDailyItem.current = null;
+    setDailyLookSheetVisible(false);
+    setDailyLookSheetMode('look');
+  }, [generatedCandidate?.id, dailyPickDate, user?.id]);
+
 
 
 
@@ -722,9 +761,25 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     );
   };
 
-  const openDailyLookSheet = () => {
-    if (generatedCandidate) track('daily_look_detail_opened', { candidateId: generatedCandidate.id });
+  const closeDailyLookSheet = () => {
+    resumeDailyLook.current = false;
+    pendingDailyItem.current = null;
+    setDailyLookSheetVisible(false);
+  };
+
+  const openDailyLookSheet = (mode: 'look' | 'suggestion' = 'look') => {
+    resumeDailyLook.current = false;
+    pendingDailyItem.current = null;
+    setDailyLookSheetMode(mode);
+    setDailyLookSheetSession(session => session + 1);
+    if (generatedCandidate) track('daily_look_detail_opened', { candidateId: generatedCandidate.id, mode });
     setDailyLookSheetVisible(true);
+  };
+
+  const openDailyLookItem = (id: number) => {
+    resumeDailyLook.current = false;
+    pendingDailyItem.current = null;
+    navigation.navigate('Closet', { screen: 'ItemDetail', params: { itemId: id, returnTo: 'Home' } });
   };
 
   const handleDailyLookFindPiece = () => {
@@ -836,59 +891,47 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         </TouchableOpacity>
       </View>
 
-      <AskStylistButton style={styles.stylistEntry}
-        onPress={() => openStylist({
-          source: 'home_prompt',
-          onNavigateToCloset: (outfitId) => navigation.navigate('Closet', {
-            screen: 'OutfitDetail',
-            params: { outfitId, returnTo: 'Home' },
-          }),
-          onNavigateToShop: (gap?: StylistMissingEssential) => {
-            if (!gap?.label) return;
-            navigation.navigate('Shop', { screen: 'ShoppingPriorityEdit', params: {
-              origin: 'daily_look',
-              priority: shoppingPriorityFromDailyLookGap(gap),
-            }});
-          },
-        })}
+      <HomeActionRow
+        ref={actionRowRef}
+        style={styles.actionRow}
+        loggedToday={loggedToday}
+        onAddToCloset={handleAddToCloset}
+        onLogWear={handleLogTodaysWear}
+        onAskStylist={() => {
+          endTour('button_tap');
+          openStylist({
+            source: 'home_prompt',
+            onNavigateToCloset: (outfitId) => navigation.navigate('Closet', {
+              screen: 'OutfitDetail',
+              params: { outfitId, returnTo: 'Home' },
+            }),
+            onNavigateToShop: (gap?: StylistMissingEssential) => {
+              if (!gap?.label) return;
+              navigation.navigate('Shop', { screen: 'ShoppingPriorityEdit', params: {
+                origin: 'daily_look',
+                priority: shoppingPriorityFromDailyLookGap(gap),
+              }});
+            },
+          });
+        }}
       />
-      <View ref={addButtonRef} collapsable={false} style={styles.closetEntry}>
-        <AddToClosetButton onPress={handleAddToCloset} />
-      </View>
-
-      <PressableScale
-        style={styles.todaysWearEntry}
-        contentStyle={styles.todaysWearRow}
-        pressedContentStyle={styles.todaysWearPressed}
-        scaleTo={0.99}
-        motion="crisp"
-        haptic={false}
-        onPress={handleLogTodaysWear}
-        accessibilityRole="button"
-        accessibilityLabel="Today’s wear. Log outfit"
-        accessibilityHint="Record what you wore today"
-      >
-        <Ionicons name="calendar-outline" size={24} color={colors.foreground} accessible={false} />
-        <View style={[styles.todaysWearContent, largeText && styles.todaysWearContentLarge]}>
-          <View style={[styles.todaysWearCopy, largeText && styles.todaysWearCopyLarge]}>
-            <Text style={styles.todaysWearTitle}>Today’s wear</Text>
-            <Text style={styles.todaysWearSubtitle}>Record what you wore today</Text>
-          </View>
-          <View style={styles.todaysWearAction}>
-            <Text style={styles.todaysWearActionText}>Log outfit</Text>
-            <Ionicons name="arrow-forward" size={16} color={colors.action} accessible={false} />
-          </View>
-        </View>
-      </PressableScale>
-
       {/* ── Featured outfit ────────────────────────────────────── */}
       <EditorialSection
         variant="ruled"
         headingStyle="chapter"
         dividerPlacement="above-heading"
         title={dailyLookPresentation.kind === 'priority' ? 'Today’s Priority' : 'Today’s Look'}
-        actionLabel={dailyLookPresentation.kind === 'owned' || dailyLookPresentation.kind === 'ready' ? 'All outfits' : undefined}
-        onAction={dailyLookPresentation.kind === 'owned' || dailyLookPresentation.kind === 'ready' ? () => navigation.navigate('Closet', {
+        trailing={hasHomeCollage ? (
+          <PressableScale onPress={() => generatedCandidate ? openDailyLookSheet('look') : featuredOutfit && navigation.navigate('Closet', {
+            screen: 'OutfitDetail', params: { outfitId: featuredOutfit.id, returnTo: 'Home' },
+          })} haptic={false} motion="crisp" scaleTo={0.985}
+            contentStyle={{ minHeight: 44, justifyContent: 'center', paddingLeft: spacing.md }}
+            accessibilityRole="button" accessibilityLabel="Look details">
+            <Text style={{ ...typography.text.meta, color: colors.inkSubtle }}>Details</Text>
+          </PressableScale>
+        ) : undefined}
+        actionLabel={!hasHomeCollage && (dailyLookPresentation.kind === 'owned' || dailyLookPresentation.kind === 'ready') ? 'All outfits' : undefined}
+        onAction={!hasHomeCollage && (dailyLookPresentation.kind === 'owned' || dailyLookPresentation.kind === 'ready') ? () => navigation.navigate('Closet', {
           screen: 'ClosetMain',
           params: { segment: 'outfits' },
         }) : undefined}
@@ -899,11 +942,17 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           <LookMat
             key={`candidate-${generatedCandidate.id}`}
             largeText={largeText}
+            interactivePlate={!candidateHasFlatLay}
+            collageCaption={!candidateHasFlatLay}
+            editorialCollage={!candidateHasFlatLay}
             plate={generatedCandidate.readinessStatus === 'ready' && generatedCandidate.aiGeneratedImageUrl ? (
               <OutfitCollage outfit={generatedPreviewOutfit(generatedCandidate)} size={plate.width} height={plate.height} borderRadius={0} />
             ) : (
               <View style={{ paddingHorizontal: spacing.page, backgroundColor: colors.background }}>
-                <EditorialOutfitBoard pieces={resolveBoardPieces(candidateGap ? generatedCandidate.foundationItemIds : generatedCandidate.itemIds, items)} width={plate.width - spacing.page * 2} />
+                <EditorialOutfitBoard pieces={resolveBoardPieces(candidateGap ? generatedCandidate.foundationItemIds : generatedCandidate.itemIds, items)} width={plate.width - spacing.page * 2}
+                  onPressItem={openDailyLookItem}
+                  suggestion={candidateGap ? { label: sentenceCase(candidateGap.label), category: candidateGap.category, offer: suggestionOffer } : undefined}
+                  onPressSuggestion={handleDailyLookFindPiece} />
               </View>
             )}
             eyebrow={generatedCandidate.readinessStatus === 'incomplete'
@@ -913,13 +962,15 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                 : undefined}
             title={candidateTitle(generatedCandidate, candidateGap)}
             note={capitalizeFirst(featuredExplanation ?? generatedCandidate.reason)}
-            onOpen={openDailyLookSheet}
+            onOpen={() => openDailyLookSheet('look')}
             accessibilityLabel={`${generatedCandidate.name}. ${generatedCandidate.reason}. Open details`}
-            captionAccessibilityLabel={`Open ${candidateTitle(generatedCandidate, candidateGap)}`}
-            action={candidateGap ? (
+            captionAccessibilityLabel={candidateHasFlatLay ? `Open ${candidateTitle(generatedCandidate, candidateGap)}` : `Look details: ${candidateTitle(generatedCandidate, candidateGap)}`}
+            action={candidateGap && !candidateHasFlatLay ? undefined : candidateGap ? (
               <LookMatAction
                 icon="bag-outline"
-                label="Find it"
+                variant={candidateHasFlatLay ? 'outlined' : 'text'}
+                label={candidateHasFlatLay ? 'Find it' : candidateGap.category === 'outerwear' ? 'Find a layer' : 'Find this piece'}
+                multiline={!candidateHasFlatLay}
                 onPress={handleDailyLookFindPiece}
                 disabled={saveDailyLook.isPending}
                 accessibilityLabel={`Find ${gapLabel(candidateGap.label)}, suggested and not in your closet`}
@@ -939,10 +990,13 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           <LookMat
             key={`outfit-${featuredOutfit.id}`}
             largeText={largeText}
+            interactivePlate={!featuredOutfit.aiGeneratedImageUrl}
+            collageCaption={!featuredOutfit.aiGeneratedImageUrl}
+            editorialCollage={!featuredOutfit.aiGeneratedImageUrl}
             plate={(
               featuredOutfit.aiGeneratedImageUrl ? <OutfitCollage outfit={featuredOutfit} size={plate.width} height={plate.height} borderRadius={0} /> :
               <View style={{ paddingHorizontal: spacing.page, backgroundColor: colors.background }}>
-                <EditorialOutfitBoard pieces={resolveBoardPieces(featuredOutfit.itemIds, items)} width={plate.width - spacing.page * 2} />
+                <EditorialOutfitBoard pieces={resolveBoardPieces(featuredOutfit.itemIds, items)} width={plate.width - spacing.page * 2} onPressItem={openDailyLookItem} />
               </View>
             )}
             title={featuredOutfit.name}
@@ -1145,10 +1199,12 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       <DailyLookDetailSheet
         visible={dailyLookSheetVisible && !!generatedCandidate}
         candidate={generatedCandidate}
+        mode={dailyLookSheetMode}
+        sessionKey={dailyLookSheetSession}
         items={items}
         saving={saveDailyLook.isPending}
         dismissing={dismissDailyLook.isPending}
-        onClose={() => setDailyLookSheetVisible(false)}
+        onClose={closeDailyLookSheet}
         onSave={handleDailyLookSave}
         onDismiss={handleDailyLookDismiss}
         onFindPiece={handleDailyLookFindPiece}
@@ -1190,15 +1246,44 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         />
       )}
       <AiActionCoachmark
-        visible={!!addCoach}
-        title="Add to my closet"
-        body="Photograph pieces you own, pick from your library, or import several at once. Every look is styled from what you add."
-        onDismiss={() => dismissAddCoach('got_it')}
-        style={addCoach ? { top: addCoach.top, left: addCoach.left } : undefined}
-        caretLeft={spacing.control + 5}
+        visible={!!tour}
+        title={tour ? HOME_TOUR_STEPS[tour.step].title : ''}
+        body={tour ? HOME_TOUR_STEPS[tour.step].body : ''}
+        step={tour?.step}
+        stepCount={HOME_TOUR_STEPS.length}
+        primaryLabel={tour && tour.step + 1 >= HOME_TOUR_STEPS.length ? 'Done' : 'Next'}
+        onPrimary={advanceTour}
+        onSkip={() => endTour('skip')}
+        onDismiss={() => endTour('scrim')}
+        spotlight={tour?.rect}
+        style={tour ? tourCalloutPosition(tour.rect, width) : undefined}
+        caretLeft={tour ? tourCaretLeft(tour.rect, width) : undefined}
+        scrimAccessibilityLabel="Dismiss tour"
       />
     </View>
   );
+}
+
+/** Keeps the gap-edit hook's call shape stable while there is no gap (query disabled). */
+const IDLE_GAP: StylistMissingEssential = { label: '', category: 'top', reason: '', context: '', priority: 0 };
+
+const HOME_TOUR_STEPS: { key: HomeActionKey; title: string; body: string }[] = [
+  { key: 'stylist', title: 'Your stylist', body: 'Ask for an outfit, a second opinion, or what to pack for a trip.' },
+  { key: 'closet', title: 'Add to your closet', body: 'Snap or import pieces — we cut them out and tag them for you. Every look is styled from what you add.' },
+  { key: 'wear', title: 'Log today’s outfit', body: 'Record what you wore. It sharpens tomorrow’s suggestions and fills your week in wear.' },
+];
+const TOUR_CALLOUT_WIDTH = 260;
+const TOUR_EDGE = 16;
+
+/** Callout sits below the disc, centred on it but kept inside the screen. */
+function tourCalloutPosition(rect: { x: number; y: number; width: number; height: number }, screenWidth: number) {
+  const centre = rect.x + rect.width / 2;
+  const left = Math.min(Math.max(TOUR_EDGE, centre - TOUR_CALLOUT_WIDTH / 2), screenWidth - TOUR_EDGE - TOUR_CALLOUT_WIDTH);
+  // Clears the disc's one-word caption so the label stays readable.
+  return { top: rect.y + rect.height + 44, left, width: TOUR_CALLOUT_WIDTH };
+}
+function tourCaretLeft(rect: { x: number; y: number; width: number; height: number }, screenWidth: number) {
+  return rect.x + rect.width / 2 - tourCalloutPosition(rect, screenWidth).left - 5;
 }
 
 // ── Styles ───────────────────────────────────────────────────────────────────
@@ -1298,31 +1383,8 @@ const styles = StyleSheet.create({
   },
 
   // The two launchers read as a pair, then hand off to the first section.
-  stylistEntry: { marginBottom: spacing.md },
-  closetEntry: { marginBottom: spacing.sm },
+  actionRow: { marginTop: spacing.md, marginBottom: spacing.sm },
 
-  todaysWearEntry: { marginTop: spacing.md },
-  todaysWearRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  todaysWearPressed: { backgroundColor: colors.surfaceSubtle },
-  todaysWearContent: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  todaysWearContentLarge: { flexDirection: 'column', alignItems: 'flex-start' },
-  todaysWearCopy: { flex: 1, gap: spacing.xs },
-  todaysWearCopyLarge: { flex: 0, alignSelf: 'stretch' },
-  todaysWearTitle: { ...typography.text.editorialSection, color: colors.foreground },
-  todaysWearSubtitle: { ...typography.text.caption, color: colors.mutedForeground },
-  todaysWearAction: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexShrink: 0 },
-  todaysWearActionText: {
-    ...typography.text.label,
-    fontWeight: typography.weight.medium,
-    color: colors.action,
-  },
 
   // Empty wardrobe nudge
   nudgeCard: {

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { parseShoppingPriorityEdit } from '../lib/shoppingPriorityEdit';
 import type { ShoppingBriefPriority } from '../lib/shopDecisionWorkspace';
+import { useProductOffers, useCommerceActive } from './useProductOffers';
 import { SHOPPING_BRIEF_QUERY_KEY } from './useShoppingBrief';
 
 export const SHOPPING_PRIORITY_EDIT_QUERY_KEY = ['shop', 'brief', 'priority-edit'] as const;
@@ -10,6 +11,7 @@ export const SHOPPING_PRIORITY_EDIT_QUERY_KEY = ['shop', 'brief', 'priority-edit
 type ShoppingPriorityEditRequestContext = {
   origin?: 'shopping_brief' | 'daily_look';
   briefGeneratedAt?: string;
+  enabled?: boolean;
 };
 
 export function shoppingPriorityEditQueryKey(
@@ -18,17 +20,12 @@ export function shoppingPriorityEditQueryKey(
 ) {
   return [
     ...SHOPPING_PRIORITY_EDIT_QUERY_KEY,
-    'editorial-v1',
+    'editorial-v3-commerce',
     priority,
     context.origin ?? null,
     context.briefGeneratedAt ?? null,
   ] as const;
 }
-
-// Backs off rather than polling flat: the commerce provider soft-blocks for
-// ~60s after a burst, and every re-ask re-fires each missing search, so quick
-// retries both land inside the block and extend it. The last ask comes ~95s in.
-const OFFER_REFETCH_DELAYS_MS = [8_000, 25_000, 60_000];
 
 export function useShoppingPriorityEdit(
   priority: ShoppingBriefPriority,
@@ -36,7 +33,9 @@ export function useShoppingPriorityEdit(
 ) {
   const queryClient = useQueryClient();
   const { origin, briefGeneratedAt } = context;
+  const active = useCommerceActive(context.enabled !== false);
   const query = useQuery({
+    enabled: active,
     queryKey: shoppingPriorityEditQueryKey(priority, { origin, briefGeneratedAt }),
     queryFn: () => api.post('/api/shop/brief/priority-edit', {
       priority,
@@ -45,14 +44,7 @@ export function useShoppingPriorityEdit(
     }).then((response) => parseShoppingPriorityEdit(response.data)),
     staleTime: 24 * 60 * 60 * 1000,
     retry: 1,
-    // Products can land in the server's offer cache a few seconds after the
-    // guide is served (a slow search finishes in the background). Re-ask a
-    // few times, backing off, so they appear without waiting out the 24h staleTime; repeat
-    // asks hit the server's edit and offer caches, so they cost nothing.
-    refetchInterval: (current) =>
-      current.state.data?.offersPending
-        ? OFFER_REFETCH_DELAYS_MS[current.state.dataUpdateCount - 1] ?? false
-        : false,
+
   });
 
   useEffect(() => {
@@ -60,5 +52,11 @@ export function useShoppingPriorityEdit(
     queryClient.setQueriesData({ queryKey: SHOPPING_BRIEF_QUERY_KEY }, query.data.updatedBrief);
   }, [query.data, queryClient]);
 
-  return query;
+  const offers = useProductOffers({ reference: query.data?.commerceReference, surface: context.origin ?? 'shopping_guide' }, active && !!query.data);
+  const data = query.data ? { ...query.data, targets: query.data.targets.map((target) => {
+    const state = offers.isError || offers.fetchStatus === 'paused' ? { status: 'unavailable' as const, offers: offers.data?.[target.key]?.offers ?? target.offers ?? [], retrievedAt: null, expiresAt: null } : offers.data?.[target.key] ?? target.offerState;
+    return state ? { ...target, offers: state.offers, offerState: state } : target;
+  }) } : undefined;
+  return { ...query, data, refreshOffers: offers.refetch };
+
 }

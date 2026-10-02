@@ -4,7 +4,6 @@ import {
   shoppingPriorityEditDisplayHeadline,
   shoppingPriorityGapNarrative,
   shoppingPriorityGapStatement,
-  shoppingPriorityTargetDisplayTitle,
   splitPriceRange,
   targetOutfitIdeas,
   type ShoppingPriorityTarget,
@@ -224,26 +223,6 @@ describe('shoppingPriorityGapNarrative', () => {
   });
 });
 
-describe('shoppingPriorityTargetDisplayTitle', () => {
-  it('strips a trailing category noun the page already states', () => {
-    expect(shoppingPriorityTargetDisplayTitle('Charcoal Tapered Trousers', 'tailored dress trousers')).toBe('Charcoal Tapered');
-    expect(shoppingPriorityTargetDisplayTitle('Deep Navy Trousers', 'Trousers Worth Having')).toBe('Deep Navy');
-  });
-
-  it('prefers the shorter strip rather than cutting a title below two words', () => {
-    expect(shoppingPriorityTargetDisplayTitle('Everyday Leather Sneakers', 'everyday leather sneakers')).toBe('Everyday Leather');
-  });
-
-  it('leaves a two-word title alone rather than reducing it to one', () => {
-    expect(shoppingPriorityTargetDisplayTitle('Navy Trousers', 'tailored dress trousers')).toBe('Navy Trousers');
-  });
-
-  it('passes through a title that shares nothing with the category', () => {
-    expect(shoppingPriorityTargetDisplayTitle('  Charcoal   Tapered Chinos ', 'tailored dress trousers')).toBe('Charcoal Tapered Chinos');
-    expect(shoppingPriorityTargetDisplayTitle('Charcoal Tapered Trousers', '   ')).toBe('Charcoal Tapered Trousers');
-  });
-});
-
 describe('splitPriceRange', () => {
   it('lifts the currency out and drops the repeated symbol', () => {
     expect(splitPriceRange('$180–$350 CAD')).toEqual({ compact: '$180–350', currency: 'CAD' });
@@ -314,13 +293,12 @@ describe('targetOutfitIdeas', () => {
 });
 
 test.each([1, 3, 5])('accepts %i styles and preserves optional editorial guidance', (count) => {
-  const result = parseShoppingPriorityEdit({ status: 'ready', headline: 'Trousers', summary: 'Try these with your jacket.', generatedAt: '2026-09-28', priority, targets: Array.from({ length: count }, (_, i) => ({ ...target(String(i)), editorialLabel: 'Best first choice', shoppingNotes: ['Wool blend', 'Clean front'] })) });
+  const result = parseShoppingPriorityEdit({ status: 'ready', headline: 'Trousers', summary: 'Try these with your jacket.', generatedAt: '2026-09-28', priority, targets: Array.from({ length: count }, (_, i) => ({ ...target(String(i)), shoppingNotes: ['Wool blend', 'Clean front'] })) });
   expect(result.targets).toHaveLength(count);
   expect(result.targets[0].shoppingNotes).toEqual(['Wool blend', 'Clean front']);
 });
 test('malformed optional offers and guidance do not break the guide', () => {
-  const result = parseShoppingPriorityEdit({ status: 'ready', headline: 'Trousers', summary: 'Try these.', generatedAt: '2026-09-28', priority, targets: [{ ...target('a'), offers: [{}], editorialLabel: 123, shoppingNotes: [null, 'Wool blend'] }] });
+  const result = parseShoppingPriorityEdit({ status: 'ready', headline: 'Trousers', summary: 'Try these.', generatedAt: '2026-09-28', priority, targets: [{ ...target('a'), offers: [{}], shoppingNotes: [null, 'Wool blend'] }] });
   expect(result.targets[0].offers).toEqual([]);
-  expect(result.targets[0].editorialLabel).toBeUndefined();
   expect(result.targets[0].shoppingNotes).toEqual(['Wool blend']);
 });

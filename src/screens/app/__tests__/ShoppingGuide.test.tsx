@@ -1,3 +1,4 @@
+jest.mock('@react-navigation/native', () => ({ ...jest.requireActual('@react-navigation/native'), usePreventRemove: jest.fn() }));
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { ShoppingPriorityEdit } from '../../../lib/shoppingPriorityEdit';

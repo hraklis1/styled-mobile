@@ -1,9 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DailyLookShoppingOptions } from './DailyLookShoppingOptions';
 import { OutfitCollage } from '../outfits/OutfitCollage';
 import { EditorialOutfitBoard } from '../outfits/EditorialOutfitBoard';
 import { resolveBoardPieces } from '../outfits/editorialBoardLayout';
@@ -19,6 +20,8 @@ type Props = {
   visible: boolean;
   candidate: DailyLookCandidate | null;
   items: Item[];
+  mode?: 'look' | 'suggestion';
+  sessionKey?: number;
   saving?: boolean;
   dismissing?: boolean;
   onClose: () => void;
@@ -48,6 +51,12 @@ function previewOutfit(candidate: DailyLookCandidate): Outfit {
   };
 }
 
+function containsSentence(a: string | null | undefined, b: string | null | undefined): boolean {
+  const norm = (value: string | null | undefined) => (value ?? '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+  const fragment = norm(b);
+  return !!fragment && norm(a).includes(fragment);
+}
+
 function sameSentence(a: string | null | undefined, b: string | null | undefined): boolean {
   const norm = (value: string | null | undefined) => (value ?? '').toLowerCase().replace(/[^a-z]/g, '');
   return norm(a) === norm(b);
@@ -60,6 +69,8 @@ export function DailyLookDetailSheet({
   visible,
   candidate,
   items,
+  mode = 'look',
+  sessionKey = 0,
   saving = false,
   dismissing = false,
   onClose,
@@ -70,10 +81,23 @@ export function DailyLookDetailSheet({
   onSheetDismissed,
 }: Props) {
   const { width } = useWindowDimensions();
+  const [shoppingOpen, setShoppingOpen] = useState(false);
+  const [exploreRequest, setExploreRequest] = useState(0);
+  const [shoppingAvailable, setShoppingAvailable] = useState(false);
+  useEffect(() => { setShoppingOpen(false); setExploreRequest(0); setShoppingAvailable(false); }, [candidate?.id, sessionKey]);
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const scrollOffset = useRef(0);
-  useEffect(() => { scrollOffset.current = 0; }, [candidate?.id]);
+  const restoringScroll = useRef(false);
+  useEffect(() => {
+    scrollOffset.current = 0;
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [candidate?.id, sessionKey, mode]);
+  useEffect(() => { if (!visible) restoringScroll.current = true; }, [visible]);
+  const restoreScroll = () => {
+    scrollRef.current?.scrollTo({ y: scrollOffset.current, animated: false });
+    requestAnimationFrame(() => { restoringScroll.current = false; });
+  };
   useEffect(() => {
     if (visible || Platform.OS === 'ios') return;
     const timer = setTimeout(onSheetDismissed, 350);
@@ -84,21 +108,63 @@ export function DailyLookDetailSheet({
   const busy = saving || dismissing;
   const isReady = candidate.readinessStatus === 'ready';
   const isPriority = candidate.readinessStatus === 'priority';
+  const hasFlatLay = isReady && !!candidate.aiGeneratedImageUrl;
   const gap = candidate.missingEssentials[0];
 
   const plateWidth = width - spacing.page * 2;
   const plateHeight = Math.round(plateWidth / editorial.outfitAspectRatio);
   const ownedPieces = resolveBoardPieces(!isReady && gap ? candidate.foundationItemIds : candidate.itemIds, items);
-  const title = candidateTitle(candidate, gap);
-  const eyebrow = isReady ? 'Styled for you today' : isPriority ? 'Highest-impact gap' : 'One piece away';
+  const isSuggestion = !hasFlatLay && !isReady && !!gap && mode === 'suggestion';
+  const shoppingActive = isSuggestion || shoppingOpen;
+  const title = isSuggestion && gap ? sentenceCase(gap.label) : candidateTitle(candidate, gap);
+  const eyebrow = isSuggestion ? 'TO COMPLETE YOUR LOOK' : isReady ? 'Styled for you today' : 'Suggested addition';
   const reason = capitalizeFirst(candidate.reason);
   const notes = candidate.stylistNotes && !sameSentence(candidate.stylistNotes, candidate.reason)
     ? capitalizeFirst(candidate.stylistNotes)
     : null;
+  const suggestionNotes = !isReady && gap && notes && containsSentence(notes, gap.label) ? notes : null;
   const specs = gap
     ? ([['Formality', gap.formality], ['Silhouette', gap.silhouette], ['Material', gap.material]] as [string, string | undefined][])
       .filter((entry): entry is [string, string] => !!entry[1])
     : [];
+
+  const story = (
+    <View style={[styles.story, isSuggestion && { paddingTop: 0 }]}>
+      {isSuggestion || hasFlatLay ? <Text style={styles.standfirst}>{reason}</Text> : null}
+      {notes && !isSuggestion && !suggestionNotes ? <Text style={styles.notes}>{notes}</Text> : null}
+      {isSuggestion && gap?.context && !containsSentence(reason, gap.context)
+        ? <Text style={styles.notes}>{capitalizeFirst(gap.context)}</Text> : null}
+    </View>
+  );
+  const criteria = !isReady && gap && (!isSuggestion || specs.length > 0 || !!gap.preferredColors?.length) ? (
+    <View style={[styles.section, isSuggestion && { paddingTop: 0, borderTopWidth: 0, marginTop: spacing.md }]}>
+      {!isSuggestion ? <Text style={styles.sectionLabel}>Suggested addition</Text> : null}
+      {!isSuggestion ? <Text style={styles.pieceTitle}>{sentenceCase(gap.label)}</Text> : null}
+      {!isSuggestion && suggestionNotes ? <Text style={styles.pieceContext}>{suggestionNotes}</Text> : null}
+      {!isSuggestion && gap.context && !containsSentence(suggestionNotes, gap.context) ? <Text style={styles.pieceContext}>{capitalizeFirst(gap.context)}</Text> : null}
+      <View style={styles.specList}>
+        {specs.map(([name, value]) => (
+          <View key={name} style={styles.specRow}>
+            <Text style={styles.specName}>{name}</Text>
+            <Text style={[styles.specValue, { flex: 1, flexShrink: 1 }]}>{capitalizeFirst(gapLabel(value))}</Text>
+          </View>
+        ))}
+        {gap.preferredColors && gap.preferredColors.length > 0 ? (
+          <View style={styles.specRow}>
+            <Text style={styles.specName}>Colours</Text>
+            <View style={styles.swatches}>
+              {gap.preferredColors.slice(0, 4).map((color) => (
+                <View key={color} style={styles.swatchItem}>
+                  <View style={[styles.swatch, { backgroundColor: getSwatchColor(color.toLowerCase()).primary }]} />
+                  <Text style={styles.specValue}>{capitalizeFirst(color)}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+      </View>
+    </View>
+  ) : null;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose} onDismiss={onSheetDismissed}>
@@ -106,11 +172,11 @@ export function DailyLookDetailSheet({
         <View style={styles.header}>
           <View style={styles.grabber} />
           <View style={styles.headerRow}>
-            <Text style={styles.headerTitle}>{isPriority ? 'Today’s Priority' : 'Today’s Look'}</Text>
+            {isSuggestion ? <View style={{ flex: 1 }} /> : <Text style={[styles.headerTitle, !hasFlatLay && { flex: 1, flexShrink: 1 }]}>{isPriority ? 'Today’s Priority' : 'Today’s Look'}</Text>}
             <Pressable
               onPress={onClose}
               hitSlop={12}
-              style={({ pressed }) => [styles.close, pressed && styles.closePressed]}
+              style={({ pressed }) => [styles.close, isSuggestion && styles.quietClose, !hasFlatLay && { flexShrink: 0 }, pressed && styles.closePressed]}
               accessibilityRole="button"
               accessibilityLabel="Close daily look details"
             >
@@ -120,50 +186,53 @@ export function DailyLookDetailSheet({
         </View>
 
         <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}
-          onScroll={(event) => { scrollOffset.current = event.nativeEvent.contentOffset.y; }} scrollEventThrottle={16}
-          onContentSizeChange={() => { scrollRef.current?.scrollTo({ y: scrollOffset.current, animated: false }); }}>
-          <View style={{ gap: spacing.xs, paddingBottom: spacing.lg }}>
+          onScroll={(event) => { if (visible && !restoringScroll.current) scrollOffset.current = event.nativeEvent.contentOffset.y; }} scrollEventThrottle={16}
+          contentOffset={{ x: 0, y: scrollOffset.current }}
+          onLayout={restoreScroll} onContentSizeChange={restoreScroll}>
+          {isSuggestion || isReady ? <View style={{ gap: spacing.xs, paddingBottom: spacing.lg }}>
             <Text style={styles.eyebrow}>{eyebrow}</Text>
             <Text style={styles.title}>{title}</Text>
-          </View>
-          {isReady && candidate.aiGeneratedImageUrl ? <OutfitCollage outfit={previewOutfit(candidate)} size={plateWidth} height={plateHeight} borderRadius={radii.photo} /> :
-            <EditorialOutfitBoard pieces={ownedPieces} width={plateWidth} onPressItem={onOpenItem} />}
-
-          <View style={styles.story}>
-            <Text style={styles.standfirst}>{reason}</Text>
-            {notes ? <Text style={styles.notes}>{notes}</Text> : null}
-          </View>
-
-          {!isReady && gap ? (
-            <View style={styles.section} accessible accessibilityLabel={`The missing piece: ${gapLabel(gap.label)}. ${gap.context}`}>
-              <Text style={styles.sectionLabel}>Suggested addition</Text>
-              {sameSentence(title, gap.label) ? null : <Text style={styles.pieceTitle}>{sentenceCase(gap.label)}</Text>}
-              {gap.context ? <Text style={[styles.pieceContext, sameSentence(title, gap.label) && styles.pieceContextLead]}>{capitalizeFirst(gap.context)}</Text> : null}
-              <View style={styles.specList}>
-                {specs.map(([name, value]) => (
-                  <View key={name} style={styles.specRow}>
-                    <Text style={styles.specName}>{name}</Text>
-                    <Text style={styles.specValue}>{capitalizeFirst(gapLabel(value))}</Text>
-                  </View>
-                ))}
-                {gap.preferredColors && gap.preferredColors.length > 0 ? (
-                  <View style={styles.specRow}>
-                    <Text style={styles.specName}>Colours</Text>
-                    <View style={styles.swatches}>
-                      {gap.preferredColors.slice(0, 4).map((color) => (
-                        <View key={color} style={styles.swatchItem}>
-                          <View style={[styles.swatch, { backgroundColor: getSwatchColor(color.toLowerCase()).primary }]} />
-                          <Text style={styles.specValue}>{capitalizeFirst(color)}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                ) : null}
+          </View> : null}
+          {isSuggestion ? story : null}
+          {isSuggestion ? criteria : null}
+          {!isSuggestion && !hasFlatLay ? <Text style={[styles.standfirst, { marginBottom: spacing.sm }]}>{reason}</Text> : null}
+          {!isSuggestion ? (
+            hasFlatLay ? <OutfitCollage outfit={previewOutfit(candidate)} size={plateWidth} height={plateHeight} borderRadius={radii.photo} /> :
+              <View style={{ paddingTop: spacing.lg }}>
+                <EditorialOutfitBoard pieces={ownedPieces} width={plateWidth} onPressItem={onOpenItem} />
               </View>
+          ) : null}
+          {!isSuggestion && (hasFlatLay || (notes && !suggestionNotes)) ? story : null}
+          {!isSuggestion ? criteria : null}
+
+          {isSuggestion && ownedPieces.length > 0 ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>With your closet</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.previewCascade}>
+                {ownedPieces.map((piece, index) => {
+                  const uri = itemPhotoUri(piece.item, { thumb: true });
+                  return <Pressable key={piece.id} disabled={!piece.item} onPress={() => onOpenItem(piece.id)}
+                    style={({ pressed }) => [styles.previewTile, { marginLeft: index === 0 ? 0 : -10 }, pressed && styles.pieceRowPressed]}
+                    accessibilityRole={piece.item ? 'button' : undefined}
+                    accessibilityLabel={piece.item?.name ?? `${piece.category}, unavailable wardrobe piece`}
+                    accessibilityHint={piece.item ? 'Open wardrobe item details' : undefined}>
+                    <View style={styles.previewPhoto}>
+                      {uri ? <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory-disk" /> : <Ionicons name="shirt-outline" size={20} color={colors.mutedForeground} />}
+                    </View>
+                  </Pressable>;
+                })}
+              </ScrollView>
             </View>
           ) : null}
 
-          {ownedPieces.length > 0 ? (
+          {isSuggestion && gap ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Complete your look</Text>
+              <DailyLookShoppingOptions gap={gap} visible={visible} reason={reason} exploreRequest={exploreRequest} onAvailabilityChange={setShoppingAvailable} />
+            </View>
+          ) : null}
+
+          {hasFlatLay && ownedPieces.length > 0 ? (
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>{isReady ? 'The pieces' : 'From your closet'}</Text>
               {ownedPieces.map((piece) => {
@@ -195,12 +264,13 @@ export function DailyLookDetailSheet({
               })}
             </View>
           ) : null}
+          {shoppingOpen && !isReady && !isSuggestion && gap ? <DailyLookShoppingOptions gap={gap} visible={visible} reason={reason} exploreRequest={exploreRequest} onAvailabilityChange={setShoppingAvailable} /> : null}
         </ScrollView>
 
         <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
           {isReady ? (
             <PressableScale
-              contentStyle={styles.primary}
+              contentStyle={[styles.primary, !hasFlatLay && { paddingVertical: spacing.md }]}
               onPress={onSave}
               disabled={busy}
               accessibilityRole="button"
@@ -209,18 +279,20 @@ export function DailyLookDetailSheet({
               <Ionicons name="bookmark-outline" size={17} color={colors.primaryForeground} />
               <Text style={styles.primaryText}>{saving ? 'Saving…' : 'Save look'}</Text>
             </PressableScale>
-          ) : gap ? (
+          ) : gap && (!shoppingActive || shoppingAvailable) ? (
             <PressableScale
-              contentStyle={styles.primary}
-              onPress={onFindPiece}
-              disabled={busy}
+              contentStyle={[styles.primary, !hasFlatLay && { paddingVertical: spacing.md }]}
+              onPress={() => shoppingActive ? setExploreRequest(value => value + 1) : setShoppingOpen(true)}
+              disabled={busy || (shoppingActive && !shoppingAvailable)}
               accessibilityRole="button"
-              accessibilityLabel={`Find a ${gapLabel(gap.label)}, suggested and not in your closet`}
+              accessibilityLabel={shoppingActive ? 'Explore all options' : `Find a ${gapLabel(gap.label)}, suggested and not in your closet`}
             >
               <Ionicons name="bag-outline" size={17} color={colors.primaryForeground} />
-              <Text style={styles.primaryText} numberOfLines={1}>Find a {gapLabel(gap.label).toLowerCase()}</Text>
+              <Text style={[styles.primaryText, !hasFlatLay && styles.primaryTextWrap]} numberOfLines={hasFlatLay ? 1 : undefined}>{shoppingActive ? 'Explore all options' : `Find a ${gapLabel(gap.label).toLowerCase()}`}</Text>
             </PressableScale>
           ) : null}
+          <View style={isSuggestion ? styles.secondaryActions : undefined}>
+          {shoppingActive && !isReady ? <Pressable onPress={onFindPiece} accessibilityRole="button" accessibilityLabel="Read styling notes" style={({ pressed }) => [styles.dismiss, pressed && styles.dismissPressed]}><Text style={styles.dismissText}>Read styling notes</Text></Pressable> : null}
           <Pressable
             onPress={onDismiss}
             disabled={busy}
@@ -231,6 +303,7 @@ export function DailyLookDetailSheet({
           >
             <Text style={styles.dismissText}>{dismissing ? 'Updating…' : 'Not for me'}</Text>
           </Pressable>
+          </View>
         </View>
       </View>
     </Modal>
@@ -259,6 +332,7 @@ const styles = StyleSheet.create({
     borderWidth: stroke.fine,
     borderColor: colors.ghostStroke,
   },
+  quietClose: { borderWidth: 0 },
   closePressed: { backgroundColor: colors.surfaceSubtle },
   content: { paddingHorizontal: spacing.page, paddingBottom: spacing.xxxl },
   story: { paddingTop: spacing.xl, gap: spacing.xs },
@@ -320,6 +394,10 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
+  previewCascade: { paddingVertical: spacing.xs },
+  previewTile: { width: 92, height: 96 },
+  previewPhoto: { flex: 1, backgroundColor: colors.surfaceSubtle, borderRadius: radii.sm, borderWidth: 2, borderColor: colors.background, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  primaryTextWrap: { flexShrink: 1, textAlign: 'center' },
   primary: {
     minHeight: 52,
     borderRadius: radii.full,
@@ -331,6 +409,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   primaryText: { ...typography.text.label, color: colors.primaryForeground },
+  secondaryActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', columnGap: spacing.md },
   dismiss: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   dismissPressed: { opacity: 0.5 },
   dismissText: { ...typography.text.meta, color: colors.mutedForeground },

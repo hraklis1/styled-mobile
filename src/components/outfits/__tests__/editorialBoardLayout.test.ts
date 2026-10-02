@@ -1,5 +1,5 @@
 jest.mock('../../../lib/api', () => ({ API_BASE_URL: 'https://example.com' }));
-import { boardPhotoUri, editorialBoardRows, resolveBoardPieces } from '../editorialBoardLayout';
+import { boardPhotoUri, editorialBoardDisplayRows, editorialBoardRows, resolveBoardPieces } from '../editorialBoardLayout';
 import type { Item } from '../../../types/item';
 const pieces = (...categories: string[]) => categories.map((category, id) => ({ id, category }));
 const item = (fields: Partial<Item>) => ({ id: 1, ...fields }) as Item;
@@ -28,4 +28,28 @@ test('respects polish and never falls back to cutouts', () => {
 });
 test('resolves wardrobe categories and retains unavailable entries', () => {
   expect(resolveBoardPieces([{ id: 1, category: 'top' }, { id: 2, category: 'bottom' }], [item({ category: 'outerwear' })]).map(p => p.category)).toEqual(['outerwear', 'bottom']);
+});
+
+describe('suggested addition layout', () => {
+  const suggestion = { label: 'Weatherproof layer', category: 'outerwear' };
+  test('pairs shoes with the suggestion while preserving top and bottom', () => {
+    const rows = editorialBoardDisplayRows(pieces('top', 'bottom', 'shoes'), suggestion);
+    expect(rows[0].foundation).toBe(true);
+    expect(rows[0].pieces.map(tile => tile.kind === 'owned' && tile.piece.category)).toEqual(['top', 'bottom']);
+    expect(rows[1].pieces.map(tile => tile.kind)).toEqual(['owned', 'suggestion']);
+    expect(rows[1].pieces[1]).toEqual({ kind: 'suggestion', suggestion });
+    expect(rows[1].pieces[1]).not.toHaveProperty('id');
+  });
+  test('retains a single foundation and balances supporting rows', () => {
+    const rows = editorialBoardDisplayRows(pieces('dress', 'shoes', 'bag', 'accessory'), suggestion);
+    expect(rows.map(row => [row.foundation, row.pieces.length])).toEqual([[true, 1], [false, 2], [false, 2]]);
+    expect(rows.flatMap(row => row.pieces).filter(tile => tile.kind === 'owned')).toHaveLength(4);
+  });
+  test('preserves existing layout when no suggestion is provided', () => {
+    const input = pieces('top', 'bottom', 'outerwear', 'shoes', 'bag');
+    expect(editorialBoardDisplayRows(input).map(row => ({ ...row, pieces: row.pieces.map(tile => tile.kind === 'owned' && tile.piece) }))).toEqual(editorialBoardRows(input));
+  });
+  test('renders a suggestion even without any resolved foundation entries', () => {
+    expect(editorialBoardDisplayRows([], suggestion)).toEqual([{ foundation: false, pieces: [{ kind: 'suggestion', suggestion }] }]);
+  });
 });

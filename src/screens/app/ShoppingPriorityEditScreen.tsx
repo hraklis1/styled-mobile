@@ -23,7 +23,7 @@ import { wearableWardrobe, withoutOutfitCount } from '../../lib/shopClarity';
 import { shoppingGarmentTitle, styleFollowupQuestions } from '../../lib/shoppingEditorial';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { track } from '../../lib/analytics';
-import { shoppingPriorityTargetDisplayTitle, withoutInlineImages } from '../../lib/shoppingPriorityEdit';
+import { withoutInlineImages } from '../../lib/shoppingPriorityEdit';
 import { shoppingSurfaces, colors, radii, spacing, typography } from '../../theme';
 import type { ShopOutfit } from '../../types/shop';
 import type { ShoppingPriorityEditScreenProps } from '../../navigation/types';
@@ -340,7 +340,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
           ) : null}
         </View>
         <Text accessibilityRole="header" style={styles.guideIntro}>
-          {directionCount === 1 ? 'A style to consider' : 'Styles to consider'}
+          {directionCount === 1 ? 'A style to consider' : `Styles to consider · ${directionCount}`}
         </Text>
         {data.targets.map((target, index) => (
           <View
@@ -355,9 +355,10 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
           >
             <ShoppingPriorityTargetCard
               target={target}
+              offerContext={{ reference: data.commerceReference, targetKey: target.key, surface: 'shopping_guide' }}
+              onRetryOffers={() => void edit.refreshOffers()}
               index={index + 1}
               wardrobe={wearable}
-              displayTitle={shoppingPriorityTargetDisplayTitle(target.title, priority.label)}
               isLast={index === directionCount - 1}
               expanded={expandedKey === target.key}
               onToggle={() => {
@@ -396,21 +397,19 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
               Ask your stylist →
             </Text>
           </Pressable>
-          {styleFollowupQuestions(data.targets).map((question) => (
-            <Pressable
-              key={question}
-              onPress={() => askStylist(question)}
-              accessibilityRole="button"
-              accessibilityLabel={question}
-              style={({ pressed }) => ({
-                minHeight: 44,
-                justifyContent: 'center',
-                opacity: pressed ? 0.6 : 1,
-              })}
-            >
-              <Text style={styles.body}>{question}</Text>
-            </Pressable>
-          ))}
+          <View style={styles.chips}>
+            {styleFollowupQuestions(data.targets).map((question) => (
+              <Pressable
+                key={question}
+                onPress={() => askStylist(question)}
+                accessibilityRole="button"
+                accessibilityLabel={question}
+                style={({ pressed }) => [styles.chip, pressed && { opacity: 0.6 }]}
+              >
+                <Text style={styles.chipText}>{question}</Text>
+              </Pressable>
+            ))}
+          </View>
         </View>
         <View style={styles.saveBand}>
           <SaveEditAction saving={saving} isSaved={isSaved} onPress={saveEdit} />
@@ -510,7 +509,17 @@ function StateScreen({
 
 const styles = StyleSheet.create({
   eyebrow: { ...typography.text.eyebrowLarge, color: shoppingSurfaces.olive.accent },
-  guideIntro: { ...typography.text.label, color: colors.inkSubtle },
+  guideIntro: { ...typography.text.eyebrow, color: colors.inkSubtle },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chip: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.full,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.controlOutline,
+  },
+  chipText: { ...typography.text.bodySmall, color: colors.foreground },
   screen: { flex: 1, backgroundColor: shoppingSurfaces.canvas },
   content: { paddingHorizontal: spacing.page },
   fullBleedHeader: {

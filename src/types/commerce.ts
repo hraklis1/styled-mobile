@@ -6,7 +6,7 @@
  * affiliate disclosure, and treat an empty list as the normal resting state
  * rather than an error.
  */
-export type CommerceProviderName = 'none' | 'serpapi' | 'brightdata' | 'ebay' | 'skimlinks' | 'catalog';
+export type CommerceProviderName = 'none' | 'serper' | 'serpapi' | 'brightdata' | 'ebay' | 'skimlinks' | 'catalog';
 
 export type ProductOffer = {
   /** Stable within a provider — safe to use as a list key. */
@@ -27,6 +27,9 @@ export type ProductOffer = {
    * offer must show the affiliate disclosure; surfaces with none must not.
    */
   monetized: boolean;
+  imagePolicy?: 'hotlink' | 'licensed';
+  retrievedAt?: string;
+  expiresAt?: string;
 };
 
 /** https, or the small base64 thumbnails Google Shopping inlines. */
@@ -59,7 +62,7 @@ export function parseProductOffers(value: unknown): ProductOffer[] {
     ) continue;
     offers.push({
       id: offer.id,
-      provider: (typeof offer.provider === 'string' ? offer.provider : 'none') as CommerceProviderName,
+      provider: (['none', 'serper', 'serpapi', 'brightdata', 'ebay', 'skimlinks', 'catalog'].includes(String(offer.provider)) ? offer.provider : 'none') as CommerceProviderName,
       title: offer.title,
       brand: typeof offer.brand === 'string' ? offer.brand : null,
       merchant: offer.merchant,
@@ -70,7 +73,29 @@ export function parseProductOffers(value: unknown): ProductOffer[] {
       url: offer.url,
       inStock: typeof offer.inStock === 'boolean' ? offer.inStock : null,
       monetized: offer.monetized,
+      imagePolicy: offer.imagePolicy === 'licensed' ? 'licensed' : 'hotlink',
+      retrievedAt: typeof offer.retrievedAt === 'string' ? offer.retrievedAt : undefined,
+      expiresAt: typeof offer.expiresAt === 'string' ? offer.expiresAt : undefined,
     });
   }
   return offers;
+}
+
+export type OfferStatus = 'pending' | 'ready' | 'empty' | 'unavailable' | 'disabled';
+export type OfferResult = { offers: ProductOffer[]; status: OfferStatus; retrievedAt: string | null; expiresAt: string | null };
+export type OfferContext = { conversationId?: number; reference?: string; wishlistId?: string; targetKey: string; surface: string };
+export function parseOfferResult(raw: unknown): OfferResult {
+  const value = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const offers = parseProductOffers(value.offers);
+  const status = ['pending', 'ready', 'empty', 'unavailable', 'disabled'].includes(String(value.status)) ? value.status as OfferStatus : offers.length ? 'ready' : 'unavailable';
+  return { offers, status, retrievedAt: typeof value.retrievedAt === 'string' ? value.retrievedAt : null, expiresAt: typeof value.expiresAt === 'string' ? value.expiresAt : null };
+}
+export function offerImageCachePolicy(offer?: ProductOffer): 'memory' | 'memory-disk' {
+  return offer?.imagePolicy === 'licensed' ? 'memory-disk' : 'memory';
+}
+export function listingAction(offer: ProductOffer): string {
+  try {
+    const host = new URL(offer.url).hostname;
+    return /(^|\.)google\.[a-z.]+$/.test(host) ? 'View listing' : `View at ${offer.merchant}`;
+  } catch { return 'View listing'; }
 }

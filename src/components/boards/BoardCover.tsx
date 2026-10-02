@@ -42,7 +42,7 @@ function CoverCell({
           source={{ uri }}
           style={StyleSheet.absoluteFill}
           contentFit={contentFit}
-          cachePolicy="memory-disk"
+          cachePolicy="memory"
           recyclingKey={recyclingKey}
           transition={150}
           onError={() => setFailed(true)}

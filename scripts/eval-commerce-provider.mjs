@@ -8,6 +8,7 @@ import {
   evaluateTarget,
   fixtureProducts,
   normalizeProducts,
+  normalizeProduct,
   renderMarkdownReport,
   summarizeEvaluation,
 } from './lib/commerce-eval.mjs';
@@ -31,7 +32,7 @@ function parseArgs(argv) {
 }
 
 function printHelp() {
-  process.stdout.write(`Commerce provider evaluation\n\nUsage:\n  node scripts/eval-commerce-provider.mjs --provider fixture\n  SOVRN_COMMERCE_API_KEY=... node scripts/eval-commerce-provider.mjs --provider sovrn\n\nOptions:\n  --provider fixture|sovrn\n  --targets <file>\n  --output <directory>\n  --limit <count>\n`);
+  process.stdout.write(`Commerce provider evaluation\n\nUsage:\n  node scripts/eval-commerce-provider.mjs --provider fixture\n  SOVRN_COMMERCE_API_KEY=... node scripts/eval-commerce-provider.mjs --provider sovrn\n\nOptions:\n  --provider fixture|sovrn|serper\n  --targets <file>\n  --output <directory>\n  --limit <count>\n`);
 }
 
 function sovrnUrl(target, apiKey) {
@@ -69,9 +70,26 @@ async function fetchSovrnProducts(target) {
   return { payload, products: normalizeProducts(payload) };
 }
 
+async function fetchSerperProducts(target) {
+  const apiKey = process.env.SERPER_API_KEY?.trim();
+  if (!apiKey) throw new Error('Missing server-side SERPER_API_KEY. Supply it through the process environment.');
+  const gl = ({ CAD: 'ca', USD: 'us', GBP: 'uk', EUR: 'de', AUD: 'au', NZD: 'nz', JPY: 'jp' })[target.currency] ?? 'us';
+  const response = await fetch('https://google.serper.dev/shopping', {
+    method: 'POST', headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ q: target.title, gl, hl: 'en' }), signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) throw new Error(`Serper request failed with HTTP ${response.status}`);
+  const payload = await response.json();
+  if (!Array.isArray(payload.shopping)) throw new Error('Serper returned no shopping result array');
+  const products = payload.shopping.map((row, index) => normalizeProduct({ ...row, url: row.link, merchant: row.source, imageUrl: row.imageUrl?.startsWith('https:') ? row.imageUrl : null, currency: target.currency }, index));
+  // Evaluation reports never retain inline thumbnail bytes.
+  return { payload: null, products };
+}
+
 async function productsFor(provider, target) {
   if (provider === 'fixture') return { payload: null, products: fixtureProducts(target) };
   if (provider === 'sovrn') return fetchSovrnProducts(target);
+  if (provider === 'serper') return fetchSerperProducts(target);
   throw new Error(`Unsupported provider: ${provider}`);
 }
 
@@ -91,7 +109,7 @@ async function main() {
     printHelp();
     return;
   }
-  if (!['fixture', 'sovrn'].includes(args.provider)) throw new Error(`Unsupported provider: ${args.provider}`);
+  if (!['fixture', 'sovrn', 'serper'].includes(args.provider)) throw new Error(`Unsupported provider: ${args.provider}`);
   if (args.provider === 'sovrn' && !process.env.SOVRN_COMMERCE_API_KEY?.trim()) {
     throw new Error('Missing SOVRN_COMMERCE_API_KEY. See eval/commerce/README.md.');
   }

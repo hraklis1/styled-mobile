@@ -3,6 +3,24 @@ import { itemCoverPresentation } from '../../lib/itemImage';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 
 export type BoardPiece = { id: number; category: string; item?: Item };
+/** A shoppable stand-in for the suggestion tile, when one is in stock. */
+export type BoardSuggestionOffer = { imageUrl: string; formattedPrice?: string | null; brand?: string | null };
+export type BoardSuggestion = { label: string; category: string; offer?: BoardSuggestionOffer };
+export type BoardTile = { kind: 'owned'; piece: BoardPiece } | { kind: 'suggestion'; suggestion: BoardSuggestion };
+
+/** Suggestions occupy supporting rows only and never acquire a wardrobe ID. */
+export function editorialBoardDisplayRows(pieces: readonly BoardPiece[], suggestion?: BoardSuggestion): { pieces: BoardTile[]; foundation: boolean }[] {
+  const owned = editorialBoardRows(pieces);
+  if (!suggestion) return owned.map(row => ({ ...row, pieces: row.pieces.map(piece => ({ kind: 'owned' as const, piece })) }));
+  const rows = owned.filter(row => row.foundation).map(row => ({ ...row, pieces: row.pieces.map(piece => ({ kind: 'owned' as const, piece }) as BoardTile) }));
+  const supporting: BoardTile[] = owned.filter(row => !row.foundation).flatMap(row => row.pieces.map(piece => ({ kind: 'owned' as const, piece })));
+  supporting.push({ kind: 'suggestion', suggestion });
+  while (supporting.length) {
+    const count = supporting.length === 4 ? 2 : Math.min(3, supporting.length);
+    rows.push({ foundation: false, pieces: supporting.splice(0, count) });
+  }
+  return rows;
+}
 const foundationOrder = ['full_body', 'dress', 'top', 'bottom', 'outerwear'];
 const supportingOrder = [...foundationOrder, 'shoes', 'bag', 'accessory', 'accessories', 'valuables'];
 export function resolveBoardPieces(entries: readonly { id: number; category: string }[], items: readonly Item[]): BoardPiece[] {

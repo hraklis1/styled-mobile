@@ -10,6 +10,8 @@ import { useItems } from '../../hooks/useItems';
 import { ShoppingPriorityTargetCard } from '../shopping/ShoppingPriorityTargetCard';
 import { withoutOutfitCount } from '../../lib/shopClarity';
 import { shoppingGarmentTitle } from '../../lib/shoppingEditorial';
+import { useProductOffers } from '../../hooks/useProductOffers';
+import { SavedProductDetail } from '../shopping/SavedProductDetail';
 import { ShopOutfitCard } from './ShopOutfitCard';
 
 type Props = {
@@ -39,6 +41,7 @@ const DEFAULT_REMOVAL_COPY = {
 
 export function ShopWishlistDetailSheet({ entry, onClose, onRemove, onSaveToBoard, removalCopy = DEFAULT_REMOVAL_COPY }: Props) {
   const { data: items = [] } = useItems();
+  const products = useProductOffers({ wishlistId: entry.id, surface: 'saved_guide' }, !!entry.outfit.shoppingBrief);
   const [expandedKey, setExpandedKey] = useState<string | null>(entry.outfit.shoppingBrief?.targets.length === 1 ? entry.outfit.shoppingBrief.targets[0].key : null);
   const wardrobe = useMemo(() => new Map(items.filter((item) => !item.isArchived && item.condition !== 'needs_repair' && item.condition !== 'donate').map((item) => [item.id, item])), [items]);
   const ref = useRef<BottomSheetModal>(null);
@@ -110,16 +113,16 @@ export function ShopWishlistDetailSheet({ entry, onClose, onRemove, onSaveToBoar
         contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, spacing.xl) }]}
         showsVerticalScrollIndicator={false}
       >
-        {entry.outfit.shoppingBrief ? (
+        {entry.outfit.product ? <SavedProductDetail entry={entry} /> : entry.outfit.shoppingBrief ? (
           <View style={styles.editContent}>
             <Text style={styles.editHeadline}>{shoppingGarmentTitle(entry.outfit.shoppingBrief.priority.label)}</Text>
             <Text style={styles.editSummary}>{withoutOutfitCount(entry.outfit.shoppingBrief.summary, entry.outfit.shoppingBrief.priority.impactScore)}</Text>
             <Text style={styles.editSummary}>{entry.outfit.shoppingBrief.targets.length === 1 ? 'A style to consider' : 'Styles to consider'}</Text>
             {entry.outfit.shoppingBrief.targets.map((target, index) => (
-              <ShoppingPriorityTargetCard key={target.key} target={target} expanded={expandedKey === target.key} onToggle={() => setExpandedKey(expandedKey === target.key ? null : target.key)} index={index + 1} wardrobe={wardrobe} isLast={index === entry.outfit.shoppingBrief!.targets.length - 1} />
+              <ShoppingPriorityTargetCard key={target.key} target={{ ...target, offers: products.data?.[target.key]?.offers ?? target.offers, offerState: products.data?.[target.key] ?? (products.isError ? { status: 'unavailable', offers: target.offers ?? [], retrievedAt: null, expiresAt: null } : target.offerState) }} offerContext={{ wishlistId: entry.id, targetKey: target.key, surface: 'saved_guide' }} onRetryOffers={() => void products.refetch()} expanded={expandedKey === target.key} onToggle={() => setExpandedKey(expandedKey === target.key ? null : target.key)} index={index + 1} wardrobe={wardrobe} isLast={index === entry.outfit.shoppingBrief!.targets.length - 1} />
             ))}
           </View>
-        ) : <ShopOutfitCard outfit={entry.outfit} />}
+        ) : <ShopOutfitCard outfit={entry.outfit} wishlistId={entry.id} />}
       </BottomSheetScrollView>
     </BottomSheetModal>
   );

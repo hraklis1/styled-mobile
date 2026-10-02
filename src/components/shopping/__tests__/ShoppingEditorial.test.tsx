@@ -1,3 +1,4 @@
+jest.mock('../../../hooks/useWishlist', () => ({ useWishlist: () => ({ data: [] }), saveProductOffer: jest.fn() }));
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { ShoppingPriorityTarget } from '../../../lib/shoppingPriorityEdit';
@@ -67,16 +68,35 @@ test('deleted wardrobe references downgrade an outfit to an honest pairing', () 
   expect(renderer.root.findAllByType('WardrobeThumbnail' as any)).toHaveLength(1);
 });
 
-test('expanded styles show outfits before characteristics and shopping links', () => {
+test('expanded styles split shopping, outfits and details into tabs, shopping first', () => {
   const wardrobe = new Map([
     [1, { id: 1, name: 'Jacket' } as Item],
     [2, { id: 2, name: 'Shoes' } as Item],
   ]);
   render(<ShoppingPriorityTargetCard target={target} index={1} wardrobe={wardrobe} expanded />);
   const json = JSON.stringify(renderer.toJSON());
-  expect(json.indexOf('Wear it with')).toBeLessThan(json.indexOf('What to look for'));
-  expect(json.indexOf('What to look for')).toBeLessThan(json.indexOf('Where to look'));
+  expect(json.indexOf('"Shop"')).toBeLessThan(json.indexOf('Wear it'));
+  expect(json.indexOf('Wear it')).toBeLessThan(json.indexOf('Details'));
+  expect(json).toContain('Uniqlo');
+  expect(json).not.toContain('Office ready');
   expect(json).not.toMatch(/unlocks|available now|1 look/i);
+});
+
+test('choosing a tab shows only that panel', () => {
+  const wardrobe = new Map([
+    [1, { id: 1, name: 'Jacket' } as Item],
+    [2, { id: 2, name: 'Shoes' } as Item],
+  ]);
+  render(<ShoppingPriorityTargetCard target={target} index={1} wardrobe={wardrobe} expanded />);
+  const tabs = renderer.root.findAll((node) => node.props.accessibilityRole === 'tab' && typeof node.props.onPress === 'function' && typeof node.type === 'string');
+  act(() => tabs.find((t) => t.props.accessibilityLabel === 'Details')!.props.onPress());
+  let json = JSON.stringify(renderer.toJSON());
+  expect(json).toContain('What to look for');
+  expect(json).not.toContain('Office ready');
+  act(() => tabs.find((t) => t.props.accessibilityLabel === 'Wear it')!.props.onPress());
+  json = JSON.stringify(renderer.toJSON());
+  expect(json).toContain('Office ready');
+  expect(json).not.toContain('What to look for');
 });
 
 test('missing outfit and retailer data leaves useful guidance without empty sections', () => {
@@ -89,7 +109,7 @@ test('missing outfit and retailer data leaves useful guidance without empty sect
     />,
   );
   const json = JSON.stringify(renderer.toJSON());
-  expect(json).not.toContain('Wear it with');
-  expect(json).not.toContain('Where to look');
+  expect(json).not.toContain('Wear it');
+  expect(json).not.toContain('"Shop"');
   expect(json).toContain('What to look for');
 });
