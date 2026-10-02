@@ -635,14 +635,14 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     shoppingPriorityFromDailyLookGap(candidateGap ?? IDLE_GAP),
     { origin: 'daily_look', enabled: !!candidateGap && !candidateHasFlatLay },
   );
-  const suggestionOffer = useMemo(() => {
+  const suggestionOffer = (() => {
     if (gapEdit.data?.status === 'no_buy') return undefined;
     for (const target of gapEdit.data?.targets ?? []) {
       const offer = target.offers?.find((candidate) => candidate.inStock !== false && candidate.imageUrl);
       if (offer?.imageUrl) return { imageUrl: offer.imageUrl, formattedPrice: offer.formattedPrice, brand: offer.brand ?? offer.merchant };
     }
     return undefined;
-  }, [gapEdit.data]);
+  })();
   const hasHomeCollage = !dailyLookIsPreparing && (generatedCandidate
     ? !candidateHasFlatLay
     : !!featuredOutfit && !featuredOutfit.aiGeneratedImageUrl);

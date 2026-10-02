@@ -16,7 +16,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { type FlashListRef } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeIn, FadeOut, ReduceMotion, useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, ReduceMotion, useSharedValue, useAnimatedScrollHandler, runOnJS } from 'react-native-reanimated';
 import { ClosetHeader } from '../../components/wardrobe/closet-header';
 import { ClosetNavigation } from '../../components/wardrobe/closet-navigation';
 import { ClosetViewMenu } from '../../components/wardrobe/closet-view-menu';
@@ -330,7 +330,8 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     const generation = ++restorationGeneration.current;
     try {
       if (!anchor || anchor.scrollY < collapseDistance) {
-        const offset = anchor?.scrollY ?? 0;
+        // A partially collapsed header is never a resting state: restore to the top.
+        const offset = 0;
         list.scrollToOffset({ offset, animated: false });
         scrollY.value = offset;
       } else {
@@ -341,12 +342,24 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     } finally { if (generation === restorationGeneration.current) restoring.current = false; }
   }, [activeItems, collapseDistance, columns, getActiveList, headerHeight, scrollY, segment]);
 
+  // Like iOS large titles, the header rests fully expanded or fully collapsed so
+  // every segment shares the same title position.
+  const snapHeader = useCallback((y: number) => {
+    if (y <= 0 || y >= collapseDistance) return;
+    getActiveList()?.scrollToOffset({ offset: y < collapseDistance / 2 ? 0 : collapseDistance, animated: true });
+  }, [collapseDistance, getActiveList]);
+
   const handleScroll = useAnimatedScrollHandler({
     onScroll: event => {
       scrollY.value = Math.max(0, event.contentOffset.y);
       fabCollapsed.value = event.contentOffset.y > collapseDistance ? 1 : 0;
     },
-  }, [collapseDistance]);
+    onEndDrag: event => {
+      if (event.velocity && Math.abs(event.velocity.y) > 0.05) return;
+      runOnJS(snapHeader)(event.contentOffset.y);
+    },
+    onMomentumEnd: event => { runOnJS(snapHeader)(event.contentOffset.y); },
+  }, [collapseDistance, snapHeader]);
 
   const browsingSignature = JSON.stringify(segment === 'pieces'
     ? [combineSearchFilters(searchFilters.pieces, piecesSearch), sortKey, selectedColors, selectedBrands, selectedSeasons, selectedConditions, selectedWarmth, selectedCategories, selectedOccasions, selectedMaterials, selectedSleeveLengths, activeSubcategory]
@@ -441,9 +454,10 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
       pendingHeaderAnchor.current = next;
       setSearchFocusRequest(null);
       setSegment(next);
-      scrollY.value = anchors.current[next]?.scrollY ?? 0;
+      const nextScrollY = anchors.current[next]?.scrollY ?? 0;
+      scrollY.value = nextScrollY < collapseDistance ? 0 : nextScrollY;
     },
-    [segment, capturePosition, scrollY],
+    [segment, capturePosition, collapseDistance, scrollY],
   );
 
   useEffect(() => {
