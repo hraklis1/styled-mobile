@@ -7,10 +7,9 @@ import type { Item } from '../types/item';
 
 type SheetCallbacks = {
   onTakePhoto?: () => void;
-  onFromLibrary?: () => void;
-  onBatchImport?: () => void;
+  onFromPhotos?: () => void;
   onItemsSaved?: (items: Item[]) => void;
-  onActionStart?: (action: 'camera' | 'library' | 'batch') => void;
+  onActionStart?: (action: 'camera' | 'photos') => void;
   onDismiss?: () => void;
 };
 
@@ -58,8 +57,7 @@ export function GlobalAddSheetProvider({ children }: Props) {
           visible={visible}
           onClose={closeAddSheet}
           onTakePhoto={callbacksRef.current.onTakePhoto}
-          onFromLibrary={callbacksRef.current.onFromLibrary}
-          onBatchImport={callbacksRef.current.onBatchImport}
+          onFromPhotos={callbacksRef.current.onFromPhotos}
           onItemsSaved={callbacksRef.current.onItemsSaved}
           onActionStart={callbacksRef.current.onActionStart}
         />

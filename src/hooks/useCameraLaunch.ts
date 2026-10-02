@@ -92,7 +92,7 @@ export function useCameraLaunch() {
 export function useLibraryLaunch() {
   const launchLibrary = useCallback(
     async (options: Options = {}): Promise<CapturedImage | null> => {
-      const { maxDim = 1600, allowsEditing = false, compress, captureExif = false } = options;
+      const { allowsEditing = false, captureExif = false } = options;
 
       // Request photo library permission if not already granted
       const { status } = await ImagePicker.getMediaLibraryPermissionsAsync();
@@ -117,26 +117,74 @@ export function useLibraryLaunch() {
 
       if (result.canceled || !result.assets[0]) return null;
 
-      const asset = result.assets[0];
-      try {
-        const compressed = await compressImageToDataUrl(
-          { uri: asset.uri, width: asset.width ?? maxDim, height: asset.height ?? maxDim },
-          maxDim,
-          compress,
-        );
-        return {
-          ...compressed,
-          exif: captureExif ? (asset.exif as Record<string, unknown> | null) : undefined,
-        };
-      } catch {
-        showCaptureFailedAlert('library');
-        return null;
-      }
+      return processLibraryAsset(result.assets[0], options);
     },
     [],
   );
 
   return launchLibrary;
+}
+
+/**
+ * Compresses a photo-library asset the way `launchLibrary` does, for callers
+ * that ran the picker themselves. Returns null (after telling the user) if
+ * the image can't be read.
+ */
+export async function processLibraryAsset(
+  asset: ImagePicker.ImagePickerAsset,
+  options: Options = {},
+): Promise<CapturedImage | null> {
+  const { maxDim = 1600, compress, captureExif = false } = options;
+  try {
+    const compressed = await compressImageToDataUrl(
+      { uri: asset.uri, width: asset.width ?? maxDim, height: asset.height ?? maxDim },
+      maxDim,
+      compress,
+    );
+    return {
+      ...compressed,
+      exif: captureExif ? (asset.exif as Record<string, unknown> | null) : undefined,
+    };
+  } catch {
+    showCaptureFailedAlert('library');
+    return null;
+  }
+}
+
+/**
+ * Returns a `launchLibraryMany` function: the photo library with multi-select
+ * up to `limit`, returning the raw full-quality assets in the order picked
+ * (empty if cancelled or permission is denied). Callers decide what one
+ * photo versus several means.
+ */
+export function useLibraryLaunchMany() {
+  return useCallback(
+    async ({ limit, captureExif = false }: { limit: number; captureExif?: boolean }): Promise<ImagePicker.ImagePickerAsset[]> => {
+      const { status } = await ImagePicker.getMediaLibraryPermissionsAsync();
+      if (status === 'denied') {
+        showLibraryDeniedAlert();
+        return [];
+      }
+      if (status !== 'granted') {
+        const { status: requested } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (requested !== 'granted') {
+          showLibraryDeniedAlert();
+          return [];
+        }
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsMultipleSelection: true,
+        orderedSelection: true,
+        selectionLimit: limit,
+        quality: 1,
+        exif: captureExif,
+      });
+      return result.canceled ? [] : result.assets;
+    },
+    [],
+  );
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

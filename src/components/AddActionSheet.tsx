@@ -42,9 +42,8 @@ export interface AddActionSheetProps {
   onClose: () => void;
   onItemsSaved?: (items: Item[]) => void;
   onTakePhoto?: () => void;
-  onFromLibrary?: () => void;
-  onBatchImport?: () => void;
-  onActionStart?: (action: 'camera' | 'library' | 'batch') => void;
+  onFromPhotos?: () => void;
+  onActionStart?: (action: 'camera' | 'photos') => void;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -54,8 +53,7 @@ export function AddActionSheet({
   onClose,
   onItemsSaved,
   onTakePhoto: onTakePhotoProp,
-  onFromLibrary: onFromLibraryProp,
-  onBatchImport: onBatchImportProp,
+  onFromPhotos: onFromPhotosProp,
   onActionStart,
 }: AddActionSheetProps) {
   const insets = useSafeAreaInsets();
@@ -153,17 +151,11 @@ export function AddActionSheet({
     setTimeout(() => onTakePhotoProp?.(), 300);
   }, [onActionStart, onTakePhotoProp]);
 
-  const handleFromLibrary = useCallback(() => {
-    onActionStart?.('library');
+  const handleFromPhotos = useCallback(() => {
+    onActionStart?.('photos');
     bottomSheetRef.current?.dismiss();
-    setTimeout(() => onFromLibraryProp?.(), 300);
-  }, [onActionStart, onFromLibraryProp]);
-
-  const handleBatchImport = useCallback(() => {
-    onActionStart?.('batch');
-    bottomSheetRef.current?.dismiss();
-    setTimeout(() => onBatchImportProp?.(), 300);
-  }, [onActionStart, onBatchImportProp]);
+    setTimeout(() => onFromPhotosProp?.(), 300);
+  }, [onActionStart, onFromPhotosProp]);
 
   const handleSaveManual = useCallback(async () => {
     if (!manualName.trim()) return;
@@ -227,9 +219,9 @@ export function AddActionSheet({
   const canClose = view !== 'saving';
 
   const headerTitle =
-    view === 'manual' ? 'Add Manually'
+    view === 'manual' ? 'Add manually'
       : view === 'saving' ? 'Adding to closet…'
-        : 'Add to My Closet';
+        : 'Add to your closet';
 
   const renderBackdrop = useCallback(
     (props: any) => (
@@ -262,19 +254,9 @@ export function AddActionSheet({
       {/* ── Menu (dynamic sizing via BottomSheetView) ── */}
       {view === 'menu' && (
         <BottomSheetView style={styles.sheetContent}>
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>Add to My Closet</Text>
-            <TouchableOpacity
-              onPress={handleClose}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name="close" size={22} color={colors.mutedForeground} />
-            </TouchableOpacity>
-          </View>
           <MenuContent
             onTakePhoto={handleTakePhoto}
-            onFromLibrary={handleFromLibrary}
-            onBatchImport={handleBatchImport}
+            onFromPhotos={handleFromPhotos}
             onManual={() => setView('manual')}
             bottomInset={insets.bottom}
           />

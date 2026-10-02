@@ -1,22 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Modal,
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Animated,
-  Easing,
-  Pressable,
-} from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Modal, View, StyleSheet, Animated, Easing, Pressable, PanResponder } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 
-import { colors, spacing, typography, radii, shadows } from '../../theme';
+import { colors, spacing, radii, shadows } from '../../theme';
+import { SheetHeading, SheetLink, SheetRows, type SheetOption } from './SheetOptions';
 
 type Props = {
   visible: boolean;
+  /**
+   * `quick-log` demotes the library to a quiet link under the rows: when
+   * logging, a saved photo is the rare path next to camera and closet.
+   */
   variant?: 'source' | 'quick-log';
   title: string;
   subtitle?: string;
@@ -26,20 +20,15 @@ type Props = {
   libraryHint?: string;
   manualLabel?: string;
   manualHint?: string;
-  /**
-   * Escape hatch for a user who opened the wrong sheet — rendered last and
-   * quietly, below the real options. Omit it and nothing extra is drawn.
-   */
-  escapeLabel?: string;
-  escapeHint?: string;
-  escapeIcon?: keyof typeof Ionicons.glyphMap;
-  onEscape?: () => void;
   onCamera: () => void;
   onLibrary: () => void;
   onManual?: () => void;
   onCancel: () => void;
   onDismiss?: () => void;
 };
+
+/** How far the sheet must be dragged down before letting go dismisses it. */
+const DISMISS_DRAG = 80;
 
 /**
  * Photo source chooser presented as its own RN Modal rather than a
@@ -51,16 +40,12 @@ export function PhotoSourceSheet({
   variant = 'source',
   title,
   subtitle,
-  cameraLabel = 'Take Photo',
+  cameraLabel = 'Take a photo',
   cameraHint = 'Use the camera right now',
-  libraryLabel = 'From Library',
+  libraryLabel = 'From your photos',
   libraryHint = 'Pick from your camera roll',
-  manualLabel = 'Choose from your closet',
-  manualHint = 'Select the pieces you wore yourself',
-  escapeLabel,
-  escapeHint,
-  escapeIcon = 'shirt-outline',
-  onEscape,
+  manualLabel = 'From your closet',
+  manualHint = 'Select the pieces you wore',
   onCamera,
   onLibrary,
   onManual,
@@ -69,12 +54,16 @@ export function PhotoSourceSheet({
 }: Props) {
   const insets = useSafeAreaInsets();
   const anim = useRef(new Animated.Value(0)).current;
+  const drag = useRef(new Animated.Value(0)).current;
   // The native Modal has to stay mounted through the slide-out, otherwise the
   // sheet vanishes instantly and only the entrance is ever animated.
   const [mounted, setMounted] = useState(visible);
 
   useEffect(() => {
-    if (visible) setMounted(true);
+    if (visible) {
+      setMounted(true);
+      drag.setValue(0);
+    }
     Animated.timing(anim, {
       toValue: visible ? 1 : 0,
       duration: visible ? 220 : 160,
@@ -83,17 +72,38 @@ export function PhotoSourceSheet({
     }).start(({ finished }) => {
       if (finished && !visible) setMounted(false);
     });
-  }, [visible, anim]);
+  }, [visible, anim, drag]);
 
-  const select = useCallback((fn: () => void) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    fn();
-  }, []);
+  // Pull-down to dismiss, from the grabber and heading — the rows stay plain
+  // taps. Kept in a ref so the latest onCancel is used without rebuilding.
+  const onCancelRef = useRef(onCancel);
+  onCancelRef.current = onCancel;
+  const pan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 4 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderMove: (_, g) => drag.setValue(Math.max(0, g.dy)),
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > DISMISS_DRAG || g.vy > 0.8) {
+          onCancelRef.current();
+        } else {
+          Animated.spring(drag, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(drag, { toValue: 0, useNativeDriver: true }).start();
+      },
+    }),
+  ).current;
 
-  const translateY = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [280, 0],
-  });
+  const translateY = Animated.add(
+    anim.interpolate({ inputRange: [0, 1], outputRange: [320, 0] }),
+    drag,
+  );
+
+  const library: SheetOption = { label: libraryLabel, hint: libraryHint, icon: 'images-outline', onPress: onLibrary };
+  const rows: SheetOption[] = [{ label: cameraLabel, hint: cameraHint, icon: 'camera-outline', onPress: onCamera }];
+  if (onManual) rows.push({ label: manualLabel, hint: manualHint, icon: 'shirt-outline', onPress: onManual });
+  if (variant === 'source') rows.push(library);
 
   return (
     <Modal
@@ -116,99 +126,13 @@ export function PhotoSourceSheet({
             { paddingBottom: Math.max(insets.bottom, spacing.lg), transform: [{ translateY }] },
           ]}
         >
-          <View style={styles.grabber} />
-
-          <Text style={styles.title}>{title}</Text>
-          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-
-          <View style={[styles.options, variant === 'quick-log' && styles.quickOptions]}>
-            <TouchableOpacity
-              style={[styles.option, variant === 'quick-log' && styles.quickPrimaryOption]}
-              onPress={() => select(onCamera)}
-              activeOpacity={0.75}
-              accessibilityRole="button"
-              accessibilityLabel={cameraLabel}
-            >
-              <View style={[styles.iconBox, variant === 'quick-log' && styles.quickPrimaryIconBox]}>
-                <Ionicons
-                  name="camera-outline"
-                  size={22}
-                  color={variant === 'quick-log' ? colors.primaryForeground : colors.primary}
-                />
-              </View>
-              <View style={styles.optionText}>
-                <Text style={[styles.optionTitle, variant === 'quick-log' && styles.quickPrimaryTitle]}>{cameraLabel}</Text>
-                <Text style={[styles.optionSub, variant === 'quick-log' && styles.quickPrimarySub]}>{cameraHint}</Text>
-              </View>
-              <Ionicons
-                name="chevron-forward"
-                size={16}
-                color={variant === 'quick-log' ? colors.primary : colors.border}
-              />
-            </TouchableOpacity>
-
-            {onManual ? (
-              <TouchableOpacity
-                style={styles.option}
-                onPress={() => select(onManual)}
-                activeOpacity={0.75}
-                accessibilityRole="button"
-                accessibilityLabel={manualLabel}
-              >
-                <View style={styles.iconBox}>
-                  <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
-                </View>
-                <View style={styles.optionText}>
-                  <Text style={styles.optionTitle}>{manualLabel}</Text>
-                  <Text style={styles.optionSub}>{manualHint}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
-              </TouchableOpacity>
-            ) : null}
-
-            <TouchableOpacity
-              style={styles.option}
-              onPress={() => select(onLibrary)}
-              activeOpacity={0.75}
-              accessibilityRole="button"
-              accessibilityLabel={libraryLabel}
-            >
-              <View style={styles.iconBox}>
-                <Ionicons name="image-outline" size={22} color={colors.primary} />
-              </View>
-              <View style={styles.optionText}>
-                <Text style={styles.optionTitle}>{libraryLabel}</Text>
-                <Text style={styles.optionSub}>{libraryHint}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
-            </TouchableOpacity>
-
-            {escapeLabel && onEscape ? (
-              <TouchableOpacity
-                style={styles.escapeOption}
-                onPress={() => select(onEscape)}
-                activeOpacity={0.75}
-                accessibilityRole="button"
-                accessibilityLabel={escapeLabel}
-              >
-                <Ionicons name={escapeIcon} size={17} color={colors.mutedForeground} />
-                <View style={styles.optionText}>
-                  <Text style={styles.escapeTitle}>{escapeLabel}</Text>
-                  {escapeHint ? <Text style={styles.optionSub}>{escapeHint}</Text> : null}
-                </View>
-                <Ionicons name="chevron-forward" size={15} color={colors.mutedForeground} />
-              </TouchableOpacity>
-            ) : null}
+          <View {...pan.panHandlers}>
+            <View style={styles.grabber} />
+            <SheetHeading title={title} subtitle={subtitle} />
           </View>
 
-          <TouchableOpacity
-            style={styles.cancelBtn}
-            onPress={onCancel}
-            activeOpacity={0.75}
-            accessibilityRole="button"
-          >
-            <Text style={styles.cancelText}>Cancel</Text>
-          </TouchableOpacity>
+          <SheetRows options={rows} />
+          {variant === 'quick-log' ? <SheetLink label={libraryLabel} onPress={onLibrary} /> : null}
         </Animated.View>
       </View>
     </Modal>
@@ -238,94 +162,5 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     backgroundColor: colors.border,
     marginBottom: spacing.lg,
-  },
-  title: {
-    fontSize: typography.text.sectionTitle.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  subtitle: {
-    fontSize: typography.text.bodySmall.fontSize,
-    color: colors.mutedForeground,
-    marginTop: 2,
-  },
-  options: {
-    gap: spacing.md,
-    marginTop: spacing.lg,
-  },
-  quickOptions: {
-    gap: spacing.sm,
-  },
-  option: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-  },
-  quickPrimaryOption: {
-    backgroundColor: colors.surfaceSelected,
-    borderColor: colors.primary,
-    borderWidth: 1.5,
-  },
-  quickPrimaryIconBox: {
-    backgroundColor: colors.primary,
-    borderRadius: radii.full,
-  },
-  quickPrimaryTitle: {
-    color: colors.primary,
-  },
-  quickPrimarySub: {
-    color: colors.mutedForeground,
-  },
-  // Not one of the options — a way out of the sheet for someone who meant to
-  // open the other flow. Deliberately borderless so it never reads as a
-  // fourth peer of the choices above it.
-  escapeOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  escapeTitle: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.medium,
-    color: colors.mutedForeground,
-  },
-  iconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: `${colors.primary}18`,
-  },
-  optionText: { flex: 1 },
-  optionTitle: {
-    fontSize: typography.text.body.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  optionSub: {
-    fontSize: typography.text.bodySmall.fontSize,
-    color: colors.mutedForeground,
-    marginTop: 2,
-  },
-  cancelBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.md,
-    marginTop: spacing.md,
-  },
-  cancelText: {
-    fontSize: typography.text.body.fontSize,
-    fontWeight: typography.weight.medium,
-    color: colors.mutedForeground,
   },
 });

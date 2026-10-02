@@ -161,7 +161,7 @@ function FadedPillScroll({ children }: { children: ReactNode }) {
 export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const insets = useSafeAreaInsets();
   const { width, fontScale } = useWindowDimensions();
-  const { openScanItem, openBatchScan } = useGlobalScan();
+  const { openScanItem, openFromPhotos } = useGlobalScan();
   const { openAddSheet } = useGlobalAddSheet();
   const { openStylist } = useGlobalAIStylist();
   const { fabCollapsed } = useFabScroll();
@@ -635,10 +635,9 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const handleAddPieces = useCallback(() => {
     openAddSheet({
       onTakePhoto: () => openScanItem('camera'),
-      onFromLibrary: () => openScanItem('library'),
-      onBatchImport: openBatchScan,
+      onFromPhotos: () => openFromPhotos(),
     });
-  }, [openAddSheet, openBatchScan, openScanItem]);
+  }, [openAddSheet, openFromPhotos, openScanItem]);
 
   const handleNewBoard = useCallback(() => {
     setBoardNameMode({ kind: 'new' });

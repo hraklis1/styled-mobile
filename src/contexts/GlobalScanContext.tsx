@@ -1,13 +1,16 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { ScanItemSheet } from '../components/wardrobe/ScanItemSheet';
-import { BatchScanSheet } from '../components/wardrobe/BatchScanSheet';
+import { BatchScanSheet, MAX_PHOTOS } from '../components/wardrobe/BatchScanSheet';
 import { BatchImportTray } from '../components/wardrobe/BatchImportTray';
 import { BatchImportWorkspace } from '../components/wardrobe/BatchImportWorkspace';
 import { useAuth } from './AuthContext';
 import { useBatchImportStore } from '../features/batch-import/store';
 import { discardBatch, startBatchRunner } from '../features/batch-import/runner';
 import { onBatchItemsSaved } from '../features/batch-import/save';
+import { useStartBatch } from '../features/batch-import/useStartBatch';
+import { processLibraryAsset, useLibraryLaunchMany, type CapturedImage } from '../hooks/useCameraLaunch';
+import { track } from '../lib/analytics';
 import type { Item } from '../types/item';
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -20,11 +23,17 @@ type ScanCallbacks = {
 type GlobalScanContextValue = {
   openScanItem: (source?: 'camera' | 'library', callbacks?: ScanCallbacks) => void;
   openBatchScan: (callbacks?: ScanCallbacks) => void;
+  /**
+   * The one library entry point: multi-select up to MAX_PHOTOS. One photo
+   * goes to the single-scan review, several to the background batch queue.
+   */
+  openFromPhotos: (callbacks?: ScanCallbacks) => void;
 };
 
 const GlobalScanContext = createContext<GlobalScanContextValue>({
   openScanItem: () => {},
   openBatchScan: () => {},
+  openFromPhotos: () => {},
 });
 
 export function useGlobalScan() {
@@ -40,12 +49,14 @@ type Props = {
 export function GlobalScanProvider({ children }: Props) {
   const [scanVisible, setScanVisible] = useState(false);
   const [scanAutoLaunch, setScanAutoLaunch] = useState<'camera' | 'library' | undefined>();
+  const [scanInitialImage, setScanInitialImage] = useState<CapturedImage | undefined>();
   const [batchVisible, setBatchVisible] = useState(false);
   const [scanCallbacks, setScanCallbacks] = useState<ScanCallbacks>({});
   const [batchCallbacks, setBatchCallbacks] = useState<ScanCallbacks>({});
 
   const openScanItem = useCallback((source?: 'camera' | 'library', callbacks?: ScanCallbacks) => {
     setScanAutoLaunch(source);
+    setScanInitialImage(undefined);
     setScanCallbacks(callbacks ?? {});
     setScanVisible(true);
   }, []);
@@ -81,9 +92,40 @@ export function GlobalScanProvider({ children }: Props) {
     setBatchVisible(true);
   }, []);
 
+  const launchLibraryMany = useLibraryLaunchMany();
+  const { startBatch } = useStartBatch();
+
+  const openFromPhotos = useCallback(async (callbacks?: ScanCallbacks) => {
+    // One batch at a time: while one is active, the entry point shows it.
+    if (useBatchImportStore.getState().batch) {
+      openBatchScan(callbacks);
+      return;
+    }
+    const dismiss = () => { if (callbacks?.onDismiss) setTimeout(callbacks.onDismiss, 300); };
+
+    const assets = await launchLibraryMany({ limit: MAX_PHOTOS, captureExif: true });
+    if (!assets.length) { dismiss(); return; }
+    track('closet_add_from_photos', { photo_count: assets.length });
+
+    if (assets.length === 1) {
+      const image = await processLibraryAsset(assets[0], { maxDim: 1600, compress: 0.85, captureExif: true });
+      if (!image) { dismiss(); return; }
+      setScanAutoLaunch('library');
+      setScanInitialImage(image);
+      setScanCallbacks(callbacks ?? {});
+      setScanVisible(true);
+      return;
+    }
+
+    const batchId = await startBatch(assets);
+    if (batchId) batchSavedRef.current = { batchId, onItemsSaved: callbacks?.onItemsSaved };
+    dismiss();
+  }, [launchLibraryMany, openBatchScan, startBatch]);
+
   const closeScan = useCallback(() => {
     setScanVisible(false);
     setScanAutoLaunch(undefined);
+    setScanInitialImage(undefined);
     const onDismiss = scanCallbacks.onDismiss;
     setScanCallbacks({});
     setTimeout(() => onDismiss?.(), 300);
@@ -97,13 +139,14 @@ export function GlobalScanProvider({ children }: Props) {
   }, [batchCallbacks]);
 
   return (
-    <GlobalScanContext.Provider value={{ openScanItem, openBatchScan }}>
+    <GlobalScanContext.Provider value={{ openScanItem, openBatchScan, openFromPhotos }}>
       <View style={styles.root}>{children}</View>
       {scanVisible && (
         <ScanItemSheet
           visible={scanVisible}
           onClose={closeScan}
           autoLaunch={scanAutoLaunch}
+          initialImage={scanInitialImage}
           onItemsSaved={scanCallbacks.onItemsSaved}
         />
       )}

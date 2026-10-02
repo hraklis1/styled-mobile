@@ -60,7 +60,7 @@ export function GlobalOutfitLoggerProvider({ children }: Props) {
   const launchCamera = useCameraLaunch();
   const launchLibrary = useLibraryLaunch();
   const { openAddSheet } = useGlobalAddSheet();
-  const { openScanItem, openBatchScan } = useGlobalScan();
+  const { openScanItem, openFromPhotos } = useGlobalScan();
   const detourPhase = useRef<'idle' | 'add' | 'scan'>('idle');
 
   const openLogger = useCallback((options?: OpenLoggerOptions) => {
@@ -105,8 +105,7 @@ export function GlobalOutfitLoggerProvider({ children }: Props) {
     if (launch === 'add') {
       openAddSheet({
         onTakePhoto: () => openScanItem('camera'),
-        onFromLibrary: () => openScanItem('library'),
-        onBatchImport: openBatchScan,
+        onFromPhotos: () => openFromPhotos(),
       });
       return;
     }
@@ -135,7 +134,7 @@ export function GlobalOutfitLoggerProvider({ children }: Props) {
       setInitialLaunch(undefined);
       setInitialImage(undefined);
     }
-  }, [launchCamera, launchLibrary, openAddSheet, openBatchScan, openScanItem, quickStartPending]);
+  }, [launchCamera, launchLibrary, openAddSheet, openFromPhotos, openScanItem, quickStartPending]);
   const resumeLogger = useCallback(() => {
     detourPhase.current = 'idle';
     setVisible(true);
@@ -153,8 +152,7 @@ export function GlobalOutfitLoggerProvider({ children }: Props) {
         onItemsSaved,
         onActionStart: () => { detourPhase.current = 'scan'; },
         onTakePhoto: () => openScanItem('camera', scanCallbacks),
-        onFromLibrary: () => openScanItem('library', scanCallbacks),
-        onBatchImport: () => openBatchScan(scanCallbacks),
+        onFromPhotos: () => openFromPhotos(scanCallbacks),
         onDismiss: () => {
           if (detourPhase.current === 'add') {
             setTimeout(resumeLogger, 300);
@@ -162,7 +160,7 @@ export function GlobalOutfitLoggerProvider({ children }: Props) {
         },
       });
     }, 300);
-  }, [openAddSheet, openBatchScan, openScanItem, resumeLogger]);
+  }, [openAddSheet, openFromPhotos, openScanItem, resumeLogger]);
 
   return (
     <GlobalOutfitLoggerContext.Provider value={{ openLogger }}>
@@ -184,13 +182,12 @@ export function GlobalOutfitLoggerProvider({ children }: Props) {
         visible={quickStartVisible}
         variant="quick-log"
         title="Log today’s look"
-        subtitle="Capture what you’re wearing or choose the pieces yourself."
-        cameraLabel="Take an outfit photo"
-        cameraHint="Match the visible pieces to your closet"
-        manualLabel="Choose from your closet"
-        manualHint="Select the pieces you wore yourself"
-        libraryLabel="Use a photo from library"
-        libraryHint="Pick a saved outfit photo"
+        subtitle="Capture it, or pick the pieces yourself."
+        cameraLabel="Photograph your outfit"
+        cameraHint="We’ll match each piece to your closet"
+        manualLabel="From your closet"
+        manualHint="Select the pieces you wore"
+        libraryLabel="Use a saved photo"
         onCamera={() => launchQuickStart('camera')}
         onLibrary={() => launchQuickStart('library')}
         onManual={() => launchQuickStart('closet')}

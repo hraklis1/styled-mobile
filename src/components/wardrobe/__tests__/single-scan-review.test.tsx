@@ -94,3 +94,11 @@ it('waits for the draft decision and restores exclusion without starting the pho
   expect(library).not.toHaveBeenCalled();
   alert.mockRestore();
 });
+
+it('scans a photo the caller already picked without opening the library', async () => {
+  const picked = { uri: 'file:///picked.jpg', dataUrl: 'data:image/jpeg;base64,picked', width: 100, height: 100 };
+  await act(async () => { renderer = TestRenderer.create(<ScanItemSheet visible autoLaunch="library" initialImage={picked} onClose={jest.fn()} />); await settle(); });
+  expect(library).not.toHaveBeenCalled();
+  expect(detect).toHaveBeenCalled();
+  expect(workspace().stage).toBe('pre-extract');
+});

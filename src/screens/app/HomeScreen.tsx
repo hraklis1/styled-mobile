@@ -236,7 +236,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const { openLogger } = useGlobalOutfitLogger();
   const { openStylist } = useGlobalAIStylist();
   const { openAddSheet } = useGlobalAddSheet();
-  const { openScanItem, openBatchScan } = useGlobalScan();
+  const { openScanItem, openFromPhotos } = useGlobalScan();
   const { fabCollapsed } = useFabScroll();
   const insets = useSafeAreaInsets();
   const lastHomeScrollY = useRef(0);
@@ -400,10 +400,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     track('home_wardrobe_action_tapped', { action: 'add_clothes_menu' });
     openAddSheet({
       onTakePhoto: () => openScanItem('camera'),
-      onFromLibrary: () => openScanItem('library'),
-      onBatchImport: openBatchScan,
+      onFromPhotos: () => openFromPhotos(),
     });
-  }, [endTour, openAddSheet, openBatchScan, openScanItem]);
+  }, [endTour, openAddSheet, openFromPhotos, openScanItem]);
 
   const handleRecordWear = useCallback(() => {
     track('home_wardrobe_action_tapped', { action: 'record_wear', source: 'week_in_wear' });

@@ -777,11 +777,11 @@ export function LogOutfitSheet({
 
       <PhotoSourceSheet
         visible={sourcePickerOpen}
-        title="Add an Outfit Photo"
+        title="Add an outfit photo"
         subtitle="We’ll match the visible pieces to your closet."
         cameraLabel="Take a selfie"
         cameraHint="Use your camera right now"
-        libraryLabel="Choose from library"
+        libraryLabel="From your photos"
         libraryHint="Pick a photo from your camera roll"
         onCamera={() => pickSource('camera')}
         onLibrary={() => pickSource('library')}

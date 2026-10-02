@@ -19,7 +19,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Crypto from 'expo-crypto';
-import { useCameraLaunch, useLibraryLaunch } from '../../hooks/useCameraLaunch';
+import { useCameraLaunch, useLibraryLaunch, type CapturedImage } from '../../hooks/useCameraLaunch';
 import {
   useScanVisionPose,
   scanItemDirect,
@@ -125,6 +125,11 @@ interface ScanItemSheetProps {
   onClose: () => void;
   onItemsSaved?: (items: Item[]) => void;
   autoLaunch?: 'camera' | 'library';
+  /**
+   * A library photo the caller already picked (and compressed); used in place
+   * of opening the picker when `autoLaunch` is 'library'.
+   */
+  initialImage?: CapturedImage;
 }
 
 const SCAN_DRAFT_KEY = 'scan_review_draft';
@@ -266,7 +271,7 @@ async function buildPreExtractItemFromPose(
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: ScanItemSheetProps) {
+export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, initialImage }: ScanItemSheetProps) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [detectedItems, setDetectedItems] = useState<EditableItem[]>([]);
@@ -387,7 +392,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch }: Sc
       const captured =
         autoLaunch === 'camera'
           ? await launchCamera({ maxDim: 1600, compress: 0.85, captureExif: true })
-          : await launchLibrary({ maxDim: 1600, compress: 0.85, captureExif: true });
+          : initialImage ?? await launchLibrary({ maxDim: 1600, compress: 0.85, captureExif: true });
       if (!active) return;
       if (!captured) { onClose(); return; }
       photoLocationRef.current = null;

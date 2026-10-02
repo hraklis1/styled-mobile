@@ -1,13 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Platform,
-  Alert,
-  Linking,
-} from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import {
   BottomSheetModal,
   BottomSheetView,
@@ -15,15 +7,9 @@ import {
 } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
-import { useAuth } from '../../contexts/AuthContext';
-import { useEntitlement } from '../../hooks/useEntitlement';
-import { presentPaywall } from '../../lib/paywall';
-import { track } from '../../lib/analytics';
+import { useLibraryLaunchMany } from '../../hooks/useCameraLaunch';
 import { colors, spacing, typography, radii } from '../../theme';
-import { useBatchImportStore } from '../../features/batch-import/store';
-import { createBatch } from '../../features/batch-import/steps';
-import { batchCost } from '../../features/batch-import/cost';
+import { useStartBatch } from '../../features/batch-import/useStartBatch';
 
 export const MAX_PHOTOS = 10;
 
@@ -43,78 +29,20 @@ export function BatchScanSheet({ onClose, onStarted }: BatchScanSheetProps) {
   const insets = useSafeAreaInsets();
   const bottomSheetRef = useRef<BottomSheetModal>(null);
   const snapPoints = useMemo(() => ['48%'], []);
-  const { user } = useAuth();
-  const { costOf, credits } = useEntitlement();
-  const scanCost = costOf('scan');
-  const balance = credits?.total ?? null;
+  const { startBatch, scanCost, balance } = useStartBatch();
+  const launchLibraryMany = useLibraryLaunchMany();
 
   useEffect(() => {
     bottomSheetRef.current?.present();
   }, []);
 
-  /** Resolve how many of `count` photos to scan, asking when credits fall short. */
-  const confirmAffordable = useCallback(async (count: number): Promise<number> => {
-    const { cost, affordable, sufficient } = batchCost(count, scanCost, balance);
-    if (sufficient) return count;
-    track('closet_batch_credits_short', { photo_count: count, cost, balance });
-    return new Promise<number>((resolve) => {
-      const buttons: Parameters<typeof Alert.alert>[2] = [
-        { text: 'Cancel', style: 'cancel', onPress: () => resolve(0) },
-        {
-          text: 'Get credits',
-          onPress: () => {
-            void presentPaywall().then((purchased) => resolve(purchased ? count : 0));
-          },
-        },
-      ];
-      if (affordable > 0) {
-        buttons.splice(1, 0, { text: `Scan first ${affordable}`, onPress: () => resolve(affordable) });
-      }
-      Alert.alert(
-        'Not enough credits',
-        `${count} photos use ${cost} credits and you have ${balance}.`,
-        buttons,
-      );
-    });
-  }, [balance, scanCost]);
-
   const pickPhotos = async () => {
-    if (!user) return;
-    const { status } = await ImagePicker.getMediaLibraryPermissionsAsync();
-    if (status === 'denied') {
-      showLibraryDeniedAlert();
-      return;
-    }
-    if (status !== 'granted') {
-      const { status: req } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (req !== 'granted') {
-        showLibraryDeniedAlert();
-        return;
-      }
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsMultipleSelection: true,
-      orderedSelection: true,
-      selectionLimit: MAX_PHOTOS,
-      // Full quality in; downscaling to the working sizes happens on device
-      // in the queue's prepare step, once per photo.
-      quality: 1,
-      exif: false,
-    });
-    if (result.canceled || !result.assets.length) return;
-
-    const count = await confirmAffordable(result.assets.length);
-    if (count === 0) return;
-
-    const batch = createBatch(user.id, result.assets.slice(0, count));
-    useBatchImportStore.getState().start(batch);
-    track('closet_batch_started', {
-      photo_count: batch.photos.length,
-      duplicate_count: count - batch.photos.length,
-    });
-    onStarted?.(batch.id);
+    // Full quality in; downscaling to the working sizes happens on device
+    // in the queue's prepare step, once per photo.
+    const assets = await launchLibraryMany({ limit: MAX_PHOTOS });
+    const batchId = await startBatch(assets);
+    if (!batchId) return;
+    onStarted?.(batchId);
     bottomSheetRef.current?.dismiss();
   };
 
@@ -167,26 +95,6 @@ export function BatchScanSheet({ onClose, onStarted }: BatchScanSheetProps) {
         </View>
       </BottomSheetView>
     </BottomSheetModal>
-  );
-}
-
-function showLibraryDeniedAlert() {
-  Alert.alert(
-    'Photo library access needed',
-    'Styled needs photo library access to batch scan items. Enable it in Settings.',
-    [
-      { text: 'Not now', style: 'cancel' },
-      {
-        text: 'Open Settings',
-        onPress: () => {
-          if (Platform.OS === 'ios') {
-            Linking.openURL('app-settings:');
-          } else {
-            Linking.openSettings();
-          }
-        },
-      },
-    ],
   );
 }
 

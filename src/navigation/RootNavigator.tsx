@@ -219,7 +219,7 @@ function AppTabNavigator() {
   const closeQuickMenu = useCallback(() => setQuickMenu(null), []);
 
   const { openAddSheet } = useGlobalAddSheet();
-  const { openScanItem, openBatchScan } = useGlobalScan();
+  const { openScanItem, openFromPhotos } = useGlobalScan();
   const { openLogger } = useGlobalOutfitLogger();
 
   // Capture is the app's core loop, so it lives one long-press from every screen
@@ -234,10 +234,9 @@ function AppTabNavigator() {
     track('closet_quick_action_tapped', { action: 'import_clothes' });
     openAddSheet({
       onTakePhoto: () => openScanItem('camera'),
-      onFromLibrary: () => openScanItem('library'),
-      onBatchImport: openBatchScan,
+      onFromPhotos: () => openFromPhotos(),
     });
-  }, [openAddSheet, openBatchScan, openScanItem]);
+  }, [openAddSheet, openFromPhotos, openScanItem]);
 
   const quickLogWear = useCallback(() => {
     track('closet_quick_action_tapped', { action: 'record_wear' });
