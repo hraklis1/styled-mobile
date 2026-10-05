@@ -38,7 +38,7 @@ export function ProductDetailContent({ offer, reason, target, wardrobe, saved, s
     {reason ? <View style={styles.context}><Text accessibilityRole="header" style={styles.heading}>Why I’d consider this style</Text><Text selectable style={styles.copy}>{reason}</Text></View> : null}
     <View style={styles.actions}>
       <ActionButton label={productListingAction(offer)} icon="open-outline" onPress={onRetailer} />
-      {onSave ? <ActionButton label={saving ? 'Updating…' : saved ? 'Saved · remove' : 'Save piece'} icon={saved ? 'bookmark' : 'bookmark-outline'} variant="secondary" onPress={onSave} disabled={saving} /> : null}
+      {onSave ? <ActionButton label={saving ? 'Updating…' : saved ? 'Added to wishlist · remove' : 'Add to wishlist'} icon={saved ? 'bookmark' : 'bookmark-outline'} variant="secondary" onPress={onSave} disabled={saving} /> : null}
     </View>
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
     <Text selectable style={styles.caption}>{priceNote ?? 'Confirm price and availability at the listing.'}{offer.inStock === false ? ' This listing is currently unavailable.' : ''}</Text>

@@ -44,7 +44,7 @@ import { CalendarScreen } from '../screens/app/CalendarScreen';
 import { ProfileNavigator } from '../screens/profile/ProfileNavigator';
 import { AppPreferencesEffects } from '../features/preferences/AppPreferencesEffects';
 import { SuggestionsScreen } from '../screens/app/SuggestionsScreen';
-import { SavedLooksScreen, SavedShoppingScreen } from '../screens/app/ShopScreen';
+import { SavedLooksScreen, SavedShoppingScreen, WishlistScreen } from '../screens/app/ShopScreen';
 import { ShopOverviewScreen } from '../screens/app/ShopOverviewScreen';
 import { ShoppingCameraScreen } from '../screens/app/ShoppingCameraScreen';
 import { ShoppingVisitReviewScreen } from '../screens/app/ShoppingVisitReviewScreen';
@@ -100,6 +100,8 @@ const linking: LinkingOptions<RootStackParamList> = {
             screens: {
               ShopMain: 'shop',
               SavedLooks: 'saved-looks',
+              SavedShopping: 'saved-shopping',
+              Wishlist: 'wishlist',
               ShoppingCamera: 'shopping-camera',
               ShoppingVisitReview: 'shopping-visit-review',
               ShoppingGallery: {
@@ -184,6 +186,7 @@ function ShopNavigator() {
       <ShopStack.Screen name="ShopMain" component={ShopOverviewScreen} />
       <ShopStack.Screen name="ShoppingBriefDetail" component={ShoppingBriefDetailScreen} />
       <ShopStack.Screen name="ShoppingPriorityEdit" component={ShoppingPriorityEditScreen} />
+      <ShopStack.Screen name="Wishlist" component={WishlistScreen} />
       <ShopStack.Screen name="SavedShopping" component={SavedShoppingScreen} />
       <ShopStack.Screen name="SavedLooks" component={SavedLooksScreen} />
       <ShopStack.Screen name="ShoppingGallery" component={ShoppingGalleryScreen} />

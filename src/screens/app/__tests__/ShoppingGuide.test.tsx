@@ -94,15 +94,15 @@ test.each([1, 3, 5])('saves %i styles and displays every style without disclosur
   expect(cards().every(card => card.props.expanded === undefined && card.props.onToggle === undefined)).toBe(true);
   const save = renderer.root
     .findAllByType('PressableScale' as any)
-    .find((node) => node.props.accessibilityLabel === 'Save this guide')!;
+    .find((node) => node.props.accessibilityLabel === 'Save list')!;
   await act(async () => {
     await save.props.onPress();
   });
   expect(mockSave).toHaveBeenCalledTimes(1);
   expect(mockSave.mock.calls[0][0].shoppingBrief.targets).toHaveLength(count);
-  const viewSaved = renderer.root.findAllByType('PressableScale' as any).find(node => node.props.accessibilityLabel === 'View saved guide')!;
+  const viewSaved = renderer.root.findAllByType('PressableScale' as any).find(node => node.props.accessibilityLabel === 'View wishlist list')!;
   act(() => viewSaved.props.onPress());
-  expect(props.navigation.navigate).toHaveBeenCalledWith('Stylist', { screen: 'StylistMain', params: { view: 'saved', tab: 'lists', selectedId: 'saved-guide' } });
+  expect(props.navigation.navigate).toHaveBeenCalledWith('Wishlist', { section: 'lists', selectedId: 'saved-guide' });
   expect(JSON.stringify(renderer.toJSON())).not.toContain('Trousers Gap');
 });
 

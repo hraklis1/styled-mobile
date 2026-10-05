@@ -33,10 +33,10 @@ type Props = {
 };
 
 const DEFAULT_REMOVAL_COPY = {
-  title: 'Remove saved item?',
-  message: 'This saved shopping item will be removed.',
+  title: 'Remove from wishlist?',
+  message: 'This item will be removed from your wishlist.',
   confirmLabel: 'Remove',
-  accessibilityLabel: 'Remove saved shopping item',
+  accessibilityLabel: 'Remove from wishlist',
 };
 
 export function ShopWishlistDetailSheet({ entry, onClose, onRemove, onSaveToBoard, removalCopy = DEFAULT_REMOVAL_COPY }: Props) {
@@ -47,7 +47,7 @@ export function ShopWishlistDetailSheet({ entry, onClose, onRemove, onSaveToBoar
   const insets = useSafeAreaInsets();
   const snapPoints = useMemo(() => ['94%'], []);
   const recommendationType = getWishlistRecommendationType(entry);
-  const title = entry.outfit.shoppingBrief ? 'Shopping guide' : recommendationType === 'look' ? 'Saved look' : recommendationType === 'piece' ? 'Saved piece' : 'Saved list';
+  const title = entry.outfit.shoppingBrief ? 'Shopping guide' : recommendationType === 'piece' ? 'Product' : 'List';
   const fallbackContext = recommendationType === 'list' ? 'Options to consider' : recommendationType === 'piece' ? 'Individual piece' : 'Complete look';
 
   useEffect(() => { ref.current?.present(); }, []);

@@ -22,7 +22,7 @@ export function CuratedItemCard({ offer, saved = false, saving = false, saveFail
   offer: ProductOffer; saved?: boolean; saving?: boolean; saveFailed?: boolean; onSave?: () => void; onOpen: () => void; width?: number;
 }) {
   return <View style={[styles.card, { width }]}>
-    <Pressable onPress={onOpen} accessibilityRole="button" accessibilityLabel={`${offer.title}, ${offer.merchant}, ${offer.formattedPrice || 'see price'}. View piece`} style={({ pressed }) => [styles.open, pressed && styles.pressed]}>
+    <Pressable onPress={onOpen} accessibilityRole="button" accessibilityLabel={`${offer.title}, ${offer.merchant}, ${offer.formattedPrice || 'see price'}. View product`} style={({ pressed }) => [styles.open, pressed && styles.pressed]}>
       <ProductImage offer={offer} />
       <View style={styles.copy}>
         {offer.brand ? <Text style={styles.brand}>{offer.brand}</Text> : null}
@@ -30,10 +30,10 @@ export function CuratedItemCard({ offer, saved = false, saving = false, saveFail
         <Text style={styles.price}>{offer.formattedPrice || 'See price'}</Text>
         {offer.inStock === false ? <Text style={styles.metadata}>Unavailable</Text> : null}
         <Text style={styles.metadata}>{productMerchantLabel(offer.merchant)}</Text>
-        <View style={styles.action}><Text style={styles.link}>View piece</Text><Ionicons name="arrow-forward" size={14} color={curatedProducts.accent} /></View>
+        <View style={styles.action}><Text style={styles.link}>View product</Text><Ionicons name="arrow-forward" size={14} color={curatedProducts.accent} /></View>
       </View>
     </Pressable>
-    {onSave ? <Pressable onPress={onSave} disabled={saving} accessibilityRole="button" accessibilityLabel={`${saving ? saved ? 'Unsaving' : 'Saving' : saveFailed ? saved ? 'Retry unsaving' : 'Retry saving' : saved ? 'Unsave' : 'Save'} ${offer.title}`} accessibilityState={{ disabled: saving, busy: saving, selected: saved }} style={({ pressed }) => [styles.save, pressed && styles.pressed]}>
+    {onSave ? <Pressable onPress={onSave} disabled={saving} accessibilityRole="button" accessibilityLabel={`${saving ? saved ? 'Unsaving' : 'Saving' : saveFailed ? saved ? 'Retry unsaving' : 'Retry saving' : saved ? 'Remove from wishlist:' : 'Add to wishlist:'} ${offer.title}`} accessibilityState={{ disabled: saving, busy: saving, selected: saved }} style={({ pressed }) => [styles.save, pressed && styles.pressed]}>
       {saving ? <ActivityIndicator size="small" color={curatedProducts.accent} /> : <Ionicons name={saveFailed ? 'refresh-outline' : saved ? 'bookmark' : 'bookmark-outline'} size={18} color={curatedProducts.accent} />}
     </Pressable> : null}
   </View>;

@@ -27,7 +27,7 @@ export function SavedProductDetail({ entry }: { entry: WishlistEntry }) {
       track('curated_product_opened', { surface: 'saved_product', targetKey: product.target.key, offerId: product.offer.id, provider: product.offer.provider, monetized: product.offer.monetized });
       void openShoppingLink(product.offer.url);
     }} />
-    {!exact && result && result.status !== 'pending' ? <Text style={styles.caption}>We couldn’t confirm this exact listing. Your saved piece is unchanged.</Text> : null}
+    {!exact && result && result.status !== 'pending' ? <Text style={styles.caption}>We couldn’t confirm this exact listing. Your wishlist product is unchanged.</Text> : null}
     <CuratedItemRail offers={alternatives} status={query.isError ? 'unavailable' : result?.status ?? 'pending'} heading="Other options" browserTitle={product.target.title} reason={styleContext} target={target} wardrobe={wardrobe} context={{ wishlistId: entry.id, targetKey: product.target.key, surface: 'saved_product' }} onRetry={() => void query.refetch()} />
   </View>;
 }

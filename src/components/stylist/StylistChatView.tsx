@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ReactNode, MutableRefObject } from 'react';
+import { StylistCardStateContext, useStylistCardState, type StylistCardState } from './StylistCardState';
 import {
   ActivityIndicator,
   Animated,
@@ -389,7 +390,22 @@ function detectOccasionHint(text: string): OccasionHint | undefined {
 
 type EventContext = { id: number; title: string };
 
+/** In-memory snapshot survives native modal dismissal while visiting saved content. */
+export type StylistSessionSnapshot = {
+  cards: Record<string, StylistCardState>;
+  messages: ChatMessage[];
+  inputText: string;
+  conversationId: number | null;
+  location: StylingLocationContext | null;
+  scrollY: number;
+  openRequestId: number;
+  promptRequestId: number;
+  composerAttachment: ComposerAttachment | null;
+  composerPhotoData: string | null;
+};
+
 type Props = {
+  sessionRef?: MutableRefObject<StylistSessionSnapshot | null>;
   initialQuery?: string;
   initialAttachmentUri?: string;
   initialMode?: StylistMode;
@@ -415,6 +431,7 @@ type Props = {
 };
 
 export function StylistChatView({
+  sessionRef,
   initialQuery,
   initialAttachmentUri,
   initialMode,
@@ -432,13 +449,19 @@ export function StylistChatView({
   onNavigateToShop,
   onNavigateToCloset,
 }: Props) {
+  const restored = useRef(sessionRef?.current?.openRequestId === openRequestId ? sessionRef.current : null).current;
+  const restoreScroll = useRef(restored?.scrollY ?? null);
+  const scrollY = useRef(restored?.scrollY ?? 0);
+  const cardStates = useRef<Record<string, StylistCardState>>(restored?.cards ?? {});
+  const skipRestoredAutoScroll = useRef(!!restored);
+  const skipRestoredLocation = useRef(!!restored);
   const insets = useSafeAreaInsets();
   const { data: allItems = [] } = useItems();
   const { data: profile } = useProfile();
   const tempUnit = resolveTempUnit(profile?.tempUnit, profile?.location);
   const stylingLocation = useActiveStylingLocation();
   const [conversationLocationContext, setConversationLocationContext] = useState<StylingLocationContext | null>(
-    initialDestination ? conversationLocation(initialDestination) : null,
+    restored?.location ?? (initialDestination ? conversationLocation(initialDestination) : null),
   );
   const [locationPickerVisible, setLocationPickerVisible] = useState(false);
   const activeLocation = conversationLocationContext ?? stylingLocation.activeLocation;
@@ -447,7 +470,7 @@ export function StylistChatView({
   const assignEventItems = useAssignEventItems();
   const acceptEventPlan = useAcceptEventOutfitPlan();
   // When the chat was launched from a calendar event, suggested looks can be
-  // assigned straight back onto that event (in addition to "Save this look").
+  // assigned straight back onto that event (in addition to "Save outfit").
   const onAddToEvent = useMemo(
     () =>
       eventContext
@@ -475,13 +498,13 @@ export function StylistChatView({
     [acceptEventPlan, allItems, assignEventItems, createOutfit, eventContext],
   );
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [inputText, setInputText] = useState('');
+  const [messages, setMessages] = useState<ChatMessage[]>(restored?.messages ?? []);
+  const [inputText, setInputText] = useState(restored?.inputText ?? '');
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   // Active server thread. null means "unsaved draft" — the next send lazily
   // creates a thread server-side and returns its id in the `done` event.
-  const [conversationId, setConversationId] = useState<number | null>(null);
+  const [conversationId, setConversationId] = useState<number | null>(restored?.conversationId ?? null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationsLoading, setConversationsLoading] = useState(false);
@@ -489,8 +512,8 @@ export function StylistChatView({
   const [attachmentSheetVisible, setAttachmentSheetVisible] = useState(false);
   const [wardrobePickerVisible, setWardrobePickerVisible] = useState(false);
   const [boardTarget, setBoardTarget] = useState<BoardEntryRef | null>(null);
-  const [composerAttachment, setComposerAttachment] = useState<ComposerAttachment | null>(null);
-  const [composerPhotoData, setComposerPhotoData] = useState<string | null>(null);
+  const [composerAttachment, setComposerAttachment] = useState<ComposerAttachment | null>(restored?.composerAttachment ?? null);
+  const [composerPhotoData, setComposerPhotoData] = useState<string | null>(restored?.composerPhotoData ?? null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [failedRequest, setFailedRequest] = useState<SendOptions | null>(null);
   const [followUpsOpen, setFollowUpsOpen] = useState(false);
@@ -504,15 +527,15 @@ export function StylistChatView({
   const streamingAssistantTextRef = useRef<Record<string, string>>({});
   const player = useAudioPlayer(null);
   const playingFileRef = useRef<File | null>(null);
-  const lastPromptRequestIdRef = useRef(0);
-  const lastOpenRequestIdRef = useRef(0);
+  const lastPromptRequestIdRef = useRef(restored?.promptRequestId ?? 0);
+  const lastOpenRequestIdRef = useRef(restored?.openRequestId ?? 0);
   // Mirror of `messages` so sendMessage can read the latest history without being
   // re-created on every message, and so a thread reset takes effect synchronously.
-  const messagesRef = useRef<ChatMessage[]>([]);
+  const messagesRef = useRef<ChatMessage[]>(restored?.messages ?? []);
   // Mirror of `conversationId` for synchronous reads: a topical "new" open resets
   // the thread and immediately fires the initial query, so the send must see the
   // cleared id rather than the previous render's value.
-  const conversationIdRef = useRef<number | null>(null);
+  const conversationIdRef = useRef<number | null>(restored?.conversationId ?? null);
   const tripOutfitsRef = useRef<Record<string, StylistTripPlanData['outfits']>>({});
   const transportRequestMetaRef = useRef<Record<string, { userMessageId: string }>>({});
 
@@ -529,6 +552,14 @@ export function StylistChatView({
       [ACTIVE_THREAD_KEY, String(id)],
     ]).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (sessionRef) sessionRef.current = {
+      cards: cardStates.current, messages, inputText, conversationId, location: conversationLocationContext,
+      scrollY: scrollY.current, openRequestId: lastOpenRequestIdRef.current,
+      promptRequestId: lastPromptRequestIdRef.current, composerAttachment, composerPhotoData,
+    };
+  });
 
   // ── Mention filtering ──────────────────────────────────────────────────────
 
@@ -1006,6 +1037,7 @@ export function StylistChatView({
   // ── Effects ────────────────────────────────────────────────────────────────
 
   useEffect(() => {
+    if (skipRestoredLocation.current) { skipRestoredLocation.current = false; return; }
     setConversationLocationContext(initialDestination ? conversationLocation(initialDestination) : null);
   }, [initialDestination]);
 
@@ -1053,6 +1085,8 @@ export function StylistChatView({
 
   useEffect(() => {
     const timer = setTimeout(() => {
+      if (skipRestoredAutoScroll.current) { skipRestoredAutoScroll.current = false; return; }
+      if (restoreScroll.current !== null) return;
       if (messages.length === 0 && !isLoading) {
         scrollRef.current?.scrollTo({ y: 0, animated: false });
         return;
@@ -1218,25 +1252,12 @@ export function StylistChatView({
       <BlurView
         intensity={35}
         tint="systemThinMaterialLight"
-        style={[styles.header, { paddingTop: embedded ? spacing.xs : insets.top }]}
+        style={[styles.header, { paddingTop: insets.top + spacing.xs }]}
         {...(Platform.OS === 'android' && { blurMethod: 'dimezisBlurViewSdk31Plus' })}
       >
         <View style={styles.headerIdentity}>
-          {!embedded && <Text style={styles.headerTitle}>Your Stylist</Text>}
-          <TouchableOpacity
-            style={styles.headerContextPill}
-            onPress={() => setLocationPickerVisible(true)}
-            activeOpacity={0.75}
-            accessibilityLabel={`Styling location: ${activeLocation.label || 'not set'}`}
-          >
-            <Ionicons name="location-outline" size={12} color={colors.primary} />
-            <Text style={styles.headerSubtitle} numberOfLines={1}>{activeLocation.label || 'Set location'}</Text>
-            {weather.data?.current ? (
-              <Text style={styles.headerWeather}>
-                {formatTemp(weather.data.current, tempUnit)}
-              </Text>
-            ) : null}
-          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Your Stylist</Text>
+
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity
@@ -1285,9 +1306,37 @@ export function StylistChatView({
           styles.messageListContent,
           isEmpty && styles.messageListEmpty,
         ]}
+        onScroll={(event) => {
+          scrollY.current = event.nativeEvent.contentOffset.y;
+          if (sessionRef?.current) sessionRef.current.scrollY = scrollY.current;
+        }}
+        scrollEventThrottle={16}
+        onContentSizeChange={() => {
+          if (restoreScroll.current === null) return;
+          const y = restoreScroll.current;
+          restoreScroll.current = null;
+          scrollRef.current?.scrollTo({ y, animated: false });
+          focusedRichMessageIdRef.current = messages[messages.length - 1]?.id ?? null;
+        }}
         keyboardDismissMode="interactive"
         showsVerticalScrollIndicator={false}
       >
+        <View style={styles.scrollingContext}>
+          <TouchableOpacity
+            style={styles.headerContextPill}
+            onPress={() => setLocationPickerVisible(true)}
+            activeOpacity={0.75}
+            accessibilityLabel={`Styling location: ${activeLocation.label || 'not set'}`}
+          >
+            <Ionicons name="location-outline" size={12} color={colors.primary} />
+            <Text style={styles.headerSubtitle} numberOfLines={1}>{activeLocation.label || 'Set location'}</Text>
+            {weather.data?.current ? (
+              <Text style={styles.headerWeather}>
+                {formatTemp(weather.data.current, tempUnit)}
+              </Text>
+            ) : null}
+          </TouchableOpacity>
+        </View>
         {isEmpty ? (
           <EmptyState
             weather={weather.data?.current}
@@ -1316,6 +1365,7 @@ export function StylistChatView({
                     }
                   }}
                 >
+                  <StylistCardStateContext.Provider value={cardStates.current[msg.id] ?? (cardStates.current[msg.id] = {})}>
                   <MessageBubble
                     message={msg}
                     allItems={allItems}
@@ -1339,6 +1389,7 @@ export function StylistChatView({
                         : undefined
                     }
                   />
+                  </StylistCardStateContext.Provider>
                 </View>
               </Fragment>
             ))}
@@ -1594,7 +1645,7 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
   const [detailItem, setDetailItem] = useState<Item | null>(null);
   // Bridges ShopOutfitCard's onSave (which mints the entry) to its onSaved
   // (which offers to board it) without widening the card's public contract.
-  const savedWishlistIdRef = useRef<string | null>(null);
+  const [savedWishlistId, setSavedWishlistId] = useStylistCardState<string | null>('wishlist-id', null);
 
   if (!isUser && message.wardrobeAudit) {
     return (
@@ -1623,6 +1674,7 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
             createOutfit={createOutfit}
             eventContext={eventContext}
             onAddToEvent={onAddToEvent}
+            onNavigateToCloset={onNavigateToCloset}
           />
         </View>
       </EditorialEntrance>
@@ -1646,6 +1698,7 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
             eventContext={eventContext}
             eventPlan={message.eventPlan}
             onAddToEvent={onAddToEvent}
+            onNavigateToCloset={onNavigateToCloset}
             onNavigateToShop={onNavigateToShop}
             onClarificationSelect={onClarificationSelect}
             onToggleAudio={onToggleAudio}
@@ -1745,21 +1798,21 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
           </View>
           <ShopOutfitCard
             outfit={message.shopOutfit}
-            saveLabel={eventContext ? `Save ${message.shopOutfit.recommendationType === 'piece' ? 'piece' : message.shopOutfit.recommendationType === 'list' ? 'list' : 'look'} for ${eventContext.title}` : undefined}
+            saveLabel={eventContext ? `${message.shopOutfit.recommendationType === 'piece' ? 'Add to wishlist' : 'Save list'} for ${eventContext.title}` : undefined}
             onSave={async () => {
               // addOutfitToWishlist mints the id client-side and POSTs it; only
               // offer to board the entry once the server has actually stored it,
               // or the board would reference an id the feed omits.
               const entry = await addOutfitToWishlist(message.shopOutfit!, eventContext);
-              savedWishlistIdRef.current = entry.id;
+              setSavedWishlistId(entry.id);
               track('outfit_saved_to_wishlist', { forEvent: !!eventContext });
             }}
             onViewSaved={onViewSaved ? () => {
-              const id = savedWishlistIdRef.current;
+              const id = savedWishlistId;
               if (id) onViewSaved(id);
             } : undefined}
             onSaveToBoard={onSaveToBoard ? () => {
-              const id = savedWishlistIdRef.current;
+              const id = savedWishlistId;
               if (id) onSaveToBoard({ type: 'wishlist', id });
             } : undefined}
           />
@@ -1971,12 +2024,12 @@ function OutfitSuggestionCard({
   onNavigateToCloset,
   onSaveToBoard,
 }: OutfitSuggestionCardProps) {
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useStylistCardState('outfit-saved', false);
   const [saving, setSaving] = useState(false);
   const [unsaving, setUnsaving] = useState(false);
   const [added, setAdded] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [savedOutfitId, setSavedOutfitId] = useState<number | null>(null);
+  const [savedOutfitId, setSavedOutfitId] = useStylistCardState<number | null>('outfit-id', null);
   const [activeEventPlan, setActiveEventPlan] = useState<StylistEventPlanData | null>(eventPlan ?? null);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
@@ -1985,12 +2038,16 @@ function OutfitSuggestionCard({
   const [choosingReason, setChoosingReason] = useState(false);
 
   // Local, editable copy of the suggested item set. Edits stay local until the
-  // user taps "Save this look", which persists whatever set is current.
-  const [editedIds, setEditedIds] = useState<number[]>(itemIds);
+  // user taps "Save outfit", which persists whatever set is current.
+  const [editedIds, setEditedIds] = useStylistCardState<number[]>('outfit-items', itemIds);
   // Reset when the underlying suggestion changes (keyed on a stable join).
   const itemIdsKey = itemIds.join(',');
+  const initialItemsKey = useRef(itemIdsKey);
   useEffect(() => {
-    setEditedIds(itemIds);
+    if (initialItemsKey.current !== itemIdsKey) {
+      setEditedIds(itemIds);
+      initialItemsKey.current = itemIdsKey;
+    }
     setActiveEventPlan(eventPlan ?? null);
     setAdded(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2319,7 +2376,7 @@ function OutfitSuggestionCard({
             accessibilityRole="button"
             accessibilityLabel={saved
               ? 'Remove this saved look from Closet'
-              : 'Save this look to Closet without adding it to the event'}
+              : 'Save this outfit to Closet without adding it to the event'}
             accessibilityState={{ selected: saved, busy: saving || unsaving }}
           >
             <Ionicons
@@ -2353,7 +2410,7 @@ function OutfitSuggestionCard({
               color={colors.white}
             />
             <Text style={styles.saveBtnText} numberOfLines={1}>
-              {saving ? 'Saving…' : unsaving ? 'Removing…' : saved ? 'Saved to Closet → Outfits' : 'Save to Closet'}
+              {saving ? 'Saving…' : unsaving ? 'Removing…' : saved ? 'Saved to Closet → Outfits' : 'Save outfit'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -2368,7 +2425,7 @@ function OutfitSuggestionCard({
             accessibilityRole="button"
             accessibilityLabel="View saved outfit in Closet"
           >
-            <Text style={styles.viewClosetText}>View saved outfit</Text>
+            <Text style={styles.viewClosetText}>View outfit</Text>
             <Ionicons name="arrow-forward-outline" size={15} color={colors.primary} />
           </TouchableOpacity>
           {onSaveToBoard && (
@@ -3301,8 +3358,10 @@ const styles = StyleSheet.create({
   },
   // The stylist's masthead is the same serif as the other tabs, set one step
   // down from the hero so it sits inside a sticky blur header.
+  scrollingContext: { marginBottom: spacing.sm },
   headerTitle: {
     ...typography.text.editorialTitle,
+    flexShrink: 1,
     color: colors.foreground,
   },
   headerIdentity: { flex: 1, alignItems: 'flex-start', gap: spacing.xs },

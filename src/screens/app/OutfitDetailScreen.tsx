@@ -55,7 +55,7 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   const visualize = useVisualizeOutfit();
   const updateOutfit = useUpdateOutfit();
   const assignEvents = useAssignOutfitEvents();
-  const { openStylist } = useGlobalAIStylist();
+  const { openStylist, resumeStylist } = useGlobalAIStylist();
   const { costOf } = useEntitlement();
   const { user } = useAuth();
   const flatlayCost = costOf('flatlay');
@@ -71,6 +71,10 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   const [saveSheetOpen, setSaveSheetOpen] = useState(false);
   const [returningToTab, setReturningToTab] = useState(false);
   const [flatlayCoachVisible, setFlatlayCoachVisible] = useState(false);
+
+  useEffect(() => navigation.addListener('beforeRemove', () => {
+    if (route.params.resumeStylist) requestAnimationFrame(resumeStylist);
+  }), [navigation, resumeStylist, route.params.resumeStylist]);
 
   // Opened from another tab (Calendar/Home): swiping or backing out should land on
   // that tab, not on the Closet tab this screen happens to live in.

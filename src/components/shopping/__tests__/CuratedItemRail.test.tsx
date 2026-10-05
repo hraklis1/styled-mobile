@@ -19,6 +19,8 @@ jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Icon' }));
 jest.mock('react-native-svg', () => ({ __esModule: true, default: 'Svg', Path: 'Path' }));
 jest.mock('react-native-reanimated', () => ({ useReducedMotion: () => true }));
 jest.mock('expo-web-browser', () => ({ openBrowserAsync: jest.fn() }));
+const mockViewWishlist = jest.fn();
+jest.mock('../../../contexts/WishlistNavigationContext', () => ({ WishlistNavigationContext: require('react').createContext((id: string) => mockViewWishlist(id)) }));
 const offers = Array.from({ length: 6 }, (_, index) => ({ id: `serper:${index}`, provider: 'serper', title: `Linen shirt ${index}`, merchant: 'Shop', price: null, currency: 'CAD', formattedPrice: '', imageUrl: null, url: 'https://shop.example/item', brand: null, inStock: null, monetized: index === 5 })) as ProductOffer[];
 const context = { reference: 'ref', targetKey: 'shirt', surface: 'guide' };
 let renderer: TestRenderer.ReactTestRenderer;
@@ -136,4 +138,13 @@ test('details preserve the collection and share save and unsave state', async ()
   act(() => renderer.root.findByType(CuratedProductDetail).props.onClose());
   expect(renderer.root.findAllByType(CuratedProductDetail)).toHaveLength(0);
   expect(renderer.root.findByType(CuratedProductBrowser)).toBe(browser);
+});
+
+test('offers a link to the exact independently saved product', async () => {
+  (saveProductOffer as jest.Mock).mockResolvedValueOnce({ id: 'saved-product' });
+  render({ offers: [offers[0]] });
+  await act(async () => { renderer.root.findByType(CuratedItemCard).props.onSave(); });
+  const view = renderer.root.findAllByType(Pressable).find(node => node.props.accessibilityLabel === `View ${offers[0].title} in wishlist`)!;
+  act(() => view.props.onPress());
+  expect(mockViewWishlist).toHaveBeenCalledWith('saved-product');
 });

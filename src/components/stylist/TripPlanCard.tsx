@@ -45,6 +45,7 @@ function TripOutfitCard({
   intro,
   eventContext,
   onAddToEvent,
+  onNavigateToCloset,
   onSaveOutfit,
   saveLabel,
 }: {
@@ -55,9 +56,11 @@ function TripOutfitCard({
   intro: string;
   eventContext?: EventContext;
   onAddToEvent?: (itemIds: number[]) => Promise<unknown>;
+  onNavigateToCloset?: (outfitId: number) => void;
   onSaveOutfit?: (input: CreateOutfitInput) => Promise<unknown>;
   saveLabel?: string;
 }) {
+  const [savedOutfitId, setSavedOutfitId] = useState<number | null>(null);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [added, setAdded] = useState(false);
@@ -88,7 +91,8 @@ function TripOutfitCard({
       };
       // Defaults to a plain closet save; the board capsule sheet passes a
       // wrapper that also files the new outfit onto the board.
-      await (onSaveOutfit ? onSaveOutfit(input) : createOutfit.mutateAsync(input));
+      const savedOutfit = await (onSaveOutfit ? onSaveOutfit(input) : createOutfit.mutateAsync(input));
+      if (savedOutfit && typeof savedOutfit === 'object' && 'id' in savedOutfit && typeof savedOutfit.id === 'number') setSavedOutfitId(savedOutfit.id);
       setSaved(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     } catch {
@@ -168,9 +172,10 @@ function TripOutfitCard({
           color={saved ? colors.primaryForeground : colors.primary}
         />
         <Text style={[styles.saveBtnText, saved && styles.saveBtnTextDone]}>
-          {saving ? 'Saving…' : saved ? 'Saved' : saveLabel ?? (outfit.status === 'incomplete' ? 'Save foundation' : 'Save look')}
+          {saving ? 'Saving…' : saved ? 'Saved' : saveLabel ?? (outfit.status === 'incomplete' ? 'Save foundation' : 'Save outfit')}
         </Text>
       </TouchableOpacity>
+      {savedOutfitId !== null && onNavigateToCloset ? <TouchableOpacity style={styles.saveBtn} accessibilityRole="button" onPress={() => onNavigateToCloset(savedOutfitId)}><Text style={styles.saveBtnText}>View outfit</Text></TouchableOpacity> : null}
     </View>
   );
 }
@@ -181,6 +186,7 @@ export function TripPlanCard({
   createOutfit,
   eventContext,
   onAddToEvent,
+  onNavigateToCloset,
   onSaveOutfit,
   saveLabel,
   eyebrowLabel,
@@ -191,6 +197,7 @@ export function TripPlanCard({
   eventContext?: EventContext;
   onAddToEvent?: (itemIds: number[]) => Promise<unknown>;
   /** Override what saving a look does — defaults to createOutfit.mutateAsync. */
+  onNavigateToCloset?: (outfitId: number) => void;
   onSaveOutfit?: (input: CreateOutfitInput) => Promise<unknown>;
   saveLabel?: string;
   /** Replaces the "Trip plan" / "Board capsule" eyebrow, e.g. for a single board look. */
@@ -232,6 +239,7 @@ export function TripPlanCard({
             intro={plan.intro}
             eventContext={eventContext}
             onAddToEvent={onAddToEvent}
+            onNavigateToCloset={onNavigateToCloset}
             onSaveOutfit={onSaveOutfit}
             saveLabel={saveLabel}
           />

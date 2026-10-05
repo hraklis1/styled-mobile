@@ -1,13 +1,27 @@
 import { createNavigationContainerRef } from '@react-navigation/native';
-import type { RootStackParamList, SavedShoppingTab } from './types';
+import type { RootStackParamList, SavedShoppingTab, WishlistSection } from './types';
 
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
-/** Used after dismissing the contextual Stylist modal. */
-export function openSavedRecommendations(selectedId?: string, tab: SavedShoppingTab = 'all') {
+export function wishlistSectionFromLegacy(tab: SavedShoppingTab = 'all'): WishlistSection {
+  return tab === 'looks' || tab === 'lists' ? 'lists' : 'products';
+}
+
+export function openWishlist(selectedId?: string, section: WishlistSection = 'products', returnTo?: 'Stylist' | 'stylist-modal') {
   if (!navigationRef.isReady()) return;
+  const origin = returnTo ?? (navigationRef.getCurrentRoute()?.name === 'StylistMain' ? 'Stylist' : undefined);
   navigationRef.navigate('App', {
-    screen: 'Stylist',
-    params: { screen: 'StylistMain', params: { view: 'saved', tab, selectedId } },
+    screen: 'Shop',
+    params: { screen: 'Wishlist', params: { section, selectedId, returnTo: origin } },
   });
+}
+
+/** Compatibility for old callers and saved links. */
+export function openSavedRecommendations(selectedId?: string, tab: SavedShoppingTab = 'all') {
+  openWishlist(selectedId, wishlistSectionFromLegacy(tab));
+}
+
+export function openClosetOutfit(outfitId: number, resumeStylist = false) {
+  if (!navigationRef.isReady()) return;
+  navigationRef.navigate('App', { screen: 'Closet', params: { screen: 'OutfitDetail', params: { outfitId, resumeStylist } } });
 }

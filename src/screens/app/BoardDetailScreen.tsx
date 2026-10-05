@@ -58,7 +58,7 @@ const HEADER_SCROLL_THRESHOLD = 10;
 const HEADER_SCROLL_DELTA = 6;
 const BOARD_WISHLIST_REMOVAL_COPY = {
   title: 'Remove from board?',
-  message: 'This outfit will stay in your Shop Wishlist.',
+  message: 'This item will stay in your Shop Wishlist.',
   confirmLabel: 'Remove',
   accessibilityLabel: 'Remove outfit from board',
 };

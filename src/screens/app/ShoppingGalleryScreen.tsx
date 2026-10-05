@@ -11,6 +11,8 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -91,6 +93,10 @@ type ShortlistContentProps = {
   embedded?: boolean;
   active?: boolean;
   onBack?: () => void;
+  onContentScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  onContentScrollBeginDrag?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  onContentScrollEndDrag?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  onContentMomentumScrollEnd?: () => void;
 };
 
 export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScreenProps) {
@@ -98,7 +104,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   return <ShortlistContent navigation={navigation} params={route.params} onConsumeParams={navigation.setParams} onBack={goBack} />;
 }
 
-export function ShortlistContent({ navigation, params, onConsumeParams, embedded = false, active = true, onBack = () => {} }: ShortlistContentProps) {
+export function ShortlistContent({ navigation, params, onConsumeParams, embedded = false, active = true, onBack = () => {}, onContentScroll, onContentScrollBeginDrag, onContentScrollEndDrag, onContentMomentumScrollEnd }: ShortlistContentProps) {
   const filterSheetRef = useRef<BottomSheetModal>(null);
   const storeSheetRef = useRef<BottomSheetModal>(null);
   const assignStoreSheetRef = useRef<BottomSheetModal>(null);
@@ -584,6 +590,11 @@ export function ShortlistContent({ navigation, params, onConsumeParams, embedded
         data={filteredItems}
         numColumns={2}
         key="pieces"
+        onScroll={onContentScroll}
+        onScrollBeginDrag={onContentScrollBeginDrag}
+        onScrollEndDrag={onContentScrollEndDrag}
+        onMomentumScrollEnd={onContentMomentumScrollEnd}
+        scrollEventThrottle={16}
         keyExtractor={(item) => item.id}
         columnWrapperStyle={{ gap: 12, paddingHorizontal: 16 }}
         ListHeaderComponent={listHeader}
@@ -638,7 +649,11 @@ export function ShortlistContent({ navigation, params, onConsumeParams, embedded
             </TouchableOpacity>}
           </View>
         )}
+        onScrollBeginDrag={onContentScrollBeginDrag}
+        onScrollEndDrag={onContentScrollEndDrag}
+        onMomentumScrollEnd={onContentMomentumScrollEnd}
         onScroll={(event) => {
+          onContentScroll?.(event);
           // The expanded header never changes size and the compact bar is not
           // in this list's layout, so nothing here can move contentOffset —
           // which is what broke the collapse on ShoppingBriefDetailScreen.

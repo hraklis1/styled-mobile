@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useStylistCardState } from '../stylist/StylistCardState';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, curatedProducts, spacing, typography } from '../../theme';
 import type { ShopOutfit } from '../../types/shop';
@@ -8,7 +9,7 @@ import { openShoppingLink } from '../shopping/ShoppingRetailerLinks';
 
 type Props = { outfit: ShopOutfit; onRemove?: () => void; onSave?: () => Promise<void>; onSaved?: () => void; onViewSaved?: () => void; onSaveToBoard?: () => void; saveLabel?: string; wishlistId?: string };
 export function ShopOutfitCard({ outfit, onRemove, onSave, onSaved, onViewSaved, onSaveToBoard, saveLabel, wishlistId }: Props) {
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useStylistCardState('shopping-saved', false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
   const query = useProductOffers({ reference: outfit.commerceReference, conversationId: outfit.commerceConversationId, wishlistId, surface: 'stylist' });
@@ -27,13 +28,13 @@ export function ShopOutfitCard({ outfit, onRemove, onSave, onSaved, onViewSaved,
         <Text style={styles.title}>{item.name}</Text>
         {!!item.whyItFitsYou && <Text style={styles.copy}>{item.whyItFitsYou}</Text>}
         {!!item.priceRange && <Text style={styles.copy}>Suggested budget {item.priceRange}</Text>}
-        {hasReference || item.offers?.length ? <CuratedItemRail browserTitle={item.name} reason={item.whyItFitsYou} offers={state?.offers ?? item.offers ?? []} status={query.isError || query.fetchStatus === 'paused' ? 'unavailable' : state?.status ?? 'pending'} context={{ reference: outfit.commerceReference, conversationId: outfit.commerceConversationId, wishlistId, targetKey: key, surface: 'stylist' }} onRetry={() => void query.refetch()} /> : <Pressable onPress={() => void openShoppingLink(`https://www.google.com/search?tbm=shop&q=${encodeURIComponent(`${item.brand} ${item.name}`)}`)} accessibilityRole="link" accessibilityLabel={`Search Google Shopping for ${item.name}`} style={styles.action}><Text style={styles.link}>Search for similar pieces ↗</Text></Pressable>}
+        {hasReference || item.offers?.length ? <CuratedItemRail browserTitle={item.name} reason={item.whyItFitsYou} offers={state?.offers ?? item.offers ?? []} status={query.isError || query.fetchStatus === 'paused' ? 'unavailable' : state?.status ?? 'pending'} context={{ reference: outfit.commerceReference, conversationId: outfit.commerceConversationId, wishlistId, targetKey: key, surface: 'stylist' }} onRetry={() => void query.refetch()} /> : <Pressable onPress={() => void openShoppingLink(item.retailerUrl || `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(`${item.brand} ${item.name}`)}`)} accessibilityRole="link" accessibilityLabel={item.retailerUrl ? `View product: ${item.name}` : `Find similar to ${item.name} on Google Shopping`} style={styles.action}><Text style={styles.link}>{item.retailerUrl ? 'View product ↗' : 'Find similar ↗'}</Text></Pressable>}
       </View>;
     })}
     {!!outfit.totalBudget && <Text style={styles.copy}>Suggested total budget {outfit.totalBudget}</Text>}
-    {onSave ? <Pressable onPress={() => void save()} disabled={saved || saving} accessibilityRole="button" accessibilityState={{ disabled: saved || saving, busy: saving }} style={styles.action}><Text style={styles.link}>{saved ? 'Saved' : saving ? 'Saving…' : saveLabel ?? `Save this ${outfit.recommendationType ?? 'look'}`}</Text></Pressable> : null}
+    {onSave ? <Pressable onPress={() => void save()} disabled={saved || saving} accessibilityRole="button" accessibilityState={{ disabled: saved || saving, busy: saving }} style={styles.action}><Text style={styles.link}>{saved ? (outfit.recommendationType === 'piece' ? 'Added to wishlist' : 'List saved') : saving ? 'Saving…' : saveLabel ?? (outfit.recommendationType === 'piece' ? 'Add to wishlist' : 'Save list')}</Text></Pressable> : null}
     {saved && (onViewSaved || onSaveToBoard) ? <View style={styles.savedActions}>
-      {onViewSaved ? <Pressable onPress={onViewSaved} accessibilityRole="button" style={styles.action}><Text style={styles.link}>View saved</Text></Pressable> : null}
+      {onViewSaved ? <Pressable onPress={onViewSaved} accessibilityRole="button" style={styles.action}><Text style={styles.link}>View wishlist</Text></Pressable> : null}
       {onSaveToBoard ? <Pressable onPress={onSaveToBoard} accessibilityRole="button" style={styles.action}><Text style={styles.link}>Add to board</Text></Pressable> : null}
     </View> : null}
     {saveError ? <Text accessibilityRole="alert" style={styles.copy}>Couldn’t save. Try again.</Text> : null}

@@ -47,7 +47,8 @@ export type ClosetStackParamList = {
   ClosetRefresh: undefined;
   OutfitDetail: {
     outfitId: number;
-    returnTo?: 'Calendar' | 'Home';
+    returnTo?: 'Calendar' | 'Home' | 'Stylist';
+    resumeStylist?: boolean;
     returnToEventId?: number;
     returnToEventDetail?: boolean;
   };
@@ -60,6 +61,8 @@ export type HomeStackParamList = {
   Suggestions: { eventId?: number } | undefined;
   Profile: undefined;
 };
+
+export type WishlistSection = 'products' | 'lists';
 
 export type SavedShoppingTab = 'all' | 'looks' | 'pieces' | 'lists';
 export type ShopView = 'for-you' | 'shortlist';
@@ -84,6 +87,7 @@ export type ShopStackParamList = {
     selectedId?: string;
     returnTo?: 'Home' | 'Closet';
   } | undefined;
+  Wishlist: { section?: WishlistSection; selectedId?: string; returnTo?: 'Stylist' | 'stylist-modal' } | undefined;
   SavedShopping: { tab?: SavedShoppingTab; selectedId?: string } | undefined;
   SavedLooks: { selectedId?: string } | undefined;
   ShoppingGallery: {
@@ -163,3 +167,5 @@ export type BoardDetailScreenProps = NativeStackScreenProps<ClosetStackParamList
 // but their files still compile against these types
 export type WardrobeListScreenProps = NativeStackScreenProps<WardrobeStackParamList, 'WardrobeList'>;
 export type OutfitsListScreenProps = NativeStackScreenProps<OutfitsStackParamList, 'OutfitsList'>;
+
+export type WishlistScreenProps = NativeStackScreenProps<ShopStackParamList, 'Wishlist'>;

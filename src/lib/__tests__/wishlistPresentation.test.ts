@@ -56,7 +56,7 @@ const entry: WishlistEntry = {
 describe('wishlist presentation', () => {
   it('builds descriptive labels and de-duplicates brands', () => {
     expect(getWishlistTitle(entry)).toBe('Polished linen layers');
-    expect(getWishlistBoardLabel(entry)).toBe('Shopping edit');
+    expect(getWishlistBoardLabel(entry)).toBe('Wishlist list');
     expect(getWishlistBoardTitle(entry)).toBe('Linen blazer');
     expect(getWishlistContext(entry)).toBe('Summer wedding');
     expect(getWishlistBrands(entry)).toEqual(['Aritzia', 'COS']);
@@ -102,14 +102,14 @@ describe('wishlist presentation', () => {
     };
 
     expect(getWishlistRecommendationType(piece)).toBe('piece');
-    expect(getWishlistBoardLabel(piece)).toBe('Saved piece');
+    expect(getWishlistBoardLabel(piece)).toBe('Wishlist product');
     expect(getWishlistBoardTitle(piece)).toBe('Merino sweater');
-    expect(getWishlistTypeLabel(piece)).toBe('Saved piece');
-    expect(getWishlistMeta(piece)).toBe('1 piece · $120 CAD');
+    expect(getWishlistTypeLabel(piece)).toBe('Product');
+    expect(getWishlistMeta(piece)).toBe('1 product · $120 CAD');
     expect(getWishlistRecommendationType(list)).toBe('list');
-    expect(getWishlistBoardLabel(list)).toBe('Shopping edit');
+    expect(getWishlistBoardLabel(list)).toBe('Wishlist list');
     expect(getWishlistBoardTitle(list)).toBe('Merino sweater');
-    expect(getWishlistTypeLabel(list)).toBe('Saved list');
+    expect(getWishlistTypeLabel(list)).toBe('List');
     expect(getWishlistMeta(list)).toBe('2 options · $100–$180 CAD');
   });
 
@@ -120,7 +120,7 @@ describe('wishlist presentation', () => {
       outfit: { intro: '', city: 'Montreal', totalBudget: '', audioSummary: '', items: [] },
     };
     expect(getWishlistTitle(empty)).toBe('Montreal');
-    expect(getWishlistBoardLabel(empty)).toBe('Shopping edit');
+    expect(getWishlistBoardLabel(empty)).toBe('Wishlist list');
     expect(getWishlistBoardTitle(empty)).toBe('Montreal');
     expect(getWishlistContext(empty)).toBe('Montreal');
     expect(getWishlistItemSummary(empty)).toBe('No products listed');

@@ -23,7 +23,7 @@ export function getWishlistTitle(entry: WishlistEntry): string {
   if (entry.outfit.shoppingBrief) return shoppingGarmentTitle(entry.outfit.shoppingBrief.priority.label);
   const firstItemName = entry.outfit.items.find((item) => item.name?.trim())?.name.trim();
   const type = getWishlistRecommendationType(entry);
-  const fallback = type === 'piece' ? 'Saved piece' : type === 'list' ? 'Saved list' : 'Saved look';
+  const fallback = type === 'piece' ? 'Product' : 'List';
   return entry.outfit.intro?.trim() || firstItemName || getWishlistContext(entry) || fallback;
 }
 
@@ -50,15 +50,15 @@ export function getWishlistBoardTitle(entry: WishlistEntry): string {
 }
 
 export function getWishlistBoardLabel(entry: WishlistEntry): string {
-  return getWishlistRecommendationType(entry) === 'piece' ? 'Saved piece' : 'Shopping edit';
+  return getWishlistRecommendationType(entry) === 'piece' ? 'Wishlist product' : 'Wishlist list';
 }
 
 export function getWishlistMeta(entry: WishlistEntry): string {
   if (entry.outfit.shoppingBrief) return 'Shopping guide';
-  if (entry.outfit.product) return `Saved piece · ${entry.outfit.product.offer.formattedPrice || 'See price'} · saved price`;
+  if (entry.outfit.product) return `Product · ${entry.outfit.product.offer.formattedPrice || 'See price'} · saved price`;
   const count = entry.outfit.items.length;
   const type = getWishlistRecommendationType(entry);
-  const countLabel = type === 'piece' ? '1 piece' : type === 'list' ? `${count} ${count === 1 ? 'option' : 'options'}` : `${count} ${count === 1 ? 'item' : 'items'}`;
+  const countLabel = type === 'piece' ? '1 product' : type === 'list' ? `${count} ${count === 1 ? 'option' : 'options'}` : `${count} ${count === 1 ? 'item' : 'items'}`;
   return [countLabel, entry.outfit.totalBudget?.trim()].filter(Boolean).join(' · ');
 }
 
@@ -93,7 +93,7 @@ export function getWishlistAccessibilityLabel(entry: WishlistEntry): string {
 export function getWishlistTypeLabel(entry: WishlistEntry): string {
   if (entry.outfit.shoppingBrief) return 'Shopping guide';
   const type = getWishlistRecommendationType(entry);
-  return type === 'piece' ? 'Saved piece' : type === 'list' ? 'Saved list' : 'Saved look';
+  return type === 'piece' ? 'Product' : 'List';
 }
 
 /**

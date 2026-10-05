@@ -45,63 +45,45 @@ import {
   FilterControl,
   SegmentedControl,
 } from '../../components/primitives/Editorial';
-import type { SavedShoppingTab } from '../../navigation/types';
+import { track } from '../../lib/analytics';
+import { wishlistSectionFromLegacy } from '../../navigation/savedRecommendations';
+import type { SavedShoppingTab, WishlistSection } from '../../navigation/types';
 
 function toggleValue(values: string[], value: string) {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
 }
 
-const TABS: { value: SavedShoppingTab; label: string; kind: 'look' | 'piece' | 'list' | null }[] = [
-  { value: 'all', label: 'All', kind: null },
-  { value: 'looks', label: 'Looks', kind: 'look' },
-  { value: 'pieces', label: 'Pieces', kind: 'piece' },
-  { value: 'lists', label: 'Lists', kind: 'list' },
+const TABS: { value: WishlistSection; label: string }[] = [
+  { value: 'products', label: 'Products' },
+  { value: 'lists', label: 'Lists' },
 ];
 
-function tabCopy(tab: SavedShoppingTab) {
-  if (tab === 'all') return {
-    title: 'Saved recommendations',
-    emptyTitle: 'Your next inspiration starts here',
-    emptySubtitle: 'Ask your Stylist for a look, piece, or shopping guide, then save the recommendations you love to keep them here.',
-    searchPlaceholder: 'Search recommendations, brands, cities…',
-    searchLabel: 'Search saved recommendations',
-    noResultsTitle: 'No matching recommendations',
-  };
-  if (tab === 'pieces') return {
-    title: 'Saved pieces',
-    emptyTitle: 'No saved pieces yet',
-    emptySubtitle: 'When your Stylist recommends one standout item, tap “Save this piece” to keep it here.',
-    searchPlaceholder: 'Search pieces, brands, cities…',
-    searchLabel: 'Search saved pieces',
-    noResultsTitle: 'No matching pieces',
-  };
-  if (tab === 'lists') return {
-    title: 'Saved lists',
-    emptyTitle: 'No saved lists yet',
-    emptySubtitle: 'Ask your Stylist for a focused list of options, then save it here for later.',
+function tabCopy(tab: WishlistSection) {
+  return tab === 'products' ? {
+    emptyTitle: 'Products you’re considering',
+    emptySubtitle: 'Add products from Shop or your Stylist to your wishlist to revisit them here.',
+    searchPlaceholder: 'Search products, brands, cities…',
+    searchLabel: 'Search wishlist products',
+    noResultsTitle: 'No matching products',
+  } : {
+    emptyTitle: 'Shopping recommendations saved together',
+    emptySubtitle: 'Save a shopping outfit or wardrobe guide as a list to keep its recommendations together.',
     searchPlaceholder: 'Search lists, brands, cities…',
-    searchLabel: 'Search saved lists',
+    searchLabel: 'Search wishlist lists',
     noResultsTitle: 'No matching lists',
-  };
-  return {
-    title: 'Saved looks',
-    emptyTitle: 'No saved looks yet',
-    emptySubtitle: 'Ask your AI Stylist to shop for a complete outfit. When it suggests one, tap “Save this look” to keep it here.',
-    searchPlaceholder: 'Search looks, brands, cities…',
-    searchLabel: 'Search saved looks',
-    noResultsTitle: 'No matching looks',
   };
 }
 
 type SavedRecommendationsContentProps = {
   initialTab?: SavedShoppingTab;
+  initialSection?: WishlistSection;
   selectedId?: string;
   active?: boolean;
   onTabConsumed?: () => void;
   onSelectionConsumed: () => void;
 };
 
-export function SavedRecommendationsContent({ initialTab, selectedId, active = true, onTabConsumed, onSelectionConsumed }: SavedRecommendationsContentProps) {
+export function SavedRecommendationsContent({ initialTab, initialSection, selectedId, active = true, onTabConsumed, onSelectionConsumed }: SavedRecommendationsContentProps) {
   const { openStylist } = useGlobalAIStylist();
   const { fontScale } = useWindowDimensions();
   const { data: entries = [], isLoading: loading, isFetching, isFetchedAfterMount, isError, refetch } = useWishlist();
@@ -114,7 +96,7 @@ export function SavedRecommendationsContent({ initialTab, selectedId, active = t
   const [brands, setBrands] = useState<string[]>([]);
   const [sortOrder, setSortOrder] = useState<WishlistSortOrder>('newest');
   const [filtersVisible, setFiltersVisible] = useState(false);
-  const [activeTab, setActiveTab] = useState<SavedShoppingTab>(initialTab ?? 'all');
+  const [activeTab, setActiveTab] = useState<WishlistSection>(initialSection ?? wishlistSectionFromLegacy(initialTab));
   const [selectedEntry, setSelectedEntry] = useState<WishlistEntry | null>(null);
   const [menuEntry, setMenuEntry] = useState<WishlistEntry | null>(null);
   const [boardTarget, setBoardTarget] = useState<BoardEntryRef | null>(null);
@@ -135,18 +117,19 @@ export function SavedRecommendationsContent({ initialTab, selectedId, active = t
   }, [active, refetch]);
 
   useEffect(() => {
-    if (initialTab) {
-      setActiveTab(initialTab);
+    if (initialSection || initialTab) {
+      setActiveTab(initialSection ?? wishlistSectionFromLegacy(initialTab));
       onTabConsumed?.();
     }
-  }, [initialTab, onTabConsumed]);
+  }, [initialTab, initialSection, onTabConsumed]);
 
   useEffect(() => {
     if (!active || !selectedId || loading) return;
     const entry = entries.find((item) => item.id === selectedId);
     if (entry) {
       const kind = getWishlistRecommendationType(entry);
-      setActiveTab(kind === 'piece' ? 'pieces' : kind === 'list' ? 'lists' : 'looks');
+      setActiveTab(kind === 'piece' ? 'products' : 'lists');
+      setQuery(''); setScope('all'); setCategories([]); setCities([]); setBrands([]); setSortOrder('newest');
       setSelectedEntry(entry);
       setSelectionNotice(null);
       onSelectionConsumed();
@@ -160,11 +143,10 @@ export function SavedRecommendationsContent({ initialTab, selectedId, active = t
     if (selectedEntry && !entries.some(entry => entry.id === selectedEntry.id)) setSelectedEntry(null);
   }, [entries, selectedEntry]);
 
-  const selectedTab = TABS.find((tab) => tab.value === activeTab) ?? TABS[0];
   const copy = tabCopy(activeTab);
   const tabEntries = useMemo(
-    () => selectedTab.kind === null ? entries : entries.filter((entry) => getWishlistRecommendationType(entry) === selectedTab.kind),
-    [entries, selectedTab.kind],
+    () => entries.filter((entry) => activeTab === 'products' ? getWishlistRecommendationType(entry) === 'piece' : getWishlistRecommendationType(entry) !== 'piece'),
+    [entries, activeTab],
   );
   const filterOptions = useMemo(() => getWishlistFilterOptions(tabEntries), [tabEntries]);
   const filters = useMemo(() => ({
@@ -197,16 +179,14 @@ export function SavedRecommendationsContent({ initialTab, selectedId, active = t
   }, [clearFilters]);
 
   const savedCounts = useMemo(() => ({
-    all: entries.length,
-    looks: entries.filter((entry) => getWishlistRecommendationType(entry) === 'look').length,
-    pieces: entries.filter((entry) => getWishlistRecommendationType(entry) === 'piece').length,
-    lists: entries.filter((entry) => getWishlistRecommendationType(entry) === 'list').length,
+    products: entries.filter((entry) => getWishlistRecommendationType(entry) === 'piece').length,
+    lists: entries.filter((entry) => getWishlistRecommendationType(entry) !== 'piece').length,
   }), [entries]);
-  const resultNoun = activeTab === 'all' ? 'recommendation' : activeTab === 'looks' ? 'look' : activeTab === 'pieces' ? 'piece' : 'list';
+  const resultNoun = activeTab === 'products' ? 'product' : 'list';
 
   const confirmRemove = useCallback((entry: WishlistEntry) => {
     const kind = getWishlistRecommendationType(entry);
-    const label = kind === 'look' ? 'look' : kind === 'piece' ? 'piece' : 'list';
+    const label = kind === 'piece' ? 'product' : 'list';
     Alert.alert(`Remove saved ${label}?`, `This saved ${label} will be removed.`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: () => removeItem(entry.id) },
@@ -248,6 +228,7 @@ export function SavedRecommendationsContent({ initialTab, selectedId, active = t
           options={TABS.map(({ value, label }) => ({ value, label: `${label} ${savedCounts[value]}` }))}
           onChange={(value) => {
             setActiveTab(value);
+            track('wishlist_section_selected', { section: value });
             clearAllSearchAndFilters();
           }}
         />
@@ -256,7 +237,7 @@ export function SavedRecommendationsContent({ initialTab, selectedId, active = t
 
       {selectionNotice ? <Text accessibilityRole="alert" style={styles.notice}>{selectionNotice}</Text> : null}
       {isError ? <View style={styles.errorState}>
-        <Text accessibilityRole="alert" style={styles.noResultsText}>{entries.length ? 'Your saved recommendations are here. We couldn’t refresh them.' : 'Couldn’t load your saved recommendations.'}</Text>
+        <Text accessibilityRole="alert" style={styles.noResultsText}>{entries.length ? 'Your wishlist is here. We couldn’t refresh it.' : 'Couldn’t load your wishlist.'}</Text>
         <ActionButton icon="refresh-outline" label="Try again" variant="secondary" onPress={() => void refetch()} />
       </View> : null}
       {loading ? (
@@ -275,8 +256,8 @@ export function SavedRecommendationsContent({ initialTab, selectedId, active = t
             label="Ask your Stylist"
             icon="sparkles"
             onPress={() => openStylist(buildShopStylistLaunch(
-              activeTab === 'lists' ? 'Build me a focused shopping list.' : activeTab === 'pieces' ? 'Help me find one piece to buy.' : 'Shop for a new outfit for me',
-              activeTab === 'lists' ? 'shop_list' : activeTab === 'pieces' ? 'shop_piece' : 'shop_new',
+              activeTab === 'lists' ? 'Build me a focused shopping list.' : 'Help me find one piece to buy.',
+              activeTab === 'lists' ? 'shop_list' : 'shop_piece',
             ))}
             accessibilityLabel="Open AI Stylist"
           />
@@ -322,7 +303,7 @@ export function SavedRecommendationsContent({ initialTab, selectedId, active = t
             renderItem={({ item }) => (
               <ShopWishlistSummaryCard
                 entry={item}
-                showType={activeTab === 'all'}
+                showType={activeTab === 'lists'}
                 onPress={() => setSelectedEntry(item)}
                 onMore={() => openEntryMenu(item)}
               />
@@ -374,12 +355,12 @@ export function SavedRecommendationsContent({ initialTab, selectedId, active = t
       {menuEntry && (
         <ActionMenuSheet
           visible
-          title="Saved item options"
-          subtitle={getWishlistRecommendationType(menuEntry) === 'look' ? 'Saved look' : getWishlistRecommendationType(menuEntry) === 'piece' ? 'Saved piece' : 'Saved list'}
+          title="Wishlist options"
+          subtitle={getWishlistRecommendationType(menuEntry) === 'piece' ? 'Product' : 'List'}
           options={[
             { label: 'Save to board', icon: 'albums-outline', onPress: () => openBoardPicker(menuEntry) },
             {
-              label: `Remove saved ${getWishlistRecommendationType(menuEntry)}`,
+              label: `Remove ${getWishlistRecommendationType(menuEntry) === 'piece' ? 'product' : 'list'}`,
               icon: 'trash-outline',
               destructive: true,
               onPress: () => confirmRemove(menuEntry),
@@ -408,7 +389,7 @@ function SavedListSkeleton() {
   const pulseStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
 
   return (
-    <View style={styles.skeleton} accessibilityLabel="Loading saved picks" accessibilityRole="progressbar">
+    <View style={styles.skeleton} accessibilityLabel="Loading wishlist" accessibilityRole="progressbar">
       {[0, 1, 2].map((row) => (
         <Animated.View key={row} style={[styles.skeletonRow, pulseStyle]}>
           <View style={styles.skeletonPlate} />

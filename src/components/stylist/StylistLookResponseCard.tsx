@@ -1,3 +1,4 @@
+import { useStylistCardState } from './StylistCardState';
 import { StylistRichText } from './StylistRichText';
 import { useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
@@ -31,6 +32,7 @@ type Props = {
   eventContext?: { id: number; title: string };
   eventPlan?: StylistEventPlanData | null;
   onAddToEvent?: (itemIds: number[], eventPlan?: StylistEventPlanData | null) => Promise<unknown>;
+  onNavigateToCloset?: (outfitId: number) => void;
   onNavigateToShop?: (gap?: StylistMissingEssential) => void;
   onClarificationSelect?: (value: string) => void;
   onToggleAudio?: () => void;
@@ -54,13 +56,16 @@ export function StylistLookResponseCard({
   eventContext,
   eventPlan,
   onAddToEvent,
+  onNavigateToCloset,
   onNavigateToShop,
   onClarificationSelect,
   onToggleAudio,
   isPlaying = false,
 }: Props) {
   const { width } = useWindowDimensions();
-  const [saved, setSaved] = useState(false);
+  const [savedOutfitId, setSavedOutfitId] = useStylistCardState<number | null>('foundation-id', null);
+  const [saveError, setSaveError] = useState(false);
+  const [saved, setSaved] = useStylistCardState('foundation-saved', false);
   const [saving, setSaving] = useState(false);
   const [added, setAdded] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -80,8 +85,9 @@ export function StylistLookResponseCard({
   async function saveFoundation() {
     if (saving || saved || items.length === 0) return;
     setSaving(true);
+    setSaveError(false);
     try {
-      await createOutfit.mutateAsync({
+      const outfit = await createOutfit.mutateAsync({
         name: displayName(items),
         description: messageText.slice(0, 240) || null,
         notes: gaps.length ? `Foundation needs: ${gaps.map((gap) => gap.label).join(', ')}` : null,
@@ -89,8 +95,11 @@ export function StylistLookResponseCard({
         isDraft: status === 'incomplete',
         itemIds: items.map((item) => ({ id: item.id, category: item.category ?? 'other' })),
       });
+      setSavedOutfitId(outfit.id);
       setSaved(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    } catch {
+      setSaveError(true);
     } finally {
       setSaving(false);
     }
@@ -194,6 +203,8 @@ export function StylistLookResponseCard({
         </View>
       )}
 
+      {saveError ? <Text accessibilityRole="alert">Couldn’t save this outfit. Try again.</Text> : null}
+      {savedOutfitId !== null && onNavigateToCloset ? <TouchableOpacity style={styles.secondaryButton} accessibilityRole="button" onPress={() => onNavigateToCloset(savedOutfitId)}><Text style={styles.secondaryButtonText}>View outfit</Text></TouchableOpacity> : null}
       <View style={styles.actions}>
         {!isIncomplete && onAddToEvent && eventContext && (
           <TouchableOpacity style={styles.primaryButton} onPress={addToEvent} disabled={adding || added} activeOpacity={0.8} accessibilityRole="button">
@@ -204,7 +215,7 @@ export function StylistLookResponseCard({
         {!isIncomplete && !eventContext && (
           <TouchableOpacity style={styles.primaryButton} onPress={saveFoundation} disabled={saving || saved} activeOpacity={0.8} accessibilityRole="button">
             <Ionicons name={saved ? 'checkmark-circle' : 'bookmark-outline'} size={17} color={colors.primaryForeground} />
-            <Text style={styles.primaryButtonText}>{saving ? 'Saving…' : saved ? 'Saved to outfits' : 'Save this look'}</Text>
+            <Text style={styles.primaryButtonText}>{saving ? 'Saving…' : saved ? 'Saved to outfits' : 'Save outfit'}</Text>
           </TouchableOpacity>
         )}
         {isIncomplete && (
@@ -216,7 +227,7 @@ export function StylistLookResponseCard({
         <View style={styles.secondaryActions}>
           <TouchableOpacity style={styles.secondaryButton} onPress={saveFoundation} disabled={saving || saved || items.length === 0} accessibilityRole="button">
             <Ionicons name={saved ? 'checkmark' : 'bookmark-outline'} size={16} color={colors.primary} />
-            <Text style={styles.secondaryButtonText}>{saved ? 'Saved' : isIncomplete ? 'Save foundation' : 'Save look'}</Text>
+            <Text style={styles.secondaryButtonText}>{saved ? 'Saved' : isIncomplete ? 'Save foundation' : 'Save outfit'}</Text>
           </TouchableOpacity>
           {onToggleAudio && (
             <TouchableOpacity style={styles.quietButton} onPress={onToggleAudio} accessibilityRole="button" accessibilityLabel="Read stylist response aloud">

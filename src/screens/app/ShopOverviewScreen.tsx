@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Keyboard, Pressable, RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Keyboard, Pressable, RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -39,8 +39,42 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
 
   const [view, setView] = useState<ShopView>(route.params?.view ?? (requestedSection === 'shortlist' ? 'shortlist' : 'for-you'));
   const [shortlistMounted, setShortlistMounted] = useState(view === 'shortlist');
+  const [menuHidden, setMenuHidden] = useState(false);
+  const menuGesture = useRef<{ anchor: number; previous: number; direction: number } | null>(null);
+  const beginMenuScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offset = Math.max(0, event.nativeEvent.contentOffset.y);
+    menuGesture.current = { anchor: offset, previous: offset, direction: 0 };
+  }, []);
+  const endMenuScroll = useCallback(() => { menuGesture.current = null; }, []);
+  const endMenuDrag = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (!event.nativeEvent.velocity?.y) menuGesture.current = null;
+  }, []);
+  const updateMenuScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const gesture = menuGesture.current;
+    if (!gesture) return;
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const offset = contentOffset.y;
+    // Ignore rubber-banding at either edge; it is not a change of intent.
+    if (offset < 0 || offset > Math.max(0, contentSize.height - layoutMeasurement.height)) return;
+    const direction = Math.sign(offset - gesture.previous);
+    if (direction && direction !== gesture.direction) {
+      gesture.anchor = gesture.previous;
+      gesture.direction = direction;
+    }
+    gesture.previous = offset;
+    const nextHidden = offset > 8 && direction > 0;
+    const crossedThreshold = offset <= 8 || (direction > 0 ? offset - gesture.anchor >= 24 : gesture.anchor - offset >= 16);
+    if (crossedThreshold && nextHidden !== menuHidden) {
+      // End this observation before the viewport expands/contracts, so layout
+      // events cannot be mistaken for the user reversing their scroll.
+      menuGesture.current = null;
+      setMenuHidden(nextHidden);
+    }
+  }, [menuHidden]);
   const selectView = useCallback((next: ShopView) => {
     Keyboard.dismiss();
+    menuGesture.current = null;
+    setMenuHidden(false);
     setView(next);
     if (next === 'shortlist') setShortlistMounted(true);
     track('shop_view_selected', { view: next });
@@ -48,7 +82,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
 
   useEffect(() => {
     if (requestedSection === 'saved-looks' || requestedSection === 'saved-shopping') {
-      navigation.navigate('SavedShopping', { selectedId: route.params?.selectedId, tab: requestedSection === 'saved-looks' ? 'looks' : 'all' });
+      navigation.navigate('Wishlist', { selectedId: route.params?.selectedId, section: requestedSection === 'saved-looks' ? 'lists' : 'products' });
       navigation.setParams({ section: undefined, selectedId: undefined });
     } else if (requestedSection === 'shortlist' && route.params?.returnTo) {
       navigation.replace('ShoppingGallery', route.params);
@@ -137,11 +171,12 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
             subtitle="Buy fewer, better pieces"
             safeTop={false}
             style={{ paddingTop: insets.top + spacing.md }}
+            secondaryActions={[{ label: 'Save a find', icon: 'camera-outline', onPress: openShoppingCamera }]}
             primaryAction={{
-              label: 'Save a find',
-              icon: 'camera-outline',
+              label: 'Wishlist',
+              icon: 'bookmark-outline',
               variant: 'secondary',
-              onPress: openShoppingCamera,
+              onPress: () => navigation.navigate('Wishlist'),
             }}
           />
           {saveFindCoachVisible ? <View style={styles.saveFindTip} accessibilityLiveRegion="polite">
@@ -150,7 +185,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
           </View> : null}
         </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.viewSwitch} contentContainerStyle={styles.viewSwitchContent}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.viewSwitch, menuHidden && styles.hidden]} accessibilityElementsHidden={menuHidden} importantForAccessibility={menuHidden ? 'no-hide-descendants' : 'auto'} contentContainerStyle={styles.viewSwitchContent}>
         <SegmentedControl value={view} variant="tabs" options={[{ value: 'for-you', label: 'For you' }, { value: 'shortlist', label: 'Shortlist' }]} onChange={selectView} />
       </ScrollView>
       <View style={[styles.pane, view !== 'for-you' && styles.hidden]} accessibilityElementsHidden={view !== 'for-you'} importantForAccessibility={view !== 'for-you' ? 'no-hide-descendants' : 'auto'}>
@@ -160,7 +195,13 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} tintColor={colors.primary} />}
           contentContainerStyle={styles.content}
-          onScroll={event => setScrollOffset(event.nativeEvent.contentOffset.y)}
+          onScrollBeginDrag={beginMenuScroll}
+          onScrollEndDrag={endMenuDrag}
+          onMomentumScrollEnd={endMenuScroll}
+          onScroll={event => {
+            setScrollOffset(event.nativeEvent.contentOffset.y);
+            updateMenuScroll(event);
+          }}
           scrollEventThrottle={100}
         >
         {/* The brief is a section of this page like any other, so it wears the
@@ -212,7 +253,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
         </ScrollView>
       </View>
       {shortlistMounted && <View style={[styles.pane, view !== 'shortlist' && styles.hidden]} accessibilityElementsHidden={view !== 'shortlist'} importantForAccessibility={view !== 'shortlist' ? 'no-hide-descendants' : 'auto'}>
-        <ShortlistContent embedded active={view === 'shortlist'} navigation={navigation} params={route.params} onConsumeParams={navigation.setParams} />
+        <ShortlistContent embedded active={view === 'shortlist'} navigation={navigation} params={route.params} onConsumeParams={navigation.setParams} onContentScroll={updateMenuScroll} onContentScrollBeginDrag={beginMenuScroll} onContentScrollEndDrag={endMenuDrag} onContentMomentumScrollEnd={endMenuScroll} />
       </View>}
       <View
         pointerEvents="none"

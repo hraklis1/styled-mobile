@@ -363,8 +363,8 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
         </View>
         <View style={styles.saveBand}>
           <SaveEditAction saving={saving} isSaved={isSaved} onPress={saveEdit} />
-          {selectedSavedId ? <PressableScale accessibilityRole="button" accessibilityLabel="View saved guide" onPress={() => navigation.navigate('Stylist', { screen: 'StylistMain', params: { view: 'saved', tab: 'lists', selectedId: selectedSavedId } })}>
-            <Text style={styles.saveActionText}>View saved</Text>
+          {selectedSavedId ? <PressableScale accessibilityRole="button" accessibilityLabel="View wishlist list" onPress={() => navigation.navigate('Wishlist', { section: 'lists', selectedId: selectedSavedId })}>
+            <Text style={styles.saveActionText}>View wishlist</Text>
           </PressableScale> : null}
         </View>
       </ScrollView>
@@ -392,7 +392,7 @@ function SaveEditAction({
   isSaved: boolean;
   onPress: () => Promise<void>;
 }) {
-  const label = saving ? 'Saving…' : isSaved ? 'Saved' : 'Save this guide';
+  const label = saving ? 'Saving…' : isSaved ? 'List saved' : 'Save list';
 
   return (
     <PressableScale
@@ -405,9 +405,9 @@ function SaveEditAction({
       haptic={!isSaved}
       accessibilityRole="button"
       accessibilityLabel={
-        saving ? 'Saving guide' : isSaved ? 'In Saved recommendations' : 'Save this guide'
+        saving ? 'Saving list' : isSaved ? 'List saved in wishlist' : 'Save list'
       }
-      accessibilityHint={isSaved ? undefined : 'Adds this guide to Saved recommendations'}
+      accessibilityHint={isSaved ? undefined : 'Adds this list to your wishlist'}
       accessibilityState={{ selected: isSaved, busy: saving, disabled: saving || isSaved }}
     >
       {saving ? (

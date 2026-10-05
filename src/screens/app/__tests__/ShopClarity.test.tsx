@@ -1,13 +1,13 @@
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
-import { FlatList, TextInput } from 'react-native';
+import { FlatList, ScrollView, StyleSheet, TextInput } from 'react-native';
 import type { ShoppingSnap } from '../../../types/shoppingSnap';
 import type { WishlistEntry } from '../../../lib/wishlist';
 import type { ShoppingBrief } from '../../../lib/shopDecisionWorkspace';
 
 jest.mock('react-native/Libraries/Components/Pressable/Pressable', () => { const React = jest.requireActual('react'); return { __esModule: true, default: function MockPressable({ children, ...props }: any) { return React.createElement('Pressable', props, typeof children === 'function' ? children({ pressed: false }) : children); } }; });
 
-jest.mock('@react-navigation/native', () => ({ usePreventRemove: jest.fn(), CommonActions: { reset: jest.fn(() => ({ type: 'RESET' })), navigate: jest.fn((params) => ({ type: 'NAVIGATE', payload: params })) }, useFocusEffect: (callback: () => void) => require('react').useEffect(callback, [callback]) }));
+jest.mock('@react-navigation/native', () => ({ createNavigationContainerRef: () => ({ isReady: () => false }), useIsFocused: () => true, usePreventRemove: jest.fn(), CommonActions: { reset: jest.fn(() => ({ type: 'RESET' })), navigate: jest.fn((params) => ({ type: 'NAVIGATE', payload: params })) }, useFocusEffect: (callback: () => void) => require('react').useEffect(callback, [callback]) }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 47, bottom: 34, left: 0, right: 0 }) }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }));
 jest.mock('react-native-reanimated', () => ({
@@ -74,7 +74,7 @@ jest.mock('@gorhom/bottom-sheet', () => ({
   BottomSheetTextInput: require('react-native').TextInput,
 }));
 import { ShoppingGalleryScreen } from '../ShoppingGalleryScreen';
-import { SavedLooksScreen, SavedShoppingScreen } from '../ShopScreen';
+import { SavedLooksScreen, SavedShoppingScreen, WishlistScreen } from '../ShopScreen';
 import { SavedRecommendationsContent } from '../../../components/stylist/SavedRecommendationsContent';
 import { ShopOverviewScreen } from '../ShopOverviewScreen';
 import { BriefNote, briefIssueLabel, ShoppingBriefCard } from '../../../components/shopping/ShoppingBriefCard';
@@ -110,22 +110,21 @@ it('keeps starter suggestions behind the existing add-wardrobe action', () => {
   expect(button('Priority 1: Leather sneakers').props.onPress).toBeUndefined();
 });
 
-it('defaults to all types sorted newest first and keeps type filters working', () => {
+it('defaults to products and groups shopping outfits and guides together as lists', () => {
   mockEntries = [entry('look', 'look', '2026-09-18'), entry('piece', 'piece', '2026-09-19'), entry('guide', 'list', '2026-09-20')];
   act(() => { renderer = TestRenderer.create(<SavedRecommendationsContent onSelectionConsumed={jest.fn()} />); });
-  expect(renderer.root.findByType(FlatList).props.data.map((item: WishlistEntry) => item.id)).toEqual(['guide', 'piece', 'look']);
-  expect(nodes('SegmentedControl')[0].props.options.map((option: any) => option.label)).toEqual(['All 3', 'Looks 1', 'Pieces 1', 'Lists 1']);
-  act(() => nodes('SegmentedControl')[0].props.onChange('pieces'));
   expect(renderer.root.findByType(FlatList).props.data.map((item: WishlistEntry) => item.id)).toEqual(['piece']);
+  expect(nodes('SegmentedControl')[0].props.options.map((option: any) => option.label)).toEqual(['Products 1', 'Lists 2']);
+  act(() => nodes('SegmentedControl')[0].props.onChange('lists'));
+  expect(renderer.root.findByType(FlatList).props.data.map((item: WishlistEntry) => item.id)).toEqual(['guide', 'look']);
 });
 
-it('redirects legacy saved destinations to Stylist with category and selection intact', () => {
+it('redirects legacy saved destinations to Wishlist with section and selection intact', () => {
   render(SavedLooksScreen, { selectedId: 'guide' });
-  expect(mockTabNavigate).toHaveBeenCalledWith('Stylist', { screen: 'StylistMain', params: { view: 'saved', tab: 'looks', selectedId: 'guide' } });
-  expect(navigation.replace).toHaveBeenCalledWith('ShopMain', { view: 'for-you' });
+  expect(navigation.replace).toHaveBeenCalledWith('Wishlist', { section: 'lists', selectedId: 'guide' });
   act(() => renderer.unmount());
   render(SavedShoppingScreen, { tab: 'pieces', selectedId: 'piece' });
-  expect(mockTabNavigate).toHaveBeenLastCalledWith('Stylist', { screen: 'StylistMain', params: { view: 'saved', tab: 'pieces', selectedId: 'piece' } });
+  expect(navigation.replace).toHaveBeenLastCalledWith('Wishlist', { section: 'products', selectedId: 'piece' });
 });
 
 it('opens selected recommendations of another type and consumes the selection once', () => {
@@ -165,7 +164,7 @@ it('offers a working shopping Stylist action when nothing is saved', () => {
   act(() => { renderer = TestRenderer.create(<SavedRecommendationsContent onSelectionConsumed={jest.fn()} />); });
   const action = nodes('ActionButton').find((node) => node.props.label === 'Ask your Stylist')!;
   act(() => action.props.onPress());
-  expect(mockOpenStylist).toHaveBeenCalledWith(expect.objectContaining({ initialMode: 'shop_new', source: 'shop' }));
+  expect(mockOpenStylist).toHaveBeenCalledWith(expect.objectContaining({ initialMode: 'shop_piece', source: 'shop' }));
 });
 
 
@@ -238,11 +237,45 @@ it('gives shortlist its own Shop view with one masthead and preserves filters', 
   mockSnaps.length = 0;
 });
 
+it('collapses the Shop menu on downward scrolling and restores it on an upward gesture', () => {
+  render(ShopOverviewScreen);
+  const event = (y: number) => ({ nativeEvent: { contentOffset: { y }, contentSize: { height: 2000 }, layoutMeasurement: { height: 600 } } });
+  const menu = () => renderer.root.findAllByType(ScrollView).find(node => node.props.horizontal)!;
+  const content = () => renderer.root.findAllByType(ScrollView).find(node => !node.props.horizontal)!;
+  const hidden = () => StyleSheet.flatten(menu().props.style).display === 'none';
+  expect(hidden()).toBe(false);
+  act(() => content().props.onScrollBeginDrag(event(0)));
+  act(() => content().props.onScroll(event(10)));
+  expect(hidden()).toBe(false);
+  act(() => content().props.onScroll(event(40)));
+  expect(hidden()).toBe(true);
+  expect(menu().props.accessibilityElementsHidden).toBe(true);
+  // A layout-induced offset change after collapse must not reopen the menu.
+  act(() => content().props.onScroll(event(15)));
+  expect(hidden()).toBe(true);
+  act(() => content().props.onScrollBeginDrag(event(120)));
+  act(() => content().props.onScroll(event(95)));
+  expect(hidden()).toBe(false);
+  expect(nodes('SegmentedControl')[0].props.value).toBe('for-you');
+
+  act(() => nodes('SegmentedControl')[0].props.onChange('shortlist'));
+  const list = () => renderer.root.findAllByType(FlatList)[0];
+  act(() => list().props.onScrollBeginDrag(event(0)));
+  act(() => list().props.onScroll(event(40)));
+  expect(hidden()).toBe(true);
+  act(() => list().props.onScrollBeginDrag(event(40)));
+  act(() => list().props.onScroll(event(-10)));
+  expect(hidden()).toBe(true);
+  act(() => list().props.onScroll(event(0)));
+  expect(hidden()).toBe(false);
+  expect(nodes('SegmentedControl')[0].props.value).toBe('shortlist');
+});
+
 it('maps legacy Shop sections and honors a return destination', () => {
   render(ShopOverviewScreen, { section: 'shortlist', returnTo: 'Home', catalogFilter: 'active' });
   expect(navigation.replace).toHaveBeenCalledWith('ShoppingGallery', expect.objectContaining({ returnTo: 'Home', catalogFilter: 'active' }));
   act(() => renderer.update(<ShopOverviewScreen navigation={navigation as any} route={{ params: { section: 'saved-looks', selectedId: 'old' } } as any} />));
-  expect(navigation.navigate).toHaveBeenCalledWith('SavedShopping', { tab: 'looks', selectedId: 'old' });
+  expect(navigation.navigate).toHaveBeenCalledWith('Wishlist', { section: 'lists', selectedId: 'old' });
 });
 
 it('returns standalone Shortlist to the Home tab that opened it', () => {
@@ -254,4 +287,32 @@ it('returns standalone Shortlist to the Home tab that opened it', () => {
     act(() => jest.advanceTimersByTime(100));
     expect(require('@react-navigation/native').CommonActions.reset).toHaveBeenCalledWith({ index: 0, routes: [{ name: 'ShopMain' }] });
   } finally { jest.useRealTimers(); }
+});
+
+it('exposes Wishlist as a labelled Shop header action', () => {
+  render(ShopOverviewScreen);
+  act(() => nodes('ScreenHeader')[0].props.primaryAction.onPress());
+  expect(nodes('ScreenHeader')[0].props.primaryAction.label).toBe('Wishlist');
+  expect(navigation.navigate).toHaveBeenCalledWith('Wishlist');
+  expect(nodes('ScreenHeader')[0].props.secondaryActions[0].label).toBe('Save a find');
+});
+
+it('renders Wishlist with products by default and a working back action', () => {
+  mockEntries = [entry('piece', 'piece', '2026-09-19'), entry('look', 'look', '2026-09-18')];
+  const nav = { ...navigation, addListener: jest.fn(() => jest.fn()), canGoBack: () => true, goBack: jest.fn() };
+  act(() => { renderer = TestRenderer.create(<WishlistScreen navigation={nav as any} route={{ params: undefined } as any} />); });
+  expect(nodes('ScreenHeader')[0].props.title).toBe('Wishlist');
+  expect(nodes('SegmentedControl')[0].props.value).toBe('products');
+  act(() => nodes('ScreenHeader')[0].props.primaryAction.onPress());
+  expect(nav.goBack).toHaveBeenCalledTimes(1);
+});
+
+it('opens the selected shopping outfit in Lists and consumes both route parameters', () => {
+  mockEntries = [entry('look', 'look', '2026-09-18')];
+  const nav = { ...navigation, addListener: jest.fn(() => jest.fn()) };
+  act(() => { renderer = TestRenderer.create(<WishlistScreen navigation={nav as any} route={{ params: { section: 'products', selectedId: 'look' } } as any} />); });
+  expect(nodes('SegmentedControl')[0].props.value).toBe('lists');
+  expect(nodes('ShopWishlistDetailSheet')[0].props.entry.id).toBe('look');
+  expect(nav.setParams).toHaveBeenCalledWith({ section: undefined });
+  expect(nav.setParams).toHaveBeenCalledWith({ selectedId: undefined });
 });

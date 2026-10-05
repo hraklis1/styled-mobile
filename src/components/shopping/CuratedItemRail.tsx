@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { colors, curatedProducts, radii, spacing, typography } from '../../theme';
 import type { OfferContext, OfferStatus, ProductOffer } from '../../types/commerce';
@@ -12,6 +12,7 @@ import { CuratedProductBrowser } from './CuratedProductBrowser';
 import { CuratedProductDetail } from './CuratedProductDetail';
 import type { ShoppingPriorityTarget } from '../../lib/shoppingPriorityEdit';
 import type { Item } from '../../types/item';
+import { WishlistNavigationContext } from '../../contexts/WishlistNavigationContext';
 import { openShoppingLink } from './ShoppingRetailerLinks';
 
 export function CuratedItemRail({ offers, status = 'ready', heading = 'Pieces to consider', context, onRetry, savedDetail = false, reason, browserTitle, collectionAction = 'rail', exploreRequest = 0, target, wardrobe }: {
@@ -19,6 +20,7 @@ export function CuratedItemRail({ offers, status = 'ready', heading = 'Pieces to
   reason?: string; browserTitle?: string; collectionAction?: 'rail' | 'external'; exploreRequest?: number;
   target?: ShoppingPriorityTarget; wardrobe?: ReadonlyMap<number, Item>;
 }) {
+  const viewWishlist = useContext(WishlistNavigationContext);
   const { width } = useWindowDimensions();
   const [contentWidth, setContentWidth] = useState(width - spacing.page * 2);
   const cardWidth = Math.min(contentWidth, Math.max(curatedProducts.minWidth, Math.min(curatedProducts.maxWidth, contentWidth * curatedProducts.previewFraction)));
@@ -80,11 +82,14 @@ export function CuratedItemRail({ offers, status = 'ready', heading = 'Pieces to
   }
   function renderCard(offer: ProductOffer, size: number) {
     const key = productKey(offer);
-    return <CuratedItemCard key={key} offer={offer} width={size}
+    const savedEntry = savedLocally.get(key) ?? wishlist.find(entry => entry.outfit.product && productKey(entry.outfit.product.offer) === key);
+    return <View key={key} style={{ width: size }}><CuratedItemCard offer={offer} width={size}
       saved={savedLocally.has(key) || wishlist.some(entry => entry.outfit.product && productKey(entry.outfit.product.offer) === key)}
       saving={saving.has(key)} saveFailed={!!errors[key]}
       onSave={!savedDetail && (context.reference || context.wishlistId || savedLocally.has(key) || wishlist.some(entry => entry.outfit.product && productKey(entry.outfit.product.offer) === key)) ? () => void save(offer) : undefined}
-      onOpen={() => { track('curated_product_detail_viewed', { surface: context.surface, targetKey: context.targetKey, offerId: offer.id, position: offers.indexOf(offer), provider: offer.provider, monetized: offer.monetized }); setSelectedOffer(offer); }} />;
+      onOpen={() => { track('curated_product_detail_viewed', { surface: context.surface, targetKey: context.targetKey, offerId: offer.id, position: offers.indexOf(offer), provider: offer.provider, monetized: offer.monetized }); setSelectedOffer(offer); }} />
+      {savedEntry && !savedDetail ? <Pressable accessibilityRole="button" accessibilityLabel={`View ${offer.title} in wishlist`} style={styles.quiet} onPress={() => viewWishlist(savedEntry.id)}><Text style={styles.link}>View wishlist</Text></Pressable> : null}
+    </View>;
   }
   const selectedKey = selectedOffer ? productKey(selectedOffer) : '';
   const selectedSaved = savedLocally.has(selectedKey) || wishlist.some(entry => entry.outfit.product && productKey(entry.outfit.product.offer) === selectedKey);
