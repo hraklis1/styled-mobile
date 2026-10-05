@@ -24,7 +24,11 @@ export async function scanWear(flowId: string, imageData: string): Promise<WearS
   return data;
 }
 
-/** The closet item a "new" row becomes: the user's draft plus the scan's cutout. */
+/**
+ * The closet item a "new" row becomes: the user's draft plus the scan's
+ * cutout, with the background-intact crop as its original photo so it can be
+ * viewed and polished like any other item.
+ */
 export function newItemInput(flowId: string, d: WearDetection, draft: WearDraft): BatchCreateItemInput {
   return {
     clientImportId: clientImportIdFor(flowId, d.id),
@@ -42,6 +46,7 @@ export function newItemInput(flowId: string, d: WearDetection, draft: WearDraft)
     sizeProfile: draft.sizeProfile,
     sleeveLength: draft.sleeveLength,
     notes: d.attributes.description || null,
+    ...(d.cropUrl ? { imageUrl: d.cropUrl } : {}),
     cutoutUrl: d.cutoutUrl,
     coverImageVariant: d.cutoutUrl ? 'cutout' : 'original',
   };

@@ -8,6 +8,7 @@ import {
   NavigationContainer,
   LinkingOptions,
   getFocusedRouteNameFromRoute,
+  StackActions,
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import {
@@ -382,6 +383,23 @@ function AppTabNavigator() {
             tabBarButton: (props) => <QuickMenuTabButton {...props} pulseToken={shortcutCoachPulse} />,
           }}
           listeners={({ navigation }) => ({
+            tabPress: (event) => {
+              // A card opened from another tab (returnTo) lives in this stack and
+              // bounces back to that tab when removed. Pressing Closet should land
+              // on the closet instead, so drop returnTo before popping to the top.
+              const closetState = navigation.getState().routes.find((r) => r.name === 'Closet')?.state;
+              const borrowed = closetState?.routes.filter(
+                (r) => (r.params as { returnTo?: string } | undefined)?.returnTo != null,
+              ) ?? [];
+              if (!closetState?.key || borrowed.length === 0) return;
+              event.preventDefault();
+              for (const r of borrowed) {
+                navigation.dispatch({ ...CommonActions.setParams({ returnTo: undefined }), source: r.key, target: closetState.key });
+              }
+              navigation.navigate('Closet');
+              const stackKey = closetState.key;
+              setTimeout(() => navigation.dispatch({ ...StackActions.popToTop(), target: stackKey }), 0);
+            },
             tabLongPress: () => {
               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               setQuickMenu({
