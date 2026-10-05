@@ -87,11 +87,11 @@ async function render() {
 }
 const cards = () => renderer.root.findAllByType('ShoppingPriorityTargetCard' as any);
 
-test.each([1, 3, 5])('saves %i styles and opens the first style automatically', async (count) => {
+test.each([1, 3, 5])('saves %i styles and displays every style without disclosure', async (count) => {
   mockData = fixture(count);
   await render();
   expect(cards()).toHaveLength(count);
-  expect(cards()[0].props.expanded).toBe(true);
+  expect(cards().every(card => card.props.expanded === undefined && card.props.onToggle === undefined)).toBe(true);
   const save = renderer.root
     .findAllByType('PressableScale' as any)
     .find((node) => node.props.accessibilityLabel === 'Save this guide')!;
@@ -103,15 +103,13 @@ test.each([1, 3, 5])('saves %i styles and opens the first style automatically', 
   expect(JSON.stringify(renderer.toJSON())).not.toContain('Trousers Gap');
 });
 
-test('one style stays open across an unchanged data refresh and stylist return', async () => {
+test('all styles remain visible across an unchanged refresh and stylist return', async () => {
   mockData = fixture(3);
   await render();
-  expect(cards().map((card) => card.props.expanded)).toEqual([true, false, false]);
-  act(() => cards()[1].props.onToggle());
-  expect(cards().map((card) => card.props.expanded)).toEqual([false, true, false]);
+  expect(cards()).toHaveLength(3);
   mockData = { ...mockData, targets: [...mockData.targets] };
   await act(async () => renderer.update(<ShoppingPriorityEditScreen {...(props as any)} />));
-  expect(cards()[1].props.expanded).toBe(true);
+  expect(cards()).toHaveLength(3);
   const ask = renderer.root.findAllByProps({ accessibilityLabel: 'Ask your stylist' })[0];
   act(() => ask.props.onPress());
   expect(mockOpen).toHaveBeenCalledWith(
@@ -120,7 +118,7 @@ test('one style stays open across an unchanged data refresh and stylist return',
       context: { kind: 'shopping_brief_edit', priority, targets: mockData.targets },
     }),
   );
-  expect(cards()[1].props.expanded).toBe(true);
+  expect(cards()).toHaveLength(3);
 });
 
 test('a suggested follow-up is dispatched exactly once with actual guide context', async () => {

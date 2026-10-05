@@ -4,6 +4,9 @@ import { Pressable, Text } from 'react-native';
 import { ShopWardrobeEdit } from '../ShopWardrobeEdit';
 import type { ShoppingBrief, ShoppingBriefPriority } from '../../../lib/shopDecisionWorkspace';
 jest.mock('react-native/Libraries/Components/Pressable/Pressable', () => { const React = jest.requireActual('react'); return { __esModule: true, default: function MockPressable({ children, ...props }: any) { return React.createElement('Pressable', props, children); } }; });
+jest.mock('react-native/Libraries/Components/View/View', () => { const React = jest.requireActual('react'); return { __esModule: true, default: React.forwardRef(function MockView(props: any, ref: any) { return React.createElement('View', { ...props, ref }, props.children); }) }; });
+jest.mock('../ShoppingOutfitPreview', () => ({ ShoppingOutfitPreview: 'ShoppingOutfitPreview' }));
+jest.mock('../WardrobeThumbnail', () => ({ WardrobeThumbnail: 'WardrobeThumbnail' }));
 jest.mock('../CuratedItemRail', () => ({ CuratedItemRail: 'CuratedItemRail' }));
 jest.mock('../../../lib/analytics', () => ({ track: jest.fn() }));
 const mockDismiss = jest.fn();
@@ -21,15 +24,21 @@ function render(data = brief) { act(() => { renderer = TestRenderer.create(<Shop
 function update(data: ShoppingBrief) { act(() => renderer.update(<ShopWardrobeEdit brief={data} wardrobe={wardrobe} onGuide={() => {}} onBrief={() => {}} />)); }
 beforeEach(() => { mockPending = []; mockEdit.mockReset().mockReturnValue({ data: undefined, isLoading: true }); jest.clearAllMocks(); });
 afterEach(() => act(() => renderer?.unmount()));
-test('switching priorities fetches only the selected preview and stale selection falls back', () => {
-  render();
-  expect(mockEdit).toHaveBeenLastCalledWith(first, expect.objectContaining({ purpose: 'preview', origin: 'shopping_brief' }));
-  expect(mockEdit.mock.calls.every(call => call[0] === first)).toBe(true);
-  const tabs = renderer.root.findAllByType(Pressable).filter(node => node.props.accessibilityRole === 'tab');
-  act(() => tabs[1].props.onPress());
-  expect(mockEdit).toHaveBeenLastCalledWith(second, expect.anything());
+test('shows every priority in rank order and defers previews until near the viewport', () => {
+  let secondY = 10000;
+  act(() => { renderer = TestRenderer.create(<ShopWardrobeEdit brief={{ ...brief, priorities: [second, first] }} wardrobe={wardrobe} onGuide={() => {}} onBrief={() => {}} />, { createNodeMock: (element: any) => element.props.testID ? { measureInWindow: (callback: (x: number, y: number) => void) => callback(0, element.props.testID === 'shop-addition-trousers' ? secondY : 0) } : null }); });
+  act(() => renderer.root.findAll(node => typeof node.type === 'string' && node.props.testID?.startsWith('shop-addition-')).forEach(node => node.props.onLayout()));
+  const calls = mockEdit.mock.calls;
+  expect(calls.filter(call => call[0] === first).at(-1)[1].enabled).toBe(true);
+  expect(calls.filter(call => call[0] === second).at(-1)[1].enabled).toBe(false);
+  const headings = renderer.root.findAllByType(Text).filter(node => node.props.accessibilityRole === 'header');
+  expect(headings.map(node => node.props.children)).toEqual(['Leather shoes', 'Trousers']);
+  secondY = 100;
+  act(() => renderer.update(<ShopWardrobeEdit brief={brief} wardrobe={wardrobe} onGuide={() => {}} onBrief={() => {}} scrollOffset={900} />));
+  expect(mockEdit.mock.calls.filter(call => call[0] === second).at(-1)[1].enabled).toBe(true);
+  mockEdit.mockClear();
   update({ ...brief, priorities: [first] });
-  expect(mockEdit).toHaveBeenLastCalledWith(first, expect.anything());
+  expect(mockEdit.mock.calls.every(call => call[0] === first)).toBe(true);
 });
 test('hiding the last priority keeps undo available and never fetches a removed priority', () => {
   render({ ...brief, priorities: [first] });
@@ -44,11 +53,20 @@ test('hiding the last priority keeps undo available and never fetches a removed 
 });
 test('collection reasoning appears once, and no-buy results show guidance without products', () => {
   mockEdit.mockReturnValue({ data: { status: 'ready', commerceReference: 'ref', targets: [{ key: 'white', rationale: 'Pairs with your navy tailoring.', offers: [{ inStock: null }], offerState: { status: 'ready' } }] } });
-  render();
+  render({ ...brief, priorities: [first] });
   expect(renderer.root.findAllByType(Text).filter(node => node.props.children === 'Pairs with your navy tailoring.')).toHaveLength(1);
   act(() => renderer.unmount());
   mockEdit.mockReturnValue({ data: { status: 'no_buy', noBuyReason: 'Already covered.', targets: [] } });
   render();
   expect(renderer.root.findAllByType('CuratedItemRail' as any)).toHaveLength(0);
   expect(renderer.root.findAllByType(Text).some(node => node.props.children === 'Already covered.')).toBe(true);
+});
+
+test('uses a target outfit before priority anchors and keeps full reasoning visible', () => {
+  const target = { key: 'white', rationale: 'A long, complete explanation of why this style works.', outfitIdeas: [{ label: 'With tailoring', itemIds: [1, 2] }], offers: [], offerState: { status: 'empty' } };
+  mockEdit.mockReturnValue({ data: { status: 'ready', targets: [target] } });
+  act(() => { renderer = TestRenderer.create(<ShopWardrobeEdit brief={{ ...brief, priorities: [first] }} wardrobe={new Map([[1, { id: 1, name: 'Jacket' } as any]])} onGuide={() => {}} onBrief={() => {}} />); });
+  expect(renderer.root.findAllByType('ShoppingOutfitPreview' as any)).toHaveLength(1);
+  const reason = renderer.root.findAllByType(Text).find(node => node.props.children === target.rationale)!;
+  expect(reason.props.numberOfLines).toBeUndefined();
 });

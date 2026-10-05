@@ -26,13 +26,12 @@ const SAMPLE_PRIORITIES: ShoppingBriefPriority[] = [
 
 const SAMPLE_NOTE = 'You have plenty to wear on weekends, but little that holds up on a cold morning. A camel overcoat would do the most work—it sits over nearly everything you own.';
 
-/** The issue line, e.g. "August brief" — so the brief reads as something
- *  issued this month rather than computed live. It rides in the section
- *  header's `trailing` slot on Shop, beside the department label, which is
- *  why it is exported rather than drawn by the card: the card owns the
- *  content, the page owns the heading. */
-export function briefIssueLabel(): string {
-  return `${new Date().toLocaleDateString('en-US', { month: 'long' })} brief`;
+/** Date the edit from its recommendation data, including older cached briefs. */
+export function briefIssueLabel(brief?: ShoppingBrief, now = new Date()): string {
+  if (!brief) return 'Daily edit';
+  const date = brief.localDate ? new Date(`${brief.localDate}T12:00:00`) : new Date(brief.generatedAt);
+  if (!Number.isFinite(date.getTime())) return 'Saved edit';
+  return date.toDateString() === now.toDateString() ? 'Today’s edit' : `${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} edit`;
 }
 
 type Props = {
@@ -140,7 +139,8 @@ export function ShoppingBriefCard({
     const starterPriorities = brief.priorities.slice(0, PRIORITY_LIMIT);
     return shell(
       <>
-        <BriefNote text={brief.summary} />
+        <BriefNote text={brief.summary} full />
+        {starterPriorities.length ? <Text style={styles.body}>These are starting points, rather than confirmed wardrobe gaps.</Text> : null}
         <BriefEditStrip priorities={starterPriorities} />
         <TextAction label="Add wardrobe pieces" onPress={onAddWardrobePieces} />
       </>,
@@ -154,7 +154,7 @@ export function ShoppingBriefCard({
     <>
       {/* The note is the stylist talking; the headline it replaced here
           still titles ShoppingBriefDetailScreen and Home's brief band. */}
-      <BriefNote text={note} />
+      <BriefNote text={note} full />
       <TextAction label="Read the full brief" onPress={onOpenFullBrief} />
 
       {/* "Balanced" with no priorities but a known next candidate — distinct
@@ -174,7 +174,7 @@ export function ShoppingBriefCard({
 /** Personal stylist commentary, with sentence-aware disclosure for older long notes. */
 export function BriefNote({ text, full }: { text: string; full?: boolean }) {
   const [expanded, setExpanded] = useState(false);
-  const preview = stylistNotePreview(text);
+  const preview = full ? text : stylistNotePreview(text);
   return (
     <View>
       <Text style={[styles.noteText, full && typography.text.editorialBody]} selectable>{expanded ? text : preview}</Text>

@@ -76,7 +76,7 @@ jest.mock('@gorhom/bottom-sheet', () => ({
 import { ShoppingGalleryScreen } from '../ShoppingGalleryScreen';
 import { SavedLooksScreen, SavedShoppingScreen } from '../ShopScreen';
 import { ShopOverviewScreen } from '../ShopOverviewScreen';
-import { ShoppingBriefCard } from '../../../components/shopping/ShoppingBriefCard';
+import { BriefNote, briefIssueLabel, ShoppingBriefCard } from '../../../components/shopping/ShoppingBriefCard';
 
 const navigation = { navigate: jest.fn(), replace: jest.fn(), setParams: jest.fn(), canGoBack: () => true, goBack: jest.fn() };
 const entry = (id: string, recommendationType: 'look' | 'piece' | 'list', savedAt: string): WishlistEntry => ({
@@ -96,9 +96,9 @@ it('opens the exact overview priority with its recommendation and brief context'
   mockEntries = [];
   render(ShopOverviewScreen);
   const priority = mockBrief.priorities[0];
-  act(() => button('Explore the guide: Leather sneakers').props.onPress());
+  act(() => button('View styling guide: Leather sneakers').props.onPress());
   expect(navigation.navigate).toHaveBeenCalledWith('ShoppingPriorityEdit', { priority, origin: 'shopping_brief', briefGeneratedAt: mockBrief.generatedAt });
-  expect(nodes('Pressable').some(node => node.findAllByType(require('react-native').Text).some(child => child.props.children === 'Read your brief'))).toBe(true);
+  expect(nodes('Pressable').some(node => node.findAllByType(require('react-native').Text).some(child => child.props.children === 'Read your brief →'))).toBe(true);
 });
 
 it('keeps starter suggestions behind the existing add-wardrobe action', () => {
@@ -170,4 +170,18 @@ it('resets every narrowing shortlist filter without changing the preferred view'
   act(() => renderer.update(<ShoppingGalleryScreen navigation={navigation as any} route={{ params: { catalogFilter: 'active' } } as any} />));
   expect(nodes('OptionChips')[4].props.multiValue).toEqual(['considering', 'wishlist']);
   mockSnaps.length = 0;
+});
+
+it('dates the edit from its own data and rolls the daily label over', () => {
+  const data = { ...mockBrief, localDate: '2026-10-05' };
+  expect(briefIssueLabel(data, new Date('2026-10-05T13:00:00'))).toBe('Today’s edit');
+  expect(briefIssueLabel(data, new Date('2026-10-06T00:01:00'))).not.toBe('Today’s edit');
+  expect(briefIssueLabel()).toBe('Daily edit');
+});
+
+it('full brief notes expose the complete stylist explanation without disclosure', () => {
+  const text = Array.from({ length: 12 }, () => 'This addition works with your wardrobe for the week ahead.').join(' ');
+  act(() => { renderer = TestRenderer.create(<BriefNote text={text} full />); });
+  expect(renderer.root.findAllByType(require('react-native').Text).some(node => node.props.children === text)).toBe(true);
+  expect(JSON.stringify(renderer.toJSON())).not.toContain('Read the full note');
 });

@@ -68,35 +68,19 @@ test('deleted wardrobe references downgrade an outfit to an honest pairing', () 
   expect(renderer.root.findAllByType('WardrobeThumbnail' as any)).toHaveLength(1);
 });
 
-test('expanded styles split shopping, outfits and details into tabs, shopping first', () => {
+test('style directions expose wardrobe evidence, products and shopping notes together', () => {
   const wardrobe = new Map([
     [1, { id: 1, name: 'Jacket' } as Item],
     [2, { id: 2, name: 'Shoes' } as Item],
   ]);
-  render(<ShoppingPriorityTargetCard target={target} index={1} wardrobe={wardrobe} expanded />);
+  render(<ShoppingPriorityTargetCard target={target} index={1} wardrobe={wardrobe} />);
   const json = JSON.stringify(renderer.toJSON());
-  expect(json.indexOf('"Shop"')).toBeLessThan(json.indexOf('Wear it'));
-  expect(json.indexOf('Wear it')).toBeLessThan(json.indexOf('Details'));
-  expect(json).toContain('Uniqlo');
-  expect(json).not.toContain('Office ready');
-  expect(json).not.toMatch(/unlocks|available now|1 look/i);
-});
-
-test('choosing a tab shows only that panel', () => {
-  const wardrobe = new Map([
-    [1, { id: 1, name: 'Jacket' } as Item],
-    [2, { id: 2, name: 'Shoes' } as Item],
-  ]);
-  render(<ShoppingPriorityTargetCard target={target} index={1} wardrobe={wardrobe} expanded />);
-  const tabs = renderer.root.findAll((node) => node.props.accessibilityRole === 'tab' && typeof node.props.onPress === 'function' && typeof node.type === 'string');
-  act(() => tabs.find((t) => t.props.accessibilityLabel === 'Details')!.props.onPress());
-  let json = JSON.stringify(renderer.toJSON());
-  expect(json).toContain('What to look for');
-  expect(json).not.toContain('Office ready');
-  act(() => tabs.find((t) => t.props.accessibilityLabel === 'Wear it')!.props.onPress());
-  json = JSON.stringify(renderer.toJSON());
   expect(json).toContain('Office ready');
-  expect(json).not.toContain('What to look for');
+  expect(json).toContain('Uniqlo');
+  expect(json).toContain('What to look for');
+  expect(json.indexOf('With your wardrobe')).toBeLessThan(json.indexOf('Pieces to consider'));
+  expect(json.indexOf('Pieces to consider')).toBeLessThan(json.indexOf('What to look for'));
+  expect(renderer.root.findAll(node => node.props.accessibilityRole === 'tab')).toHaveLength(0);
 });
 
 test('missing outfit and retailer data leaves useful guidance without empty sections', () => {
@@ -109,7 +93,7 @@ test('missing outfit and retailer data leaves useful guidance without empty sect
     />,
   );
   const json = JSON.stringify(renderer.toJSON());
-  expect(json).not.toContain('Wear it');
-  expect(json).not.toContain('"Shop"');
+  expect(json).not.toContain('With your wardrobe');
+  expect(json).not.toContain('Pieces to consider');
   expect(json).toContain('What to look for');
 });

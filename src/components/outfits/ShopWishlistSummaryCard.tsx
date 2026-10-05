@@ -51,7 +51,7 @@ export function ShopWishlistSummaryCard({ entry, onPress, onMore, showType }: Pr
         {context ? (
           <AppText variant="eyebrow" tone="brand" numberOfLines={1}>{context}</AppText>
         ) : null}
-        <AppText variant="cardTitle" tone="primary" numberOfLines={2}>{title}</AppText>
+        <AppText variant="cardTitle" tone="primary">{title}</AppText>
         {savedEdit && !showType ? (
           <AppText variant="caption" tone="muted" numberOfLines={1}>Shopping guide</AppText>
         ) : brands.length > 0 ? (
@@ -59,9 +59,9 @@ export function ShopWishlistSummaryCard({ entry, onPress, onMore, showType }: Pr
         ) : null}
         <View style={styles.metaRow}>
           {figure ? (
-            <AppText variant="data" tone="primary" numberOfLines={1} style={styles.figure}>{figure}</AppText>
+            <AppText variant="data" tone="primary" style={styles.figure}>{figure}</AppText>
           ) : null}
-          <AppText variant="caption" tone="muted" numberOfLines={1} style={styles.meta}>
+          <AppText variant="caption" tone="muted" style={styles.meta}>
             {[count, savedDate].filter(Boolean).join(' · ')}
           </AppText>
         </View>
@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
   },
   preview: { width: 88, aspectRatio: 4 / 5, borderRadius: radii.photo },
   copy: { flex: 1, minWidth: 0, gap: spacing.xs },
-  metaRow: { flexWrap: 'wrap', flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, paddingTop: spacing.xs },
+  metaRow: { flexDirection: 'column', gap: spacing.xs, paddingTop: spacing.xs },
   figure: { flexShrink: 1 },
   meta: { flexShrink: 1, fontVariant: ['tabular-nums'] },
   // Pulled up and out by the row's own padding so the 44pt target sits on the

@@ -10,6 +10,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import Animated, {
   Easing,
@@ -102,6 +103,7 @@ type SavedShoppingContentProps = {
 
 function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShoppingContentProps) {
   const { openStylist } = useGlobalAIStylist();
+  const { fontScale } = useWindowDimensions();
   const { data: entries = [], isLoading: loading, refetch } = useWishlist();
   const { mutate: removeItem } = useRemoveFromWishlist();
 
@@ -245,6 +247,7 @@ function SavedShoppingContent({ navigation, initialTab, selectedId }: SavedShopp
         <SegmentedControl
           value={activeTab}
           variant="tabs"
+          style={{ minWidth: Math.max(350, TABS.reduce((total, tab) => total + (tab.label.length + String(savedCounts[tab.value]).length + 1) * 9 * fontScale + 24, 0)) }}
           options={TABS.map(({ value, label }) => ({ value, label: `${label} ${savedCounts[value]}` }))}
           onChange={(value) => {
             setActiveTab(value);

@@ -35,6 +35,7 @@ export function ProductDetailContent({ offer, reason, target, wardrobe, saved, s
       <Text selectable style={styles.price}>{offer.formattedPrice || 'See price at the listing'}</Text>
       <Text selectable style={styles.copy}>{productMerchantLabel(offer.merchant)}</Text>
     </View>
+    {reason ? <View style={styles.context}><Text accessibilityRole="header" style={styles.heading}>Why I’d consider this style</Text><Text selectable style={styles.copy}>{reason}</Text></View> : null}
     <View style={styles.actions}>
       <ActionButton label={productListingAction(offer)} icon="open-outline" onPress={onRetailer} />
       {onSave ? <ActionButton label={saving ? 'Updating…' : saved ? 'Saved · remove' : 'Save piece'} icon={saved ? 'bookmark' : 'bookmark-outline'} variant="secondary" onPress={onSave} disabled={saving} /> : null}
@@ -42,7 +43,7 @@ export function ProductDetailContent({ offer, reason, target, wardrobe, saved, s
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
     <Text selectable style={styles.caption}>{priceNote ?? 'Confirm price and availability at the listing.'}{offer.inStock === false ? ' This listing is currently unavailable.' : ''}</Text>
     {offer.monetized ? <Text selectable style={styles.caption}>{productDisclosure}</Text> : null}
-    {reason ? <View style={styles.context}><Text accessibilityRole="header" style={styles.heading}>Why this style</Text><Text selectable style={styles.copy}>{reason}</Text></View> : null}
+
     {looks.length && target && wardrobe ? <View style={styles.context}>
       <Text accessibilityRole="header" style={styles.heading}>With your wardrobe</Text>
       <Text style={styles.caption}>Ways to wear this suggested style with pieces you own.</Text>

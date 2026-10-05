@@ -36,11 +36,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
   const { data: wishlist = [] } = useWishlist();
   const startedAt = useRef(Date.now());
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scrollRef = useRef<ScrollView>(null);
-  const scrollY = useRef(0);
-  const openingKey = useRef<string | null>(null);
   const { openStylist } = useGlobalAIStylist();
-  const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [savedLocally, setSavedLocally] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showSaveToast, setShowSaveToast] = useState(false);
@@ -90,7 +86,6 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
     if (!edit.data || lastGuideIdentity.current === guideIdentity) return;
     lastGuideIdentity.current = guideIdentity;
     setSavedLocally(false);
-    setExpandedKey(edit.data.targets[0]?.key ?? null);
   }, [guideIdentity, edit.data]);
 
   useEffect(
@@ -223,7 +218,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
           <ShopSubpageHeader
             eyebrow={guideEyebrow}
             editorialSize
-            backLabel="Back to Shopping Brief"
+            backLabel={source === 'home_daily_look' ? 'Back to Home' : 'Back'}
             title="Your brief was updated"
             subtitle={data.summary}
             onBack={goBack}
@@ -265,7 +260,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
           <ShopSubpageHeader
             eyebrow={guideEyebrow}
             editorialSize
-            backLabel="Back to Shopping Brief"
+            backLabel={source === 'home_daily_look' ? 'Back to Home' : 'Back'}
             title={displayHeadline}
             subtitle={data.summary}
             onBack={goBack}
@@ -298,16 +293,11 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
   return (
     <View style={styles.screen}>
       <ScrollView
-        ref={scrollRef}
-        onScroll={(event) => {
-          scrollY.current = event.nativeEvent.contentOffset.y;
-        }}
-        scrollEventThrottle={16}
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xxxl }]}
         showsVerticalScrollIndicator={false}
       >
         <ShopSubpageHeader editorialSize eyebrow={guideEyebrow} title={displayHeadline} subtitle={intro}
-          onBack={goBack} backLabel="Back to Shopping Brief" style={styles.fullBleedHeader} />
+          onBack={goBack} backLabel={source === 'home_daily_look' ? 'Back to Home' : 'Back'} style={styles.fullBleedHeader} />
         {edit.isError ? <Text style={styles.body}>You’re reading your saved guide. We couldn’t refresh it just now.</Text> : null}
         <Text accessibilityRole="header" style={styles.guideIntro}>
           {directionCount === 1 ? 'A style to consider' : `Styles to consider · ${directionCount}`}
@@ -315,13 +305,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
         {data.targets.map((target, index) => (
           <View
             key={target.key}
-            onLayout={(event) => {
-              if (openingKey.current !== target.key) return;
-              openingKey.current = null;
-              const top = event.nativeEvent.layout.y;
-              if (top < scrollY.current)
-                scrollRef.current?.scrollTo({ y: top, animated: !reduceMotion });
-            }}
+
           >
             <ShoppingPriorityTargetCard
               target={target}
@@ -330,11 +314,6 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
               index={index + 1}
               wardrobe={wearable}
               isLast={index === directionCount - 1}
-              expanded={expandedKey === target.key}
-              onToggle={() => {
-                openingKey.current = expandedKey === target.key ? null : target.key;
-                setExpandedKey(expandedKey === target.key ? null : target.key);
-              }}
               onSaveFind={() => {
                 track('shopping_brief_save_find_tapped', {
                   category: priority.category,
@@ -464,7 +443,7 @@ function StateScreen({
       >
         <ShopSubpageHeader
           editorialSize
-          backLabel="Back to Shopping Brief"
+          backLabel="Back"
           compact
           eyebrow={eyebrow}
           title={title}

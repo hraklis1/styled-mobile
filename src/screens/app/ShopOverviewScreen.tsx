@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -9,7 +9,6 @@ import { ShortlistCarousel } from '../../components/shopping/ShortlistCarousel';
 import { SavedLookTile } from '../../components/outfits/SavedLookTile';
 import { EditorialSection, ScreenHeader } from '../../components/primitives/Editorial';
 import { AppText } from '../../components/primitives/AppText';
-import { AiActionCoachmark } from '../../components/primitives/AiActionCoachmark';
 import { EditorialRow } from '../../components/primitives/EditorialRow';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrencyCode } from '../../hooks/useCurrencyCode';
@@ -28,16 +27,9 @@ import { colors, radii, shoppingSurfaces, spacing } from '../../theme';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import type { ShopOverviewScreenProps } from '../../navigation/types';
 
-/**
- * Shop answers two questions, in this order: what should I shop for (the
- * brief, summarized here and stated in full one tap away on
- * ShoppingBriefDetailScreen), and what have I already started (the shortlist
- * rail). The camera lives in the header
- * instead of a card of its own, because saving a find is a one-tap habit
- * once you're in the app, not the thing the page needs to sell.
- */
 export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProps) {
   const insets = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
   const { user } = useAuth();
   const { isPremium } = useEntitlement();
   const { data: items = [], refetch: refetchItems } = useItems();
@@ -103,12 +95,8 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
     setRefreshing(false);
   }, [brief, isPremium, refetchItems, refetchSnaps]);
 
-  // ── First-run "Save a find" coachmark ───────────────────────────────────────
-  // The button lost its standing caption when it moved into the masthead, so
-  // what it does is explained once, pointed at the button itself, and never
-  // again.
   const [saveFindCoachVisible, setSaveFindCoachVisible] = useState(false);
-  const [headerHeight, setHeaderHeight] = useState(0);
+  const [scrollOffset, setScrollOffset] = useState(0);
 
   useEffect(() => {
     const userId = user?.id;
@@ -160,17 +148,21 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
 
   return (
     <View style={styles.root}>
+      {/* Reflow native text measurements when Dynamic Type changes. */}
       <ScrollView
+        key={fontScale}
         contentInsetAdjustmentBehavior="never"
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} tintColor={colors.primary} />}
         contentContainerStyle={styles.content}
+        onScroll={event => setScrollOffset(event.nativeEvent.contentOffset.y)}
+        scrollEventThrottle={100}
       >
         {/* The tab masthead is the shared ScreenHeader the other tabs wear —
             page name in the display face, tagline demoted to its subtitle.
             Shop used to invert that (a small SHOP eyebrow over an editorial
             tagline), which read as a different kind of page. */}
-        <View onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}>
+        <View>
           <ScreenHeader
             title="Shop"
             titleVariant="display"
@@ -184,6 +176,10 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
               onPress: openShoppingCamera,
             }}
           />
+          {saveFindCoachVisible ? <View style={styles.saveFindTip} accessibilityLiveRegion="polite">
+            <AppText variant="caption" tone="muted">Save a find: photograph a piece or price tag to revisit on your shortlist.</AppText>
+            <Pressable accessibilityRole="button" accessibilityLabel="Dismiss Save a find tip" onPress={() => dismissSaveFindCoach('got_it')} style={{ minHeight: 44, justifyContent: 'center' }}><AppText variant="caption" tone="primary">Got it</AppText></Pressable>
+          </View> : null}
         </View>
 
         {/* The brief is a section of this page like any other, so it wears the
@@ -195,10 +191,11 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
           headingStyle="editorial"
           style={styles.section}
           title="For your wardrobe"
-          trailing={<AppText variant="caption" tone="muted">{briefIssueLabel()}</AppText>}
+          trailing={<AppText variant="caption" tone="muted">{briefIssueLabel(brief.data)}</AppText>}
         >
           {isPremium && brief.data?.status === 'ready' ? <ShopWardrobeEdit
             brief={brief.data}
+            scrollOffset={scrollOffset}
             wardrobe={wardrobe}
             onGuide={(priority) => {
               track('shopping_brief_priority_opened', { category: priority.category, reason: priority.reason, rank: priority.priority });
@@ -299,23 +296,14 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
         accessibilityElementsHidden
         style={[styles.safeAreaScrim, { height: insets.top }]}
       />
-      {/* Hung off the measured masthead height so the caret stays under the
-          button whatever the header measures at. */}
-      <AiActionCoachmark
-        visible={saveFindCoachVisible && headerHeight > 0}
-        title="Save a find"
-        body="Snap a piece or its price tag while you're in store. It's filed to your Shortlist so you can decide later."
-        onDismiss={() => dismissSaveFindCoach('got_it')}
-        style={{ top: headerHeight - spacing.sm, right: spacing.page }}
-        caretRight={36}
-        scrimAccessibilityLabel="Dismiss the Save a find tip"
-      />
+
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
+  saveFindTip: { paddingHorizontal: spacing.page, paddingBottom: spacing.md, gap: spacing.xs },
   content: { paddingBottom: spacing.xxxl },
   briefPanel: {
     padding: spacing.lg,
