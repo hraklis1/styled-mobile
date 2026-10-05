@@ -46,8 +46,8 @@ export function ShopSubpageHeader({ editorialSize, backLabel = 'Back to Shop', t
       {compact && (
         <View style={styles.compactTitleWrap}>
           {eyebrow ? <AppText variant="eyebrow" tone="brand">{eyebrow}</AppText> : null}
-          <AppText variant="sectionTitle" tone="primary" numberOfLines={1}>{title}</AppText>
-          {subtitle ? <AppText variant="caption" tone="muted" numberOfLines={1}>{subtitle}</AppText> : null}
+          <AppText variant="editorialCompact" tone="primary" numberOfLines={titleNumberOfLines}>{title}</AppText>
+          {subtitle ? <AppText variant="caption" tone="muted" numberOfLines={subtitleNumberOfLines}>{subtitle}</AppText> : null}
         </View>
       )}
       {!compact && (
@@ -69,15 +69,15 @@ export function ShopSubpageHeader({ editorialSize, backLabel = 'Back to Shop', t
 const styles = StyleSheet.create({
   // Page ground, not a tinted plate: Shop's subpages are one continuous
   // sheet, sectioned by single hairlines rather than by changes of surface.
-  header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, backgroundColor: colors.surfaceElevated },
+  header: { paddingHorizontal: spacing.page, paddingBottom: spacing.lg, backgroundColor: colors.background },
   headerCompact: { paddingBottom: spacing.md },
-  topRow: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xl },
+  topRow: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.lg },
   topRowCompact: { minHeight: 42, marginBottom: spacing.sm },
   compactTitleWrap: { gap: 1 },
   // Outlined, not filled: on the page ground a white disc had nothing to sit
   // against, and a tinted one vanished. A hairline ring reads as a control
   // without adding a surface.
-  backButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.surfaceElevated },
+  backButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.background },
   actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   eyebrowRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
   title: { maxWidth: 340, paddingTop: spacing.sm },

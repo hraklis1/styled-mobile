@@ -122,7 +122,7 @@ export function ShoppingPriorityTargetCard({
         accessibilityHint={
           expanded
             ? "Collapses this style"
-            : "Shows outfit ideas and shopping guidance"
+            : "Shows pieces, outfit ideas, and shopping guidance"
         }
         style={({ pressed }) => [
           styles.summary,
@@ -148,9 +148,7 @@ export function ShoppingPriorityTargetCard({
               <Text style={styles.action}>
                 {expanded
                   ? "Close"
-                  : looks.length
-                    ? "How to wear it"
-                    : "Style details"}
+                  : hasShop ? "Explore pieces" : "Style details"}
               </Text>
               <Animated.View
                 style={{
@@ -227,6 +225,8 @@ export function ShoppingPriorityTargetCard({
                     onRetry={onRetryOffers}
                     targetKey={target.key}
                     targetTitle={target.title}
+                    target={target}
+                    wardrobe={wardrobe}
                   />
                 ) : (
                   <ShoppingRetailerLinks target={target} />

@@ -87,11 +87,11 @@ async function render() {
 }
 const cards = () => renderer.root.findAllByType('ShoppingPriorityTargetCard' as any);
 
-test.each([1, 3, 5])('saves %i styles and opens a single style automatically', async (count) => {
+test.each([1, 3, 5])('saves %i styles and opens the first style automatically', async (count) => {
   mockData = fixture(count);
   await render();
   expect(cards()).toHaveLength(count);
-  expect(cards()[0].props.expanded).toBe(count === 1);
+  expect(cards()[0].props.expanded).toBe(true);
   const save = renderer.root
     .findAllByType('PressableScale' as any)
     .find((node) => node.props.accessibilityLabel === 'Save this guide')!;
@@ -106,7 +106,6 @@ test.each([1, 3, 5])('saves %i styles and opens a single style automatically', a
 test('one style stays open across an unchanged data refresh and stylist return', async () => {
   mockData = fixture(3);
   await render();
-  act(() => cards()[0].props.onToggle());
   expect(cards().map((card) => card.props.expanded)).toEqual([true, false, false]);
   act(() => cards()[1].props.onToggle());
   expect(cards().map((card) => card.props.expanded)).toEqual([false, true, false]);

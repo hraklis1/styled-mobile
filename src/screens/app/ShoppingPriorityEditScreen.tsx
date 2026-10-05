@@ -90,7 +90,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
     if (!edit.data || lastGuideIdentity.current === guideIdentity) return;
     lastGuideIdentity.current = guideIdentity;
     setSavedLocally(false);
-    setExpandedKey(edit.data.targets.length === 1 ? edit.data.targets[0].key : null);
+    setExpandedKey(edit.data.targets[0]?.key ?? null);
   }, [guideIdentity, edit.data]);
 
   useEffect(
@@ -297,22 +297,6 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
 
   return (
     <View style={styles.screen}>
-      <View
-        style={{
-          paddingTop: insets.top,
-          paddingHorizontal: spacing.page,
-          backgroundColor: shoppingSurfaces.canvas,
-        }}
-      >
-        <Pressable
-          onPress={goBack}
-          accessibilityRole="button"
-          accessibilityLabel="Back to Shopping Brief"
-          style={{ minHeight: 44, minWidth: 44, alignSelf: 'flex-start', justifyContent: 'center' }}
-        >
-          <Ionicons name="chevron-back" size={23} color={colors.foreground} />
-        </Pressable>
-      </View>
       <ScrollView
         ref={scrollRef}
         onScroll={(event) => {
@@ -322,23 +306,9 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xxxl }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={{ gap: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xl }}>
-          <Text style={styles.eyebrow}>{guideEyebrow}</Text>
-          <Text
-            accessibilityRole="header"
-            style={{ ...typography.text.editorialTitle, color: colors.foreground }}
-          >
-            {displayHeadline}
-          </Text>
-          <Text selectable style={styles.body}>
-            {intro}
-          </Text>
-          {edit.isError ? (
-            <Text style={styles.body}>
-              You’re reading your saved guide. We couldn’t refresh it just now.
-            </Text>
-          ) : null}
-        </View>
+        <ShopSubpageHeader editorialSize eyebrow={guideEyebrow} title={displayHeadline} subtitle={intro}
+          onBack={goBack} backLabel="Back to Shopping Brief" style={styles.fullBleedHeader} />
+        {edit.isError ? <Text style={styles.body}>You’re reading your saved guide. We couldn’t refresh it just now.</Text> : null}
         <Text accessibilityRole="header" style={styles.guideIntro}>
           {directionCount === 1 ? 'A style to consider' : `Styles to consider · ${directionCount}`}
         </Text>

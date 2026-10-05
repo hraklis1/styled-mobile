@@ -5,6 +5,8 @@ import type { ShoppingSnap } from '../../../types/shoppingSnap';
 import type { WishlistEntry } from '../../../lib/wishlist';
 import type { ShoppingBrief } from '../../../lib/shopDecisionWorkspace';
 
+jest.mock('react-native/Libraries/Components/Pressable/Pressable', () => { const React = jest.requireActual('react'); return { __esModule: true, default: function MockPressable({ children, ...props }: any) { return React.createElement('Pressable', props, typeof children === 'function' ? children({ pressed: false }) : children); } }; });
+
 jest.mock('@react-navigation/native', () => ({ usePreventRemove: jest.fn(), CommonActions: { reset: jest.fn() }, useFocusEffect: (callback: () => void) => require('react').useEffect(callback, [callback]) }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 47, bottom: 34, left: 0, right: 0 }) }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }));
@@ -38,6 +40,9 @@ const mockBrief: ShoppingBrief = {
   status: 'ready', headline: 'Three useful additions', summary: 'Based on your wardrobe', generatedAt: '2026-09-20', source: 'rules',
   priorities: [{ label: 'Leather sneakers', category: 'shoes', reason: 'wardrobe_gap', priority: 1, context: 'With your tailoring', unlocks: [], candidateKey: 'sneakers', recommendationKey: 'rec-1', impactScore: 130 }],
 };
+jest.mock('../../../hooks/useShoppingFeedback', () => ({ useShoppingFeedback: () => ({ pending: [], error: null, dismiss: jest.fn(), undo: jest.fn() }) }));
+jest.mock('../../../hooks/useShoppingPriorityEdit', () => ({ useShoppingPriorityEdit: () => ({ data: undefined, isLoading: true }) }));
+jest.mock('../../../components/shopping/CuratedItemRail', () => ({ CuratedItemRail: 'CuratedItemRail' }));
 jest.mock('../../../hooks/useShoppingBrief', () => ({ useShoppingBrief: () => ({ data: mockBrief, refetch: mockRefetch }) }));
 const mockSnaps: ShoppingSnap[] = [];
 const mockPending: never[] = [];
@@ -91,9 +96,9 @@ it('opens the exact overview priority with its recommendation and brief context'
   mockEntries = [];
   render(ShopOverviewScreen);
   const priority = mockBrief.priorities[0];
-  act(() => button('Priority 1: Leather sneakers').props.onPress());
+  act(() => button('Explore the guide: Leather sneakers').props.onPress());
   expect(navigation.navigate).toHaveBeenCalledWith('ShoppingPriorityEdit', { priority, origin: 'shopping_brief', briefGeneratedAt: mockBrief.generatedAt });
-  expect(button('Read the full brief')).toBeDefined();
+  expect(nodes('Pressable').some(node => node.findAllByType(require('react-native').Text).some(child => child.props.children === 'Read your brief'))).toBe(true);
 });
 
 it('keeps starter suggestions behind the existing add-wardrobe action', () => {

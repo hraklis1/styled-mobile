@@ -7,10 +7,12 @@ import { colors, curatedProducts, spacing, typography } from '../../theme';
 import type { OfferContext, OfferStatus, ProductOffer } from '../../types/commerce';
 import { productDisclosure, productKey } from '../../lib/productPresentation';
 
-export function CuratedProductBrowser({ visible, title, reason, offers, status, context, onRetry, onClose, renderCard, error }: {
+export function CuratedProductBrowser({ visible, title, reason, offers, status, context, onRetry, onClose, renderCard, error, detail, onCloseDetail }: {
   visible: boolean; title: string; reason?: string; offers: ProductOffer[]; status: OfferStatus;
   context: OfferContext; onRetry?: () => void; onClose: () => void;
   renderCard: (offer: ProductOffer, width: number) => ReactNode; error?: string | null;
+  detail?: ReactNode;
+  onCloseDetail?: () => void;
 }) {
   const { width, fontScale } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -18,13 +20,13 @@ export function CuratedProductBrowser({ visible, title, reason, offers, status, 
   const contentWidth = width - spacing.page * 2 - insets.left - insets.right;
   const twoColumns = fontScale <= curatedProducts.gridFontScaleLimit && (contentWidth - spacing.md) / 2 >= curatedProducts.minWidth;
   const cardWidth = twoColumns ? (contentWidth - spacing.md) / 2 : contentWidth;
-  return <Modal visible={visible} animationType={reduceMotion ? 'none' : 'slide'} presentationStyle="fullScreen" onRequestClose={onClose}>
+  return <Modal visible={visible} animationType={reduceMotion ? 'none' : 'slide'} presentationStyle="fullScreen" onRequestClose={detail ? onCloseDetail ?? onClose : onClose}>
     <View style={[styles.root, { paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right }]} accessibilityViewIsModal>
-      <View style={styles.header}>
+      <View style={styles.header} accessibilityElementsHidden={!!detail} importantForAccessibility={detail ? 'no-hide-descendants' : 'auto'}>
         <Text style={styles.eyebrow}>THE SHOPPING EDIT</Text>
         <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close product options" style={({ pressed }) => [styles.close, pressed && styles.pressed]}><Ionicons name="close" size={22} color={colors.foreground} /></Pressable>
       </View>
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]} showsVerticalScrollIndicator={false}>
+      <ScrollView accessibilityElementsHidden={!!detail} importantForAccessibility={detail ? 'no-hide-descendants' : 'auto'} contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]} showsVerticalScrollIndicator={false}>
         <Text style={styles.title} accessibilityRole="header">{title}</Text>
         {reason ? <Text style={styles.reason}>{reason}</Text> : null}
         <Text style={styles.count}>{offers.length} {offers.length === 1 ? 'piece' : 'pieces'} to consider</Text>
@@ -34,6 +36,7 @@ export function CuratedProductBrowser({ visible, title, reason, offers, status, 
         {!offers.length ? <Text style={styles.copy}>{status === 'pending' ? 'Finding considered pieces…' : status === 'unavailable' ? 'Shopping options are unavailable right now.' : 'No suitable listings right now. Your styling guide is still here.'}</Text> : null}
         {status === 'unavailable' && onRetry ? <Pressable onPress={onRetry} accessibilityRole="button" accessibilityLabel={`Retry ${context.targetKey} options`} style={styles.retry}><Text style={styles.copy}>Try again</Text></Pressable> : null}
       </ScrollView>
+      {detail}
     </View>
   </Modal>;
 }

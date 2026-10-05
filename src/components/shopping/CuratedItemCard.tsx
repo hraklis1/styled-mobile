@@ -7,27 +7,30 @@ import { useReducedMotion } from 'react-native-reanimated';
 import { colors, curatedProducts, radii, spacing, typography } from '../../theme';
 import { offerImageCachePolicy, type ProductOffer } from '../../types/commerce';
 
-import { productDisplayTitle, productListingAction, productMerchantLabel } from '../../lib/productPresentation';
+import { productDisplayTitle, productMerchantLabel } from '../../lib/productPresentation';
+
+export function ProductImage({ offer }: { offer: ProductOffer }) {
+  const [failed, setFailed] = useState(false);
+  const reduceMotion = useReducedMotion();
+  useEffect(() => setFailed(false), [offer.imageUrl]);
+  return <View style={styles.image}>
+    {offer.imageUrl && !failed ? <Image source={{ uri: offer.imageUrl }} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy={offerImageCachePolicy(offer)} transition={reduceMotion ? 0 : 150} onError={() => setFailed(true)} accessible={false} /> : <View style={styles.fallback} accessibilityElementsHidden><Svg width={64} height={80} viewBox="0 0 100 120"><Path d="M33 18L16 28L6 53L24 60L29 45V105H71V45L76 60L94 53L84 28L67 18Q50 34 33 18Z" fill={colors.hairline} stroke={colors.controlOutline} /></Svg></View>}
+  </View>;
+}
 
 export function CuratedItemCard({ offer, saved = false, saving = false, saveFailed = false, onSave, onOpen, width = curatedProducts.minWidth }: {
   offer: ProductOffer; saved?: boolean; saving?: boolean; saveFailed?: boolean; onSave?: () => void; onOpen: () => void; width?: number;
 }) {
-  const [failed, setFailed] = useState(false);
-  const reduceMotion = useReducedMotion();
-  useEffect(() => setFailed(false), [offer.imageUrl]);
-  const action = productListingAction(offer);
   return <View style={[styles.card, { width }]}>
-    <Pressable onPress={onOpen} accessibilityRole="link" accessibilityLabel={`${offer.title}, ${offer.merchant}, ${offer.formattedPrice || 'see price'}. ${action}`} style={({ pressed }) => [styles.open, pressed && styles.pressed]}>
-      <View style={styles.image}>
-        {offer.imageUrl && !failed ? <Image source={{ uri: offer.imageUrl }} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy={offerImageCachePolicy(offer)} transition={reduceMotion ? 0 : 150} onError={() => setFailed(true)} accessible={false} /> : <View style={styles.fallback} accessibilityElementsHidden><Svg width={64} height={80} viewBox="0 0 100 120"><Path d="M33 18L16 28L6 53L24 60L29 45V105H71V45L76 60L94 53L84 28L67 18Q50 34 33 18Z" fill={colors.hairline} stroke={colors.controlOutline} /></Svg></View>}
-      </View>
+    <Pressable onPress={onOpen} accessibilityRole="button" accessibilityLabel={`${offer.title}, ${offer.merchant}, ${offer.formattedPrice || 'see price'}. View piece`} style={({ pressed }) => [styles.open, pressed && styles.pressed]}>
+      <ProductImage offer={offer} />
       <View style={styles.copy}>
         {offer.brand ? <Text style={styles.brand}>{offer.brand}</Text> : null}
         <Text style={styles.title}>{productDisplayTitle(offer)}</Text>
         <Text style={styles.price}>{offer.formattedPrice || 'See price'}</Text>
         {offer.inStock === false ? <Text style={styles.metadata}>Unavailable</Text> : null}
-        {action === 'View listing' ? <Text style={styles.metadata}>{productMerchantLabel(offer.merchant)}</Text> : null}
-        <View style={styles.action}><Text style={styles.link}>{action}</Text><Ionicons name="open-outline" size={14} color={curatedProducts.accent} /></View>
+        <Text style={styles.metadata}>{productMerchantLabel(offer.merchant)}</Text>
+        <View style={styles.action}><Text style={styles.link}>View piece</Text><Ionicons name="arrow-forward" size={14} color={curatedProducts.accent} /></View>
       </View>
     </Pressable>
     {onSave ? <Pressable onPress={onSave} disabled={saving} accessibilityRole="button" accessibilityLabel={`${saving ? saved ? 'Unsaving' : 'Saving' : saveFailed ? saved ? 'Retry unsaving' : 'Retry saving' : saved ? 'Unsave' : 'Save'} ${offer.title}`} accessibilityState={{ disabled: saving, busy: saving, selected: saved }} style={({ pressed }) => [styles.save, pressed && styles.pressed]}>

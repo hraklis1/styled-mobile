@@ -240,13 +240,16 @@ export function ActionButton({
   variant = 'primary',
   accessibilityLabel,
   style,
-}: HeaderAction & { style?: StyleProp<ViewStyle> }) {
+  disabled = false,
+}: HeaderAction & { style?: StyleProp<ViewStyle>; disabled?: boolean }) {
   return (
     <PressableScale
       motion="crisp" scaleTo={0.985}
       pressedContentStyle={variant === 'primary' ? styles.primaryPressed : styles.controlPressed}
       contentStyle={[styles.actionButton, styles[`${variant}ActionButton`], style]}
       onPress={onPress}
+      disabled={disabled}
+      accessibilityState={{ disabled }}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
     >

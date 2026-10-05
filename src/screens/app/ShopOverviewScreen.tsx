@@ -3,6 +3,7 @@ import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ShopWardrobeEdit } from '../../components/shopping/ShopWardrobeEdit';
 import { ShoppingBriefCard, briefIssueLabel } from '../../components/shopping/ShoppingBriefCard';
 import { ShortlistCarousel } from '../../components/shopping/ShortlistCarousel';
 import { SavedLookTile } from '../../components/outfits/SavedLookTile';
@@ -31,7 +32,7 @@ import type { ShopOverviewScreenProps } from '../../navigation/types';
  * Shop answers two questions, in this order: what should I shop for (the
  * brief, summarized here and stated in full one tap away on
  * ShoppingBriefDetailScreen), and what have I already started (the shortlist
- * rail). All three sit in the first scroll — the camera lives in the header
+ * rail). The camera lives in the header
  * instead of a card of its own, because saving a find is a one-tap habit
  * once you're in the app, not the thing the page needs to sell.
  */
@@ -193,18 +194,24 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
         <EditorialSection
           headingStyle="editorial"
           style={styles.section}
-          title="Your shopping brief"
-          description="A few considered additions, chosen with your wardrobe in mind."
+          title="For your wardrobe"
           trailing={<AppText variant="caption" tone="muted">{briefIssueLabel()}</AppText>}
         >
-          <View style={styles.briefShadow}>
-            <View style={styles.briefPanel}>
+          {isPremium && brief.data?.status === 'ready' ? <ShopWardrobeEdit
+            brief={brief.data}
+            wardrobe={wardrobe}
+            onGuide={(priority) => {
+              track('shopping_brief_priority_opened', { category: priority.category, reason: priority.reason, rank: priority.priority });
+              navigation.navigate('ShoppingPriorityEdit', shoppingPriorityRoute(priority, brief.data!.generatedAt));
+            }}
+            onBrief={() => navigation.navigate('ShoppingBriefDetail')}
+          /> : <View style={styles.briefPanel}>
               <ShoppingBriefCard
                 isPremium={isPremium}
                 brief={brief.data}
                 wardrobe={wardrobe}
                 isLoading={brief.isLoading}
-                isError={brief.isError}
+                isError={brief.isError && !brief.data}
                 onSelectPriority={(priority) => {
                   if (!brief.data) return;
                   track('shopping_brief_priority_opened', { category: priority.category, reason: priority.reason, rank: priority.priority });
@@ -220,8 +227,8 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
                 )}
                 onRetry={() => void brief.refetch()}
               />
-            </View>
-          </View>
+          </View>}
+          {brief.isError && brief.data ? <AppText variant="caption" tone="muted">Your saved edit is here. We couldn’t refresh it just now.</AppText> : null}
         </EditorialSection>
 
         <EditorialSection
@@ -310,15 +317,12 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   content: { paddingBottom: spacing.xxxl },
-  briefShadow: {},
   briefPanel: {
     padding: spacing.lg,
     borderRadius: radii.md,
     borderCurve: 'continuous',
     overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: shoppingSurfaces.edge,
-    backgroundColor: shoppingSurfaces.alabaster,
+    backgroundColor: shoppingSurfaces.bone,
   },
   section: { paddingHorizontal: spacing.page },
   savedPreviewGrid: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },

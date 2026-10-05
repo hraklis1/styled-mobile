@@ -2,12 +2,15 @@ import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { Pressable, ScrollView, Text } from 'react-native';
 import { CuratedItemRail } from '../CuratedItemRail';
+import { CuratedProductDetail } from '../CuratedProductDetail';
 import { CuratedProductBrowser } from '../CuratedProductBrowser';
 import { track } from '../../../lib/analytics';
 import { CuratedItemCard } from '../CuratedItemCard';
 import { saveProductOffer, unsaveProductEntry } from '../../../hooks/useWishlist';
 import type { ProductOffer } from '../../../types/commerce';
 jest.mock('../../../hooks/useWishlist', () => ({ useWishlist: () => ({ data: [] }), saveProductOffer: jest.fn(), unsaveProductEntry: jest.fn() }));
+jest.mock('../../../components/primitives/Editorial', () => ({ ActionButton: 'ActionButton' }));
+jest.mock('../../../components/shopping/ShoppingOutfitPreview', () => ({ ShoppingOutfitPreview: 'ShoppingOutfitPreview' }));
 jest.mock('../../../lib/analytics', () => ({ track: jest.fn() }));
 jest.mock('react-native/Libraries/Components/Pressable/Pressable', () => { const React = jest.requireActual('react'); return { __esModule: true, default: function MockPressable({ children, ...props }: any) { return React.createElement('Pressable', props, typeof children === 'function' ? children({ pressed: false }) : children); } }; });
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 20, left: 0, right: 0 }) }));
@@ -73,6 +76,9 @@ test('external collection request opens browser while hiding duplicate action', 
 test('opening a filtered offer retains its original position for analytics', () => {
   render({ offers: [{ ...offers[0], inStock: false }, offers[1]] });
   act(() => renderer.root.findByType(CuratedItemCard).props.onOpen());
+  expect(track).toHaveBeenCalledWith('curated_product_detail_viewed', expect.objectContaining({ position: 1 }));
+  expect(track).not.toHaveBeenCalledWith('curated_product_opened', expect.anything());
+  act(() => renderer.root.findByType(CuratedProductDetail).props.onRetailer());
   expect(track).toHaveBeenCalledWith('curated_product_opened', expect.objectContaining({ position: 1 }));
 });
 
@@ -112,4 +118,22 @@ test('failed unsave keeps the saved state and allows retry', async () => {
   expect(text()).toContain('Couldn’t unsave');
   await act(async () => renderer.root.findByType(CuratedItemCard).props.onSave());
   expect(renderer.root.findByType(CuratedItemCard).props.saved).toBe(false);
+});
+
+test('details preserve the collection and share save and unsave state', async () => {
+  (saveProductOffer as jest.Mock).mockResolvedValue({ id: 'product_saved' });
+  render({ offers: [offers[0]], reason: 'Works with tailoring.' });
+  act(() => renderer.root.findAllByType(Pressable).find(node => node.findAllByType(Text).some(child => child.props.children === 'Explore all options'))!.props.onPress());
+  const browser = renderer.root.findByType(CuratedProductBrowser);
+  act(() => browser.findByType(CuratedItemCard).props.onOpen());
+  expect(renderer.root.findByType(CuratedProductBrowser)).toBe(browser);
+  expect(renderer.root.findByType(CuratedProductDetail).props).toMatchObject({ embedded: true, reason: 'Works with tailoring.' });
+  await act(async () => renderer.root.findByType(CuratedProductDetail).props.onSave());
+  expect(renderer.root.findByType(CuratedProductDetail).props.saved).toBe(true);
+  expect(renderer.root.findAllByType(CuratedItemCard).every(card => card.props.saved)).toBe(true);
+  await act(async () => renderer.root.findByType(CuratedProductDetail).props.onSave());
+  expect(unsaveProductEntry).toHaveBeenCalledWith('product_saved');
+  act(() => renderer.root.findByType(CuratedProductDetail).props.onClose());
+  expect(renderer.root.findAllByType(CuratedProductDetail)).toHaveLength(0);
+  expect(renderer.root.findByType(CuratedProductBrowser)).toBe(browser);
 });

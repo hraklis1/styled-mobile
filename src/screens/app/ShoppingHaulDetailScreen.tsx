@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ShoppingEditCard } from '../../components/shopping/ShoppingEditCard';
@@ -13,11 +12,10 @@ import { useShoppingSnaps } from '../../hooks/useShoppingSnaps';
 import { buildShoppingEditItems, mergeShoppingSnaps, type ShoppingEditItem } from '../../lib/shoppingGallery';
 import { buildShoppingSessionGroups } from '../../lib/shoppingSessionGroups';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
-import { AppText } from '../../components/primitives/AppText';
+import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
 import { ActionButton } from '../../components/primitives/Editorial';
-import { PressableScale } from '../../components/primitives/PressableScale';
 import { SHORTLIST_COPY } from '../../lib/shoppingVocabulary';
-import { colors, radii, spacing } from '../../theme';
+import { colors, spacing } from '../../theme';
 import type { ShoppingHaulDetailScreenProps } from '../../navigation/types';
 import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 
@@ -81,36 +79,13 @@ export function ShoppingHaulDetailScreen({ route, navigation }: ShoppingHaulDeta
 
   return (
     <View style={styles.screen}>
-      <View style={styles.hero}>
-        <View style={[styles.heroInner, { paddingTop: insets.top + spacing.md }]}>
-          <View style={styles.heroTopRow}>
-            <PressableScale
-              contentStyle={styles.backButton}
-              onPress={() => navigation.goBack()}
-              accessibilityRole="button"
-              accessibilityLabel="Back"
-            >
-              <Ionicons name="chevron-back" size={23} color={colors.foreground} />
-            </PressableScale>
-          </View>
-          <AppText variant="editorialCompact" tone={group.storeName ? 'primary' : 'action'} numberOfLines={1}>
-            {group.storeName ?? SHORTLIST_COPY.needsStore}
-          </AppText>
-          {/* One line: when, where, how many. The row that pushed this screen
-              said the same, so nothing here needs a second line. */}
-          <AppText variant="caption" tone="muted" numberOfLines={1}>
-            {[contextLine, `${group.itemCount} ${group.itemCount === 1 ? 'piece' : 'pieces'}`].filter(Boolean).join('  ·  ')}
-          </AppText>
-          {group.storeName ? null : (
-            <View style={styles.heroStoreAction}>
-              <ActionButton icon="add" label={SHORTLIST_COPY.addStore} variant="secondary" onPress={openStoreAssignment} />
-            </View>
-          )}
-        </View>
-      </View>
+      <ShopSubpageHeader compact eyebrow="SHOPPING VISIT" title={group.storeName ?? SHORTLIST_COPY.needsStore}
+        subtitle={[contextLine, `${group.itemCount} ${group.itemCount === 1 ? 'piece' : 'pieces'}`].filter(Boolean).join(' · ')}
+        onBack={() => navigation.goBack()} backLabel="Back to your shortlist"
+        actions={!group.storeName ? <ActionButton icon="add" label={SHORTLIST_COPY.addStore} variant="secondary" onPress={openStoreAssignment} /> : undefined} />
 
       <ScrollView
-        contentContainerStyle={styles.grid}
+        contentContainerStyle={[styles.grid, { paddingBottom: insets.bottom + spacing.xl }]}
         showsVerticalScrollIndicator={false}
       >
         {rows.map((row) => (
@@ -151,25 +126,6 @@ export function ShoppingHaulDetailScreen({ route, navigation }: ShoppingHaulDeta
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  // Ivory, matching the list that pushes this screen — a white slab here read
-  // as a card the moment the rows behind it stopped being cards.
-  hero: {
-    backgroundColor: colors.background,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  heroInner: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, gap: 2 },
-  heroTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md, marginLeft: -spacing.sm },
-  heroSpend: { marginTop: spacing.sm },
-  heroStoreAction: { alignSelf: 'flex-start', marginTop: spacing.sm },
-  backButton: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radii.full,
-    backgroundColor: colors.surfaceSubtle,
-  },
   grid: { gap: spacing.sm, padding: spacing.lg },
   gridRow: { flexDirection: 'row', gap: spacing.sm },
 });

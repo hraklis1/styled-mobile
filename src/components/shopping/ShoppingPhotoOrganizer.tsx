@@ -535,7 +535,7 @@ export function ShoppingPhotoOrganizer({
               accessibilityLabel={titleIsPlaceholder ? title : `Change store, currently ${title}`}
             >
               <AppText
-                variant="editorialSection"
+                variant="editorialCompact"
                 tone={titleIsPlaceholder ? 'action' : 'primary'}
                 style={styles.title}
                 numberOfLines={1}
@@ -545,7 +545,7 @@ export function ShoppingPhotoOrganizer({
               <Ionicons name="pencil-outline" size={16} color={colors.action} style={styles.titleIcon} />
             </TouchableOpacity>
           ) : (
-            <AppText variant="editorialSection" tone="primary" style={styles.title} numberOfLines={1}>{title}</AppText>
+            <AppText variant="editorialCompact" tone="primary" style={styles.title} numberOfLines={1}>{title}</AppText>
           )}
           <Text style={styles.meta} numberOfLines={1}>
             {[subtitle, tally].filter(Boolean).join(' · ')}
@@ -572,7 +572,7 @@ export function ShoppingPhotoOrganizer({
               <Ionicons name="refresh-outline" size={16} color={colors.secondaryForeground} />
             </TouchableOpacity>
           ) : null}
-          <TouchableOpacity style={styles.iconButton} onPress={onClose} disabled={isSaving} accessibilityLabel="Close organizer">
+          <TouchableOpacity style={styles.iconButton} onPress={onClose} disabled={isSaving} accessibilityLabel={closeLabel}>
             <Ionicons name="close" size={22} color={colors.foreground} />
           </TouchableOpacity>
         </View>
@@ -791,7 +791,7 @@ function NewItemDropZone({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md, paddingHorizontal: spacing.page, paddingTop: spacing.md, paddingBottom: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   headerCopy: { flex: 1 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingTop: spacing.xs },
   title: { paddingTop: 2 },

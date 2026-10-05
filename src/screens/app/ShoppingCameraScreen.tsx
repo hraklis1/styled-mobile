@@ -1365,8 +1365,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   permissionTitle: {
-    fontSize: typography.text.sectionTitle.fontSize,
-    fontWeight: typography.weight.bold,
+    ...typography.text.editorialCompact,
     color: colors.foreground,
   },
   permissionText: {
@@ -1397,7 +1396,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.page,
   },
   roundButton: {
     width: 44,

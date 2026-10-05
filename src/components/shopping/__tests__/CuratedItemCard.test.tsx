@@ -15,13 +15,13 @@ test('bookmark is independent of retailer action and retains the full original t
   const onOpen = jest.fn(), onSave = jest.fn();
   act(() => { renderer = TestRenderer.create(<CuratedItemCard offer={offer} onOpen={onOpen} onSave={onSave} />); });
   const buttons = renderer.root.findAllByType(Pressable);
-  const save = buttons.find(button => button.props.accessibilityRole === 'button')!;
+  const save = buttons.find(button => button.props.accessibilityLabel?.startsWith('Save '))!;
   let ancestor = save.parent;
   while (ancestor) { expect(ancestor.type).not.toBe(Pressable); ancestor = ancestor.parent; }
   expect(StyleSheet.flatten(save.props.style({ pressed: false }))).toMatchObject({ width: 44, height: 44 });
   act(() => save.props.onPress());
   expect(onSave).toHaveBeenCalledTimes(1); expect(onOpen).not.toHaveBeenCalled();
-  const link = buttons.find(button => button.props.accessibilityRole === 'link')!;
+  const link = buttons.find(button => button.props.accessibilityLabel?.includes('View piece'))!;
   expect(link.props.accessibilityLabel).toContain(offer.title);
   expect(link.props.accessibilityLabel).toContain('see price');
   act(() => link.props.onPress()); expect(onOpen).toHaveBeenCalledTimes(1);
@@ -39,7 +39,7 @@ test('failed image falls back, a new image resets, and reduced motion disables t
 
 test('saved bookmark remains enabled with an unsave label', () => {
   act(() => { renderer = TestRenderer.create(<CuratedItemCard offer={offer} saved onOpen={() => {}} onSave={() => {}} />); });
-  const button = renderer.root.findAllByType(Pressable).find(node => node.props.accessibilityRole === 'button')!;
+  const button = renderer.root.findAllByType(Pressable).find(node => node.props.accessibilityLabel?.startsWith('Unsave '))!;
   expect(button.props.disabled).toBe(false);
   expect(button.props.accessibilityLabel).toBe(`Unsave ${offer.title}`);
   expect(button.props.accessibilityState.selected).toBe(true);

@@ -32,8 +32,8 @@ export function ShopWishlistSummaryCard({ entry, onPress, onMore, showType }: Pr
   const savedDate = new Date(entry.savedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   const title = getWishlistCardTitle(entry);
   const meta = getWishlistMeta(entry);
-  const figure = savedEdit ? undefined : outfit.totalBudget?.trim();
-  const count = savedEdit ? undefined : meta.split(' · ')[0];
+  const figure = outfit.product ? outfit.product.offer.formattedPrice : savedEdit ? undefined : outfit.totalBudget?.trim();
+  const count = savedEdit || outfit.product ? undefined : meta.split(' · ')[0];
 
   return (
     <PressableScale
@@ -89,9 +89,9 @@ const styles = StyleSheet.create({
   },
   preview: { width: 88, aspectRatio: 4 / 5, borderRadius: radii.photo },
   copy: { flex: 1, minWidth: 0, gap: spacing.xs },
-  metaRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, paddingTop: spacing.xs },
+  metaRow: { flexWrap: 'wrap', flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, paddingTop: spacing.xs },
   figure: { flexShrink: 1 },
-  meta: { flexShrink: 0, fontVariant: ['tabular-nums'] },
+  meta: { flexShrink: 1, fontVariant: ['tabular-nums'] },
   // Pulled up and out by the row's own padding so the 44pt target sits on the
   // row's corner without a spacer of its own.
   moreButton: {

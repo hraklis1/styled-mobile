@@ -9,16 +9,21 @@ import { productDisclosure, productKey } from '../../lib/productPresentation';
 import { saveProductOffer, unsaveProductEntry, useWishlist } from '../../hooks/useWishlist';
 import { CuratedItemCard } from './CuratedItemCard';
 import { CuratedProductBrowser } from './CuratedProductBrowser';
+import { CuratedProductDetail } from './CuratedProductDetail';
+import type { ShoppingPriorityTarget } from '../../lib/shoppingPriorityEdit';
+import type { Item } from '../../types/item';
 import { openShoppingLink } from './ShoppingRetailerLinks';
 
-export function CuratedItemRail({ offers, status = 'ready', heading = 'Pieces to consider', context, onRetry, savedDetail = false, reason, browserTitle, collectionAction = 'rail', exploreRequest = 0 }: {
+export function CuratedItemRail({ offers, status = 'ready', heading = 'Pieces to consider', context, onRetry, savedDetail = false, reason, browserTitle, collectionAction = 'rail', exploreRequest = 0, target, wardrobe }: {
   offers: ProductOffer[]; status?: OfferStatus; heading?: string; context: OfferContext; onRetry?: () => void; savedDetail?: boolean;
   reason?: string; browserTitle?: string; collectionAction?: 'rail' | 'external'; exploreRequest?: number;
+  target?: ShoppingPriorityTarget; wardrobe?: ReadonlyMap<number, Item>;
 }) {
   const { width } = useWindowDimensions();
   const [contentWidth, setContentWidth] = useState(width - spacing.page * 2);
-  const cardWidth = Math.min(curatedProducts.maxWidth, contentWidth * curatedProducts.previewFraction);
+  const cardWidth = Math.min(contentWidth, Math.max(curatedProducts.minWidth, Math.min(curatedProducts.maxWidth, contentWidth * curatedProducts.previewFraction)));
   const [browserOpen, setBrowserOpen] = useState(false);
+  const [selectedOffer, setSelectedOffer] = useState<ProductOffer | null>(null);
   const [saving, setSaving] = useState<Set<string>>(new Set());
   const [savedLocally, setSavedLocally] = useState<Map<string, WishlistEntry>>(new Map());
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -43,7 +48,7 @@ export function CuratedItemRail({ offers, status = 'ready', heading = 'Pieces to
   }
   useEffect(() => {
     generation.current += 1;
-    setBrowserOpen(false); setErrors({}); setSavedLocally(new Map()); setSaving(new Set()); pending.current.clear();
+    setBrowserOpen(false); setSelectedOffer(null); setErrors({}); setSavedLocally(new Map()); setSaving(new Set()); pending.current.clear();
     scroll.current?.scrollTo({ x: 0, animated: false });
   }, [context.reference, context.wishlistId, context.targetKey]);
   useEffect(() => {
@@ -79,8 +84,15 @@ export function CuratedItemRail({ offers, status = 'ready', heading = 'Pieces to
       saved={savedLocally.has(key) || wishlist.some(entry => entry.outfit.product && productKey(entry.outfit.product.offer) === key)}
       saving={saving.has(key)} saveFailed={!!errors[key]}
       onSave={!savedDetail && (context.reference || context.wishlistId || savedLocally.has(key) || wishlist.some(entry => entry.outfit.product && productKey(entry.outfit.product.offer) === key)) ? () => void save(offer) : undefined}
-      onOpen={() => { track('curated_product_opened', { surface: context.surface, targetKey: context.targetKey, offerId: offer.id, position: offers.indexOf(offer), provider: offer.provider, monetized: offer.monetized }); void openShoppingLink(offer.url); }} />;
+      onOpen={() => { track('curated_product_detail_viewed', { surface: context.surface, targetKey: context.targetKey, offerId: offer.id, position: offers.indexOf(offer), provider: offer.provider, monetized: offer.monetized }); setSelectedOffer(offer); }} />;
   }
+  const selectedKey = selectedOffer ? productKey(selectedOffer) : '';
+  const selectedSaved = savedLocally.has(selectedKey) || wishlist.some(entry => entry.outfit.product && productKey(entry.outfit.product.offer) === selectedKey);
+  const canSave = !savedDetail && !!(context.reference || context.wishlistId || selectedSaved);
+  const detail = selectedOffer ? <CuratedProductDetail embedded={browserOpen} offer={selectedOffer} reason={reason} target={target} wardrobe={wardrobe}
+    saved={selectedSaved} saving={saving.has(selectedKey)} error={errors[selectedKey]}
+    onSave={canSave ? () => void save(selectedOffer) : undefined} onClose={() => setSelectedOffer(null)}
+    onRetailer={() => { track('curated_product_opened', { surface: context.surface, targetKey: context.targetKey, offerId: selectedOffer.id, position: offers.indexOf(selectedOffer), provider: selectedOffer.provider, monetized: selectedOffer.monetized }); void openShoppingLink(selectedOffer.url); }} /> : null;
   function retry() { track('curated_options_retried', { surface: context.surface }); onRetry?.(); }
   const error = Object.values(errors)[0];
   return <View style={styles.section} onLayout={event => { if (event.nativeEvent.layout.width > 0) setContentWidth(event.nativeEvent.layout.width); }}>
@@ -92,7 +104,8 @@ export function CuratedItemRail({ offers, status = 'ready', heading = 'Pieces to
     {status === 'unavailable' && onRetry ? <Pressable onPress={retry} accessibilityRole="button" style={styles.quiet}><Text style={styles.link}>Try again</Text></Pressable> : null}
     {error ? <Text style={styles.copy} accessibilityRole="alert">{error}</Text> : null}
     {preview.some(offer => offer.monetized) ? <Text style={styles.copy}>{productDisclosure}</Text> : null}
-    {browserOpen ? <CuratedProductBrowser visible title={browserTitle ?? (heading || 'Pieces to consider')} reason={reason} offers={eligible} status={status} context={context} onRetry={onRetry ? retry : undefined} onClose={() => setBrowserOpen(false)} renderCard={renderCard} error={error} /> : null}
+    {browserOpen ? <CuratedProductBrowser visible title={browserTitle ?? (heading || 'Pieces to consider')} reason={reason} offers={eligible} status={status} context={context} onRetry={onRetry ? retry : undefined} onClose={() => { setSelectedOffer(null); setBrowserOpen(false); }} onCloseDetail={() => setSelectedOffer(null)} detail={detail} renderCard={renderCard} error={error} /> : null}
+    {!browserOpen ? detail : null}
   </View>;
 }
 const styles = StyleSheet.create({
