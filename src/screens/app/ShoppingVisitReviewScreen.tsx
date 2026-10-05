@@ -84,11 +84,9 @@ export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitRe
     // came from. Resetting rather than pushing also means the shortlist's own
     // back button leads to Shop, instead of reopening a camera the shopper
     // has already closed.
-    navigation.reset({
-      index: 1,
-      routes: [{ name: 'ShopMain' }, { name: 'ShoppingGallery' }],
-    });
-  }, [endVisit, navigation, sessionId]);
+    if (!isLiveVisit && navigation.canGoBack()) navigation.goBack();
+    else navigation.popTo('ShopMain', { view: 'shortlist' });
+  }, [endVisit, isLiveVisit, navigation, sessionId]);
 
   // A failure is rethrown for the organizer to show inline, beside the
   // button that caused it; an alert on top of that told the shopper twice.

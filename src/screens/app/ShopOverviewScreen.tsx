@@ -1,22 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Keyboard, Pressable, RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ShortlistContent } from './ShoppingGalleryScreen';
 import { ShopWardrobeEdit } from '../../components/shopping/ShopWardrobeEdit';
 import { ShoppingBriefCard, briefIssueLabel } from '../../components/shopping/ShoppingBriefCard';
-import { ShortlistCarousel } from '../../components/shopping/ShortlistCarousel';
-import { SavedLookTile } from '../../components/outfits/SavedLookTile';
-import { EditorialSection, ScreenHeader } from '../../components/primitives/Editorial';
+import { EditorialSection, ScreenHeader, SegmentedControl } from '../../components/primitives/Editorial';
 import { AppText } from '../../components/primitives/AppText';
-import { EditorialRow } from '../../components/primitives/EditorialRow';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrencyCode } from '../../hooks/useCurrencyCode';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useItems } from '../../hooks/useItems';
 import { useShoppingBrief } from '../../hooks/useShoppingBrief';
 import { useShoppingSnaps } from '../../hooks/useShoppingSnaps';
-import { useWishlist } from '../../hooks/useWishlist';
 import { buildShoppingEditItems, mergeShoppingSnaps, type ShoppingEditItem } from '../../lib/shoppingGallery';
 import { buildShortlistSpotlight } from '../../lib/shortlistSpotlight';
 import { shoppingPriorityRoute, wearableWardrobe } from '../../lib/shopClarity';
@@ -25,7 +22,7 @@ import { hasSeenAiActionCoach, markAiActionCoachSeen } from '../../lib/aiActionC
 import { presentPaywall } from '../../lib/paywall';
 import { colors, radii, shoppingSurfaces, spacing } from '../../theme';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
-import type { ShopOverviewScreenProps } from '../../navigation/types';
+import type { ShopOverviewScreenProps, ShopView } from '../../navigation/types';
 
 export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProps) {
   const insets = useSafeAreaInsets();
@@ -35,24 +32,31 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
   const { data: items = [], refetch: refetchItems } = useItems();
   const wardrobe = useMemo(() => wearableWardrobe(items), [items]);
   const { data: remoteSnaps = [], refetch: refetchSnaps } = useShoppingSnaps();
-  const { data: savedShopping = [] } = useWishlist();
   const pendingUploads = useShoppingSessionStore((state) => state.pendingUploads);
   const brief = useShoppingBrief(isPremium);
   const [refreshing, setRefreshing] = useState(false);
   const requestedSection = route.params?.section;
 
+  const [view, setView] = useState<ShopView>(route.params?.view ?? (requestedSection === 'shortlist' ? 'shortlist' : 'for-you'));
+  const [shortlistMounted, setShortlistMounted] = useState(view === 'shortlist');
+  const selectView = useCallback((next: ShopView) => {
+    Keyboard.dismiss();
+    setView(next);
+    if (next === 'shortlist') setShortlistMounted(true);
+    track('shop_view_selected', { view: next });
+  }, []);
+
   useEffect(() => {
-    if (requestedSection === 'shortlist') {
-      navigation.replace('ShoppingGallery', {
-        catalogFilter: route.params?.catalogFilter,
-        resetFilters: route.params?.resetFilters,
-        focusGroupId: route.params?.focusGroupId,
-        returnTo: route.params?.returnTo,
-      });
-    } else if (requestedSection === 'saved-looks' || requestedSection === 'saved-shopping') {
-      navigation.replace('SavedShopping', { selectedId: route.params?.selectedId, tab: requestedSection === 'saved-looks' ? 'looks' : 'all' });
+    if (requestedSection === 'saved-looks' || requestedSection === 'saved-shopping') {
+      navigation.navigate('SavedShopping', { selectedId: route.params?.selectedId, tab: requestedSection === 'saved-looks' ? 'looks' : 'all' });
+      navigation.setParams({ section: undefined, selectedId: undefined });
+    } else if (requestedSection === 'shortlist' && route.params?.returnTo) {
+      navigation.replace('ShoppingGallery', route.params);
+    } else if (route.params?.view || requestedSection === 'shortlist') {
+      selectView(route.params?.view ?? 'shortlist');
+      navigation.setParams({ view: undefined, section: undefined });
     }
-  }, [navigation, route.params?.resetFilters, requestedSection, route.params?.catalogFilter, route.params?.focusGroupId, route.params?.returnTo, route.params?.selectedId]);
+  }, [navigation, requestedSection, route.params, selectView]);
 
   const homeCurrency = useCurrencyCode();
   const shoppingItems = useMemo(
@@ -61,13 +65,6 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
   );
   const spotlight = useMemo(() => buildShortlistSpotlight(shoppingItems), [shoppingItems]);
   const activeFinds = spotlight.awaitingDecision;
-  const savedPreviewEntries = useMemo(
-    () => [...savedShopping]
-      .sort((a, b) => Date.parse(b.savedAt) - Date.parse(a.savedAt))
-      .slice(0, 2),
-    [savedShopping],
-  );
-
   useEffect(() => {
     if (!brief.data) return;
     track('shop_brief_loaded', {
@@ -131,37 +128,8 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
   }, [dismissSaveFindCoach, navigation]);
 
 
-  const openHistory = useCallback((params?: { focusGroupId?: string; catalogFilter?: 'active' | 'all'; resetFilters?: boolean }) => {
-    track('shop_section_opened', { section: params?.focusGroupId ? 'candidate' : 'shopping_history' });
-    navigation.navigate('ShoppingGallery', params);
-  }, [navigation]);
-
-  const openFind = useCallback((item: ShoppingEditItem) => {
-    track('shop_section_opened', { section: 'shortlist' });
-    navigation.navigate('ShoppingGallery', { focusGroupId: item.captureGroupId });
-  }, [navigation]);
-
-  const openSavedShopping = useCallback((selectedId?: string) => {
-    track('shop_destination_opened', { destination: 'saved-shopping' });
-    navigation.navigate('SavedShopping', { tab: 'all', ...(selectedId ? { selectedId } : {}) });
-  }, [navigation]);
-
   return (
     <View style={styles.root}>
-      {/* Reflow native text measurements when Dynamic Type changes. */}
-      <ScrollView
-        key={fontScale}
-        contentInsetAdjustmentBehavior="never"
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} tintColor={colors.primary} />}
-        contentContainerStyle={styles.content}
-        onScroll={event => setScrollOffset(event.nativeEvent.contentOffset.y)}
-        scrollEventThrottle={100}
-      >
-        {/* The tab masthead is the shared ScreenHeader the other tabs wear —
-            page name in the display face, tagline demoted to its subtitle.
-            Shop used to invert that (a small SHOP eyebrow over an editorial
-            tagline), which read as a different kind of page. */}
         <View>
           <ScreenHeader
             title="Shop"
@@ -182,6 +150,19 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
           </View> : null}
         </View>
 
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.viewSwitch} contentContainerStyle={styles.viewSwitchContent}>
+        <SegmentedControl value={view} variant="tabs" options={[{ value: 'for-you', label: 'For you' }, { value: 'shortlist', label: 'Shortlist' }]} onChange={selectView} />
+      </ScrollView>
+      <View style={[styles.pane, view !== 'for-you' && styles.hidden]} accessibilityElementsHidden={view !== 'for-you'} importantForAccessibility={view !== 'for-you' ? 'no-hide-descendants' : 'auto'}>
+        <ScrollView
+          key={fontScale}
+          contentInsetAdjustmentBehavior="never"
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} tintColor={colors.primary} />}
+          contentContainerStyle={styles.content}
+          onScroll={event => setScrollOffset(event.nativeEvent.contentOffset.y)}
+          scrollEventThrottle={100}
+        >
         {/* The brief is a section of this page like any other, so it wears the
             page's own department heading rather than a masthead of its own
             inside the panel — which put its label 16pt in from the gutter every
@@ -228,69 +209,11 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
           {brief.isError && brief.data ? <AppText variant="caption" tone="muted">Your saved edit is here. We couldn’t refresh it just now.</AppText> : null}
         </EditorialSection>
 
-        <EditorialSection
-          variant="ruled"
-          headingStyle="editorial"
-          style={styles.section}
-          title="Your shortlist"
-          description={spotlight.itemCount > 0 ? undefined : 'Pieces you’ve found and are considering.'}
-          actionLabel={spotlight.itemCount > 0 ? `See all ${spotlight.itemCount}` : undefined}
-          onAction={() => openHistory({ catalogFilter: 'all', resetFilters: true })}
-        >
-          {spotlight.itemCount > 0 ? (
-            <>
-              <ShortlistCarousel
-                items={spotlight.railItems}
-                totalCount={spotlight.itemCount}
-                onPressItem={openFind}
-                onSeeAll={() => openHistory({ catalogFilter: 'all', resetFilters: true })}
-              />
-            </>
-          ) : (
-            <EditorialRow
-              variant="filled"
-              icon="camera-outline"
-              title="Nothing on your shortlist yet"
-              description="Photograph a piece and its price tag while you shop, and keep it here until you decide."
-              onPress={openShoppingCamera}
-            />
-          )}
-        </EditorialSection>
-
-        <EditorialSection
-          variant="ruled"
-          headingStyle="editorial"
-          style={styles.section}
-          title="Saved recommendations"
-          description={savedPreviewEntries.length > 0 ? undefined : 'Looks, pieces, and shopping guides you’ve saved from your Stylist.'}
-          actionLabel={savedShopping.length > 0 ? `See all ${savedShopping.length}` : undefined}
-          onAction={() => openSavedShopping()}
-        >
-          {savedPreviewEntries.length > 0 ? (
-            <View style={styles.savedPreviewGrid}>
-              {savedPreviewEntries.map((entry) => (
-                <SavedLookTile
-                  key={entry.id}
-                  entry={entry}
-                  style={savedPreviewEntries.length === 1 ? styles.savedPreviewSingle : undefined}
-                  onPress={() => openSavedShopping(entry.id)}
-                />
-              ))}
-            </View>
-          ) : (
-            <EditorialRow
-              variant="filled"
-              icon="heart-outline"
-              title="Nothing saved yet"
-              description="Looks, pieces, and lists from your Stylist will appear here."
-              onPress={() => openSavedShopping()}
-              accessibilityLabel="Open your saved Stylist picks"
-              accessibilityHint="Opens saved looks, pieces, and lists"
-            />
-          )}
-        </EditorialSection>
-
-      </ScrollView>
+        </ScrollView>
+      </View>
+      {shortlistMounted && <View style={[styles.pane, view !== 'shortlist' && styles.hidden]} accessibilityElementsHidden={view !== 'shortlist'} importantForAccessibility={view !== 'shortlist' ? 'no-hide-descendants' : 'auto'}>
+        <ShortlistContent embedded active={view === 'shortlist'} navigation={navigation} params={route.params} onConsumeParams={navigation.setParams} />
+      </View>}
       <View
         pointerEvents="none"
         accessibilityElementsHidden
@@ -313,8 +236,9 @@ const styles = StyleSheet.create({
     backgroundColor: shoppingSurfaces.bone,
   },
   section: { paddingHorizontal: spacing.page },
-  savedPreviewGrid: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  // A lone tile keeps to half the row rather than swelling to a full-width plate.
-  savedPreviewSingle: { flex: 0, width: '48%' },
+  pane: { flex: 1 },
+  hidden: { display: 'none' },
+  viewSwitch: { flexGrow: 0, flexShrink: 0 },
+  viewSwitchContent: { paddingHorizontal: spacing.page, paddingBottom: spacing.md },
   safeAreaScrim: { position: 'absolute', zIndex: 20, top: 0, left: 0, right: 0, backgroundColor: colors.background },
 });

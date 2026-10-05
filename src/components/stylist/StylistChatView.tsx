@@ -409,6 +409,7 @@ type Props = {
   onClose?: () => void;
   /** True when rendered as the permanent Stylist tab rather than a contextual modal. */
   embedded?: boolean;
+  onViewSaved?: (id: string) => void;
   onNavigateToShop?: (gap?: StylistMissingEssential) => void;
   onNavigateToCloset?: (outfitId: number) => void;
 };
@@ -427,6 +428,7 @@ export function StylistChatView({
   onPromptConsumed,
   onClose,
   embedded = false,
+  onViewSaved,
   onNavigateToShop,
   onNavigateToCloset,
 }: Props) {
@@ -1216,11 +1218,11 @@ export function StylistChatView({
       <BlurView
         intensity={35}
         tint="systemThinMaterialLight"
-        style={[styles.header, { paddingTop: embedded ? insets.top + spacing.xs : insets.top }]}
+        style={[styles.header, { paddingTop: embedded ? spacing.xs : insets.top }]}
         {...(Platform.OS === 'android' && { blurMethod: 'dimezisBlurViewSdk31Plus' })}
       >
         <View style={styles.headerIdentity}>
-          <Text style={styles.headerTitle}>Your Stylist</Text>
+          {!embedded && <Text style={styles.headerTitle}>Your Stylist</Text>}
           <TouchableOpacity
             style={styles.headerContextPill}
             onPress={() => setLocationPickerVisible(true)}
@@ -1327,6 +1329,7 @@ export function StylistChatView({
                     onNavigateToCloset={onNavigateToCloset}
                     onStyleAuditItem={openAuditItemStyling}
                     onSaveToBoard={setBoardTarget}
+                    onViewSaved={onViewSaved}
                     onToggleAudio={
                       msg.role === 'assistant' && !msg.isStreaming
                         ? () =>
@@ -1583,9 +1586,10 @@ type BubbleProps = {
   onNavigateToCloset?: (outfitId: number) => void;
   onStyleAuditItem?: (itemId: number) => void;
   onSaveToBoard?: (ref: BoardEntryRef) => void;
+  onViewSaved?: (id: string) => void;
 };
 
-function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContext, entryContext, onAddToEvent, onToggleAudio, onNavigateToShop, onClarificationSelect, onNavigateToCloset, onStyleAuditItem, onSaveToBoard }: BubbleProps) {
+function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContext, entryContext, onAddToEvent, onToggleAudio, onNavigateToShop, onClarificationSelect, onNavigateToCloset, onStyleAuditItem, onSaveToBoard, onViewSaved }: BubbleProps) {
   const isUser = message.role === 'user';
   const [detailItem, setDetailItem] = useState<Item | null>(null);
   // Bridges ShopOutfitCard's onSave (which mints the entry) to its onSaved
@@ -1750,10 +1754,14 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
               savedWishlistIdRef.current = entry.id;
               track('outfit_saved_to_wishlist', { forEvent: !!eventContext });
             }}
-            onSaved={() => {
+            onViewSaved={onViewSaved ? () => {
               const id = savedWishlistIdRef.current;
-              if (id) onSaveToBoard?.({ type: 'wishlist', id });
-            }}
+              if (id) onViewSaved(id);
+            } : undefined}
+            onSaveToBoard={onSaveToBoard ? () => {
+              const id = savedWishlistIdRef.current;
+              if (id) onSaveToBoard({ type: 'wishlist', id });
+            } : undefined}
           />
           {onToggleAudio && (
             <TouchableOpacity style={styles.quietAudioBtn} onPress={onToggleAudio} accessibilityLabel="Read shopping notes aloud">

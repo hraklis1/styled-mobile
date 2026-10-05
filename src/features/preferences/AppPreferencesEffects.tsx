@@ -48,5 +48,7 @@ export function AppPreferencesEffects() {
     if (typeof url === 'string' && url.startsWith('styled://')) void Linking.openURL(url);
   }, [response]);
 
-  return <ReducedMotionConfig mode={prefs.reduceMotion ? ReduceMotion.Always : ReduceMotion.System} />;
+  // Reanimated already follows the system setting by default. Only mount an
+  // override when requested; unmounting restores the previous system behavior.
+  return prefs.reduceMotion ? <ReducedMotionConfig mode={ReduceMotion.Always} /> : null;
 }

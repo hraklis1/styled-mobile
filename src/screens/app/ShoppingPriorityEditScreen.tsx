@@ -37,18 +37,19 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
   const startedAt = useRef(Date.now());
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { openStylist } = useGlobalAIStylist();
-  const [savedLocally, setSavedLocally] = useState(false);
+  const [savedId, setSavedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showSaveToast, setShowSaveToast] = useState(false);
   const reduceMotion = useReducedMotion();
   const wearable = useMemo(() => wearableWardrobe(items), [items]);
   const savedFromWishlist = useMemo(() => {
-    if (!edit.data || edit.data.status !== 'ready') return false;
-    return wishlist.some(
+    if (!edit.data || edit.data.status !== 'ready') return undefined;
+    return wishlist.find(
       (entry) => entry.outfit.shoppingBrief?.generatedAt === edit.data?.generatedAt,
     );
   }, [edit.data, wishlist]);
-  const isSaved = savedLocally || savedFromWishlist;
+  const selectedSavedId = savedId ?? savedFromWishlist?.id;
+  const isSaved = Boolean(selectedSavedId);
 
   useEffect(() => {
     track('shopping_brief_edit_opened', {
@@ -85,7 +86,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
   useEffect(() => {
     if (!edit.data || lastGuideIdentity.current === guideIdentity) return;
     lastGuideIdentity.current = guideIdentity;
-    setSavedLocally(false);
+    setSavedId(null);
   }, [guideIdentity, edit.data]);
 
   useEffect(
@@ -149,8 +150,8 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
     };
     try {
       setSaving(true);
-      await addOutfitToWishlist(outfit, null, priority.recommendationKey);
-      setSavedLocally(true);
+      const entry = await addOutfitToWishlist(outfit, null, priority.recommendationKey);
+      setSavedId(entry.id);
       showSavedToast();
       track('shopping_brief_edit_saved', {
         category: priority.category,
@@ -362,6 +363,9 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
         </View>
         <View style={styles.saveBand}>
           <SaveEditAction saving={saving} isSaved={isSaved} onPress={saveEdit} />
+          {selectedSavedId ? <PressableScale accessibilityRole="button" accessibilityLabel="View saved guide" onPress={() => navigation.navigate('Stylist', { screen: 'StylistMain', params: { view: 'saved', tab: 'lists', selectedId: selectedSavedId } })}>
+            <Text style={styles.saveActionText}>View saved</Text>
+          </PressableScale> : null}
         </View>
       </ScrollView>
       {showSaveToast ? (
@@ -372,7 +376,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
           accessibilityLiveRegion="polite"
         >
           <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-          <Text style={styles.saveToastText}>Added to Saved recommendations</Text>
+          <Text style={styles.saveToastText}>Saved in Stylist</Text>
         </Animated.View>
       ) : null}
     </View>

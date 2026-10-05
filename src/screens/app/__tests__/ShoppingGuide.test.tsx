@@ -23,7 +23,7 @@ jest.mock('../../../components/shopping/ShoppingPriorityTargetCard', () => ({
 }));
 jest.mock('../../../hooks/useItems', () => ({ useItems: () => ({ data: [] }) }));
 jest.mock('../../../lib/analytics', () => ({ track: jest.fn() }));
-const mockSave = jest.fn().mockResolvedValue(undefined);
+const mockSave = jest.fn().mockResolvedValue({ id: 'saved-guide' });
 jest.mock('../../../hooks/useWishlist', () => ({
   useWishlist: () => ({ data: [] }),
   addOutfitToWishlist: (...args: unknown[]) => mockSave(...args),
@@ -100,6 +100,9 @@ test.each([1, 3, 5])('saves %i styles and displays every style without disclosur
   });
   expect(mockSave).toHaveBeenCalledTimes(1);
   expect(mockSave.mock.calls[0][0].shoppingBrief.targets).toHaveLength(count);
+  const viewSaved = renderer.root.findAllByType('PressableScale' as any).find(node => node.props.accessibilityLabel === 'View saved guide')!;
+  act(() => viewSaved.props.onPress());
+  expect(props.navigation.navigate).toHaveBeenCalledWith('Stylist', { screen: 'StylistMain', params: { view: 'saved', tab: 'lists', selectedId: 'saved-guide' } });
   expect(JSON.stringify(renderer.toJSON())).not.toContain('Trousers Gap');
 });
 

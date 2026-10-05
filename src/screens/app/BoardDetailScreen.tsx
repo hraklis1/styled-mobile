@@ -66,7 +66,7 @@ const BOARD_FILTERS: { key: BoardFilter; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'item', label: 'Pieces' },
   { key: 'outfit', label: 'Outfits' },
-  { key: 'wishlist', label: 'Wishlist' },
+  { key: 'wishlist', label: 'Recommendations' },
 ];
 
 const NAMED_SWATCHES: Record<string, string> = {
@@ -596,7 +596,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
               <Ionicons name="albums-outline" size={30} color={colors.mutedForeground} />
             </View>
             <Text style={styles.emptyTitle}>Nothing saved yet</Text>
-            <Text style={styles.emptySub}>Save pieces, outfits, and wishlist looks to this board.</Text>
+            <Text style={styles.emptySub}>Save closet pieces, outfits, and recommended looks, pieces, or lists to this board.</Text>
             <TouchableOpacity
               style={styles.emptyBtn}
               onPress={() => setContentPickerVisible(true)}

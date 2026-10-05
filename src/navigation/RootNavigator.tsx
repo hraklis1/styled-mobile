@@ -52,6 +52,7 @@ import { ShoppingGalleryScreen } from '../screens/app/ShoppingGalleryScreen';
 import { ShoppingHaulDetailScreen } from '../screens/app/ShoppingHaulDetailScreen';
 import { ShoppingBriefDetailScreen } from '../screens/app/ShoppingBriefDetailScreen';
 import { ShoppingPriorityEditScreen } from '../screens/app/ShoppingPriorityEditScreen';
+import { navigationRef } from './savedRecommendations';
 import { StylistScreen } from '../screens/app/StylistScreen';
 import { ErrorState } from '../components/primitives/ErrorState';
 import { QuickMenuTabButton } from '../components/navigation/QuickMenuTabButton';
@@ -67,6 +68,7 @@ import type {
   HomeStackParamList,
   ClosetStackParamList,
   ShopStackParamList,
+  StylistStackParamList,
 } from './types';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -92,6 +94,7 @@ const linking: LinkingOptions<RootStackParamList> = {
             },
           },
           Calendar: 'calendar',
+          Stylist: { screens: { StylistMain: 'stylist' } },
           Closet: { screens: { ItemDetail: { path: 'wardrobe-item/:itemId', parse: { itemId: Number } } } },
           Shop: {
             screens: {
@@ -114,7 +117,7 @@ const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const AppTab = createBottomTabNavigator<AppTabParamList>();
 const HomeStack = createNativeStackNavigator<HomeStackParamList>();
 const ClosetStack = createNativeStackNavigator<ClosetStackParamList>();
-const StylistStack = createNativeStackNavigator();
+const StylistStack = createNativeStackNavigator<StylistStackParamList>();
 const ShopStack = createNativeStackNavigator<ShopStackParamList>();
 
 const TAB_ICONS: Record<string, { default: keyof typeof Ionicons.glyphMap; selected: keyof typeof Ionicons.glyphMap }> = {
@@ -297,17 +300,14 @@ function AppTabNavigator() {
 
     if (shopStackKey) {
       navigation.dispatch({
-        ...CommonActions.reset({
-          index: 0,
-          routes: [{ name: 'ShopMain' }],
-        }),
+        ...StackActions.popTo('ShopMain', { view: 'for-you' }),
         target: shopStackKey,
       });
       navigation.navigate('Shop');
       return;
     }
 
-    navigation.navigate('Shop', { screen: 'ShopMain' });
+    navigation.navigate('Shop', { screen: 'ShopMain', params: { view: 'for-you' } });
   }, []);
 
   // Once per signed-in session, migrate any legacy on-device wishlist to the server.
@@ -509,21 +509,15 @@ function AppTabNavigator() {
                 options: [
                   {
                     key: 'overview',
-                    label: 'Shop home',
+                    label: 'For you',
                     icon: 'bag-outline',
                     onPress: () => openShopHome(navigation),
-                  },
-                  {
-                    key: 'saved-looks',
-                    label: 'Saved recommendations',
-                    icon: 'heart-outline',
-                    onPress: () => navigation.navigate('Shop', { screen: 'SavedShopping', params: { tab: 'all' } }),
                   },
                   {
                     key: 'shopping-history',
                     label: 'Shortlist',
                     icon: 'images-outline',
-                    onPress: () => navigation.navigate('Shop', { screen: 'ShoppingGallery' }),
+                    onPress: () => navigation.navigate('Shop', { screen: 'ShopMain', params: { view: 'shortlist' } }),
                   },
                   {
                     key: 'shopping-camera',
@@ -643,7 +637,7 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer linking={linking}>
+    <NavigationContainer ref={navigationRef} linking={linking}>
       <RootStack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (
           <RootStack.Screen name="App" component={AppGate} />

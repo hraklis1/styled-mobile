@@ -1,6 +1,7 @@
-import { createContext, useCallback, useContext, useState } from 'react';
-import { Modal, View, StyleSheet } from 'react-native';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { Modal, Platform, View, StyleSheet } from 'react-native';
 
+import { openSavedRecommendations } from '../navigation/savedRecommendations';
 import { StylistChatView } from '../components/stylist/StylistChatView';
 import { useEntitlement } from '../hooks/useEntitlement';
 import { track } from '../lib/analytics';
@@ -62,6 +63,23 @@ function threadModeForSource(source: StylistOpenSource): 'new' | 'resume' {
 
 export function GlobalAIStylistProvider({ children }: Props) {
   const [visible, setVisible] = useState(false);
+  const pendingSavedId = useRef<string | null>(null);
+  const finishSavedNavigation = useCallback(() => {
+    const id = pendingSavedId.current;
+    if (!id) return;
+    pendingSavedId.current = null;
+    openSavedRecommendations(id);
+  }, []);
+  // iOS waits for native dismissal; Android/web have no Modal onDismiss event.
+  useEffect(() => {
+    if (visible || Platform.OS === 'ios' || !pendingSavedId.current) return;
+    const frame = requestAnimationFrame(finishSavedNavigation);
+    return () => cancelAnimationFrame(frame);
+  }, [finishSavedNavigation, visible]);
+  const viewSaved = useCallback((id: string) => {
+    pendingSavedId.current = id;
+    setVisible(false);
+  }, []);
   const [initialQuery, setInitialQuery] = useState<string | undefined>(undefined);
   const [initialAttachmentUri, setInitialAttachmentUri] = useState<string | undefined>(undefined);
   const [initialMode, setInitialMode] = useState<StylistMode | undefined>(undefined);
@@ -125,6 +143,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
         presentationStyle="fullScreen"
         statusBarTranslucent
         onRequestClose={closeStylist}
+        onDismiss={finishSavedNavigation}
       >
         <StylistChatView
           initialQuery={initialQuery}
@@ -137,6 +156,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
           openRequestId={openRequestId}
           source={source}
           threadMode={threadMode}
+          onViewSaved={viewSaved}
           onNavigateToCloset={navigateToCloset}
           onNavigateToShop={onNavigateToShop}
           onPromptConsumed={consumePrompt}

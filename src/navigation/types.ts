@@ -7,7 +7,7 @@ import type { ShoppingBriefPriority } from '../lib/shopDecisionWorkspace';
 export type RootStackParamList = {
   Auth: undefined;
   Onboarding: undefined;
-  App: undefined;
+  App: NavigatorScreenParams<AppTabParamList> | undefined;
 };
 
 export type AuthStackParamList = {
@@ -19,7 +19,7 @@ export type AuthStackParamList = {
 export type AppTabParamList = {
   Home: undefined;
   Closet: NavigatorScreenParams<ClosetStackParamList> | undefined;
-  Stylist: undefined;
+  Stylist: NavigatorScreenParams<StylistStackParamList> | undefined;
   Shop: NavigatorScreenParams<ShopStackParamList> | undefined;
   Calendar: {
     /** Open this event's detail sheet on arrival, and filter to its day. */
@@ -62,11 +62,21 @@ export type HomeStackParamList = {
 };
 
 export type SavedShoppingTab = 'all' | 'looks' | 'pieces' | 'lists';
+export type ShopView = 'for-you' | 'shortlist';
+export type StylistStackParamList = {
+  StylistMain: { view?: 'chat' | 'saved'; tab?: SavedShoppingTab; selectedId?: string } | undefined;
+};
+export type StylistScreenProps = CompositeScreenProps<
+  NativeStackScreenProps<StylistStackParamList, 'StylistMain'>,
+  BottomTabScreenProps<AppTabParamList>
+>;
+
 export type ShopSection = 'shortlist' | 'saved-looks' | 'saved-shopping';
 
 // Shop nested stack (wishlist + shopping tools)
 export type ShopStackParamList = {
   ShopMain: {
+    view?: ShopView;
     section?: ShopSection;
     focusGroupId?: string;
     catalogFilter?: 'active' | 'all';

@@ -68,7 +68,7 @@ import {
 } from '../../lib/shoppingPresentation';
 import { SHORTLIST_COPY } from '../../lib/shoppingVocabulary';
 import { deleteShoppingSnaps as deleteShoppingSnapsService } from '../../lib/deleteShoppingSnaps';
-import type { ShoppingGalleryScreenProps } from '../../navigation/types';
+import type { ShopStackParamList, ShoppingGalleryScreenProps } from '../../navigation/types';
 import { useReturnToTab } from '../../hooks/useReturnToTab';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import { colors, radii, spacing, typography } from '../../theme';
@@ -84,7 +84,21 @@ const DATE_OPTIONS: { value: ShoppingDateFilter; label: string }[] = [
 /** One axis for "what still needs doing", replacing three overlapping ones. */
 type ShortlistAttentionFilter = 'all' | ShoppingReviewReasonKey | 'on-this-phone';
 
+type ShortlistContentProps = {
+  navigation: Pick<ShoppingGalleryScreenProps['navigation'], 'navigate'>;
+  params?: ShopStackParamList['ShoppingGallery'];
+  onConsumeParams: (params: Partial<NonNullable<ShopStackParamList['ShoppingGallery']>>) => void;
+  embedded?: boolean;
+  active?: boolean;
+  onBack?: () => void;
+};
+
 export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScreenProps) {
+  const goBack = useReturnToTab(navigation, route.params?.returnTo);
+  return <ShortlistContent navigation={navigation} params={route.params} onConsumeParams={navigation.setParams} onBack={goBack} />;
+}
+
+export function ShortlistContent({ navigation, params, onConsumeParams, embedded = false, active = true, onBack = () => {} }: ShortlistContentProps) {
   const filterSheetRef = useRef<BottomSheetModal>(null);
   const storeSheetRef = useRef<BottomSheetModal>(null);
   const assignStoreSheetRef = useRef<BottomSheetModal>(null);
@@ -136,30 +150,40 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
   const reviewReasonFilter: ShoppingReviewReasonKey | 'all' =
     attentionFilter === 'all' || attentionFilter === 'on-this-phone' ? 'all' : attentionFilter;
 
-  const goBack = useReturnToTab(navigation, route.params?.returnTo);
-
   useEffect(() => {
-    if (route.params?.resetFilters) {
+    if (params?.resetFilters) {
       setQuery(''); setSearchOpen(false); setFavorites(false); setCategory('');
       setCurrency(''); setMinimum(''); setMaximum(''); setOldest(false);
       setStoreFilter(STORE_FILTER_ALL); setDateFilter('all'); setAttentionFilter('all');
       setCatalogStatuses(new Set());
     }
-    const requestedFilter = route.params?.catalogFilter;
+    const requestedFilter = params?.catalogFilter;
     if (requestedFilter) {
       setCatalogStatuses(requestedFilter === 'active'
         ? new Set<ShoppingFindCatalogStatus>(['considering', 'wishlist'])
         : new Set());
     }
-    const focusGroupId = route.params?.focusGroupId;
+    const focusGroupId = params?.focusGroupId;
+    let consumedFocus = false;
     if (focusGroupId) {
       const focused = allItems.find((item) => item.captureGroupId === focusGroupId);
       if (focused) setLightboxItem(focused);
+      consumedFocus = !!focused || (!isLoading && !isError);
     }
-    if (focusGroupId || requestedFilter || route.params?.resetFilters) {
-      navigation.setParams({ focusGroupId: undefined, catalogFilter: undefined, resetFilters: undefined });
+    if (consumedFocus || requestedFilter || params?.resetFilters) {
+      onConsumeParams({ ...(consumedFocus || !focusGroupId ? { focusGroupId: undefined } : {}), catalogFilter: undefined, resetFilters: undefined });
     }
-  }, [allItems, navigation, route.params?.catalogFilter, route.params?.focusGroupId, route.params?.resetFilters]);
+  }, [allItems, isError, isLoading, onConsumeParams, params?.catalogFilter, params?.focusGroupId, params?.resetFilters]);
+  useEffect(() => {
+    if (!active) {
+      filterSheetRef.current?.dismiss();
+      storeSheetRef.current?.dismiss();
+      assignStoreSheetRef.current?.dismiss();
+      setLightboxItem(null);
+      setMenuGroup(null);
+      setComparison(null);
+    }
+  }, [active]);
   const storeOptions = useMemo(() => buildShoppingStoreOptions(allItems), [allItems]);
   const unassignedStoreCount = useMemo(() => countItemsWithoutStore(allItems), [allItems]);
   const storeFilterLabel = useMemo(
@@ -472,11 +496,11 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
             onPress={() => filterSheetRef.current?.present()}
             label="Refine shortlist"
           />
-          <ActionButton
+          {!embedded && <ActionButton
             icon="camera"
             label="Save a find"
             onPress={() => navigation.navigate('ShoppingCamera')}
-          />
+          />}
         </>
       )}
     </View>
@@ -491,18 +515,21 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
         const next = event.nativeEvent.layout.height;
         setHeroHeight((current) => (current === next ? current : next));
       }}>
-        <ShopSubpageHeader
+        {embedded ? <View style={styles.embeddedActions}>
+          <AppText variant="caption" tone="muted">{countLine}</AppText>
+          {headerActions}
+        </View> : <ShopSubpageHeader
           title="Your shortlist"
           compact={allItems.length > 0}
           subtitle={allItems.length > 0
             ? countLine
             : 'Pieces you photographed while shopping, kept here while you decide.'}
           eyebrow={null}
-          onBack={goBack}
-          backLabel={route.params?.returnTo ? `Back to ${route.params.returnTo}` : undefined}
+          onBack={onBack}
+          backLabel={params?.returnTo ? `Back to ${params.returnTo}` : undefined}
           actions={headerActions}
           style={styles.heroHeader}
-        />
+        />}
         <View style={styles.controls}>
           {/* Mode on the left, the one always-on filter on the right: a single
               row instead of a rail that held nothing but Favorites at rest. */}
@@ -565,7 +592,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
         contentContainerStyle={{ paddingBottom: selectionMode ? 180 : 32 }}
         refreshing={isRefetching}
         onRefresh={() => void refetch()}
-        ListEmptyComponent={<View style={styles.emptyState}><Text style={styles.emptyTitle}>{allItems.length ? 'No matching pieces' : 'Your next find starts here'}</Text><Text style={styles.emptyText}>{allItems.length ? 'Try clearing a filter or changing your search to see more pieces.' : 'Photograph a piece or import photos to consider later.'}</Text><ActionButton icon="add" label={allItems.length ? 'Clear filters' : 'Save a find'} onPress={() => { if (allItems.length) { setQuery(''); setFavorites(false); setCategory(''); setCurrency(''); setMinimum(''); setMaximum(''); setCatalogStatuses(new Set()); clearItemFilters(); } else navigation.navigate('ShoppingCamera'); }} /></View>}
+        ListEmptyComponent={isLoading ? <View style={styles.emptyState}><ActivityIndicator color={colors.primary} /></View> : <View style={styles.emptyState}><Text style={styles.emptyTitle}>{allItems.length ? 'No matching pieces' : 'Your next find starts here'}</Text><Text style={styles.emptyText}>{allItems.length ? 'Try clearing a filter or changing your search to see more pieces.' : 'Photograph a piece or import photos to consider later.'}</Text>{(!embedded || allItems.length > 0) && <ActionButton icon="add" label={allItems.length ? 'Clear filters' : 'Save a find'} onPress={() => { if (allItems.length) { setQuery(''); setFavorites(false); setCategory(''); setCurrency(''); setMinimum(''); setMaximum(''); setCatalogStatuses(new Set()); clearItemFilters(); } else navigation.navigate('ShoppingCamera'); }} />}</View>}
         renderItem={({ item }) => <ShoppingPieceTile item={item} selected={selectedItemIds.has(item.id)} selecting={selectionMode} onPress={() => { if (selectionMode) setSelectedItemIds((ids) => { const next = new Set(ids); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; }); else setLightboxItem(item); }} onLongPress={() => { setSelectionMode(true); setSelectedItemIds(new Set([item.id])); }} onFavorite={() => void saveCatalog(item.captureGroupId, { isFavorite: !item.isFavorite }).catch((error) => Alert.alert('Could not save', error.message))} />}
       /> : <FlatList
         key="visits"
@@ -605,10 +632,10 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
             <Text style={styles.emptyText}>
               Photograph pieces and price tags while you shop, or import them from your camera roll, and keep them here until you decide.
             </Text>
-            <TouchableOpacity style={styles.emptyButton} onPress={() => navigation.navigate('ShoppingCamera')}>
+            {!embedded && <TouchableOpacity style={styles.emptyButton} onPress={() => navigation.navigate('ShoppingCamera')}>
               <Ionicons name="camera-outline" size={18} color={colors.primaryForeground} />
               <Text style={styles.emptyButtonText}>Save a find</Text>
-            </TouchableOpacity>
+            </TouchableOpacity>}
           </View>
         )}
         onScroll={(event) => {
@@ -640,7 +667,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
         onClose={() => setMenuGroup(null)}
       />
 
-      {viewMode === 'visits' && showCompactHeader ? (
+      {!embedded && viewMode === 'visits' && showCompactHeader ? (
         <Animated.View
           entering={reduceMotion ? undefined : FadeIn.duration(120)}
           exiting={reduceMotion ? undefined : FadeOut.duration(90)}
@@ -651,8 +678,8 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
             title="Your shortlist"
             subtitle={compactState}
             eyebrow={null}
-            onBack={goBack}
-            backLabel={route.params?.returnTo ? `Back to ${route.params.returnTo}` : undefined}
+            onBack={onBack}
+            backLabel={params?.returnTo ? `Back to ${params.returnTo}` : undefined}
             actions={headerActions}
             style={styles.stickyHeaderContent}
           />
@@ -781,6 +808,7 @@ export function ShoppingGalleryScreen({ navigation, route }: ShoppingGalleryScre
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
+  embeddedActions: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   listContent: { paddingBottom: spacing.xxxl },
   listContentSelecting: { paddingBottom: 112 },
   heroHeader: { paddingBottom: spacing.lg, backgroundColor: colors.background },

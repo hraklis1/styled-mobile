@@ -63,7 +63,10 @@ export function useRemoveFromWishlist() {
       if (ctx?.previous) qc.setQueryData(WISHLIST_QUERY_KEY, ctx.previous);
       Alert.alert('Error', "Couldn't remove from wishlist. Please try again.");
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: WISHLIST_QUERY_KEY }),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: WISHLIST_QUERY_KEY });
+      void qc.invalidateQueries({ queryKey: ['boards'] });
+    },
   });
 }
 
@@ -90,5 +93,6 @@ export async function unsaveProductEntry(id: string): Promise<void> {
   await api.delete(`/api/wishlist/${id}`);
   if (getUserCacheEpoch() === epoch) {
     queryClient.setQueryData<WishlistEntry[]>(WISHLIST_QUERY_KEY, (old = []) => old.filter(entry => entry.id !== id));
+    void queryClient.invalidateQueries({ queryKey: ['boards'] });
   }
 }
