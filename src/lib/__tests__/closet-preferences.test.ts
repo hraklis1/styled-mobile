@@ -20,6 +20,7 @@ describe('closet view preferences', () => {
   it('accepts known modes and defaults unknown values to grid', () => {
     expect(parsePiecesViewMode('grid')).toBe('grid');
     expect(parsePiecesViewMode('list')).toBe('list');
+    expect(parsePiecesViewMode('grid3')).toBe('grid3');
     expect(parsePiecesViewMode('dense')).toBe('grid');
     expect(parsePiecesViewMode(null)).toBe('grid');
   });

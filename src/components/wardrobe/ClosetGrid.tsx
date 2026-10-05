@@ -6,7 +6,6 @@ import { GarmentCard } from './GarmentCard';
 import { editorial, spacing } from '../../theme';
 import type { Item } from '../../types/item';
 
-const NUM_COLS = 2;
 const SIDE_PAD = spacing.page;
 const COL_GAP  = spacing.grid;
 
@@ -19,6 +18,7 @@ type ExtraData = {
 
 type Props = {
   items: Item[];
+  numColumns?: 2 | 3;
   selectedIds: Set<number>;
   selectionMode: boolean;
   onItemPress: (item: Item) => void;
@@ -42,6 +42,7 @@ const CARD_OVERHEAD = 88;
 
 const ClosetGridComponent = forwardRef<FlashListRef<Item>, Props>(function ClosetGridComponent({
   items,
+  numColumns = 2,
   selectedIds,
   selectionMode,
   onItemPress,
@@ -60,7 +61,7 @@ const ClosetGridComponent = forwardRef<FlashListRef<Item>, Props>(function Close
   viewabilityConfig,
 }, ref) {
   const { width, fontScale } = useWindowDimensions();
-  const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / NUM_COLS;
+  const cardWidth = (width - SIDE_PAD * 2 - COL_GAP * (numColumns - 1)) / numColumns;
   const itemHeight = Math.round(cardWidth / CARD_ASPECT_RATIO) + CARD_OVERHEAD;
 
   const extraData: ExtraData = { selectedIds, selectionMode };
@@ -96,7 +97,7 @@ const ClosetGridComponent = forwardRef<FlashListRef<Item>, Props>(function Close
       <AnimatedClosetList
         ref={ref}
         data={items}
-        numColumns={NUM_COLS}
+        numColumns={numColumns}
         renderItem={renderItem}
         keyExtractor={(item: Item) => String(item.id)}
         extraData={extraData}

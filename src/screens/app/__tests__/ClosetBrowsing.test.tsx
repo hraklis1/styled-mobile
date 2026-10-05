@@ -264,3 +264,22 @@ it('keeps browsing controls visible when opening search with saved history', () 
   act(() => node('SearchField').props.onChangeText('linen'));
   expect(node('ClosetGrid').props.ListHeaderComponent).not.toBeNull();
 });
+
+
+it('switches pieces between two- and three-column grids and remembers the choice', () => {
+  const { savePiecesViewMode } = require('../../../lib/closet-preferences');
+  expect(node('ClosetGrid').props.numColumns).toBe(2);
+  act(() => node('ClosetViewMenu').props.onChange('grid3'));
+  expect(node('ClosetGrid').props.numColumns).toBe(3);
+  expect(savePiecesViewMode).toHaveBeenCalledWith('grid3');
+  act(() => node('ClosetViewMenu').props.onChange('grid'));
+  expect(node('ClosetGrid').props.numColumns).toBe(2);
+});
+
+it('offers three columns for outfits without changing the pieces layout', () => {
+  act(() => node('ClosetNavigation').props.onChange('outfits'));
+  act(() => node('ClosetViewMenu').props.onChange('grid3'));
+  expect(node('AnimatedClosetList').props.numColumns).toBe(3);
+  act(() => node('ClosetNavigation').props.onChange('pieces'));
+  expect(node('ClosetGrid').props.numColumns).toBe(2);
+});

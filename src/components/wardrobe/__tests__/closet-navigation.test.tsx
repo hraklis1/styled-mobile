@@ -4,7 +4,7 @@ import { StyleSheet, useWindowDimensions } from 'react-native';
 import { ClosetNavigation } from '../closet-navigation';
 
 jest.mock('../../primitives/PressableScale', () => ({ PressableScale: 'PressableScale' }));
-jest.mock('../../primitives/Editorial', () => ({ FilterControl: 'FilterControl' }));
+jest.mock('../../primitives/Editorial', () => ({ ...jest.requireActual('../../primitives/Editorial'), FilterControl: 'FilterControl' }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }));
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({ __esModule: true, default: jest.fn() }));
 

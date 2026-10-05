@@ -69,7 +69,7 @@ import {
 } from '../../lib/closet-preferences';
 import { ItemSecondaryMeta } from '../../components/wardrobe/item-secondary-meta';
 
-type ViewMode = 'grid' | 'list';
+type ViewMode = PiecesViewMode;
 type Segment = 'pieces' | 'outfits' | 'boards';
 type BoardNameMode =
   | { kind: 'new' }
@@ -284,7 +284,9 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   };
 
   const cardWidth = (width - SIDE_PAD * 2 - COL_GAP) / 2;
-  const outfitTileHeight = Math.round(cardWidth / editorial.outfitAspectRatio);
+  const outfitColumns = outfitViewMode === 'grid3' ? 3 : 2;
+  const outfitCardWidth = (width - SIDE_PAD * 2 - COL_GAP * (outfitColumns - 1)) / outfitColumns;
+  const outfitTileHeight = Math.round(outfitCardWidth / editorial.outfitAspectRatio);
 
   const hasCategoryPills = segment === 'pieces' && availableCategories.length > 0;
   const [headerHeight, setHeaderHeight] = useState(112);
@@ -296,11 +298,11 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const restorationGeneration = useRef(0);
   const resettingResults = useRef(false);
   const getActiveList = useCallback(() => segment === 'pieces'
-    ? (piecesViewMode === 'grid' ? piecesGridRef.current : piecesListRef.current)
+    ? (piecesViewMode !== 'list' ? piecesGridRef.current : piecesListRef.current)
     : segment === 'outfits' ? outfitListRef.current : boardListRef.current,
   [segment, piecesViewMode]);
   const activeItems = segment === 'pieces' ? filteredItems : segment === 'outfits' ? filteredOutfits : sortedBoards;
-  const columns = segment === 'pieces' ? (piecesViewMode === 'grid' ? 2 : 1) : segment === 'outfits' ? (outfitViewMode === 'grid' ? 2 : 1) : 2;
+  const columns = segment === 'pieces' ? (piecesViewMode === 'list' ? 1 : piecesViewMode === 'grid3' ? 3 : 2) : segment === 'outfits' ? (outfitViewMode === 'list' ? 1 : outfitViewMode === 'grid3' ? 3 : 2) : 2;
 
   const capturePosition = useCallback(() => {
     const list = getActiveList();
@@ -832,7 +834,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
       return (
         <View style={styles.outfitGridItem}>
           <PressableScale
-            contentStyle={[styles.outfitCard, { width: cardWidth }]}
+            contentStyle={[styles.outfitCard, { width: outfitCardWidth }]}
             onPress={
               outfitSelectionMode
                 ? () => toggleOutfitSelect(outfit.id)
@@ -845,7 +847,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             accessibilityState={outfitSelectionMode ? { selected: isSelected } : undefined}
           >
             <View style={styles.collageWrapper}>
-              <OutfitCollage outfit={outfit} size={cardWidth} height={outfitTileHeight} borderRadius={radii.photo} />
+              <OutfitCollage outfit={outfit} size={outfitCardWidth} height={outfitTileHeight} borderRadius={radii.photo} />
               {outfitSelectionMode && isSelected && <View style={styles.selectedOverlay} />}
               {outfitSelectionMode && (
                 <View style={styles.selectionBadge}>
@@ -884,7 +886,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         </View>
       );
     },
-    [history, outfitsSearch, cardWidth, outfitTileHeight, navigation, outfitViewMode, outfitSelectionMode, selectedOutfitIds, toggleOutfitSelect, handleOutfitLongPress, upcomingAssignmentSummaries, fontScale],
+    [history, outfitsSearch, outfitCardWidth, outfitTileHeight, navigation, outfitViewMode, outfitSelectionMode, selectedOutfitIds, toggleOutfitSelect, handleOutfitLongPress, upcomingAssignmentSummaries, fontScale],
   );
 
   // ── Empty states ───────────────────────────────────────────────────────────
@@ -1005,7 +1007,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     if (outfitShowFavorites) filterTokens.push({ key: 'favorites', label: 'Favourites', remove: () => setOutfitShowFavorites(false) });
   }
   const browseHeader = (
-    <View style={[styles.browseHeader, (segment === 'pieces' ? piecesViewMode === 'grid' : segment === 'outfits' ? outfitViewMode === 'grid' : false) && { paddingHorizontal: COL_GAP / 2 }]}>
+    <View style={[styles.browseHeader, (segment === 'pieces' ? piecesViewMode !== 'list' : segment === 'outfits' ? outfitViewMode !== 'list' : false) && { paddingHorizontal: COL_GAP / 2 }]}>
           {/* Category pills — pieces only */}
           {hasCategoryPills && (
             <View style={styles.pillRow}>
@@ -1078,9 +1080,10 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             key={`pieces-${piecesViewMode}`}
             style={styles.piecesListStage}
           >
-          {piecesViewMode === 'grid' ? (
+          {piecesViewMode !== 'list' ? (
             <ClosetGrid
               ref={piecesGridRef}
+              numColumns={piecesViewMode === 'grid3' ? 3 : 2}
               items={filteredItems}
               selectedIds={selectedIds}
               selectionMode={selectionMode}
@@ -1127,7 +1130,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             keyExtractor={outfit => String(outfit.id)}
             renderItem={renderOutfitCard}
             extraData={{ outfitSelectionMode, selectedOutfitIds }}
-            numColumns={outfitViewMode === 'list' ? 1 : 2}
+            numColumns={outfitViewMode === 'list' ? 1 : outfitColumns}
             ListEmptyComponent={emptyOutfits}
             contentContainerStyle={
               outfitViewMode === 'list'
