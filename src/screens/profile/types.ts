@@ -19,6 +19,7 @@ export type ProfileStackParamList = {
   SettingsAccessibility: undefined;
   SettingsPrivacy: undefined;
   SettingsLearned: undefined;
+  SettingsHiddenProducts: undefined;
   SettingsAccount: undefined;
   SettingsPassword: undefined;
 };

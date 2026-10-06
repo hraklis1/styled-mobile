@@ -2,6 +2,9 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { ProfileStackParamList } from './types';
 import { SettingsScaffold, Group, GroupBlock, NavRow } from '../../components/profile/SettingsUI';
 import { api } from '../../lib/api';
 import { colors, spacing, typography, radii } from '../../theme';
@@ -40,6 +43,7 @@ function TagCloud({ tags, onRemove, empty }: { tags: string[]; onRemove: (tag: s
  */
 export function LearnedScreen() {
   const qc = useQueryClient();
+  const navigation = useNavigation<NativeStackNavigationProp<ProfileStackParamList>>();
   const { data, isLoading } = useQuery({
     queryKey: LEARNED_KEY,
     queryFn: () => api.get<Learned>('/api/profile/learned').then((r) => r.data),
@@ -50,7 +54,7 @@ export function LearnedScreen() {
     onError: () => Alert.alert('Error', "Couldn't update. Please try again."),
   });
 
-  const resetAll = () => Alert.alert('Reset everything learned?', 'Your stylist will start learning your taste again from scratch. Your profile answers are not affected.', [
+  const resetAll = () => Alert.alert('Reset everything learned?', 'Your stylist and shopping guides will start learning your taste again from scratch. Your profile answers and products marked “Not for me” are not affected.', [
     { text: 'Cancel', style: 'cancel' },
     { text: 'Reset', style: 'destructive', onPress: () => forget.mutate({ kind: 'all' }) },
   ]);
@@ -85,6 +89,9 @@ export function LearnedScreen() {
                 </Pressable>
               )}
             </GroupBlock>
+          </Group>
+          <Group title="Shopping">
+            <NavRow label="Products marked “Not for me”" onPress={() => navigation.navigate('SettingsHiddenProducts')} />
           </Group>
           <Group>
             <NavRow label="Reset everything learned" destructive onPress={resetAll} />

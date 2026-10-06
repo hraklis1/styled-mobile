@@ -1,3 +1,4 @@
+jest.mock('../../../lib/api', () => ({ api: { post: jest.fn().mockResolvedValue({ data: { productKey: 'k' } }), delete: jest.fn().mockResolvedValue({}) } }));
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { Pressable, ScrollView, Text } from 'react-native';
@@ -157,4 +158,35 @@ test('editorial collection counts eligible options and carries its presentation 
   act(() => renderer.root.findAllByType(Pressable).find(node => node.findAllByType(Text).some(child => child.props.children === 'Browse all 5 options'))!.props.onPress());
   expect(renderer.root.findByType(CuratedProductBrowser).props.editorial).toBe(true);
   expect(renderer.root.findByType(CuratedProductBrowser).props.offers).toHaveLength(5);
+});
+test('guide cards can be hidden: the slot stays as a reason panel while on the page; undo restores the card', () => {
+  const { productFeedbackStore } = require('../../../lib/productFeedback');
+  const { ProductFeedbackPanel } = require('../ProductFeedbackPanel');
+  productFeedbackStore.reset();
+  render();
+  expect(renderer.root.findAllByType(CuratedItemCard)[0].props.onHide).toBeUndefined();
+  act(() => renderer.update(<CuratedItemRail offers={offers} context={{ ...context, surface: 'shopping_guide' }} />));
+  act(() => renderer.root.findAllByType(CuratedItemCard)[0].props.onHide());
+  const panel = renderer.root.findByType(ProductFeedbackPanel);
+  act(() => panel.props.onReason('wrong_color'));
+  expect(renderer.root.findByType(ProductFeedbackPanel).props.reason).toBe('wrong_color');
+  expect(renderer.root.findAllByType(CuratedItemCard).map((card) => card.props.offer.id)).toEqual(['serper:1', 'serper:2']);
+  act(() => renderer.root.findByType(ProductFeedbackPanel).props.onUndo());
+  expect(renderer.root.findAllByType(ProductFeedbackPanel)).toHaveLength(0);
+  expect(renderer.root.findAllByType(CuratedItemCard).map((card) => card.props.offer.id)).toEqual(['serper:0', 'serper:1', 'serper:2']);
+});
+test('the reason panel keeps its slot even after upstream drops the hidden offer', () => {
+  const { productFeedbackStore } = require('../../../lib/productFeedback');
+  const { ProductFeedbackPanel } = require('../ProductFeedbackPanel');
+  productFeedbackStore.reset();
+  const guide = { ...context, surface: 'shopping_guide' };
+  act(() => { renderer = TestRenderer.create(<CuratedItemRail offers={offers} context={guide} />); });
+  act(() => renderer.root.findAllByType(CuratedItemCard)[1].props.onHide());
+  act(() => renderer.update(<CuratedItemRail offers={offers.filter((offer) => offer.id !== 'serper:1')} context={guide} />));
+  expect(renderer.root.findAllByType(ProductFeedbackPanel)).toHaveLength(1);
+  expect(renderer.root.findAllByType(CuratedItemCard).map((card) => card.props.offer.id)).toEqual(['serper:0', 'serper:2']);
+  // Leaving the page (a new guide context) drops the outline; the rail closes ranks.
+  act(() => renderer.update(<CuratedItemRail offers={offers.filter((offer) => offer.id !== 'serper:1')} context={{ ...guide, targetKey: 'other' }} />));
+  expect(renderer.root.findAllByType(ProductFeedbackPanel)).toHaveLength(0);
+  expect(renderer.root.findAllByType(CuratedItemCard).map((card) => card.props.offer.id)).toEqual(['serper:0', 'serper:2', 'serper:3']);
 });

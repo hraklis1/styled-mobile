@@ -1,10 +1,11 @@
-import { useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 import { NavigationContext } from '@react-navigation/native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { track } from '../lib/analytics';
 import { parseOfferResult, type OfferResult } from '../types/commerce';
+import { useHiddenProducts } from '../lib/productFeedback';
 
 export function useCommerceActive(enabled = true) {
   const navigation = useContext(NavigationContext);
@@ -22,6 +23,13 @@ export function useProductOffers(context: { conversationId?: number; reference?:
   const active = useCommerceActive(enabled);
   const client = useQueryClient();
   const key = ['commerce', context.reference ?? null, context.wishlistId ?? null, context.conversationId ?? null];
+  // Products hidden this session drop out of every consumer (guide rails, Shop
+  // previews) right away; the next server refresh excludes them for good.
+  const hidden = useHiddenProducts();
+  const select = useCallback((targets: Record<string, OfferResult>) => {
+    if (!hidden.size) return targets;
+    return Object.fromEntries(Object.entries(targets).map(([targetKey, result]) => [targetKey, { ...result, offers: result.offers.filter((offer) => !hidden.has(offer.id)) }]));
+  }, [hidden]);
   const query = useQuery({
     queryKey: key,
     enabled: active && !!(context.reference || context.wishlistId),
@@ -40,6 +48,7 @@ export function useProductOffers(context: { conversationId?: number; reference?:
       const expiries = Object.values(query.state.data ?? {}).map((target) => Date.parse(target.expiresAt ?? '')).filter(Number.isFinite);
       return expiries.length ? Math.max(0, Math.min(...expiries) - query.state.dataUpdatedAt) : 60_000;
     },
+    select,
     retry: false,
     refetchInterval: (query) => active && Object.values(query.state.data ?? {}).some((target) => target.status === 'pending') ? 4_000 : false,
   });

@@ -49,5 +49,15 @@ test('editorial cards inset supplier images without changing cache policy or cro
   act(() => { renderer = TestRenderer.create(<CuratedItemCard editorial offer={offer} onOpen={() => {}} />); });
   const image = renderer.root.findByType('Image' as any);
   expect(image.props).toMatchObject({ contentFit: 'contain', cachePolicy: 'memory' });
-  expect(StyleSheet.flatten(image.props.style)).toMatchObject({ top: 12, bottom: 12, left: 12, right: 12 });
+  expect(StyleSheet.flatten(image.props.style)).toMatchObject({ top: 8, bottom: 8, left: 8, right: 8 });
+});
+test('"Not for me" is its own 44pt control and only appears when hiding is allowed', () => {
+  const onOpen = jest.fn(), onHide = jest.fn();
+  act(() => { renderer = TestRenderer.create(<CuratedItemCard offer={offer} onOpen={onOpen} />); });
+  expect(renderer.root.findAllByType(Pressable).some(button => button.props.accessibilityLabel?.startsWith('Not for me'))).toBe(false);
+  act(() => renderer.update(<CuratedItemCard offer={offer} onOpen={onOpen} onHide={onHide} />));
+  const hide = renderer.root.findAllByType(Pressable).find(button => button.props.accessibilityLabel === `Not for me: hide ${offer.title}`)!;
+  expect(StyleSheet.flatten(hide.props.style({ pressed: false }))).toMatchObject({ width: 44, height: 44 });
+  act(() => hide.props.onPress());
+  expect(onHide).toHaveBeenCalledTimes(1); expect(onOpen).not.toHaveBeenCalled();
 });

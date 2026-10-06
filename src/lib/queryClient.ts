@@ -1,5 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 import { shoppingFeedbackQueue } from './shoppingFeedback';
+import { productFeedbackStore } from './productFeedback';
 import { isNetworkError } from './networkError';
 
 export const queryClient = new QueryClient({
@@ -23,6 +24,7 @@ export function getUserCacheEpoch(): number { return userCacheEpoch; }
 export async function clearUserQueryCache(): Promise<void> {
   userCacheEpoch += 1;
   shoppingFeedbackQueue.clear();
+  productFeedbackStore.reset();
   await queryClient.cancelQueries();
   queryClient.clear();
 }

@@ -14,6 +14,7 @@ import { NotificationsScreen } from './NotificationsScreen';
 import { AccessibilityScreen } from './AccessibilityScreen';
 import { PrivacyScreen } from './PrivacyScreen';
 import { LearnedScreen } from './LearnedScreen';
+import { HiddenProductsScreen } from './HiddenProductsScreen';
 import { AccountScreen } from './AccountScreen';
 import { PasswordScreen } from './PasswordScreen';
 
@@ -35,6 +36,7 @@ export function ProfileNavigator() {
       <Stack.Screen name="SettingsAccessibility" component={AccessibilityScreen} />
       <Stack.Screen name="SettingsPrivacy" component={PrivacyScreen} />
       <Stack.Screen name="SettingsLearned" component={LearnedScreen} />
+      <Stack.Screen name="SettingsHiddenProducts" component={HiddenProductsScreen} />
       <Stack.Screen name="SettingsAccount" component={AccountScreen} />
       <Stack.Screen name="SettingsPassword" component={PasswordScreen} />
     </Stack.Navigator>
