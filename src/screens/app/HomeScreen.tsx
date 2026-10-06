@@ -895,6 +895,12 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         style={styles.actionRow}
         loggedToday={loggedToday}
         onAddToCloset={handleAddToCloset}
+        onSaveFind={() => {
+          endTour('button_tap');
+          track('shop_action_selected', { action: 'evaluate_item', source: 'home' });
+          // initial:false keeps ShopMain beneath the camera so closing it never strands the Shop tab on the camera.
+          navigation.navigate('Shop', { screen: 'ShoppingCamera', initial: false });
+        }}
         onLogWear={handleLogTodaysWear}
         onAskStylist={() => {
           endTour('button_tap');
@@ -1270,6 +1276,7 @@ const HOME_TOUR_STEPS: { key: HomeActionKey; title: string; body: string }[] = [
   { key: 'stylist', title: 'Your stylist', body: 'Ask for an outfit, a second opinion, or what to pack for a trip.' },
   { key: 'closet', title: 'Add to your closet', body: 'Snap or import pieces — we cut them out and tag them for you. Every look is styled from what you add.' },
   { key: 'wear', title: 'Log today’s outfit', body: 'Record what you wore. It sharpens tomorrow’s suggestions and fills your week in wear.' },
+  { key: 'shop', title: 'Save a find', body: 'Spot something in a store? Snap it straight from here — we’ll save it to Shop and check how it works with your closet.' },
 ];
 const TOUR_CALLOUT_WIDTH = 260;
 const TOUR_EDGE = 16;

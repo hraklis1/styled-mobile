@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { PressableScale } from '../primitives/PressableScale';
 import { colors, radii, shadows, spacing, stroke, typography } from '../../theme';
 
-export type HomeActionKey = 'stylist' | 'closet' | 'wear';
+export type HomeActionKey = 'stylist' | 'closet' | 'shop' | 'wear';
 
 /** Lets the first-run tour measure each button in window coordinates. */
 export type HomeActionRowHandle = {
@@ -14,6 +14,7 @@ export type HomeActionRowHandle = {
 type Props = {
   onAskStylist: () => void;
   onAddToCloset: () => void;
+  onSaveFind: () => void;
   onLogWear: () => void;
   loggedToday?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -22,15 +23,17 @@ type Props = {
 const DISC = 56;
 
 /**
- * Home's three everyday actions as one quiet row of discs. The stylist is the
- * charcoal primary; closet and wear sit beside it as outlined twins. What each
+ * Home's everyday actions as one quiet row of discs. The stylist is the
+ * charcoal primary; closet, wear and shop sit beside it as outlined
+ * twins. Add and Save find both open a camera, so each wears its own glyph
+ * (camera + plus for the closet, price tag + camera for shopping). What each
  * does is taught once by the first-run tour, so the captions stay one word.
  */
 export const HomeActionRow = forwardRef<HomeActionRowHandle, Props>(function HomeActionRow(
-  { onAskStylist, onAddToCloset, onLogWear, loggedToday = false, style },
+  { onAskStylist, onAddToCloset, onSaveFind, onLogWear, loggedToday = false, style },
   ref,
 ) {
-  const refs = { stylist: useRef<View>(null), closet: useRef<View>(null), wear: useRef<View>(null) };
+  const refs = { stylist: useRef<View>(null), closet: useRef<View>(null), shop: useRef<View>(null), wear: useRef<View>(null) };
 
   useImperativeHandle(ref, () => ({
     measure: (key) => new Promise((resolve) => {
@@ -55,6 +58,10 @@ export const HomeActionRow = forwardRef<HomeActionRowHandle, Props>(function Hom
     {
       key: 'wear', label: loggedToday ? 'Logged' : 'Log wear', icon: loggedToday ? 'checkmark' : 'calendar-outline',
       onPress: onLogWear, a11y: loggedToday ? 'Today’s outfit logged' : 'Log today’s outfit', hint: 'Record what you wore today',
+    },
+    {
+      key: 'shop', label: 'Save find', icon: 'pricetag-outline', badge: 'camera', onPress: onSaveFind,
+      a11y: 'Save a find while shopping', hint: 'Opens the shopping camera to capture something you saw in a store',
     },
   ];
 
@@ -85,7 +92,7 @@ export const HomeActionRow = forwardRef<HomeActionRowHandle, Props>(function Hom
             />
             {action.badge ? (
               <View style={styles.badge}>
-                <Ionicons name={action.badge} size={11} color={colors.primaryForeground} accessible={false} />
+                <Ionicons name={action.badge} size={action.badge === 'add' ? 11 : 10} color={colors.primaryForeground} accessible={false} />
               </View>
             ) : null}
           </View>
@@ -97,7 +104,7 @@ export const HomeActionRow = forwardRef<HomeActionRowHandle, Props>(function Hom
 });
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: spacing.xl },
+  row: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: spacing.sm },
   cell: { flex: 1, alignItems: 'center' },
   cellContent: { alignItems: 'center', gap: spacing.sm, minWidth: 72 },
   disc: {

@@ -43,15 +43,16 @@ function render(element: React.ReactElement) {
 afterEach(() => { act(() => { mounted.splice(0).forEach((renderer) => renderer.unmount()); }); });
 
 it('routes each home action disc to its own callback', () => {
-  const onAskStylist = jest.fn(); const onAddToCloset = jest.fn(); const onLogWear = jest.fn();
-  const renderer = render(<HomeActionRow onAskStylist={onAskStylist} onAddToCloset={onAddToCloset} onLogWear={onLogWear} />);
+  const onAskStylist = jest.fn(); const onAddToCloset = jest.fn(); const onLogWear = jest.fn(); const onSaveFind = jest.fn();
+  const renderer = render(<HomeActionRow onAskStylist={onAskStylist} onAddToCloset={onAddToCloset} onSaveFind={onSaveFind} onLogWear={onLogWear} />);
   const buttons = renderer.root.findAllByType(Pressable);
-  expect(buttons.map((button) => button.props.accessibilityLabel)).toEqual(['Ask your stylist', 'Add to my closet', 'Log today’s outfit']);
+  expect(buttons.map((button) => button.props.accessibilityLabel)).toEqual(['Ask your stylist', 'Add to my closet', 'Log today’s outfit', 'Save a find while shopping']);
   buttons.forEach((button) => act(() => button.props.onPress()));
   expect(onAskStylist).toHaveBeenCalledTimes(1);
   expect(onAddToCloset).toHaveBeenCalledTimes(1);
+  expect(onSaveFind).toHaveBeenCalledTimes(1);
   expect(onLogWear).toHaveBeenCalledTimes(1);
-  act(() => renderer.update(<HomeActionRow onAskStylist={onAskStylist} onAddToCloset={onAddToCloset} onLogWear={onLogWear} loggedToday />));
+  act(() => renderer.update(<HomeActionRow onAskStylist={onAskStylist} onAddToCloset={onAddToCloset} onSaveFind={onSaveFind} onLogWear={onLogWear} loggedToday />));
   expect(renderer.root.findAllByType(Pressable)[2].props.accessibilityLabel).toBe('Today’s outfit logged');
 });
 
