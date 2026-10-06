@@ -1,3 +1,5 @@
+import { confirmSheet } from '../../components/primitives/ConfirmSheet';
+import { itemThumbUri } from '../../lib/itemImage';
 import { useAuth } from '../../contexts/AuthContext';
 import { useClosetSearchHistory } from '../../hooks/useClosetSearchHistory';
 import { ClosetSearchFilters } from '../../components/wardrobe/closet-search-filters';
@@ -10,7 +12,6 @@ import {
   ScrollView,
   StyleSheet,
   useWindowDimensions,
-  Alert,
   Keyboard,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -574,22 +575,22 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const handleBulkDeleteOutfits = useCallback(() => {
     const count = selectedOutfitIds.size;
     if (count === 0) return;
-    Alert.alert(
-      'Delete outfits',
-      `Delete ${count} outfit${count !== 1 ? 's' : ''}? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            selectedOutfitIds.forEach(id => deleteOutfit.mutate(id));
-            exitOutfitSelectionMode();
-          },
-        },
-      ]
-    );
-  }, [selectedOutfitIds, deleteOutfit, exitOutfitSelectionMode]);
+    const itemsById = new Map(items.map((item) => [item.id, item]));
+    confirmSheet({
+      title: `Delete ${count} outfit${count !== 1 ? 's' : ''}?`,
+      message: 'The pieces stay in your closet. This can’t be undone.',
+      images: outfits
+        .filter((outfit) => selectedOutfitIds.has(outfit.id))
+        .map((outfit) => outfit.aiGeneratedImageUrl ?? itemThumbUri(itemsById.get(outfit.itemIds[0]?.id ?? -1)))
+        .filter((uri): uri is string => Boolean(uri)),
+      confirmLabel: count === 1 ? 'Delete outfit' : 'Delete outfits',
+      destructive: true,
+      onConfirm: () => {
+        selectedOutfitIds.forEach(id => deleteOutfit.mutate(id));
+        exitOutfitSelectionMode();
+      },
+    });
+  }, [items, outfits, selectedOutfitIds, deleteOutfit, exitOutfitSelectionMode]);
 
   const handleBulkMarkOutfitsWorn = useCallback(() => {
     if (selectedOutfitIds.size === 0) return;
@@ -609,22 +610,18 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const handleBulkDelete = useCallback(() => {
     const count = selectedIds.size;
     if (count === 0) return;
-    Alert.alert(
-      'Delete items',
-      `Delete ${count} item${count !== 1 ? 's' : ''}? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            selectedIds.forEach(id => deleteItem.mutate(id));
-            exitSelectionMode();
-          },
-        },
-      ]
-    );
-  }, [selectedIds, deleteItem, exitSelectionMode]);
+    confirmSheet({
+      title: `Delete ${count} item${count !== 1 ? 's' : ''}?`,
+      message: 'They will be removed from your wardrobe. This can’t be undone.',
+      images: items.filter((item) => selectedIds.has(item.id)).map((item) => itemThumbUri(item)).filter((uri): uri is string => Boolean(uri)),
+      confirmLabel: count === 1 ? 'Delete item' : 'Delete items',
+      destructive: true,
+      onConfirm: () => {
+        selectedIds.forEach(id => deleteItem.mutate(id));
+        exitSelectionMode();
+      },
+    });
+  }, [items, selectedIds, deleteItem, exitSelectionMode]);
 
   const handleBulkFavorite = useCallback(() => {
     if (selectedIds.size === 0) return;
@@ -679,10 +676,14 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   }, [launchLibrary, updateBoard]);
 
   const confirmDeleteBoard = useCallback((board: Board) => {
-    Alert.alert('Delete board', `Delete “${board.name}”? Everything saved here will stay in your closet.`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => deleteBoard.mutate(board.id) },
-    ]);
+    confirmSheet({
+      title: `Delete “${board.name}”?`,
+      message: 'Everything saved here will stay in your closet.',
+      images: board.coverImageUrl ? [board.coverImageUrl] : undefined,
+      confirmLabel: 'Delete board',
+      destructive: true,
+      onConfirm: () => deleteBoard.mutate(board.id),
+    });
   }, [deleteBoard]);
 
   const handleBoardOptions = useCallback((board: Board) => {

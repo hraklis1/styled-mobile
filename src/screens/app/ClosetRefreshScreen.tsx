@@ -1,3 +1,5 @@
+import { confirmSheet } from '../../components/primitives/ConfirmSheet';
+import { itemThumbUri } from '../../lib/itemImage';
 import { useState } from 'react';
 import {
   View,
@@ -6,7 +8,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
-  Alert,
   ActivityIndicator,
   FlatList,
 } from 'react-native';
@@ -90,14 +91,15 @@ function StaleItemRow({ entry }: { entry: StaleEntry }) {
       : `Last worn ${daysSinceWorn} ${daysSinceWorn === 1 ? 'day' : 'days'} ago`;
 
   const handleDelete = () => {
-    Alert.alert('Remove item', `Remove "${item.name}" from your wardrobe?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: () => deleteItem.mutate(item.id),
-      },
-    ]);
+    const thumb = itemThumbUri(item);
+    confirmSheet({
+      title: `Remove ${item.name}?`,
+      message: 'It will be removed from your wardrobe. This can’t be undone.',
+      images: thumb ? [thumb] : undefined,
+      confirmLabel: 'Remove item',
+      destructive: true,
+      onConfirm: () => deleteItem.mutate(item.id),
+    });
   };
 
   return (
@@ -202,14 +204,15 @@ function BucketSheetContent({
       : data.similarGroups.flatMap((g) => g.items);
 
   const handleDelete = (item: Item) => {
-    Alert.alert('Remove item', `Remove "${item.name}" from your wardrobe?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: () => deleteItem.mutate(item.id),
-      },
-    ]);
+    const thumb = itemThumbUri(item);
+    confirmSheet({
+      title: `Remove ${item.name}?`,
+      message: 'It will be removed from your wardrobe. This can’t be undone.',
+      images: thumb ? [thumb] : undefined,
+      confirmLabel: 'Remove item',
+      destructive: true,
+      onConfirm: () => deleteItem.mutate(item.id),
+    });
   };
 
   return (

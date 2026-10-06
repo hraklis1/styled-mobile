@@ -1,4 +1,6 @@
 import { Modal } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 
 import { ShoppingPhotoOrganizer } from './ShoppingPhotoOrganizer';
 import type { ShoppingSnapOrganizationUpdate } from '../../lib/shoppingSnapOrganizer';
@@ -24,13 +26,18 @@ export function ShoppingSnapOrganizerModal({
 }) {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <ShoppingPhotoOrganizer
-        snaps={snaps}
-        onClose={onClose}
-        onSave={onSave}
-        isSaving={isSaving}
-        title="Group photos"
-      />
+      {/* A native modal sits above the app's sheet host, so it brings its own. */}
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <BottomSheetModalProvider>
+          <ShoppingPhotoOrganizer
+            snaps={snaps}
+            onClose={onClose}
+            onSave={onSave}
+            isSaving={isSaving}
+            title="Group photos"
+          />
+        </BottomSheetModalProvider>
+      </GestureHandlerRootView>
     </Modal>
   );
 }

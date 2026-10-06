@@ -106,7 +106,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     backgroundColor: colors.card,
   },
-  input: { flex: 1, fontSize: typography.text.body.fontSize, color: colors.foreground },
+  // A fixed height filling the box: sized to its font alone, iOS clips the descenders.
+  input: { flex: 1, height: 46, paddingVertical: 0, fontSize: typography.text.body.fontSize, color: colors.foreground },
   row: {
     minHeight: 54,
     flexDirection: 'row',

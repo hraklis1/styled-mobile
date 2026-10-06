@@ -20,6 +20,7 @@ import { GlobalAddSheetProvider } from './src/contexts/GlobalAddSheetContext';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { ErrorBoundary } from './src/components/primitives/ErrorBoundary';
 import { OfflineBanner } from './src/components/primitives/OfflineBanner';
+import { ConfirmSheetHost } from './src/components/primitives/ConfirmSheet';
 import { useAppStateListener } from './src/hooks/useAppStateListener';
 
 Sentry.init({
@@ -60,6 +61,7 @@ function App() {
                     <StatusBar style="dark" />
                     <RootNavigator />
                     <OfflineBanner />
+                    <ConfirmSheetHost />
                   </GlobalAddSheetProvider>
                 </BottomSheetModalProvider>
               </AuthProvider>

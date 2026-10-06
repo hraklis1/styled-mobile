@@ -67,6 +67,24 @@ export function formatShoppingPrice(price: number | null, currencyCode: string |
   }).format(price);
 }
 
+// Dollar currencies all print as a bare "$" in their home locale, so a CAD
+// tag read by a shopper whose currency is USD would look like USD.
+const DOLLAR_PREFIXES: Record<string, string> = { USD: 'US$', CAD: 'CA$', AUD: 'A$', NZD: 'NZ$' };
+
+/** Like formatShoppingPrice, but a foreign dollar price always names its
+ *  currency ("CA$75") so it can't be mistaken for the shopper's own. */
+export function formatShoppingPriceForHome(price: number | null, currencyCode: string | null, homeCurrency: string | null): string | null {
+  const formatted = formatShoppingPrice(price, currencyCode);
+  const prefix = currencyCode && currencyCode !== homeCurrency ? DOLLAR_PREFIXES[currencyCode] : undefined;
+  if (price === null || !formatted || !prefix) return formatted;
+  // Hermes has no formatToParts, so format the bare number and prefix it.
+  const amount = new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: Number.isInteger(price) ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(price);
+  return `${prefix}${amount}`;
+}
+
 function reviewReasonKey(reason: string): ShoppingReviewReasonKey | null {
   if (reason === 'Missing price') return 'missing-price';
   if (reason === 'Missing store') return 'missing-store';

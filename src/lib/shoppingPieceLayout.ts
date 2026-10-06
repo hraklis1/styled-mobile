@@ -16,9 +16,9 @@ export type PieceFrame = { x: number; y: number; width: number; height: number }
 export type PieceLayout = { frames: PieceFrame[]; height: number };
 
 /** The hero plate is a little taller than wide: the aspect of a hanging garment. */
-const HERO_ASPECT = 1.12;
-/** Share of the row the side column takes. */
-const SIDE_SHARE = 0.36;
+const HERO_ASPECT = 1.0;
+/** Share of the row the side column takes: paperwork, so it stays narrow. */
+const SIDE_SHARE = 0.27;
 /** How many photos stack beside the hero before the rest wrap underneath. */
 const SIDE_SLOTS = 2;
 /** Overflow rows use portrait tiles, three across. */

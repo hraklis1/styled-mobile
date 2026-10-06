@@ -1,9 +1,9 @@
+import { confirmSheet } from '../../components/primitives/ConfirmSheet';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   RefreshControl,
 } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
@@ -464,18 +464,13 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   };
 
   const handleDelete = (ev: Event) => {
-    Alert.alert(
-      'Delete Event',
-      `Delete "${ev.title}"? This can't be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => { deleteEventMutation.mutate(ev.id); setDetailEvent(null); },
-        },
-      ],
-    );
+    confirmSheet({
+      title: `Delete “${ev.title}”?`,
+      message: 'This event will be removed from your calendar. This can’t be undone.',
+      confirmLabel: 'Delete event',
+      destructive: true,
+      onConfirm: () => { deleteEventMutation.mutate(ev.id); setDetailEvent(null); },
+    });
   };
 
   const openStylistForEvent = (event: Event, source: StylistOpenSource) => {

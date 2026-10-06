@@ -2,10 +2,7 @@ import { resolveShoppingSnapPrices } from '../../lib/shoppingPrices';
 import { useCurrencyCode } from '../../hooks/useCurrencyCode';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActionSheetIOS,
   ActivityIndicator,
-  Alert,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -29,12 +26,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DraggablePhotoGrid } from './DraggablePhotoGrid';
 import { AppText } from '../primitives/AppText';
 import { ShoppingPhotoViewer } from './ShoppingPhotoViewer';
+import {
+  ShoppingOrganizerSheet,
+  type OrganizerSheetAction,
+  type OrganizerSheetContent,
+} from './ShoppingOrganizerSheet';
 import { dismissOrganizerHint, isOrganizerHintDismissed } from '../../lib/shoppingOrganizerHint';
 import { heroPieceLayout } from '../../lib/shoppingPieceLayout';
 import { formatShoppingPrice, snapRoleLabel } from '../../lib/shoppingPresentation';
 import {
   applySelection,
   moveSnapToStage,
+  moveSnapsToStage,
   partitionKey,
   seedStages,
   selectionAction,
@@ -48,6 +51,8 @@ import {
 import { colors, radii, spacing, typography } from '../../theme';
 import type { ShoppingCaptureRole, ShoppingSnap } from '../../types/shoppingSnap';
 import { SHORTLIST_COPY } from '../../lib/shoppingVocabulary';
+
+export type ShoppingPieceRename = { captureGroupId: string; productName: string | null };
 
 const GRID_GAP = spacing.sm;
 const DROP_ZONE_HEIGHT = 64;
@@ -112,15 +117,22 @@ export function ShoppingPhotoOrganizer({
   title = 'Group photos',
   titleIsPlaceholder = false,
   onPressTitle,
+  titleAction,
+  showHeaderClose = true,
+  canRename = false,
   subtitle,
   saveLabel = 'Save',
   countInSaveLabel = false,
   closeLabel = 'Cancel',
   onRemove,
+  fullImageUris,
 }: {
   snaps: ShoppingSnap[];
+  /** Full-size image per snap id, for when `snaps` carry small previews: the
+   *  grid stays light, the full-screen viewer stays sharp. */
+  fullImageUris?: Map<string, string>;
   onClose: () => void;
-  onSave: (updates: ShoppingSnapOrganizationUpdate[]) => Promise<void>;
+  onSave: (updates: ShoppingSnapOrganizationUpdate[], renames: ShoppingPieceRename[]) => Promise<void>;
   isSaving: boolean;
   eyebrow?: string;
   title?: string;
@@ -128,6 +140,12 @@ export function ShoppingPhotoOrganizer({
   titleIsPlaceholder?: boolean;
   /** Makes the title tappable. */
   onPressTitle?: () => void;
+  /** A small chip under the meta line for a value still to give ("+ Add store"). */
+  titleAction?: { label: string; onPress: () => void };
+  /** Off when the save bar's own close button is the screen's one way out. */
+  showHeaderClose?: boolean;
+  /** Pieces can be named; the names reach `onSave` keyed by their final group. */
+  canRename?: boolean;
   /** Short — it shares a line with the piece and photo tally. */
   subtitle?: string;
   saveLabel?: string;
@@ -151,6 +169,9 @@ export function ShoppingPhotoOrganizer({
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const [hintVisible, setHintVisible] = useState(false);
+  // Names typed here, by stage id. A stage keeps its id through most edits,
+  // so a name follows its piece; a stage minted by a split starts unnamed.
+  const [namesByStageId, setNamesByStageId] = useState<Record<string, string>>({});
 
   // Mirrors of the two pieces of state the gesture handlers read and write
   // mid-drag. A drop resolves and commits inside one callback, which is a
@@ -176,10 +197,20 @@ export function ShoppingPhotoOrganizer({
   // What each section header says, computed once per change rather than
   // twice per section per render — this is the tree that re-renders on
   // every drag frame.
-  const stageSummaries = useMemo(() => stages.map((stage, index) => ({
-    title: snapsWithStagedRoles.find((snap) => stage.snapIds.includes(snap.id))?.category ?? `Piece ${index + 1}`,
-    price: stagePrice(snapsWithStagedRoles, stage.snapIds, homeCurrency),
-  })), [homeCurrency, snapsWithStagedRoles, stages]);
+  const stageSummaries = useMemo(() => stages.map((stage, index) => {
+    const members = snapsWithStagedRoles.filter((snap) => stage.snapIds.includes(snap.id));
+    const category = members.find((snap) => snap.category)?.category ?? null;
+    const size = members.find((snap) => snap.sizeLabel)?.sizeLabel ?? null;
+    const typed = namesByStageId[stage.id];
+    const saved = members.find((snap) => snap.productName?.trim())?.productName?.trim() ?? null;
+    const name = typed !== undefined ? typed.trim() || null : saved;
+    return {
+      name,
+      title: name ?? (category ? category.charAt(0).toUpperCase() + category.slice(1) : `Piece ${index + 1}`),
+      size,
+      price: stagePrice(snapsWithStagedRoles, stage.snapIds, homeCurrency),
+    };
+  }), [homeCurrency, namesByStageId, snapsWithStagedRoles, stages]);
 
   const applyStages = useCallback((next: ShoppingOrganizerStage[]) => {
     stagesRef.current = next;
@@ -194,6 +225,7 @@ export function ShoppingPhotoOrganizer({
     setSelectionMode(false);
     setViewerSnapId(null);
     setRolesBySnapId(Object.fromEntries(snaps.map((snap) => [snap.id, snap.captureRole])));
+    setNamesByStageId({});
     setSaveError(null);
   }, [applyStages, snaps]);
 
@@ -280,18 +312,21 @@ export function ShoppingPhotoOrganizer({
     setViewerSnapId(snapId);
   }, [selectionMode, toggleSelected]);
 
-  /** Held and let go on the spot: start picking, with this one picked. */
-  const handleHold = useCallback((snapId: string) => {
+  /** Start picking, with this one picked. */
+  const startSelecting = useCallback((snapId: string) => {
     setSelectionMode(true);
     toggleSelected(snapId);
-    retireHint();
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }, [retireHint, toggleSelected]);
+  }, [toggleSelected]);
 
   const selectFromViewer = useCallback((snapId: string) => {
     setViewerSnapId(null);
     setSelectionMode(true);
     setSelectedIds((current) => new Set(current).add(snapId));
+    void Haptics.selectionAsync();
+  }, []);
+
+  const setRole = useCallback((snapId: string, role: ShoppingCaptureRole) => {
+    setRolesBySnapId((current) => ({ ...current, [snapId]: role }));
     void Haptics.selectionAsync();
   }, []);
 
@@ -324,45 +359,117 @@ export function ShoppingPhotoOrganizer({
     clearSelection();
   }, [clearSelection, commitStages]);
 
+  const [sheet, setSheet] = useState<OrganizerSheetContent | null>(null);
+  const closeSheet = useCallback(() => setSheet(null), []);
+
+  const stageThumb = useCallback((stage: ShoppingOrganizerStage) => (
+    snapById.get(stage.snapIds[0])?.imageUri ?? null
+  ), [snapById]);
+
   /**
-   * The item's own menu: the operations that act on the whole item rather
-   * than on chosen photos. A native sheet, because both are blunt and one is
-   * destructive — they deserve the pause a sheet imposes.
+   * The other pieces, as places photos can go. "New piece" is offered only
+   * when it would change something — a whole piece into a new one is a no-op.
    */
-  const openStageMenu = useCallback((stage: ShoppingOrganizerStage, index: number) => {
-    const options: { label: string; destructive?: boolean; run: () => void }[] = [];
+  const buildMove = useCallback((snapIds: string[], fromStageId: string, allowNew: boolean, startOpen = false) => {
+    const targets = stagesRef.current
+      .map((stage, index) => ({ stage, index }))
+      .filter(({ stage }) => stage.id !== fromStageId)
+      .map(({ stage, index }) => ({
+        id: stage.id,
+        label: stageSummaries[index]?.title ?? `Piece ${index + 1}`,
+        meta: stageSummaries[index]?.price ?? null,
+        thumbUri: stageThumb(stage),
+      }));
+    return {
+      targets,
+      allowNew,
+      startOpen,
+      onMove: (targetId: string | null) => {
+        if (commitStages((now) => moveSnapsToStage(now, snapIds, targetId, () => Crypto.randomUUID()))) {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
+        clearSelection();
+      },
+    };
+  }, [clearSelection, commitStages, stageSummaries, stageThumb]);
+
+  /** The piece's own sheet: its name, and the operations on the whole piece. */
+  const openStageMenu = useCallback((stage: ShoppingOrganizerStage, index: number, focusName = false) => {
+    const summary = stageSummaries[index];
+    const actions: OrganizerSheetAction[] = [];
     if (stage.snapIds.length > 1) {
-      options.push({ label: SHORTLIST_COPY.separatePhotos, run: () => splitAll(stage.id) });
+      actions.push({ key: 'split', icon: 'albums-outline', label: SHORTLIST_COPY.separatePhotos, run: () => splitAll(stage.id) });
     }
     if (onRemove) {
-      options.push({ label: SHORTLIST_COPY.removePiece, destructive: true, run: () => onRemove(stage.snapIds) });
+      actions.push({ key: 'remove', icon: 'trash-outline', label: SHORTLIST_COPY.removePiece, destructive: true, run: () => onRemove(stage.snapIds) });
     }
-    if (options.length === 0) return;
     void Haptics.selectionAsync();
-    const title = `Piece ${index + 1}`;
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          title,
-          options: [...options.map((option) => option.label), 'Cancel'],
-          cancelButtonIndex: options.length,
-          destructiveButtonIndex: options.findIndex((option) => option.destructive) >= 0
-            ? options.findIndex((option) => option.destructive)
-            : undefined,
+    setSheet({
+      key: `piece:${stage.id}:${Date.now()}`,
+      thumbUri: stageThumb(stage),
+      eyebrow: `Piece ${index + 1}`,
+      title: summary?.title ?? `Piece ${index + 1}`,
+      meta: [summary?.price, `${stage.snapIds.length} photo${stage.snapIds.length === 1 ? '' : 's'}`].filter(Boolean).join(' · '),
+      name: canRename ? {
+        value: summary?.name ?? '',
+        placeholder: summary?.title ?? SHORTLIST_COPY.namePiece,
+        autoFocus: focusName,
+        onCommit: (value) => {
+          setNamesByStageId((names) => ({ ...names, [stage.id]: value.slice(0, 60) }));
+          void Haptics.selectionAsync();
         },
-        (chosen) => options[chosen]?.run(),
-      );
-      return;
+      } : undefined,
+      actions,
+      move: stagesRef.current.length > 1 ? buildMove(stage.snapIds, stage.id, false) : undefined,
+    });
+  }, [buildMove, canRename, onRemove, splitAll, stageSummaries, stageThumb]);
+
+  /** Held and let go on the spot: start picking, with this one picked. */
+  const handleHold = useCallback((snapId: string) => {
+    startSelecting(snapId);
+    retireHint();
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, [retireHint, startSelecting]);
+
+  /** The photo's own sheet: everything that can be done to one photo. */
+  const openPhotoMenu = useCallback((snapId: string, startMoving = false) => {
+    retireHint();
+    void Haptics.selectionAsync();
+    const index = stagesRef.current.findIndex((item) => item.snapIds.includes(snapId));
+    const stage = stagesRef.current[index];
+    if (!stage) return;
+    const role = rolesBySnapId[snapId] ?? snapById.get(snapId)?.captureRole ?? 'unknown';
+    const canMove = stagesRef.current.length > 1 || stage.snapIds.length > 1;
+    const actions: OrganizerSheetAction[] = [
+      { key: 'select', icon: 'checkmark-circle-outline', label: SHORTLIST_COPY.selectPhotos, run: () => startSelecting(snapId) },
+    ];
+    if (onRemove) {
+      actions.push({ key: 'remove', icon: 'trash-outline', label: SHORTLIST_COPY.removePhoto, destructive: true, run: () => onRemove([snapId]) });
     }
-    Alert.alert(title, undefined, [
-      ...options.map((option) => ({
-        text: option.label,
-        style: option.destructive ? ('destructive' as const) : ('default' as const),
-        onPress: option.run,
-      })),
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  }, [onRemove, splitAll]);
+    setSheet({
+      key: `photo:${snapId}:${Date.now()}`,
+      thumbUri: snapById.get(snapId)?.imageUri ?? null,
+      eyebrow: `${snapRoleLabel(role)} photo`,
+      title: stageSummaries[index]?.title ?? `Piece ${index + 1}`,
+      meta: stageSummaries[index]?.price ?? null,
+      role: { value: role === 'tag' ? 'tag' : 'garment', onChange: (next) => setRole(snapId, next) },
+      actions,
+      move: canMove ? buildMove([snapId], stage.id, stage.snapIds.length > 1, startMoving) : undefined,
+    });
+  }, [buildMove, onRemove, retireHint, rolesBySnapId, setRole, snapById, stageSummaries, startSelecting]);
+
+  /** The grid reports taps on a tile's ⋯ corner; while picking photos they are ordinary taps. */
+  const handleCornerTap = useCallback((snapId: string) => {
+    if (selectionMode || isSaving) return false;
+    openPhotoMenu(snapId);
+    return true;
+  }, [isSaving, openPhotoMenu, selectionMode]);
+
+  /** From the full-size viewer: close it first so the sheet is not hidden behind the modal. */
+  const moveFromViewer = useCallback((snapId: string) => {
+    setViewerSnapId(null);
+    setTimeout(() => openPhotoMenu(snapId, true), 350);
+  }, [openPhotoMenu]);
 
   const resetStages = useCallback(() => {
     commitStages(() => seedStages(snaps));
@@ -445,17 +552,28 @@ export function ShoppingPhotoOrganizer({
         createGroupId: () => Crypto.randomUUID(),
       })
       : [];
+    // Each piece's name lands on whatever group its first photo ends up in.
+    const groupBySnapId = new Map(updates.map((update) => [update.snapId, update.captureGroupId]));
+    const renames: ShoppingPieceRename[] = [];
+    stages.forEach((stage, index) => {
+      if (namesByStageId[stage.id] === undefined) return;
+      const first = stage.snapIds[0];
+      const groupId = groupBySnapId.get(first) ?? snapById.get(first)?.captureGroupId;
+      const previous = snapById.get(first)?.productName?.trim() || null;
+      const next = stageSummaries[index]?.name ?? null;
+      if (groupId && next !== previous) renames.push({ captureGroupId: groupId, productName: next });
+    });
     setSaveError(null);
-    void onSave(updates).catch((error) => {
+    void onSave(updates, renames).catch((error) => {
       setSaveError(error instanceof Error ? error.message : 'Please try again.');
     });
-  }, [hasChanges, onSave, reusableCaptureGroupIds, rolesBySnapId, snaps, stages]);
+  }, [hasChanges, namesByStageId, onSave, reusableCaptureGroupIds, rolesBySnapId, snapById, snaps, stageSummaries, stages]);
 
   /**
    * The photo fills whatever slot the grid gives it. Its role is a mark on
    * the photo, not a caption under it: a garment carries nothing, because
-   * that is the default and the picture says so; a tag gets a small corner
-   * badge; only an unsorted photo is a job, and gets the accent pill.
+   * that is the default and the picture says so; a tag carries nothing either —
+   * the paperwork is plain to see; only an unsorted photo is a job, and gets the accent pill.
    */
   const renderPhotoTile = useCallback((snapId: string, index: number) => {
     const snap = snapById.get(snapId);
@@ -467,20 +585,17 @@ export function ShoppingPhotoOrganizer({
     return (
       <View
         style={[styles.photo, (selected || dragging) && styles.photoActive]}
-        accessibilityLabel={`${snapRoleLabel(role)} photo, tap to see it big, hold to select or drag`}
+        accessibilityLabel={`${snapRoleLabel(role)} photo, tap to see it big, hold to select, hold and drag to move`}
         accessibilityState={{ selected }}
       >
         <Image
           source={{ uri: snap.imageUri }}
           style={StyleSheet.absoluteFill}
-          // The hero shows the whole garment; the paperwork beside it can crop.
-          contentFit={hero ? 'contain' : 'cover'}
+          // Every tile fills its slot: letterboxed heroes read as unfinished.
+          // The hero favours the top, where the garment's neckline sits.
+          contentFit="cover"
+          contentPosition={hero ? 'top' : 'center'}
         />
-        {role === 'tag' ? (
-          <View pointerEvents="none" style={styles.tagBadge}>
-            <Text style={styles.tagBadgeText}>{snapRoleLabel(role)}</Text>
-          </View>
-        ) : null}
         {role === 'unknown' ? (
           <View pointerEvents="none" style={styles.unsortedBadge}>
             <Text style={styles.unsortedBadgeText}>{snapRoleLabel(role)}</Text>
@@ -490,10 +605,14 @@ export function ShoppingPhotoOrganizer({
           <View style={styles.check}>
             <Ionicons name="checkmark" size={15} color={colors.primaryForeground} />
           </View>
-        ) : null}
+        ) : selecting || isSaving ? null : (
+          <View pointerEvents="none" style={styles.photoMenu}>
+            <Ionicons name="ellipsis-horizontal" size={15} color={colors.foreground} />
+          </View>
+        )}
       </View>
     );
-  }, [draggingId, rolesBySnapId, selectedIds, snapById]);
+  }, [draggingId, isSaving, rolesBySnapId, selectedIds, selecting, snapById]);
 
   const viewerStageIndex = viewerSnapId === null
     ? -1
@@ -502,6 +621,10 @@ export function ShoppingPhotoOrganizer({
     ? stages[viewerStageIndex].snapIds
       .map((snapId) => snapById.get(snapId))
       .filter((snap): snap is ShoppingSnap => Boolean(snap))
+      .map((snap) => {
+        const full = fullImageUris?.get(snap.id);
+        return full ? { ...snap, imageUri: full } : snap;
+      })
     : [];
 
   const actionLabel = action === 'merge'
@@ -542,7 +665,9 @@ export function ShoppingPhotoOrganizer({
               >
                 {title}
               </AppText>
-              <Ionicons name="pencil-outline" size={16} color={colors.action} style={styles.titleIcon} />
+              {titleAction ? null : (
+                <Ionicons name="pencil-outline" size={16} color={colors.action} style={styles.titleIcon} />
+              )}
             </TouchableOpacity>
           ) : (
             <AppText variant="editorialCompact" tone="primary" style={styles.title} numberOfLines={1}>{title}</AppText>
@@ -550,6 +675,18 @@ export function ShoppingPhotoOrganizer({
           <Text style={styles.meta} numberOfLines={1}>
             {[subtitle, tally].filter(Boolean).join(' · ')}
           </Text>
+          {titleAction ? (
+            <TouchableOpacity
+              style={styles.titleChip}
+              onPress={titleAction.onPress}
+              disabled={isSaving}
+              hitSlop={6}
+              accessibilityRole="button"
+            >
+              <Ionicons name="add" size={14} color={colors.foreground} />
+              <Text style={styles.titleChipText}>{titleAction.label}</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
         <View style={styles.headerActions}>
           {history.length > 0 ? (
@@ -572,9 +709,11 @@ export function ShoppingPhotoOrganizer({
               <Ionicons name="refresh-outline" size={16} color={colors.secondaryForeground} />
             </TouchableOpacity>
           ) : null}
-          <TouchableOpacity style={styles.iconButton} onPress={onClose} disabled={isSaving} accessibilityLabel={closeLabel}>
-            <Ionicons name="close" size={22} color={colors.foreground} />
-          </TouchableOpacity>
+          {showHeaderClose ? (
+            <TouchableOpacity style={styles.iconButton} onPress={onClose} disabled={isSaving} accessibilityLabel={closeLabel}>
+              <Ionicons name="close" size={22} color={colors.foreground} />
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
 
@@ -628,7 +767,7 @@ export function ShoppingPhotoOrganizer({
           <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} layout={LinearTransition} style={styles.hint}>
             <Ionicons name="hand-left-outline" size={18} color={colors.primary} />
             <Text style={styles.hintText}>
-              Hold a photo to select it. Drag it into another piece, or down to start a new one.
+              Tap ••• on a photo for options. Hold to select, or hold and drag it into another piece.
             </Text>
             <TouchableOpacity onPress={retireHint} hitSlop={8} accessibilityLabel="Dismiss hint">
               <Ionicons name="close" size={15} color={colors.mutedForeground} />
@@ -659,14 +798,30 @@ export function ShoppingPhotoOrganizer({
               >
                 <View style={styles.sectionHeader}>
                   <View style={styles.sectionCopy}>
-                    <Text style={styles.sectionTitle}>{summary?.title}</Text>
+                    {canRename ? (
+                      <TouchableOpacity
+                        onPress={() => openStageMenu(stage, index, true)}
+                        disabled={isSaving}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Rename ${summary?.title ?? 'piece'}`}
+                        style={styles.sectionTitleButton}
+                      >
+                        <Text style={styles.sectionTitle} numberOfLines={1}>{summary?.title}</Text>
+                        <Ionicons name="pencil-outline" size={13} color={colors.mutedForeground} />
+                      </TouchableOpacity>
+                    ) : (
+                      <Text style={styles.sectionTitle} numberOfLines={1}>{summary?.title}</Text>
+                    )}
                     <Text style={styles.sectionMeta}>
                       {hovered
                         ? 'Release to add this photo'
-                        : `${stage.snapIds.length} photo${stage.snapIds.length === 1 ? '' : 's'}${
-                          summary?.price ? ` · ${summary.price}` : ''}`}
+                        : [
+                          summary?.size,
+                          `${stage.snapIds.length} photo${stage.snapIds.length === 1 ? '' : 's'}`,
+                        ].filter(Boolean).join(' · ')}
                     </Text>
                   </View>
+                  {summary?.price ? <Text style={styles.sectionPrice}>{summary.price}</Text> : null}
                   {hasMenu ? (
                     <TouchableOpacity
                       style={styles.menuButton}
@@ -686,6 +841,7 @@ export function ShoppingPhotoOrganizer({
                     item.id === stage.id ? { ...item, snapIds: nextIds } : item
                   )))}
                   onTap={handleTap}
+                  onCornerTap={handleCornerTap}
                   onHold={handleHold}
                   renderPhoto={renderPhotoTile}
                   disabled={isSaving}
@@ -707,9 +863,12 @@ export function ShoppingPhotoOrganizer({
           roleFor={(snapId) => rolesBySnapId[snapId] ?? snapById.get(snapId)?.captureRole ?? 'unknown'}
           onCycleRole={cycleRole}
           onSelect={selectFromViewer}
+          onMove={stages.length > 1 || (stages[viewerStageIndex]?.snapIds.length ?? 0) > 1 ? moveFromViewer : undefined}
           onClose={() => setViewerSnapId(null)}
         />
       ) : null}
+
+      <ShoppingOrganizerSheet content={sheet} onClose={closeSheet} />
 
       <NewItemDropZone
         ref={dropZoneRef}
@@ -812,11 +971,10 @@ const styles = StyleSheet.create({
   // the shortlist uses for a visit, so the two screens read as one product.
   pool: {
     gap: spacing.sm,
-    paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.hairline,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
   },
-  poolLast: { borderBottomWidth: 0 },
+  poolLast: { paddingBottom: spacing.md },
   // A drop target has to be unmistakable mid-drag, so this is the one place
   // the band is allowed to become a surface.
   poolHovered: {
@@ -826,19 +984,22 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
     backgroundColor: colors.surfaceSelected,
   },
+  titleChip: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.sm, paddingHorizontal: spacing.sm + 2, paddingVertical: 6, borderRadius: radii.full, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.foreground },
+  titleChipText: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.medium, color: colors.foreground },
   sectionHeader: { minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   sectionCopy: { flex: 1 },
-  sectionTitle: { fontSize: typography.text.body.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground },
+  sectionTitle: { ...typography.text.editorialCard, fontSize: 19, lineHeight: 24, color: colors.foreground },
+  sectionTitleButton: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', maxWidth: '100%' },
+  sectionPrice: { alignSelf: 'flex-start', ...typography.text.editorialCard, fontSize: 19, lineHeight: 24, color: colors.foreground, fontVariant: ['tabular-nums'] },
   sectionMeta: { paddingTop: 2, fontSize: typography.text.caption.fontSize, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
-  menuButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  menuButton: { alignSelf: 'flex-start', marginTop: -10, marginRight: -spacing.sm, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   makeButton: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radii.md, backgroundColor: colors.primary },
   makeButtonDisabled: { opacity: 0.45 },
   makeText: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, color: colors.primaryForeground },
   photo: { flex: 1, overflow: 'hidden', borderWidth: 2, borderColor: 'transparent', borderRadius: radii.photo, backgroundColor: colors.surfaceSubtle },
   photoActive: { borderColor: colors.primary },
+  photoMenu: { position: 'absolute', top: 6, right: 6, width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.86)' },
   check: { position: 'absolute', top: 6, right: 6, width: 24, height: 24, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: colors.primary },
-  tagBadge: { position: 'absolute', top: 6, left: 6, paddingHorizontal: 7, paddingVertical: 2, borderRadius: radii.full, backgroundColor: colors.foreground },
-  tagBadgeText: { fontSize: 11, fontWeight: typography.weight.medium, letterSpacing: 0.2, color: colors.primaryForeground },
   unsortedBadge: { position: 'absolute', left: 6, right: 6, bottom: 6, alignItems: 'center', paddingVertical: 3, borderRadius: radii.full, backgroundColor: colors.accent },
   unsortedBadgeText: { fontSize: 11, fontWeight: typography.weight.semibold, color: colors.primary },
   dropZone: { position: 'absolute', left: spacing.lg, right: spacing.lg, height: DROP_ZONE_HEIGHT, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.primary, borderRadius: radii.lg, backgroundColor: colors.accent },

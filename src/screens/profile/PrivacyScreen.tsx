@@ -1,3 +1,4 @@
+import { confirmSheet } from '../../components/primitives/ConfirmSheet';
 import React, { useCallback, useState } from 'react';
 import { Alert, Linking, Share } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -46,12 +47,12 @@ export function PrivacyScreen({ navigation }: ProfileStackScreenProps<'SettingsP
   };
 
   const clearHistory = () => {
-    Alert.alert('Clear stylist history?', 'Deletes every conversation. What Styled has learned about your taste is kept. Manage that separately.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Clear',
-        style: 'destructive',
-        onPress: async () => {
+    confirmSheet({
+      title: 'Clear stylist history?',
+      message: 'Deletes every conversation. What Styled has learned about your taste is kept. Manage that separately.',
+      confirmLabel: 'Clear history',
+      destructive: true,
+      onConfirm: async () => {
           try {
             const { data } = await api.delete<{ deleted: number }>('/api/stylist/conversations');
             await clearLocalStylistThreads();
@@ -59,9 +60,8 @@ export function PrivacyScreen({ navigation }: ProfileStackScreenProps<'SettingsP
           } catch {
             Alert.alert('Error', "Couldn't clear your history. Please try again.");
           }
-        },
       },
-    ]);
+    });
   };
 
   return (

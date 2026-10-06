@@ -1,5 +1,6 @@
+import { confirmSheet } from '../primitives/ConfirmSheet';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import {
   BottomSheetModal,
   BottomSheetView,
@@ -86,18 +87,17 @@ export function BoardAskSheet({ board, items, closetById, onClose }: Props) {
   }, [ask, board.id, board.name, itemIds]);
 
   const confirmClear = useCallback(() => {
-    Alert.alert('Clear saved answers?', 'This removes every question and answer saved on this board.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Clear',
-        style: 'destructive',
-        onPress: () => {
-          track('board_ask_cleared', { boardId: board.id, count: history.length });
-          setOpenId(null);
-          clearHistory.mutate();
-        },
+    confirmSheet({
+      title: 'Clear saved answers?',
+      message: 'This removes every question and answer saved on this board.',
+      confirmLabel: 'Clear answers',
+      destructive: true,
+      onConfirm: () => {
+        track('board_ask_cleared', { boardId: board.id, count: history.length });
+        setOpenId(null);
+        clearHistory.mutate();
       },
-    ]);
+    });
   }, [board.id, clearHistory, history.length]);
 
   const mentionedFor = useCallback(

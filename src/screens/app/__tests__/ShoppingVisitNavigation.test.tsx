@@ -4,6 +4,8 @@ import type { ShoppingSnap } from '../../../types/shoppingSnap';
 
 jest.mock('../../../components/shopping/ShoppingPhotoOrganizer', () => ({ ShoppingPhotoOrganizer: 'ShoppingPhotoOrganizer' }));
 jest.mock('../../../components/shopping/ShoppingStoreAssignmentSheet', () => ({ ShoppingStoreAssignmentSheet: 'ShoppingStoreAssignmentSheet' }));
+jest.mock('../../../components/primitives/UndoToast', () => ({ UndoToast: 'UndoToast' }));
+jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 jest.mock('../../../contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'user' } }) }));
 jest.mock('../../../hooks/useAssignShoppingStore', () => ({ useAssignShoppingStore: () => jest.fn() }));
 jest.mock('../../../lib/shoppingPreviews', () => ({ deleteShoppingPreview: jest.fn() }));

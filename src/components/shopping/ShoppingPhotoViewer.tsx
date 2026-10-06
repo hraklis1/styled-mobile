@@ -34,6 +34,7 @@ export function ShoppingPhotoViewer({
   roleFor,
   onCycleRole,
   onSelect,
+  onMove,
   onClose,
 }: {
   snaps: ShoppingSnap[];
@@ -42,6 +43,8 @@ export function ShoppingPhotoViewer({
   roleFor: (snapId: string) => ShoppingCaptureRole;
   onCycleRole: (snapId: string) => void;
   onSelect: (snapId: string) => void;
+  /** Absent when there is nowhere to move the photo to. */
+  onMove?: (snapId: string) => void;
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
@@ -112,13 +115,23 @@ export function ShoppingPhotoViewer({
             <Ionicons name="pricetag-outline" size={16} color={colors.primaryForeground} />
             <Text style={styles.roleText}>{snapRoleLabel(role)}</Text>
           </TouchableOpacity>
+          {onMove ? (
+            <TouchableOpacity
+              style={styles.roleButton}
+              onPress={() => onMove(activeSnap.id)}
+              accessibilityLabel="Move this photo to another piece"
+            >
+              <Ionicons name="swap-horizontal-outline" size={16} color={colors.primaryForeground} />
+              <Text style={styles.roleText}>Move</Text>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity
             style={styles.selectButton}
             onPress={() => onSelect(activeSnap.id)}
             accessibilityLabel="Select this photo and go back to the grouping"
           >
             <Ionicons name="checkmark-circle-outline" size={18} color={colors.foreground} />
-            <Text style={styles.selectText}>Select this photo</Text>
+            <Text style={styles.selectText}>Select</Text>
           </TouchableOpacity>
         </View>
       </View>

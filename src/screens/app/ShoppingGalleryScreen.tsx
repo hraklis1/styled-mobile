@@ -31,13 +31,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeOut, useReducedMotion } from 'react-native-reanimated';
 
 import { ShoppingSessionBundle } from '../../components/shopping/ShoppingSessionBundle';
-import { ShortlistFilterBar, ShortlistToggleChip, type ShortlistAppliedFilter } from '../../components/shopping/ShortlistFilterBar';
+import { ShortlistFilterBar, type ShortlistAppliedFilter } from '../../components/shopping/ShortlistFilterBar';
 import { ShoppingItemLightbox } from '../../components/shopping/ShoppingItemLightbox';
+import { confirmSheet } from '../../components/primitives/ConfirmSheet';
+import { ShortlistViewMenu } from '../../components/shopping/ShortlistViewMenu';
 import { ShoppingStoreFilterSheet } from '../../components/shopping/ShoppingStoreFilterSheet';
 import { ShoppingStoreAssignmentSheet } from '../../components/shopping/ShoppingStoreAssignmentSheet';
 import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
 import { AppText } from '../../components/primitives/AppText';
-import { ActionButton, FilterControl, IconButton, SegmentedControl } from '../../components/primitives/Editorial';
+import { ActionButton, FilterControl, IconButton } from '../../components/primitives/Editorial';
 import { SearchField } from '../../components/primitives/SearchField';
 import { ActionMenuSheet, type ActionMenuOption } from '../../components/primitives/ActionMenuSheet';
 import { OptionChips } from '../../components/primitives/EditAtoms';
@@ -237,11 +239,14 @@ export function ShortlistContent({ navigation, params, onConsumeParams, embedded
     setAttentionFilter('all');
   }, [attentionFilter, attentionOptions]);
 
+  // "Considering" is the shortlist's resting state, not a choice the user
+  // made, so it neither counts nor shows as a removable chip.
+  const statusesAreDefault = catalogStatuses.size === 1 && catalogStatuses.has('considering');
   // One filter, one count — picking "needs price" used to score two.
   const activeFilterCount = Number(storeFilter !== 'all')
     + Number(dateFilter !== 'all')
     + Number(attentionFilter !== 'all')
-    + catalogStatuses.size + Number(Boolean(category)) + Number(Boolean(currency)) + Number(Boolean(minimum || maximum)) + Number(oldest);
+    + (statusesAreDefault ? 0 : catalogStatuses.size) + Number(Boolean(category)) + Number(Boolean(currency)) + Number(Boolean(minimum || maximum)) + Number(oldest);
 
   const appliedFilters = useMemo<ShortlistAppliedFilter[]>(() => {
     const filters: ShortlistAppliedFilter[] = [];
@@ -259,7 +264,7 @@ export function ShortlistContent({ navigation, params, onConsumeParams, embedded
         onRemove: () => setAttentionFilter('all'),
       });
     }
-    for (const status of catalogStatuses) {
+    for (const status of statusesAreDefault ? [] : catalogStatuses) {
       filters.push({
         key: `status:${status}`,
         label: SHOPPING_CATALOG_STATUS_OPTIONS.find((option) => option.value === status)?.label ?? status.charAt(0).toUpperCase() + status.slice(1),
@@ -282,7 +287,7 @@ export function ShortlistContent({ navigation, params, onConsumeParams, embedded
     if (minimum || maximum) filters.push({ key: 'price', label: `${minimum || '0'}–${maximum || 'any'}`, onRemove: () => { setMinimum(''); setMaximum(''); } });
     if (oldest) filters.push({ key: 'sort', label: 'Oldest first', onRemove: () => setOldest(false) });
     return filters;
-  }, [category, currency, minimum, maximum, oldest, attentionFilter, attentionOptions, catalogStatuses, dateFilter, storeFilter, storeFilterLabel]);
+  }, [category, currency, minimum, maximum, oldest, attentionFilter, attentionOptions, catalogStatuses, statusesAreDefault, dateFilter, storeFilter, storeFilterLabel]);
 
   const deleteSnaps = useCallback(async (snaps: ShoppingSnap[]) => {
     await deleteShoppingSnapsService(snaps, user?.id ?? null);
@@ -372,57 +377,46 @@ export function ShortlistContent({ navigation, params, onConsumeParams, embedded
     });
   }, []);
 
+  const deleteFailed = useCallback((error: unknown) => {
+    Alert.alert('Could not delete photos', error instanceof Error ? error.message : 'Please try again.');
+  }, []);
+
   const confirmDeleteSelection = useCallback(() => {
     if (selectedBulkSnaps.length === 0) return;
-    const itemCount = selectedItemIds.size;
+    const items = allItems.filter((item) => selectedItemIds.has(item.id));
     const count = selectedBulkSnaps.length;
-    Alert.alert(
-      `Delete ${itemCount} ${itemCount === 1 ? 'piece' : 'pieces'}?`,
-      `${count} shopping photo${count === 1 ? '' : 's'} will be removed from your history.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            setIsDeletingSelection(true);
-            void deleteSnaps(selectedBulkSnaps)
-              .then(() => {
-                cancelSelection();
-                setLightboxItem(null);
-              })
-              .catch((error) => {
-                Alert.alert(
-                  'Could not delete photos',
-                  error instanceof Error ? error.message : 'Please try again.',
-                );
-              })
-              .finally(() => setIsDeletingSelection(false));
-          },
-        },
-      ],
-    );
-  }, [cancelSelection, deleteSnaps, selectedBulkSnaps, selectedItemIds.size]);
+    confirmSheet({
+      title: `Delete ${items.length} ${items.length === 1 ? 'piece' : 'pieces'}?`,
+      message: `${count} shopping photo${count === 1 ? '' : 's'} will be removed from your history. This can’t be undone.`,
+      images: items.map((item) => item.primarySnap.imageUri).filter(Boolean),
+      confirmLabel: 'Delete',
+      destructive: true,
+      onConfirm: async () => {
+        setIsDeletingSelection(true);
+        try {
+          await deleteSnaps(selectedBulkSnaps);
+          cancelSelection();
+          setLightboxItem(null);
+        } catch (error) {
+          deleteFailed(error);
+        } finally {
+          setIsDeletingSelection(false);
+        }
+      },
+    });
+  }, [allItems, cancelSelection, deleteFailed, deleteSnaps, selectedBulkSnaps, selectedItemIds]);
 
   const confirmDeleteGroup = useCallback((group: ShoppingSessionGroup) => {
     const snaps = group.items.flatMap((item) => item.snaps);
-    Alert.alert(
-      `Delete ${group.itemCount} ${group.itemCount === 1 ? 'piece' : 'pieces'}?`,
-      `${snaps.length} shopping photo${snaps.length === 1 ? '' : 's'} will be removed from your history.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            void deleteSnaps(snaps).catch((error) => {
-              Alert.alert('Could not delete photos', error instanceof Error ? error.message : 'Please try again.');
-            });
-          },
-        },
-      ],
-    );
-  }, [deleteSnaps]);
+    confirmSheet({
+      title: group.storeName ? `Delete ${group.storeName} visit?` : `Delete ${group.itemCount === 1 ? 'this piece' : `${group.itemCount} pieces`}?`,
+      message: `${group.itemCount} ${group.itemCount === 1 ? 'piece' : 'pieces'} and ${snaps.length} shopping photo${snaps.length === 1 ? '' : 's'} will be removed from your history. This can’t be undone.`,
+      images: group.items.map((item) => item.primarySnap.imageUri).filter(Boolean),
+      confirmLabel: group.storeName ? 'Delete visit' : 'Delete',
+      destructive: true,
+      onConfirm: () => deleteSnaps(snaps).then(() => undefined, deleteFailed),
+    });
+  }, [deleteFailed, deleteSnaps]);
 
   // Everything a visit can do, in one place. Options only appear when they
   // apply, so a stored, sorted visit offers just select and delete.
@@ -521,10 +515,7 @@ export function ShortlistContent({ navigation, params, onConsumeParams, embedded
         const next = event.nativeEvent.layout.height;
         setHeroHeight((current) => (current === next ? current : next));
       }}>
-        {embedded ? <View style={styles.embeddedActions}>
-          <AppText variant="caption" tone="muted">{countLine}</AppText>
-          {headerActions}
-        </View> : <ShopSubpageHeader
+        {embedded ? null : <ShopSubpageHeader
           title="Your shortlist"
           compact={allItems.length > 0}
           subtitle={allItems.length > 0
@@ -537,23 +528,26 @@ export function ShortlistContent({ navigation, params, onConsumeParams, embedded
           style={styles.heroHeader}
         />}
         <View style={styles.controls}>
-          {/* Mode on the left, the one always-on filter on the right: a single
-              row instead of a rail that held nothing but Favorites at rest. */}
-          <View style={styles.modeRow}>
-            <SegmentedControl
-              value={viewMode}
-              options={[{ value: 'pieces', label: 'Pieces' }, { value: 'visits', label: 'Visits' }]}
-              onChange={(value) => { if (user) useShoppingOfflineStore.getState().view(user.id, value); cancelSelection(); }}
-            />
-            {allItems.length > 0 ? (
-              <ShortlistToggleChip
-                label="Favorites"
-                icon="heart-outline"
-                activeIcon="heart"
-                active={favorites}
-                onPress={() => setFavorites((value) => !value)}
-              />
-            ) : null}
+          {/* One toolbar: the view menu (layout + Favorites, totals in its
+              title), whatever filters are active, then search and Refine. */}
+          <View style={styles.toolbar}>
+            {selectionMode ? (
+              <AppText variant="label" style={styles.toolbarFill}>{countLine}</AppText>
+            ) : (
+              <>
+                <ShortlistViewMenu
+                  value={viewMode}
+                  favorites={favorites}
+                  summary={countLine}
+                  onChange={(value) => { if (user) useShoppingOfflineStore.getState().view(user.id, value); cancelSelection(); }}
+                  onToggleFavorites={() => setFavorites((value) => !value)}
+                />
+                {appliedFilters.length > 0
+                  ? <ShortlistFilterBar inline filters={appliedFilters} />
+                  : <View style={styles.toolbarFill} />}
+              </>
+            )}
+            {embedded ? headerActions : null}
           </View>
           {searchOpen || query ? (
             <SearchField
@@ -569,7 +563,6 @@ export function ShortlistContent({ navigation, params, onConsumeParams, embedded
             />
           ) : null}
         </View>
-        {allItems.length > 0 ? <ShortlistFilterBar filters={appliedFilters} /> : null}
         {/* Carries its own padding only when it has something to say, so an
             idle notice adds no gap above the first visit. */}
         <View style={styles.syncNotice}><ShoppingSyncNotice /></View>
@@ -823,7 +816,6 @@ export function ShortlistContent({ navigation, params, onConsumeParams, embedded
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
-  embeddedActions: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   listContent: { paddingBottom: spacing.xxxl },
   listContentSelecting: { paddingBottom: 112 },
   heroHeader: { paddingBottom: spacing.lg, backgroundColor: colors.background },
@@ -834,8 +826,9 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   heroActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  controls: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md, gap: spacing.md },
-  modeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  controls: { paddingHorizontal: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.md, gap: spacing.md },
+  toolbar: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  toolbarFill: { flex: 1 },
   syncNotice: { paddingHorizontal: spacing.lg },
   searchField: { flex: 0 },
   remoteError: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, backgroundColor: colors.accent },

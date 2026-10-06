@@ -133,6 +133,24 @@ function distanceMeters(
   return 2 * radiusMeters * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
 }
 
+/** The store the shopper has visited before that is closest to where they
+ *  are standing, if one is near enough to be the same branch. */
+export function nearestVisitedStore(
+  suggestions: ShoppingStoreSuggestion[],
+  currentLocation: { latitude: number | null; longitude: number | null } | null | undefined,
+  maxMeters = 250,
+): ShoppingStoreSuggestion | null {
+  if (!currentLocation) return null;
+  let best: { suggestion: ShoppingStoreSuggestion; distance: number } | null = null;
+  for (const suggestion of suggestions) {
+    if (suggestion.source !== 'recent') continue;
+    const distance = distanceMeters(suggestion, currentLocation);
+    if (distance === null || distance > maxMeters) continue;
+    if (!best || distance < best.distance) best = { suggestion, distance };
+  }
+  return best?.suggestion ?? null;
+}
+
 function queryScore(storeName: string, query: string): number {
   if (!query) return 0;
   const normalizedStore = normalizeStoreName(storeName);

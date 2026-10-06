@@ -1,3 +1,4 @@
+import { confirmSheet } from '../../components/primitives/ConfirmSheet';
 import React from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -54,10 +55,13 @@ export function LearnedScreen() {
     onError: () => Alert.alert('Error', "Couldn't update. Please try again."),
   });
 
-  const resetAll = () => Alert.alert('Reset everything learned?', 'Your stylist and shopping guides will start learning your taste again from scratch. Your profile answers and products marked “Not for me” are not affected.', [
-    { text: 'Cancel', style: 'cancel' },
-    { text: 'Reset', style: 'destructive', onPress: () => forget.mutate({ kind: 'all' }) },
-  ]);
+  const resetAll = () => confirmSheet({
+    title: 'Reset everything learned?',
+    message: 'Your stylist and shopping guides will start learning your taste again from scratch. Your profile answers and products marked “Not for me” are not affected.',
+    confirmLabel: 'Reset',
+    destructive: true,
+    onConfirm: () => forget.mutate({ kind: 'all' }),
+  });
 
   return (
     <SettingsScaffold title="What Styled Learned" lede="Picked up from your conversations and feedback, on top of the answers in your profile. Remove anything that isn't right.">

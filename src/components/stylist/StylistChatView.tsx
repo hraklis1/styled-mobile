@@ -1,3 +1,4 @@
+import { confirmSheet } from '../primitives/ConfirmSheet';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode, MutableRefObject } from 'react';
 import { StylistCardStateContext, useStylistCardState, type StylistCardState } from './StylistCardState';
@@ -508,7 +509,6 @@ export function StylistChatView({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationsLoading, setConversationsLoading] = useState(false);
-  const [showNewSessionConfirm, setShowNewSessionConfirm] = useState(false);
   const [attachmentSheetVisible, setAttachmentSheetVisible] = useState(false);
   const [wardrobePickerVisible, setWardrobePickerVisible] = useState(false);
   const [boardTarget, setBoardTarget] = useState<BoardEntryRef | null>(null);
@@ -1231,7 +1231,12 @@ export function StylistChatView({
       startNewConversation();
       return;
     }
-    setShowNewSessionConfirm(true);
+    confirmSheet({
+      title: 'Start a new styling session?',
+      message: 'Your current conversation stays saved in History.',
+      confirmLabel: 'Start new session',
+      onConfirm: startNewConversation,
+    });
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -1579,25 +1584,6 @@ export function StylistChatView({
         </View>
       </StylistOverlaySheet>
 
-      <Modal visible={showNewSessionConfirm} transparent animationType="fade" onRequestClose={() => setShowNewSessionConfirm(false)}>
-        <Pressable style={styles.confirmOverlay} onPress={() => setShowNewSessionConfirm(false)}>
-          <Pressable style={styles.confirmCard} onPress={() => {}}>
-            <Text style={styles.confirmTitle}>Start a new styling session?</Text>
-            <Text style={styles.confirmBody}>Your current conversation stays saved in History.</Text>
-            <View style={styles.confirmActions}>
-              <TouchableOpacity style={styles.confirmCancelBtn} onPress={() => setShowNewSessionConfirm(false)}>
-                <Text style={styles.confirmCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.confirmPrimaryBtn}
-                onPress={() => { setShowNewSessionConfirm(false); startNewConversation(); }}
-              >
-                <Text style={styles.confirmPrimaryText}>Start New</Text>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -3157,14 +3143,13 @@ function ConversationDrawer({
   };
 
   const confirmDelete = (c: Conversation) => {
-    Alert.alert(
-      'Delete conversation',
-      `Delete "${c.title || 'this conversation'}"? This can't be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => onDelete(c.id) },
-      ],
-    );
+    confirmSheet({
+      title: `Delete “${c.title || 'this conversation'}”?`,
+      message: 'This conversation will be removed from History. This can’t be undone.',
+      confirmLabel: 'Delete conversation',
+      destructive: true,
+      onConfirm: () => onDelete(c.id),
+    });
   };
 
   const groups = useMemo(() => {
@@ -3517,59 +3502,6 @@ const styles = StyleSheet.create({
     fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.white,
-  },
-  confirmOverlay: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
-  confirmCard: {
-    width: '100%',
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radii.lg,
-    padding: spacing.xl,
-    gap: spacing.sm,
-    ...shadows.lg,
-  },
-  confirmTitle: {
-    fontSize: typography.text.sectionTitle.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-    letterSpacing: typography.tracking.none,
-  },
-  confirmBody: {
-    fontSize: typography.text.bodySmall.fontSize,
-    color: colors.mutedForeground,
-    lineHeight: 20,
-  },
-  confirmActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  confirmCancelBtn: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.full,
-  },
-  confirmCancelText: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.medium,
-    color: colors.mutedForeground,
-  },
-  confirmPrimaryBtn: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.full,
-    backgroundColor: colors.primary,
-  },
-  confirmPrimaryText: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.primaryForeground,
   },
   renameOverlay: {
     flex: 1,

@@ -1,6 +1,7 @@
 import {
   applySelection,
   moveSnapToStage,
+  moveSnapsToStage,
   partitionKey,
   seedStages,
   selectionAction,
@@ -186,5 +187,35 @@ describe('partitionKey', () => {
 
   it('changes when a photo moves between items', () => {
     expect(partitionKey(stages)).not.toBe(partitionKey(moveSnapToStage(stages, 'a1', 'group-b', createStageId)));
+  });
+});
+
+describe('moveSnapsToStage', () => {
+  const stages: ShoppingOrganizerStage[] = [
+    { id: 'a', snapIds: ['1', '2'] },
+    { id: 'b', snapIds: ['3'] },
+    { id: 'c', snapIds: ['4', '5'] },
+  ];
+
+  it('merges a whole piece into another', () => {
+    expect(moveSnapsToStage(stages, ['1', '2'], 'b', () => 'n')).toEqual([
+      { id: 'b', snapIds: ['3', '1', '2'] },
+      { id: 'c', snapIds: ['4', '5'] },
+    ]);
+  });
+
+  it('pulls several photos into one new piece', () => {
+    let next = 0;
+    const result = moveSnapsToStage(stages, ['4', '1'], null, () => `n${next++}`);
+    expect(result).toEqual([
+      { id: 'a', snapIds: ['2'] },
+      { id: 'b', snapIds: ['3'] },
+      { id: 'c', snapIds: ['5'] },
+      { id: 'n0', snapIds: ['4', '1'] },
+    ]);
+  });
+
+  it('leaves the stages alone for an empty move', () => {
+    expect(moveSnapsToStage(stages, [], 'b', () => 'n')).toBe(stages);
   });
 });

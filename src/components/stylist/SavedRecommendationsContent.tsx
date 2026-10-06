@@ -1,6 +1,6 @@
+import { confirmSheet } from '../primitives/ConfirmSheet';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   FlatList,
   Keyboard,
   RefreshControl,
@@ -187,10 +187,13 @@ export function SavedRecommendationsContent({ initialTab, initialSection, select
   const confirmRemove = useCallback((entry: WishlistEntry) => {
     const kind = getWishlistRecommendationType(entry);
     const label = kind === 'piece' ? 'product' : 'list';
-    Alert.alert(`Remove saved ${label}?`, `This saved ${label} will be removed.`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => removeItem(entry.id) },
-    ]);
+    confirmSheet({
+      title: `Remove saved ${label}?`,
+      message: `This saved ${label} will be removed from your wishlist.`,
+      confirmLabel: 'Remove',
+      destructive: true,
+      onConfirm: () => removeItem(entry.id),
+    });
   }, [removeItem]);
 
   /**

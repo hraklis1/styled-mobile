@@ -38,6 +38,7 @@ export function DraggablePhotoGrid({
   layout,
   onReorder,
   onTap,
+  onCornerTap,
   renderPhoto,
   disabled,
   onDragStart,
@@ -50,6 +51,12 @@ export function DraggablePhotoGrid({
   layout: (count: number, width: number) => PieceLayout;
   onReorder: (nextIds: string[]) => void;
   onTap?: (id: string) => void;
+  /**
+   * A tap in the tile's top-right corner, where the photo's ⋯ button is
+   * drawn. Resolved here because a button nested in the tile's own gestures
+   * never gets the touch. Return false to fall back to `onTap`.
+   */
+  onCornerTap?: (id: string) => boolean;
   /** Fills its slot; the grid sizes the wrapper. */
   renderPhoto: (id: string, index: number) => ReactNode;
   disabled?: boolean;
@@ -90,6 +97,7 @@ export function DraggablePhotoGrid({
               disabled={Boolean(disabled)}
               onMove={handleMove}
               onTap={onTap}
+              onCornerTap={onCornerTap}
               onDragStart={onDragStart}
               onHold={onHold}
               onDragMove={onDragMove}
@@ -104,6 +112,8 @@ export function DraggablePhotoGrid({
 }
 
 const SETTLE = { duration: 220 };
+/** Side of the top-right square that counts as the ⋯ button. */
+const CORNER_HIT = 44;
 
 function DraggableTile({
   id,
@@ -114,6 +124,7 @@ function DraggableTile({
   disabled,
   onMove,
   onTap,
+  onCornerTap,
   onDragStart,
   onHold,
   onDragMove,
@@ -128,6 +139,7 @@ function DraggableTile({
   disabled: boolean;
   onMove: (from: number, to: number) => void;
   onTap?: (id: string) => void;
+  onCornerTap?: (id: string) => boolean;
   onDragStart?: (id: string) => void;
   onHold?: (id: string) => void;
   onDragMove?: (id: string, windowX: number, windowY: number) => void;
@@ -163,11 +175,18 @@ function DraggableTile({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, frame.x, frame.y, frame.width, frame.height, frames]);
 
+  const handleCornerTap = () => {
+    if (!onCornerTap?.(id)) onTap?.(id);
+  };
+
   const tap = Gesture.Tap()
     .enabled(!disabled && Boolean(onTap))
     .maxDuration(200)
-    .onEnd((_event, success) => {
-      if (success && onTap) runOnJS(onTap)(id);
+    .onEnd((event, success) => {
+      if (!success) return;
+      const inCorner = event.x > width.value - CORNER_HIT && event.y < CORNER_HIT;
+      if (inCorner && onCornerTap) runOnJS(handleCornerTap)();
+      else if (onTap) runOnJS(onTap)(id);
     });
 
   const pan = Gesture.Pan()

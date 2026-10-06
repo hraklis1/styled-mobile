@@ -1,3 +1,5 @@
+import { confirmSheet } from '../../components/primitives/ConfirmSheet';
+import { itemThumbUri } from '../../lib/itemImage';
 import { CommonActions, usePreventRemove } from '@react-navigation/native';
 import { formatShoppingPrice } from '../../lib/shoppingPresentation';
 import { useState, useRef, useEffect, type ReactNode } from 'react';
@@ -268,22 +270,18 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
       ? `\n\nThis item appears in ${affectedCount} outfit${affectedCount === 1 ? '' : 's'}. A deleted placeholder will replace it until you clear it.`
       : '';
 
-    Alert.alert(
-      'Remove item',
-      `Remove "${item.name}" from your wardrobe? This can't be undone.${warningSuffix}`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            deleteItem.mutate(item.id);
-            navigation.goBack();
-          },
-        },
-      ]
-    );
+    const thumb = itemThumbUri(item);
+    confirmSheet({
+      title: `Remove ${item.name}?`,
+      message: `It will be removed from your wardrobe. This can’t be undone.${warningSuffix}`,
+      images: thumb ? [thumb] : undefined,
+      confirmLabel: 'Remove item',
+      destructive: true,
+      onConfirm: () => {
+        deleteItem.mutate(item.id);
+        navigation.goBack();
+      },
+    });
   };
 
   // ── Inline tag handlers ──────────────────────────────────────────────────────

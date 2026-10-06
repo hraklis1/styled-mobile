@@ -1,3 +1,4 @@
+import { confirmSheet } from '../primitives/ConfirmSheet';
 import { useReducedMotion } from 'react-native-reanimated';
 import { purchaseDetails, validateShoppingPatch } from '../../lib/shoppingCatalog';
 import { parseShoppingAmount, resolveShoppingPrice, shoppingPriceCandidates, suggestedShoppingCurrency } from '../../lib/shoppingPrices';
@@ -362,20 +363,19 @@ export function ShoppingItemLightbox({
   };
 
   const handleDelete = () => {
-    Alert.alert('Delete this piece?', 'These shopping photos will be removed from your history.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          void deleteItem(displayItem)
-            .then(onClose)
-            .catch((error) => {
-              Alert.alert('Could not delete', error instanceof Error ? error.message : 'Please try again.');
-            });
-        },
-      },
-    ]);
+    const count = displayItem.snaps.length;
+    confirmSheet({
+      title: 'Delete this piece?',
+      message: `${count} shopping photo${count === 1 ? '' : 's'} will be removed from your history. This can’t be undone.`,
+      images: displayItem.snaps.map((snap) => snap.imageUri).filter(Boolean),
+      confirmLabel: 'Delete piece',
+      destructive: true,
+      onConfirm: () => deleteItem(displayItem)
+        .then(onClose)
+        .catch((error) => {
+          Alert.alert('Could not delete', error instanceof Error ? error.message : 'Please try again.');
+        }),
+    });
   };
 
   const capturedLabel = new Date(displayItem.capturedAt).toLocaleString(undefined, {

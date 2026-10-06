@@ -1,5 +1,6 @@
+import { confirmSheet } from '../primitives/ConfirmSheet';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -58,17 +59,16 @@ export function ShopWishlistDetailSheet({ entry, onClose, onRemove, onSaveToBoar
   );
 
   const confirmRemove = useCallback(() => {
-    Alert.alert(removalCopy.title, removalCopy.message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: removalCopy.confirmLabel,
-        style: 'destructive',
-        onPress: () => {
-          ref.current?.dismiss();
-          onRemove();
-        },
+    confirmSheet({
+      title: removalCopy.title,
+      message: removalCopy.message,
+      confirmLabel: removalCopy.confirmLabel,
+      destructive: true,
+      onConfirm: () => {
+        ref.current?.dismiss();
+        onRemove();
       },
-    ]);
+    });
   }, [onRemove, removalCopy]);
 
   return (

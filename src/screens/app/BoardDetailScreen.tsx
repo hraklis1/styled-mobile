@@ -1,3 +1,4 @@
+import { confirmSheet } from '../../components/primitives/ConfirmSheet';
 import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import {
   Animated,
@@ -6,9 +7,9 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   ScrollView,
 } from 'react-native';
+import { UndoToast } from '../../components/primitives/UndoToast';
 import { FlashList } from '@shopify/flash-list';
 import type { ListRenderItemInfo } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -249,18 +250,13 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
   const handleDeleteSelected = useCallback(() => {
     if (!board || selectedKeys.size === 0) return;
     const count = selectedKeys.size;
-    Alert.alert(
-      'Remove from board',
-      `Remove ${count} ${count === 1 ? 'item' : 'items'} from this board? They will stay in your closet.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => removeSelection(`${count} removed from board`),
-        },
-      ],
-    );
+    confirmSheet({
+      title: `Remove ${count} ${count === 1 ? 'item' : 'items'} from this board?`,
+      message: 'They will stay in your closet.',
+      confirmLabel: 'Remove',
+      destructive: true,
+      onConfirm: () => removeSelection(`${count} removed from board`),
+    });
   }, [board, removeSelection, selectedKeys.size]);
 
   const handleMoved = useCallback(({ name, before }: { name: string; before: Board | null }) => {
@@ -372,18 +368,18 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
     // The FK is ON DELETE SET NULL, so a linked event survives but quietly
     // loses its board. Say so rather than letting it vanish unannounced.
     const eventNote = boardEvent ? ` "${boardEvent.title}" will no longer link to it.` : '';
-    Alert.alert('Delete board', `Delete "${board?.name ?? 'this board'}"? Saved items stay in your closet.${eventNote}`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          deleteBoard(boardId);
-          navigation.goBack();
-        },
+    confirmSheet({
+      title: `Delete “${board?.name ?? 'this board'}”?`,
+      message: `Saved items stay in your closet.${eventNote}`,
+      images: board?.coverImageUrl ? [board.coverImageUrl] : undefined,
+      confirmLabel: 'Delete board',
+      destructive: true,
+      onConfirm: () => {
+        deleteBoard(boardId);
+        navigation.goBack();
       },
-    ]);
-  }, [boardId, board?.name, boardEvent, deleteBoard, navigation]);
+    });
+  }, [boardId, board, boardEvent, deleteBoard, navigation]);
 
   const handleOverflow = useCallback(() => {
     setOptionsMenuVisible(true);
@@ -720,13 +716,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
       )}
 
       {lastRemoval && (
-        <View style={[styles.undoToast, { bottom: insets.bottom + spacing.lg }]} accessibilityLiveRegion="polite">
-          <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-          <Text style={styles.undoToastText} numberOfLines={1}>{lastRemoval.message}</Text>
-          <TouchableOpacity style={styles.undoToastButton} onPress={undoRemoval} accessibilityRole="button">
-            <Text style={styles.undoToastAction}>Undo</Text>
-          </TouchableOpacity>
-        </View>
+        <UndoToast message={lastRemoval.message} onUndo={undoRemoval} bottom={insets.bottom + spacing.lg} />
       )}
     </View>
   );
@@ -828,24 +818,6 @@ const styles = StyleSheet.create({
   organizeBanner: { minHeight: 48, marginHorizontal: spacing.lg, marginBottom: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.accent },
   organizeText: { flex: 1, color: colors.secondaryForeground, fontSize: typography.text.caption.fontSize },
   filteredEmpty: { paddingTop: spacing.xxxl, alignItems: 'center', gap: spacing.xs },
-  undoToast: {
-    position: 'absolute',
-    left: spacing.lg,
-    right: spacing.lg,
-    minHeight: 52,
-    paddingLeft: spacing.md,
-    paddingRight: spacing.xs,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surfaceElevated,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  undoToastText: { flex: 1, color: colors.foreground, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.medium },
-  undoToastButton: { minWidth: 56, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  undoToastAction: { color: colors.primary, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.bold },
   centered: {
     flex: 1,
     alignItems: 'center',

@@ -29,6 +29,17 @@ export const SHORTLIST_COPY = {
   separatePhotos: 'Separate photos',
   /** Deletes every photo of one piece, from the organizer's piece menu. */
   removePiece: 'Remove piece',
+  removePhoto: 'Remove photo',
+  renamePiece: 'Rename',
+  namePiece: 'Name this piece',
+  /** The organizer's non-gesture regroup: pick the piece a photo goes to. */
+  moveTo: 'Move to…',
+  newPiece: 'New piece',
+  markAsTag: 'Mark as tag',
+  markAsGarment: 'Mark as garment',
+  selectPhotos: 'Select',
+  /** Visit title before a store is given; the store is asked for by a chip. */
+  todaysVisit: "Today's visit",
   /** Captured on the device, not uploaded yet. Never "pending" or "sync". */
   onThisPhone: 'On this phone',
   /** Uploaded. Only appears in the item lightbox. */

@@ -57,7 +57,8 @@ jest.mock('../../../components/shopping/ShoppingSessionBundle', () => ({ Shoppin
 jest.mock('../../../components/shopping/ShoppingItemLightbox', () => ({ ShoppingItemLightbox: 'ShoppingItemLightbox' }));
 jest.mock('../../../components/shopping/ShoppingStoreFilterSheet', () => ({ ShoppingStoreFilterSheet: 'ShoppingStoreFilterSheet' }));
 jest.mock('../../../components/shopping/ShoppingStoreAssignmentSheet', () => ({ ShoppingStoreAssignmentSheet: 'ShoppingStoreAssignmentSheet' }));
-jest.mock('../../../components/shopping/ShortlistFilterBar', () => ({ ShortlistFilterBar: 'ShortlistFilterBar', ShortlistToggleChip: 'ShortlistToggleChip' }));
+jest.mock('../../../components/shopping/ShortlistFilterBar', () => ({ ShortlistFilterBar: 'ShortlistFilterBar' }));
+jest.mock('../../../components/shopping/ShortlistViewMenu', () => ({ ShortlistViewMenu: 'ShortlistViewMenu' }));
 jest.mock('../../../components/primitives/EditAtoms', () => ({ OptionChips: 'OptionChips' }));
 jest.mock('../../../components/primitives/SearchField', () => ({ SearchField: 'SearchField' }));
 jest.mock('../../../contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'test-user' } }) }));
@@ -173,7 +174,7 @@ it('resets every narrowing shortlist filter without changing the preferred view'
   const input = (label: string) => renderer.root.findAllByType(TextInput).find((node) => node.props.accessibilityLabel === label)!;
   act(() => {
     nodes('IconButton').find((node) => node.props.label === 'Search shortlist')!.props.onPress();
-    nodes('ShortlistToggleChip')[0].props.onPress();
+    nodes('ShortlistViewMenu')[0].props.onToggleFavorites();
     nodes('ShoppingStoreFilterSheet')[0].props.onSelect('COS');
     input('Price filter currency').props.onChangeText('CAD');
     input('Minimum price').props.onChangeText('60');
@@ -190,13 +191,13 @@ it('resets every narrowing shortlist filter without changing the preferred view'
   act(() => renderer.update(<ShoppingGalleryScreen navigation={navigation as any} route={{ params: { catalogFilter: 'all', resetFilters: true } } as any} />));
   expect(nodes('FilterControl')[0].props.count).toBe(0);
   expect(nodes('SearchField')).toHaveLength(0);
-  expect(nodes('ShortlistToggleChip')[0].props.active).toBe(false);
+  expect(nodes('ShortlistViewMenu')[0].props.favorites).toBe(false);
   expect(nodes('ShoppingStoreFilterSheet')[0].props.storeFilter).toBe('all');
   expect(input('Price filter currency').props.value).toBe('');
   expect(input('Minimum price').props.value).toBe('');
   expect(input('Maximum price').props.value).toBe('');
   expect(nodes('OptionChips').map((node) => node.props.value ?? node.props.multiValue)).toEqual(['', 'newest', 'all', 'all', []]);
-  expect(nodes('SegmentedControl')[0].props.value).toBe('visits');
+  expect(nodes('ShortlistViewMenu')[0].props.value).toBe('visits');
   expect(nodes('ShoppingSessionBundle')).toHaveLength(1);
   expect(navigation.setParams).toHaveBeenCalledWith({ focusGroupId: undefined, catalogFilter: undefined, resetFilters: undefined });
   act(() => renderer.update(<ShoppingGalleryScreen navigation={navigation as any} route={{ params: { catalogFilter: 'active' } } as any} />));
@@ -226,12 +227,12 @@ it('gives shortlist its own Shop view with one masthead and preserves filters', 
   act(() => nodes('SegmentedControl')[0].props.onChange('shortlist'));
   expect(nodes('ShopSubpageHeader')).toHaveLength(0);
   expect(nodes('ScreenHeader')).toHaveLength(1);
-  act(() => nodes('ShortlistToggleChip')[0].props.onPress());
+  act(() => nodes('ShortlistViewMenu')[0].props.onToggleFavorites());
   act(() => nodes('SegmentedControl')[0].props.onChange('for-you'));
   act(() => nodes('SegmentedControl')[0].props.onChange('shortlist'));
-  expect(nodes('ShortlistToggleChip')[0].props.active).toBe(true);
+  expect(nodes('ShortlistViewMenu')[0].props.favorites).toBe(true);
   act(() => renderer.update(<ShopOverviewScreen navigation={navigation as any} route={{ params: { view: 'shortlist', resetFilters: true, catalogFilter: 'active' } } as any} />));
-  expect(nodes('ShortlistToggleChip')[0].props.active).toBe(false);
+  expect(nodes('ShortlistViewMenu')[0].props.favorites).toBe(false);
   expect(nodes('OptionChips')[4].props.multiValue).toEqual(['considering', 'wishlist']);
   mockSnaps.length = 0;
 });

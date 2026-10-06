@@ -153,3 +153,28 @@ export function moveSnapToStage(
   const created: ShoppingOrganizerStage = { id: createStageId(), snapIds: [snapId] };
   return [...remaining.slice(0, insertAt), created, ...remaining.slice(insertAt)];
 }
+
+/**
+ * Move several photos at once — a whole piece into another, or a photo picked
+ * from a menu rather than dragged. With a null target they become one new
+ * item together, placed after the first photo's old item.
+ */
+export function moveSnapsToStage(
+  stages: ShoppingOrganizerStage[],
+  snapIds: string[],
+  targetStageId: string | null,
+  createStageId: () => string,
+): ShoppingOrganizerStage[] {
+  if (snapIds.length === 0) return stages;
+  let target = targetStageId;
+  let next = stages;
+  for (const snapId of snapIds) {
+    const before = next;
+    next = moveSnapToStage(next, snapId, target, createStageId);
+    if (target === null && next !== before) {
+      target = next.find((stage) => stage.snapIds.length === 1 && stage.snapIds[0] === snapId
+        && !before.some((old) => old.id === stage.id))?.id ?? null;
+    }
+  }
+  return next;
+}

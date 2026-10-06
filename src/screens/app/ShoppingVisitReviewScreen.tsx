@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, View, StyleSheet } from 'react-native';
+import { Alert, AppState, View, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BottomSheetModal } from '@gorhom/bottom-sheet';
 import * as Haptics from '../../lib/haptics';
 
-import { ShoppingPhotoOrganizer } from '../../components/shopping/ShoppingPhotoOrganizer';
+import { ShoppingPhotoOrganizer, type ShoppingPieceRename } from '../../components/shopping/ShoppingPhotoOrganizer';
+import { UndoToast } from '../../components/primitives/UndoToast';
 import { ShoppingStoreAssignmentSheet } from '../../components/shopping/ShoppingStoreAssignmentSheet';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAssignShoppingStore } from '../../hooks/useAssignShoppingStore';
@@ -18,7 +20,11 @@ import type { ShoppingSnapOrganizationUpdate } from '../../lib/shoppingSnapOrgan
 import { buildVisitReviewHeader } from '../../lib/shoppingVisitReview';
 import type { ShoppingVisitReviewScreenProps } from '../../navigation/types';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
-import { colors } from '../../theme';
+import { colors, spacing } from '../../theme';
+
+const UNDO_WINDOW_MS = 5000;
+/** The organizer's save bar; the toast floats just above it. */
+const SAVE_BAR_HEIGHT = 80;
 
 /**
  * Where a shopping visit ends. The camera now closes into this screen instead
@@ -41,10 +47,15 @@ export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitRe
   const currentSession = useShoppingSessionStore((state) => state.currentSession);
   const pendingVisitMetadata = useShoppingSessionStore((state) => state.pendingVisitMetadata);
   const endVisit = useShoppingSessionStore((state) => state.endVisit);
-  const { saveOrganization, isSavingOrganization } = useShoppingItemActions();
+  const { saveOrganization, isSavingOrganization, saveCatalog } = useShoppingItemActions();
   const assignShoppingStore = useAssignShoppingStore();
   const storeSheetRef = useRef<BottomSheetModal>(null);
   const [isFinishing, setIsFinishing] = useState(false);
+  const insets = useSafeAreaInsets();
+  // A removal waits out its undo window before anything is deleted; until
+  // then its photos are only hidden.
+  const [pendingRemoval, setPendingRemoval] = useState<{ snapIds: string[]; message: string } | null>(null);
+  const pendingRef = useRef<{ snapIds: string[]; timer: ReturnType<typeof setTimeout> } | null>(null);
   // Reached from the camera this screen closes a trip in progress; reached
   // from the shortlist it is just an organizer over an old one. The copy has
   // to follow, or "Keep shooting" offers a camera that is not there.
@@ -60,10 +71,16 @@ export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitRe
       || a.captureSequence - b.captureSequence), [allSnaps, sessionId]);
   // Stores the shopper has used before, offered first in the store sheet.
   const storeOptions = useMemo(() => buildShoppingStoreOptions(buildShoppingEditItems(allSnaps)), [allSnaps]);
-  const snaps = useMemo(
+  const allVisitSnaps = useMemo(
     () => applyShoppingPreviewUris(rawSnaps, visitPreviews, pendingUploads),
     [pendingUploads, rawSnaps, visitPreviews],
   );
+  const snaps = useMemo(() => {
+    if (!pendingRemoval) return allVisitSnaps;
+    const hidden = new Set(pendingRemoval.snapIds);
+    return allVisitSnaps.filter((snap) => !hidden.has(snap.id));
+  }, [allVisitSnaps, pendingRemoval]);
+  const fullImageUris = useMemo(() => new Map(rawSnaps.map((snap) => [snap.id, snap.imageUri])), [rawSnaps]);
 
   /**
    * Ends the visit and releases the rail's preview files. Cleanup lives here
@@ -90,16 +107,22 @@ export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitRe
 
   // A failure is rethrown for the organizer to show inline, beside the
   // button that caused it; an alert on top of that told the shopper twice.
-  const handleSave = useCallback(async (updates: ShoppingSnapOrganizationUpdate[]) => {
+  const handleSave = useCallback(async (updates: ShoppingSnapOrganizationUpdate[], renames: ShoppingPieceRename[] = []) => {
     setIsFinishing(true);
     try {
+      // A removal still inside its undo window is final once the visit is.
+      await commitPendingRef.current();
       await saveOrganization(updates);
+      // Names go on after the regroup, so each lands on its piece's final group.
+      for (const rename of renames) {
+        await saveCatalog(rename.captureGroupId, { productName: rename.productName });
+      }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       finish();
     } finally {
       setIsFinishing(false);
     }
-  }, [finish, saveOrganization]);
+  }, [finish, saveCatalog, saveOrganization]);
 
   /**
    * The store is asked for here because this is the last moment the shopper
@@ -143,27 +166,62 @@ export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitRe
     }
   }, [rawSnaps, userId]);
 
-  const confirmRemove = useCallback((snapIds: string[]) => {
-    const count = snapIds.length;
-    Alert.alert(
-      count === 1 ? 'Remove this photo?' : `Remove ${count} photos?`,
-      // Deleting reseeds the organizer from what is left, which discards any
-      // regrouping not yet saved. Say so rather than let it look like a bug.
-      'It will be deleted from this visit. Unsaved grouping changes will be reset.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: () => void removeSnaps(snapIds) },
-      ],
-    );
+  /** Deletes whatever is waiting in the undo window, now. */
+  const commitPendingRemoval = useCallback(async () => {
+    const pending = pendingRef.current;
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    pendingRef.current = null;
+    setPendingRemoval(null);
+    await removeSnaps(pending.snapIds);
   }, [removeSnaps]);
+  const commitPendingRef = useRef(commitPendingRemoval);
+  commitPendingRef.current = commitPendingRemoval;
+
+  /**
+   * Hide now, delete after the undo window. Hiding still reseeds the
+   * organizer from what is left, as a real delete always did.
+   */
+  const stageRemove = useCallback((snapIds: string[]) => {
+    void commitPendingRef.current();
+    const isWholePiece = snapIds.length > 1
+      && new Set(rawSnaps.filter((snap) => snapIds.includes(snap.id)).map((snap) => snap.captureGroupId)).size === 1;
+    const message = snapIds.length === 1
+      ? 'Photo removed'
+      : isWholePiece ? 'Piece removed' : `${snapIds.length} photos removed`;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const timer = setTimeout(() => { void commitPendingRef.current(); }, UNDO_WINDOW_MS);
+    pendingRef.current = { snapIds, timer };
+    setPendingRemoval({ snapIds, message });
+  }, [rawSnaps]);
+
+  const undoRemoval = useCallback(() => {
+    const pending = pendingRef.current;
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    pendingRef.current = null;
+    setPendingRemoval(null);
+    void Haptics.selectionAsync();
+  }, []);
+
+  // Leaving the screen or the app must not strand a hidden-but-undeleted photo.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'background') void commitPendingRef.current();
+    });
+    return () => {
+      subscription.remove();
+      void commitPendingRef.current();
+    };
+  }, []);
 
   // Nothing was photographed — there is no review to do, so close the visit
   // out rather than parking on an empty organizer.
   useEffect(() => {
-    if (!isLoading && snaps.length === 0) finish();
-  }, [finish, isLoading, snaps.length]);
+    if (!isLoading && allVisitSnaps.length === 0) finish();
+  }, [finish, isLoading, allVisitSnaps.length]);
 
-  if (snaps.length === 0) return <View style={styles.root} />;
+  if (allVisitSnaps.length === 0) return <View style={styles.root} />;
 
   const header = buildVisitReviewHeader(snaps, {
     isLiveVisit,
@@ -176,19 +234,29 @@ export function ShoppingVisitReviewScreen({ navigation, route }: ShoppingVisitRe
     <View style={styles.root}>
       <ShoppingPhotoOrganizer
         snaps={snaps}
+        fullImageUris={fullImageUris}
         onClose={handleClose}
         onSave={handleSave}
-        onRemove={confirmRemove}
+        onRemove={stageRemove}
         isSaving={isSavingOrganization || isFinishing}
         eyebrow={header.eyebrow}
-        title={header.storeName ?? SHORTLIST_COPY.addStore}
-        titleIsPlaceholder={header.storeName === null}
+        title={header.storeName ?? SHORTLIST_COPY.todaysVisit}
         onPressTitle={openStoreSheet}
+        titleAction={header.storeName === null ? { label: SHORTLIST_COPY.addStore, onPress: openStoreSheet } : undefined}
+        showHeaderClose={false}
+        canRename
         subtitle={header.meta}
         saveLabel={isLiveVisit ? 'Finish visit' : 'Done'}
         countInSaveLabel={isLiveVisit}
         closeLabel={isLiveVisit ? 'Keep shooting' : 'Back'}
       />
+      {pendingRemoval ? (
+        <UndoToast
+          message={pendingRemoval.message}
+          onUndo={undoRemoval}
+          bottom={insets.bottom + SAVE_BAR_HEIGHT + spacing.md}
+        />
+      ) : null}
       <ShoppingStoreAssignmentSheet
         sheetRef={storeSheetRef}
         options={storeOptions}

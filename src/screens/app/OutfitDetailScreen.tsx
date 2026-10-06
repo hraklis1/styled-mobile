@@ -1,3 +1,5 @@
+import { confirmSheet } from '../../components/primitives/ConfirmSheet';
+import { itemThumbUri } from '../../lib/itemImage';
 import {
   View,
   Text,
@@ -273,21 +275,17 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   };
 
   const handleDelete = () => {
-    Alert.alert(
-      'Delete outfit',
-      `Delete "${outfit.name}"? This can't be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            deleteOutfit.mutate(outfit.id);
-            handleBack();
-          },
-        },
-      ]
-    );
+    confirmSheet({
+      title: `Delete “${outfit.name}”?`,
+      message: 'The pieces stay in your closet. This can’t be undone.',
+      images: outfit.itemIds.map((entry) => itemThumbUri(itemMap.get(entry.id))).filter((uri): uri is string => Boolean(uri)),
+      confirmLabel: 'Delete outfit',
+      destructive: true,
+      onConfirm: () => {
+        deleteOutfit.mutate(outfit.id);
+        handleBack();
+      },
+    });
   };
 
   const hasAiImage = !!outfit.aiGeneratedImageUrl;

@@ -51,7 +51,7 @@ export function ShortlistToggleChip({
  * nothing, letting the photographs begin immediately. Once Refine narrows the
  * shortlist, each active choice appears as a removable capsule.
  */
-export function ShortlistFilterBar({ filters }: { filters: ShortlistAppliedFilter[] }) {
+export function ShortlistFilterBar({ filters, inline = false }: { filters: ShortlistAppliedFilter[]; /** Sits inside a toolbar row: no own gutter or bottom gap. */ inline?: boolean }) {
   const reduceMotion = useReducedMotion();
 
   if (filters.length === 0) return null;
@@ -60,12 +60,12 @@ export function ShortlistFilterBar({ filters }: { filters: ShortlistAppliedFilte
     <Animated.View
       entering={reduceMotion ? undefined : FadeIn.duration(140)}
       exiting={reduceMotion ? undefined : FadeOut.duration(90)}
-      style={styles.container}
+      style={inline ? styles.inlineContainer : styles.container}
     >
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.row}
+        contentContainerStyle={[styles.row, inline && styles.inlineRow]}
         accessibilityLabel="Applied shortlist filters"
       >
         {filters.map((filter) => (
@@ -92,6 +92,8 @@ export function ShortlistFilterBar({ filters }: { filters: ShortlistAppliedFilte
 
 const styles = StyleSheet.create({
   container: { paddingBottom: spacing.md },
+  inlineContainer: { flex: 1, minWidth: 0 },
+  inlineRow: { paddingHorizontal: 0 },
   row: { gap: spacing.sm, alignItems: 'center', paddingHorizontal: spacing.lg },
   chip: {
     maxWidth: 200,

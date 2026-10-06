@@ -10,7 +10,9 @@ export async function createShoppingPreview(sourceUri: string, id: string): Prom
   SHOPPING_PREVIEW_DIRECTORY.create({ intermediates: true, idempotent: true });
   const resized = await ImageManipulator.manipulateAsync(
     sourceUri,
-    [{ resize: { width: 240 } }],
+    // Wide enough for the review grid's hero tile (about half the screen at 3x);
+    // the full-screen viewers load the original instead.
+    [{ resize: { width: 600 } }],
     { compress: 0.72, format: ImageManipulator.SaveFormat.JPEG },
   );
   const destination = new File(SHOPPING_PREVIEW_DIRECTORY, `${id}.jpg`);

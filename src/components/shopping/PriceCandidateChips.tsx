@@ -1,14 +1,15 @@
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as Haptics from '../../lib/haptics';
 
-import { formatShoppingPrice } from '../../lib/shoppingPresentation';
+import { formatShoppingPriceForHome } from '../../lib/shoppingPresentation';
+import { useCurrencyCode } from '../../hooks/useCurrencyCode';
 import type { ShoppingPriceCandidate } from '../../lib/shoppingPrices';
 import { cameraColors, colors, radii, spacing, typography } from '../../theme';
 
 export type PriceChoice = { amount: number; currencyCode: string | null };
 
-function chipLabel(candidate: ShoppingPriceCandidate): string {
-  return formatShoppingPrice(candidate.amount, candidate.currencyCode)
+function chipLabel(candidate: ShoppingPriceCandidate, homeCurrency: string): string {
+  return formatShoppingPriceForHome(candidate.amount, candidate.currencyCode, homeCurrency)
     ?? `${candidate.amount.toLocaleString()} · ?`;
 }
 
@@ -34,6 +35,7 @@ export function PriceCandidateChips({
   disabled?: boolean;
   onPick: (choice: PriceChoice) => void;
 }) {
+  const homeCurrency = useCurrencyCode();
   if (candidates.length === 0) return null;
   const dark = tone === 'camera';
   return (
@@ -54,10 +56,10 @@ export function PriceCandidateChips({
               style={[styles.chip, dark && styles.chipDark, active && (dark ? styles.chipActiveDark : styles.chipActive)]}
               accessibilityRole="radio"
               accessibilityState={{ selected: active, disabled: Boolean(disabled) }}
-              accessibilityLabel={`${chipLabel(candidate)}${candidate.currencyCode ? '' : ', currency unknown'}`}
+              accessibilityLabel={`${chipLabel(candidate, homeCurrency)}${candidate.currencyCode ? '' : ', currency unknown'}`}
             >
               <Text style={[styles.label, dark && styles.labelDark, active && (dark ? styles.labelActiveDark : styles.labelActive)]}>
-                {chipLabel(candidate)}
+                {chipLabel(candidate, homeCurrency)}
               </Text>
             </TouchableOpacity>
           );
