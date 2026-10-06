@@ -734,8 +734,26 @@ export function ShortlistContent({ navigation, params, onConsumeParams, embedded
         backgroundStyle={styles.filterSheetBackground}
         handleIndicatorStyle={styles.filterSheetHandle}
       >
+        {/* Pinned header: reset sits beside the title so it's reachable without scrolling. */}
+        <View style={styles.filterSheetHeader}>
+          <AppText variant="sheetTitle" tone="primary" style={styles.filterSheetTitle}>Refine your shortlist</AppText>
+          {activeFilterCount > 0 ? (
+            <Animated.View entering={reduceMotion ? undefined : FadeIn.duration(180)} exiting={reduceMotion ? undefined : FadeOut.duration(140)}>
+              <TouchableOpacity
+                style={styles.resetPill}
+                onPress={() => { void Haptics.selectionAsync(); clearItemFilters(); }}
+                accessibilityRole="button"
+                accessibilityLabel={`Clear ${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'}`}
+                hitSlop={8}
+              >
+                <Ionicons name="close" size={13} color={colors.foreground} />
+                <Text style={styles.resetPillText}>Clear</Text>
+                <View style={styles.resetPillCount}><Text style={styles.resetPillCountText}>{activeFilterCount}</Text></View>
+              </TouchableOpacity>
+            </Animated.View>
+          ) : null}
+        </View>
         <BottomSheetScrollView contentContainerStyle={styles.filterSheetContent} keyboardShouldPersistTaps="handled">
-          <AppText variant="sheetTitle" tone="primary">Refine your shortlist</AppText>
 
           <AppText variant="eyebrow" tone="muted">CATEGORY</AppText>
           <OptionChips options={[{ value: '', label: 'All categories' }, ...[...new Set(allItems.map((item) => item.category).filter((value): value is string => Boolean(value)))].map((value) => ({ value, label: value }))]} value={category} onSelect={setCategory} />
@@ -777,11 +795,6 @@ export function ShortlistContent({ navigation, params, onConsumeParams, embedded
             <Ionicons name="chevron-forward" size={17} color={colors.mutedForeground} />
           </TouchableOpacity>
 
-          {activeFilterCount > 0 ? (
-            <TouchableOpacity style={styles.clearFiltersButton} onPress={clearItemFilters}>
-              <Text style={styles.clearFiltersText}>Clear filters</Text>
-            </TouchableOpacity>
-          ) : null}
           <TouchableOpacity style={styles.doneButton} onPress={() => filterSheetRef.current?.dismiss()}>
             <Text style={styles.doneButtonText}>Show {filteredItems.length} piece{filteredItems.length === 1 ? '' : 's'}</Text>
           </TouchableOpacity>
@@ -844,8 +857,12 @@ const styles = StyleSheet.create({
   filterGroupLabel: { paddingTop: spacing.sm, ...typography.text.eyebrow, color: colors.mutedForeground },
   doneButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, backgroundColor: colors.primary },
   doneButtonText: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.primaryForeground, fontVariant: ['tabular-nums'] },
-  clearFiltersButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  clearFiltersText: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.action },
+  filterSheetHeader: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+  filterSheetTitle: { flex: 1 },
+  resetPill: { minHeight: 32, flexDirection: 'row', alignItems: 'center', gap: 5, paddingLeft: 10, paddingRight: 4, borderRadius: radii.full, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.surfaceSubtle },
+  resetPillText: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground },
+  resetPillCount: { minWidth: 22, height: 22, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, borderRadius: radii.full, backgroundColor: colors.primary },
+  resetPillCountText: { fontSize: 11, fontWeight: typography.weight.semibold, color: colors.primaryForeground, fontVariant: ['tabular-nums'] },
   storePickerButton: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, borderRadius: radii.md, backgroundColor: colors.surfaceSubtle },
   storePickerText: { flex: 1, fontSize: typography.text.bodySmall.fontSize, color: colors.foreground },
   selectionBar: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.background },

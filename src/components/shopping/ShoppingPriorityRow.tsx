@@ -11,6 +11,8 @@ import { shoppingGarmentTitle, legacyPriorityRationale } from '../../lib/shoppin
 import { shoppingFeedbackOptions, type ShoppingFeedbackReason } from '../../lib/shoppingFeedback';
 import { PressableScale } from '../primitives/PressableScale';
 import { WardrobeThumbnail } from './WardrobeThumbnail';
+import { ShoppingStyleSwatches } from './ShoppingStyleSwatches';
+import { useShoppingPriorityEdit } from '../../hooks/useShoppingPriorityEdit';
 import { colors, shoppingSurfaces, spacing, typography } from '../../theme';
 import type { ShoppingBriefPriority } from '../../lib/shopDecisionWorkspace';
 import type { Item } from '../../types/item';
@@ -25,6 +27,8 @@ type Props = {
   skipping?: boolean;
   isLast?: boolean;
   wardrobe?: ReadonlyMap<number, Item>;
+  /** When set, the row previews its guide's "styles to compare" instead of the owned anchor pieces. */
+  briefGeneratedAt?: string;
 };
 export function ShoppingPriorityRow({
   index,
@@ -35,7 +39,13 @@ export function ShoppingPriorityRow({
   skipping,
   isLast,
   wardrobe,
+  briefGeneratedAt,
 }: Props) {
+  // Same request the guide's Shop preview uses; the server caches the edit, so opening the guide reuses it.
+  const edit = useShoppingPriorityEdit(priority, {
+    origin: 'shopping_brief', briefGeneratedAt, purpose: 'preview', enabled: !!briefGeneratedAt && !compact,
+  });
+  const styleTargets = briefGeneratedAt ? edit.data?.targets ?? [] : [];
   const label = sentenceCase(priority.label);
   const narrative = shoppingPriorityGapNarrative(priority.label, priority.context ?? '', {
     impactScore: priority.impactScore,
@@ -47,7 +57,7 @@ export function ShoppingPriorityRow({
   const rationale = narrativeCopy.toLowerCase().startsWith(`${repeatedLabel} `)
     ? narrativeCopy.slice(repeatedLabel.length).trim()
     : narrativeCopy;
-  const anchors = priorityAnchorPieces(priority, wardrobe).slice(0, 3);
+  const anchors = briefGeneratedAt ? [] : priorityAnchorPieces(priority, wardrobe).slice(0, 3);
   const body = (
     <>
       <Text style={styles.numeral} accessibilityElementsHidden>
@@ -58,6 +68,16 @@ export function ShoppingPriorityRow({
         <Text style={styles.title}>{label}</Text>
         {!compact && rationale && !isGenericOutfitClaim(rationale) ? (
           <Text style={styles.copy}>{rationale}</Text>
+        ) : null}
+        {styleTargets.length ? (
+          <View style={styles.anchors}>
+            <Text style={styles.meta}>
+              {styleTargets.length > 1 ? `${styleTargets.length} styles to compare` : 'Style to consider'}
+            </Text>
+            <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+              <ShoppingStyleSwatches targets={styleTargets} wardrobe={wardrobe} />
+            </View>
+          </View>
         ) : null}
         {anchors.length ? (
           <View style={styles.anchors}>
@@ -89,6 +109,7 @@ export function ShoppingPriorityRow({
             label,
             rationale,
             anchors.length ? `With your ${anchors.map((item) => item.name).join(', ')}` : null,
+            styleTargets.length ? `Styles to compare: ${styleTargets.map((target) => target.title).join(', ')}` : null,
           ]
             .filter(Boolean)
             .join('. ')}

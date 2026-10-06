@@ -42,7 +42,8 @@ export function ShoppingStyleSwatches({ targets, budgets, wardrobe, onSelect }: 
   /** Per-target budget, present only where it differs from the guide's shared budget. */
   budgets?: Record<string, string | undefined>;
   wardrobe?: ReadonlyMap<number, Item>;
-  onSelect: (key: string) => void;
+  /** Omit for a read-only strip (e.g. inside a row that is itself the tap target). */
+  onSelect?: (key: string) => void;
 }) {
   const { fontScale } = useWindowDimensions();
   // Every title reserves two lines, so prices sit on one baseline across the row.
@@ -56,15 +57,18 @@ export function ShoppingStyleSwatches({ targets, budgets, wardrobe, onSelect }: 
     {targets.map((target, index) => {
       const price = offerPriceSpan(target) ?? budgets?.[target.key];
       const details = price ? [price] : [];
-      return <Pressable key={target.key} onPress={() => onSelect(target.key)}
-        accessibilityRole="button" accessibilityLabel={[target.title, versatileKey === target.key ? 'Most versatile' : null, ...details].filter(Boolean).join(', ')} accessibilityHint="Jumps to this style"
-        style={({ pressed }) => [styles.tile, { width: `${100 / columns}%` }, pressed && styles.pressed]}>
-        <View style={styles.inner}>
+      const inner = <View style={styles.inner}>
           <ShoppingStyleVisual plain fill target={target} />
           {versatileKey ? <Text style={styles.flag} accessibilityElementsHidden={versatileKey !== target.key}>{versatileKey === target.key ? 'Most versatile' : ' '}</Text> : null}
           <Text style={[styles.title, { minHeight: titleHeight }]} numberOfLines={2}>{target.title}</Text>
           {details.map(detail => <Text key={detail} style={styles.detail}>{detail}</Text>)}
-        </View>
+        </View>;
+      const width = `${100 / columns}%` as const;
+      if (!onSelect) return <View key={target.key} style={[styles.tile, { width }]}>{inner}</View>;
+      return <Pressable key={target.key} onPress={() => onSelect(target.key)}
+        accessibilityRole="button" accessibilityLabel={[target.title, versatileKey === target.key ? 'Most versatile' : null, ...details].filter(Boolean).join(', ')} accessibilityHint="Jumps to this style"
+        style={({ pressed }) => [styles.tile, { width }, pressed && styles.pressed]}>
+        {inner}
       </Pressable>;
     })}
   </View>;

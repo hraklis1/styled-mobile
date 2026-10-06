@@ -109,6 +109,7 @@ export function ShoppingBriefDetailScreen({ navigation, route }: ShoppingBriefDe
                     index={index + 1}
                     priority={priority}
                     wardrobe={wardrobe}
+                    briefGeneratedAt={data.generatedAt}
                     isLast={index === data.priorities.length - 1}
                     onPress={() => {
                       track('shopping_brief_priority_opened', {
