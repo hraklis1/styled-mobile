@@ -144,9 +144,9 @@ test('a suggested follow-up is dispatched exactly once with actual guide context
 test.each([1, 3])('a guide with %i styles uses chapter contents only when useful', async count => {
   mockData = fixture(count);
   await render();
-  const contents = renderer.root.findAllByType(require('../../../components/shopping/ShoppingChapterContents').ShoppingChapterContents);
+  const contents = renderer.root.findAllByType(require('../../../components/shopping/ShoppingStyleSwatches').ShoppingStyleSwatches);
   expect(contents).toHaveLength(count > 1 ? 1 : 0);
-  if (count > 1) expect(contents[0].props.entries.map((entry: any) => entry.key)).toEqual(mockData.targets.map(target => target.key));
+  if (count > 1) expect(contents[0].props.targets.map((target: any) => target.key)).toEqual(mockData.targets.map(target => target.key));
   expect(cards().every(card => card.props.editorial)).toBe(true);
   const scroll = renderer.root.findByType(require('react-native').ScrollView);
   expect(scroll.props.contentInsetAdjustmentBehavior).toBe('never');
@@ -158,7 +158,22 @@ test('contents tracks refreshed targets instead of linking to removed chapters',
   await render();
   mockData = { ...mockData, targets: mockData.targets.slice(1) };
   await act(async () => renderer.update(<ShoppingPriorityEditScreen {...(props as any)} />));
-  const contents = renderer.root.findByType(require('../../../components/shopping/ShoppingChapterContents').ShoppingChapterContents);
-  expect(contents.props.entries.map((entry: any) => entry.key)).toEqual(['1', '2']);
+  const contents = renderer.root.findByType(require('../../../components/shopping/ShoppingStyleSwatches').ShoppingStyleSwatches);
+  expect(contents.props.targets.map((target: any) => target.key)).toEqual(['1', '2']);
   expect(cards()).toHaveLength(2);
+});
+
+test('style tabs appear once the comparison scrolls away and follow the current chapter', async () => {
+  mockData = fixture(3);
+  await render();
+  const { ScrollView } = require('react-native');
+  const scroll = () => renderer.root.findAllByType(ScrollView).find(node => !node.props.horizontal)!;
+  const contents = renderer.root.findAll(node => typeof node.type === 'string' && typeof node.props.onLayout === 'function');
+  act(() => contents.forEach(node => node.props.onLayout({ nativeEvent: { layout: { x: 0, y: 0, width: 300, height: 200 } } })));
+  expect(renderer.root.findAllByProps({ accessibilityRole: 'tab' })).toHaveLength(0);
+  act(() => scroll().props.onScroll({ nativeEvent: { contentOffset: { y: 400 } } }));
+  const tabs = renderer.root.findAll(node => node.props.accessibilityRole === 'tab' && typeof node.type !== 'string' && node.props.onPress);
+  expect(tabs.map(tab => tab.props.accessibilityLabel)).toEqual(['Charcoal wool', 'Deep navy', 'Deep navy']);
+  act(() => scroll().props.onScroll({ nativeEvent: { contentOffset: { y: 0 } } }));
+  expect(renderer.root.findAllByProps({ accessibilityRole: 'tab' })).toHaveLength(0);
 });

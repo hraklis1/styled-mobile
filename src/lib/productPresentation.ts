@@ -15,6 +15,20 @@ export function productDisplayTitle(offer: Pick<ProductOffer, 'title' | 'brand'>
   return remainder.replace(/^[\s:–—-]+/, '') || offer.title;
 }
 
+/**
+ * A shorter title for an editorial product card. The detail view keeps the
+ * full `productDisplayTitle` (sizes and all); a card only needs to name the
+ * piece, so a leading gender department and a trailing size token go.
+ */
+export function productCardTitle(offer: Pick<ProductOffer, 'title' | 'brand'>): string {
+  const full = productDisplayTitle(offer);
+  const cleaned = full
+    .replace(/^(?:wo)?men(?:'s|s)?(?=\s|$)\s*/i, '')
+    .replace(/\s+(size\s+\S+|w\d{2}\s*l\d{2}|\d{2}[slr]|xx?[sl]|[sml])$/i, '')
+    .trim();
+  return cleaned ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : full;
+}
+
 export function productListingAction(offer: ProductOffer): string {
   try {
     if (/(^|\.)google\.[a-z.]+$/.test(new URL(offer.url).hostname)) return 'View listing';

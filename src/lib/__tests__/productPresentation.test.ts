@@ -1,4 +1,4 @@
-import { productDisplayTitle, productMerchantLabel, productListingAction } from '../productPresentation';
+import { productCardTitle, productDisplayTitle, productMerchantLabel, productListingAction } from '../productPresentation';
 import type { ProductOffer } from '../../types/commerce';
 test.each([['muji.ca', 'muji'], ['www.example.com', 'example'], ['https://www.example.co.uk/', 'example'], ['Marks & Spencer - Canada', 'Marks & Spencer - Canada'], ['Studio.xyz', 'Studio.xyz']])('merchant %s becomes %s conservatively', (input, output) => expect(productMerchantLabel(input)).toBe(output));
 test('only exact leading brand repetition is removed without losing garment attributes', () => {
@@ -18,4 +18,12 @@ test('leading brand cleanup is case-insensitive and preserves sizes and model in
   expect(productDisplayTitle({ brand: 'Polo Ralph Lauren', title: 'POLO RALPH LAUREN — Masters Court leather sneaker size 10' })).toBe('Masters Court leather sneaker size 10');
   expect(productDisplayTitle({ brand: 'COS', title: 'cosmic wool trousers 31L' })).toBe('cosmic wool trousers 31L');
   expect(productDisplayTitle({ brand: 'Next', title: 'Mens Next Green Tailored Fit Twill Suit Trousers 31L' })).toBe('Mens Next Green Tailored Fit Twill Suit Trousers 31L');
+});
+
+test('card titles drop gender departments and trailing sizes but never empty a title', () => {
+  expect(productCardTitle({ brand: 'Next', title: 'Mens Next Green Tailored Fit Twill Suit Trousers 31L' })).toBe('Next Green Tailored Fit Twill Suit Trousers');
+  expect(productCardTitle({ brand: null, title: "Women's wool coat size M" })).toBe('Wool coat');
+  expect(productCardTitle({ brand: null, title: 'Chino W32 L30' })).toBe('Chino');
+  expect(productCardTitle({ brand: null, title: 'Men' })).toBe('Men');
+  expect(productCardTitle({ brand: null, title: 'Mensa graphic tee' })).toBe('Mensa graphic tee');
 });

@@ -105,6 +105,10 @@ export const spacing = {
   control: 20,
   gridRow: 24,
   section: 32,
+  /** Between two groups inside one editorial chapter (Why → Wear it → Shop it). */
+  subsection: 32,
+  /** Between two editorial chapters: twice a subsection, so a new idea reads as new. */
+  chapter: 64,
 } as const;
 
 const weight = {
@@ -225,6 +229,21 @@ export const typography = {
       fontSize: 44,
       lineHeight: 48,
       fontVariant: ['tabular-nums'] as TextStyle['fontVariant'],
+    },
+    /** The large serif number that opens an editorial chapter ("01"). */
+    chapterNumeral: {
+      fontFamily: editorialFamily.editorialRegular,
+      fontSize: 32,
+      lineHeight: 36,
+      fontVariant: ['tabular-nums'] as TextStyle['fontVariant'],
+    },
+    /**
+     * A sub-section label inside an editorial chapter ("What to look for").
+     * Sits between the serif chapter title and content labels; tracked wide
+     * so it reads as structure, never as content.
+     */
+    sectionKicker: {
+      fontSize: 11, lineHeight: 14, fontWeight: weight.medium, letterSpacing: 1.6, textTransform: 'uppercase' as const,
     },
     /** Sequence numerals in a rail ("01", "02") beside editorial titles. */
     editorialNumeral: {
@@ -502,6 +521,8 @@ export const shoppingSurfaces = {
   bone: colors.surfaceSubtle,
   espresso: colors.primary,
   secondaryInk: colors.mutedForeground,
+  // Olive is the action/navigation colour on shopping surfaces (links,
+  // jump arrows, save); content stays in ink.
   olive: { accent: '#586047', wash: '#EEF0E7' },
   stone: { accent: '#716E65', wash: '#F0EEE8' },
   charcoal: { accent: '#454A47', wash: '#ECEEEB' },

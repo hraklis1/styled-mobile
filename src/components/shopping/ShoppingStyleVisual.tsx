@@ -25,16 +25,21 @@ function silhouette(category: string) {
   if (/top|shirt|jacket|coat|outer|blazer|knit|sweater|tee/i.test(category)) return silhouettes.top;
   return null;
 }
-export function ShoppingStyleVisual({ target }: { target: ShoppingPriorityTarget }) {
+/**
+ * `plain` sets the piece on white, matching retailer photography, instead of
+ * the bone plate. `fill` crops a photo to the frame so a retailer's own
+ * backdrop never leaves bands — for large frames where the piece is the hero.
+ */
+export function ShoppingStyleVisual({ target, plain = false, fill = false }: { target: ShoppingPriorityTarget; plain?: boolean; fill?: boolean }) {
   const uri = target.offers?.find((offer) => offer.imageUrl)?.imageUrl ?? target.imageUrl;
   const [failed, setFailed] = useState(false);
   const reduceMotion = useReducedMotion();
   useEffect(() => setFailed(false), [uri]);
-  const path = silhouette(target.category);
-  const color = getSwatchColor(target.color).primary;
+  const path = silhouette(target.category ?? '');
+  const color = getSwatchColor(target.color ?? '').primary;
   return (
     <View
-      style={styles.frame}
+      style={[styles.frame, plain && styles.plain]}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
@@ -42,7 +47,7 @@ export function ShoppingStyleVisual({ target }: { target: ShoppingPriorityTarget
         <Image
           source={{ uri }}
           style={StyleSheet.absoluteFill}
-          contentFit="contain"
+          contentFit={fill ? 'cover' : 'contain'}
           cachePolicy="memory"
           transition={reduceMotion ? 0 : 150}
           onError={() => setFailed(true)}
@@ -70,6 +75,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.photo,
     overflow: 'hidden',
   },
+  plain: { backgroundColor: colors.surfaceElevated },
   plate: { padding: 8, alignItems: 'center', gap: 8 },
   swatch: { width: 28, height: 36, borderRadius: 2 },
   caption: { ...typography.text.caption, color: colors.inkSubtle, textAlign: 'center' },

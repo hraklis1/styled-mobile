@@ -98,9 +98,8 @@ it('opens the exact overview priority with its recommendation and brief context'
   mockEntries = [];
   render(ShopOverviewScreen);
   const priority = mockBrief.priorities[0];
-  act(() => button('View shopping guide: Leather sneakers').props.onPress());
+  act(() => button('Leather sneakers. Start here').props.onPress());
   expect(navigation.navigate).toHaveBeenCalledWith('ShoppingPriorityEdit', { priority, origin: 'shopping_brief', briefGeneratedAt: mockBrief.generatedAt });
-  expect(nodes('Pressable').some(node => node.findAllByType(require('react-native').Text).some(child => child.props.children === 'Read your shopping brief →'))).toBe(true);
 });
 
 it('keeps starter suggestions behind the existing add-wardrobe action', () => {

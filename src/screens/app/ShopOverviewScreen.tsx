@@ -4,7 +4,6 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Ionicons } from '@expo/vector-icons';
-import { useShoppingChapters } from '../../components/shopping/ShoppingChapterContents';
 import { ShortlistContent } from './ShoppingGalleryScreen';
 import { ShopWardrobeEdit } from '../../components/shopping/ShopWardrobeEdit';
 import { ShoppingBriefCard, briefIssueLabel } from '../../components/shopping/ShoppingBriefCard';
@@ -43,7 +42,6 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
   const [shortlistMounted, setShortlistMounted] = useState(view === 'shortlist');
   const [compact, setCompact] = useState(false);
   const headerModes = useRef<Record<ShopView, boolean>>({ 'for-you': false, shortlist: false });
-  const chapterNav = useShoppingChapters(brief.data?.generatedAt ?? '');
   const updateHeader = useCallback((offset: number, pane: ShopView) => {
     const current = headerModes.current[pane];
     const next = offset > 80 ? true : offset < 40 ? false : current;
@@ -108,7 +106,6 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
   }, [brief, isPremium, refetchItems, refetchSnaps]);
 
   const [saveFindCoachVisible, setSaveFindCoachVisible] = useState(false);
-  const [scrollOffset, setScrollOffset] = useState(0);
 
   useEffect(() => {
     const userId = user?.id;
@@ -177,13 +174,11 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
       </ScrollView>
       <View style={[styles.pane, view !== 'for-you' && styles.hidden]} accessibilityElementsHidden={view !== 'for-you'} importantForAccessibility={view !== 'for-you' ? 'no-hide-descendants' : 'auto'}>
         <ScrollView
-          ref={chapterNav.scroll}
           contentInsetAdjustmentBehavior="never"
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} tintColor={colors.primary} />}
           contentContainerStyle={[styles.content, { paddingBottom: spacing.xxxl + insets.bottom }]}
           onScroll={event => {
-            setScrollOffset(event.nativeEvent.contentOffset.y);
             updateMenuScroll(event);
           }}
           scrollEventThrottle={100}
@@ -193,25 +188,25 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
             inside the panel — which put its label 16pt in from the gutter every
             other section label sits on, at a different size and colour. The
             issue line takes the header's `trailing` slot. */}
-        <View ref={chapterNav.content} collapsable={false} style={{ paddingLeft: insets.left, paddingRight: insets.right }}><EditorialSection
+        <View style={{ paddingLeft: insets.left, paddingRight: insets.right }}>
+        {/* The ready edit opens with its own date line and serif lede, so the
+            department heading would only stack a third title above it. */}
+        {isPremium && brief.data?.status === 'ready' ? <View style={[styles.section, styles.editSection]}>
+          <ShopWardrobeEdit
+            brief={brief.data}
+            onGuide={(priority) => {
+              track('shopping_brief_priority_opened', { category: priority.category, reason: priority.reason, rank: priority.priority });
+              navigation.navigate('ShoppingPriorityEdit', shoppingPriorityRoute(priority, brief.data!.generatedAt));
+            }}
+          />
+          {brief.isError && brief.data ? <AppText variant="caption" tone="muted">Your saved edit is here. We couldn’t refresh it just now.</AppText> : null}
+        </View> : <EditorialSection
           headingStyle="editorial"
           style={styles.section}
           title="For your wardrobe"
           trailing={<AppText variant="caption" tone="muted">{briefIssueLabel(brief.data)}</AppText>}
         >
-          {isPremium && brief.data?.status === 'ready' ? <ShopWardrobeEdit
-            brief={brief.data}
-            scrollOffset={scrollOffset}
-            onJump={chapterNav.jump}
-            registerChapter={(key, node) => { if (node) chapterNav.chapters.current.set(key, node); else chapterNav.chapters.current.delete(key); }}
-            registerHeading={(key, node) => { if (node) chapterNav.headings.current.set(key, node); else chapterNav.headings.current.delete(key); }}
-            wardrobe={wardrobe}
-            onGuide={(priority) => {
-              track('shopping_brief_priority_opened', { category: priority.category, reason: priority.reason, rank: priority.priority });
-              navigation.navigate('ShoppingPriorityEdit', shoppingPriorityRoute(priority, brief.data!.generatedAt));
-            }}
-            onBrief={() => navigation.navigate('ShoppingBriefDetail')}
-          /> : <View style={styles.briefPanel}>
+          <View style={styles.briefPanel}>
               <ShoppingBriefCard
                 isPremium={isPremium}
                 brief={brief.data}
@@ -233,9 +228,9 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
                 )}
                 onRetry={() => void brief.refetch()}
               />
-          </View>}
+          </View>
           {brief.isError && brief.data ? <AppText variant="caption" tone="muted">Your saved edit is here. We couldn’t refresh it just now.</AppText> : null}
-        </EditorialSection></View>
+        </EditorialSection>}</View>
 
         </ScrollView>
       </View>
@@ -270,6 +265,7 @@ const styles = StyleSheet.create({
     backgroundColor: shoppingSurfaces.bone,
   },
   section: { paddingHorizontal: spacing.page },
+  editSection: { paddingTop: spacing.sm, gap: spacing.md },
   pane: { flex: 1 },
   hidden: { display: 'none' },
   viewSwitch: { flexGrow: 0, flexShrink: 0 },

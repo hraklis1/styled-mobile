@@ -239,6 +239,16 @@ export function shoppingPriorityEditDisplayHeadline(headline: string, priorityLa
  * not guaranteed to match any shape, so anything unrecognised passes through
  * untouched.
  */
+/** What to check for when shopping a target: its own notes, else colour/material/shape. */
+export function targetShoppingNotes(target: ShoppingPriorityTarget): string[] {
+  const notes = target.shoppingNotes?.length ? target.shoppingNotes : [
+    target.color && `Colour: ${humanizeInlineTokens(target.color)}`,
+    target.material && `Material: ${humanizeInlineTokens(target.material)}`,
+    target.silhouette && `Shape: ${humanizeInlineTokens(target.silhouette)}`,
+  ].filter((note): note is string => !!note);
+  return notes.map(note => humanizeInlineTokens(note));
+}
+
 export function splitPriceRange(priceRange: string): { compact: string; currency: string | null } {
   const normalized = normalizeEditorialCopy(priceRange);
   if (!normalized) return { compact: normalized, currency: null };
