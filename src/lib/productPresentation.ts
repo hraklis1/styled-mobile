@@ -9,7 +9,7 @@ export function productMerchantLabel(merchant: string): string {
 
 export function productDisplayTitle(offer: Pick<ProductOffer, 'title' | 'brand'>): string {
   const brand = offer.brand?.trim();
-  if (!brand || !offer.title.startsWith(brand)) return offer.title;
+  if (!brand || !offer.title.toLowerCase().startsWith(brand.toLowerCase())) return offer.title;
   const remainder = offer.title.slice(brand.length);
   if (!/^[\s:–—-]/.test(remainder)) return offer.title;
   return remainder.replace(/^[\s:–—-]+/, '') || offer.title;

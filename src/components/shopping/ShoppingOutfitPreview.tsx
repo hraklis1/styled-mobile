@@ -12,10 +12,12 @@ export function ShoppingOutfitPreview({
   look,
   target,
   wardrobe,
+  editorial = false,
 }: {
   look: ShoppingPriorityOutfitIdea;
   target: ShoppingPriorityTarget;
   wardrobe: ReadonlyMap<number, Item>;
+  editorial?: boolean;
 }) {
   const pieces = [...new Set(look.itemIds)]
     .map((id) => wardrobe.get(id))
@@ -23,7 +25,7 @@ export function ShoppingOutfitPreview({
   if (!pieces.length) return null;
   const complete = !!look.label && pieces.length === look.itemIds.length && pieces.length >= 2;
   return (
-    <View style={styles.look}>
+    <View style={[styles.look, editorial && styles.editorialLook]}>
       <View
         style={styles.headingRow}
         accessible
@@ -31,39 +33,42 @@ export function ShoppingOutfitPreview({
         accessibilityLabel={`${complete ? look.label : 'Pair it with'}. With ${target.title}, the recommended piece to add.`}
       >
         <Text style={styles.heading}>{complete ? look.label : 'Pair it with'}</Text>
-        <View style={styles.dot} />
-        <Text style={styles.withNew} numberOfLines={1}>
+        {!editorial ? <View style={styles.dot} /> : null}
+        {!editorial ? <Text style={styles.withNew} numberOfLines={1}>
           with this piece
-        </Text>
+        </Text> : null}
       </View>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.strip}
       >
-        {pieces.length < 2 ? (
+        {editorial || pieces.length < 2 ? (
           <View
-            style={styles.tile}
+            style={[styles.tile, editorial && styles.editorialTile]}
             accessible
             accessibilityLabel={`${target.title}. Recommended piece to add.`}
           >
+            {editorial ? <Text style={styles.caption}>To add</Text> : null}
             <View style={styles.proposed}>
               <ShoppingStyleVisual target={target} />
             </View>
-            <Text style={styles.toAdd} numberOfLines={1}>
-              To add
+            {editorial ? <Text style={styles.caption} numberOfLines={2}>{target.title}</Text> : null}
+            <Text style={styles.toAdd} numberOfLines={editorial ? undefined : 1}>
+              {editorial ? 'Suggested addition' : 'To add'}
             </Text>
           </View>
         ) : null}
         {pieces.map((item) => (
           <View
             key={item.id}
-            style={styles.tile}
+            style={[styles.tile, editorial && styles.editorialTile]}
             accessible
             accessibilityLabel={`${item.name}. In your wardrobe.`}
           >
+            {editorial ? <Text style={styles.caption}>Owned</Text> : null}
             <WardrobeThumbnail item={item} style={styles.owned} />
-            <Text style={styles.caption} numberOfLines={1}>
+            <Text style={styles.caption} numberOfLines={editorial ? 2 : 1}>
               {item.name}
             </Text>
           </View>
@@ -74,6 +79,8 @@ export function ShoppingOutfitPreview({
 }
 const styles = StyleSheet.create({
   look: { gap: spacing.md },
+  editorialLook: { backgroundColor: colors.surfaceSubtle, padding: spacing.lg },
+  editorialTile: { width: 88 },
   headingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   heading: { ...typography.text.label, color: colors.foreground },
   dot: {

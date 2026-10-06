@@ -98,9 +98,9 @@ it('opens the exact overview priority with its recommendation and brief context'
   mockEntries = [];
   render(ShopOverviewScreen);
   const priority = mockBrief.priorities[0];
-  act(() => button('View styling guide: Leather sneakers').props.onPress());
+  act(() => button('View shopping guide: Leather sneakers').props.onPress());
   expect(navigation.navigate).toHaveBeenCalledWith('ShoppingPriorityEdit', { priority, origin: 'shopping_brief', briefGeneratedAt: mockBrief.generatedAt });
-  expect(nodes('Pressable').some(node => node.findAllByType(require('react-native').Text).some(child => child.props.children === 'Read your brief →'))).toBe(true);
+  expect(nodes('Pressable').some(node => node.findAllByType(require('react-native').Text).some(child => child.props.children === 'Read your shopping brief →'))).toBe(true);
 });
 
 it('keeps starter suggestions behind the existing add-wardrobe action', () => {
@@ -237,38 +237,29 @@ it('gives shortlist its own Shop view with one masthead and preserves filters', 
   mockSnaps.length = 0;
 });
 
-it('collapses the Shop menu on downward scrolling and restores it on an upward gesture', () => {
+it('compacts the Shop header with hysteresis while keeping tabs visible and pane offsets intact', () => {
   render(ShopOverviewScreen);
   const event = (y: number) => ({ nativeEvent: { contentOffset: { y }, contentSize: { height: 2000 }, layoutMeasurement: { height: 600 } } });
   const menu = () => renderer.root.findAllByType(ScrollView).find(node => node.props.horizontal)!;
   const content = () => renderer.root.findAllByType(ScrollView).find(node => !node.props.horizontal)!;
-  const hidden = () => StyleSheet.flatten(menu().props.style).display === 'none';
-  expect(hidden()).toBe(false);
-  act(() => content().props.onScrollBeginDrag(event(0)));
-  act(() => content().props.onScroll(event(10)));
-  expect(hidden()).toBe(false);
-  act(() => content().props.onScroll(event(40)));
-  expect(hidden()).toBe(true);
-  expect(menu().props.accessibilityElementsHidden).toBe(true);
-  // A layout-induced offset change after collapse must not reopen the menu.
-  act(() => content().props.onScroll(event(15)));
-  expect(hidden()).toBe(true);
-  act(() => content().props.onScrollBeginDrag(event(120)));
-  act(() => content().props.onScroll(event(95)));
-  expect(hidden()).toBe(false);
-  expect(nodes('SegmentedControl')[0].props.value).toBe('for-you');
-
+  const visible = () => expect(StyleSheet.flatten(menu().props.style).display).not.toBe('none');
+  act(() => content().props.onScroll(event(81)));
+  expect(nodes('ScreenHeader')).toHaveLength(0);
+  visible();
+  act(() => content().props.onScroll(event(60)));
+  expect(nodes('ScreenHeader')).toHaveLength(0);
+  act(() => content().props.onScroll(event(39)));
+  expect(nodes('ScreenHeader')).toHaveLength(1);
+  act(() => content().props.onScroll(event(120)));
   act(() => nodes('SegmentedControl')[0].props.onChange('shortlist'));
+  expect(nodes('ScreenHeader')).toHaveLength(1);
   const list = () => renderer.root.findAllByType(FlatList)[0];
-  act(() => list().props.onScrollBeginDrag(event(0)));
-  act(() => list().props.onScroll(event(40)));
-  expect(hidden()).toBe(true);
-  act(() => list().props.onScrollBeginDrag(event(40)));
-  act(() => list().props.onScroll(event(-10)));
-  expect(hidden()).toBe(true);
-  act(() => list().props.onScroll(event(0)));
-  expect(hidden()).toBe(false);
-  expect(nodes('SegmentedControl')[0].props.value).toBe('shortlist');
+  act(() => list().props.onScroll(event(100)));
+  expect(nodes('ScreenHeader')).toHaveLength(0);
+  visible();
+  act(() => nodes('SegmentedControl')[0].props.onChange('for-you'));
+  expect(nodes('ScreenHeader')).toHaveLength(0);
+  expect(nodes('SegmentedControl')[0].props.value).toBe('for-you');
 });
 
 it('maps legacy Shop sections and honors a return destination', () => {

@@ -1,3 +1,4 @@
+jest.mock('react-native-reanimated', () => ({ useReducedMotion: () => true }));
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { Pressable, Text } from 'react-native';
@@ -32,7 +33,7 @@ test('shows every priority in rank order and defers previews until near the view
   expect(calls.filter(call => call[0] === first).at(-1)[1].enabled).toBe(true);
   expect(calls.filter(call => call[0] === second).at(-1)[1].enabled).toBe(false);
   const headings = renderer.root.findAllByType(Text).filter(node => node.props.accessibilityRole === 'header');
-  expect(headings.map(node => node.props.children)).toEqual(['Leather shoes', 'Trousers']);
+  expect(headings.map(node => node.props.children)).toEqual(['Two additions to consider', 'Leather shoes', 'Trousers']);
   secondY = 100;
   act(() => renderer.update(<ShopWardrobeEdit brief={brief} wardrobe={wardrobe} onGuide={() => {}} onBrief={() => {}} scrollOffset={900} />));
   expect(mockEdit.mock.calls.filter(call => call[0] === second).at(-1)[1].enabled).toBe(true);
@@ -69,4 +70,28 @@ test('uses a target outfit before priority anchors and keeps full reasoning visi
   expect(renderer.root.findAllByType('ShoppingOutfitPreview' as any)).toHaveLength(1);
   const reason = renderer.root.findAllByType(Text).find(node => node.props.children === target.rationale)!;
   expect(reason.props.numberOfLines).toBeUndefined();
+});
+
+test('overview is count-aware and chapter selection does not open the guide', () => {
+  const onGuide = jest.fn(), onJump = jest.fn(), onBrief = jest.fn();
+  act(() => { renderer = TestRenderer.create(<ShopWardrobeEdit brief={brief} wardrobe={wardrobe} onGuide={onGuide} onBrief={onBrief} onJump={onJump} />); });
+  expect(JSON.stringify(renderer.toJSON())).toContain('Two additions to consider');
+  expect(JSON.stringify(renderer.toJSON())).not.toContain(brief.summary);
+  act(() => renderer.root.findAllByType(Pressable).find(node => node.props.accessibilityHint === 'Jumps to this chapter')!.props.onPress());
+  expect(onJump).toHaveBeenCalledWith('shoes');
+  expect(onGuide).not.toHaveBeenCalled();
+});
+
+test('pending dismissal removes its chapter and contents immediately; undo restores both', () => {
+  render();
+  mockPending = [{ id: 'hidden', localDate: brief.localDate!, label: first.label, submitting: false, recommendationKey: 'shoes' } as any];
+  mockEdit.mockClear();
+  update(brief);
+  expect(JSON.stringify(renderer.toJSON())).toContain('One addition to consider');
+  expect(renderer.root.findAllByProps({ testID: 'shop-addition-shoes' })).toHaveLength(0);
+  expect(mockEdit.mock.calls.every(call => call[0] === second)).toBe(true);
+  mockPending = [];
+  update(brief);
+  expect(JSON.stringify(renderer.toJSON())).toContain('Two additions to consider');
+  expect(renderer.root.findAllByProps({ testID: 'shop-addition-shoes' }).length).toBeGreaterThan(0);
 });

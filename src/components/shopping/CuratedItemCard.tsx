@@ -9,24 +9,24 @@ import { offerImageCachePolicy, type ProductOffer } from '../../types/commerce';
 
 import { productDisplayTitle, productMerchantLabel } from '../../lib/productPresentation';
 
-export function ProductImage({ offer }: { offer: ProductOffer }) {
+export function ProductImage({ offer, editorial = false }: { offer: ProductOffer; editorial?: boolean }) {
   const [failed, setFailed] = useState(false);
   const reduceMotion = useReducedMotion();
   useEffect(() => setFailed(false), [offer.imageUrl]);
-  return <View style={styles.image}>
-    {offer.imageUrl && !failed ? <Image source={{ uri: offer.imageUrl }} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy={offerImageCachePolicy(offer)} transition={reduceMotion ? 0 : 150} onError={() => setFailed(true)} accessible={false} /> : <View style={styles.fallback} accessibilityElementsHidden><Svg width={64} height={80} viewBox="0 0 100 120"><Path d="M33 18L16 28L6 53L24 60L29 45V105H71V45L76 60L94 53L84 28L67 18Q50 34 33 18Z" fill={colors.hairline} stroke={colors.controlOutline} /></Svg></View>}
+  return <View style={[styles.image, editorial && styles.editorialImage]}>
+    {offer.imageUrl && !failed ? <Image source={{ uri: offer.imageUrl }} style={editorial ? styles.insetImage : StyleSheet.absoluteFill} contentFit="contain" cachePolicy={offerImageCachePolicy(offer)} transition={reduceMotion ? 0 : 150} onError={() => setFailed(true)} accessible={false} /> : <View style={styles.fallback} accessibilityElementsHidden><Svg width={64} height={80} viewBox="0 0 100 120"><Path d="M33 18L16 28L6 53L24 60L29 45V105H71V45L76 60L94 53L84 28L67 18Q50 34 33 18Z" fill={colors.hairline} stroke={colors.controlOutline} /></Svg></View>}
   </View>;
 }
 
-export function CuratedItemCard({ offer, saved = false, saving = false, saveFailed = false, onSave, onOpen, width = curatedProducts.minWidth }: {
-  offer: ProductOffer; saved?: boolean; saving?: boolean; saveFailed?: boolean; onSave?: () => void; onOpen: () => void; width?: number;
+export function CuratedItemCard({ offer, editorial = false, saved = false, saving = false, saveFailed = false, onSave, onOpen, width = curatedProducts.minWidth }: {
+  offer: ProductOffer; editorial?: boolean; saved?: boolean; saving?: boolean; saveFailed?: boolean; onSave?: () => void; onOpen: () => void; width?: number;
 }) {
   return <View style={[styles.card, { width }]}>
     <Pressable onPress={onOpen} accessibilityRole="button" accessibilityLabel={`${offer.title}, ${offer.merchant}, ${offer.formattedPrice || 'see price'}. View product`} style={({ pressed }) => [styles.open, pressed && styles.pressed]}>
-      <ProductImage offer={offer} />
+      <ProductImage offer={offer} editorial={editorial} />
       <View style={styles.copy}>
         {offer.brand ? <Text style={styles.brand}>{offer.brand}</Text> : null}
-        <Text style={styles.title}>{productDisplayTitle(offer)}</Text>
+        <Text style={[styles.title, editorial && styles.editorialTitle]}>{productDisplayTitle(offer)}</Text>
         <Text style={styles.price}>{offer.formattedPrice || 'See price'}</Text>
         {offer.inStock === false ? <Text style={styles.metadata}>Unavailable</Text> : null}
         <Text style={styles.metadata}>{productMerchantLabel(offer.merchant)}</Text>
@@ -39,6 +39,9 @@ export function CuratedItemCard({ offer, saved = false, saving = false, saveFail
   </View>;
 }
 const styles = StyleSheet.create({
+  editorialImage: { aspectRatio: 0.8 },
+  insetImage: { position: 'absolute', top: 12, bottom: 12, left: 12, right: 12 },
+  editorialTitle: { ...typography.text.cardTitle },
   card: { alignSelf: 'flex-start' },
   open: {}, pressed: { backgroundColor: colors.surfaceSelected },
   image: { aspectRatio: curatedProducts.imageAspectRatio, backgroundColor: curatedProducts.background, borderRadius: radii.photo, overflow: 'hidden' },

@@ -7,8 +7,8 @@ import { colors, curatedProducts, spacing, typography } from '../../theme';
 import type { OfferContext, OfferStatus, ProductOffer } from '../../types/commerce';
 import { productDisclosure, productKey } from '../../lib/productPresentation';
 
-export function CuratedProductBrowser({ visible, title, reason, offers, status, context, onRetry, onClose, renderCard, error, detail, onCloseDetail }: {
-  visible: boolean; title: string; reason?: string; offers: ProductOffer[]; status: OfferStatus;
+export function CuratedProductBrowser({ editorial = false, visible, title, reason, offers, status, context, onRetry, onClose, renderCard, error, detail, onCloseDetail }: {
+  editorial?: boolean; visible: boolean; title: string; reason?: string; offers: ProductOffer[]; status: OfferStatus;
   context: OfferContext; onRetry?: () => void; onClose: () => void;
   renderCard: (offer: ProductOffer, width: number) => ReactNode; error?: string | null;
   detail?: ReactNode;
@@ -28,7 +28,7 @@ export function CuratedProductBrowser({ visible, title, reason, offers, status, 
       </View>
       <ScrollView accessibilityElementsHidden={!!detail} importantForAccessibility={detail ? 'no-hide-descendants' : 'auto'} contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]} showsVerticalScrollIndicator={false}>
         <Text style={styles.title} accessibilityRole="header">{title}</Text>
-        {reason ? <Text style={styles.reason}>{reason}</Text> : null}
+        {reason ? <Text style={[styles.reason, editorial && styles.editorialReason]}>{reason}</Text> : null}
         <Text style={styles.count}>{offers.length} {offers.length === 1 ? 'piece' : 'pieces'} to consider</Text>
         {error ? <Text style={styles.copy} accessibilityRole="alert">{error}</Text> : null}
         {offers.some(offer => offer.monetized) ? <Text style={styles.copy}>{productDisclosure}</Text> : null}
@@ -41,6 +41,7 @@ export function CuratedProductBrowser({ visible, title, reason, offers, status, 
   </Modal>;
 }
 const styles = StyleSheet.create({
+  editorialReason: { ...typography.text.body },
   root: { flex: 1, backgroundColor: colors.background },
   header: { paddingHorizontal: spacing.page, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   eyebrow: { ...typography.text.masthead, color: colors.accentInk, flexShrink: 1 },

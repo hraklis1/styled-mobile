@@ -44,3 +44,10 @@ test('saved bookmark remains enabled with an unsave label', () => {
   expect(button.props.accessibilityLabel).toBe(`Remove from wishlist: ${offer.title}`);
   expect(button.props.accessibilityState.selected).toBe(true);
 });
+
+test('editorial cards inset supplier images without changing cache policy or cropping', () => {
+  act(() => { renderer = TestRenderer.create(<CuratedItemCard editorial offer={offer} onOpen={() => {}} />); });
+  const image = renderer.root.findByType('Image' as any);
+  expect(image.props).toMatchObject({ contentFit: 'contain', cachePolicy: 'memory' });
+  expect(StyleSheet.flatten(image.props.style)).toMatchObject({ top: 12, bottom: 12, left: 12, right: 12 });
+});

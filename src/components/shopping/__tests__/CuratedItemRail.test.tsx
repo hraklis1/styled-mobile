@@ -148,3 +148,13 @@ test('offers a link to the exact independently saved product', async () => {
   act(() => view.props.onPress());
   expect(mockViewWishlist).toHaveBeenCalledWith('saved-product');
 });
+
+test('editorial collection counts eligible options and carries its presentation into the browser', () => {
+  render({ editorial: true, offers: [{ ...offers[0], inStock: false }, ...offers.slice(1)] });
+  expect(text()).toContain('Browse all 5 options');
+  expect(renderer.root.findAllByType(CuratedItemCard).every(card => card.props.editorial)).toBe(true);
+  expect(renderer.root.findAllByType(CuratedItemCard)[0].props.width).toBeLessThanOrEqual(240);
+  act(() => renderer.root.findAllByType(Pressable).find(node => node.findAllByType(Text).some(child => child.props.children === 'Browse all 5 options'))!.props.onPress());
+  expect(renderer.root.findByType(CuratedProductBrowser).props.editorial).toBe(true);
+  expect(renderer.root.findByType(CuratedProductBrowser).props.offers).toHaveLength(5);
+});

@@ -13,3 +13,9 @@ test('direct retailer and Google listing actions remain distinct', () => {
   expect(productListingAction({ ...offer, url: 'https://www.google.ca/shopping/item' })).toBe('View listing');
   expect(productListingAction({ ...offer, url: 'broken' })).toBe('View listing');
 });
+
+test('leading brand cleanup is case-insensitive and preserves sizes and model information', () => {
+  expect(productDisplayTitle({ brand: 'Polo Ralph Lauren', title: 'POLO RALPH LAUREN — Masters Court leather sneaker size 10' })).toBe('Masters Court leather sneaker size 10');
+  expect(productDisplayTitle({ brand: 'COS', title: 'cosmic wool trousers 31L' })).toBe('cosmic wool trousers 31L');
+  expect(productDisplayTitle({ brand: 'Next', title: 'Mens Next Green Tailored Fit Twill Suit Trousers 31L' })).toBe('Mens Next Green Tailored Fit Twill Suit Trousers 31L');
+});

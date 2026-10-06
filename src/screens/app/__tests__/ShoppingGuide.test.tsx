@@ -140,3 +140,25 @@ test('a suggested follow-up is dispatched exactly once with actual guide context
     }),
   );
 });
+
+test.each([1, 3])('a guide with %i styles uses chapter contents only when useful', async count => {
+  mockData = fixture(count);
+  await render();
+  const contents = renderer.root.findAllByType(require('../../../components/shopping/ShoppingChapterContents').ShoppingChapterContents);
+  expect(contents).toHaveLength(count > 1 ? 1 : 0);
+  if (count > 1) expect(contents[0].props.entries.map((entry: any) => entry.key)).toEqual(mockData.targets.map(target => target.key));
+  expect(cards().every(card => card.props.editorial)).toBe(true);
+  const scroll = renderer.root.findByType(require('react-native').ScrollView);
+  expect(scroll.props.contentInsetAdjustmentBehavior).toBe('never');
+  expect(renderer.root.findAllByProps({ accessibilityLabel: 'Back' }).some(node => node.parent !== scroll)).toBe(true);
+});
+
+test('contents tracks refreshed targets instead of linking to removed chapters', async () => {
+  mockData = fixture(3);
+  await render();
+  mockData = { ...mockData, targets: mockData.targets.slice(1) };
+  await act(async () => renderer.update(<ShoppingPriorityEditScreen {...(props as any)} />));
+  const contents = renderer.root.findByType(require('../../../components/shopping/ShoppingChapterContents').ShoppingChapterContents);
+  expect(contents.props.entries.map((entry: any) => entry.key)).toEqual(['1', '2']);
+  expect(cards()).toHaveLength(2);
+});

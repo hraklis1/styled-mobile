@@ -97,3 +97,34 @@ test('missing outfit and retailer data leaves useful guidance without empty sect
   expect(json).not.toContain('Pieces to consider');
   expect(json).toContain('What to look for');
 });
+
+test.each([1, 2, 3])('editorial outfits always show the suggested addition with %s owned pieces', count => {
+  const ids = Array.from({ length: count }, (_, index) => index + 1);
+  render(<ShoppingOutfitPreview editorial look={{ label: 'Weekend walk', itemIds: ids }} target={target}
+    wardrobe={new Map(ids.map(id => [id, { id, name: `Owned piece ${id}` } as Item]))} />);
+  const json = JSON.stringify(renderer.toJSON());
+  expect(json).toContain('Suggested addition');
+  expect(json).not.toContain('with this piece');
+  expect(renderer.root.findAllByType('WardrobeThumbnail' as any)).toHaveLength(count);
+  expect(json.indexOf('Recommended piece to add')).toBeLessThan(json.indexOf('Owned piece 1'));
+});
+
+test('editorial guide teaches selection criteria before outfits and shopping', () => {
+  render(<ShoppingPriorityTargetCard editorial target={{ ...target, shoppingNotes: ['Smooth wool', 'Clean hem'] }} index={2}
+    wardrobe={new Map([[1, { id: 1, name: 'Jacket' } as Item], [2, { id: 2, name: 'Shoes' } as Item]])} />);
+  const json = JSON.stringify(renderer.toJSON());
+  expect(json.indexOf('What to look for')).toBeLessThan(json.indexOf('Ways to wear it'));
+  expect(json.indexOf('Ways to wear it')).toBeLessThan(json.indexOf('Shop this style'));
+  expect(json).toContain('Smooth wool');
+  expect(json).toContain('Suggested addition');
+});
+
+test('editorial guide omits absent budgets, criteria, outfits and shopping', () => {
+  render(<ShoppingPriorityTargetCard editorial target={{ ...target, priceRange: '', color: '', material: '', silhouette: '', retailerExamples: [], outfitIdeas: [] }} index={1} wardrobe={new Map()} />);
+  const json = JSON.stringify(renderer.toJSON());
+  expect(json).not.toContain('Suggested budget');
+  expect(json).not.toContain('What to look for');
+  expect(json).not.toContain('Ways to wear it');
+  expect(json).not.toContain('Shop this style');
+  expect(json).toContain(target.rationale);
+});

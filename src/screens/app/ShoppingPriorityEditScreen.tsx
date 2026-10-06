@@ -7,12 +7,14 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInUp, FadeOutDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CommonActions, usePreventRemove } from '@react-navigation/native';
 
+import { ShoppingChapterContents, useShoppingChapters } from '../../components/shopping/ShoppingChapterContents';
 import { PressableScale } from '../../components/primitives/PressableScale';
 import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
 import { ShoppingPriorityTargetCard } from '../../components/shopping/ShoppingPriorityTargetCard';
@@ -23,7 +25,7 @@ import { wearableWardrobe, withoutOutfitCount } from '../../lib/shopClarity';
 import { shoppingGarmentTitle, styleFollowupQuestions } from '../../lib/shoppingEditorial';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { track } from '../../lib/analytics';
-import { withoutInlineImages } from '../../lib/shoppingPriorityEdit';
+import { splitPriceRange, withoutInlineImages } from '../../lib/shoppingPriorityEdit';
 import { shoppingSurfaces, colors, radii, spacing, typography } from '../../theme';
 import type { ShopOutfit } from '../../types/shop';
 import type { ShoppingPriorityEditScreenProps } from '../../navigation/types';
@@ -81,6 +83,8 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
       });
   }, [edit.data, edit.isError, priority, source]);
 
+  const { width, fontScale } = useWindowDimensions();
+  const chapterNav = useShoppingChapters(`${priority.recommendationKey ?? priority.label}:${edit.data?.generatedAt ?? ''}:${width}:${fontScale}`);
   const guideIdentity = `${priority.recommendationKey ?? priority.label}:${edit.data?.generatedAt ?? ''}`;
   const lastGuideIdentity = useRef('');
   useEffect(() => {
@@ -208,7 +212,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
   const displayHeadline = shoppingGarmentTitle(priority.label);
   if (data.status === 'no_buy' && data.briefUpdated && data.updatedBrief) {
     return (
-      <View style={styles.screen}>
+      <GuideSurface>
         <ScrollView
           contentContainerStyle={[
             styles.stateContent,
@@ -244,13 +248,13 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
             </PressableScale>
           </View>
         </ScrollView>
-      </View>
+      </GuideSurface>
     );
   }
 
   if (data.status === 'no_buy') {
     return (
-      <View style={styles.screen}>
+      <GuideSurface>
         <ScrollView
           contentContainerStyle={[
             styles.stateContent,
@@ -277,7 +281,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
             </Text>
           </View>
         </ScrollView>
-      </View>
+      </GuideSurface>
     );
   }
 
@@ -292,23 +296,37 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
     });
 
   return (
-    <View style={styles.screen}>
-      <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xxxl }]}
+    <GuideSurface>
+      <View style={[styles.fixedBar, { paddingTop: insets.top + spacing.sm, paddingLeft: spacing.page + insets.left, paddingRight: spacing.page + insets.right }]}>
+        <Pressable onPress={goBack} accessibilityRole="button" accessibilityLabel={source === 'home_daily_look' ? 'Back to Home' : 'Back'} style={({ pressed }) => [styles.backControl, pressed && styles.pressed]}><Ionicons name="chevron-back" size={23} color={colors.foreground} /></Pressable>
+        <Text style={styles.barTitle}>Shopping guide</Text>
+      </View>
+      <ScrollView ref={chapterNav.scroll} contentInsetAdjustmentBehavior="never"
+        contentContainerStyle={[styles.content, { paddingLeft: spacing.page + insets.left, paddingRight: spacing.page + insets.right, paddingBottom: insets.bottom + spacing.xxxl }]}
         showsVerticalScrollIndicator={false}
       >
-        <ShopSubpageHeader editorialSize eyebrow={guideEyebrow} title={displayHeadline} subtitle={intro}
-          onBack={goBack} backLabel={source === 'home_daily_look' ? 'Back to Home' : 'Back'} style={styles.fullBleedHeader} />
+        <View ref={chapterNav.content} collapsable={false}>
+        <View style={styles.guideOpening}>
+          <Text style={styles.eyebrow}>{guideEyebrow}</Text>
+          <Text accessibilityRole="header" style={styles.guideTitle}>{displayHeadline}</Text>
+          {intro ? <Text style={styles.body}>{intro}</Text> : null}
+        </View>
         {edit.isError ? <Text style={styles.body}>You’re reading your saved guide. We couldn’t refresh it just now.</Text> : null}
-        <Text accessibilityRole="header" style={styles.guideIntro}>
-          {directionCount === 1 ? 'A style to consider' : `Styles to consider · ${directionCount}`}
-        </Text>
+        {directionCount > 1 ? <View style={styles.contents}>
+          <Text style={styles.sectionLabel}>Styles to consider · {directionCount}</Text>
+          <ShoppingChapterContents entries={data.targets.map(target => {
+            const price = splitPriceRange(target.priceRange);
+            return { key: target.key, title: target.title, detail: price.compact ? `Suggested budget · ${price.compact}${price.currency ? ` ${price.currency}` : ''}` : undefined };
+          })} onSelect={chapterNav.jump} />
+        </View> : null}
         {data.targets.map((target, index) => (
           <View
             key={target.key}
-
+            collapsable={false}
+            ref={node => { if (node) chapterNav.chapters.current.set(target.key, node); else chapterNav.chapters.current.delete(target.key); }}
           >
-            <ShoppingPriorityTargetCard
+            <ShoppingPriorityTargetCard editorial
+              headingRef={node => { if (node) chapterNav.headings.current.set(target.key, node); else chapterNav.headings.current.delete(target.key); }}
               target={target}
               offerContext={{ reference: data.commerceReference, targetKey: target.key, surface: 'shopping_guide' }}
               onRetryOffers={() => void edit.refreshOffers()}
@@ -363,9 +381,10 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
         </View>
         <View style={styles.saveBand}>
           <SaveEditAction saving={saving} isSaved={isSaved} onPress={saveEdit} />
-          {selectedSavedId ? <PressableScale accessibilityRole="button" accessibilityLabel="View wishlist list" onPress={() => navigation.navigate('Wishlist', { section: 'lists', selectedId: selectedSavedId })}>
+          {selectedSavedId ? <PressableScale accessibilityRole="button" accessibilityLabel="View wishlist list" contentStyle={{ minHeight: 44, justifyContent: 'center' }} onPress={() => navigation.navigate('Wishlist', { section: 'lists', selectedId: selectedSavedId })}>
             <Text style={styles.saveActionText}>View wishlist</Text>
           </PressableScale> : null}
+        </View>
         </View>
       </ScrollView>
       {showSaveToast ? (
@@ -379,8 +398,13 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
           <Text style={styles.saveToastText}>Saved in Stylist</Text>
         </Animated.View>
       ) : null}
-    </View>
+    </GuideSurface>
   );
+}
+
+function GuideSurface({ children }: { children: ReactNode }) {
+  const insets = useSafeAreaInsets();
+  return <View style={styles.screen}>{children}<View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.safeAreaScrim, { height: insets.top }]} /></View>;
 }
 
 function SaveEditAction({
@@ -437,7 +461,7 @@ function StateScreen({
 }) {
   const insets = useSafeAreaInsets();
   return (
-    <View style={styles.screen}>
+    <GuideSurface>
       <ScrollView
         contentContainerStyle={[
           styles.stateContent,
@@ -456,11 +480,20 @@ function StateScreen({
         />
         <View style={styles.stateCard}>{children}</View>
       </ScrollView>
-    </View>
+    </GuideSurface>
   );
 }
 
 const styles = StyleSheet.create({
+  safeAreaScrim: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20, backgroundColor: colors.background },
+  fixedBar: { backgroundColor: colors.background, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  backControl: { width: 44, height: 44, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center' },
+  barTitle: { ...typography.text.label, color: colors.foreground, flex: 1 },
+  pressed: { backgroundColor: colors.surfaceSelected },
+  guideOpening: { gap: spacing.md, paddingTop: spacing.xl, paddingBottom: spacing.xl },
+  guideTitle: { ...typography.text.editorialTitle, color: colors.foreground },
+  contents: { gap: spacing.sm, paddingBottom: spacing.xl },
+  sectionLabel: { ...typography.text.label, color: colors.foreground },
   eyebrow: { ...typography.text.eyebrowLarge, color: shoppingSurfaces.olive.accent },
   guideIntro: { ...typography.text.eyebrow, color: colors.inkSubtle },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },

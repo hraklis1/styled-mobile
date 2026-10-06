@@ -15,15 +15,15 @@ import type { Item } from '../../types/item';
 import { WishlistNavigationContext } from '../../contexts/WishlistNavigationContext';
 import { openShoppingLink } from './ShoppingRetailerLinks';
 
-export function CuratedItemRail({ offers, status = 'ready', heading = 'Pieces to consider', context, onRetry, savedDetail = false, reason, browserTitle, collectionAction = 'rail', exploreRequest = 0, target, wardrobe }: {
-  offers: ProductOffer[]; status?: OfferStatus; heading?: string; context: OfferContext; onRetry?: () => void; savedDetail?: boolean;
+export function CuratedItemRail({ editorial = false, offers, status = 'ready', heading = 'Pieces to consider', context, onRetry, savedDetail = false, reason, browserTitle, collectionAction = 'rail', exploreRequest = 0, target, wardrobe }: {
+  editorial?: boolean; offers: ProductOffer[]; status?: OfferStatus; heading?: string; context: OfferContext; onRetry?: () => void; savedDetail?: boolean;
   reason?: string; browserTitle?: string; collectionAction?: 'rail' | 'external'; exploreRequest?: number;
   target?: ShoppingPriorityTarget; wardrobe?: ReadonlyMap<number, Item>;
 }) {
   const viewWishlist = useContext(WishlistNavigationContext);
   const { width } = useWindowDimensions();
   const [contentWidth, setContentWidth] = useState(width - spacing.page * 2);
-  const cardWidth = Math.min(contentWidth, Math.max(curatedProducts.minWidth, Math.min(curatedProducts.maxWidth, contentWidth * curatedProducts.previewFraction)));
+  const cardWidth = editorial ? Math.min(contentWidth, Math.max(180, Math.min(240, contentWidth * 0.68))) : Math.min(contentWidth, Math.max(curatedProducts.minWidth, Math.min(curatedProducts.maxWidth, contentWidth * curatedProducts.previewFraction)));
   const [browserOpen, setBrowserOpen] = useState(false);
   const [selectedOffer, setSelectedOffer] = useState<ProductOffer | null>(null);
   const [saving, setSaving] = useState<Set<string>>(new Set());
@@ -83,7 +83,7 @@ export function CuratedItemRail({ offers, status = 'ready', heading = 'Pieces to
   function renderCard(offer: ProductOffer, size: number) {
     const key = productKey(offer);
     const savedEntry = savedLocally.get(key) ?? wishlist.find(entry => entry.outfit.product && productKey(entry.outfit.product.offer) === key);
-    return <View key={key} style={{ width: size }}><CuratedItemCard offer={offer} width={size}
+    return <View key={key} style={{ width: size }}><CuratedItemCard editorial={editorial} offer={offer} width={size}
       saved={savedLocally.has(key) || wishlist.some(entry => entry.outfit.product && productKey(entry.outfit.product.offer) === key)}
       saving={saving.has(key)} saveFailed={!!errors[key]}
       onSave={!savedDetail && (context.reference || context.wishlistId || savedLocally.has(key) || wishlist.some(entry => entry.outfit.product && productKey(entry.outfit.product.offer) === key)) ? () => void save(offer) : undefined}
@@ -104,20 +104,21 @@ export function CuratedItemRail({ offers, status = 'ready', heading = 'Pieces to
     {heading ? <Text style={styles.heading}>{heading}</Text> : null}
     {preview.length ? <ScrollView ref={scroll} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail} snapToInterval={cardWidth + spacing.md} decelerationRate="fast">
       {preview.map(offer => renderCard(offer, cardWidth))}
-    </ScrollView> : status === 'pending' ? <View style={styles.rail} accessibilityLabel="Finding considered pieces" accessibilityState={{ busy: true }}>{[0, 1].map(key => <View key={key} style={{ width: cardWidth }}><View style={[styles.skeleton, { aspectRatio: curatedProducts.imageAspectRatio }]} /><View style={styles.skeletonLine} /><View style={[styles.skeletonLine, { width: '65%' }]} /></View>)}</View> : <Text style={styles.copy}>{status === 'unavailable' ? 'Shopping options are unavailable right now. Your styling guide is still here.' : 'No suitable listings right now. Use the style notes as your shopping guide.'}</Text>}
-    {collectionAction === 'rail' && eligible.length ? <Pressable onPress={explore} style={({ pressed }) => [styles.quiet, pressed && styles.pressed]} accessibilityRole="button"><Text style={styles.link}>Explore all options</Text></Pressable> : null}
+    </ScrollView> : status === 'pending' ? <View style={styles.rail} accessibilityLabel="Finding considered pieces" accessibilityState={{ busy: true }}>{[0, 1].map(key => <View key={key} style={{ width: cardWidth }}><View style={[styles.skeleton, { aspectRatio: editorial ? 0.8 : curatedProducts.imageAspectRatio }]} /><View style={styles.skeletonLine} /><View style={[styles.skeletonLine, { width: '65%' }]} /></View>)}</View> : <Text style={styles.copy}>{status === 'unavailable' ? 'Shopping options are unavailable right now. Your styling guide is still here.' : 'No suitable listings right now. Use the style notes as your shopping guide.'}</Text>}
+    {collectionAction === 'rail' && eligible.length ? <Pressable onPress={explore} style={({ pressed }) => [styles.quiet, editorial && styles.collectionButton, pressed && styles.pressed]} accessibilityRole="button"><Text style={styles.link}>{editorial ? `Browse all ${eligible.length} ${eligible.length === 1 ? 'option' : 'options'}` : 'Explore all options'}</Text></Pressable> : null}
     {status === 'unavailable' && onRetry ? <Pressable onPress={retry} accessibilityRole="button" style={styles.quiet}><Text style={styles.link}>Try again</Text></Pressable> : null}
     {error ? <Text style={styles.copy} accessibilityRole="alert">{error}</Text> : null}
     {preview.some(offer => offer.monetized) ? <Text style={styles.copy}>{productDisclosure}</Text> : null}
-    {browserOpen ? <CuratedProductBrowser visible title={browserTitle ?? (heading || 'Pieces to consider')} reason={reason} offers={eligible} status={status} context={context} onRetry={onRetry ? retry : undefined} onClose={() => { setSelectedOffer(null); setBrowserOpen(false); }} onCloseDetail={() => setSelectedOffer(null)} detail={detail} renderCard={renderCard} error={error} /> : null}
+    {browserOpen ? <CuratedProductBrowser editorial={editorial} visible title={browserTitle ?? (heading || 'Pieces to consider')} reason={reason} offers={eligible} status={status} context={context} onRetry={onRetry ? retry : undefined} onClose={() => { setSelectedOffer(null); setBrowserOpen(false); }} onCloseDetail={() => setSelectedOffer(null)} detail={detail} renderCard={renderCard} error={error} /> : null}
     {!browserOpen ? detail : null}
   </View>;
 }
 const styles = StyleSheet.create({
+  collectionButton: { alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.controlOutline, borderRadius: radii.full, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   section: { gap: spacing.md }, heading: { ...typography.text.label, color: colors.foreground },
   rail: { flexDirection: 'row', gap: spacing.md, paddingBottom: spacing.xs },
   copy: { ...typography.text.bodySmall, color: colors.mutedForeground },
-  quiet: { minHeight: 44, justifyContent: 'center' }, pressed: { opacity: 0.5 }, link: { ...typography.text.label, color: curatedProducts.accent },
+  quiet: { minWidth: 44, minHeight: 44, justifyContent: 'center' }, pressed: { opacity: 0.5 }, link: { ...typography.text.label, color: curatedProducts.accent },
   skeleton: { backgroundColor: colors.surfaceSubtle, borderRadius: radii.photo },
   skeletonLine: { backgroundColor: colors.surfaceSubtle, height: spacing.md, marginTop: spacing.sm, borderRadius: radii.sm },
 });

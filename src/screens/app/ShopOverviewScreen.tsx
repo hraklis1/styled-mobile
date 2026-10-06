@@ -3,6 +3,8 @@ import { Keyboard, Pressable, RefreshControl, ScrollView, StyleSheet, View, useW
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Ionicons } from '@expo/vector-icons';
+import { useShoppingChapters } from '../../components/shopping/ShoppingChapterContents';
 import { ShortlistContent } from './ShoppingGalleryScreen';
 import { ShopWardrobeEdit } from '../../components/shopping/ShopWardrobeEdit';
 import { ShoppingBriefCard, briefIssueLabel } from '../../components/shopping/ShoppingBriefCard';
@@ -39,42 +41,21 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
 
   const [view, setView] = useState<ShopView>(route.params?.view ?? (requestedSection === 'shortlist' ? 'shortlist' : 'for-you'));
   const [shortlistMounted, setShortlistMounted] = useState(view === 'shortlist');
-  const [menuHidden, setMenuHidden] = useState(false);
-  const menuGesture = useRef<{ anchor: number; previous: number; direction: number } | null>(null);
-  const beginMenuScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const offset = Math.max(0, event.nativeEvent.contentOffset.y);
-    menuGesture.current = { anchor: offset, previous: offset, direction: 0 };
-  }, []);
-  const endMenuScroll = useCallback(() => { menuGesture.current = null; }, []);
-  const endMenuDrag = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    if (!event.nativeEvent.velocity?.y) menuGesture.current = null;
+  const [compact, setCompact] = useState(false);
+  const headerModes = useRef<Record<ShopView, boolean>>({ 'for-you': false, shortlist: false });
+  const chapterNav = useShoppingChapters(brief.data?.generatedAt ?? '');
+  const updateHeader = useCallback((offset: number, pane: ShopView) => {
+    const current = headerModes.current[pane];
+    const next = offset > 80 ? true : offset < 40 ? false : current;
+    headerModes.current[pane] = next;
+    setCompact(next);
   }, []);
   const updateMenuScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const gesture = menuGesture.current;
-    if (!gesture) return;
-    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    const offset = contentOffset.y;
-    // Ignore rubber-banding at either edge; it is not a change of intent.
-    if (offset < 0 || offset > Math.max(0, contentSize.height - layoutMeasurement.height)) return;
-    const direction = Math.sign(offset - gesture.previous);
-    if (direction && direction !== gesture.direction) {
-      gesture.anchor = gesture.previous;
-      gesture.direction = direction;
-    }
-    gesture.previous = offset;
-    const nextHidden = offset > 8 && direction > 0;
-    const crossedThreshold = offset <= 8 || (direction > 0 ? offset - gesture.anchor >= 24 : gesture.anchor - offset >= 16);
-    if (crossedThreshold && nextHidden !== menuHidden) {
-      // End this observation before the viewport expands/contracts, so layout
-      // events cannot be mistaken for the user reversing their scroll.
-      menuGesture.current = null;
-      setMenuHidden(nextHidden);
-    }
-  }, [menuHidden]);
+    updateHeader(event.nativeEvent.contentOffset.y, view);
+  }, [updateHeader, view]);
   const selectView = useCallback((next: ShopView) => {
     Keyboard.dismiss();
-    menuGesture.current = null;
-    setMenuHidden(false);
+    setCompact(headerModes.current[next]);
     setView(next);
     if (next === 'shortlist') setShortlistMounted(true);
     track('shop_view_selected', { view: next });
@@ -164,8 +145,14 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
 
   return (
     <View style={styles.root}>
-        <View>
-          <ScreenHeader
+        <View style={{ paddingLeft: insets.left, paddingRight: insets.right }}>
+          {compact ? <View style={[styles.compactHeader, { paddingTop: insets.top + spacing.md }, fontScale > 1.3 && styles.stackedHeader]}>
+            <AppText variant="editorialCompact">Shop</AppText>
+            <View style={styles.headerActions}>
+              <Pressable onPress={openShoppingCamera} accessibilityRole="button" accessibilityLabel="Save a find" style={({ pressed }) => [styles.headerControl, pressed && styles.pressed]}><Ionicons name="camera-outline" size={20} color={colors.foreground} /></Pressable>
+              <Pressable onPress={() => navigation.navigate('Wishlist')} accessibilityRole="button" style={({ pressed }) => [styles.headerControl, styles.wishlistControl, pressed && styles.pressed]}><Ionicons name="bookmark-outline" size={18} color={colors.foreground} /><AppText variant="label">Wishlist</AppText></Pressable>
+            </View>
+          </View> : <ScreenHeader
             title="Shop"
             titleVariant="display"
             subtitle="Buy fewer, better pieces"
@@ -178,26 +165,23 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
               variant: 'secondary',
               onPress: () => navigation.navigate('Wishlist'),
             }}
-          />
+          />}
           {saveFindCoachVisible ? <View style={styles.saveFindTip} accessibilityLiveRegion="polite">
             <AppText variant="caption" tone="muted">Save a find: photograph a piece or price tag to revisit on your shortlist.</AppText>
-            <Pressable accessibilityRole="button" accessibilityLabel="Dismiss Save a find tip" onPress={() => dismissSaveFindCoach('got_it')} style={{ minHeight: 44, justifyContent: 'center' }}><AppText variant="caption" tone="primary">Got it</AppText></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Dismiss Save a find tip" onPress={() => dismissSaveFindCoach('got_it')} style={({ pressed }) => [{ minHeight: 44, justifyContent: 'center' }, pressed && styles.pressed]}><AppText variant="caption" tone="primary">Got it</AppText></Pressable>
           </View> : null}
         </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.viewSwitch, menuHidden && styles.hidden]} accessibilityElementsHidden={menuHidden} importantForAccessibility={menuHidden ? 'no-hide-descendants' : 'auto'} contentContainerStyle={styles.viewSwitchContent}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.viewSwitch} contentContainerStyle={[styles.viewSwitchContent, { paddingLeft: spacing.page + insets.left, paddingRight: spacing.page + insets.right }]}>
         <SegmentedControl value={view} variant="tabs" options={[{ value: 'for-you', label: 'For you' }, { value: 'shortlist', label: 'Shortlist' }]} onChange={selectView} />
       </ScrollView>
       <View style={[styles.pane, view !== 'for-you' && styles.hidden]} accessibilityElementsHidden={view !== 'for-you'} importantForAccessibility={view !== 'for-you' ? 'no-hide-descendants' : 'auto'}>
         <ScrollView
-          key={fontScale}
+          ref={chapterNav.scroll}
           contentInsetAdjustmentBehavior="never"
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} tintColor={colors.primary} />}
-          contentContainerStyle={styles.content}
-          onScrollBeginDrag={beginMenuScroll}
-          onScrollEndDrag={endMenuDrag}
-          onMomentumScrollEnd={endMenuScroll}
+          contentContainerStyle={[styles.content, { paddingBottom: spacing.xxxl + insets.bottom }]}
           onScroll={event => {
             setScrollOffset(event.nativeEvent.contentOffset.y);
             updateMenuScroll(event);
@@ -209,7 +193,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
             inside the panel — which put its label 16pt in from the gutter every
             other section label sits on, at a different size and colour. The
             issue line takes the header's `trailing` slot. */}
-        <EditorialSection
+        <View ref={chapterNav.content} collapsable={false} style={{ paddingLeft: insets.left, paddingRight: insets.right }}><EditorialSection
           headingStyle="editorial"
           style={styles.section}
           title="For your wardrobe"
@@ -218,6 +202,9 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
           {isPremium && brief.data?.status === 'ready' ? <ShopWardrobeEdit
             brief={brief.data}
             scrollOffset={scrollOffset}
+            onJump={chapterNav.jump}
+            registerChapter={(key, node) => { if (node) chapterNav.chapters.current.set(key, node); else chapterNav.chapters.current.delete(key); }}
+            registerHeading={(key, node) => { if (node) chapterNav.headings.current.set(key, node); else chapterNav.headings.current.delete(key); }}
             wardrobe={wardrobe}
             onGuide={(priority) => {
               track('shopping_brief_priority_opened', { category: priority.category, reason: priority.reason, rank: priority.priority });
@@ -248,12 +235,12 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
               />
           </View>}
           {brief.isError && brief.data ? <AppText variant="caption" tone="muted">Your saved edit is here. We couldn’t refresh it just now.</AppText> : null}
-        </EditorialSection>
+        </EditorialSection></View>
 
         </ScrollView>
       </View>
       {shortlistMounted && <View style={[styles.pane, view !== 'shortlist' && styles.hidden]} accessibilityElementsHidden={view !== 'shortlist'} importantForAccessibility={view !== 'shortlist' ? 'no-hide-descendants' : 'auto'}>
-        <ShortlistContent embedded active={view === 'shortlist'} navigation={navigation} params={route.params} onConsumeParams={navigation.setParams} onContentScroll={updateMenuScroll} onContentScrollBeginDrag={beginMenuScroll} onContentScrollEndDrag={endMenuDrag} onContentMomentumScrollEnd={endMenuScroll} />
+        <ShortlistContent embedded active={view === 'shortlist'} navigation={navigation} params={route.params} onConsumeParams={navigation.setParams} onContentScroll={updateMenuScroll} />
       </View>}
       <View
         pointerEvents="none"
@@ -266,6 +253,12 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
 }
 
 const styles = StyleSheet.create({
+  compactHeader: { paddingHorizontal: spacing.page, paddingBottom: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, backgroundColor: colors.background },
+  stackedHeader: { flexDirection: 'column', alignItems: 'flex-start' },
+  headerActions: { flexDirection: 'row', gap: spacing.sm },
+  headerControl: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceSubtle, borderRadius: radii.full },
+  wishlistControl: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.md },
+  pressed: { backgroundColor: colors.surfaceSelected },
   root: { flex: 1, backgroundColor: colors.background },
   saveFindTip: { paddingHorizontal: spacing.page, paddingBottom: spacing.md, gap: spacing.xs },
   content: { paddingBottom: spacing.xxxl },
