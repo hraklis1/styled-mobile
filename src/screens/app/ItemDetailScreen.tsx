@@ -428,11 +428,11 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         staleTime: 0,
       });
       const latest = latestItems.find((candidate) => candidate.id === item.id);
-      if (!latest?.polishedUrl) return false;
+      if (!latest?.polishedUrl || latest.polishedUrl === item.polishedUrl) return false;
       applyPolishedItem(latest);
       return true;
     };
-    polishItem.mutate({ itemId: item.id, idempotencyKey }, {
+    polishItem.mutate({ itemId: item.id, idempotencyKey, previousPolishedUrl: item.polishedUrl }, {
       onSuccess: () => {
         // The mutation hook has already merged the authoritative item into the cache.
         setCoverSheetOpen(false);

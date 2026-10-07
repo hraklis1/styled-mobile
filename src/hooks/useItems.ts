@@ -322,9 +322,10 @@ export function useScanTag() {
  * cutout. The idempotency key lets a retry join the original in-flight work or
  * replay its result rather than start another paid generation.
  */
-export function requestPolish(itemId: number, idempotencyKey: string) {
+export function requestPolish(itemId: number, idempotencyKey: string, previousPolishedUrl?: string | null) {
   return api
-    .post<{ polishedUrl: string; item: Item }>(`/api/items/${itemId}/polish`, {}, {
+    .post<{ polishedUrl: string; item: Item }>(`/api/items/${itemId}/polish`, previousPolishedUrl
+      ? { regenerate: true, previousPolishedUrl } : {}, {
       timeout: 120_000,
       headers: idempotencyHeaders(idempotencyKey),
     })
@@ -342,8 +343,8 @@ export function applyPolishedItem(qc: ReturnType<typeof useQueryClient>, item: I
 export function usePolishItem() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ itemId, idempotencyKey }: { itemId: number; idempotencyKey: string }) =>
-      requestPolish(itemId, idempotencyKey),
+    mutationFn: ({ itemId, idempotencyKey, previousPolishedUrl }: { itemId: number; idempotencyKey: string; previousPolishedUrl?: string | null }) =>
+      requestPolish(itemId, idempotencyKey, previousPolishedUrl),
     // Reuse the same idempotency key if the connection drops.
     retry: (failureCount, error) => isNetworkError(error) && failureCount < 1,
     retryDelay: 2_000,
