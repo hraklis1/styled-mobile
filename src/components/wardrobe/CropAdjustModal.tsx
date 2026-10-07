@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import { ImpactFeedbackStyle, impactAsync, selectionAsync } from '../../lib/haptics';
+import { colors, radii, spacing, typography } from '../../theme';
 
 const grabFeedback = () => { void impactAsync(ImpactFeedbackStyle.Light); };
 const edgeFeedback = () => { void selectionAsync(); };
@@ -17,8 +18,6 @@ function onEdge(left: number, top: number, right: number, bottom: number) {
   const e = 0.001;
   return left <= e || top <= e || right >= 1 - e || bottom >= 1 - e;
 }
-
-import { colors, radii, spacing, typography } from '../../theme';
 
 export type Bbox = { x: number; y: number; width: number; height: number };
 
@@ -44,20 +43,12 @@ type Props = {
   itemName: string;
   onApply: (bbox: Bbox) => void;
   onCancel: () => void;
-  /** The grid plate the editor opens from, in window coordinates: the crop zooms out of it into place. */
-  origin?: CropOrigin | null;
 };
 
-export type CropOrigin = { x: number; y: number; width: number; height: number; uri: string };
-
-export function CropAdjustEditor({ sourceImage, initialBbox, itemName, onApply, onCancel, origin }: Props) {
+export function CropAdjustEditor({ sourceImage, initialBbox, itemName, onApply, onCancel }: Props) {
   const insets = useSafeAreaInsets();
   const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
-  const [canvasTop, setCanvasTop] = useState(0);
-  const reduceMotion = useReducedMotion();
-  // 0 → 1 as the crop flies from its grid plate to its place on the photo.
-  const reveal = useSharedValue(origin && !reduceMotion ? 0 : 1);
 
   const centerX = useSharedValue(0.5);
   const centerY = useSharedValue(0.5);
@@ -111,7 +102,7 @@ export function CropAdjustEditor({ sourceImage, initialBbox, itemName, onApply, 
       const edge = onEdge(centerX.get() - halfWidth, centerY.get() - halfHeight, centerX.get() + halfWidth, centerY.get() + halfHeight);
       if (edge && !atEdge.get()) scheduleOnRN(edgeFeedback);
       atEdge.set(edge);
-    }), [bounds, centerX, centerY, cropHeight, cropWidth, startCenterX, startCenterY]);
+    }), [bounds, centerX, centerY, cropHeight, cropWidth, startCenterX, startCenterY, atEdge]);
 
   const pinchGesture = useMemo(() => Gesture.Pinch()
     .onBegin(() => {
@@ -158,55 +149,12 @@ export function CropAdjustEditor({ sourceImage, initialBbox, itemName, onApply, 
       const edge = onEdge(left, top, right, bottom);
       if (edge && !atEdge.get()) scheduleOnRN(edgeFeedback);
       atEdge.set(edge);
-    }), [bounds, centerX, centerY, cropHeight, cropWidth, startBottom, startLeft, startRight, startTop]);
+    }), [bounds, centerX, centerY, cropHeight, cropWidth, startBottom, startLeft, startRight, startTop, atEdge]);
 
   const topLeftGesture = useMemo(() => resizeGesture(true, true), [resizeGesture]);
   const topRightGesture = useMemo(() => resizeGesture(false, true), [resizeGesture]);
   const bottomLeftGesture = useMemo(() => resizeGesture(true, false), [resizeGesture]);
   const bottomRightGesture = useMemo(() => resizeGesture(false, false), [resizeGesture]);
-
-  // Where the starting crop lands on screen; the ghost flies there, then hands over.
-  const ghost = useMemo(() => {
-    if (!origin) return null;
-    // Until the photo's size is known the ghost simply holds on its plate.
-    if (!bounds) return { uri: origin.uri, from: origin, to: origin, ready: false };
-    return {
-      uri: origin.uri,
-      from: origin,
-      ready: true,
-      to: {
-        x: bounds.x + (initialBbox.x / 100) * bounds.width,
-        y: canvasTop + bounds.y + (initialBbox.y / 100) * bounds.height,
-        width: (initialBbox.width / 100) * bounds.width,
-        height: (initialBbox.height / 100) * bounds.height,
-      },
-    };
-  }, [bounds, canvasTop, initialBbox, origin]);
-  useEffect(() => {
-    if (!ghost?.ready || reveal.get() === 1) return;
-    reveal.set(withTiming(1, { duration: 380, easing: Easing.out(Easing.cubic) }));
-  }, [ghost, reveal]);
-  // Cancel flies the crop back to its plate (nothing changed, so it still matches it).
-  const closing = useRef(false);
-  const close = useCallback(() => {
-    if (closing.current) return;
-    if (!ghost?.ready || reduceMotion) { onCancel(); return; }
-    closing.current = true;
-    reveal.set(withTiming(0, { duration: 280, easing: Easing.in(Easing.cubic) }, (finished) => { if (finished) scheduleOnRN(onCancel); }));
-  }, [ghost, onCancel, reduceMotion, reveal]);
-  const canvasStyle = useAnimatedStyle(() => ({ opacity: reveal.get() }));
-  const ghostStyle = useAnimatedStyle(() => {
-    if (!ghost) return { opacity: 0 };
-    const t = reveal.get();
-    const lerp = (a: number, b: number) => a + (b - a) * t;
-    return {
-      opacity: t < 0.75 ? 1 : 1 - (t - 0.75) / 0.25,
-      left: lerp(ghost.from.x, ghost.to.x),
-      top: lerp(ghost.from.y, ghost.to.y),
-      width: lerp(ghost.from.width, ghost.to.width),
-      height: lerp(ghost.from.height, ghost.to.height),
-    };
-  });
 
   const frameStyle = useAnimatedStyle(() => {
     if (!bounds) return { opacity: 0 };
@@ -254,7 +202,7 @@ export function CropAdjustEditor({ sourceImage, initialBbox, itemName, onApply, 
   return (
     <View style={styles.root} accessibilityViewIsModal>
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <TouchableOpacity style={styles.headerButton} onPress={close} accessibilityLabel="Back to piece review">
+        <TouchableOpacity style={styles.headerButton} onPress={onCancel} accessibilityLabel="Back to piece review">
           <Ionicons name="chevron-back" size={24} color={colors.foreground} />
         </TouchableOpacity>
         <View style={styles.headerCopy}>
@@ -267,10 +215,10 @@ export function CropAdjustEditor({ sourceImage, initialBbox, itemName, onApply, 
         </TouchableOpacity>
       </View>
 
-      <Animated.View
-        style={[styles.canvas, canvasStyle]}
+      <View
+        style={styles.canvas}
         onTouchStart={() => { if (!touched) setTouched(true); }}
-        onLayout={(event) => { setCanvasSize(event.nativeEvent.layout); setCanvasTop(event.nativeEvent.layout.y); }}
+        onLayout={(event) => setCanvasSize(event.nativeEvent.layout)}
         accessibilityLabel={`Crop ${itemName}`}
       >
         {bounds ? (
@@ -300,16 +248,10 @@ export function CropAdjustEditor({ sourceImage, initialBbox, itemName, onApply, 
             <CropCorner style={styles.cornerBottomRight} corner={styles.bracketBottomRight} gesture={bottomRightGesture} />
           </Animated.View>
         </GestureDetector>
-      </Animated.View>
-
-      {ghost ? (
-        <Animated.View pointerEvents="none" style={[styles.ghost, ghostStyle]}>
-          <Image source={{ uri: ghost.uri }} style={styles.ghostImage} contentFit="contain" cachePolicy="memory-disk" />
-        </Animated.View>
-      ) : null}
+      </View>
 
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
-        <TouchableOpacity style={styles.cancelButton} onPress={close} accessibilityRole="button">
+        <TouchableOpacity style={styles.cancelButton} onPress={onCancel} accessibilityRole="button">
           <Text style={styles.cancelText}>Cancel</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.applyButton} onPress={handleApply} accessibilityRole="button">
@@ -346,8 +288,6 @@ const styles = StyleSheet.create({
   canvas: { flex: 1, overflow: 'hidden', backgroundColor: colors.foreground },
   subtitleGone: { opacity: 0 },
   image: { position: 'absolute' },
-  ghost: { position: 'absolute' },
-  ghostImage: { width: '100%', height: '100%' },
   dim: { position: 'absolute', backgroundColor: 'rgba(24,20,17,0.58)' },
   topDim: { top: 0, left: 0, right: 0 },
   bottomDim: { bottom: 0, left: 0, right: 0 },

@@ -159,19 +159,15 @@ describe('pre-extract curation card', () => {
       onPress: jest.fn(), onToggle: jest.fn(), onCrop: jest.fn(), onBrand: jest.fn(), ...overrides,
     };
     let card!: TestRenderer.ReactTestRenderer;
-    act(() => { card = TestRenderer.create(<GridCard {...props} />, { createNodeMock: () => ({ measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) => cb(16, 120, 140, 186) }) }); });
+    act(() => { card = TestRenderer.create(<GridCard {...props} />); });
     return { card, props };
   };
   const plate = (card: TestRenderer.ReactTestRenderer) => card.root.findAll(n => n.props.accessibilityLabel === 'Piece 0, 1 of 6' && n.props.onPress)[0];
 
   it('opens the crop from the photo, the loupe from the caption, and skips on long press', () => {
     const { card, props } = renderCard();
-    // RN's jest View mock stubs measureInWindow without ever calling back.
-    for (const node of card.root.findAll(n => typeof n.instance?.measureInWindow === 'function')) {
-      node.instance.measureInWindow = (cb: (x: number, y: number, w: number, h: number) => void) => cb(16, 120, 140, 186);
-    }
     act(() => plate(card).props.onPress());
-    expect(props.onCrop).toHaveBeenCalledWith({ x: 16, y: 120, width: 140, height: 186, uri: 'file://crop.jpg' });
+    expect(props.onCrop).toHaveBeenCalledTimes(1);
     expect(props.onPress).not.toHaveBeenCalled();
     act(() => plate(card).props.onLongPress());
     expect(props.onToggle).toHaveBeenCalledTimes(1);

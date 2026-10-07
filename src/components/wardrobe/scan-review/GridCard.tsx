@@ -9,7 +9,6 @@ import { pieceFlags, type PieceReviewState, type ReviewField } from '../../../li
 import { colors, cutoutScaleFor, editorial, ingestion, motion, radii, spacing, surfaces, typography } from '../../../theme';
 import { BrandPill } from './BrandPill';
 import { FlagDot } from './atoms';
-import type { CropOrigin } from '../CropAdjustModal';
 import { SelectBadge } from './SelectBadge';
 import { coverUri, type ScanReviewPiece, type ScanReviewStage } from './types';
 
@@ -38,7 +37,7 @@ export const GridCard = memo(function GridCard({ piece, index, count, stage, sta
   onPress: () => void;
   onToggle: () => void;
   /** When set, the plate opens the crop editor and the caption opens the loupe. */
-  onCrop?: (origin: CropOrigin | null) => void;
+  onCrop?: () => void;
   /** When set, the caption carries a tappable brand pill. */
   onBrand?: () => void;
   /** Bumped when a batch brand lands on this piece; flashes the overline. */
@@ -55,14 +54,6 @@ export const GridCard = memo(function GridCard({ piece, index, count, stage, sta
   const stateLabel = state === 'check' ? ', worth a look' : state === 'confirmed' ? ', confirmed' : '';
 
   const target = useRef<View>(null);
-  const print = useRef<View>(null);
-  // Hand the editor the print's window frame so the crop can zoom out of it.
-  const openCrop = () => {
-    const node = print.current;
-    if (!onCrop) return;
-    if (!node || !uri) { onCrop(null); return; }
-    node.measureInWindow((x, y, w, h) => onCrop(w > 0 ? { x, y, width: w, height: h, uri } : null));
-  };
   const [focused, setFocused] = useState(false);
   useEffect(() => {
     if (!restoreFocus) return;
@@ -97,7 +88,7 @@ export const GridCard = memo(function GridCard({ piece, index, count, stage, sta
   const imageStyle = useAnimatedStyle(() => ({ opacity: withTiming(included ? 1 : ingestion.excludedOpacity, { duration: reduceMotion ? 0 : motion.quick }) }));
   return (
     <View>
-      <Pressable ref={target} onPress={onCrop ? openCrop : onPress} onLongPress={onToggle} delayLongPress={350} disabled={disabled}
+      <Pressable ref={target} onPress={onCrop ?? onPress} onLongPress={onToggle} delayLongPress={350} disabled={disabled}
         onPressIn={() => { pressed.value = true; }} onPressOut={() => { pressed.value = false; }}
         onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
         style={({ pressed }) => ({ outlineWidth: focused ? 2 : 0, outlineColor: colors.foreground, backgroundColor: pressed ? colors.surfaceSelected : 'transparent' })}
@@ -107,7 +98,7 @@ export const GridCard = memo(function GridCard({ piece, index, count, stage, sta
         onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'inspect') onPress(); else if (event.nativeEvent.actionName === 'toggle') onToggle(); }}>
         <View>
           <Animated.View style={[styles.plate, { height: plateHeight }, plateStyle]}>
-            <Animated.View ref={print} style={[{ width: inset, height: inset, alignItems: 'center', justifyContent: 'center' }, imageStyle, settleStyle]}>
+            <Animated.View style={[{ width: inset, height: inset, alignItems: 'center', justifyContent: 'center' }, imageStyle, settleStyle]}>
               {uri ? <Image source={{ uri }} style={{ width: '100%', height: '100%' }} contentFit="contain" cachePolicy="memory-disk" recyclingKey={piece.id} />
                 : <Ionicons name="shirt-outline" size={28} color={colors.mutedForeground} />}
               {uri ? <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, desaturatedStyle]}>

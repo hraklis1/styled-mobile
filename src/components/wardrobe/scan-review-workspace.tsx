@@ -18,7 +18,7 @@ import type { InclusionChange } from '../../lib/extraction-review';
 import { track } from '../../lib/analytics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CropAdjustEditor, type Bbox, type CropOrigin } from './CropAdjustModal';
+import { CropAdjustEditor, type Bbox } from './CropAdjustModal';
 import {
   duplicatePieceIds,
   loupeHeroHeight,
@@ -145,8 +145,6 @@ export function ScanReviewWorkspace({
   const cropBusy = useRef(false);
   const [cropApplying, setCropApplying] = useState(false);
   const [cropId, setCropId] = useState<string | null>(null);
-  /** Set only when the crop was opened from a grid plate; the loupe opens it plainly. */
-  const [cropOrigin, setCropOrigin] = useState<CropOrigin | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
   const inclusion = useBatchExtractionReview(pieces, busy, onInclusionChange);
   const gridOffset = useRef(0);
@@ -355,7 +353,6 @@ export function ScanReviewWorkspace({
             sourceImage={cropPiece.cropSource}
             initialBbox={cropPiece.cropBbox}
             itemName={cropPiece.name}
-            origin={cropOrigin}
             onApply={async (bbox) => {
               if (cropBusy.current) return;
               cropBusy.current = true;
@@ -483,7 +480,7 @@ export function ScanReviewWorkspace({
                 track('scan_review_inclusion_changed', { mode: onMinimize ? 'batch' : 'single', included: !piece });
               }}
               onToggleSelect={() => {}}
-              onCrop={stage === 'pre-extract' ? (id, origin) => { setCropOrigin(reduceMotion ? null : origin); setCropId(id); } : undefined}
+              onCrop={stage === 'pre-extract' ? setCropId : undefined}
               onBrand={id => openSheet({ kind: 'brand', target: [id] })}
             />
           ) : activeResolvedId ? (
@@ -499,7 +496,7 @@ export function ScanReviewWorkspace({
               onActiveChange={setActiveId}
               onUpdate={update}
               onOpenSheet={(kind, id) => openSheet({ kind, target: [id] })}
-              onCrop={id => { setCropOrigin(null); setCropId(id); }}
+              onCrop={setCropId}
               onToggleIncluded={id => {
                 selectionFeedback();
                 inclusion.change([id], !inclusion.snapshot().some(p => p.id === id));

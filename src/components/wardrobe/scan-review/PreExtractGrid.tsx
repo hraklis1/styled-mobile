@@ -9,7 +9,6 @@ import { dismissCropTip, isCropTipDismissed } from '../../../lib/scanCropTip';
 import { type PieceReviewState, type SheetGuidance } from '../../../lib/scan-review';
 import { colors, radii, spacing, typography } from '../../../theme';
 import { GridCard } from './GridCard';
-import type { CropOrigin } from '../CropAdjustModal';
 import { Middot, TextSegment } from './atoms';
 import { reviewColumns } from '../../../lib/extraction-review';
 import { isReviewStage, type ScanReviewPiece, type ScanReviewStage } from './types';
@@ -37,7 +36,7 @@ type Props = {
   brandFeedback?: { revision: number; ids: ReadonlySet<string> };
   onToggleSelect: (id: string) => void;
   /** Pre-extract: the plate opens the crop editor directly. */
-  onCrop?: (id: string, origin: CropOrigin | null) => void;
+  onCrop?: (id: string) => void;
   onBrand?: (id: string) => void;
 };
 
@@ -144,7 +143,7 @@ export function PreExtractGrid({
             onPress={() => selecting ? onToggleSelect(piece.id) : openPiece(piece.id)}
             brandRevision={brandFeedback?.ids.has(piece.id) ? brandFeedback.revision : 0}
             onToggle={() => selecting ? onToggleSelect(piece.id) : onToggleIncluded(piece.id)}
-            onCrop={onCrop && !selecting ? origin => { if (showCropTip) putAwayCropTip(); onCrop(piece.id, origin); } : undefined}
+            onCrop={onCrop && !selecting ? () => { if (showCropTip) putAwayCropTip(); onCrop(piece.id); } : undefined}
             onBrand={onBrand && (preExtract || review) && !selecting ? () => { if (showTip) { setTipDismissed(true); void dismissBrandTip(); } onBrand(piece.id); } : undefined}
           />
         </Animated.View>
