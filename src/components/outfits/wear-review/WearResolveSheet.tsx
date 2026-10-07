@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Keyboard, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { WorkspaceSheet } from '../../wardrobe/scan-review/WorkspaceSheet';
-import { PrimaryButton } from '../../wardrobe/scan-review/ActionBar';
 import { TextLink } from '../../wardrobe/scan-review/atoms';
 import { selectionFeedback } from '../../wardrobe/scan-review/feedback';
 import { dispatchWear } from '../../../features/wear-log/store';
@@ -14,6 +13,7 @@ import { NewPieceEditor } from './NewPieceSheet';
 import { LocateInPhoto, PieceImage } from './PieceImage';
 import { PhotoHero } from './PhotoHero';
 import { orderedDetections } from '../../../features/wear-log/reducer';
+import { GuidedFooter, guidedLabel } from '../../wardrobe/scan-review/GuidedFooter';
 
 type Mode = 'review' | 'library' | 'new' | 'photo';
 
@@ -66,10 +66,8 @@ export function WearResolveSheet({ queue: initialQueue, startIndex = 0, reviewId
   return <WorkspaceSheet title={title} detent="large" reduceMotion={reduceMotion} dismissed={dismissed} onClose={close}
     subtitle={mode === 'photo' || editing ? undefined : <Text style={styles.meta}>Piece {index + 1} of {queue.length}</Text>}
     headerAction={<View /* swipe down closes; the footer confirms */ />}
-    footer={mode === 'new' ? <View style={styles.footerStack}>
-      <PrimaryButton label={editing ? 'Save' : index === queue.length - 1 ? 'Add to outfit' : 'Save & next'} onPress={() => { selectionFeedback(); advance(); }} />
-      <View style={styles.center}><TextLink label="Skip this piece" tone="muted" onPress={skip} /></View>
-    </View> : mode === 'library' ? <View style={styles.links}><TextLink label="Add as new" onPress={addNew} /><TextLink label="Skip this piece" tone="muted" onPress={skip} /></View> : undefined}>
+    footer={mode === 'new' ? <GuidedFooter label={guidedLabel({ editing, last: index === queue.length - 1, lastLabel: 'Add to outfit' })} onConfirm={() => { selectionFeedback(); advance(); }} onSkip={skip} />
+      : mode === 'library' ? <View style={styles.links}><TextLink label="Add as new" onPress={addNew} /><TextLink label="Skip" tone="muted" onPress={skip} accessibilityLabel="Skip this piece" /></View> : undefined}>
     {mode === 'photo' ? <View>
       {returnTo ? <Pressable style={styles.back} onPress={() => { setMode(returnTo); setReturnTo(null); }} hitSlop={6} accessibilityRole="button" accessibilityLabel="Back to piece">
         <Ionicons name="chevron-back" size={16} color={colors.foreground} /><Text style={styles.backText}>Back to piece</Text>
@@ -178,8 +176,7 @@ export function FocusedPiece({ detection, resolution, initialItemId, onPendingCh
     </ScrollView>
     <View style={styles.footer}>
       {/* Anchored: always here, faded until a pick, so the footer never jumps. */}
-      <PrimaryButton label={editing ? 'Save' : last ? 'Add to outfit' : 'Save & next'} disabled={!selected} onPress={() => { if (selected) { selectionFeedback(); onConfirm(selected.id); } }} />
-      <View style={styles.center}><TextLink label="Skip this piece" tone="muted" onPress={onSkip} /></View>
+      <GuidedFooter label={guidedLabel({ editing, last, lastLabel: 'Add to outfit' })} disabled={!selected} onConfirm={() => { if (selected) { selectionFeedback(); onConfirm(selected.id); } }} onSkip={onSkip} />
     </View>
   </View>;
 }
@@ -201,12 +198,10 @@ const styles = StyleSheet.create({
   newTile: { height: 144, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceSubtle, borderColor: colors.controlOutline, borderWidth: stroke.hairline },
   newBadge: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', borderWidth: stroke.hairline, borderColor: colors.controlOutline },
   option: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, backgroundColor: colors.surfaceSubtle, minHeight: 72, borderWidth: stroke.hairline, borderColor: colors.controlOutline },
-  footerStack: { gap: spacing.xs },
   optionIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   optionTitle: { ...typography.text.bodySmall, fontWeight: typography.weight.medium, color: colors.foreground },
   back: { flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 36, paddingHorizontal: spacing.lg - 4, alignSelf: 'flex-start' },
   backText: { ...typography.text.meta, color: colors.foreground },
-  center: { alignItems: 'center' },
   browse: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 52, borderTopWidth: stroke.hairline, borderBottomWidth: stroke.hairline, borderColor: colors.hairline },
   end: { justifyContent: 'flex-end' },
   tick: { position: 'absolute', top: spacing.sm, right: spacing.sm, width: 24, height: 24, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },

@@ -6,6 +6,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { colors, radii, spacing, stroke, typography } from '../../../theme';
 import { TextLink } from './atoms';
 import { pieceCountLabel } from './types';
+import { GuidedFooter, guidedLabel } from './GuidedFooter';
 
 export type ActionBarMode =
   | { kind: 'extract'; count: number; extractionCount: number; additional?: boolean; onExtract: () => void; onBatch?: () => void }
@@ -69,16 +70,7 @@ export function ActionBar({ mode, bottomInset }: { mode: ActionBarMode; bottomIn
           ) : null}
         </>
       ) : mode.kind === 'confirm' ? (
-        <View style={styles.confirmRow}>
-          {mode.onSkip ? (
-            <TouchableOpacity style={styles.skip} onPress={mode.onSkip} accessibilityRole="button" accessibilityLabel="Skip to the next piece without confirming">
-              <Text style={styles.skipText}>Skip</Text>
-            </TouchableOpacity>
-          ) : null}
-          <View style={styles.flex}>
-            <PrimaryButton label={mode.last ? 'Done' : 'Confirm & next'} onPress={mode.onConfirm} />
-          </View>
-        </View>
+        <GuidedFooter label={guidedLabel({ last: mode.last, lastLabel: 'Done' })} onConfirm={mode.onConfirm} onSkip={mode.onSkip} />
       ) : mode.kind === 'failed' ? (
         <><PrimaryButton label={`Retry ${pieceCountLabel(mode.count)}`} onPress={mode.onRetry} /><TextLink label="Keep basic details" onPress={mode.onKeepBasic} /></>
       ) : (
@@ -204,8 +196,6 @@ const styles = StyleSheet.create({
   secondary: { alignItems: 'center', minHeight: 36, justifyContent: 'center' },
   confirmRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   flex: { flex: 1 },
-  skip: { minHeight: 56, minWidth: 64, paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center' },
-  skipText: { ...typography.text.label, color: colors.foreground },
   polish: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 52, paddingVertical: spacing.xs },
   polishMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   polishTitleLine: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
