@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated';
@@ -22,6 +22,13 @@ import { ChipRow, FlagDot } from './atoms';
 import { isReviewStage, type PiecePatch, type ScanReviewPiece, type ScanReviewStage } from './types';
 
 export type ExpandableRow = 'color' | 'details';
+
+/**
+ * `list`: a product page's ruled details list. `card`: the review sheets'
+ * grouped card with plain sentence-case labels, matching the editor's rows.
+ */
+export type SpecVariant = 'list' | 'card';
+const VariantContext = createContext<SpecVariant>('list');
 export type SheetKind = 'brand' | 'material' | 'category';
 
 const SEASON_CHIPS = SEASON_OPTIONS.map((value) => ({ value, label: SEASON_LABELS[value] }));
@@ -51,8 +58,9 @@ function colourValue(color: string | null): string | null {
  * right, hairline rules between. Only the name is typed; everything else is
  * picked, inline when the choices are few, in a sheet when they need search.
  */
-export function SpecSheet({ piece, stage, flags, expandedRow, disabled, compact = false, onExpand, onUpdate, onOpenSheet }: {
+export function SpecSheet({ piece, stage, flags, expandedRow, disabled, compact = false, variant = 'list', onExpand, onUpdate, onOpenSheet }: {
   piece: ScanReviewPiece;
+  variant?: SpecVariant;
   /** Fold Material and Details behind "More details" until asked for (quick capture, e.g. logging a wear). */
   compact?: boolean;
   stage: ScanReviewStage;
@@ -70,7 +78,9 @@ export function SpecSheet({ piece, stage, flags, expandedRow, disabled, compact 
   const details = detailsSummary(piece);
   const [more, setMore] = useState(!compact || !!piece.material || !!details);
 
+  const card = variant === 'card';
   return (
+    <VariantContext.Provider value={variant}>
     <View style={styles.root}>
       <View style={styles.identity}>
         <EditableTitle
@@ -86,73 +96,87 @@ export function SpecSheet({ piece, stage, flags, expandedRow, disabled, compact 
         ) : null}
       </View>
 
-      <View style={styles.rows}>
-        <SpecRow
-          label="Brand"
-          value={piece.brand.trim() || null}
-          placeholder="Add"
-          flagged={flagged('brand')}
-          disabled={disabled}
-          onPress={() => onOpenSheet('brand')}
-        />
-      </View>
-      {!review && !piece.brand ? <Text style={styles.hint}>Optional. A brand helps us read the details.</Text> : null}
-
-      {review ? (
-        <View style={styles.rowsContinued}>
+      {(() => {
+        const brandRow = (
           <SpecRow
-            label="Category"
-            value={categoryValue(piece)}
-            placeholder="Choose a category"
-            flagged={flagged('category')}
+            label="Brand"
+            value={piece.brand.trim() || null}
+            placeholder="Add"
+            flagged={flagged('brand')}
             disabled={disabled}
-            onPress={() => onOpenSheet('category')}
+            onPress={() => onOpenSheet('brand')}
           />
-          <SpecRow
-            label="Colour"
-            value={colour}
-            placeholder="Add colour"
-            flagged={flagged('color')}
-            swatch={colour ? getSwatchColor(colour).primary : null}
-            expanded={expandedRow === 'color'}
-            disabled={disabled}
-            onPress={() => toggle('color')}
-          >
-            <SwatchRow
-              selected={(piece.colorNormalized as NormalizedColor | null | undefined) ?? null}
+        );
+        const reviewRows = review ? (
+          <>
+            <SpecRow
+              label="Category"
+              value={categoryValue(piece)}
+              placeholder="Choose a category"
+              flagged={flagged('category')}
               disabled={disabled}
-              onPick={(key) => onUpdate({ color: normalizedColorDisplayName(key), colorNormalized: key })}
+              onPress={() => onOpenSheet('category')}
             />
-          </SpecRow>
-          {more ? <>
-          <SpecRow
-            label="Material"
-            value={piece.material}
-            placeholder="Add material"
-            flagged={flagged('material')}
-            disabled={disabled}
-            onPress={() => onOpenSheet('material')}
-          />
-          <SpecRow
-            label="Details"
-            value={details}
-            placeholder="Style, season, fit"
-            flagged={flagged('fit')}
-            expanded={expandedRow === 'details'}
-            disabled={disabled}
-            onPress={() => toggle('details')}
-          >
-            <DetailsPanel piece={piece} disabled={disabled} onUpdate={onUpdate} />
-          </SpecRow>
-          </> : (
-            <TouchableOpacity style={styles.moreRow} onPress={() => setMore(true)} disabled={disabled} accessibilityRole="button" accessibilityLabel="More details: material, style, season, fit">
-              <Text style={styles.moreText}>More details</Text>
-              <Text style={styles.moreHint}>Material, style, season, fit</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      ) : null}
+            <SpecRow
+              label="Colour"
+              value={colour}
+              placeholder="Add colour"
+              flagged={flagged('color')}
+              swatch={colour ? getSwatchColor(colour).primary : null}
+              expanded={expandedRow === 'color'}
+              disabled={disabled}
+              onPress={() => toggle('color')}
+            >
+              <SwatchRow
+                selected={(piece.colorNormalized as NormalizedColor | null | undefined) ?? null}
+                disabled={disabled}
+                onPick={(key) => onUpdate({ color: normalizedColorDisplayName(key), colorNormalized: key })}
+              />
+            </SpecRow>
+            {more ? <>
+              <SpecRow
+                label="Material"
+                value={piece.material}
+                placeholder="Add material"
+                flagged={flagged('material')}
+                disabled={disabled}
+                onPress={() => onOpenSheet('material')}
+              />
+              <SpecRow
+                label="Details"
+                value={details}
+                placeholder="Style, season, fit"
+                flagged={flagged('fit')}
+                expanded={expandedRow === 'details'}
+                disabled={disabled}
+                onPress={() => toggle('details')}
+              >
+                <DetailsPanel piece={piece} disabled={disabled} onUpdate={onUpdate} />
+              </SpecRow>
+            </> : (
+              <TouchableOpacity style={[styles.moreRow, card && styles.moreRowCard]} onPress={() => setMore(true)} disabled={disabled} accessibilityRole="button" accessibilityLabel="More details: material, style, season, fit">
+                <Text style={styles.moreText}>More details</Text>
+                <Text style={styles.moreHint}>Material, style, season, fit</Text>
+              </TouchableOpacity>
+            )}
+          </>
+        ) : null;
+        const hint = !review && !piece.brand ? <Text style={styles.hint}>Optional. A brand helps us read the details.</Text> : null;
+        return card ? (
+          <>
+            <View style={styles.card}>{brandRow}{reviewRows}</View>
+            {hint}
+          </>
+        ) : (
+          <>
+            <View style={styles.rows}>{brandRow}</View>
+            {hint}
+            {reviewRows ? <View style={styles.rowsContinued}>{reviewRows}</View> : null}
+          </>
+        );
+      })()}
     </View>
+    </VariantContext.Provider>
   );
 }
 
@@ -199,8 +223,9 @@ function SpecRow({ label, value, placeholder, flagged, swatch, italicValue, expa
   children?: ReactNode;
 }) {
   const expandable = children !== undefined;
+  const card = useContext(VariantContext) === 'card';
   return (
-    <Animated.View layout={LinearTransition.duration(200)} style={[styles.row, flagged && styles.rowFlagged]}>
+    <Animated.View layout={LinearTransition.duration(200)} style={[styles.row, card && styles.rowCard, flagged && (card ? styles.rowFlaggedCard : styles.rowFlagged)]}>
       <TouchableOpacity
         style={styles.rowPress}
         onPress={onPress}
@@ -211,13 +236,13 @@ function SpecRow({ label, value, placeholder, flagged, swatch, italicValue, expa
         accessibilityState={expandable ? { expanded: Boolean(expanded) } : undefined}
       >
         <View style={styles.rowLabelWrap}>
-          <Text style={styles.rowLabel}>{label}</Text>
+          <Text style={card ? styles.rowLabelCard : styles.rowLabel}>{label}</Text>
         </View>
         <View style={styles.rowValueWrap}>
           {flagged ? <View style={styles.checkChip}><FlagDot /><Text style={styles.checkChipText}>Check</Text></View> : null}
           {swatch ? <View style={[styles.valueSwatch, { backgroundColor: swatch }]} /> : null}
           <Text
-            style={[styles.rowValue, (!value || italicValue) && styles.rowValueItalic, !value && styles.rowValueEmpty]}
+            style={[styles.rowValue, !card && (!value || italicValue) && styles.rowValueItalic, !value && (card ? styles.rowValueEmptyCard : styles.rowValueEmpty)]}
             numberOfLines={1}
           >
             {value ?? placeholder}
@@ -354,6 +379,13 @@ const styles = StyleSheet.create({
   rowValueEmpty: { color: colors.tertiary },
   valueSwatch: { width: 12, height: 12, borderRadius: 6, borderWidth: stroke.hairline, borderColor: colors.ghostStroke },
   rowBody: { paddingBottom: spacing.lg },
+  // Card variant: the editor's grouped rows — one bordered card, plain labels, quiet placeholders.
+  card: { borderRadius: radii.lg, borderCurve: 'continuous', borderWidth: stroke.hairline, borderColor: colors.hairline, backgroundColor: colors.card, paddingHorizontal: spacing.lg, overflow: 'hidden' },
+  rowCard: { marginBottom: -stroke.hairline },
+  rowFlaggedCard: { backgroundColor: colors.surfaceSelected, marginHorizontal: -spacing.lg, paddingHorizontal: spacing.lg },
+  rowLabelCard: { ...typography.text.body, color: colors.foreground },
+  rowValueEmptyCard: { color: colors.mutedForeground },
+  moreRowCard: { borderTopWidth: stroke.hairline, borderTopColor: colors.hairline },
   swatches: { gap: spacing.sm, paddingVertical: 2 },
   swatchRing: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', borderWidth: stroke.fine, borderColor: 'transparent' },
   swatchRingOn: { borderColor: colors.foreground },

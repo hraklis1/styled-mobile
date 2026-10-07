@@ -130,6 +130,12 @@ function useWardrobeBrands(enabled = true) {
   });
 }
 
+/** Brands already in the user's closet, to label them apart from the generic list. */
+export function useClosetBrands(enabled = true): string[] {
+  const { data = [] } = useWardrobeBrands(enabled);
+  return data;
+}
+
 export function useBrandSuggestions(enabled = true): string[] {
   const { data: wardrobeBrands = [] } = useWardrobeBrands(enabled);
   return useMemo(() => {
@@ -310,31 +316,38 @@ export function useScanTag() {
 /**
  * Regenerate one item as an idealised catalog shot.
  *
- * Quota'd server-side (402 POLISH_QUOTA_EXCEEDED) because it is the only
- * genuinely expensive call in the image pipeline. The result lands in its own
- * column and becomes the cover without touching the real photo or cutout.
+ * Metered server-side (`polish` meter: premium only, credit-priced) because it
+ * is the only genuinely expensive call in the image pipeline. The result lands
+ * in its own column and becomes the cover without touching the real photo or
+ * cutout. The idempotency key lets a retry join the original in-flight work or
+ * replay its result rather than start another paid generation.
  */
+export function requestPolish(itemId: number, idempotencyKey: string) {
+  return api
+    .post<{ polishedUrl: string; item: Item }>(`/api/items/${itemId}/polish`, {}, {
+      timeout: 120_000,
+      headers: idempotencyHeaders(idempotencyKey),
+    })
+    .then((r) => r.data);
+}
+
+/** Put a freshly polished item into the closet cache. */
+export function applyPolishedItem(qc: ReturnType<typeof useQueryClient>, item: Item) {
+  qc.setQueryData<Item[]>(ITEMS_QUERY_KEY, (old) =>
+    old?.map((current) => current.id === item.id ? item : current) ?? [item]
+  );
+  invalidateItemQueries(qc);
+}
+
 export function usePolishItem() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ itemId, idempotencyKey }: { itemId: number; idempotencyKey: string }) =>
-      api
-        .post<{ polishedUrl: string; item: Item }>(`/api/items/${itemId}/polish`, {}, {
-          timeout: 120_000,
-          headers: idempotencyHeaders(idempotencyKey),
-        })
-        .then((r) => r.data),
-    // Reuse the same idempotency key if the connection drops. The server can
-    // then join the original in-flight work or return its cached result rather
-    // than starting another paid generation.
+      requestPolish(itemId, idempotencyKey),
+    // Reuse the same idempotency key if the connection drops.
     retry: (failureCount, error) => isNetworkError(error) && failureCount < 1,
     retryDelay: 2_000,
-    onSuccess: ({ item }) => {
-      queryClient.setQueryData<Item[]>(ITEMS_QUERY_KEY, (old) =>
-        old?.map((current) => current.id === item.id ? item : current) ?? [item]
-      );
-      invalidateItemQueries(queryClient);
-    },
+    onSuccess: ({ item }) => applyPolishedItem(queryClient, item),
   });
 }
 

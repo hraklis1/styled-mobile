@@ -1,3 +1,4 @@
+import { containedShare, iou, type Box } from './cropGeometry';
 // Cycling status copy for the Detect step — no real per-item progress exists
 // until the single pose-scan request resolves, so this is deliberately
 // vibes-based rather than tied to actual detection events.
@@ -201,15 +202,6 @@ export function scrubberIndex(x: number, railWidth: number, count: number): numb
   return Math.max(0, Math.min(count - 1, Math.floor((x / railWidth) * count)));
 }
 
-type Box = { x: number; y: number; width: number; height: number };
-
-function containedShare(inner: Box, outer: Box): number {
-  const overlap = Math.max(0, Math.min(inner.x + inner.width, outer.x + outer.width) - Math.max(inner.x, outer.x))
-    * Math.max(0, Math.min(inner.y + inner.height, outer.y + outer.height) - Math.max(inner.y, outer.y));
-  const area = inner.width * inner.height;
-  return area > 0 ? overlap / area : 0;
-}
-
 /**
  * Whole-outfit detections ("Brown Outfit Set") that only frame a top and a
  * bottom found on their own. The server drops these; this catches older or
@@ -224,6 +216,32 @@ export function compositePieceIds(pieces: readonly { id: string; category: strin
     if (inside.some(p => p.category === 'top' || p.category === 'outerwear') && inside.some(p => p.category === 'bottom')) ids.add(piece.id);
   }
   return ids;
+}
+
+export type OverlapFlag = { of: string; strong: boolean };
+
+/**
+ * Detections that frame the same garment as an earlier one in the same
+ * category. The server already merges boxes at IoU ≥ 0.6, so what reaches
+ * here is the near-miss tail: a strong overlap (one box mostly inside the
+ * other, or IoU ≥ 0.5) is almost surely a repeat and starts unticked; a
+ * moderate one (IoU ≥ 0.3) only earns a quiet note. The earlier piece always
+ * stays — detection order puts the more confident box first.
+ */
+export function overlapDuplicates(pieces: readonly { id: string; category: string | null; bbox: Box | null }[]): Map<string, OverlapFlag> {
+  const flags = new Map<string, OverlapFlag>();
+  pieces.forEach((piece, index) => {
+    // An unknown category can't vouch for "same garment".
+    if (!piece.bbox || !piece.category) return;
+    for (const earlier of pieces.slice(0, index)) {
+      if (!earlier.bbox || earlier.category !== piece.category || flags.has(earlier.id)) continue;
+      const overlap = iou(piece.bbox, earlier.bbox);
+      const contained = Math.max(containedShare(piece.bbox, earlier.bbox), containedShare(earlier.bbox, piece.bbox));
+      if (contained >= 0.85 || overlap >= 0.5) { flags.set(piece.id, { of: earlier.id, strong: true }); return; }
+      if (overlap >= 0.3 && !flags.has(piece.id)) flags.set(piece.id, { of: earlier.id, strong: false });
+    }
+  });
+  return flags;
 }
 
 /**
@@ -254,4 +272,28 @@ export const SINGLE_PASS_SCAN = process.env.EXPO_PUBLIC_SINGLE_PASS_SCAN === '1'
 /** Included pieces other than `exceptId` that still carry no brand. */
 export function piecesMissingBrand<T extends { id: string; brand: string; included?: boolean }>(pieces: readonly T[], exceptId: string): T[] {
   return pieces.filter(piece => piece.id !== exceptId && piece.included !== false && !piece.brand.trim());
+}
+
+/** The singular noun for a category, naming a piece the user adds by hand. */
+export const PIECE_NOUN: Record<string, string> = {
+  top: 'Top',
+  bottom: 'Bottoms',
+  full_body: 'Dress',
+  shoes: 'Shoes',
+  outerwear: 'Jacket',
+  accessory: 'Accessory',
+  valuables: 'Valuable',
+};
+
+/** The review blurb: how many pieces were found, and what a tap does. */
+export function reviewBlurb(count: number): string {
+  if (count === 0) return 'I couldn’t pick out any pieces in this look. Add one below.';
+  return `I found ${count === 1 ? '1 piece' : `${count} pieces`} in this look. Tap a piece to make adjustments.`;
+}
+
+/** The stylist line once details are read: how many, and how many deserve a look. */
+export function readyBlurb(count: number, check: number): string {
+  const pieces = count === 1 ? '1 piece' : `${count} pieces`;
+  if (check === 0) return `I read the details on ${pieces}. Tap one to fine-tune, or add them as they are.`;
+  return `I read the details on ${pieces}. ${check === 1 ? '1 is' : `${check} are`} worth a quick look.`;
 }

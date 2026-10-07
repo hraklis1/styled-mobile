@@ -7,6 +7,7 @@ import { track } from '../../lib/analytics';
 import { batchDirectory, cropRegion, fileExists } from './files';
 import { classifyError, type RetryDecision } from './retryPolicy';
 import { batchImport } from './store';
+import { enqueuePolish } from '../polish-queue/runner';
 import type { Batch, Piece } from './types';
 
 const UPLOAD_CONCURRENCY = 4;
@@ -164,6 +165,8 @@ export async function runSave(batchId: string): Promise<void> {
       if (!stillCurrent(batchId)) return;
       applySavedItems(queryClient, result.items);
       for (const listener of savedListeners) listener(batchId, result.items);
+      const polishIds = new Set(batch.polishIds ?? []);
+      enqueuePolish(batch.userId, result.items.filter((item) => item.clientImportId && polishIds.has(item.clientImportId)));
       const created = new Set(result.items.map((item) => item.clientImportId));
       for (const piece of ready) {
         if (created.has(piece.id)) savedIds.push(piece.id);

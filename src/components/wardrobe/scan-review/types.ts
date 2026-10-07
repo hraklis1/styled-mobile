@@ -35,6 +35,8 @@ export type ScanReviewPiece = {
   possibleDuplicate?: boolean;
   /** Extraction gave up on this piece; it keeps only what detection found. */
   extractFailed?: boolean;
+  /** Pre-extract: the box overlaps an earlier piece's in the same category. */
+  overlap?: { of: string; strong: boolean };
 };
 
 export type ExtractTrigger = 'completed_review' | 'extract_now';
@@ -43,10 +45,16 @@ export type PiecePatch = Partial<ScanReviewPiece>;
 
 /** Which in-tree sheet is open, and what it edits. */
 export type SheetRequest =
-  | { kind: 'brand'; target: string[]; includedOnly?: boolean }
-  | { kind: 'material'; target: string[] }
-  | { kind: 'category'; target: string[] }
+  | { kind: 'brand'; target: string[]; includedOnly?: boolean; returnTo?: string }
+  | { kind: 'material'; target: string[]; returnTo?: string }
+  | { kind: 'category'; target: string[]; returnTo?: string }
+  /** The review's per-piece editor: preview, crop, type and brand. */
+  | { kind: 'editor'; target: string[] }
+  /** Choosing the type of a piece the user is adding by hand. */
+  | { kind: 'add-type'; target: string[] }
   | { kind: 'season'; target: string[] }
+  /** A before/after of a polished piece. */
+  | { kind: 'polish-example'; target: string[] }
   /** Menus: the footer's batch edits and the header's import options. */
   | { kind: 'options'; target: string[] };
 

@@ -10,6 +10,10 @@ import { BatchImportWorkspace } from '../components/wardrobe/BatchImportWorkspac
 import { useAuth } from './AuthContext';
 import { useBatchImportStore } from '../features/batch-import/store';
 import { discardBatch, startBatchRunner } from '../features/batch-import/runner';
+import { startPolishRunner } from '../features/polish-queue/runner';
+import { usePolishQueueStore } from '../features/polish-queue/store';
+import { PolishQueueTray } from '../components/wardrobe/PolishQueueTray';
+import { ScanDraftTray } from '../components/wardrobe/ScanDraftTray';
 import { onBatchItemsSaved } from '../features/batch-import/save';
 import { useStartBatch } from '../features/batch-import/useStartBatch';
 import { processLibraryAsset, useLibraryLaunchMany, type CapturedImage } from '../hooks/useCameraLaunch';
@@ -53,6 +57,7 @@ export function GlobalScanProvider({ children }: Props) {
   const [scanVisible, setScanVisible] = useState(false);
   const [scanAutoLaunch, setScanAutoLaunch] = useState<'camera' | 'library' | undefined>();
   const [scanInitialImage, setScanInitialImage] = useState<CapturedImage | undefined>();
+  const [scanResumeDraft, setScanResumeDraft] = useState(false);
   const [batchVisible, setBatchVisible] = useState(false);
   const [scanCallbacks, setScanCallbacks] = useState<ScanCallbacks>({});
   const [batchCallbacks, setBatchCallbacks] = useState<ScanCallbacks>({});
@@ -73,7 +78,16 @@ export function GlobalScanProvider({ children }: Props) {
   const openScanItem = useCallback((source?: 'camera' | 'library', callbacks?: ScanCallbacks) => {
     setScanAutoLaunch(source);
     setScanInitialImage(undefined);
+    setScanResumeDraft(false);
     setScanCallbacks(callbacks ?? {});
+    setScanVisible(true);
+  }, []);
+
+  const resumeScanDraft = useCallback(() => {
+    setScanAutoLaunch(undefined);
+    setScanInitialImage(undefined);
+    setScanResumeDraft(true);
+    setScanCallbacks({});
     setScanVisible(true);
   }, []);
 
@@ -82,11 +96,14 @@ export function GlobalScanProvider({ children }: Props) {
   // The batch queue outlives any screen: resume it on launch and keep it
   // running for the life of the signed-in shell.
   useEffect(() => startBatchRunner(), []);
+  useEffect(() => startPolishRunner(), []);
 
   // A batch belongs to the account that started it.
   useEffect(() => {
     const batch = useBatchImportStore.getState().batch;
     if (batch && user && batch.userId !== user.id) discardBatch();
+    const polish = usePolishQueueStore.getState();
+    if (polish.userId && user && polish.userId !== user.id) polish.reset();
   }, [user]);
 
   // Whoever opened a batch hears when its pieces reach the closet, however
@@ -129,6 +146,7 @@ export function GlobalScanProvider({ children }: Props) {
       if (!image) { dismiss(); return; }
       setScanAutoLaunch('library');
       setScanInitialImage(image);
+      setScanResumeDraft(false);
       setScanCallbacks(callbacks ?? {});
       setScanVisible(true);
       return;
@@ -143,6 +161,7 @@ export function GlobalScanProvider({ children }: Props) {
     setScanVisible(false);
     setScanAutoLaunch(undefined);
     setScanInitialImage(undefined);
+    setScanResumeDraft(false);
     const onDismiss = scanCallbacks.onDismiss;
     setScanCallbacks({});
     setTimeout(() => onDismiss?.(), 300);
@@ -164,6 +183,7 @@ export function GlobalScanProvider({ children }: Props) {
           onClose={closeScan}
           autoLaunch={scanAutoLaunch}
           initialImage={scanInitialImage}
+          resumeDraft={scanResumeDraft}
           onItemsSaved={(items) => {
             if (items.length > 0) setAdded(items.length);
             scanCallbacks.onItemsSaved?.(items);
@@ -179,6 +199,8 @@ export function GlobalScanProvider({ children }: Props) {
         />
       )}
       <BatchImportTray />
+      <PolishQueueTray />
+      <ScanDraftTray hidden={scanVisible} onResume={resumeScanDraft} />
       <BatchImportWorkspace />
       {added !== null ? (
         <UndoToast

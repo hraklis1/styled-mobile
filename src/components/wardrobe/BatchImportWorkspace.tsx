@@ -146,9 +146,9 @@ export function BatchImportWorkspace() {
       onInclusionChange={changes => store().setInclusion(changes)}
       onKeepBasic={ids => store().keepBasicDetails(ids)}
       onExtract={ids => { store().beginExtraction(ids); }}
-      onSave={(ids) => {
-        track('closet_batch_save_started', { item_count: ids.length });
-        store().beginSave(ids);
+      onSave={(ids, polishIds) => {
+        track('closet_batch_save_started', { item_count: ids.length, polish_count: polishIds.length });
+        store().beginSave(ids, polishIds);
         store().closeWorkspace();
       }}
       onMinimize={store().closeWorkspace}

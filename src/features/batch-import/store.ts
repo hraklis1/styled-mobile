@@ -73,7 +73,7 @@ type BatchImportState = {
   unblock: () => void;
   /** Put failed photos/pieces back in the queue for another round of attempts. */
   retryFailed: () => void;
-  beginSave: (ids?: readonly string[]) => void;
+  beginSave: (ids?: readonly string[], polishIds?: readonly string[]) => void;
   /** Saved pieces leave the batch; the batch ends once nothing is left. */
   finishSave: (savedIds: string[], failures: { id: string; message: string }[]) => void;
   failSave: (message: string) => void;
@@ -173,12 +173,14 @@ export const useBatchImportStore = create<BatchImportState>()(
             ? { ...p, status: p.failedStep === 'extract' ? 'pending' : 'ready', failedStep: null, attempts: 0, notBefore: 0, error: null }
             : p),
       }))),
-      beginSave: (ids) => {
+      beginSave: (ids, polishIds) => {
         const b = get().batch;
         if (!b || b.phase !== 'review') return;
         const selected = b.pieces.filter(p => p.included !== false && (!ids || ids.includes(p.id)));
         if (!selected.length || selected.some(p => p.status !== 'ready' && !(p.status === 'failed' && p.failedStep === 'save'))) return;
         set(s => update(s, current => ({ ...current, phase: 'saving', saveError: null,
+          // A retry (no list given) keeps the choice made at the first save.
+          polishIds: polishIds ? [...polishIds] : current.polishIds,
           saveIds: selected.map(p => p.id), pieces: current.pieces.map(p => selected.some(t => t.id === p.id)
             ? { ...p, status: 'ready', failedStep: null, error: null } : p) })));
       },

@@ -118,6 +118,8 @@ export type AppPreferences = {
   adventurousness: StylistAdventurousness;
   shoppingLinksInAnswers: boolean;
   analyticsOptOut: boolean;
+  /** Last choice of the add-to-closet "Polish photos" switch. */
+  polishOnImport: boolean;
   notifications: {
     dailyLook: { enabled: boolean; time: string };
     wearLog: boolean;

@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import { ImpactFeedbackStyle, impactAsync, selectionAsync } from '../../lib/haptics';
 import { colors, radii, spacing, typography } from '../../theme';
+import { displayBounds } from '../../lib/cropGeometry';
 
 const grabFeedback = () => { void impactAsync(ImpactFeedbackStyle.Light); };
 const edgeFeedback = () => { void selectionAsync(); };
@@ -30,12 +31,6 @@ function clamp(value: number, minimum: number, maximum: number) {
   return Math.max(minimum, Math.min(maximum, value));
 }
 
-function displayBounds(containerWidth: number, containerHeight: number, imageWidth: number, imageHeight: number) {
-  const scale = Math.min(containerWidth / imageWidth, containerHeight / imageHeight);
-  const width = imageWidth * scale;
-  const height = imageHeight * scale;
-  return { x: (containerWidth - width) / 2, y: (containerHeight - height) / 2, width, height };
-}
 
 type Props = {
   sourceImage: string;
@@ -43,9 +38,13 @@ type Props = {
   itemName: string;
   onApply: (bbox: Bbox) => void;
   onCancel: () => void;
+  title?: string;
+  /** Standing guidance under the title; without it, a how-to that retires at the first touch. */
+  instruction?: string;
+  applyLabel?: string;
 };
 
-export function CropAdjustEditor({ sourceImage, initialBbox, itemName, onApply, onCancel }: Props) {
+export function CropAdjustEditor({ sourceImage, initialBbox, itemName, onApply, onCancel, title = 'Adjust crop', instruction, applyLabel = 'Apply crop' }: Props) {
   const insets = useSafeAreaInsets();
   const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -120,7 +119,8 @@ export function CropAdjustEditor({ sourceImage, initialBbox, itemName, onApply, 
 
   const frameGesture = useMemo(() => Gesture.Simultaneous(panGesture, pinchGesture), [panGesture, pinchGesture]);
 
-  const resizeGesture = useCallback((leftEdge: boolean, topEdge: boolean) => Gesture.Pan()
+  // `null` leaves that axis alone, so the mid-edge handles move one side only.
+  const resizeGesture = useCallback((leftEdge: boolean | null, topEdge: boolean | null) => Gesture.Pan()
     .onStart(() => { scheduleOnRN(grabFeedback); })
     .onBegin(() => {
       startLeft.set(centerX.get() - cropWidth.get() / 2);
@@ -130,18 +130,20 @@ export function CropAdjustEditor({ sourceImage, initialBbox, itemName, onApply, 
     })
     .onUpdate((event) => {
       if (!bounds) return;
+      const dx = leftEdge === null ? 0 : event.translationX / bounds.width;
+      const dy = topEdge === null ? 0 : event.translationY / bounds.height;
       const left = leftEdge
-        ? clamp(startLeft.get() + event.translationX / bounds.width, 0, startRight.get() - MIN_FRAC)
+        ? clamp(startLeft.get() + dx, 0, startRight.get() - MIN_FRAC)
         : startLeft.get();
       const right = leftEdge
         ? startRight.get()
-        : clamp(startRight.get() + event.translationX / bounds.width, startLeft.get() + MIN_FRAC, 1);
+        : clamp(startRight.get() + dx, startLeft.get() + MIN_FRAC, 1);
       const top = topEdge
-        ? clamp(startTop.get() + event.translationY / bounds.height, 0, startBottom.get() - MIN_FRAC)
+        ? clamp(startTop.get() + dy, 0, startBottom.get() - MIN_FRAC)
         : startTop.get();
       const bottom = topEdge
         ? startBottom.get()
-        : clamp(startBottom.get() + event.translationY / bounds.height, startTop.get() + MIN_FRAC, 1);
+        : clamp(startBottom.get() + dy, startTop.get() + MIN_FRAC, 1);
       cropWidth.set(right - left);
       cropHeight.set(bottom - top);
       centerX.set((left + right) / 2);
@@ -155,6 +157,10 @@ export function CropAdjustEditor({ sourceImage, initialBbox, itemName, onApply, 
   const topRightGesture = useMemo(() => resizeGesture(false, true), [resizeGesture]);
   const bottomLeftGesture = useMemo(() => resizeGesture(true, false), [resizeGesture]);
   const bottomRightGesture = useMemo(() => resizeGesture(false, false), [resizeGesture]);
+  const topEdgeGesture = useMemo(() => resizeGesture(null, true), [resizeGesture]);
+  const bottomEdgeGesture = useMemo(() => resizeGesture(null, false), [resizeGesture]);
+  const leftEdgeGesture = useMemo(() => resizeGesture(true, null), [resizeGesture]);
+  const rightEdgeGesture = useMemo(() => resizeGesture(false, null), [resizeGesture]);
 
   const frameStyle = useAnimatedStyle(() => {
     if (!bounds) return { opacity: 0 };
@@ -206,9 +212,9 @@ export function CropAdjustEditor({ sourceImage, initialBbox, itemName, onApply, 
           <Ionicons name="chevron-back" size={24} color={colors.foreground} />
         </TouchableOpacity>
         <View style={styles.headerCopy}>
-          <Text style={styles.title}>Adjust crop</Text>
+          <Text style={styles.title} accessibilityRole="header">{title}</Text>
           {/* The how-to retires at the first touch; after that it is only clutter. */}
-          <Text style={[styles.subtitle, touched && styles.subtitleGone]}>Drag to move · corners to resize · pinch to zoom</Text>
+          {instruction ? null : <Text style={[styles.subtitle, touched && styles.subtitleGone]}>Drag to move · edges to resize · pinch to zoom</Text>}
         </View>
         <TouchableOpacity style={styles.headerButton} onPress={resetCrop} accessibilityLabel="Reset crop">
           <Ionicons name="refresh" size={21} color={colors.foreground} />
@@ -242,6 +248,10 @@ export function CropAdjustEditor({ sourceImage, initialBbox, itemName, onApply, 
             <View pointerEvents="none" style={styles.gridV2} />
             <View pointerEvents="none" style={styles.gridH1} />
             <View pointerEvents="none" style={styles.gridH2} />
+            <CropEdge style={styles.edgeTop} bar={styles.barHorizontal} gesture={topEdgeGesture} />
+            <CropEdge style={styles.edgeBottom} bar={styles.barHorizontal} gesture={bottomEdgeGesture} />
+            <CropEdge style={styles.edgeLeft} bar={styles.barVertical} gesture={leftEdgeGesture} />
+            <CropEdge style={styles.edgeRight} bar={styles.barVertical} gesture={rightEdgeGesture} />
             <CropCorner style={styles.cornerTopLeft} corner={styles.bracketTopLeft} gesture={topLeftGesture} />
             <CropCorner style={styles.cornerTopRight} corner={styles.bracketTopRight} gesture={topRightGesture} />
             <CropCorner style={styles.cornerBottomLeft} corner={styles.bracketBottomLeft} gesture={bottomLeftGesture} />
@@ -250,13 +260,14 @@ export function CropAdjustEditor({ sourceImage, initialBbox, itemName, onApply, 
         </GestureDetector>
       </View>
 
-      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+      {instruction ? <Text style={styles.instruction}>{instruction}</Text> : null}
+      <View style={[styles.footer, instruction && styles.footerAfterInstruction, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
         <TouchableOpacity style={styles.cancelButton} onPress={onCancel} accessibilityRole="button">
           <Text style={styles.cancelText}>Cancel</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.applyButton} onPress={handleApply} accessibilityRole="button">
           <Ionicons name="checkmark" size={18} color={colors.primaryForeground} />
-          <Text style={styles.applyText}>Apply crop</Text>
+          <Text style={styles.applyText}>{applyLabel}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -272,6 +283,19 @@ function CropCorner({ style, gesture, corner }: { style: object; gesture: Return
     </GestureDetector>
   );
 }
+
+/** A mid-edge grip: a short bar on the frame, inside a full-length hit strip. */
+function CropEdge({ style, gesture, bar }: { style: object; gesture: ReturnType<typeof Gesture.Pan>; bar: object }) {
+  return (
+    <GestureDetector gesture={gesture}>
+      <Animated.View style={[styles.edgeHit, style]}>
+        <View style={[styles.bar, bar]} />
+      </Animated.View>
+    </GestureDetector>
+  );
+}
+
+const EDGE_HIT = 32;
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
@@ -309,6 +333,17 @@ const styles = StyleSheet.create({
   bracketTopRight: { right: CORNER_HIT / 2 - 1.5, top: CORNER_HIT / 2 - 1.5, borderRightWidth: 3, borderTopWidth: 3 },
   bracketBottomLeft: { left: CORNER_HIT / 2 - 1.5, bottom: CORNER_HIT / 2 - 1.5, borderLeftWidth: 3, borderBottomWidth: 3 },
   bracketBottomRight: { right: CORNER_HIT / 2 - 1.5, bottom: CORNER_HIT / 2 - 1.5, borderRightWidth: 3, borderBottomWidth: 3 },
+  // The strip spans the side between the corner targets, which stay on top.
+  edgeHit: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
+  edgeTop: { top: -EDGE_HIT / 2, left: CORNER_HIT / 2, right: CORNER_HIT / 2, height: EDGE_HIT },
+  edgeBottom: { bottom: -EDGE_HIT / 2, left: CORNER_HIT / 2, right: CORNER_HIT / 2, height: EDGE_HIT },
+  edgeLeft: { left: -EDGE_HIT / 2, top: CORNER_HIT / 2, bottom: CORNER_HIT / 2, width: EDGE_HIT },
+  edgeRight: { right: -EDGE_HIT / 2, top: CORNER_HIT / 2, bottom: CORNER_HIT / 2, width: EDGE_HIT },
+  bar: { backgroundColor: colors.white, borderRadius: 2, filter: [{ dropShadow: { offsetX: 0, offsetY: 0, standardDeviation: 1, color: 'rgba(0,0,0,0.55)' } }] },
+  barHorizontal: { width: 22, height: 4 },
+  barVertical: { width: 4, height: 22 },
+  instruction: { ...typography.text.caption, color: colors.mutedForeground, textAlign: 'center', paddingTop: spacing.md, paddingHorizontal: spacing.lg, backgroundColor: colors.background },
+  footerAfterInstruction: { borderTopWidth: 0, paddingTop: spacing.sm },
   footer: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
     paddingHorizontal: spacing.lg, paddingTop: spacing.md,

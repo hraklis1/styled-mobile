@@ -55,7 +55,21 @@ function OptionRow({ label, selected, muted, icon, query, divided = true, onPres
   );
 }
 
-function SearchBar({ value, onChange, placeholder, onSubmit, autoFocus }: {
+/** Saving a brand that isn't in the list: an ink "+" disc and the name, so it reads as an action. */
+function SaveTypedRow({ brand, onPress }: { brand: string; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={styles.saveRow} onPress={onPress} accessibilityRole="button" accessibilityLabel={`Save ${brand} as the brand`} activeOpacity={0.7}>
+      <View style={styles.saveIcon}><Ionicons name="add" size={18} color={colors.primaryForeground} /></View>
+      <View style={styles.saveText}>
+        <Text style={styles.saveTitle} numberOfLines={1}>Add “{brand}”</Text>
+        <Text style={styles.saveHint}>Save as a new brand</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function SearchBar({ value, onChange, placeholder, onSubmit, autoFocus, returnKeyType = 'done' }: {
+  returnKeyType?: 'done' | 'search';
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
@@ -71,7 +85,7 @@ function SearchBar({ value, onChange, placeholder, onSubmit, autoFocus }: {
         placeholder={placeholder}
         autoCorrect={false}
         autoCapitalize="words"
-        returnKeyType="done"
+        returnKeyType={returnKeyType}
         onSubmitEditing={onSubmit}
         autoFocus={autoFocus}
       />}
@@ -84,9 +98,11 @@ function SearchBar({ value, onChange, placeholder, onSubmit, autoFocus }: {
  * used in this scan — a haul is often several pieces from one shop — then
  * the closet-first suggestion list.
  */
-export function BrandPicker({ current, suggestions, scanBrands, onSelect }: {
+export function BrandPicker({ current, suggestions, scanBrands, closetBrands = [], onSelect }: {
   current: string;
   suggestions: string[];
+  /** Brands the user already owns; listed first, under their own label. */
+  closetBrands?: string[];
   scanBrands: string[];
   onSelect: (brand: string) => void;
 }) {
@@ -102,19 +118,33 @@ export function BrandPicker({ current, suggestions, scanBrands, onSelect }: {
   const useTyped = Boolean(trimmed) && !exact;
   // The chosen brand already leads the list with a check; the chips offer the others.
   const otherScanBrands = scanBrands.filter((brand) => brand !== current);
+  // Before typing, the list splits into the user's own brands and the generic
+  // "Popular brands". "Suggested" is kept for picks chosen for this garment,
+  // which this list never is.
+  const closet = useMemo(() => new Set(closetBrands.map((brand) => brand.toLocaleLowerCase())), [closetBrands]);
+  const rows = useMemo(() => {
+    if (trimmed) return filtered.length ? [{ kind: 'label' as const, label: 'Matching' }, ...filtered.map((brand) => ({ kind: 'brand' as const, brand }))] : [];
+    const own = filtered.filter((brand) => closet.has(brand.toLocaleLowerCase()) || brand === current);
+    const rest = filtered.filter((brand) => !own.includes(brand));
+    return [
+      ...(own.length ? [{ kind: 'label' as const, label: 'From your closet' }, ...own.map((brand) => ({ kind: 'brand' as const, brand }))] : []),
+      ...(rest.length ? [{ kind: 'label' as const, label: 'Popular brands' }, ...rest.map((brand) => ({ kind: 'brand' as const, brand }))] : []),
+    ];
+  }, [closet, current, filtered, trimmed]);
 
   return (
     <View style={styles.fill}>
-      <SearchBar autoFocus value={query} onChange={setQuery} placeholder="Search or type a brand" onSubmit={() => { if (trimmed) onSelect(trimmed); }} />
+      <SearchBar autoFocus value={query} onChange={setQuery} placeholder="Search or enter a brand" returnKeyType={useTyped ? 'done' : 'search'} onSubmit={() => { if (trimmed) onSelect(trimmed); }} />
       <FlatList
-        data={filtered}
-        keyExtractor={(brand) => brand.toLocaleLowerCase()}
+        data={rows}
+        keyExtractor={(row) => row.kind === 'label' ? `label:${row.label}` : row.brand.toLocaleLowerCase()}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
         contentContainerStyle={styles.list}
         ListHeaderComponent={
           <>
-            {useTyped && filtered.length === 0 ? <OptionRow icon="add" label={`Use “${trimmed}”`} divided={false} onPress={() => onSelect(trimmed)} /> : null}
+            {/* A name we don't know is saved as typed: said plainly, first, and as a clear action. */}
+            {useTyped ? <SaveTypedRow brand={trimmed} onPress={() => onSelect(trimmed)} /> : null}
             {!trimmed && otherScanBrands.length > 0 ? (
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>In this scan</Text>
@@ -126,24 +156,17 @@ export function BrandPicker({ current, suggestions, scanBrands, onSelect }: {
               </View>
             ) : null}
             {current && !trimmed ? <OptionRow icon="close" label="No brand" muted onPress={() => onSelect('')} /> : null}
-            {filtered.length > 0 ? (
-              <Text style={[styles.sectionLabel, styles.listLabel]}>{trimmed ? 'Matching' : 'Suggested'}</Text>
-            ) : null}
           </>
         }
-        // With matches on screen the typed name is the fallback, so it follows them.
-        ListFooterComponent={useTyped && filtered.length > 0 ? (
-          <View style={styles.useTypedAfter}>
-            <OptionRow icon="add" label={`Use “${trimmed}”`} divided={false} onPress={() => onSelect(trimmed)} />
-          </View>
-        ) : null}
-        renderItem={({ item, index }) => (
+        renderItem={({ item, index }) => item.kind === 'label' ? (
+          <Text style={[styles.sectionLabel, styles.listLabel]}>{item.label}</Text>
+        ) : (
           <OptionRow
-            label={item}
+            label={item.brand}
             query={trimmed}
-            selected={item === current}
-            divided={index < filtered.length - 1}
-            onPress={() => onSelect(item)}
+            selected={item.brand === current}
+            divided={rows[index + 1]?.kind === 'brand'}
+            onPress={() => onSelect(item.brand)}
           />
         )}
       />
@@ -264,7 +287,11 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.hairline,
   },
   optionText: { ...typography.text.body, color: colors.foreground, flex: 1 },
-  useTypedAfter: { borderTopWidth: stroke.hairline, borderTopColor: colors.hairline },
+  saveRow: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.xs, marginBottom: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.lg, borderCurve: 'continuous', backgroundColor: colors.card, borderWidth: stroke.hairline, borderColor: colors.hairline },
+  saveIcon: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary },
+  saveText: { flex: 1, minWidth: 0, gap: 1 },
+  saveTitle: { ...typography.text.body, fontWeight: typography.weight.medium, color: colors.foreground },
+  saveHint: { ...typography.text.caption, color: colors.mutedForeground },
   optionLast: { borderBottomWidth: 0 },
   optionRest: { color: colors.mutedForeground },
   optionMatch: { fontWeight: typography.weight.medium },

@@ -136,6 +136,8 @@ export type Batch = {
   /** Save failed after automatic retries — the user has to act. */
   saveError: string | null;
   saveIds?: string[];
+  /** Pieces to polish once saved; carried here so a resumed save still queues them. */
+  polishIds?: string[];
   revision?: number;
   submission?: ReviewSubmission;
 };

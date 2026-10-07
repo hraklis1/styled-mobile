@@ -9,13 +9,15 @@ import { colors } from '../../../theme';
  * The one inclusion mark, on the grid plate and the loupe hero alike. A
  * white ring keeps it legible on white linen and on navy alike.
  */
-export function SelectBadge({ checked, onPress, disabled, reduceMotion, accessibilityLabel, style }: {
+export function SelectBadge({ checked, onPress, disabled, reduceMotion, accessibilityLabel, style, variant = 'photo' }: {
   checked: boolean;
   onPress: () => void;
   disabled?: boolean;
   reduceMotion: boolean;
   accessibilityLabel: string;
   style?: StyleProp<ViewStyle>;
+  /** `photo` sits on imagery and needs its lift; `plain` sits on cream and doesn't. */
+  variant?: 'photo' | 'plain';
 }) {
   const pop = useSharedValue(1);
   useEffect(() => {
@@ -26,8 +28,8 @@ export function SelectBadge({ checked, onPress, disabled, reduceMotion, accessib
     <TouchableOpacity hitSlop={2} onPress={onPress} disabled={disabled} activeOpacity={0.8}
       accessibilityRole="checkbox" accessibilityLabel={accessibilityLabel}
       accessibilityState={{ checked, disabled }} style={[styles.badgeTarget, style]}>
-      <Animated.View style={[styles.badge, checked && styles.badgeOn, popStyle]}>
-        {checked ? <Ionicons name="checkmark" size={13} color={colors.primaryForeground} /> : null}
+      <Animated.View style={[styles.badge, variant === 'plain' && styles.badgePlain, checked && styles.badgeOn, popStyle]}>
+        {checked ? <Ionicons name="checkmark" size={variant === 'plain' ? 12 : 13} color={colors.primaryForeground} /> : null}
       </Animated.View>
     </TouchableOpacity>
   );
@@ -47,5 +49,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
   },
+  // Flat and a touch smaller; the 48pt target is unchanged.
+  badgePlain: { width: 20, height: 20, borderRadius: 10, boxShadow: 'none', borderColor: colors.controlOutline, backgroundColor: 'transparent' },
   badgeOn: { backgroundColor: colors.foreground, borderColor: colors.foreground },
 });

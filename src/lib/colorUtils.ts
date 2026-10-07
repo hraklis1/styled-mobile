@@ -2,76 +2,96 @@ import type { NormalizedColor } from '../types/item';
 
 // ─── Color hex lookup map ─────────────────────────────────────────────────────
 
+/**
+ * Colour names as fabric, not as UI: muted, slightly warm values that read
+ * like dyed cloth on a cream page, rather than saturated screen primaries
+ * (a "brown" jumper is a deep brown, not saddle orange).
+ */
 export const COLOR_HEX_MAP: Record<string, string> = {
-  black: '#1A1A1A',
-  white: '#F5F5F5',
-  ivory: '#FFFFF0',
-  cream: '#FFF8E7',
-  'off white': '#F5F0E8',
-  'off-white': '#F5F0E8',
-  red: '#DC2626',
-  crimson: '#DC143C',
-  scarlet: '#FF2400',
-  burgundy: '#800020',
-  maroon: '#800000',
-  wine: '#722F37',
-  pink: '#F472B6',
-  blush: '#FFBCBB',
-  rose: '#F43F5E',
-  coral: '#FF6B6B',
-  salmon: '#FA8072',
-  orange: '#EA580C',
-  amber: '#F59E0B',
-  yellow: '#EAB308',
-  mustard: '#D4900A',
-  gold: '#D4AF37',
-  lime: '#84CC16',
-  green: '#16A34A',
-  olive: '#6B7C23',
-  sage: '#B2C29C',
-  'olive green': '#6B7C23',
-  'army green': '#4B5320',
-  'forest green': '#228B22',
-  'hunter green': '#355E3B',
-  'dark green': '#14532D',
-  moss: '#8A9A5B',
-  chocolate: '#5C3A21',
-  oatmeal: '#D8CBB3',
-  stone: '#B8AFA2',
-  ecru: '#E8E0CC',
-  mint: '#3EB489',
-  teal: '#0D9488',
-  aqua: '#00BCD4',
-  cyan: '#06B6D4',
-  blue: '#2563EB',
-  cobalt: '#0047AB',
-  navy: '#1B2A4A',
-  'navy blue': '#1B2A4A',
-  sky: '#7DD3FC',
-  'light blue': '#93C5FD',
-  'baby blue': '#BFDBFE',
-  indigo: '#4338CA',
-  purple: '#7C3AED',
-  violet: '#7C3AED',
-  lavender: '#C4B5FD',
-  lilac: '#D8B4FE',
-  mauve: '#E0B0FF',
-  brown: '#92400E',
-  tan: '#D2B48C',
-  khaki: '#C3B091',
-  camel: '#C19A6B',
-  sand: '#C2B280',
-  beige: '#D4C5A9',
-  taupe: '#9E8E7E',
-  grey: '#6B7280',
-  gray: '#6B7280',
-  'light-blue': '#93C5FD',
-  'light grey': '#D1D5DB',
-  'light gray': '#D1D5DB',
-  'dark grey': '#374151',
-  'dark gray': '#374151',
-  charcoal: '#374151',
-  silver: '#C0C0C0',
+  black: '#1C1C1C',
+  white: '#F7F6F2',
+  ivory: '#F6F1E3',
+  cream: '#F1E8D2',
+  'off white': '#EEE9DF',
+  'off-white': '#EEE9DF',
+  ecru: '#E6DCC6',
+  oatmeal: '#D8CDB8',
+  stone: '#B9B0A3',
+  red: '#B3261E',
+  crimson: '#A51C30',
+  scarlet: '#C8281E',
+  burgundy: '#6D1A2A',
+  maroon: '#5E1A1D',
+  wine: '#5B2333',
+  plum: '#5E2F4E',
+  pink: '#E8A5B5',
+  blush: '#E9C6C0',
+  rose: '#C96A7A',
+  coral: '#E57F6C',
+  salmon: '#E79A84',
+  rust: '#A4502C',
+  terracotta: '#B85F3C',
+  orange: '#D9692A',
+  amber: '#D39A2C',
+  ochre: '#C08A2B',
+  yellow: '#E5C547',
+  mustard: '#C99A2E',
+  gold: '#C7A04A',
+  lime: '#A3B84A',
+  green: '#3F7D4E',
+  emerald: '#2F7A57',
+  olive: '#6E6B3A',
+  'olive green': '#6E6B3A',
+  'army green': '#4E5333',
+  'forest green': '#2F5233',
+  'hunter green': '#2F4A36',
+  'dark green': '#24402F',
+  sage: '#A7B29A',
+  moss: '#7A7F4E',
+  mint: '#A8D5C2',
+  teal: '#2E6F6E',
+  aqua: '#6FC3C9',
+  cyan: '#4FB3C4',
+  blue: '#3A5DA8',
+  cobalt: '#2F4FA3',
+  navy: '#1F2A44',
+  'navy blue': '#1F2A44',
+  denim: '#4A6A8E',
+  'light wash': '#8EA9C6',
+  'dark wash': '#2F3E57',
+  sky: '#9CC3E4',
+  'light blue': '#A9C6E2',
+  'light-blue': '#A9C6E2',
+  'baby blue': '#C8DCEF',
+  indigo: '#3B3F7A',
+  purple: '#6A4C93',
+  violet: '#7B5BA6',
+  lavender: '#C3B6DA',
+  lilac: '#CDB5D8',
+  mauve: '#B08A9E',
+  brown: '#5D4030',
+  chocolate: '#4A2E22',
+  espresso: '#3B2A22',
+  cognac: '#9A4E25',
+  chestnut: '#6E3B22',
+  tortoiseshell: '#6B4226',
+  gum: '#B5813F',
+  tan: '#C4A47E',
+  khaki: '#B8A984',
+  camel: '#B88B5A',
+  sand: '#CDB998',
+  beige: '#D9C8AD',
+  taupe: '#8E7F72',
+  grey: '#8A8A88',
+  gray: '#8A8A88',
+  'heather grey': '#A8A7A3',
+  'heather gray': '#A8A7A3',
+  'light grey': '#C9C8C4',
+  'light gray': '#C9C8C4',
+  'dark grey': '#4A4A48',
+  'dark gray': '#4A4A48',
+  charcoal: '#3A3A3A',
+  silver: '#BDBDBD',
 };
 
 const PATTERN_KEYWORDS = ['multi', 'pattern', 'floral', 'stripe', 'plaid', 'check', 'print', 'camo'];
@@ -83,7 +103,27 @@ export function resolveHex(lower: string): string {
   for (const key of Object.keys(COLOR_HEX_MAP)) {
     if ((lower.includes(key) || key.includes(lower)) && (!best || key.length > best.length)) best = key;
   }
-  return best ? COLOR_HEX_MAP[best] : '#9CA3AF';
+  if (!best) return '#9CA3AF';
+  const hex = COLOR_HEX_MAP[best];
+  // "Light"/"dark" on a name without its own entry ("light pink", "deep
+  // red") shifts the tone; a colour that is already that light or dark
+  // ("dark navy") stays as it is.
+  if (best.includes('light') || best.includes('dark')) return hex;
+  const luminance = relativeLuminance(hex);
+  if (/\b(light|pale|soft)\b/.test(lower) && luminance < 0.75) return mixHex(hex, '#FFFFFF', 0.45);
+  if (/\b(dark|deep)\b/.test(lower) && luminance > 0.25) return mixHex(hex, '#000000', 0.35);
+  return hex;
+}
+
+function relativeLuminance(hex: string): number {
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+}
+
+function mixHex(hex: string, toward: string, amount: number): string {
+  const channel = (value: string, i: number) => parseInt(value.slice(i, i + 2), 16);
+  return '#' + [1, 3, 5].map(i => Math.round(channel(hex, i) + (channel(toward, i) - channel(hex, i)) * amount)
+    .toString(16).padStart(2, '0')).join('').toUpperCase();
 }
 
 export function getSwatchColor(name: string): { primary: string; secondary?: string } {

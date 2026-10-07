@@ -17,3 +17,16 @@ describe('colour names', () => {
     expect(toNormalizedColor('')).toBeNull();
   });
 });
+
+describe('fabric swatch tones', () => {
+  it('reads a compound name by its most specific colour', () => {
+    expect(getSwatchColor('Chocolate Brown').primary).toBe(COLOR_HEX_MAP.chocolate);
+  });
+  it('shifts a plain colour for light and dark, but leaves already-dark tones alone', () => {
+    const pink = COLOR_HEX_MAP.pink;
+    expect(getSwatchColor('light pink').primary).not.toBe(pink);
+    expect(getSwatchColor('deep red').primary).not.toBe(COLOR_HEX_MAP.red);
+    expect(getSwatchColor('dark navy').primary).toBe(COLOR_HEX_MAP.navy);
+    expect(getSwatchColor('light grey').primary).toBe(COLOR_HEX_MAP['light grey']);
+  });
+});

@@ -22,6 +22,9 @@ import { CropAdjustEditor, type Bbox } from './CropAdjustModal';
 import {
   duplicatePieceIds,
   loupeHeroHeight,
+  overlapDuplicates,
+  readyBlurb,
+  reviewBlurb,
   nextFlaggedPieceId,
   pieceReviewState,
   piecesMissingBrand,
@@ -36,12 +39,19 @@ import { ActionBar, type ActionBarMode } from './scan-review/ActionBar';
 import { PreExtractGrid, PieceLine, type SheetFilter } from './scan-review/PreExtractGrid';
 import { DetectionState, ExtractionState, type FilmFrame } from './scan-review/LoadingStates';
 import { ItemInspectionModal } from './scan-review/ItemInspectionModal';
+import { PhotoReview } from './scan-review/PhotoReview';
+import { PieceEditorSheet } from './scan-review/PieceEditorSheet';
+import { PieceDetailSheet } from './scan-review/PieceDetailSheet';
+import { usePolishChoice } from './scan-review/usePolishChoice';
+import { PolishExample } from './scan-review/PolishExample';
+import { PieceTag } from './scan-review/PieceRow';
+import { CATEGORY_LABELS, CATEGORY_ORDER } from '../../types/item';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { BrandSearchSheet } from './scan-review/BrandSearchSheet';
 import { selectionFeedback, bulkFeedback, cropFeedback } from './scan-review/feedback';
 import { ConfirmationPanel } from './scan-review/overlays';
 import { CategoryPicker, MaterialPicker, SeasonPicker, SheetButton } from './scan-review/pickers';
-import { TextLink } from './scan-review/atoms';
+import { ChipRow, TextLink } from './scan-review/atoms';
 import { WorkspaceSheet } from './scan-review/WorkspaceSheet';
 import { ArmedDiscardRow, MenuRow } from './scan-review/MenuRows';
 import {
@@ -80,7 +90,8 @@ type Props = {
   onInclusionChange: (changes: InclusionChange[]) => void;
   onKeepBasic: (ids: string[]) => void;
   onExtract: (ids: string[], trigger: ExtractTrigger, reviewedCount: number, brandCount: number) => void;
-  onSave: (ids: string[]) => void;
+  /** `polishIds`: the saved pieces that should get a polished cover once they land. */
+  onSave: (ids: string[], polishIds: string[]) => void;
   onClose: () => void;
   /**
    * Batch import runs in the background, so its workspace can be put away at
@@ -89,7 +100,18 @@ type Props = {
    * becomes "discard", available at every stage except mid-save.
    */
   onMinimize?: () => void;
+  /**
+   * Adds a piece the scan missed, cut from the same photo. Resolves to the
+   * new piece's id, or null when the crop couldn't be made. Only a
+   * single-photo scan offers this.
+   */
+  onAddPiece?: (bbox: Bbox, category: string) => Promise<string | null>;
+  /** Brands already in the closet, labelled apart from the generic list in brand search. */
+  closetBrands?: string[];
 };
+
+/** Where "Add one" starts: a centred box the user then fits to the garment. */
+const ADD_START_BBOX: Bbox = { x: 25, y: 25, width: 50, height: 50 };
 
 type View_ = 'sheet' | 'loupe';
 /**
@@ -122,6 +144,8 @@ export function ScanReviewWorkspace({
   onSave,
   onClose,
   onMinimize,
+  onAddPiece,
+  closetBrands,
 }: Props) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -145,8 +169,13 @@ export function ScanReviewWorkspace({
   const cropBusy = useRef(false);
   const [cropApplying, setCropApplying] = useState(false);
   const [cropId, setCropId] = useState<string | null>(null);
+  /** The editor a crop was opened from; it reopens when the crop closes. */
+  const [cropReturn, setCropReturn] = useState<string | null>(null);
+  /** "Add one": the box drawn so far, waiting on its type. */
+  const [adding, setAdding] = useState<{ step: 'crop' } | { step: 'type'; bbox: Bbox } | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
   const inclusion = useBatchExtractionReview(pieces, busy, onInclusionChange);
+  const polish = usePolishChoice();
   const gridOffset = useRef(0);
   const [brandFeedback, setBrandFeedback] = useState({ revision: 0, ids: new Set<string>() });
   /** After one piece gets a brand: offer it to the included pieces still without one. */
@@ -165,6 +194,10 @@ export function ScanReviewWorkspace({
   const visiblePieces = useMemo(() => {
     const shown = pieces.filter(piece =>
       preExtract || piece.included !== false || (piece.extraction !== 'not-started' && piece.extraction !== undefined));
+    if (preExtract) {
+      const overlaps = overlapDuplicates(shown.map(piece => ({ id: piece.id, category: piece.category, bbox: piece.cropBbox })));
+      return overlaps.size ? shown.map(piece => overlaps.has(piece.id) ? { ...piece, overlap: overlaps.get(piece.id) } : piece) : shown;
+    }
     if (!review) return shown;
     const duplicates = duplicatePieceIds(shown);
     return duplicates.size ? shown.map(piece => duplicates.has(piece.id) ? { ...piece, possibleDuplicate: true } : piece) : shown;
@@ -180,6 +213,27 @@ export function ScanReviewWorkspace({
   const checkCount = summary.check;
 
   const sheetEnabled = true;
+  // One photo behind every piece: the photo-led review. A batch spans many
+  // photos, so it keeps the contact sheet.
+  const reviewPhoto = (preExtract || review) && visiblePieces.length > 0 && visiblePieces.every(piece => piece.cropSource === visiblePieces[0].cropSource)
+    ? visiblePieces[0].cropSource
+    : null;
+  // Numbered once, by detection order, so piece 5 is piece 5 before and after extraction.
+  const numbers = useMemo(() => new Map(pieces.map((piece, index) => [piece.id, index + 1])), [pieces]);
+  // Strong overlaps start unselected; they wait in a collapsed group instead of crowding the list.
+  const duplicateIds = useMemo(
+    () => new Set(preExtract ? visiblePieces.filter(piece => piece.overlap?.strong).map(piece => piece.id) : []),
+    [preExtract, visiblePieces],
+  );
+  const noteFor = useCallback((piece: ScanReviewPiece): string | null => {
+    if (preExtract) {
+      const of = piece.overlap ? numbers.get(piece.overlap.of) : undefined;
+      return of === undefined ? null : piece.overlap!.strong ? `Looks like #${of}` : `Possibly same as #${of}`;
+    }
+    if (piece.extraction === 'failed') return 'Couldn’t read details';
+    if (states[piece.id] !== 'check') return null;
+    return piece.possibleDuplicate ? 'Possible repeat' : 'Worth a look';
+  }, [numbers, preExtract, states]);
   const effectiveView: View_ = view;
   const sheetPieces = filter === 'check' && review
     ? visiblePieces.filter((piece) => states[piece.id] === 'check')
@@ -205,6 +259,8 @@ export function ScanReviewWorkspace({
     setWalk(null);
     setSheet(null);
     setCropId(null);
+    setCropReturn(null);
+    setAdding(null);
     setConfirmClose(false);
 
     gridOffset.current = 0;
@@ -222,8 +278,10 @@ export function ScanReviewWorkspace({
       setFilter('all');
     }
     if (busy) {
-        setSheet(null);
+      setSheet(null);
       setCropId(null);
+      setCropReturn(null);
+      setAdding(null);
     }
   }, [busy, stage]);
 
@@ -300,8 +358,9 @@ export function ScanReviewWorkspace({
     if (busy) return;
     const targets = inclusion.snapshot();
     if (!targets.length || targets.some(p => p.extraction !== 'ready')) return;
-    track('scan_review_save_approved', { mode: onMinimize ? 'batch' : 'single', item_count: targets.length });
-    onSave(targets.map(p => p.id));
+    const polishIds = targets.filter(p => polish.isPolished(p.id)).map(p => p.id);
+    track('scan_review_save_approved', { mode: onMinimize ? 'batch' : 'single', item_count: targets.length, polish_count: polishIds.length });
+    onSave(targets.map(p => p.id), polishIds);
   };
 
   const openSheet = useCallback((request: SheetRequest) => {
@@ -321,12 +380,37 @@ export function ScanReviewWorkspace({
   const afterSheet = useRef<(() => void) | null>(null);
   const thenDismiss = useCallback((next: () => void) => { afterSheet.current = next; setSheetDismissed(true); }, []);
   const closeSheet = useCallback(() => {
+    // A brand or type sheet opened from the editor hands back to it.
+    const returnTo = sheet && (sheet.kind === 'brand' || sheet.kind === 'category' || sheet.kind === 'material') ? sheet.returnTo : undefined;
     setSheet(null);
     setSheetDismissed(false);
     const next = afterSheet.current;
     afterSheet.current = null;
-    next?.();
-  }, []);
+    if (next) next();
+    else if (returnTo && pieces.some(piece => piece.id === returnTo)) setSheet({ kind: 'editor', target: [returnTo] });
+  }, [pieces, sheet]);
+
+  const openEditor = useCallback((id: string) => {
+    track('scan_review_inspected', { mode: onMinimize ? 'batch' : 'single' });
+    setActiveId(id);
+    setOpenedIds(current => new Set(current).add(id));
+    setSheetDismissed(false);
+    setSheet({ kind: 'editor', target: [id] });
+  }, [onMinimize]);
+
+  const closeCrop = useCallback(() => {
+    setCropId(null);
+    const back = cropReturn;
+    setCropReturn(null);
+    if (back && pieces.some(piece => piece.id === back)) { setSheetDismissed(false); setSheet({ kind: 'editor', target: [back] }); }
+  }, [cropReturn, pieces]);
+
+  const toggleIncluded = useCallback((id: string) => {
+    selectionFeedback();
+    const included = inclusion.snapshot().some(p => p.id === id);
+    inclusion.change([id], !included);
+    track('scan_review_inclusion_changed', { mode: onMinimize ? 'batch' : 'single', included: !included });
+  }, [inclusion, onMinimize]);
 
 
   const requestSystemClose = useCallback(() => {
@@ -344,15 +428,36 @@ export function ScanReviewWorkspace({
 
   // ── Crop editor (full screen: precise manipulation earns the takeover) ─────
 
+  if (adding?.step === 'crop' && reviewPhoto) {
+    return (
+      <Modal visible={visible} presentationStyle="fullScreen" animationType="none" onRequestClose={() => setAdding(null)}>
+        <GestureHandlerRootView style={styles.root}>
+          <CropAdjustEditor
+            sourceImage={reviewPhoto}
+            initialBbox={ADD_START_BBOX}
+            itemName="the new piece"
+            title="Add a piece"
+            instruction="Drag the edges around the piece you want to add."
+            applyLabel="Next"
+            onApply={bbox => { setSheetDismissed(false); setAdding({ step: 'type', bbox }); setSheet({ kind: 'add-type', target: [] }); }}
+            onCancel={() => setAdding(null)}
+          />
+        </GestureHandlerRootView>
+      </Modal>
+    );
+  }
+
   const cropPiece = cropId ? pieces.find((piece) => piece.id === cropId) ?? null : null;
   if (cropPiece?.cropSource && cropPiece.cropBbox) {
     return (
-      <Modal visible={visible} presentationStyle="fullScreen" animationType="none" onRequestClose={() => { if (!cropBusy.current) setCropId(null); }}>
+      <Modal visible={visible} presentationStyle="fullScreen" animationType="none" onRequestClose={() => { if (!cropBusy.current) closeCrop(); }}>
         <GestureHandlerRootView style={styles.root}>
           <CropAdjustEditor
             sourceImage={cropPiece.cropSource}
             initialBbox={cropPiece.cropBbox}
             itemName={cropPiece.name}
+            instruction={preExtract ? 'Drag the edges to include the whole piece.' : undefined}
+            applyLabel={preExtract ? 'Save crop' : undefined}
             onApply={async (bbox) => {
               if (cropBusy.current) return;
               cropBusy.current = true;
@@ -360,7 +465,7 @@ export function ScanReviewWorkspace({
               try {
                 await onApplyCrop(cropPiece.id, bbox);
                 cropFeedback(true);
-                setCropId(null);
+                closeCrop();
               } catch {
                 cropFeedback(false);
                 Alert.alert('Couldn’t adjust crop', 'Please try again.');
@@ -369,7 +474,7 @@ export function ScanReviewWorkspace({
                 setCropApplying(false);
               }
             }}
-            onCancel={() => { if (!cropBusy.current) setCropId(null); }}
+            onCancel={() => { if (!cropBusy.current) closeCrop(); }}
           />
           {cropApplying ? <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.chromeTint }]} accessibilityRole="alert"><ActivityIndicator /><Text>Updating crop…</Text></View> : null}
         </GestureHandlerRootView>
@@ -386,6 +491,7 @@ export function ScanReviewWorkspace({
   // Scanning and extracting tell their own story in the hero; the footer
   // would only repeat it, so it holds its space empty.
   const heroSpeaks = stage === 'scanning' || stage === 'extracting';
+  const polishCount = inclusion.included.filter(p => polish.isPolished(p.id)).length;
   const actionMode: ActionBarMode = heroSpeaks
     ? { kind: 'busy', label: '' }
     : stage === 'saving'
@@ -408,8 +514,18 @@ export function ScanReviewWorkspace({
                 count: inclusion.included.length,
                 flagged: sheetEnabled ? checkCount : 0,
                 onSave: save,
-                onReviewFlagged: startFlaggedWalk,
-                onSeason: effectiveView === 'sheet' && inclusion.included.length ? () => openSheet({ kind: 'season', target: inclusion.snapshot().map(p => p.id) }) : undefined,
+                onReviewFlagged: reviewPhoto
+                  ? () => { const first = visiblePieces.find(p => states[p.id] === 'check'); if (first) openEditor(first.id); }
+                  : startFlaggedWalk,
+                polish: effectiveView === 'sheet' ? {
+                  count: polishCount,
+                  total: inclusion.included.length,
+                  cost: polish.costFor(polishCount),
+                  balance: polish.balance,
+                  locked: !polish.isPremium,
+                  onToggle: next => { void polish.setAll(next); },
+                  onExample: polish.example ? () => openSheet({ kind: 'polish-example', target: [] }) : undefined,
+                } : undefined,
               };
 
   const sheetTargets = sheet ? pieces.filter((piece) => sheet.target.includes(piece.id) && (!(sheet.kind === 'brand' && sheet.includedOnly) || piece.included !== false)) : [];
@@ -441,6 +557,7 @@ export function ScanReviewWorkspace({
             onClose={() => setConfirmClose(true)}
             busy={heroSpeaks}
             onMinimize={onMinimize}
+            heading={reviewPhoto ? (preExtract ? 'Review your pieces' : 'Your pieces are ready') : undefined}
           />
 
           {failure ? (
@@ -455,6 +572,27 @@ export function ScanReviewWorkspace({
             <DetectionState previewImage={previewImage} photos={scanPhotos} progress={scanProgress} heroHeight={heroHeight} reduceMotion={reduceMotion} />
           ) : stage === 'extracting' ? (
             <ExtractionState piece={visiblePieces[0] ?? null} pieces={inclusion.included} progress={extractionProgress} heroHeight={heroHeight} reduceMotion={reduceMotion} />
+          ) : reviewPhoto ? (
+            <PhotoReview
+              source={reviewPhoto}
+              blurb={preExtract ? reviewBlurb(visiblePieces.length) : readyBlurb(inclusion.included.length, checkCount)}
+              pieces={visiblePieces}
+              numbers={numbers}
+              noteFor={noteFor}
+              isPolished={polishCount > 0 ? polish.isPolished : undefined}
+              duplicateIds={duplicateIds}
+              compactPhoto={review}
+              activeId={activeId}
+              disabled={stage === 'saving'}
+              reduceMotion={reduceMotion}
+              bottomPadding={contentBottom}
+              onActivate={id => { selectionFeedback(); setActiveId(id); }}
+              onClearActive={() => setActiveId(null)}
+              onOpen={openEditor}
+              onToggleIncluded={toggleIncluded}
+              onBrand={id => { setActiveId(id); openSheet({ kind: 'brand', target: [id] }); }}
+              onAddPiece={onAddPiece ? () => { setActiveId(null); setAdding({ step: 'crop' }); } : undefined}
+            />
           ) : effectiveView === 'sheet' ? (
             <PreExtractGrid
               pieces={sheetPieces}
@@ -527,9 +665,71 @@ export function ScanReviewWorkspace({
 
         </View>
 
-        {sheet?.kind === 'brand' ? (
+        {/* The sheets present natively; their host must take no room in the layout, or the review collapses behind them. */}
+        <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+        {sheet?.kind === 'editor' && singleTarget && (singleTarget.extraction === 'ready' || singleTarget.extraction === 'failed') ? (
+          <PieceDetailSheet
+            piece={singleTarget}
+            stage={singleTarget.extraction === 'failed' ? 'pre-extract' : stage}
+            confirmed={confirmedIds.has(singleTarget.id)}
+            disabled={stage === 'saving'}
+            dismissed={sheetDismissed}
+            reduceMotion={reduceMotion}
+            onClose={closeSheet}
+            onDone={() => {
+              // Done means "looked at": its "worth a look" note retires.
+              setConfirmedIds(current => new Set(current).add(singleTarget.id));
+              dismissSheet();
+            }}
+            onCrop={singleTarget.canAdjustCrop && singleTarget.cropSource && singleTarget.cropBbox
+              ? () => thenDismiss(() => { setCropReturn(singleTarget.id); setCropId(singleTarget.id); })
+              : undefined}
+            onToggleCutout={() => onToggleCutout(singleTarget.id)}
+            polish={singleTarget.extraction === 'ready' && polish.isPremium
+              ? { on: polish.isPolished(singleTarget.id), cost: polish.costPerPiece, onToggle: next => polish.setPiece(singleTarget.id, next) }
+              : undefined}
+            onUpdate={patch => update(singleTarget.id, patch)}
+            onOpenSheet={kind => thenDismiss(() => { setSheetDismissed(false); setSheet({ kind, target: [singleTarget.id], returnTo: singleTarget.id }); })}
+          />
+        ) : sheet?.kind === 'editor' && singleTarget ? (
+          <PieceEditorSheet
+            piece={singleTarget}
+            dismissed={sheetDismissed}
+            reduceMotion={reduceMotion}
+            onClose={closeSheet}
+            onDone={dismissSheet}
+            onCrop={singleTarget.canAdjustCrop && singleTarget.cropSource && singleTarget.cropBbox
+              ? () => thenDismiss(() => { setCropReturn(singleTarget.id); setCropId(singleTarget.id); })
+              : undefined}
+            onType={() => thenDismiss(() => { setSheetDismissed(false); setSheet({ kind: 'category', target: [singleTarget.id], returnTo: singleTarget.id }); })}
+            onBrand={() => thenDismiss(() => { setSheetDismissed(false); setSheet({ kind: 'brand', target: [singleTarget.id], returnTo: singleTarget.id }); })}
+          />
+        ) : sheet?.kind === 'add-type' && adding?.step === 'type' ? (
+          <WorkspaceSheet title="What is it?" reduceMotion={reduceMotion} dismissed={sheetDismissed}
+            onClose={() => { closeSheet(); setAdding(current => current?.step === 'type' ? null : current); }}>
+            <View style={styles.addTypeBody}>
+              <ChipRow
+                label="Type"
+                options={CATEGORY_ORDER.map(value => ({ value: value as string, label: CATEGORY_LABELS[value] }))}
+                isSelected={() => false}
+                onToggle={category => {
+                  if (!onAddPiece) return;
+                  const { bbox } = adding;
+                  // Leave the sheet first; the new piece's editor opens once it exists.
+                  thenDismiss(() => {
+                    setAdding(null);
+                    void onAddPiece(bbox, category).then(id => {
+                      if (id) { bulkFeedback(); openEditor(id); }
+                      else Alert.alert('Couldn’t add that piece', 'Please try again.');
+                    });
+                  });
+                }}
+              />
+            </View>
+          </WorkspaceSheet>
+        ) : sheet?.kind === 'brand' ? (
           <BrandSearchSheet targetIds={sheet.target} current={singleTarget?.brand ?? (sheetTargets.every(piece => piece.brand === sheetTargets[0]?.brand) ? sheetTargets[0]?.brand ?? '' : '')}
-            suggestions={brandSuggestions} scanBrands={scanBrands} subtitle={singleTarget ? <PieceLine piece={singleTarget} hideBrand /> : <Text style={styles.sheetSubtitle}>{pieceCountLabel(sheetTargets.length)}</Text>}
+            suggestions={brandSuggestions} scanBrands={scanBrands} closetBrands={closetBrands} subtitle={singleTarget ? <PieceTag piece={singleTarget} /> : <Text style={styles.sheetSubtitle}>{pieceCountLabel(sheetTargets.length)}</Text>}
             reduceMotion={reduceMotion} dismissed={sheetDismissed} onClose={closeSheet}
             onSelect={(ids, brand) => {
               const targets = ids.filter(id => pieces.some(p => p.id === id && (!sheet.includedOnly || p.included !== false)));
@@ -539,6 +739,10 @@ export function ScanReviewWorkspace({
               setBrandOffer(rest.length ? { brand: brand.trim(), ids: rest } : null);
               dismissSheet();
             }} />
+        ) : sheet?.kind === 'polish-example' && polish.example ? (
+          <WorkspaceSheet title="What Polish does" reduceMotion={reduceMotion} dismissed={sheetDismissed} onClose={closeSheet}>
+            <PolishExample example={polish.example} />
+          </WorkspaceSheet>
         ) : sheet?.kind === 'options' ? (
           <WorkspaceSheet title="Import options" detent="fit" rows={onMinimize ? 2 : 1} reduceMotion={reduceMotion} dismissed={sheetDismissed} onClose={closeSheet}>
             {onMinimize ? <MenuRow icon="chevron-down" label="Keep running in the background" onPress={() => thenDismiss(onMinimize)} /> : null}
@@ -550,9 +754,9 @@ export function ScanReviewWorkspace({
               })}
             />
           </WorkspaceSheet>
-        ) : sheet ? (
+        ) : sheet && sheet.kind !== 'editor' && sheet.kind !== 'add-type' ? (
           <WorkspaceSheet
-            title={sheet.kind === 'material' ? 'Material' : sheet.kind === 'category' ? 'Category' : 'Season'}
+            title={sheet.kind === 'material' ? 'Material' : sheet.kind === 'category' ? (preExtract ? 'Type' : 'Category') : 'Season'}
             subtitle={singleTarget ? <PieceLine piece={singleTarget} /> : <Text style={styles.sheetSubtitle}>{pieceCountLabel(sheetTargets.length)}</Text>}
             reduceMotion={reduceMotion}
             dismissed={sheetDismissed}
@@ -576,6 +780,19 @@ export function ScanReviewWorkspace({
                   dismissSheet();
                 }}
               />
+            ) : sheet.kind === 'category' && singleTarget && preExtract ? (
+              // Before extraction only the category is known; type details come from extraction.
+              <View style={styles.addTypeBody}>
+                <ChipRow
+                  label="Type"
+                  options={CATEGORY_ORDER.map(value => ({ value: value as string, label: CATEGORY_LABELS[value] }))}
+                  isSelected={value => value === singleTarget.category}
+                  onToggle={category => {
+                    if (category !== singleTarget.category) { selectionFeedback(); update(singleTarget.id, { category }); }
+                    dismissSheet();
+                  }}
+                />
+              </View>
             ) : sheet.kind === 'category' && singleTarget ? (
               <CategoryPicker
                 category={singleTarget.category}
@@ -588,6 +805,7 @@ export function ScanReviewWorkspace({
             ) : null}
           </WorkspaceSheet>
         ) : null}
+        </View>
 
         {confirmClose ? (
           <ConfirmationPanel
@@ -611,7 +829,9 @@ export function ScanReviewWorkspace({
   );
 }
 
-function WorkspaceHeader({ stage, view, canGoBack, position, includedCount, totalCount, onIncludeAll, onMore, closeDisabled, busy, topInset, onBack, onClose, onMinimize }: {
+function WorkspaceHeader({ stage, view, canGoBack, position, includedCount, totalCount, onIncludeAll, onMore, closeDisabled, busy, topInset, onBack, onClose, onMinimize, heading }: {
+  /** A screen heading set in the bar itself, beside the close button: one compact row instead of a bar plus a title. */
+  heading?: string;
   stage: ScanReviewStage;
   view: View_;
   canGoBack: boolean;
@@ -634,6 +854,30 @@ function WorkspaceHeader({ stage, view, canGoBack, position, includedCount, tota
       ? 'Reading details'
       : stage === 'pre-extract' ? 'Choose pieces' : 'Review details';
   const showPosition = view === 'loupe' && position && position.count > 1 && (stage === 'review' || stage === 'saving' || stage === 'pre-extract');
+
+  if (heading) {
+    return (
+      <View style={[styles.headingBar, { paddingTop: topInset + spacing.xs }]}>
+        <Text style={styles.heading} accessibilityRole="header" numberOfLines={1}>{heading}</Text>
+        {onMore ? <Pressable onPress={onMore} style={styles.headerButton} accessibilityRole="button" accessibilityLabel="More options"><Ionicons name="ellipsis-horizontal" size={22} color={colors.foreground} /></Pressable> : null}
+        {onMinimize ? (
+          <TouchableOpacity style={styles.headerButton} onPress={onMinimize} accessibilityRole="button" accessibilityLabel="Hide batch import" accessibilityHint="The batch keeps running in the background">
+            <Ionicons name="chevron-down" size={22} color={colors.foreground} />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={onClose}
+            disabled={closeDisabled}
+            accessibilityRole="button"
+            accessibilityLabel={busy ? 'Stop closet scan' : 'Close closet scan'}
+          >
+            <Ionicons name="close" size={22} color={closeDisabled ? colors.border : colors.foreground} />
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.header, { paddingTop: topInset + spacing.xs }]}>
@@ -688,6 +932,7 @@ const styles = StyleSheet.create({
   discardDetail: { ...typography.text.bodySmall, opacity: 0.85 },
   inclusionControl: { minHeight: 44, marginHorizontal: spacing.lg, marginVertical: spacing.sm },
   root: { flex: 1, backgroundColor: colors.background },
+  addTypeBody: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -697,6 +942,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: stroke.hairline,
     borderBottomColor: colors.hairline,
   },
+  headingBar: { flexDirection: 'row', alignItems: 'center', paddingLeft: spacing.lg, paddingRight: spacing.sm, paddingBottom: spacing.xs },
+  heading: { ...typography.text.editorialSection, color: colors.foreground, flex: 1 },
   headerSide: { flexShrink: 0, flexDirection: 'row', alignItems: 'center' },
   headerSideEnd: { justifyContent: 'flex-end' },
   headerCenter: { flex: 1, alignItems: 'center' },

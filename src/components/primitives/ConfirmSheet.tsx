@@ -14,9 +14,14 @@ export type ConfirmSheetRequest = {
   /** Thumbnails of what the action affects, so the decision is visual. */
   images?: string[];
   confirmLabel: string;
-  cancelLabel?: string;
+  /** null hides the cancel button, for a notice with a single acknowledgement. */
+  cancelLabel?: string | null;
   destructive?: boolean;
   onConfirm: () => void | Promise<void>;
+  /** Runs when the cancel button is pressed (not on a plain dismiss). */
+  onCancel?: () => void;
+  /** False when the choice must be made: no backdrop or back-gesture dismiss. */
+  dismissible?: boolean;
 };
 
 const MAX_THUMBS = 4;
@@ -74,15 +79,21 @@ export function ConfirmSheet({ request, onClose }: { request: ConfirmSheetReques
     }
   };
 
+  const cancel = () => {
+    shown.onCancel?.();
+    onClose();
+  };
+  const dismiss = busy || shown.dismissible === false ? undefined : onClose;
+
   const thumbs = (shown.images ?? []).slice(0, MAX_THUMBS);
   const overflow = (shown.images?.length ?? 0) - thumbs.length;
   const translateY = animation.interpolate({ inputRange: [0, 1], outputRange: [320, 0] });
 
   return (
-    <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
+    <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={dismiss ?? (() => {})}>
       <View style={styles.root}>
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: animation }]}>
-          <Pressable style={styles.backdrop} onPress={busy ? undefined : onClose} accessibilityLabel="Dismiss" />
+          <Pressable style={styles.backdrop} onPress={dismiss} accessibilityLabel="Dismiss" />
         </Animated.View>
         <Animated.View
           accessibilityViewIsModal
@@ -114,9 +125,9 @@ export function ConfirmSheet({ request, onClose }: { request: ConfirmSheetReques
               ? <ActivityIndicator color={colors.primaryForeground} />
               : <AppText variant="label" style={styles.confirmText}>{shown.confirmLabel}</AppText>}
           </Pressable>
-          <Pressable onPress={onClose} disabled={busy} accessibilityRole="button" style={({ pressed }) => [styles.cancel, pressed && styles.pressed]}>
+          {shown.cancelLabel === null ? null : <Pressable onPress={cancel} disabled={busy} accessibilityRole="button" style={({ pressed }) => [styles.cancel, pressed && styles.pressed]}>
             <AppText variant="label" tone="muted">{shown.cancelLabel ?? 'Cancel'}</AppText>
-          </Pressable>
+          </Pressable>}
         </Animated.View>
       </View>
     </Modal>

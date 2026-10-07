@@ -68,7 +68,7 @@ it('excluded records remain visible and zero remains recoverable', () => {
   act(() => review.change(makePieces().map(p => p.id), false));
   expect(renderer.root.findByType(FlatList).props.data).toHaveLength(6);
   expect(renderer.root.findByType(ActionBar).props.mode.count).toBe(0);
-  expect(renderer.root.findAllByType(Text).map(n => n.props.children)).toContain('Choose at least 1 piece');
+  expect(renderer.root.findAllByType(Text).map(n => n.props.children)).toContain('Select at least one piece');
   act(() => review.change(['0'], true));
   expect(review.snapshot().map(p => p.id)).toEqual(['0']);
 });

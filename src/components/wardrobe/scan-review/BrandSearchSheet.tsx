@@ -3,11 +3,12 @@ import { BrandPicker } from './pickers';
 import { WorkspaceSheet } from './WorkspaceSheet';
 import { selectionFeedback, bulkFeedback } from './feedback';
 
-export function BrandSearchSheet({ targetIds, current, suggestions, scanBrands, subtitle, dismissed, reduceMotion, onSelect, onClose }: {
+export function BrandSearchSheet({ targetIds, current, suggestions, scanBrands, closetBrands, subtitle, dismissed, reduceMotion, onSelect, onClose }: {
   targetIds: string[];
   current: string;
   suggestions: string[];
   scanBrands: string[];
+  closetBrands?: string[];
   subtitle?: ReactNode;
   dismissed: boolean;
   reduceMotion: boolean;
@@ -16,7 +17,7 @@ export function BrandSearchSheet({ targetIds, current, suggestions, scanBrands, 
 }) {
   const committed = useRef(false);
   return <WorkspaceSheet title="Brand" subtitle={subtitle} detent="large" dismissed={dismissed} reduceMotion={reduceMotion} onClose={onClose}>
-    <BrandPicker current={current} suggestions={suggestions} scanBrands={scanBrands} onSelect={brand => {
+    <BrandPicker current={current} suggestions={suggestions} scanBrands={scanBrands} closetBrands={closetBrands} onSelect={brand => {
       if (committed.current || dismissed) return;
       committed.current = true;
       if (targetIds.length > 1) bulkFeedback(); else selectionFeedback();

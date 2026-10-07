@@ -8,6 +8,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   adventurousness: 'balanced',
   shoppingLinksInAnswers: true,
   analyticsOptOut: false,
+  polishOnImport: false,
   notifications: {
     dailyLook: { enabled: false, time: '07:30' },
     wearLog: false,

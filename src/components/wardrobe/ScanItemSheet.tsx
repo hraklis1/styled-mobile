@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { enqueuePolish } from '../../features/polish-queue/runner';
 import {
   View,
   Text,
@@ -6,11 +7,11 @@ import {
   StyleSheet,
   Platform,
   UIManager,
-  Alert,
   AppState,
   type AppStateStatus,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SCAN_DRAFT_KEY, countDraftPieces, readScanDraft, useScanDraftStore } from '../../features/scan-draft/store';
 import {
   BottomSheetModal,
   BottomSheetScrollView,
@@ -26,6 +27,7 @@ import {
   createItemsBatch,
   applySavedItems,
   useBrandSuggestions,
+  useClosetBrands,
   type BatchCreateItemInput,
   type PoseScanItem,
 } from '../../hooks/useItems';
@@ -49,8 +51,9 @@ import { isDataUri, uploadDataUrlsToR2 } from '../../lib/uploadImage';
 import { capturePhotoLocation } from '../../lib/photoLocation';
 import { track } from '../../lib/analytics';
 import { applyInclusionChanges } from '../../lib/extraction-review';
-import { resolveExtractedIdentity, compositePieceIds, SINGLE_PASS_SCAN } from '../../lib/scan-review';
+import { resolveExtractedIdentity, compositePieceIds, overlapDuplicates, PIECE_NOUN, SINGLE_PASS_SCAN } from '../../lib/scan-review';
 import * as Haptics from '../../lib/haptics';
+import { confirmSheet } from '../primitives/ConfirmSheet';
 import {
   ScanReviewWorkspace,
   type ScanReviewPiece,
@@ -130,9 +133,9 @@ interface ScanItemSheetProps {
    * of opening the picker when `autoLaunch` is 'library'.
    */
   initialImage?: CapturedImage;
+  /** Opened from the unfinished-scan tray: restore the saved draft without asking. */
+  resumeDraft?: boolean;
 }
-
-const SCAN_DRAFT_KEY = 'scan_review_draft';
 const EXTRACTION_CONCURRENCY = 4;
 /** Long edge of the frame sent to /api/scan-vision-pose; matches batch import. */
 const POSE_FRAME_MAX_DIM = 1024;
@@ -271,7 +274,7 @@ async function buildPreExtractItemFromPose(
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, initialImage }: ScanItemSheetProps) {
+export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, initialImage, resumeDraft }: ScanItemSheetProps) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [detectedItems, setDetectedItems] = useState<EditableItem[]>([]);
@@ -311,44 +314,36 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
   const launchCamera = useCameraLaunch();
   const launchLibrary = useLibraryLaunch();
   const brandSuggestions = useBrandSuggestions();
+  const closetBrands = useClosetBrands();
 
   // ── Draft persistence ────────────────────────────────────────────────────────
 
   // On mount: offer to restore a saved draft if one exists
   useEffect(() => {
-    AsyncStorage.getItem(SCAN_DRAFT_KEY).then((raw) => {
-      if (!raw) { setDraftChoice('new'); return; }
-      try {
-        const parsed = JSON.parse(raw);
-        const draft = Array.isArray(parsed) ? { ready: parsed as EditableItem[], pending: [] as PreExtractItemData[], image: null as string | null, failedIds: [] as string[], approvedIds: [] as string[] } : parsed;
-        if (!draft || !Array.isArray(draft.ready) || !Array.isArray(draft.pending)) { setDraftChoice('new'); return; }
-        const count = new Set([...draft.ready, ...draft.pending].map((p: { tempId: string }) => p.tempId)).size;
-        if (!count) { setDraftChoice('new'); return; }
-        Alert.alert(
-          'Resume previous scan?',
-          `You have ${count} pieces from a previous scan. Continue editing?`,
-          [
-            {
-              text: 'Discard',
-              style: 'destructive',
-              onPress: () => { void AsyncStorage.removeItem(SCAN_DRAFT_KEY); setDraftChoice('new'); },
-            },
-            {
-              text: 'Resume',
-              onPress: () => {
-                setDraftChoice('resumed');
-                const pending = draft.pending.map((p: PreExtractItemData) => ({ ...p, sourceImage: draft.image ?? p.sourceImage }));
-                setDetectedItems(draft.ready.map((p: EditableItem) => ({ ...p, sourceImage: draft.image ?? p.sourceImage })));
-                setPreExtractItems(pending);
-                setFailedItems(pending.filter((p: PreExtractItemData) => draft.failedIds?.includes(p.tempId)));
-                setImageDataUrl(draft.image);
-                setPhase(draft.ready.length ? 'review' : 'pre-extract');
-                if (draft.approvedIds?.length && draft.image) setResumeIds(draft.approvedIds);
-              },
-            },
-          ],
-        );
-      } catch { void AsyncStorage.removeItem(SCAN_DRAFT_KEY); setDraftChoice('new'); }
+    readScanDraft().then((draft) => {
+      if (!draft) { setDraftChoice('new'); return; }
+      const restore = () => {
+        setDraftChoice('resumed');
+        const pending = (draft.pending as PreExtractItemData[]).map(p => ({ ...p, sourceImage: draft.image ?? p.sourceImage }));
+        setDetectedItems((draft.ready as EditableItem[]).map(p => ({ ...p, sourceImage: draft.image ?? p.sourceImage })));
+        setPreExtractItems(pending);
+        setFailedItems(pending.filter(p => draft.failedIds?.includes(p.tempId)));
+        setImageDataUrl(draft.image);
+        setPhase(draft.ready.length ? 'review' : 'pre-extract');
+        if (draft.approvedIds?.length && draft.image) setResumeIds(draft.approvedIds);
+      };
+      if (resumeDraft) { restore(); return; }
+      const count = countDraftPieces(draft);
+      confirmSheet({
+        title: 'Resume previous scan?',
+        message: `You have ${count} ${count === 1 ? 'piece' : 'pieces'} from a previous scan. Pick up where you left off?`,
+        images: draft.image ? [draft.image] : undefined,
+        confirmLabel: 'Resume',
+        cancelLabel: 'Discard',
+        dismissible: false,
+        onCancel: () => { void useScanDraftStore.getState().discard(); setDraftChoice('new'); },
+        onConfirm: restore,
+      });
     }).catch(() => setDraftChoice('new'));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -367,7 +362,9 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
     const draft = draftRef.current;
     if (draftClosed.current || draft.phase === 'idle' || draft.phase === 'scanning') return;
     const withoutSource = <T extends { sourceImage: string | null }>(items: T[]) => items.map(({ sourceImage: _source, ...item }) => item);
-    void AsyncStorage.setItem(SCAN_DRAFT_KEY, JSON.stringify({ version: 2, ...draft,
+    const pieces = new Set([...draft.ready, ...draft.pending].map(p => p.tempId)).size;
+    useScanDraftStore.getState().set(pieces ? { count: pieces, image: draft.image } : null);
+    void AsyncStorage.setItem(SCAN_DRAFT_KEY, JSON.stringify({ version: 2, savedAt: Date.now(), ...draft,
       ready: draft.image ? withoutSource(draft.ready) : draft.ready, pending: draft.image ? withoutSource(draft.pending) : draft.pending, approvedIds: approvedIds.current,
     })).catch(() => { /* A failed local draft write does not block review. */ });
   }, []);
@@ -436,7 +433,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
     approvedIds.current = [];
     sessionRef.current += 1;
     extractionCacheRef.current?.clear();
-    AsyncStorage.removeItem(SCAN_DRAFT_KEY);
+    void useScanDraftStore.getState().discard();
     poseScan.reset();
     setPreExtractItems([]);
     setFailedItems([]);
@@ -472,7 +469,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
   }, [phase]);
 
 
-  const handleSaveAll = async (ids: string[]) => {
+  const handleSaveAll = async (ids: string[], polishIds: string[] = []) => {
     const items = detectedItems.filter(item => ids.includes(item.tempId));
     if (items.length === 0 || operationRef.current) return;
     if (!user) {
@@ -537,6 +534,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
         // Applied even if the session moved on: the rows exist either way.
         applySavedItems(queryClient, result.items);
         savedItems = result.items;
+        enqueuePolish(user.id, result.items.filter((saved) => saved.clientImportId && polishIds.includes(saved.clientImportId)));
         for (const rejected of result.rejected) {
           if (rejected.clientImportId) failures.set(rejected.clientImportId, rejected.message);
         }
@@ -560,12 +558,15 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
       setDetectedItems((current) => current.filter((it) => !savedIds.has(it.tempId)));
       if (savedItems.length > 0) onItemsSaved?.(savedItems);
       const [firstMessage] = failures.values();
-      Alert.alert(
-        savedItems.length > 0 ? 'Some pieces weren\'t added' : 'Save failed',
-        failures.size === 1
+      confirmSheet({
+        title: savedItems.length > 0 ? 'Some pieces weren\u2019t added' : 'Save failed',
+        message: failures.size === 1
           ? `${firstMessage} Tap Add to try again.`
-          : `${failures.size} pieces couldn't be added. Tap Add to try again.`,
-      );
+          : `${failures.size} pieces couldn\u2019t be added. Tap Add to try again.`,
+        confirmLabel: 'OK',
+        cancelLabel: null,
+        onConfirm: () => {},
+      });
       setPreExtractItems(current => current.filter(item => !savedIds.has(item.tempId)));
       operationRef.current = false;
       setPhase('review');
@@ -574,7 +575,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
 
     operationRef.current = false;
     draftClosed.current = true;
-    AsyncStorage.removeItem(SCAN_DRAFT_KEY);
+    void useScanDraftStore.getState().discard();
     track('wardrobe_items_added', { item_count: savedItems.length });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     onItemsSaved?.(savedItems);
@@ -795,11 +796,15 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
       if (sessionRef.current !== session) return;
 
       if (!result.items || result.items.length === 0) {
-        Alert.alert(
-          'No clothing detected',
-          'Try a full-body photo with better lighting, or add items manually.',
-          [{ text: 'OK', onPress: () => { setPhase('idle'); setImageDataUrl(null); } }],
-        );
+        confirmSheet({
+          title: 'No clothing detected',
+          message: 'Try a full-body photo with better lighting, or add items manually.',
+          images: [displayDataUrl],
+          confirmLabel: 'OK',
+          cancelLabel: null,
+          dismissible: false,
+          onConfirm: () => { setPhase('idle'); setImageDataUrl(null); },
+        });
         return;
       }
 
@@ -809,7 +814,11 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
       );
       if (sessionRef.current !== session) return;
 
-      const composites = compositePieceIds(preItems.map(item => ({ id: item.tempId, category: item.category, bbox: item.bbox })));
+      const boxes = preItems.map(item => ({ id: item.tempId, category: item.category, bbox: item.bbox }));
+      const composites = compositePieceIds(boxes);
+      // A strong overlap is almost surely the same garment twice: it starts
+      // unticked (and says so in review) rather than vanishing.
+      for (const [id, flag] of overlapDuplicates(boxes)) if (flag.strong) composites.add(id);
       setPreExtractItems(composites.size ? preItems.map(item => composites.has(item.tempId) ? { ...item, included: false } : item) : preItems);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setPhase('pre-extract');
@@ -818,13 +827,16 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
       if (SINGLE_PASS_SCAN) setResumeIds(preItems.filter(item => !composites.has(item.tempId)).map(item => item.tempId));
     } catch (err: any) {
       if (sessionRef.current !== session) return;
-      Alert.alert(
-        'Scan failed',
+      confirmSheet({
+        title: 'Scan failed',
         // The server's own message when it sent one — a 503 LABEL_UNAVAILABLE
         // says the photo couldn't be read and that no credits were taken.
-        apiErrorMessage(err, err?.message || 'Something went wrong. Please try again.'),
-        [{ text: 'OK', onPress: () => { setPhase('idle'); setImageDataUrl(null); } }],
-      );
+        message: apiErrorMessage(err, err?.message || 'Something went wrong. Please try again.'),
+        confirmLabel: 'OK',
+        cancelLabel: null,
+        dismissible: false,
+        onConfirm: () => { setPhase('idle'); setImageDataUrl(null); },
+      });
     }
   };
 
@@ -879,6 +891,32 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
       });
     }
   }, [detectedItems, preExtractItems, updatePreExtractItem, updateItem]);
+
+  /** "Missing a piece? Add one": cut it from the scan's own photo and append it, included. */
+  const handleAddPiece = useCallback(async (bbox: Bbox, category: string): Promise<string | null> => {
+    const template = preExtractItems[0];
+    if (!template?.sourceImage) return null;
+    const crop = await cropImage(template.sourceImage, bbox, { maxDim: 800 });
+    if (!crop) return null;
+    const tempId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setPreExtractItems(prev => [...prev, {
+      tempId,
+      name: PIECE_NOUN[category] ?? 'Piece',
+      category,
+      croppedImage: crop,
+      cutoutImage: null,
+      useCutout: false,
+      targetImage: crop,
+      bbox,
+      previewBbox: bbox,
+      sourceImage: template.sourceImage,
+      brandHint: '',
+      nameEdited: false,
+      scene: template.scene,
+    }]);
+    track('scan_review_piece_added', { category });
+    return tempId;
+  }, [preExtractItems]);
 
   const workspacePieces = useMemo<ScanReviewPiece[]>(() => {
     const readyPieces: ScanReviewPiece[] = detectedItems.map((item) => ({
@@ -936,9 +974,14 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
 
   const handleWorkspaceUpdate = useCallback((tempId: string, patch: Partial<ScanReviewPiece>) => {
     if (!detectedItems.some(item => item.tempId === tempId)) {
+      const preItem = preExtractItems.find(item => item.tempId === tempId);
+      // A new type makes the detected name wrong ("Quarter-zip" as shoes), and
+      // the name steers extraction, so an unedited name follows the type.
+      const retyped = patch.category && preItem && patch.category !== preItem.category ? patch.category : null;
       updatePreExtractItem(tempId, {
         ...(patch.name !== undefined ? { name: patch.name, nameEdited: true } : {}),
         ...(patch.brand !== undefined ? { brandHint: patch.brand } : {}),
+        ...(retyped ? { category: retyped, ...(preItem?.nameEdited ? {} : { name: PIECE_NOUN[retyped] ?? preItem!.name }) } : {}),
       });
       return;
     }
@@ -958,7 +1001,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
       ...(patch.fit !== undefined ? { fit: patch.fit } : {}),
       ...(patch.sizeProfile !== undefined ? { sizeProfile: patch.sizeProfile } : {}),
     });
-  }, [detectedItems, updateItem, updatePreExtractItem]);
+  }, [detectedItems, preExtractItems, updateItem, updatePreExtractItem]);
 
   return (
     <>
@@ -1006,6 +1049,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
         previewImage={imageDataUrl}
         pieces={workspacePieces}
         brandSuggestions={brandSuggestions}
+        closetBrands={closetBrands}
         extractionProgress={extractionProgress}
         failure={phase === 'review' && failedItems.length > 0 ? {
           message: failedItems.length === 1
@@ -1024,6 +1068,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
           }
         }}
         onApplyCrop={handleWorkspaceCropApply}
+        onAddPiece={phase === 'pre-extract' ? handleAddPiece : undefined}
         onInclusionChange={changes => {
           const apply = <T extends { tempId: string; included?: boolean }>(items: T[]) =>
             applyInclusionChanges(items.map(item => ({ ...item, id: item.tempId })), changes);
@@ -1050,10 +1095,10 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
           });
           void handleStartExtraction(ids);
         }}
-        onSave={ids => { void handleSaveAll(ids).catch(() => {
+        onSave={(ids, polishIds) => { void handleSaveAll(ids, polishIds).catch(() => {
           operationRef.current = false;
           setPhase('review');
-          Alert.alert('Couldn’t add these pieces', 'Your edits are safe. Please try again.');
+          confirmSheet({ title: 'Couldn’t add these pieces', message: 'Your edits are safe. Please try again.', confirmLabel: 'OK', cancelLabel: null, onConfirm: () => {} });
         }); }}
         onClose={handleWorkspaceDiscard}
       />
