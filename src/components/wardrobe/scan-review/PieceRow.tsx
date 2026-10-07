@@ -61,7 +61,7 @@ export function PieceRow({ piece, number, active, note, polished = false, disabl
         <View style={styles.text}>
           <View style={styles.nameLine}>
             <Text style={[styles.name, !included && styles.nameOff]} numberOfLines={1}>{name}</Text>
-            {included && polished ? <Ionicons name="sparkles" size={13} color={colors.foreground} /> : null}
+            {included && polished ? <Ionicons name="sparkles" size={11} color={colors.mutedForeground} style={styles.sparkle} /> : null}
           </View>
           {/* Brand, then colour, each on its own line: neither has to give way to the other. */}
           {onBrand ? <View style={styles.meta}><BrandLink brand={brand} guess={brandGuess} name={name} disabled={disabled} onPress={onBrand} /></View> : null}
@@ -172,6 +172,8 @@ const styles = StyleSheet.create({
   nameLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   name: { flexShrink: 1, ...typography.text.body, fontWeight: typography.weight.medium, color: colors.foreground },
   nameOff: { color: colors.mutedForeground },
+  // Quieter than the name, and never the thing that gets squeezed out.
+  sparkle: { flexShrink: 0 },
   meta: { flexDirection: 'row' },
   detail: { ...typography.text.caption, color: colors.mutedForeground, flexShrink: 1 },
   colourLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 14 },
