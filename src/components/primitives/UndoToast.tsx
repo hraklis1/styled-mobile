@@ -6,9 +6,10 @@ import { colors, radii, spacing, typography } from '../../theme';
 
 /**
  * The floating "Removed · Undo" bar. A removal that can be taken back for a
- * few seconds needs no confirmation dialog in front of it.
+ * few seconds needs no confirmation dialog in front of it. With another
+ * `actionLabel` it is the same bar for a quiet success ("6 pieces added · View").
  */
-export function UndoToast({ message, onUndo, bottom }: { message: string; onUndo: () => void; bottom: number }) {
+export function UndoToast({ message, onUndo, bottom, actionLabel = 'Undo' }: { message: string; onUndo: () => void; bottom: number; actionLabel?: string }) {
   return (
     <Animated.View
       entering={FadeInDown.duration(180)}
@@ -19,7 +20,7 @@ export function UndoToast({ message, onUndo, bottom }: { message: string; onUndo
       <Ionicons name="checkmark-circle" size={18} color={colors.success} />
       <Text style={styles.text} numberOfLines={1}>{message}</Text>
       <TouchableOpacity style={styles.button} onPress={onUndo} accessibilityRole="button">
-        <Text style={styles.action}>Undo</Text>
+        <Text style={styles.action}>{actionLabel}</Text>
       </TouchableOpacity>
     </Animated.View>
   );

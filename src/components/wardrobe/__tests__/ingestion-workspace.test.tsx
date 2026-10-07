@@ -78,28 +78,25 @@ describe('before extraction', () => {
     act(() => { renderer = TestRenderer.create(<Harness />); });
   });
 
-  it('removes a piece from view and brings it back with Undo', () => {
-    expect(node('Grid').props.pieces.map((p: ScanReviewPiece) => p.id)).toEqual(['0', '1']);
-    act(() => node('Grid').props.onRemove('0'));
-    expect(node('Grid').props.pieces.map((p: ScanReviewPiece) => p.id)).toEqual(['1']);
-    expect(latest[0].included).toBe(false);
-    const undo = renderer.root.findAll(n => n.props.accessibilityLabel === 'Undo removing Piece 0')[0];
-    act(() => undo.props.onPress());
-    expect(latest[0].included).toBe(true);
-    expect(renderer.root.findAll(n => n.props.accessibilityLabel === 'Undo removing Piece 0')).toHaveLength(0);
-  });
-
-  it('stays in place when the loupe removes the piece it is showing', () => {
+  it('keeps the loupe on an unticked piece instead of jumping away', () => {
     act(() => node('Grid').props.onOpen('0'));
-    act(() => node('Inspection').props.onRemove('0'));
-    expect(node('Inspection').props.activeId).toBe('1');
-    const undo = renderer.root.findAll(n => n.props.accessibilityLabel === 'Undo removing Piece 0')[0];
-    act(() => undo.props.onPress());
+    act(() => node('Inspection').props.onToggleIncluded('0'));
     expect(node('Inspection').props.activeId).toBe('0');
+    expect(latest[0].included).toBe(false);
   });
 
-  it('opens the brand sheet for one piece straight from its tile', () => {
-    act(() => node('Grid').props.onAddBrand('1'));
+  it('keeps an unticked piece in view, dimmed, so it can be ticked back', () => {
+    expect(node('Grid').props.pieces.map((p: ScanReviewPiece) => p.id)).toEqual(['0', '1', '2']);
+    act(() => node('Grid').props.onToggleIncluded('0'));
+    expect(node('Grid').props.pieces.map((p: ScanReviewPiece) => p.id)).toEqual(['0', '1', '2']);
+    expect(latest[0].included).toBe(false);
+    act(() => node('Grid').props.onToggleIncluded('0'));
+    expect(latest[0].included).toBe(true);
+  });
+
+  it('opens the brand sheet for one piece from its loupe', () => {
+    act(() => node('Grid').props.onOpen('1'));
+    act(() => node('Inspection').props.onOpenSheet('brand', '1'));
     act(() => node('BrandSheet').props.onSelect(['1'], 'COS'));
     expect(latest[1].brand).toBe('COS');
   });

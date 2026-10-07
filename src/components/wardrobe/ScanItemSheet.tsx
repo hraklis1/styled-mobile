@@ -49,7 +49,7 @@ import { isDataUri, uploadDataUrlsToR2 } from '../../lib/uploadImage';
 import { capturePhotoLocation } from '../../lib/photoLocation';
 import { track } from '../../lib/analytics';
 import { applyInclusionChanges } from '../../lib/extraction-review';
-import { resolveExtractedIdentity } from '../../lib/scan-review';
+import { resolveExtractedIdentity, compositePieceIds, SINGLE_PASS_SCAN } from '../../lib/scan-review';
 import * as Haptics from '../../lib/haptics';
 import {
   ScanReviewWorkspace,
@@ -809,9 +809,13 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
       );
       if (sessionRef.current !== session) return;
 
-      setPreExtractItems(preItems);
+      const composites = compositePieceIds(preItems.map(item => ({ id: item.tempId, category: item.category, bbox: item.bbox })));
+      setPreExtractItems(composites.size ? preItems.map(item => composites.has(item.tempId) ? { ...item, included: false } : item) : preItems);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setPhase('pre-extract');
+      // Single pass: go straight on to extraction through the resume path,
+      // which reads the items just set rather than this closure's.
+      if (SINGLE_PASS_SCAN) setResumeIds(preItems.filter(item => !composites.has(item.tempId)).map(item => item.tempId));
     } catch (err: any) {
       if (sessionRef.current !== session) return;
       Alert.alert(

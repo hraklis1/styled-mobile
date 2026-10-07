@@ -4,13 +4,19 @@ import { Host, RNHostView } from '@expo/ui';
 import { NativeReviewSheet } from './NativeReviewSheet';
 import { colors, spacing, typography } from '../../../theme';
 
-export type SheetDetent = 'medium' | 'large';
+export type SheetDetent = 'medium' | 'large' | 'fit';
+
+/** Header (title + subtitle + top inset) and the home-indicator margin around a `fit` menu. */
+const FIT_CHROME = 112;
+const MENU_ROW = 57;
 
 /** Native presentation is anchored inside the review modal, not the app portal. */
-export function WorkspaceSheet({ title, subtitle, detent = 'medium', dismissed = false, onClose, children, footer, headerAction }: {
+export function WorkspaceSheet({ title, subtitle, detent = 'medium', rows = 0, dismissed = false, onClose, children, footer, headerAction }: {
   title: string;
   subtitle?: ReactNode;
   detent?: SheetDetent;
+  /** Menu rows in a `fit` sheet; the sheet is sized to them. */
+  rows?: number;
   reduceMotion: boolean;
   dismissed?: boolean;
   onClose: () => void;
@@ -29,7 +35,8 @@ export function WorkspaceSheet({ title, subtitle, detent = 'medium', dismissed =
   const close = () => { Keyboard.dismiss(); setPresented(false); };
   return (
     <Host colorScheme="light" seedColor={colors.primary}>
-      <NativeReviewSheet isPresented={presented} onDismiss={onClose} snapPoints={detent === 'large' ? ['full'] : ['half', 'full']}>
+      <NativeReviewSheet isPresented={presented} onDismiss={onClose} snapPoints={detent === 'large' ? ['full'] : ['half', 'full']}
+        fitHeight={detent === 'fit' ? FIT_CHROME + rows * MENU_ROW : undefined}>
         <RNHostView matchContents={false}>
           <View style={styles.root} accessibilityViewIsModal>
             <View style={styles.header}>

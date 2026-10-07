@@ -3,7 +3,7 @@ import { Column, ModalBottomSheet, type ModalBottomSheetRef } from '@expo/ui/jet
 import { fillMaxHeight } from '@expo/ui/jetpack-compose/modifiers';
 import type { BottomSheetProps } from '@expo/ui';
 
-export function NativeReviewSheet({ isPresented, onDismiss, snapPoints, children }: BottomSheetProps) {
+export function NativeReviewSheet({ isPresented, onDismiss, snapPoints, children }: BottomSheetProps & { fitHeight?: number }) {
   const ref = useRef<ModalBottomSheetRef>(null);
   const callback = useRef(onDismiss);
   callback.current = onDismiss;

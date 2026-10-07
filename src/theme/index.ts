@@ -541,13 +541,17 @@ export const ingestion = {
   activeBorder: 1,
   excludedOpacity: 0.45,
   pressedScale: 0.98,
+  /** A skipped piece steps back a touch, as well as greying out. */
+  skippedScale: 0.97,
   /** The inclusion badge sits over photography, so both states carry a white ring. */
   badge: { size: 24, ring: 1.5, ringColor: '#FFFFFF', offFill: 'rgba(0,0,0,0.28)', removeFill: 'rgba(31,26,22,0.5)' },
   /**
-   * A photo crop rarely matches the 3:4 plate. It is shown whole (contain)
-   * over a blurred, softened copy of itself, so the plate reads as a matte
-   * rather than a letterbox, and nothing is zoomed past its own edges.
+   * A photo crop rarely matches the 3:4 plate. It is shown whole (contain),
+   * inset on the plain warm plate like a mounted print, so nothing is zoomed
+   * past its own edges and no blurred fill reads as a broken image.
    */
+  printInset: 0.88,
+  /** Blurred backdrop for home look plates (not used by scan review). */
   matte: { blurRadius: 24, opacity: 0.55 },
   /** How long "Removed · Undo" stays before the removal settles. */
   undoMs: 5000,

@@ -79,16 +79,27 @@ export function SpecSheet({ piece, stage, flags, expandedRow, disabled, compact 
           disabled={disabled}
           onChange={(name) => onUpdate({ name })}
         />
-        <BrandEyebrow brand={piece.brand} flagged={flagged('brand')} disabled={disabled} onPress={() => onOpenSheet('brand')} />
-        {!review && !piece.brand ? (
-          <Text style={styles.hint}>Optional. A brand helps us read the details.</Text>
+        {review && piece.possibleDuplicate ? (
+          <Text style={styles.hint}>Looks like another piece in this scan. Untick it above if it’s the same one.</Text>
         ) : piece.extractFailed ? (
           <Text style={styles.hint}>We couldn’t read the details for this piece. Add what you know, or retry above.</Text>
         ) : null}
       </View>
 
+      <View style={styles.rows}>
+        <SpecRow
+          label="Brand"
+          value={piece.brand.trim() || null}
+          placeholder="Add"
+          flagged={flagged('brand')}
+          disabled={disabled}
+          onPress={() => onOpenSheet('brand')}
+        />
+      </View>
+      {!review && !piece.brand ? <Text style={styles.hint}>Optional. A brand helps us read the details.</Text> : null}
+
       {review ? (
-        <View style={styles.rows}>
+        <View style={styles.rowsContinued}>
           <SpecRow
             label="Category"
             value={categoryValue(piece)}
@@ -145,32 +156,6 @@ export function SpecSheet({ piece, stage, flags, expandedRow, disabled, compact 
   );
 }
 
-function BrandEyebrow({ brand, flagged, disabled, onPress }: {
-  brand: string;
-  flagged: boolean;
-  disabled: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <TouchableOpacity
-      style={styles.brandRow}
-      onPress={onPress}
-      disabled={disabled}
-      hitSlop={{ top: 8, bottom: 4 }}
-      accessibilityRole="button"
-      accessibilityLabel={brand ? `Brand, ${brand}` : 'Add a brand, optional'}
-      accessibilityHint={flagged ? 'Worth checking' : undefined}
-    >
-      {brand ? (
-        <Text style={styles.brand} numberOfLines={1}>{brand}</Text>
-      ) : (
-        <Text style={styles.brandEmpty}>+ Add brand</Text>
-      )}
-      {flagged ? <FlagDot /> : null}
-    </TouchableOpacity>
-  );
-}
-
 function EditableTitle({ value, flagged, disabled, onChange }: {
   value: string;
   flagged: boolean;
@@ -215,7 +200,7 @@ function SpecRow({ label, value, placeholder, flagged, swatch, italicValue, expa
 }) {
   const expandable = children !== undefined;
   return (
-    <Animated.View layout={LinearTransition.duration(200)} style={styles.row}>
+    <Animated.View layout={LinearTransition.duration(200)} style={[styles.row, flagged && styles.rowFlagged]}>
       <TouchableOpacity
         style={styles.rowPress}
         onPress={onPress}
@@ -227,9 +212,9 @@ function SpecRow({ label, value, placeholder, flagged, swatch, italicValue, expa
       >
         <View style={styles.rowLabelWrap}>
           <Text style={styles.rowLabel}>{label}</Text>
-          {flagged ? <FlagDot /> : null}
         </View>
         <View style={styles.rowValueWrap}>
+          {flagged ? <View style={styles.checkChip}><FlagDot /><Text style={styles.checkChipText}>Check</Text></View> : null}
           {swatch ? <View style={[styles.valueSwatch, { backgroundColor: swatch }]} /> : null}
           <Text
             style={[styles.rowValue, (!value || italicValue) && styles.rowValueItalic, !value && styles.rowValueEmpty]}
@@ -354,6 +339,11 @@ const styles = StyleSheet.create({
   titleFlag: { marginTop: 2 },
   hint: { ...typography.text.bodySmall, color: colors.mutedForeground, paddingTop: spacing.xs },
   rows: { borderTopWidth: stroke.hairline, borderTopColor: colors.hairline },
+  rowsContinued: {},
+  // A flagged row carries a faint wash, so the eye lands on it before the dot.
+  rowFlagged: { backgroundColor: colors.surfaceSelected, marginHorizontal: -spacing.sm, paddingHorizontal: spacing.sm, borderRadius: radii.sm },
+  checkChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radii.full, borderWidth: stroke.hairline, borderColor: colors.controlOutline },
+  checkChipText: { ...typography.text.caption, color: colors.foreground },
   row: { borderBottomWidth: stroke.hairline, borderBottomColor: colors.hairline },
   rowPress: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   rowLabelWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, width: 96 },

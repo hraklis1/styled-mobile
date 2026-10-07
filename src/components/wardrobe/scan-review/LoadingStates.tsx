@@ -13,7 +13,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { SCAN_MESSAGES } from '../../../lib/scan-review';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { colors, radii, spacing, surfaces, typography } from '../../../theme';
 import type { ScanReviewPiece } from './types';
 
 const SWEEP_BAND_HEIGHT = 90;
@@ -86,14 +86,60 @@ export function DetectionState({ previewImage, progress, heroHeight, reduceMotio
   );
 }
 
-export function ExtractionState({ piece, progress, heroHeight, reduceMotion }: { piece: ScanReviewPiece | null; progress: { current: number; total: number }; heroHeight: number; reduceMotion: boolean }) {
-  const uri = piece?.photo;
+export function ExtractionState({ piece, pieces, progress, heroHeight, reduceMotion }: { piece: ScanReviewPiece | null; pieces?: ScanReviewPiece[]; progress: { current: number; total: number }; heroHeight: number; reduceMotion: boolean }) {
+  const reel = (pieces ?? []).filter(p => p.photo);
+  // Pieces are read in parallel, so the count is the honest signal: the first
+  // `current` frames read as done and the hero shows the next one in line.
+  const doneCount = Math.min(progress.current, reel.length);
+  const current = reel.length ? reel[Math.min(doneCount, reel.length - 1)] : piece;
+  const uri = current?.photo;
+  const sweep = useSharedValue(0);
+  useEffect(() => {
+    if (reduceMotion) return;
+    sweep.set(withRepeat(withTiming(1, { duration: 1600, easing: Easing.inOut(Easing.quad) }), -1, false));
+  }, [reduceMotion, sweep]);
+  const sweepStyle = useAnimatedStyle(() => ({ transform: [{ translateX: -300 + sweep.get() * 900 }, { rotate: '18deg' }] }));
+  const status = current?.name ? `Reading ${current.name.toLowerCase()}` : 'Reading details';
   return (
     <View style={styles.extractionState} accessibilityLiveRegion="polite">
-      <View style={[styles.extractionHero, { height: heroHeight }]}>{uri ? <Image source={{ uri }} style={styles.heroImage} contentFit="contain" cachePolicy="memory-disk" /> : null}</View>
+      <View style={[styles.extractionHero, styles.extractionPlate, { height: heroHeight }]}>
+        {uri ? <Image source={{ uri }} style={styles.extractionImage} contentFit="contain" cachePolicy="memory-disk" transition={reduceMotion ? 0 : 400} recyclingKey="extraction-hero" /> : null}
+        {reduceMotion ? null : (
+          <Animated.View pointerEvents="none" style={[styles.shimmer, sweepStyle]}>
+            <LinearGradient colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.45)', 'rgba(255,255,255,0)']} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
+          </Animated.View>
+        )}
+      </View>
       <Text style={styles.extractionTitle}>Refining your pieces</Text>
-      <Text style={styles.extractionCopy}>Adding colour, material, fit, and styling details.</Text>
-      <ScanStepTrack stage="extracting" progress={progress} reduceMotion={reduceMotion} />
+      {reel.length > 1 ? <Filmstrip pieces={reel} doneCount={doneCount} reduceMotion={reduceMotion} /> : null}
+      <Text style={styles.extractionCopy} accessibilityLabel={`${status}, ${progress.current} of ${progress.total} done`}>
+        {status}{progress.total > 0 ? ` · ${Math.min(progress.current + 1, progress.total)} of ${progress.total}` : ''}
+      </Text>
+    </View>
+  );
+}
+
+/** One small frame per piece: read ones in full colour with a tick, the current one breathing, the rest waiting. */
+function Filmstrip({ pieces, doneCount, reduceMotion }: { pieces: ScanReviewPiece[]; doneCount: number; reduceMotion: boolean }) {
+  const pulse = useSharedValue(1);
+  useEffect(() => {
+    if (reduceMotion) { pulse.set(1); return; }
+    pulse.set(withRepeat(withSequence(withTiming(0.55, { duration: 700 }), withTiming(1, { duration: 700 })), -1, false));
+  }, [pulse, reduceMotion]);
+  const pulseStyle = useAnimatedStyle(() => ({ opacity: pulse.get() }));
+  return (
+    <View style={styles.filmstrip} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      {pieces.map((p, index) => {
+        const done = index < doneCount;
+        const active = index === doneCount;
+        return (
+          <View key={p.id} style={[styles.frame, !done && !active && styles.framePending]}>
+            <Image source={{ uri: done && p.cutout ? p.cutout : p.photo! }} style={styles.frameImage} contentFit="contain" cachePolicy="memory-disk" transition={reduceMotion ? 0 : 300} />
+            {active ? <Animated.View pointerEvents="none" style={[styles.frameRing, pulseStyle]} /> : null}
+            {done ? <View style={styles.frameTick}><Ionicons name="checkmark" size={9} color={colors.primaryForeground} /></View> : null}
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -121,9 +167,16 @@ function ScanStepTrack({ stage, progress, reduceMotion, labels }: {
     : 0.5 + (progress.total > 0 ? (progress.current / progress.total) * 0.5 : 0);
 
   const fill = useSharedValue(targetFraction);
+  // A single-photo detect has no progress signal, so the rule creeps toward
+  // the end of its half on an easing curve that never quite arrives: alive,
+  // but never claiming to be done before it is.
+  const creeping = stage === 'scanning' && progress.total <= 0;
   useEffect(() => {
-    fill.set(reduceMotion ? targetFraction : withTiming(targetFraction, { duration: 350 }));
-  }, [targetFraction, reduceMotion, fill]);
+    if (reduceMotion) { fill.set(targetFraction); return; }
+    fill.set(creeping
+      ? withSequence(withTiming(targetFraction, { duration: 350 }), withTiming(0.45, { duration: 9000, easing: Easing.out(Easing.cubic) }))
+      : withTiming(targetFraction, { duration: 350 }));
+  }, [targetFraction, reduceMotion, fill, creeping]);
 
   const fillStyle = useAnimatedStyle(() => ({ width: `${fill.get() * 100}%` }));
 
@@ -155,9 +208,18 @@ function ScanStepTrack({ stage, progress, reduceMotion, labels }: {
 
 const styles = StyleSheet.create({
   heroImage: { width: '100%', height: '100%' },
+  extractionPlate: { backgroundColor: surfaces.plate },
+  extractionImage: { width: '88%', height: '88%' },
   extractionState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl },
   extractionHero: { width: '100%', overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderRadius: radii.xl, borderCurve: 'continuous', backgroundColor: colors.card },
   extractionTitle: { ...typography.text.editorialSection, color: colors.foreground },
+  shimmer: { position: 'absolute', top: -200, bottom: -200, left: 0, width: 140 },
+  filmstrip: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.xs },
+  frame: { width: 36, height: 48, borderRadius: radii.sm, borderCurve: 'continuous', backgroundColor: surfaces.plate, alignItems: 'center', justifyContent: 'center' },
+  framePending: { opacity: 0.4 },
+  frameImage: { width: '86%', height: '86%' },
+  frameRing: { ...StyleSheet.absoluteFill, borderRadius: radii.sm, borderWidth: 1.5, borderColor: colors.foreground },
+  frameTick: { position: 'absolute', right: -3, top: -3, width: 14, height: 14, borderRadius: 7, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.foreground },
   extractionCopy: { ...typography.text.bodySmall, color: colors.mutedForeground, textAlign: 'center' },
   detectScrim: { ...StyleSheet.absoluteFill, backgroundColor: colors.primary },
   detectSweep: { position: 'absolute', left: 0, right: 0, top: 0 },

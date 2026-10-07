@@ -17,9 +17,11 @@ export type ReviewCarouselMetrics = {
 };
 
 export function reviewCarouselMetrics(viewportWidth: number): ReviewCarouselMetrics {
+  // One piece at a time: the gap is at least the side padding, so the
+  // neighbour waits fully off-screen instead of showing as a grey sliver.
   const sidePadding = 24;
-  const gap = 12;
-  const cardWidth = Math.max(240, viewportWidth - 64);
+  const gap = 32;
+  const cardWidth = Math.max(240, viewportWidth - sidePadding * 2);
   return { cardWidth, gap, sidePadding, snapInterval: cardWidth + gap };
 }
 
@@ -197,4 +199,59 @@ export function scrubberIndex(x: number, railWidth: number, count: number): numb
   'worklet';
   if (count <= 0 || railWidth <= 0) return 0;
   return Math.max(0, Math.min(count - 1, Math.floor((x / railWidth) * count)));
+}
+
+type Box = { x: number; y: number; width: number; height: number };
+
+function containedShare(inner: Box, outer: Box): number {
+  const overlap = Math.max(0, Math.min(inner.x + inner.width, outer.x + outer.width) - Math.max(inner.x, outer.x))
+    * Math.max(0, Math.min(inner.y + inner.height, outer.y + outer.height) - Math.max(inner.y, outer.y));
+  const area = inner.width * inner.height;
+  return area > 0 ? overlap / area : 0;
+}
+
+/**
+ * Whole-outfit detections ("Brown Outfit Set") that only frame a top and a
+ * bottom found on their own. The server drops these; this catches older or
+ * cached scans, which then start unticked rather than vanish. A dress never
+ * has its own top and bottom inside it, so it is never caught.
+ */
+export function compositePieceIds(pieces: readonly { id: string; category: string | null; bbox: Box | null }[]): Set<string> {
+  const ids = new Set<string>();
+  for (const piece of pieces) {
+    if (piece.category !== 'full_body' || !piece.bbox) continue;
+    const inside = pieces.filter(other => other !== piece && other.bbox && containedShare(other.bbox, piece.bbox!) >= 0.8);
+    if (inside.some(p => p.category === 'top' || p.category === 'outerwear') && inside.some(p => p.category === 'bottom')) ids.add(piece.id);
+  }
+  return ids;
+}
+
+/**
+ * Included pieces that repeat an earlier one: same category and the same
+ * name. The first stays; each repeat is flagged as a possible duplicate.
+ */
+export function duplicatePieceIds(pieces: readonly { id: string; name: string; category: string | null; included?: boolean }[]): Set<string> {
+  const seen = new Set<string>();
+  const ids = new Set<string>();
+  for (const piece of pieces) {
+    if (piece.included === false) continue;
+    const key = `${piece.category ?? ''}|${piece.name.trim().toLocaleLowerCase()}`;
+    if (!piece.name.trim()) continue;
+    if (seen.has(key)) ids.add(piece.id);
+    else seen.add(key);
+  }
+  return ids;
+}
+
+/**
+ * Trial: skip "Choose pieces" and extract every kept detection straight
+ * away, so a scan has one review instead of two. Costs extraction on pieces
+ * the user might have dropped, and a crop changed afterwards re-extracts.
+ * Off unless EXPO_PUBLIC_SINGLE_PASS_SCAN=1.
+ */
+export const SINGLE_PASS_SCAN = process.env.EXPO_PUBLIC_SINGLE_PASS_SCAN === '1';
+
+/** Included pieces other than `exceptId` that still carry no brand. */
+export function piecesMissingBrand<T extends { id: string; brand: string; included?: boolean }>(pieces: readonly T[], exceptId: string): T[] {
+  return pieces.filter(piece => piece.id !== exceptId && piece.included !== false && !piece.brand.trim());
 }

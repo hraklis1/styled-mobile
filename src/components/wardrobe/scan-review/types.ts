@@ -31,6 +31,8 @@ export type ScanReviewPiece = {
   sleeveLength: SleeveLength | null;
   /** Fields the extraction was unsure of — drives the "worth a look" marks. */
   lowConfidenceFields?: string[];
+  /** Same category and name as an earlier included piece; derived in review. */
+  possibleDuplicate?: boolean;
   /** Extraction gave up on this piece; it keeps only what detection found. */
   extractFailed?: boolean;
 };
@@ -58,14 +60,6 @@ export function coverUri(piece: ScanReviewPiece, stage: ScanReviewStage): string
   return showingCutout ? piece.cutout : piece.photo;
 }
 
-/**
- * A reusable image for the plate's matte: a photo crop is framed whole over a
- * blurred copy of itself. Cutouts sit on the plain plate and need none.
- */
-export function matteUri(piece: ScanReviewPiece, stage: ScanReviewStage): string | null {
-  const uri = coverUri(piece, stage);
-  return uri !== null && uri !== piece.cutout ? uri : null;
-}
 
 export function pieceCountLabel(count: number): string {
   return count === 1 ? '1 piece' : `${count} pieces`;

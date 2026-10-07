@@ -190,7 +190,7 @@ const styles = StyleSheet.create({
   middot: { ...typography.text.meta, color: colors.tertiary, paddingHorizontal: spacing.sm },
   segment: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   segmentRule: { width: stroke.hairline, height: 12, backgroundColor: colors.controlOutline },
-  segmentSelected: { textDecorationLine: 'underline', textDecorationColor: colors.foreground },
+  segmentSelected: { fontWeight: typography.weight.semibold, color: colors.foreground },
   chip: {
     minHeight: 44,
     minWidth: 44,

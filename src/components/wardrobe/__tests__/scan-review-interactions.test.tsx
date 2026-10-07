@@ -9,7 +9,7 @@ import { useBatchExtractionReview } from '../../../hooks/useBatchExtractionRevie
 import { applyInclusionChanges, reviewColumns } from '../../../lib/extraction-review';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({ getItem: jest.fn(async () => '1'), setItem: jest.fn(async () => {}) }));
-jest.mock('react-native-reanimated', () => ({ __esModule: true, default: { View: jest.requireActual('react-native').View }, FadeOut: { duration: () => undefined }, LinearTransition: { duration: () => undefined }, useSharedValue: (value: unknown) => ({ value }), useAnimatedStyle: (fn: () => unknown) => fn(), withSequence: (...values: unknown[]) => values[values.length - 1], withTiming: (value: unknown) => value }));
+jest.mock('react-native-reanimated', () => ({ __esModule: true, default: { View: jest.requireActual('react-native').View, Text: jest.requireActual('react-native').Text }, FadeIn: { duration: () => undefined }, FadeOut: { duration: () => undefined }, LinearTransition: { duration: () => undefined }, useSharedValue: (value: unknown) => ({ value }), useAnimatedStyle: (fn: () => unknown) => fn(), withSequence: (...values: unknown[]) => values[values.length - 1], withTiming: (value: unknown) => value }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }));
 jest.mock('expo-image', () => ({ Image: 'Image' }));
 
@@ -148,4 +148,58 @@ it('batch dock disables empty tagging and switches select all to deselect all', 
   act(() => button('Done').props.onPress());
   expect(done).toHaveBeenCalledTimes(1);
   act(() => dock.unmount());
+});
+
+describe('pre-extract curation card', () => {
+  const { GridCard } = jest.requireActual('../scan-review/GridCard') as typeof import('../scan-review/GridCard');
+  const renderCard = (overrides: Partial<React.ComponentProps<typeof GridCard>> = {}, piece: Partial<ScanReviewPiece> = {}) => {
+    const props = {
+      piece: { ...makePieces()[0], photo: 'file://crop.jpg', ...piece }, index: 0, count: 6, stage: 'pre-extract' as const, state: null, width: 160,
+      selected: false, selecting: false, disabled: false, reduceMotion: true, restoreFocus: false,
+      onPress: jest.fn(), onToggle: jest.fn(), onCrop: jest.fn(), onBrand: jest.fn(), ...overrides,
+    };
+    let card!: TestRenderer.ReactTestRenderer;
+    act(() => { card = TestRenderer.create(<GridCard {...props} />, { createNodeMock: () => ({ measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) => cb(16, 120, 140, 186) }) }); });
+    return { card, props };
+  };
+  const plate = (card: TestRenderer.ReactTestRenderer) => card.root.findAll(n => n.props.accessibilityLabel === 'Piece 0, 1 of 6' && n.props.onPress)[0];
+
+  it('opens the crop from the photo, the loupe from the caption, and skips on long press', () => {
+    const { card, props } = renderCard();
+    // RN's jest View mock stubs measureInWindow without ever calling back.
+    for (const node of card.root.findAll(n => typeof n.instance?.measureInWindow === 'function')) {
+      node.instance.measureInWindow = (cb: (x: number, y: number, w: number, h: number) => void) => cb(16, 120, 140, 186);
+    }
+    act(() => plate(card).props.onPress());
+    expect(props.onCrop).toHaveBeenCalledWith({ x: 16, y: 120, width: 140, height: 186, uri: 'file://crop.jpg' });
+    expect(props.onPress).not.toHaveBeenCalled();
+    act(() => plate(card).props.onLongPress());
+    expect(props.onToggle).toHaveBeenCalledTimes(1);
+    const caption = card.root.findAll(n => n.props.accessible === false && n.props.onPress)[0];
+    act(() => caption.props.onPress());
+    expect(props.onPress).toHaveBeenCalledTimes(1);
+    act(() => card.unmount());
+  });
+
+  it('offers "+ Brand" when empty and the brand itself once set', () => {
+    const empty = renderCard();
+    const add = empty.card.root.findAll(n => n.props.accessibilityLabel === 'Add brand to Piece 0' && n.props.onPress)[0];
+    act(() => add.props.onPress());
+    expect(empty.props.onBrand).toHaveBeenCalledTimes(1);
+    act(() => empty.card.unmount());
+    const set = renderCard({}, { brand: 'COS' });
+    expect(set.card.root.findAll(n => n.props.accessibilityLabel === 'Brand COS, change' && n.props.onPress)).toHaveLength(1);
+    act(() => set.card.unmount());
+  });
+
+  it('keeps the old tap-to-inspect card when no crop handler is given', () => {
+    const { card, props } = renderCard({ onCrop: undefined, onBrand: undefined });
+    act(() => plate(card).props.onPress());
+    expect(props.onPress).toHaveBeenCalledTimes(1);
+    act(() => card.unmount());
+  });
+});
+
+it('extract bar carries no Edit button before extraction', () => {
+  expect(renderer.root.findAll(n => n.props.accessibilityLabel === 'Edit pieces' || n.props.children === 'Edit')).toHaveLength(0);
 });

@@ -9,6 +9,7 @@ import { dismissCropTip, isCropTipDismissed } from '../../../lib/scanCropTip';
 import { type PieceReviewState, type SheetGuidance } from '../../../lib/scan-review';
 import { colors, radii, spacing, typography } from '../../../theme';
 import { GridCard } from './GridCard';
+import type { CropOrigin } from '../CropAdjustModal';
 import { Middot, TextSegment } from './atoms';
 import { reviewColumns } from '../../../lib/extraction-review';
 import { isReviewStage, type ScanReviewPiece, type ScanReviewStage } from './types';
@@ -35,9 +36,9 @@ type Props = {
   focusId: string | null;
   brandFeedback?: { revision: number; ids: ReadonlySet<string> };
   onToggleSelect: (id: string) => void;
-  /** Present before extraction: tiles carry a remove mark and a "+ Brand" link. */
-  onRemove?: (id: string) => void;
-  onAddBrand?: (id: string) => void;
+  /** Pre-extract: the plate opens the crop editor directly. */
+  onCrop?: (id: string, origin: CropOrigin | null) => void;
+  onBrand?: (id: string) => void;
 };
 
 /**
@@ -62,8 +63,8 @@ export function PreExtractGrid({
   focusId,
   onToggleSelect,
   brandFeedback,
-  onRemove,
-  onAddBrand,
+  onCrop,
+  onBrand,
 }: Props) {
   const [tipDismissed, setTipDismissed] = useState(true);
   const [cropTipDismissed, setCropTipDismissed] = useState(true);
@@ -73,8 +74,9 @@ export function PreExtractGrid({
   }, []);
   // One tip at a time: the crop tip first, since a bad crop spoils
   // extraction and brands are optional.
-  const showCropTip = Boolean(onRemove) && !cropTipDismissed && pieces.length > 0;
-  const showTip = !showCropTip && Boolean(onAddBrand) && !tipDismissed && pieces.some(piece => !piece.brand);
+  const preExtract = stage === 'pre-extract';
+  const showCropTip = preExtract && !cropTipDismissed && pieces.length > 0;
+  const showTip = !showCropTip && preExtract && !tipDismissed && pieces.some(piece => !piece.brand);
   const putAwayCropTip = () => { setCropTipDismissed(true); void dismissCropTip(); };
   const openPiece = (id: string) => { if (showCropTip) putAwayCropTip(); onOpen(id); };
   const { width, fontScale } = useWindowDimensions();
@@ -107,7 +109,7 @@ export function PreExtractGrid({
           {showCropTip ? (
             <View style={styles.tip}>
               <Ionicons name="crop-outline" size={15} color={colors.foreground} />
-              <Text style={styles.tipText}>Tap a piece to check and fix its crop.</Text>
+              <Text style={styles.tipText}>Tap a photo to fix its crop.</Text>
               <Pressable hitSlop={12} onPress={putAwayCropTip} accessibilityRole="button" accessibilityLabel="Dismiss tip">
                 <Ionicons name="close" size={16} color={colors.mutedForeground} />
               </Pressable>
@@ -118,7 +120,7 @@ export function PreExtractGrid({
             // at its old height, stranding a blank band above the grid.
             <View style={styles.tip}>
               <Ionicons name="pricetag-outline" size={15} color={colors.foreground} />
-              <Text style={styles.tipText}>Know the brands? Adding them sharpens the details we read.</Text>
+              <Text style={styles.tipText}>Know a brand? Tap + Brand on a piece — it sharpens the details we read.</Text>
               <Pressable hitSlop={12} onPress={() => { setTipDismissed(true); void dismissBrandTip(); }} accessibilityRole="button" accessibilityLabel="Dismiss tip">
                 <Ionicons name="close" size={16} color={colors.mutedForeground} />
               </Pressable>
@@ -142,8 +144,8 @@ export function PreExtractGrid({
             onPress={() => selecting ? onToggleSelect(piece.id) : openPiece(piece.id)}
             brandRevision={brandFeedback?.ids.has(piece.id) ? brandFeedback.revision : 0}
             onToggle={() => selecting ? onToggleSelect(piece.id) : onToggleIncluded(piece.id)}
-            onRemove={onRemove ? () => onRemove(piece.id) : undefined}
-            onAddBrand={onAddBrand ? () => onAddBrand(piece.id) : undefined}
+            onCrop={onCrop && !selecting ? origin => { if (showCropTip) putAwayCropTip(); onCrop(piece.id, origin); } : undefined}
+            onBrand={onBrand && preExtract && !selecting ? () => { if (showTip) { setTipDismissed(true); void dismissBrandTip(); } onBrand(piece.id); } : undefined}
           />
         </Animated.View>
       )}

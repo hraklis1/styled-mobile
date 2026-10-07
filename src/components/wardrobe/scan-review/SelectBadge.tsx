@@ -1,10 +1,9 @@
 import { useEffect } from 'react';
-import { Pressable, StyleSheet, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, TouchableOpacity, type StyleProp, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 
-import { colors, ingestion } from '../../../theme';
+import { colors } from '../../../theme';
 
 /**
  * The one inclusion mark, on the grid plate and the loupe hero alike. A
@@ -28,50 +27,25 @@ export function SelectBadge({ checked, onPress, disabled, reduceMotion, accessib
       accessibilityRole="checkbox" accessibilityLabel={accessibilityLabel}
       accessibilityState={{ checked, disabled }} style={[styles.badgeTarget, style]}>
       <Animated.View style={[styles.badge, checked && styles.badgeOn, popStyle]}>
-        {checked ? <Ionicons name="checkmark" size={15} color={colors.primaryForeground} /> : null}
+        {checked ? <Ionicons name="checkmark" size={13} color={colors.primaryForeground} /> : null}
       </Animated.View>
     </TouchableOpacity>
-  );
-}
-
-/**
- * Before extraction a tile's corner mark removes the piece outright; the
- * grid holds an Undo, so the tap needs no confirmation.
- */
-export function RemoveBadge({ onPress, disabled, label, style }: {
-  onPress: () => void;
-  disabled?: boolean;
-  label: string;
-  style?: StyleProp<ViewStyle>;
-}) {
-  // Neutral at rest so a grid of them stays quiet over the clothes; the
-  // action colour arrives only under the finger, as the tap commits.
-  return (
-    <Pressable hitSlop={2} onPress={onPress} disabled={disabled}
-      accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }} style={[styles.badgeTarget, style]}>
-      {({ pressed }) => (
-        <View style={[styles.badge, styles.remove, pressed && styles.removePressed]}>
-          {!pressed ? <BlurView pointerEvents="none" tint="dark" intensity={30} style={StyleSheet.absoluteFill} /> : null}
-          <Ionicons name="close" size={14} color="#FFFFFF" />
-        </View>
-      )}
-    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   badgeTarget: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   badge: {
-    width: ingestion.badge.size,
-    height: ingestion.badge.size,
-    borderRadius: ingestion.badge.size / 2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: ingestion.badge.ring,
-    borderColor: ingestion.badge.ringColor,
-    backgroundColor: ingestion.badge.offFill,
+    // Off: an ink ring on a white disc, so an empty slot reads on pale plates and dark photos alike.
+    borderWidth: 1.5,
+    borderColor: colors.foreground,
+    backgroundColor: colors.white,
+    boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
   },
-  badgeOn: { backgroundColor: colors.primary },
-  remove: { overflow: 'hidden', backgroundColor: ingestion.badge.removeFill },
-  removePressed: { backgroundColor: colors.destructive, transform: [{ scale: 0.92 }] },
+  badgeOn: { backgroundColor: colors.foreground, borderColor: colors.foreground },
 });

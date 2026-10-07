@@ -1,5 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { UndoToast } from '../components/primitives/UndoToast';
+import { navigationRef } from '../navigation/savedRecommendations';
 import { ScanItemSheet } from '../components/wardrobe/ScanItemSheet';
 import { BatchScanSheet, MAX_PHOTOS } from '../components/wardrobe/BatchScanSheet';
 import { BatchImportTray } from '../components/wardrobe/BatchImportTray';
@@ -53,6 +56,19 @@ export function GlobalScanProvider({ children }: Props) {
   const [batchVisible, setBatchVisible] = useState(false);
   const [scanCallbacks, setScanCallbacks] = useState<ScanCallbacks>({});
   const [batchCallbacks, setBatchCallbacks] = useState<ScanCallbacks>({});
+  const insets = useSafeAreaInsets();
+
+  // The scan closes the moment its pieces land; this is the arrival note.
+  const [added, setAdded] = useState<number | null>(null);
+  useEffect(() => {
+    if (added === null) return;
+    const timer = setTimeout(() => setAdded(null), 4500);
+    return () => clearTimeout(timer);
+  }, [added]);
+  const viewCloset = useCallback(() => {
+    setAdded(null);
+    if (navigationRef.isReady()) navigationRef.navigate('App', { screen: 'Closet', params: { screen: 'ClosetMain' } } as never);
+  }, []);
 
   const openScanItem = useCallback((source?: 'camera' | 'library', callbacks?: ScanCallbacks) => {
     setScanAutoLaunch(source);
@@ -78,6 +94,7 @@ export function GlobalScanProvider({ children }: Props) {
   // no caller left to tell.
   const batchSavedRef = useRef<{ batchId: string; onItemsSaved?: (items: Item[]) => void } | null>(null);
   useEffect(() => onBatchItemsSaved((batchId, items) => {
+    if (items.length > 0) setAdded(items.length);
     if (batchSavedRef.current?.batchId === batchId) batchSavedRef.current.onItemsSaved?.(items);
   }), []);
 
@@ -147,7 +164,10 @@ export function GlobalScanProvider({ children }: Props) {
           onClose={closeScan}
           autoLaunch={scanAutoLaunch}
           initialImage={scanInitialImage}
-          onItemsSaved={scanCallbacks.onItemsSaved}
+          onItemsSaved={(items) => {
+            if (items.length > 0) setAdded(items.length);
+            scanCallbacks.onItemsSaved?.(items);
+          }}
         />
       )}
       {batchVisible && (
@@ -160,6 +180,14 @@ export function GlobalScanProvider({ children }: Props) {
       )}
       <BatchImportTray />
       <BatchImportWorkspace />
+      {added !== null ? (
+        <UndoToast
+          message={added === 1 ? '1 piece added to your closet' : `${added} pieces added to your closet`}
+          actionLabel="View"
+          onUndo={viewCloset}
+          bottom={insets.bottom + 96}
+        />
+      ) : null}
     </GlobalScanContext.Provider>
   );
 }
