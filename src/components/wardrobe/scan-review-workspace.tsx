@@ -38,6 +38,7 @@ import { UndoToast } from '../primitives/UndoToast';
 import { ActionBar, type ActionBarMode } from './scan-review/ActionBar';
 import { PreExtractGrid, PieceLine, type SheetFilter } from './scan-review/PreExtractGrid';
 import { DetectionState, ExtractionState, type FilmFrame } from './scan-review/LoadingStates';
+import { SlowScanHint } from './scan-review/SlowScanHint';
 import { ItemInspectionModal } from './scan-review/ItemInspectionModal';
 import { PhotoReview } from './scan-review/PhotoReview';
 import { PieceEditorSheet } from './scan-review/PieceEditorSheet';
@@ -645,7 +646,9 @@ export function ScanReviewWorkspace({
 
           <View onLayout={event => setFooterHeight(event.nativeEvent.layout.height)}>
             {heroSpeaks
-              ? <View style={{ height: Math.max(insets.bottom, spacing.md) + spacing.sm + 56 }} />
+              ? <View style={[styles.heroFooter, { height: Math.max(insets.bottom, spacing.md) + spacing.sm + 56 }]}>
+                  <SlowScanHint watchKey={stage} background={onMinimize ? { onPress: onMinimize } : undefined} />
+                </View>
               : <ActionBar mode={actionMode} bottomInset={insets.bottom} />}
           </View>
           {brandOffer && effectiveView === 'sheet' && !sheet ? (
@@ -926,6 +929,7 @@ function WorkspaceHeader({ stage, view, canGoBack, position, includedCount, tota
 }
 
 const styles = StyleSheet.create({
+  heroFooter: { justifyContent: 'flex-start', paddingTop: spacing.sm },
   inclusionControl: { minHeight: 44, marginHorizontal: spacing.lg, marginVertical: spacing.sm },
   root: { flex: 1, backgroundColor: colors.background },
   addTypeBody: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm },

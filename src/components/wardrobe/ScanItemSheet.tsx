@@ -2,10 +2,6 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { enqueuePolish } from '../../features/polish-queue/runner';
 import { GaveUp, withRetries } from '../../features/batch-import/retryPolicy';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
   Platform,
   UIManager,
   AppState,
@@ -13,12 +9,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SCAN_DRAFT_KEY, countDraftPieces, readScanDraft, useScanDraftStore } from '../../features/scan-draft/store';
-import {
-  BottomSheetModal,
-  BottomSheetScrollView,
-  BottomSheetBackdrop,
-} from '@gorhom/bottom-sheet';
-import { Ionicons } from '@expo/vector-icons';
+import { PhotoSourceSheet } from '../primitives/PhotoSourceSheet';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Crypto from 'expo-crypto';
 import { useCameraLaunch, useLibraryLaunch, type CapturedImage } from '../../hooks/useCameraLaunch';
@@ -35,7 +26,6 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiErrorMessage } from '../../lib/api';
-import { colors, spacing, typography, radii } from '../../theme';
 import { type Item, type ItemCategory, type SleeveLength } from '../../types/item';
 import type { SizeProfile } from '../../lib/sizes';
 import { type Bbox } from './CropAdjustModal';
@@ -296,11 +286,6 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
     return extractionCacheRef.current;
   };
   const reviewTrackedRef = useRef(false);
-  // Guards the handoff from the idle picker sheet to the full-screen scan
-  // workspace: set right before a programmatic `.dismiss()` so `handleDismiss`
-  // (BottomSheetModal's onDismiss) treats it as a no-op instead of tearing
-  // down the whole scan. Genuine user dismissals never set this.
-  const suppressNextDismissRef = useRef(false);
   // Once a scan has actually started, a mid-flow bounce back to `idle` (no
   // items detected, scan failed, last piece removed) should re-show the
   // picker sheet rather than leave a blank screen.
@@ -375,14 +360,16 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
   }, [persistDraft]);
   useEffect(() => { persistDraft(); }, [phase, detectedItems, preExtractItems, failedItems, persistDraft]);
 
-  // ── BottomSheetModal ──────────────────────────────────────────────────────────
-  const bottomSheetRef = useRef<BottomSheetModal>(null);
-  const snapPoints = useMemo(() => ['90%'], []);
+  // ── Photo source chooser ─────────────────────────────────────────────────────
+  // Only when nothing was picked up front (e.g. a resumed draft that had
+  // expired). The picker launches once the chooser has gone, never over it.
+  const [sourceOpen, setSourceOpen] = useState(false);
+  const sourceChoice = useRef<'camera' | 'library' | 'cancel' | null>(null);
 
   useEffect(() => {
     if (draftChoice !== 'new') return;
     if (!autoLaunch) {
-      bottomSheetRef.current?.present();
+      setSourceOpen(true);
       return;
     }
     let active = true;
@@ -404,27 +391,8 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftChoice]);
 
-  const canClose = phase === 'idle' || phase === 'review' || phase === 'pre-extract';
-
-  const headerTitle =
-    phase === 'idle' ? 'Add to My Closet'
-    : phase === 'scanning' ? 'Scanning outfit…'
-    : phase === 'pre-extract'
-      ? preExtractItems.length === 1
-        ? 'Verify & add details'
-        : `${preExtractItems.length} items — verify & add details`
-    : phase === 'extracting' ? 'Extracting details…'
-    : phase === 'saving' ? 'Adding to closet…'
-    : detectedItems.length === 1 ? '1 item detected'
-    : `${detectedItems.length} items detected`;
-
-  const handleClose = useCallback(() => {
-    if (phase === 'saving' || phase === 'extracting') return;
-    bottomSheetRef.current?.dismiss();
-  }, [phase]);
-
-  // Shared teardown for actually ending the scan — used both when the idle
-  // picker sheet is dismissed (via handleDismiss below) and when the
+  // Shared teardown for actually ending the scan — used both when the photo
+  // source chooser is cancelled (via handleSourceDismissed below) and when the
   // full-screen workspace's "Discard scan" is confirmed, where there's no
   // bottom sheet dismiss animation to wait on since the sheet was already
   // dismissed (or never presented) by the time scanning started.
@@ -441,12 +409,14 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
     onClose();
   }, [poseScan, onClose]);
 
-  const handleDismiss = useCallback(() => {
-    if (suppressNextDismissRef.current) {
-      suppressNextDismissRef.current = false;
-      return;
-    }
-    finishClose();
+  const handleSourceDismissed = useCallback(async () => {
+    const choice = sourceChoice.current;
+    sourceChoice.current = null;
+    if (choice === 'cancel') { finishClose(); return; }
+    if (!choice) return;
+    // A cancelled picker comes back to the chooser, as before.
+    if (!(await pickImage(choice))) setSourceOpen(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finishClose]);
 
   const handleWorkspaceDiscard = useCallback(() => {
@@ -465,7 +435,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
   useEffect(() => {
     if (phase !== 'idle' || !hasStartedRef.current) return;
     if (autoLaunch) finishClose();
-    else bottomSheetRef.current?.present();
+    else setSourceOpen(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
@@ -718,19 +688,6 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resumeIds, imageDataUrl]);
 
-  const renderBackdrop = useCallback(
-    (props: any) => (
-      <BottomSheetBackdrop
-        {...props}
-        appearsOnIndex={0}
-        disappearsOnIndex={-1}
-        opacity={0.5}
-        pressBehavior={canClose ? 'close' : 'none'}
-      />
-    ),
-    [canClose],
-  );
-
   const pickImage = async (source: 'camera' | 'library') => {
     // Both hooks handle permission checks, denial alerts, and compression internally
     const captured =
@@ -738,7 +695,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
         ? await launchCamera({ maxDim: 1600, compress: 0.85, captureExif: true })
         : await launchLibrary({ maxDim: 1600, compress: 0.85, captureExif: true });
 
-    if (!captured) return;
+    if (!captured) return false;
     track('item_scan_started', { source });
 
     // Capture location in parallel — EXIF GPS preferred, current position as
@@ -751,6 +708,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
     setImageDataUrl(captured.dataUrl);
     // Pass the local file URI so runPoseScan can downscale without re-encoding the data URL
     await runPoseScan(captured.uri, captured.dataUrl, captured);
+    return true;
   };
 
   const runPoseScan = async (
@@ -766,8 +724,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
     setDetectedItems([]);
     setFailedItems([]);
     hasStartedRef.current = true;
-    suppressNextDismissRef.current = true;
-    bottomSheetRef.current?.dismiss();
+    setSourceOpen(false);
     setPhase('scanning');
 
     // Long edge 1024 px, the same frame batch import sends (SCAN_MAX_DIM), so
@@ -1006,43 +963,16 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
 
   return (
     <>
-      <BottomSheetModal
-        ref={bottomSheetRef}
-        snapPoints={snapPoints}
-        onDismiss={handleDismiss}
-        backdropComponent={renderBackdrop}
-        handleIndicatorStyle={styles.handle}
-        backgroundStyle={styles.sheetBackground}
-        enablePanDownToClose={canClose}
-        keyboardBehavior="interactive"
-        keyboardBlurBehavior="restore"
-      >
-        <BottomSheetScrollView
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.bodyContent}
-          stickyHeaderIndices={[0]}
-        >
-          {/* Sticky header */}
-          <View style={styles.header}>
-            <View style={styles.headerLeft}>
-              <Ionicons name="sparkles" size={18} color={colors.primary} />
-              <Text style={styles.headerTitle}>{headerTitle}</Text>
-            </View>
-            {canClose && (
-              <TouchableOpacity
-                onPress={handleClose}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Ionicons name="close" size={22} color={colors.mutedForeground} />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Body */}
-          {phase === 'idle' && <IdleContent onPickImage={pickImage} />}
-        </BottomSheetScrollView>
-      </BottomSheetModal>
+      <PhotoSourceSheet
+        visible={sourceOpen && phase === 'idle'}
+        title="Add to your closet"
+        subtitle="Photograph a piece, or a whole outfit — every piece is picked out."
+        cameraHint="Snap a piece or an outfit"
+        onCamera={() => { sourceChoice.current = 'camera'; setSourceOpen(false); }}
+        onLibrary={() => { sourceChoice.current = 'library'; setSourceOpen(false); }}
+        onCancel={() => { sourceChoice.current = 'cancel'; setSourceOpen(false); }}
+        onDismiss={handleSourceDismissed}
+      />
 
       <ScanReviewWorkspace
         visible={phase === 'scanning' || phase === 'pre-extract' || phase === 'extracting' || phase === 'review' || phase === 'saving'}
@@ -1107,103 +1037,3 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
     </>
   );
 }
-
-// ─── IdleContent ──────────────────────────────────────────────────────────────
-
-function IdleContent({ onPickImage }: { onPickImage: (src: 'camera' | 'library') => void }) {
-  return (
-    <View style={idleStyles.container}>
-      <Text style={idleStyles.subtitle}>
-        Snap your outfit — AI detects every item you're wearing, including accessories.
-      </Text>
-      <TouchableOpacity style={idleStyles.option} onPress={() => onPickImage('camera')}>
-        <View style={idleStyles.iconBox}>
-          <Ionicons name="camera-outline" size={22} color={colors.primary} />
-        </View>
-        <View style={idleStyles.optionText}>
-          <Text style={idleStyles.optionTitle}>Take Photo</Text>
-          <Text style={idleStyles.optionSub}>Snap your outfit or items</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
-      </TouchableOpacity>
-      <TouchableOpacity style={idleStyles.option} onPress={() => onPickImage('library')}>
-        <View style={idleStyles.iconBox}>
-          <Ionicons name="image-outline" size={22} color={colors.primary} />
-        </View>
-        <View style={idleStyles.optionText}>
-          <Text style={idleStyles.optionTitle}>Choose from Library</Text>
-          <Text style={idleStyles.optionSub}>Select from camera roll</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-const idleStyles = StyleSheet.create({
-  container: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: spacing.md },
-  subtitle: {
-    fontSize: typography.text.bodySmall.fontSize,
-    color: colors.mutedForeground,
-    lineHeight: typography.text.bodySmall.fontSize * 1.5,
-    marginBottom: spacing.xs,
-  },
-  option: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-  },
-  iconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: radii.md,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  optionText: { flex: 1 },
-  optionTitle: {
-    fontSize: typography.text.body.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  optionSub: {
-    fontSize: typography.text.bodySmall.fontSize,
-    color: colors.mutedForeground,
-    marginTop: 2,
-  },
-});
-
-// ─── Sheet styles ─────────────────────────────────────────────────────────────
-
-const styles = StyleSheet.create({
-  sheetBackground: {
-    backgroundColor: colors.background,
-  },
-  handle: {
-    backgroundColor: colors.border,
-    width: 36,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  headerTitle: {
-    fontSize: typography.text.sectionTitle.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  bodyContent: { paddingBottom: spacing.xl },
-});

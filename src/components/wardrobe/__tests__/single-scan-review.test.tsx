@@ -11,7 +11,7 @@ import { useLibraryLaunch } from '../../../hooks/useCameraLaunch';
 jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'));
 jest.mock('../scan-review-workspace', () => ({ ScanReviewWorkspace: 'ReviewWorkspace' }));
 jest.mock('../../../features/polish-queue/runner', () => ({ enqueuePolish: jest.fn() }));
-jest.mock('@gorhom/bottom-sheet', () => ({ BottomSheetModal: 'BottomSheetModal', BottomSheetScrollView: 'BottomSheetScrollView', BottomSheetBackdrop: 'Backdrop' }));
+jest.mock('../../primitives/PhotoSourceSheet', () => ({ PhotoSourceSheet: 'PhotoSourceSheet' }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }));
 jest.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({}) }));
 jest.mock('../../../contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'test-user' } }) }));

@@ -7,6 +7,7 @@ import { Image } from 'expo-image';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { DetectionState } from '../../wardrobe/scan-review/LoadingStates';
+import { SlowScanHint } from '../../wardrobe/scan-review/SlowScanHint';
 import { PrimaryButton } from '../../wardrobe/scan-review/ActionBar';
 import { OutlinePill, TextLink } from '../../wardrobe/scan-review/atoms';
 import { cropFeedback, selectionFeedback } from '../../wardrobe/scan-review/feedback';
@@ -34,20 +35,6 @@ import { OutfitPhotoHeader, photoHeaderHeight } from './OutfitPhotoHeader';
 
 type Surface = { kind: 'resolve'; queue: string[]; startIndex?: number; initialPhoto?: boolean } | { kind: 'add' } | { kind: 'date' };
 
-/** After this long a scan offers to carry on without the user watching. */
-const SLOW_SCAN_MS = 8_000;
-
-/** True once `key` has stayed the same for `ms`; resets when it changes. */
-function useSlowFlag(key: string | null, ms: number): boolean {
-  const [slow, setSlow] = useState(false);
-  useEffect(() => {
-    setSlow(false);
-    if (!key) return;
-    const t = setTimeout(() => setSlow(true), ms);
-    return () => clearTimeout(t);
-  }, [key, ms]);
-  return slow;
-}
 type DateChoice = 'today' | 'yesterday' | 'other';
 
 const isoDay = localISODay;
@@ -84,7 +71,6 @@ export function WearReviewWorkspace({ onClose, onMinimize, onLogged, onPickManua
     setWorkspaceOpen(true);
     return () => setWorkspaceOpen(false);
   }, [setWorkspaceOpen]);
-  const slow = useSlowFlag(flow.status === 'processing' ? flow.id : null, SLOW_SCAN_MS);
   const safe = useSafeAreaInsets();
   // The logger is an iOS page sheet, which already starts below the status
   // bar; the window's top inset would push the header down a second time.
@@ -108,16 +94,11 @@ export function WearReviewWorkspace({ onClose, onMinimize, onLogged, onPickManua
         ) : null}
         {flow.status === 'processing' ? (
           <View style={[styles.bar, styles.bottom, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
-            {slow ? (
-              <View style={styles.center} accessibilityLiveRegion="polite">
-                <Text style={styles.slowText}>Taking longer than usual</Text>
-                <TextLink label="Keep going in the background" onPress={onMinimize} />
-              </View>
-            ) : (
+            <SlowScanHint watchKey={flow.id} background={{ onPress: onMinimize }}>
               <View style={styles.center}>
                 <TextLink label="Pick the pieces yourself" tone="muted" onPress={onPickManually} />
               </View>
-            )}
+            </SlowScanHint>
           </View>
         ) : (
           <View style={styles.failed} accessibilityLiveRegion="polite">
@@ -450,7 +431,6 @@ const styles = StyleSheet.create({
   failedCopy: { ...typography.text.bodySmall, color: colors.mutedForeground, textAlign: 'center', paddingHorizontal: spacing.xl },
   center: { alignItems: 'center' },
   bottom: { marginTop: 'auto', alignSelf: 'stretch' },
-  slowText: { ...typography.text.meta, color: colors.mutedForeground },
   logged: { alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   loggedTitle: { ...typography.text.editorialSection, color: colors.foreground, marginTop: spacing.md },
   loggedMeta: { ...typography.text.meta, color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 1.2 },
