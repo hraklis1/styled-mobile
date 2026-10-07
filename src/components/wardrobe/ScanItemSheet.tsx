@@ -419,6 +419,17 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finishClose]);
 
+  // Put the review away with its draft intact: the unfinished-scan tray
+  // offers it back. Late results from this session are dropped.
+  const handleKeepForLater = useCallback(() => {
+    persistDraft();
+    draftClosed.current = true;
+    operationRef.current = false;
+    sessionRef.current += 1;
+    extractionCacheRef.current?.clear();
+    onClose();
+  }, [onClose, persistDraft]);
+
   const handleWorkspaceDiscard = useCallback(() => {
     finishClose();
   }, [finishClose]);
@@ -1032,6 +1043,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
           confirmSheet({ title: 'Couldn’t add these pieces', message: 'Your edits are safe. Please try again.', confirmLabel: 'OK', cancelLabel: null, onConfirm: () => {} });
         }); }}
         onClose={handleWorkspaceDiscard}
+        onKeepForLater={handleKeepForLater}
       />
 
     </>

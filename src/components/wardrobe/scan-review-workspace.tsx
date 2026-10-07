@@ -102,6 +102,12 @@ type Props = {
    */
   onMinimize?: () => void;
   /**
+   * Single scan only: puts the review away with its draft kept, for the
+   * unfinished-scan tray to resume. Offered in the ⋯ menu while choosing or
+   * reviewing pieces, never while a request is in flight.
+   */
+  onKeepForLater?: () => void;
+  /**
    * Adds a piece the scan missed, cut from the same photo. Resolves to the
    * new piece's id, or null when the crop couldn't be made. Only a
    * single-photo scan offers this.
@@ -145,6 +151,7 @@ export function ScanReviewWorkspace({
   onSave,
   onClose,
   onMinimize,
+  onKeepForLater,
   onAddPiece,
   closetBrands,
 }: Props) {
@@ -152,6 +159,7 @@ export function ScanReviewWorkspace({
   const { height } = useWindowDimensions();
   const reduceMotion = useReviewReducedMotion();
   const review = isReviewStage(stage);
+  const keepForLater = onKeepForLater && (stage === 'pre-extract' || stage === 'review') ? onKeepForLater : undefined;
   const busy = stage === 'scanning' || stage === 'extracting' || stage === 'saving';
   // Scanning and extracting can be stopped (the parent's session guard drops
   // late results); only a save in flight holds the screen.
@@ -550,7 +558,7 @@ export function ScanReviewWorkspace({
             includedCount={inclusion.included.length}
             totalCount={visiblePieces.length}
             onIncludeAll={busy ? undefined : () => { bulkFeedback(); inclusion.change(visiblePieces.map(p => p.id), true); }}
-            onMore={onMinimize ? () => openSheet({ kind: 'options', target: [] }) : undefined}
+            onMore={onMinimize || keepForLater ? () => openSheet({ kind: 'options', target: [] }) : undefined}
             closeDisabled={closeDisabled}
             topInset={insets.top}
             onBack={() => { setWalk(null); setView('sheet'); }}
@@ -746,13 +754,13 @@ export function ScanReviewWorkspace({
             <PolishExample example={polish.example} />
           </WorkspaceSheet>
         ) : sheet?.kind === 'options' ? (
-          <WorkspaceSheet title="Import options" detent="fit" rows={scanOptionsRowCount(onMinimize)} reduceMotion={reduceMotion} dismissed={sheetDismissed} onClose={closeSheet}>
+          <WorkspaceSheet title="Import options" detent="fit" rows={scanOptionsRowCount(onMinimize ?? keepForLater)} reduceMotion={reduceMotion} dismissed={sheetDismissed} onClose={closeSheet}>
             <ScanOptionsRows
-              onKeep={onMinimize ? () => thenDismiss(onMinimize) : undefined}
-              discardLabel="Discard import"
+              onKeep={(onMinimize ?? keepForLater) ? () => thenDismiss((onMinimize ?? keepForLater)!) : undefined}
+              discardLabel={onMinimize ? 'Discard import' : 'Discard scan'}
               detail={`${pieceCountLabel(pieces.length)} and your edits`}
               onDiscard={() => thenDismiss(() => {
-                track('scan_review_discarded', { mode: 'batch', included_count: inclusion.included.length, detected_count: pieces.length });
+                track('scan_review_discarded', { mode: onMinimize ? 'batch' : 'single', included_count: inclusion.included.length, detected_count: pieces.length });
                 onClose();
               })}
             />

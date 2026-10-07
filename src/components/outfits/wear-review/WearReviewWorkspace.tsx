@@ -12,6 +12,7 @@ import { PrimaryButton } from '../../wardrobe/scan-review/ActionBar';
 import { OutlinePill, TextLink } from '../../wardrobe/scan-review/atoms';
 import { cropFeedback, selectionFeedback } from '../../wardrobe/scan-review/feedback';
 import { localISODay } from '../../../lib/dates';
+import { presentPaywall } from '../../../lib/paywall';
 import { UndoToast } from '../../primitives/UndoToast';
 import { useReviewReducedMotion } from '../../../hooks/useReviewReducedMotion';
 import { applySavedItems, useItems } from '../../../hooks/useItems';
@@ -108,7 +109,10 @@ export function WearReviewWorkspace({ onClose, onMinimize, onLogged, onPickManua
             <View style={[styles.bar, styles.bottom, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
               {flow.offline
                 ? <PrimaryButton label="Keep it for later" onPress={onMinimize} />
-                : <PrimaryButton label="Try again" onPress={() => { if (!retryWearScan()) onPickManually(); }} />}
+                : flow.needsCredits
+                  // As in the closet scan: top up, then the same photo is read with no re-pick.
+                  ? <PrimaryButton label="Get credits" onPress={() => { void presentPaywall().then((ok) => { if (ok && !retryWearScan()) onPickManually(); }); }} />
+                  : <PrimaryButton label="Try again" onPress={() => { if (!retryWearScan()) onPickManually(); }} />}
               <View style={styles.center}><TextLink label="Pick the pieces yourself" onPress={onPickManually} /></View>
             </View>
           </View>

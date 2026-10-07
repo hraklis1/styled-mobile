@@ -23,6 +23,7 @@ jest.mock('../../wardrobe/scan-review/MenuRows', () => ({ ScanOptionsRows: 'Scan
 jest.mock('../../wardrobe/scan-review/WorkspaceSheet', () => ({ WorkspaceSheet: 'WorkspaceSheet' }));
 jest.mock('../wear-review/NewPieceSheet', () => ({ NewPieceSheet: 'NewPieceSheet', NewPieceEditor: 'NewPieceEditor' }));
 jest.mock('../../../features/wear-log/runner', () => ({ discardWearFlow: jest.fn(), retryWearScan: jest.fn() }));
+jest.mock('../../../lib/paywall', () => ({ presentPaywall: jest.fn() }));
 jest.mock('../../../features/wear-log/api', () => ({ saveWearLog: jest.fn() }));
 jest.mock('../../../hooks/useReviewReducedMotion', () => ({ useReviewReducedMotion: () => true }));
 jest.mock('../../../hooks/useItems', () => ({ useItems: jest.fn(), applySavedItems: jest.fn() }));
@@ -104,6 +105,31 @@ describe('WearReviewWorkspace while processing', () => {
     });
     const buttons = tree.root.findAll((n) => (n.type as unknown) === 'PrimaryButton').map((n) => n.props.label);
     expect(buttons).toEqual(['Keep it for later']);
+    act(() => { tree.unmount(); });
+  });
+
+  it('an out-of-credits failure offers a top-up, then reads the same photo again', async () => {
+    useWearLogStore.setState({
+      flow: { status: 'failed', id: 'flow-1', photoUri: 'file:///p.jpg', date: '2026-09-30', message: 'credits', offline: false, needsCredits: true },
+    });
+    const paywall = jest.mocked(jest.requireMock('../../../lib/paywall').presentPaywall as () => Promise<boolean>);
+    const retry = jest.requireMock('../../../features/wear-log/runner').retryWearScan as jest.Mock;
+    retry.mockReturnValue(true);
+    paywall.mockResolvedValue(false);
+    let tree!: TestRenderer.ReactTestRenderer;
+    act(() => {
+      tree = TestRenderer.create(
+        <WearReviewWorkspace onClose={jest.fn()} onMinimize={jest.fn()} onLogged={jest.fn()} onPickManually={jest.fn()} />,
+      );
+    });
+    const button = tree.root.find((n) => (n.type as unknown) === 'PrimaryButton');
+    expect(button.props.label).toBe('Get credits');
+    // Dismissing the paywall leaves the scan alone.
+    await act(async () => { button.props.onPress(); });
+    expect(retry).not.toHaveBeenCalled();
+    paywall.mockResolvedValue(true);
+    await act(async () => { button.props.onPress(); });
+    expect(retry).toHaveBeenCalledTimes(1);
     act(() => { tree.unmount(); });
   });
 });
