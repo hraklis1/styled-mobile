@@ -1,4 +1,5 @@
 import { normalizeScanCategory } from '../../lib/outfit-log-scan';
+import { toNormalizedColor } from '../../lib/colorUtils';
 import type { Resolution, ReviewFlow, WearDetection, WearDraft, WearEvent, WearFlow, WearScan } from './types';
 
 export const IDLE: WearFlow = { status: 'idle' };
@@ -19,7 +20,7 @@ export function draftFrom(d: WearDetection): WearDraft {
     category: normalizeScanCategory(d.attributes.category),
     subcategory: null,
     color: d.attributes.color || null,
-    colorNormalized: null,
+    colorNormalized: toNormalizedColor(d.attributes.color),
     style: null,
     seasons: [],
     occasions: [],

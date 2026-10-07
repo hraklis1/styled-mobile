@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import {
   Modal,
   View,
@@ -267,9 +267,10 @@ export function LogOutfitSheet({
     void launch.finally(() => setAutoLaunchPending(false));
   }, [initialImage, initialLaunch, processScanImage, runScan]);
 
-  useEffect(() => {
-    if (visible && initialView === 'picker') setView('picker');
-    if (visible && initialView === 'scan-review') setView('scan-review');
+  // The view is chosen as the sheet opens, not reset as it closes: a close
+  // animates out on whatever view it had, so resetting then flashed the form.
+  useLayoutEffect(() => {
+    if (visible) setView(initialView ?? 'form');
   }, [initialView, visible]);
 
   const reset = useCallback(() => {
@@ -284,7 +285,6 @@ export function LogOutfitSheet({
     setLocation('');
     setRating(null);
     setDetailsExpanded(false);
-    setView('form');
     setSearch('');
     setSourcePickerOpen(false);
     setAutoLaunchPending(false);
@@ -292,10 +292,12 @@ export function LogOutfitSheet({
 
   useEffect(() => {
     if (!visible) reset();
+    // (view is set on open — see the layout effect above)
   }, [reset, visible]);
 
+  // Reset happens in the !visible effect, after the sheet has gone, so
+  // closing never flashes the empty form on the way out.
   const handleClose = () => {
-    reset();
     onClose();
   };
 
@@ -322,7 +324,6 @@ export function LogOutfitSheet({
       {
         onSuccess: () => {
           track('outfit_logged', { item_count: selectedIds.length });
-          reset();
           onSaved?.();
           onClose();
         },
@@ -365,14 +366,15 @@ export function LogOutfitSheet({
       onShow={handleModalShow}
       onRequestClose={view === 'picker' ? handlePickerBack : handleClose}
     >
-      {view === 'scan-review' && wearStatus !== 'idle' ? (
+      {/* While the sheet closes after a log the flow is already idle; keep this
+          branch (it renders nothing) so the empty form doesn't flash on the way out. */}
+      {view === 'scan-review' && (wearStatus !== 'idle' || !visible) ? (
         <WearReviewWorkspace
           onClose={handleClose}
           // Plain close: the !visible effect resets the form after the sheet
           // has gone, so it doesn't flash the form on the way out.
           onMinimize={onClose}
           onLogged={() => {
-            reset();
             onSaved?.();
             onClose();
           }}
@@ -408,10 +410,11 @@ export function LogOutfitSheet({
                 >
                   <Text style={styles.headerCancel}>Cancel</Text>
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>What Did You Wear?</Text>
-                <TouchableOpacity
+                <Text style={styles.headerTitle} accessibilityRole="header">What did you wear?</Text>
+                {/* Save appears once there's something to save. */}
+                {selectedIds.length === 0 ? <View style={styles.headerSpacer} /> : <TouchableOpacity
                   onPress={handleSave}
-                  disabled={selectedIds.length === 0 || createLog.isPending}
+                  disabled={createLog.isPending}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
                   {createLog.isPending ? (
@@ -426,7 +429,7 @@ export function LogOutfitSheet({
                       Save
                     </Text>
                   )}
-                </TouchableOpacity>
+                </TouchableOpacity>}
               </View>
 
               <ScrollView
@@ -528,9 +531,11 @@ export function LogOutfitSheet({
                   accessibilityRole="button"
                   accessibilityLabel={resumable ? 'Continue reviewing your outfit photo' : 'Match your outfit from a photo'}
                 >
-                  <Ionicons name={resumable ? 'images-outline' : 'camera-outline'} size={20} color={colors.primary} />
+                  <View style={styles.scanIcon}>
+                    <Ionicons name={resumable ? 'images-outline' : 'camera-outline'} size={20} color={colors.primaryForeground} />
+                  </View>
                   <View style={styles.addItemsBtnCopy}>
-                    <Text style={styles.addItemsBtnText}>
+                    <Text style={styles.scanTitle}>
                       {resumable ? 'Continue your photo' : 'Match from a photo'}
                     </Text>
                     <Text style={styles.addItemsBtnSubtext}>
@@ -548,7 +553,7 @@ export function LogOutfitSheet({
                 ) : null}
 
                 <TouchableOpacity
-                  style={styles.addItemsBtn}
+                  style={[styles.addItemsBtn, styles.closetRow]}
                   onPress={() => {
                     setSearch('');
                     setView('picker');
@@ -857,11 +862,10 @@ const styles = StyleSheet.create({
     minWidth: 44,
   },
   headerTitle: {
-    fontSize: typography.text.body.fontSize,
-    fontWeight: typography.weight.semibold,
+    ...typography.text.editorialSection,
     color: colors.foreground,
-    letterSpacing: typography.tracking.whisper,
   },
+  headerSpacer: { minWidth: 44 },
   headerSave: {
     fontSize: typography.text.body.fontSize,
     fontWeight: typography.weight.bold,
@@ -1219,10 +1223,33 @@ const styles = StyleSheet.create({
   },
 
   // ── Scan button variant
+  // Photo matching is the main path: a taller, quieter card that leads.
   scanBtn: {
-    borderColor: `${colors.primary}35`,
-    backgroundColor: `${colors.primary}0D`,
-    marginBottom: spacing.sm,
+    borderWidth: 0,
+    backgroundColor: colors.surfaceSubtle,
+    paddingVertical: spacing.lg,
+    gap: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  scanIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scanTitle: {
+    ...typography.text.editorialSection,
+    fontSize: 20,
+    color: colors.foreground,
+  },
+  // The hand-picked path sits beneath as a plain row, not a second card.
+  closetRow: {
+    borderWidth: 0,
+    backgroundColor: 'transparent',
+    paddingHorizontal: spacing.md,
+    gap: spacing.md,
   },
 
   // ── Scan review

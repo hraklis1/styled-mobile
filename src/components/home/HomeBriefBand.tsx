@@ -8,6 +8,7 @@ import { useEntitlement } from '../../hooks/useEntitlement';
 import { useShoppingBrief } from '../../hooks/useShoppingBrief';
 import { colors, radii, shadows, spacing, stroke } from '../../theme';
 import { AppText } from '../primitives/AppText';
+import { withoutOutfitCount } from '../../lib/shopClarity';
 
 type Props = {
   onBriefPress: () => void;
@@ -66,7 +67,11 @@ function WardrobeEditKicker({ icon, label, purpose }: {
 export function HomeWardrobeEdit({ onBriefPress, shortlist, style }: Props) {
   const { isPremium } = useEntitlement();
   const { data: brief } = useShoppingBrief(isPremium);
-  const hasBrief = !!brief && brief.status !== 'insufficient_data';
+  // The same text Shop's "Your shopping brief" panel shows, nothing more.
+  const summary = brief && brief.status !== 'insufficient_data'
+    ? brief.priorities.reduce((text, priority) => withoutOutfitCount(text, priority.impactScore), brief.summary)
+    : '';
+  const hasBrief = !!summary;
 
   if (!hasBrief && !shortlist) return null;
 
@@ -86,18 +91,14 @@ export function HomeWardrobeEdit({ onBriefPress, shortlist, style }: Props) {
             contentStyle={[styles.card, styles.briefCard]}
             onPress={onBriefPress}
             accessibilityRole="button"
-            accessibilityLabel={`Your shopping brief: ${brief.headline}. Opens the brief in Shop`}
+            accessibilityLabel={`Your shopping brief: ${summary}. Opens Shop`}
           >
             <WardrobeEditKicker
               icon="sparkles-outline"
               label="Your shopping brief"
               purpose="What your wardrobe needs next"
             />
-            <AppText variant="editorialCompact" tone="primary" numberOfLines={2}>{brief.headline}</AppText>
-            <View style={styles.link}>
-              <AppText variant="label" tone="action">Read the brief</AppText>
-              <Ionicons name="arrow-forward" size={13} color={colors.action} />
-            </View>
+            <AppText variant="body" tone="primary">{summary}</AppText>
           </PressableScale>
         ) : null}
         {shortlist?.({
@@ -147,10 +148,4 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   kickerCopy: { flex: 1 },
-  link: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 5,
-  },
 });

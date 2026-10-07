@@ -51,8 +51,10 @@ function colourValue(color: string | null): string | null {
  * right, hairline rules between. Only the name is typed; everything else is
  * picked, inline when the choices are few, in a sheet when they need search.
  */
-export function SpecSheet({ piece, stage, flags, expandedRow, disabled, onExpand, onUpdate, onOpenSheet }: {
+export function SpecSheet({ piece, stage, flags, expandedRow, disabled, compact = false, onExpand, onUpdate, onOpenSheet }: {
   piece: ScanReviewPiece;
+  /** Fold Material and Details behind "More details" until asked for (quick capture, e.g. logging a wear). */
+  compact?: boolean;
   stage: ScanReviewStage;
   flags: readonly ReviewField[];
   expandedRow: ExpandableRow | null;
@@ -66,6 +68,7 @@ export function SpecSheet({ piece, stage, flags, expandedRow, disabled, onExpand
   const toggle = (row: ExpandableRow) => onExpand(expandedRow === row ? null : row);
   const colour = colourValue(piece.color);
   const details = detailsSummary(piece);
+  const [more, setMore] = useState(!compact || !!piece.material || !!details);
 
   return (
     <View style={styles.root}>
@@ -110,6 +113,7 @@ export function SpecSheet({ piece, stage, flags, expandedRow, disabled, onExpand
               onPick={(key) => onUpdate({ color: normalizedColorDisplayName(key), colorNormalized: key })}
             />
           </SpecRow>
+          {more ? <>
           <SpecRow
             label="Material"
             value={piece.material}
@@ -129,6 +133,12 @@ export function SpecSheet({ piece, stage, flags, expandedRow, disabled, onExpand
           >
             <DetailsPanel piece={piece} disabled={disabled} onUpdate={onUpdate} />
           </SpecRow>
+          </> : (
+            <TouchableOpacity style={styles.moreRow} onPress={() => setMore(true)} disabled={disabled} accessibilityRole="button" accessibilityLabel="More details: material, style, season, fit">
+              <Text style={styles.moreText}>More details</Text>
+              <Text style={styles.moreHint}>Material, style, season, fit</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : null}
     </View>
@@ -325,6 +335,9 @@ const styles = StyleSheet.create({
   identity: { gap: 2 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'flex-start', minHeight: 36, marginVertical: 4, paddingHorizontal: spacing.md, borderRadius: radii.full, borderWidth: stroke.fine, borderColor: colors.controlOutline },
   brand: { ...typography.text.eyebrow, color: colors.foreground },
+  moreRow: { minHeight: 52, justifyContent: 'center', gap: 2 },
+  moreText: { ...typography.text.bodySmall, color: colors.foreground },
+  moreHint: { ...typography.text.meta, color: colors.mutedForeground },
   brandEmpty: { ...typography.text.eyebrow, color: colors.tertiary },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   title: {

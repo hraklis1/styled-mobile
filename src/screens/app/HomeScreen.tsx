@@ -1,5 +1,6 @@
 import { HomeActionRow, type HomeActionKey, type HomeActionRowHandle } from '../../components/home/HomeActionRow';
-import { buildWearWeek } from '../../lib/wearWeek';
+import { buildClosetInsights } from '../../lib/closetInsights';
+import { ClosetInsightsCard } from '../../components/insights/ClosetInsightsCard';
 import { useShoppingPriorityEdit } from '../../hooks/useShoppingPriorityEdit';
 import { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -253,6 +254,11 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const saveDailyLook = useSaveDailyLook();
   const dismissDailyLook = useDismissDailyLook();
   const homeCurrency = useCurrencyCode();
+  const closetInsights = useMemo(() => buildClosetInsights(items, logs), [items, logs]);
+  const openClosetInsights = useCallback(() => {
+    track('home_insights_open', { active_share: Math.round(closetInsights.activeShare * 100) });
+    navigation.navigate('ClosetInsights');
+  }, [closetInsights.activeShare, navigation]);
   const shortlist = useMemo(
     () => buildShortlistSpotlight(buildShoppingEditItems(mergeShoppingSnaps(shoppingSnaps, pendingShoppingUploads), { homeCurrency })),
     [homeCurrency, pendingShoppingUploads, shoppingSnaps],
@@ -393,7 +399,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     else void showTourStep(tour.step + 1);
   }, [tour, endTour, showTourStep]);
 
-  const loggedToday = useMemo(() => !!buildWearWeek(logs).days[6]?.log, [logs]);
 
   const handleAddToCloset = useCallback(() => {
     endTour('button_tap');
@@ -893,7 +898,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       <HomeActionRow
         ref={actionRowRef}
         style={styles.actionRow}
-        loggedToday={loggedToday}
         onAddToCloset={handleAddToCloset}
         onSaveFind={() => {
           endTour('button_tap');
@@ -1145,7 +1149,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       <HomeWardrobeEdit
         onBriefPress={() => {
           track('shop_section_opened', { section: 'home_brief' });
-          navigation.navigate('Shop', { screen: 'ShoppingBriefDetail', params: { returnTo: 'Home' } });
+          navigation.navigate('Shop', { screen: 'ShopMain', params: { view: 'for-you' } });
         }}
         shortlist={shortlist.awaitingDecision.length > 0 ? ({ header, cardStyle }) => (
           <ShortlistDecisionCard
@@ -1185,6 +1189,20 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           disabled={deleteLog.isPending}
         />
       </EditorialSection>
+
+      {/* ── Closet Insights ───────────────────────────────────────── */}
+      {!itemsLoading && items.length > 0 ? (
+        <EditorialSection
+          variant="ruled"
+          headingStyle="chapter"
+          dividerPlacement="above-heading"
+          title="Closet Insights"
+          actionLabel={closetInsights.ready ? 'See all' : undefined}
+          onAction={closetInsights.ready ? openClosetInsights : undefined}
+        >
+          <ClosetInsightsCard insights={closetInsights} currencyCode={homeCurrency} onPress={openClosetInsights} />
+        </EditorialSection>
+      ) : null}
 
     </Animated.ScrollView>
       {/* Status-bar chrome: content glides under a frosted band, not a hard crop. */}

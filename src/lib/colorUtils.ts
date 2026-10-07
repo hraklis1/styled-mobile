@@ -29,6 +29,16 @@ export const COLOR_HEX_MAP: Record<string, string> = {
   green: '#16A34A',
   olive: '#6B7C23',
   sage: '#B2C29C',
+  'olive green': '#6B7C23',
+  'army green': '#4B5320',
+  'forest green': '#228B22',
+  'hunter green': '#355E3B',
+  'dark green': '#14532D',
+  moss: '#8A9A5B',
+  chocolate: '#5C3A21',
+  oatmeal: '#D8CBB3',
+  stone: '#B8AFA2',
+  ecru: '#E8E0CC',
   mint: '#3EB489',
   teal: '#0D9488',
   aqua: '#00BCD4',
@@ -68,10 +78,12 @@ const PATTERN_KEYWORDS = ['multi', 'pattern', 'floral', 'stripe', 'plaid', 'chec
 
 export function resolveHex(lower: string): string {
   if (COLOR_HEX_MAP[lower]) return COLOR_HEX_MAP[lower];
-  for (const [key, hex] of Object.entries(COLOR_HEX_MAP)) {
-    if (lower.includes(key) || key.includes(lower)) return hex;
+  // Longest name wins: "olive green" is olive, not green.
+  let best: string | null = null;
+  for (const key of Object.keys(COLOR_HEX_MAP)) {
+    if ((lower.includes(key) || key.includes(lower)) && (!best || key.length > best.length)) best = key;
   }
-  return '#9CA3AF';
+  return best ? COLOR_HEX_MAP[best] : '#9CA3AF';
 }
 
 export function getSwatchColor(name: string): { primary: string; secondary?: string } {
@@ -121,6 +133,31 @@ export const NORMALIZED_COLOR_HEX: Record<NormalizedColor, string> = {
   silver:     '#C0C0C0',
   multi:      '#C8B9A8',
 };
+
+const NORMALIZED_SYNONYMS: Record<string, NormalizedColor> = {
+  gray: 'grey', charcoal: 'grey', 'light blue': 'light-blue', 'baby blue': 'light-blue', sky: 'light-blue',
+  'navy blue': 'navy', 'olive green': 'olive', 'army green': 'olive', sage: 'olive', moss: 'olive',
+  ivory: 'cream', 'off white': 'cream', 'off-white': 'cream', ecru: 'cream', oatmeal: 'beige', stone: 'beige',
+  sand: 'beige', camel: 'tan', chocolate: 'brown', maroon: 'burgundy', wine: 'burgundy', lilac: 'lavender',
+};
+
+/**
+ * Free-text colour ("olive green", "Light Grey") to a palette key, or null
+ * when it doesn't map cleanly. Longest match wins, so "olive green" is olive.
+ */
+export function toNormalizedColor(raw: string | null | undefined): NormalizedColor | null {
+  const lower = raw?.toLowerCase().trim().replace(/\s+/g, ' ');
+  if (!lower) return null;
+  if (lower.includes('/') || PATTERN_KEYWORDS.some((kw) => lower.includes(kw))) return 'multi';
+  const keys = [...Object.keys(NORMALIZED_SYNONYMS), ...Object.keys(NORMALIZED_COLOR_HEX)];
+  let best: string | null = null;
+  for (const key of keys) {
+    const k = key.replace('-', ' ');
+    if (new RegExp(`\\b${k}\\b`).test(lower) && (!best || k.length > best.replace('-', ' ').length)) best = key;
+  }
+  if (!best) return null;
+  return NORMALIZED_SYNONYMS[best] ?? (best as NormalizedColor);
+}
 
 export function normalizedColorDisplayName(color: NormalizedColor): string {
   return color.replace('-', ' ').replace(/\b\w/g, c => c.toUpperCase());

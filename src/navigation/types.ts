@@ -60,6 +60,7 @@ export type HomeStackParamList = {
   HomeMain: undefined;
   Suggestions: { eventId?: number } | undefined;
   Profile: undefined;
+  ClosetInsights: undefined;
 };
 
 export type WishlistSection = 'products' | 'lists';
@@ -134,6 +135,10 @@ export type ResetPasswordScreenProps = NativeStackScreenProps<AuthStackParamList
 // CompositeScreenProps lets HomeMain navigate within HomeStack and across to sibling tabs.
 export type HomeScreenProps = CompositeScreenProps<
   NativeStackScreenProps<HomeStackParamList, 'HomeMain'>,
+  BottomTabScreenProps<AppTabParamList>
+>;
+export type ClosetInsightsScreenProps = CompositeScreenProps<
+  NativeStackScreenProps<HomeStackParamList, 'ClosetInsights'>,
   BottomTabScreenProps<AppTabParamList>
 >;
 export type SuggestionsScreenProps = NativeStackScreenProps<HomeStackParamList, 'Suggestions'>;

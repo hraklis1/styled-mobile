@@ -48,7 +48,9 @@ export function newItemInput(flowId: string, d: WearDetection, draft: WearDraft)
     notes: d.attributes.description || null,
     ...(d.cropUrl ? { imageUrl: d.cropUrl } : {}),
     cutoutUrl: d.cutoutUrl,
-    coverImageVariant: d.cutoutUrl ? 'cutout' : 'original',
+    // The background-intact crop is the cover; the cutout stays on the item
+    // as an option. Detection cutouts can lose hands, collars and edges.
+    coverImageVariant: d.cropUrl || !d.cutoutUrl ? 'original' : 'cutout',
   };
 }
 

@@ -37,6 +37,7 @@ import { ResetPasswordScreen } from '../screens/auth/ResetPasswordScreen';
 import { HomeScreen } from '../screens/app/HomeScreen';
 import { ItemDetailScreen } from '../screens/app/ItemDetailScreen';
 import { ClosetRefreshScreen } from '../screens/app/ClosetRefreshScreen';
+import { ClosetInsightsScreen } from '../screens/app/ClosetInsightsScreen';
 import { OutfitDetailScreen } from '../screens/app/OutfitDetailScreen';
 import { BoardDetailScreen } from '../screens/app/BoardDetailScreen';
 import { ClosetScreen } from '../screens/app/ClosetScreen';
@@ -175,6 +176,7 @@ function HomeNavigator() {
     <HomeStack.Navigator screenOptions={{ headerShown: false }}>
       <HomeStack.Screen name="HomeMain" component={HomeScreen} />
       <HomeStack.Screen name="Suggestions" component={SuggestionsScreen} />
+      <HomeStack.Screen name="ClosetInsights" component={ClosetInsightsScreen} />
       <HomeStack.Screen name="Profile" component={ProfileNavigator} options={{ presentation: 'modal' }} />
     </HomeStack.Navigator>
   );

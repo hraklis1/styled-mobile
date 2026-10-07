@@ -12,6 +12,7 @@ jest.mock('../../wardrobe/scan-review/WorkspaceSheet', () => ({
 jest.mock('../../wardrobe/scan-review/ActionBar', () => ({ PrimaryButton: 'PrimaryButton' }));
 jest.mock('../../wardrobe/scan-review/atoms', () => ({ TextLink: 'TextLink' }));
 jest.mock('../../wardrobe/scan-review/feedback', () => ({ selectionFeedback: jest.fn() }));
+jest.mock('react-native-reanimated', () => ({ __esModule: true, default: { View: 'AnimatedView' }, FadeIn: { duration: () => ({}) } }));
 jest.mock('../wear-review/PieceImage', () => ({ PieceImage: 'PieceImage' }));
 jest.mock('../wear-review/PhotoHero', () => ({ PhotoHero: 'PhotoHero' }));
 jest.mock('../wear-review/ClosetMatchSheet', () => ({ ClosetPicker: 'ClosetPicker' }));
@@ -30,6 +31,9 @@ function tap(tree: TestRenderer.ReactTestRenderer, label: string) {
 }
 function closeSheet(tree: TestRenderer.ReactTestRenderer) {
   act(() => node(tree, 'WorkspaceSheet').props.onClose());
+}
+function has(tree: TestRenderer.ReactTestRenderer, type: string) {
+  return tree.root.findAll((n) => (n.type as unknown) === type).length > 0;
 }
 function press(tree: TestRenderer.ReactTestRenderer, type: string, label: string) {
   act(() => node(tree, type, label).props.onPress());
@@ -61,10 +65,11 @@ describe('guided piece review', () => {
     const candidate = tree.root.find((n) => n.props.accessibilityRole === 'button' && n.props.accessibilityLabel === 'Cotton shirt, COS');
     act(() => candidate.props.onPress());
     expect(resolutions().d0).toMatchObject({ itemId: 1, source: 'suggested' });
-    press(tree, 'PrimaryButton', 'Confirm & next');
+    press(tree, 'PrimaryButton', 'Save & next');
     expect(resolutions().d0).toEqual({ kind: 'matched', itemId: 2, source: 'user' });
-    expect(node(tree, 'PrimaryButton', 'Confirm & finish').props.disabled).toBe(true);
-    press(tree, 'TextLink', 'Skip piece');
+    // Nothing chosen yet: the anchored confirm is there but disabled.
+    expect(node(tree, 'PrimaryButton', 'Add to outfit').props.disabled).toBe(true);
+    press(tree, 'TextLink', 'Skip this piece');
     expect(resolutions().d1.kind).toBe('dismissed');
     expect(node(tree, 'WorkspaceSheet').props.dismissed).toBe(true);
     act(() => tree.unmount());
@@ -72,7 +77,7 @@ describe('guided piece review', () => {
 
   it('closing partway through preserves decisions and discards an unconfirmed pick', () => {
     const tree = mount(['d0', 'd1']);
-    press(tree, 'PrimaryButton', 'Confirm & next');
+    press(tree, 'PrimaryButton', 'Save & next');
     const candidate = tree.root.find((n) => n.props.accessibilityRole === 'button' && n.props.accessibilityLabel === 'Cotton shirt, COS');
     act(() => candidate.props.onPress());
     closeSheet(tree);
@@ -89,7 +94,8 @@ describe('guided piece review', () => {
     tap(tree, 'Browse closet');
     act(() => node(tree, 'ClosetPicker').props.onPick(3));
     expect(resolutions().d0).toMatchObject({ itemId: 3, source: 'user' });
-    expect(node(tree, 'PrimaryButton').props.label).toBe('Confirm & finish');
+    expect(node(tree, 'WorkspaceSheet').props.subtitle.props.children).toEqual(['Piece ', 2, ' of ', 2]);
+    expect(node(tree, 'PrimaryButton').props.disabled).toBe(true);
     expect(node(tree, 'WorkspaceSheet').props.dismissed).toBe(false);
     act(() => tree.unmount());
   });
@@ -101,7 +107,7 @@ describe('guided piece review', () => {
     tap(tree, 'Browse closet');
     press(tree, 'TextLink', 'Back to comparison');
     expect(resolutions().d0).toMatchObject({ itemId: 1, source: 'suggested' });
-    press(tree, 'PrimaryButton', 'Confirm & finish');
+    press(tree, 'PrimaryButton', 'Add to outfit');
     expect(resolutions().d0).toMatchObject({ itemId: 2, source: 'user' });
     act(() => tree.unmount());
   });
@@ -120,8 +126,10 @@ describe('guided piece review', () => {
     tap(tree, 'Add as a new piece');
     act(() => node(tree, 'NewPieceEditor').props.onChange({ brand: 'Arket', name: 'Summer shirt' }));
     expect(resolutions().d0).toMatchObject({ kind: 'new', draft: { brand: 'Arket', name: 'Summer shirt' } });
-    press(tree, 'TextLink', 'Done');
-    expect(node(tree, 'PrimaryButton').props.label).toBe('Confirm & finish');
+    expect(node(tree, 'WorkspaceSheet').props.headerAction.props.label).toBeUndefined();
+    press(tree, 'PrimaryButton', 'Save & next');
+    expect(node(tree, 'WorkspaceSheet').props.title).toBe('Match your pieces');
+    expect(has(tree, 'NewPieceEditor')).toBe(false);
     expect(resolutions().d0).toMatchObject({ draft: { brand: 'Arket' } });
     act(() => tree.unmount());
   });
@@ -143,7 +151,7 @@ describe('guided piece review', () => {
     const tree = mount([], true, ['d0', 'd1']);
     act(() => node(tree, 'PhotoHero').props.onOpen('d1'));
     expect(node(tree, 'WorkspaceSheet').props.title).toBe('Match your pieces');
-    expect(node(tree, 'PrimaryButton').props.label).toBe('Confirm & finish');
+    expect(node(tree, 'WorkspaceSheet').props.subtitle.props.children).toEqual(['Piece ', 2, ' of ', 2]);
     act(() => tree.unmount());
   });
 
@@ -161,8 +169,21 @@ describe('guided piece review', () => {
     const tree = mount(['d0']);
     expect(node(tree, 'PrimaryButton').props.disabled).toBe(true);
     expect(node(tree, 'PieceImage').props.cutoutUrl).toBeNull();
-    press(tree, 'TextLink', 'Skip piece');
+    // No candidates: full-width options instead of a lone half-width tile.
+    tree.root.find((n) => n.props.accessibilityLabel === 'Find it in my closet' && typeof n.props.onPress === 'function');
+    tree.root.find((n) => n.props.accessibilityLabel === 'Add as a new piece' && typeof n.props.onPress === 'function');
+    press(tree, 'TextLink', 'Skip this piece');
     expect(resolutions().d0.kind).toBe('dismissed');
+    act(() => tree.unmount());
+  });
+
+  it('Back to matches undoes a new piece', () => {
+    const tree = mount(['d0']);
+    tap(tree, 'Add as a new piece');
+    expect(resolutions().d0.kind).toBe('new');
+    tap(tree, 'Back to matches. Undo new piece');
+    expect(resolutions().d0.kind).not.toBe('new');
+    expect(has(tree, 'NewPieceEditor')).toBe(false);
     act(() => tree.unmount());
   });
 });

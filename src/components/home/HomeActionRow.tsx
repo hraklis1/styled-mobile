@@ -16,7 +16,6 @@ type Props = {
   onAddToCloset: () => void;
   onSaveFind: () => void;
   onLogWear: () => void;
-  loggedToday?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -30,7 +29,7 @@ const DISC = 56;
  * does is taught once by the first-run tour, so the captions stay one word.
  */
 export const HomeActionRow = forwardRef<HomeActionRowHandle, Props>(function HomeActionRow(
-  { onAskStylist, onAddToCloset, onSaveFind, onLogWear, loggedToday = false, style },
+  { onAskStylist, onAddToCloset, onSaveFind, onLogWear, style },
   ref,
 ) {
   const refs = { stylist: useRef<View>(null), closet: useRef<View>(null), shop: useRef<View>(null), wear: useRef<View>(null) };
@@ -56,8 +55,8 @@ export const HomeActionRow = forwardRef<HomeActionRowHandle, Props>(function Hom
       a11y: 'Add to my closet', hint: 'Take a photo, choose from your library, or import several pieces',
     },
     {
-      key: 'wear', label: loggedToday ? 'Logged' : 'Log wear', icon: loggedToday ? 'checkmark' : 'calendar-outline',
-      onPress: onLogWear, a11y: loggedToday ? 'Today’s outfit logged' : 'Log today’s outfit', hint: 'Record what you wore today',
+      key: 'wear', label: 'Log wear', icon: 'calendar-outline',
+      onPress: onLogWear, a11y: 'Log today’s outfit', hint: 'Record what you wore today',
     },
     {
       key: 'shop', label: 'Save find', icon: 'pricetag-outline', badge: 'camera', onPress: onSaveFind,

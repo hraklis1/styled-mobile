@@ -180,14 +180,14 @@ export function GlobalOutfitLoggerProvider({ children }: Props) {
       />
       <PhotoSourceSheet
         visible={quickStartVisible}
-        variant="quick-log"
         title="Log today’s look"
         subtitle="Capture it, or pick the pieces yourself."
         cameraLabel="Photograph your outfit"
         cameraHint="We’ll match each piece to your closet"
         manualLabel="From your closet"
         manualHint="Select the pieces you wore"
-        libraryLabel="Use a saved photo"
+        libraryLabel="From your photos"
+        libraryHint="Use a photo of the outfit you wore"
         onCamera={() => launchQuickStart('camera')}
         onLibrary={() => launchQuickStart('library')}
         onManual={() => launchQuickStart('closet')}

@@ -21,10 +21,12 @@ export function FlagDot({ size = 6, style }: { size?: number; style?: StyleProp<
   );
 }
 
-export function TextLink({ label, onPress, tone = 'ink', disabled, accessibilityLabel }: {
+export function TextLink({ label, onPress, tone = 'ink', weight = 'regular', disabled, accessibilityLabel }: {
   label: string;
   onPress: () => void;
   tone?: 'ink' | 'muted';
+  /** `strong` for a sheet's confirming action (Done, Save). */
+  weight?: 'regular' | 'strong';
   disabled?: boolean;
   accessibilityLabel?: string;
 }) {
@@ -37,7 +39,47 @@ export function TextLink({ label, onPress, tone = 'ink', disabled, accessibility
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
     >
-      <Text style={[styles.linkText, tone === 'muted' && styles.linkMuted, disabled && styles.linkDisabled]}>{label}</Text>
+      <Text style={[styles.linkText, weight === 'strong' && styles.linkStrong, tone === 'muted' && styles.linkMuted, disabled && styles.linkDisabled]}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+/**
+ * A list-height action row — a ringed glyph and a label — for actions that
+ * belong to a list ("Add missing piece") rather than float below it.
+ */
+export function GhostRow({ label, icon = 'add', onPress, disabled, accessibilityLabel }: {
+  label: string;
+  icon?: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+  disabled?: boolean;
+  accessibilityLabel?: string;
+}) {
+  return (
+    <TouchableOpacity onPress={onPress} disabled={disabled} activeOpacity={0.6} style={[styles.ghostRow, disabled && styles.linkDisabled]}
+      accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label} accessibilityState={{ disabled: !!disabled }}>
+      <View style={styles.ghostIcon}><Ionicons name={icon} size={16} color={colors.foreground} /></View>
+      <Text style={styles.ghostLabel}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+/**
+ * A full-width outlined pill for a secondary list action ("Add another
+ * piece") — a control, so rounded; quieter than the primary bar below it.
+ */
+export function OutlinePill({ label, icon = 'add', onPress, disabled, accessibilityLabel }: {
+  label: string;
+  icon?: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+  disabled?: boolean;
+  accessibilityLabel?: string;
+}) {
+  return (
+    <TouchableOpacity onPress={onPress} disabled={disabled} activeOpacity={0.6} style={[styles.pill, disabled && styles.linkDisabled]}
+      accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label} accessibilityState={{ disabled: !!disabled }}>
+      <Ionicons name={icon} size={16} color={colors.foreground} />
+      <Text style={styles.pillLabel}>{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -138,6 +180,12 @@ const styles = StyleSheet.create({
   link: { minWidth: 44, minHeight: 44, justifyContent: 'center' },
   linkText: { ...typography.text.meta, fontWeight: typography.weight.medium, color: colors.foreground },
   linkMuted: { color: colors.mutedForeground },
+  linkStrong: { fontWeight: typography.weight.semibold },
+  pill: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, height: 48, borderRadius: radii.action, borderWidth: stroke.fine, borderColor: colors.controlOutline },
+  pillLabel: { ...typography.text.bodySmall, fontWeight: typography.weight.medium, color: colors.foreground },
+  ghostRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 56, paddingHorizontal: spacing.lg },
+  ghostIcon: { width: 28, height: 28, borderRadius: 14, borderWidth: stroke.fine, borderColor: colors.controlOutline, alignItems: 'center', justifyContent: 'center' },
+  ghostLabel: { ...typography.text.bodySmall, color: colors.foreground },
   linkDisabled: { opacity: 0.4 },
   middot: { ...typography.text.meta, color: colors.tertiary, paddingHorizontal: spacing.sm },
   segment: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

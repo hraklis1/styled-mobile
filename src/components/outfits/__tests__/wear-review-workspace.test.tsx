@@ -9,8 +9,9 @@ jest.mock('expo-file-system', () => ({
 }));
 jest.mock('../../wardrobe/scan-review/LoadingStates', () => ({ DetectionState: 'Detection' }));
 jest.mock('../../wardrobe/scan-review/ActionBar', () => ({ PrimaryButton: 'PrimaryButton' }));
-jest.mock('../../wardrobe/scan-review/atoms', () => ({ TextLink: 'TextLink', TextSegment: 'TextSegment' }));
-jest.mock('../../wardrobe/scan-review/feedback', () => ({ cropFeedback: jest.fn() }));
+jest.mock('../../wardrobe/scan-review/atoms', () => ({ TextLink: 'TextLink', TextSegment: 'TextSegment', GhostRow: 'GhostRow', OutlinePill: 'OutlinePill' }));
+jest.mock('../../primitives/UndoToast', () => ({ UndoToast: 'UndoToast' }));
+jest.mock('../../wardrobe/scan-review/feedback', () => ({ cropFeedback: jest.fn(), selectionFeedback: jest.fn() }));
 jest.mock('../wear-review/PieceImage', () => ({ PieceImage: 'PieceImage' }));
 jest.mock('../wear-review/PhotoHero', () => ({ PhotoHero: 'PhotoHero' }));
 jest.mock('../wear-review/PairingRow', () => ({ PairingRow: 'PairingRow' }));
@@ -37,7 +38,7 @@ import { useItems } from '../../../hooks/useItems';
 import { saveWearLog } from '../../../features/wear-log/api';
 import { closetItems, detection, reviewFixture } from '../../../features/wear-log/__fixtures__/review';
 import { reviewQueue } from '../../../features/wear-log/reducer';
-import { useWearLogStore } from '../../../features/wear-log/store';
+import { dispatchWear, useWearLogStore } from '../../../features/wear-log/store';
 
 function linkLabels(tree: TestRenderer.ReactTestRenderer): string[] {
   return tree.root.findAll((n) => (n.type as unknown) === 'TextLink').map((n) => n.props.label as string);
@@ -133,7 +134,7 @@ describe('compact outfit overview', () => {
   it('builds a guided queue from uncertain pieces and opens a row at its place in the queue', () => {
     useWearLogStore.setState({ flow: reviewFixture() });
     const tree = mountReview();
-    act(() => named(tree, 'PrimaryButton', 'Review 2 pieces').props.onPress());
+    act(() => named(tree, 'PrimaryButton', 'Review pieces · 2 left').props.onPress());
     expect(named(tree, 'WearResolveSheet').props.queue).toEqual(['d0', 'd1']);
     act(() => named(tree, 'WearResolveSheet').props.onClose());
     const rows = tree.root.findAll((n) => (n.type as unknown) === 'PairingRow');
@@ -142,12 +143,13 @@ describe('compact outfit overview', () => {
     act(() => tree.unmount());
   });
 
-  it('groups rows by what still needs confirming and folds three or more accessories', () => {
+  it('keeps one list in layer order and folds three or more accessories', () => {
     const acc = (id: string) => ({ ...detection(id), layer: 'accessory' as const });
     useWearLogStore.setState({ flow: reviewFixture([detection('d0'), detection('d1', 'high'), acc('d2'), acc('d3'), acc('d4')]) });
     const tree = mountReview();
     const texts = tree.root.findAll((n) => (n.type as unknown) === 'Text').map((n) => [n.props.children].flat().join(''));
-    expect(texts).toEqual(expect.arrayContaining(['To confirm', 'Ready']));
+    expect(texts).not.toContain('To confirm');
+    expect(texts).not.toContain('Ready');
     const rows = () => tree.root.findAll((n) => (n.type as unknown) === 'PairingRow').map((n) => n.props.detection.id);
     expect(rows()).toEqual(['d0', 'd1']);
     const fold = tree.root.find((n) => n.props.accessibilityState?.expanded === false && typeof n.props.onPress === 'function');
@@ -160,7 +162,7 @@ describe('compact outfit overview', () => {
     useWearLogStore.setState({ flow: reviewFixture([]) });
     const tree = mountReview();
     expect(named(tree, 'PrimaryButton').props.disabled).toBe(true);
-    const add = named(tree, 'TextLink', '+ Add missing piece');
+    const add = named(tree, 'OutlinePill', 'Add another piece');
     act(() => add.props.onPress());
     act(() => named(tree, 'ClosetPicker').props.onPick(3));
     expect(named(tree, 'PrimaryButton').props.disabled).toBe(false);
@@ -176,7 +178,7 @@ describe('compact outfit overview', () => {
     expect(reviewQueue(flow, new Set([1, 2, 3]))).toEqual(['d0']);
     useWearLogStore.setState({ flow });
     const tree = mountReview();
-    expect(named(tree, 'PrimaryButton').props.label).toBe('Review 1 piece');
+    expect(named(tree, 'PrimaryButton').props.label).toBe('Review pieces · 1 left');
     act(() => named(tree, 'TextLink', 'Remove').props.onPress());
     expect(useWearLogStore.getState().flow).toMatchObject({ additionalItemIds: [] });
     act(() => tree.unmount());
@@ -193,6 +195,45 @@ describe('compact outfit overview', () => {
     expect(named(tree, 'PrimaryButton').props.label).toBe('Log outfit');
     expect(named(tree, 'PrimaryButton').props.disabled).toBe(true);
     expect(named(tree, 'PairingRow').props.wardrobeReady).toBe(false);
+    act(() => tree.unmount());
+  });
+
+  it('drops the lone "To confirm" header and offers one tap to accept suggested matches', () => {
+    useWearLogStore.setState({ flow: reviewFixture([detection('d0'), detection('d1')]) });
+    const tree = mountReview();
+    const texts = tree.root.findAll((n) => (n.type as unknown) === 'Text').map((n) => [n.props.children].flat().join(''));
+    expect(texts).not.toContain('To confirm');
+    expect(texts).toEqual(expect.arrayContaining(['2 to confirm']));
+    act(() => named(tree, 'OutlinePill', 'Accept 2 suggested matches').props.onPress());
+    const flow = useWearLogStore.getState().flow;
+    expect(flow).toMatchObject({ resolutions: { d0: { source: 'user' }, d1: { source: 'user' } } });
+    expect(named(tree, 'PrimaryButton').props).toMatchObject({ label: 'Log outfit', variant: 'primary' });
+    act(() => tree.unmount());
+  });
+
+  it('outlines the review button while pieces are pending; only Log outfit is solid', () => {
+    useWearLogStore.setState({ flow: reviewFixture() });
+    const tree = mountReview();
+    expect(named(tree, 'PrimaryButton').props).toMatchObject({ label: 'Review pieces · 2 left', variant: 'secondary' });
+    act(() => tree.unmount());
+  });
+
+  it('keeps the log button filled and busy while saving', () => {
+    const flow = reviewFixture([detection('d0', 'high')]);
+    useWearLogStore.setState({ flow: { ...flow, status: 'saving' } });
+    const tree = mountReview();
+    expect(named(tree, 'PrimaryButton').props).toMatchObject({ busy: true, label: 'Logging' });
+    act(() => tree.unmount());
+  });
+
+  it('offers to undo a skipped piece', () => {
+    useWearLogStore.setState({ flow: reviewFixture([detection('d0'), detection('d1', 'high')]) });
+    const tree = mountReview();
+    act(() => dispatchWear({ type: 'dismiss', detectionId: 'd0' }));
+    const toast = named(tree, 'UndoToast');
+    expect(toast.props.message).toBe('Not logging Beige shirt');
+    act(() => toast.props.onUndo());
+    expect(useWearLogStore.getState().flow).toMatchObject({ resolutions: { d0: { kind: 'matched' } } });
     act(() => tree.unmount());
   });
 });

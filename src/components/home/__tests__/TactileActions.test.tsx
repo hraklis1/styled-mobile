@@ -16,6 +16,9 @@ jest.mock('react-native/Libraries/Components/Pressable/Pressable', () => {
 jest.mock('@expo/ui/community/menu', () => ({ MenuView: 'MenuView' }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }));
 jest.mock('../../shopping/WardrobeThumbnail', () => ({ WardrobeThumbnail: 'WardrobeThumbnail' }));
+jest.mock('../../../hooks/useShoppingPriorityEdit', () => ({
+  useShoppingPriorityEdit: () => ({ data: undefined, refreshOffers: jest.fn() }),
+}));
 jest.mock('expo-haptics', () => ({ impactAsync: jest.fn(), ImpactFeedbackStyle: { Light: 'light' } }));
 jest.mock('react-native-reanimated', () => ({
   __esModule: true,
@@ -52,8 +55,6 @@ it('routes each home action disc to its own callback', () => {
   expect(onAddToCloset).toHaveBeenCalledTimes(1);
   expect(onSaveFind).toHaveBeenCalledTimes(1);
   expect(onLogWear).toHaveBeenCalledTimes(1);
-  act(() => renderer.update(<HomeActionRow onAskStylist={onAskStylist} onAddToCloset={onAddToCloset} onSaveFind={onSaveFind} onLogWear={onLogWear} loggedToday />));
-  expect(renderer.root.findAllByType(Pressable)[2].props.accessibilityLabel).toBe('Today’s outfit logged');
 });
 
 it('exposes independent brief actions without a pressable ancestor around skip', () => {

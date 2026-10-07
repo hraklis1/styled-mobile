@@ -3,8 +3,8 @@ jest.mock('../../../hooks/useItems', () => ({ createItemsBatch: jest.fn() }));
 
 import { api } from '../../../lib/api';
 import { createItemsBatch } from '../../../hooks/useItems';
-import { saveWearLog } from '../api';
-import { reduce } from '../reducer';
+import { newItemInput, saveWearLog } from '../api';
+import { draftFrom, reduce } from '../reducer';
 import type { ReviewFlow } from '../types';
 import { closetItems, detection, reviewFixture } from '../__fixtures__/review';
 
@@ -36,4 +36,16 @@ it('retries new-item creation and logging with the same idempotency keys', async
   expect(batch.mock.calls[0]).toEqual(batch.mock.calls[1]);
   expect(batch.mock.calls[0][0][0].clientImportId).toBe('wear-flow-test-d0');
   expect(post.mock.calls[0]).toEqual(post.mock.calls[1]);
+});
+
+describe('new piece cover image', () => {
+  const draft = draftFrom(detection('d0'));
+  it('uses the background-intact crop as the cover, keeping the cutout on the item', () => {
+    const input = newItemInput('flow-test', { ...detection('d0'), cropUrl: 'https://x/crop.jpg', cutoutUrl: 'https://x/cut.png' }, draft);
+    expect(input).toMatchObject({ imageUrl: 'https://x/crop.jpg', cutoutUrl: 'https://x/cut.png', coverImageVariant: 'original' });
+  });
+  it('falls back to the cutout only when there is no crop', () => {
+    const input = newItemInput('flow-test', { ...detection('d0'), cropUrl: null, cutoutUrl: 'https://x/cut.png' }, draft);
+    expect(input.coverImageVariant).toBe('cutout');
+  });
 });

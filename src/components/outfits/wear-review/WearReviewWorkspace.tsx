@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, SectionList, Pressable, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -8,13 +8,14 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { DetectionState } from '../../wardrobe/scan-review/LoadingStates';
 import { PrimaryButton } from '../../wardrobe/scan-review/ActionBar';
-import { TextLink } from '../../wardrobe/scan-review/atoms';
-import { cropFeedback } from '../../wardrobe/scan-review/feedback';
+import { OutlinePill, TextLink } from '../../wardrobe/scan-review/atoms';
+import { cropFeedback, selectionFeedback } from '../../wardrobe/scan-review/feedback';
+import { UndoToast } from '../../primitives/UndoToast';
 import { useReviewReducedMotion } from '../../../hooks/useReviewReducedMotion';
 import { applySavedItems, useItems } from '../../../hooks/useItems';
 import { OUTFIT_LOGS_QUERY_KEY } from '../../../hooks/useOutfitLogs';
 import { track } from '../../../lib/analytics';
-import { colors, spacing, stroke, typography } from '../../../theme';
+import { colors, radii, spacing, stroke, typography } from '../../../theme';
 import type { Item } from '../../../types/item';
 import { saveWearLog } from '../../../features/wear-log/api';
 import { canLog, matchedItemIds, orderedDetections, reviewCounts, reviewQueue, selectedItemIds, sharedMatch } from '../../../features/wear-log/reducer';
@@ -224,14 +225,13 @@ function Review({ flow, heroHeight, width, insets, reduceMotion, onClose, onMini
     // Three or more small pieces fold into one row so the list reads as clothes first.
     const fold = accessories.length >= 3;
     const rest = fold ? ordered.filter((d) => d.layer !== 'accessory') : ordered;
-    const toConfirm = rest.filter((d) => queue.includes(d.id));
-    const done = rest.filter((d) => !queue.includes(d.id));
+    // One list in layer order: a row's status pill changes as it's resolved,
+    // but the row never jumps between headers.
     return [
-      ...(toConfirm.length ? [{ key: 'confirm', title: 'To confirm', quiet: true, data: toConfirm }] : []),
-      ...(done.length ? [{ key: 'ready', title: toConfirm.length ? 'Ready' : '', quiet: !!toConfirm.length, data: done }] : []),
-      ...(fold ? [{ key: 'accessories', title: 'Accessories', quiet: false, data: accessoriesOpen ? accessories : [], all: accessories }] : []),
+      ...(rest.length ? [{ key: 'pieces', title: '', data: rest }] : []),
+      ...(fold ? [{ key: 'accessories', title: 'Accessories', data: accessoriesOpen ? accessories : [], all: accessories }] : []),
     ];
-  }, [ordered, queue, accessoriesOpen]);
+  }, [ordered, accessoriesOpen]);
   const ready = ordered.filter((d) => !queue.includes(d.id) && flow.resolutions[d.id]?.kind !== 'dismissed').length;
   const openPiece = (id: string) => {
     if (saving) return;
@@ -239,6 +239,35 @@ function Review({ flow, heroHeight, width, insets, reduceMotion, onClose, onMini
     const at = queue.indexOf(id);
     setSurface(at >= 0 ? { kind: 'resolve', queue, startIndex: at } : { kind: 'resolve', queue: [id] });
   };
+  // Medium matches the scan pre-filled; one tap accepts them all.
+  const suggested = isSuccess ? queue.filter((id) => {
+    const r = flow.resolutions[id];
+    return r?.kind === 'matched' && r.source === 'suggested' && availableIds.has(r.itemId);
+  }) : [];
+  const acceptSuggested = () => {
+    selectionFeedback();
+    for (const id of suggested) {
+      const r = flow.resolutions[id];
+      if (r?.kind === 'matched') dispatchWear({ type: 'confirm', detectionId: id, itemId: r.itemId });
+    }
+  };
+  // Skipping a piece (here or in the guided sheet) gets a moment to take it back.
+  const [skipToast, setSkipToast] = useState<{ id: string; name: string } | null>(null);
+  const dismissedKey = ordered.filter((d) => flow.resolutions[d.id]?.kind === 'dismissed').map((d) => d.id).join(',');
+  const prevDismissed = useRef(dismissedKey);
+  useEffect(() => {
+    const before = new Set(prevDismissed.current.split(',').filter(Boolean));
+    prevDismissed.current = dismissedKey;
+    const added = dismissedKey.split(',').filter((id) => id && !before.has(id));
+    if (!added.length) { if (skipToast && !dismissedKey.split(',').includes(skipToast.id)) setSkipToast(null); return; }
+    const d = ordered.find((o) => o.id === added[added.length - 1]);
+    if (d) setSkipToast({ id: d.id, name: d.attributes.name });
+  }, [dismissedKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!skipToast) return;
+    const t = setTimeout(() => setSkipToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [skipToast]);
   const closeSurface = () => { dispatchWear({ type: 'closeResolve' }); setSurface(null); };
 
   const save = useCallback(async () => {
@@ -267,7 +296,7 @@ function Review({ flow, heroHeight, width, insets, reduceMotion, onClose, onMini
     }
   }, [qc, availableIds, isSuccess]);
   const dateLabel = dateChoice(flow.date) === 'today' ? 'Worn today' : dateChoice(flow.date) === 'yesterday' ? 'Worn yesterday' : `Worn ${shortDate(flow.date)}`;
-  const buttonLabel = saving ? 'Logging…' : queue.length ? `Review ${pieces(queue.length)}` : 'Log outfit';
+  const buttonLabel = saving ? 'Logging' : queue.length ? `Review pieces · ${queue.length} left` : 'Log outfit';
   const status = queue.length ? `${queue.length} to confirm${ready ? ` · ${ready} ready` : ''}`
     : counts.newItems ? `${pieces(counts.logging)} selected` : `${pieces(counts.logging)} matched`;
   return (
@@ -278,20 +307,27 @@ function Review({ flow, heroHeight, width, insets, reduceMotion, onClose, onMini
           ListHeaderComponent={<View>
             <Pressable disabled={saving} onPress={() => setSurface({ kind: 'resolve', queue: [], initialPhoto: true })} accessibilityRole="button" accessibilityLabel="View outfit photo and detected pieces">
               <Image source={{ uri: flow.photoUri }} style={{ width, height: heroHeight, backgroundColor: colors.surfaceSubtle }} contentFit="cover" contentPosition={heroFocus} />
-              <View style={styles.expand}><Ionicons name="expand-outline" size={16} color={colors.foreground} /></View>
+              <View style={styles.expand}><Ionicons name="expand-outline" size={14} color={colors.foreground} /></View>
             </Pressable>
             <View style={styles.summary}>
-              <Text style={styles.summaryTitle} accessibilityLiveRegion="polite">{status}</Text>
+              <View style={styles.summaryHead}>
+                <Text style={styles.summaryTitle} accessibilityRole="header">Your outfit</Text>
+                <Pressable style={({ pressed }) => [styles.dateChip, pressed && styles.pressed]} disabled={saving} onPress={() => setSurface({ kind: 'date' })} hitSlop={6} accessibilityRole="button" accessibilityLabel={`${dateLabel}. Change date`}>
+                  <Ionicons name="calendar-outline" size={15} color={colors.foreground} /><Text style={styles.dateText}>{dateLabel}</Text><Ionicons name="chevron-down" size={14} color={colors.mutedForeground} />
+                </Pressable>
+              </View>
+              <Text style={styles.summaryMeta} accessibilityLiveRegion="polite">{status}</Text>
             </View>
+            {suggested.length >= 2 && !saving ? <View style={styles.pillWrap}><OutlinePill icon="checkmark" label={`Accept ${suggested.length} suggested matches`} onPress={acceptSuggested} /></View> : null}
             {ordered.length === 0 ? <Text style={styles.failedCopy}>We couldn’t make out any clothes. Add pieces from your closet, or retake the photo.</Text> : null}
           </View>}
           renderSectionHeader={({ section }) => section.key === 'accessories'
             ? <AccessoriesHeader pieces={section.all ?? []} open={accessoriesOpen} toConfirm={(section.all ?? []).filter((d) => queue.includes(d.id)).length} onToggle={() => setAccessoriesOpen((o) => !o)} />
             : section.title ? <Text style={styles.sectionTitle}>{section.title}</Text> : null}
-          renderItem={({ item: d, section }) => <PairingRow detection={d} quiet={section.quiet} resolution={flow.resolutions[d.id]} itemsById={itemsById} sharedWith={sharedMatch(flow, d.id).map((id) => numbers[id])} wardrobeReady={!!isSuccess} disabled={saving}
+          renderItem={({ item: d }) => <PairingRow detection={d} resolution={flow.resolutions[d.id]} itemsById={itemsById} sharedWith={sharedMatch(flow, d.id).map((id) => numbers[id])} wardrobeReady={!!isSuccess} disabled={saving}
             onOpen={() => openPiece(d.id)} onRestore={() => dispatchWear({ type: 'restore', detectionId: d.id })} />}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
-          ListFooterComponent={<View>
+          ListFooterComponent={<View style={styles.listFooter}>
             {flow.additionalItemIds.map((id) => {
               const item = itemsById.get(id);
               const missing = isSuccess && !item;
@@ -305,20 +341,19 @@ function Review({ flow, heroHeight, width, insets, reduceMotion, onClose, onMini
                 <TextLink label="Remove" disabled={saving} onPress={() => dispatchWear({ type: 'removeAdditionalItem', itemId: id })} accessibilityLabel={`Remove ${item?.name ?? 'missing piece'}`} />
               </View>;
             })}
-            <View style={styles.addRow}><TextLink label="+ Add missing piece" disabled={saving || !isSuccess} onPress={() => setSurface({ kind: 'add' })} /></View>
+            <View style={styles.pillWrap}><OutlinePill label="Add another piece" disabled={saving || !isSuccess} onPress={() => setSurface({ kind: 'add' })} /></View>
           </View>}
-          contentContainerStyle={{ paddingBottom: spacing.lg }} />
+          contentContainerStyle={{ paddingBottom: spacing.xl * 2 }} />
         <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
           {flow.saveError ? <Text style={styles.error} accessibilityLiveRegion="assertive">{flow.saveError}</Text> : null}
           {missingAdditional.length ? <Text style={styles.error}>Remove unavailable pieces before logging.</Text> : null}
           {!isSuccess ? <View style={styles.loadingRow}><Text style={styles.meta}>{isError ? 'Couldn’t load your closet' : 'Loading your closet…'}</Text>{isError ? <TextLink label="Try again" onPress={() => { void refetch(); }} /> : null}</View> : null}
-          <Pressable style={styles.dateRow} disabled={saving} onPress={() => setSurface({ kind: 'date' })} accessibilityRole="button" accessibilityLabel={`${dateLabel}. Change date`}>
-            <Ionicons name="calendar-outline" size={18} color={colors.mutedForeground} /><Text style={styles.dateText}>{dateLabel}</Text><Ionicons name="chevron-down" size={16} color={colors.mutedForeground} />
-          </Pressable>
-          <PrimaryButton label={buttonLabel} disabled={saving || !isSuccess || (!queue.length && (!canLog(flow) || missingAdditional.length > 0))}
+          <PrimaryButton label={buttonLabel} busy={saving} variant={queue.length && !saving ? 'secondary' : 'primary'} disabled={saving || !isSuccess || (!queue.length && (!canLog(flow) || missingAdditional.length > 0))}
             onPress={() => { if (queue.length) setSurface({ kind: 'resolve', queue }); else void save(); }} />
         </View>
       </View>
+      {skipToast && !surface ? <UndoToast message={`Not logging ${skipToast.name}`} bottom={Math.max(insets.bottom, spacing.md) + 132}
+        onUndo={() => { dispatchWear({ type: 'restore', detectionId: skipToast.id }); setSkipToast(null); }} /> : null}
       <View style={styles.sheetHost} pointerEvents="box-none">
         {surface?.kind === 'resolve' ? <WearResolveSheet queue={surface.queue} startIndex={surface.startIndex} reviewIds={queue} initialPhoto={surface.initialPhoto} flow={flow} items={items} reduceMotion={reduceMotion} onClose={closeSurface} />
           : surface?.kind === 'add' ? <AdditionalPieceSheet items={items} selectedIds={selectedItemIds(flow)} reduceMotion={reduceMotion} onClose={closeSurface} />
@@ -357,19 +392,24 @@ function Logged({ flow, topInset, onDone }: {
   onDone: () => void;
 }) {
   useEffect(() => {
-    const t = setTimeout(() => { discardWearFlow(); onDone(); }, 1400);
+    cropFeedback(true);
+    // Close first, then clear the flow, so the sheet leaves on this screen.
+    const t = setTimeout(() => { onDone(); discardWearFlow(); }, 1600);
     return () => clearTimeout(t);
   }, [onDone]);
   const already = flow.alreadyLoggedItemIds.length;
+  const when = dateChoice(flow.date) === 'today' ? 'Today' : dateChoice(flow.date) === 'yesterday' ? 'Yesterday' : shortDate(flow.date);
   return (
     <View style={[styles.root, styles.logged, { paddingTop: topInset }]} accessibilityLiveRegion="polite">
-      <Ionicons name="checkmark" size={28} color={colors.foreground} />
-      <Text style={styles.loggedTitle}>Logged · {pieces(flow.itemIds.length)}</Text>
-      <Text style={styles.failedCopy}>
-        {already
-          ? `${pieces(already)} ${already === 1 ? 'was' : 'were'} already logged that day and counted once.`
-          : dateChoice(flow.date) === 'today' ? 'Added to today.' : `Added to ${shortDate(flow.date)}.`}
-      </Text>
+      <View>
+        <Image source={{ uri: flow.photoUri }} style={styles.loggedPhoto} contentFit="cover" />
+        <View style={styles.loggedBadge}><Ionicons name="checkmark" size={16} color={colors.primaryForeground} /></View>
+      </View>
+      <Text style={styles.loggedTitle}>Logged</Text>
+      <Text style={styles.loggedMeta}>{pieces(flow.itemIds.length)} · {when}</Text>
+      {already ? (
+        <Text style={styles.failedCopy}>{`${pieces(already)} ${already === 1 ? 'was' : 'were'} already logged that day and counted once.`}</Text>
+      ) : null}
     </View>
   );
 }
@@ -388,15 +428,19 @@ const styles = StyleSheet.create({
   headerTitle: { ...typography.text.editorialSection, color: colors.foreground, flex: 1 },
   more: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerRight: { minWidth: 44, alignItems: 'flex-end' },
-  summary: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
-  summaryTitle: { ...typography.text.editorialSection, color: colors.foreground, flexGrow: 1 },
+  summary: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.sm, gap: 4 },
+  summaryHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  summaryTitle: { ...typography.text.editorialSection, color: colors.foreground, flexShrink: 1 },
+  // Scrolls with the list and always clears the sticky bar below it.
+  listFooter: { paddingBottom: spacing.xl },
+  pillWrap: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
+  summaryMeta: { ...typography.text.meta, color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 1.2 },
   additionalRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderTopWidth: stroke.hairline, borderTopColor: colors.hairline },
   additionalCopy: { flex: 1, gap: 4 },
   itemName: { ...typography.text.bodySmall, color: colors.foreground },
   meta: { ...typography.text.meta, color: colors.mutedForeground },
-  addRow: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   loadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  expand: { position: 'absolute', right: spacing.md, bottom: spacing.md, width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.85)', alignItems: 'center', justifyContent: 'center' },
+  expand: { position: 'absolute', right: spacing.md, bottom: spacing.md, width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.7)', alignItems: 'center', justifyContent: 'center' },
   sectionTitle: { ...typography.text.meta, color: colors.mutedForeground, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xs },
   accessories: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, minHeight: 64, marginTop: spacing.sm, borderTopWidth: stroke.hairline, borderTopColor: colors.hairline },
   accessoryCopy: { flex: 1, gap: 4 },
@@ -410,8 +454,9 @@ const styles = StyleSheet.create({
     borderTopColor: colors.hairline,
     backgroundColor: colors.background,
   },
-  dateRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44 },
-  dateText: { ...typography.text.meta, color: colors.foreground, flex: 1 },
+  dateChip: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, paddingHorizontal: spacing.md, borderRadius: 16, borderWidth: stroke.fine, borderColor: colors.controlOutline },
+  dateText: { ...typography.text.meta, color: colors.foreground },
+  pressed: { opacity: 0.6 },
   error: { ...typography.text.meta, color: colors.error },
   failed: { flex: 1, alignItems: 'center', gap: spacing.sm },
   failedTitle: { ...typography.text.editorialSection, color: colors.foreground, textAlign: 'center', marginTop: spacing.lg },
@@ -420,5 +465,8 @@ const styles = StyleSheet.create({
   bottom: { marginTop: 'auto', alignSelf: 'stretch' },
   slowText: { ...typography.text.meta, color: colors.mutedForeground },
   logged: { alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  loggedTitle: { ...typography.text.editorialSection, color: colors.foreground },
+  loggedTitle: { ...typography.text.editorialSection, color: colors.foreground, marginTop: spacing.md },
+  loggedMeta: { ...typography.text.meta, color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 1.2 },
+  loggedPhoto: { width: 112, height: 140, borderRadius: radii.photo, backgroundColor: colors.surfaceSubtle },
+  loggedBadge: { position: 'absolute', right: -10, bottom: -10, width: 32, height: 32, borderRadius: 16, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: colors.background },
 });

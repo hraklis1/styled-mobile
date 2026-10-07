@@ -61,11 +61,11 @@ export function WearResolveSheet({ queue: initialQueue, startIndex = 0, reviewId
   const brands = [...new Set(Object.values(flow.resolutions).flatMap((r) => r.kind === 'new' && r.draft.brand ? [r.draft.brand] : []))];
   return <WorkspaceSheet title={title} detent="large" reduceMotion={reduceMotion} dismissed={dismissed} onClose={close}
     subtitle={mode === 'photo' || editing ? undefined : <Text style={styles.meta}>Piece {index + 1} of {queue.length}</Text>}
-    headerAction={mode === 'new' ? <TextLink label="Done" onPress={advance} accessibilityLabel="Finish piece details" /> : <View /* swipe down closes; no extra Done */ />}
-    footer={mode === 'new' ? <View style={styles.links}>
-      <TextLink label="Undo new piece" onPress={() => { dispatchWear({ type: 'clear', detectionId: id }); setMode('review'); }} />
-      <TextLink label="Skip piece" tone="muted" onPress={skip} />
-    </View> : mode === 'library' ? <View style={styles.links}><TextLink label="Add as new" onPress={addNew} /><TextLink label="Skip piece" tone="muted" onPress={skip} /></View> : undefined}>
+    headerAction={<View /* swipe down closes; the footer confirms */ />}
+    footer={mode === 'new' ? <View style={styles.footerStack}>
+      <PrimaryButton label={editing ? 'Save' : index === queue.length - 1 ? 'Add to outfit' : 'Save & next'} onPress={() => { selectionFeedback(); advance(); }} />
+      <View style={styles.center}><TextLink label="Skip this piece" tone="muted" onPress={skip} /></View>
+    </View> : mode === 'library' ? <View style={styles.links}><TextLink label="Add as new" onPress={addNew} /><TextLink label="Skip this piece" tone="muted" onPress={skip} /></View> : undefined}>
     {mode === 'photo' ? <View>
       <PhotoHero
         uri={flow.photoUri}
@@ -86,7 +86,12 @@ export function WearResolveSheet({ queue: initialQueue, startIndex = 0, reviewId
       </ScrollView>
       {activeId ? null : <Text style={[styles.meta, styles.stripHint]}>Tap a piece to see it in the photo</Text>}
     </View>
-      : mode === 'new' && resolution.kind === 'new' && detection ? <NewPieceEditor key={id} detection={detection} draft={resolution.draft} scanBrands={brands} onChange={(patch) => dispatchWear({ type: 'editDraft', detectionId: id, patch })} />
+      : mode === 'new' && resolution.kind === 'new' && detection ? <>
+        <Pressable style={styles.back} onPress={() => { Keyboard.dismiss(); dispatchWear({ type: 'clear', detectionId: id }); setMode('review'); }} hitSlop={6} accessibilityRole="button" accessibilityLabel="Back to matches. Undo new piece">
+          <Ionicons name="chevron-back" size={16} color={colors.foreground} /><Text style={styles.backText}>Back to matches</Text>
+        </Pressable>
+        <NewPieceEditor key={id} detection={detection} draft={resolution.draft} scanBrands={brands} onChange={(patch) => dispatchWear({ type: 'editDraft', detectionId: id, patch })} />
+      </>
       : mode === 'library' ? <>
         <View style={styles.pad}><TextLink label="Back to comparison" onPress={() => { Keyboard.dismiss(); setMode('review'); }} /></View>
         <ClosetPicker key={id} detection={detection} items={items} currentItemId={resolution.kind === 'matched' ? resolution.itemId : null} onPick={confirm} />
@@ -129,30 +134,40 @@ export function FocusedPiece({ detection, resolution, initialItemId, onPendingCh
           {heldCopy ? <Text style={styles.attention}>{heldCopy}</Text> : null}
         </View>
       </View>
-      <Text style={styles.heading}>{candidates.length ? 'Is this your piece?' : 'Choose a piece from your closet'}</Text>
-      <View style={styles.candidates}>
-        {candidates.map((item) => {
-          const on = pendingId === item.id;
-          return <Pressable key={item.id} onPress={() => { selectionFeedback(); setPendingId(item.id); onPendingChange(item.id); }} style={[styles.candidate, on && styles.selected, pendingId != null && !on && styles.unselected]} accessibilityRole="button" accessibilityLabel={`${item.name}${item.brand ? `, ${item.brand}` : ''}`} accessibilityState={{ selected: on }}>
-            <PieceImage item={item} width="100%" height={132} />
-            <Text style={styles.name} numberOfLines={2}>{item.name}</Text>{item.brand ? <Text style={styles.meta}>{item.brand}</Text> : null}
-            <Ionicons name={on ? 'checkmark-circle' : 'ellipse-outline'} size={22} color={colors.foreground} style={styles.tick} />
-          </Pressable>;
-        })}
-        <Pressable onPress={onAddNew} style={[styles.candidate, styles.newTile, pendingId != null && styles.unselected]} accessibilityRole="button" accessibilityLabel="Add as a new piece">
-          <Ionicons name="add" size={24} color={colors.foreground} />
-          <Text style={[styles.name, styles.center]}>New piece</Text>
+      {candidates.length ? <>
+        <Text style={styles.heading}>Is this your piece?</Text>
+        <View style={styles.candidates}>
+          {candidates.map((item) => {
+            const on = pendingId === item.id;
+            return <Pressable key={item.id} onPress={() => { selectionFeedback(); setPendingId(item.id); onPendingChange(item.id); }} style={({ pressed }) => [styles.candidate, pendingId != null && !on && styles.unselected, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`${item.name}${item.brand ? `, ${item.brand}` : ''}`} accessibilityState={{ selected: on }}>
+              <View style={[styles.candidateImage, on && styles.selected]}><PieceImage item={item} width="100%" height={140} /></View>
+              <Text style={styles.name} numberOfLines={2}>{item.name}</Text>{item.brand ? <Text style={styles.meta}>{item.brand}</Text> : null}
+              {on ? <View style={styles.tick}><Ionicons name="checkmark" size={14} color={colors.primaryForeground} /></View> : null}
+            </Pressable>;
+          })}
+          <Pressable onPress={onAddNew} style={({ pressed }) => [styles.candidate, pendingId != null && styles.unselected, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Add as a new piece">
+            <View style={[styles.candidateImage, styles.newTile]}><View style={styles.newBadge}><Ionicons name="add" size={20} color={colors.foreground} /></View></View>
+            <Text style={styles.name}>New piece</Text><Text style={styles.meta}>Not in my closet</Text>
+          </Pressable>
+        </View>
+      </> : <>
+        <Text style={styles.heading}>Is this piece in your closet?</Text>
+        <Pressable onPress={onAddNew} style={({ pressed }) => [styles.option, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Add as a new piece">
+          <View style={styles.optionIcon}><Ionicons name="add" size={18} color={colors.primaryForeground} /></View>
+          <View style={styles.copy}><Text style={styles.optionTitle}>Add as new piece</Text><Text style={styles.meta}>Saved to your closet when you log</Text></View>
+          <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
         </Pressable>
-      </View>
+      </>}
       {selected && !candidates.some((item) => item.id === selected.id) ? <View style={styles.current}><PieceImage item={selected} width={48} height={60} /><View style={styles.copy}><Text style={styles.name}>{selected.name}</Text><Text style={styles.meta}>Current match</Text></View></View> : null}
-      <Pressable onPress={onBrowse} style={styles.browse} accessibilityRole="button" accessibilityLabel="Browse closet">
-        <Text style={styles.name}>Browse closet</Text>
+      <Pressable onPress={onBrowse} style={({ pressed }) => [styles.browse, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={candidates.length ? 'Browse closet' : 'Find it in my closet'}>
+        <Text style={styles.name}>{candidates.length ? 'Browse closet' : 'Find it in my closet'}</Text>
         <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
       </Pressable>
     </ScrollView>
     <View style={styles.footer}>
-      <PrimaryButton label={editing ? 'Save' : last ? 'Confirm & finish' : 'Confirm & next'} disabled={!selected} onPress={() => { if (selected) { selectionFeedback(); onConfirm(selected.id); } }} />
-      <View style={[styles.links, styles.end]}><TextLink label="Skip piece" tone="muted" onPress={onSkip} /></View>
+      {/* Anchored: always here, faded until a pick, so the footer never jumps. */}
+      <PrimaryButton label={editing ? 'Save' : last ? 'Add to outfit' : 'Save & next'} disabled={!selected} onPress={() => { if (selected) { selectionFeedback(); onConfirm(selected.id); } }} />
+      <View style={styles.center}><TextLink label="Skip this piece" tone="muted" onPress={onSkip} /></View>
     </View>
   </View>;
 }
@@ -165,21 +180,32 @@ const styles = StyleSheet.create({
   meta: { ...typography.text.meta, color: colors.mutedForeground },
   attention: { ...typography.text.meta, color: colors.accentInk },
   candidates: { flexDirection: 'row', gap: spacing.sm, alignItems: 'stretch' },
-  candidate: { flex: 1, minWidth: 0, borderWidth: stroke.fine, borderColor: colors.controlOutline, padding: spacing.sm, gap: 4 },
-  selected: { borderColor: colors.foreground, borderWidth: 2, padding: spacing.sm - 1 },
-  unselected: { opacity: 0.6 },
-  newTile: { alignItems: 'center', justifyContent: 'center', flex: 0.7, borderStyle: 'dashed' },
-  center: { textAlign: 'center' },
-  browse: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44, borderTopWidth: stroke.hairline, borderBottomWidth: stroke.hairline, borderColor: colors.hairline },
+  candidate: { flex: 1, minWidth: 0, gap: 4 },
+  candidateImage: { borderWidth: 2, borderColor: 'transparent', marginBottom: 2 },
+  selected: { borderColor: colors.foreground },
+  unselected: { opacity: 0.55 },
+  pressed: { opacity: 0.7 },
+  // Same footprint as a wardrobe photo (140 + the 2pt selection ring each side).
+  newTile: { height: 144, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceSubtle, borderColor: colors.controlOutline, borderWidth: stroke.hairline },
+  newBadge: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', borderWidth: stroke.hairline, borderColor: colors.controlOutline },
+  option: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, backgroundColor: colors.surfaceSubtle, minHeight: 72, borderWidth: stroke.hairline, borderColor: colors.controlOutline },
+  footerStack: { gap: spacing.xs },
+  optionIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  optionTitle: { ...typography.text.bodySmall, fontWeight: typography.weight.medium, color: colors.foreground },
+  back: { flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 36, paddingHorizontal: spacing.lg - 4, alignSelf: 'flex-start' },
+  backText: { ...typography.text.meta, color: colors.foreground },
+  center: { alignItems: 'center' },
+  browse: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 52, borderTopWidth: stroke.hairline, borderBottomWidth: stroke.hairline, borderColor: colors.hairline },
   end: { justifyContent: 'flex-end' },
-  tick: { position: 'absolute', top: spacing.sm, right: spacing.sm, backgroundColor: colors.background, borderRadius: 11 },
+  tick: { position: 'absolute', top: spacing.sm, right: spacing.sm, width: 24, height: 24, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   name: { ...typography.text.bodySmall, color: colors.foreground },
   current: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   copy: { flex: 1 },
-  footer: { borderTopWidth: stroke.hairline, borderTopColor: colors.hairline, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.md },
+  footer: { gap: spacing.xs, borderTopWidth: stroke.hairline, borderTopColor: colors.hairline, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.md },
   strip: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: spacing.sm },
-  stripItem: { borderWidth: 2, borderColor: 'transparent', padding: 2 },
-  stripActive: { borderColor: colors.foreground },
+  // An offset ring with a little lift: the photo is never clipped by it.
+  stripItem: { padding: 3, borderWidth: stroke.fine, borderColor: 'transparent', opacity: 0.7, backgroundColor: colors.background },
+  stripActive: { borderColor: colors.foreground, opacity: 1, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   stripHint: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
   dimmed: { opacity: 0.3 },
   links: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: spacing.md },

@@ -3,15 +3,10 @@ import { Modal, View, StyleSheet, Animated, Easing, Pressable, PanResponder } fr
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, spacing, radii, shadows } from '../../theme';
-import { SheetHeading, SheetLink, SheetRows, type SheetOption } from './SheetOptions';
+import { SheetHeading, SheetRows, type SheetOption } from './SheetOptions';
 
 type Props = {
   visible: boolean;
-  /**
-   * `quick-log` demotes the library to a quiet link under the rows: when
-   * logging, a saved photo is the rare path next to camera and closet.
-   */
-  variant?: 'source' | 'quick-log';
   title: string;
   subtitle?: string;
   cameraLabel?: string;
@@ -37,7 +32,6 @@ const DISMISS_DRAG = 80;
  */
 export function PhotoSourceSheet({
   visible,
-  variant = 'source',
   title,
   subtitle,
   cameraLabel = 'Take a photo',
@@ -100,10 +94,9 @@ export function PhotoSourceSheet({
     drag,
   );
 
-  const library: SheetOption = { label: libraryLabel, hint: libraryHint, icon: 'images-outline', onPress: onLibrary };
   const rows: SheetOption[] = [{ label: cameraLabel, hint: cameraHint, icon: 'camera-outline', onPress: onCamera }];
+  rows.push({ label: libraryLabel, hint: libraryHint, icon: 'images-outline', onPress: onLibrary });
   if (onManual) rows.push({ label: manualLabel, hint: manualHint, icon: 'shirt-outline', onPress: onManual });
-  if (variant === 'source') rows.push(library);
 
   return (
     <Modal
@@ -132,7 +125,6 @@ export function PhotoSourceSheet({
           </View>
 
           <SheetRows options={rows} />
-          {variant === 'quick-log' ? <SheetLink label={libraryLabel} onPress={onLibrary} /> : null}
         </Animated.View>
       </View>
     </Modal>

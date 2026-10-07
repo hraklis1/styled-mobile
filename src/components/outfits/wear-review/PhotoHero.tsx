@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -60,6 +60,16 @@ export function PhotoHero({ uri, height, width, detections, activeId, dimmedIds,
   const box = active?.bbox_pct;
   const dots = dotPositions(detections, rect);
   const activeDot = dots.find((p) => p.id === activeId);
+  // The tag is placed from its measured size, so it can be as wide (or two
+  // lines tall) as the name needs; it stays invisible until measured.
+  const [tag, setTag] = useState<Size | null>(null);
+  useEffect(() => setTag(null), [activeId]);
+  const tagMax = Math.min(width - spacing.sm * 2, 260);
+  const tagPos = activeDot && tag ? (() => {
+    const left = Math.min(Math.max(spacing.sm, activeDot.x - tag.width / 2), width - tag.width - spacing.sm);
+    const above = activeDot.y - tag.height - 12;
+    return { left, top: above >= spacing.sm ? above : activeDot.y + DOT / 2 + 12 };
+  })() : null;
 
   return (
     <View style={[styles.frame, { height, width }]}>
@@ -92,10 +102,13 @@ export function PhotoHero({ uri, height, width, detections, activeId, dimmedIds,
           />
         );
       })}
-      {active && activeDot ? <Pressable onPress={() => onOpen(active.id)} accessibilityRole="button" accessibilityLabel={`Open ${active.attributes.name}`}
-        style={[styles.pill, { top: Math.max(spacing.sm, activeDot.y - 44), left: Math.min(Math.max(spacing.sm, activeDot.x - 90), width - 188) }]}>
-        <Text style={styles.pillText} numberOfLines={1}>{active.attributes.name}</Text>
-        <Ionicons name="chevron-forward" size={14} color={colors.white} />
+      {active && activeDot ? <Pressable onPress={() => onOpen(active.id)} accessibilityRole="button" accessibilityLabel={`Match ${active.attributes.name}`} accessibilityHint="Opens the matcher"
+        onLayout={(e) => { const { width: w, height: h } = e.nativeEvent.layout; if (!tag || tag.width !== w || tag.height !== h) setTag({ width: w, height: h }); }}
+        style={({ pressed }) => [styles.pill, { maxWidth: tagMax }, tagPos ?? { left: 0, top: 0, opacity: 0 }, pressed && styles.pillPressed]}>
+        <Text style={styles.pillText} numberOfLines={2}>{active.attributes.name}</Text>
+        <View style={styles.pillDivider} />
+        <Text style={styles.pillAction}>Match</Text>
+        <Ionicons name="chevron-forward" size={13} color={colors.white} />
       </Pressable> : null}
     </View>
   );
@@ -117,14 +130,16 @@ const styles = StyleSheet.create({
   dimmed: { opacity: 0.3 },
   pill: {
     position: 'absolute',
-    maxWidth: 180,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(20,20,20,0.85)',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 18,
+    backgroundColor: 'rgba(20,20,20,0.88)',
   },
-  pillText: { ...typography.text.meta, color: colors.white, flexShrink: 1 },
+  pillPressed: { opacity: 0.8 },
+  pillText: { ...typography.text.meta, lineHeight: 16, color: colors.white, flexShrink: 1 },
+  pillDivider: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch', backgroundColor: 'rgba(255,255,255,0.4)', marginVertical: 2 },
+  pillAction: { ...typography.text.meta, fontSize: 10, letterSpacing: 0.8, textTransform: 'uppercase', fontWeight: typography.weight.semibold, color: colors.white },
 });

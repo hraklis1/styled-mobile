@@ -7,6 +7,8 @@ jest.mock('react-native-reanimated', () => ({
   default: { View: 'AnimatedView' },
   ZoomIn: { duration: () => ({}) },
   useReducedMotion: () => false,
+  useAnimatedStyle: (callback: () => unknown) => callback(),
+  withSpring: (value: number) => value,
 }));
 
 jest.mock('expo-image', () => ({
@@ -74,9 +76,9 @@ describe('CaptureStackRail', () => {
     expect(buttons[0].props.accessibilityState).toEqual({ selected: true, disabled: false });
     expect(buttons[1].props.accessibilityState).toEqual({ selected: false, disabled: false });
     expect(buttons[2].props.accessibilityLabel).toMatch(/empty/i);
-    // Number badges for every tile, and a count pill only on the multi-photo stack.
+    // Number badges for every tile; multi-photo stacks show stacked cards, not a count pill.
     expect(labels).toEqual(expect.arrayContaining(['1', '2', '3']));
-    expect(labels.filter((label) => label === '2')).toHaveLength(2);
+    expect(labels.filter((label) => label === '2')).toHaveLength(1);
   });
 
   it('marks the empty item as active when no group is selected', () => {

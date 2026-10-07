@@ -11,6 +11,12 @@ jest.mock('react-native-reanimated', () => ({
   __esModule: true,
   default: { View: 'AnimatedView' },
   useReducedMotion: () => true,
+  useSharedValue: (value: number) => ({ value }),
+  useAnimatedStyle: (fn: () => object) => fn(),
+  withTiming: (value: number) => value,
+  withRepeat: (value: number) => value,
+  cancelAnimation: () => undefined,
+  Easing: { inOut: () => undefined, quad: undefined },
 }));
 jest.mock('../../../lib/analytics', () => ({ track: jest.fn() }));
 jest.mock('../../primitives/PressableScale', () => ({ PressableScale: 'PressableScale' }));

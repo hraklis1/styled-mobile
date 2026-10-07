@@ -84,12 +84,23 @@ function WithBatch({ onBatch, children }: { onBatch?: () => void; children: Reac
   );
 }
 
-/** Disabled reads as guidance, an outline, rather than a greyed-out button. */
-export function PrimaryButton({ label, icon, onPress, disabled = false }: { disabled?: boolean; label: string; icon?: keyof typeof Ionicons.glyphMap; onPress: () => void }) {
+/**
+ * Disabled is a solid stone bar with muted ink — it reads as "not yet", never
+ * as a secondary button. Busy keeps full ink with a spinner so work in flight
+ * doesn't look switched off.
+ */
+export function PrimaryButton({ label, icon, onPress, disabled = false, busy = false, variant = 'primary' }: {
+  disabled?: boolean; busy?: boolean; label: string; icon?: keyof typeof Ionicons.glyphMap; onPress: () => void;
+  /** `secondary` is an ink outline: still a button, but not the finishing action. */
+  variant?: 'primary' | 'secondary';
+}) {
+  const idle = disabled && !busy;
+  const ink = idle ? colors.mutedForeground : variant === 'secondary' ? colors.foreground : colors.primaryForeground;
   return (
-    <TouchableOpacity disabled={disabled} accessibilityState={{ disabled }} style={[styles.primary, disabled && styles.primaryIdle]} onPress={onPress} accessibilityRole="button" activeOpacity={0.85}>
-      {icon ? <Ionicons name={icon} size={17} color={disabled ? colors.mutedForeground : colors.primaryForeground} /> : null}
-      <Text style={[styles.primaryText, disabled && styles.primaryIdleText]}>{label}</Text>
+    <TouchableOpacity disabled={disabled || busy} accessibilityState={{ disabled: disabled && !busy, busy }} style={[styles.primary, variant === 'secondary' && styles.primaryOutline, idle && styles.primaryIdle]} onPress={onPress} accessibilityRole="button" activeOpacity={0.85}>
+      {busy ? <ActivityIndicator size="small" color={ink} />
+        : icon ? <Ionicons name={icon} size={17} color={ink} /> : null}
+      <Text style={[styles.primaryText, { color: ink }]}>{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -136,8 +147,9 @@ const styles = StyleSheet.create({
     borderCurve: 'continuous',
     backgroundColor: colors.primary,
   },
-  primaryIdle: { backgroundColor: 'transparent', borderWidth: stroke.fine, borderColor: colors.controlOutline },
-  primaryIdleText: { color: colors.mutedForeground },
+  // Disabled is a solid stone pair, not a faded black: readable, clearly inert.
+  primaryIdle: { backgroundColor: colors.hairline, borderWidth: 0 },
+  primaryOutline: { backgroundColor: 'transparent', borderWidth: stroke.fine, borderColor: colors.foreground },
   batch: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', borderWidth: stroke.fine, borderColor: colors.controlOutline },
   primaryText: { textAlign: 'center', ...typography.text.sectionTitle, color: colors.primaryForeground },
   secondary: { alignItems: 'center', minHeight: 36, justifyContent: 'center' },

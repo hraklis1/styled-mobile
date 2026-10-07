@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Image } from 'expo-image';
 
 import { WorkspaceSheet } from '../../wardrobe/scan-review/WorkspaceSheet';
 import { SpecSheet, type ExpandableRow, type SheetKind } from '../../wardrobe/scan-review/SpecSheet';
@@ -10,7 +9,8 @@ import { selectionFeedback } from '../../wardrobe/scan-review/feedback';
 import type { PiecePatch, ScanReviewPiece } from '../../wardrobe/scan-review/types';
 import { useBrandSuggestions } from '../../../hooks/useItems';
 import { pieceFlags } from '../../../lib/scan-review';
-import { colors, radii, spacing, typography } from '../../../theme';
+import { colors, radii, spacing, stroke, typography } from '../../../theme';
+import { PieceImage } from './PieceImage';
 import type { WearDetection, WearDraft } from '../../../features/wear-log/types';
 
 const DRAFT_KEYS: (keyof WearDraft)[] = [
@@ -23,9 +23,9 @@ function toPiece(detection: WearDetection, draft: WearDraft): ScanReviewPiece {
   return {
     id: detection.id,
     ...draft,
-    photo: detection.cutoutUrl,
+    photo: detection.cropUrl ?? detection.cutoutUrl,
     cutout: detection.cutoutUrl,
-    useCutout: true,
+    useCutout: !detection.cropUrl,
     canAdjustCrop: false,
     cropSource: null,
     cropBbox: null,
@@ -76,7 +76,7 @@ export function NewPieceEditor({ detection, draft, scanBrands, onChange }: {
           <Text style={styles.title}>{title}</Text>
           <TextLink label="Back to piece details" onPress={() => setPicker(null)} />
         </View>
-      ) : <Text style={[styles.subtitle, styles.pad]}>Added to your closet when you log</Text>}
+      ) : null}
       {picker === 'brand' ? (
         <BrandPicker current={draft.brand} suggestions={brandSuggestions} scanBrands={scanBrands} onSelect={(brand) => pick({ brand })} />
       ) : picker === 'material' ? (
@@ -92,10 +92,9 @@ export function NewPieceEditor({ detection, draft, scanBrands, onChange }: {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <Text style={[styles.subtitle, styles.pad]}>Saved to your closet when you log</Text>
           <View style={styles.plate}>
-            {detection.cutoutUrl ? (
-              <Image source={{ uri: detection.cutoutUrl }} style={styles.cutout} contentFit="contain" cachePolicy="memory-disk" />
-            ) : null}
+            <PieceImage cropUrl={detection.cropUrl} cutoutUrl={detection.cutoutUrl} width={168} height={210} />
           </View>
           <SpecSheet
             piece={piece}
@@ -103,6 +102,7 @@ export function NewPieceEditor({ detection, draft, scanBrands, onChange }: {
             flags={flags}
             expandedRow={expandedRow}
             disabled={false}
+            compact
             onExpand={setExpandedRow}
             onUpdate={update}
             onOpenSheet={setPicker}
@@ -127,14 +127,13 @@ const styles = StyleSheet.create({
   subtitle: { ...typography.text.meta, color: colors.mutedForeground },
   content: { paddingBottom: spacing.xl, gap: spacing.lg },
   pad: { paddingHorizontal: spacing.lg },
+  // A mat around the raw crop so an unsegmented photo reads as framed, not cut out.
   plate: {
     alignSelf: 'center',
-    width: 150,
-    height: 200,
+    padding: spacing.md,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: stroke.hairline,
+    borderColor: colors.hairline,
     borderRadius: radii.photo,
-    backgroundColor: colors.card,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  cutout: { width: '88%', height: '88%' },
 });
