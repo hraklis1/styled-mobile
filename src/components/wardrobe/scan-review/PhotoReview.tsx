@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } fr
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, spacing, typography } from '../../../theme';
-import { MarkedPhoto } from './MarkedPhoto';
+import { MarkedPhoto, reviewPhotoHeight, type PhotoMark } from './MarkedPhoto';
 import { PieceRow } from './PieceRow';
 import { TextLink } from './atoms';
 import type { ScanReviewPiece } from './types';
@@ -45,14 +45,14 @@ export function PhotoReview({ source, blurb, pieces, numbers, duplicateIds, note
   const rowTops = useRef(new Map<string, number>());
   const sectionTops = useRef({ main: 0, duplicates: 0 });
   const [showDuplicates, setShowDuplicates] = useState(false);
-  // Enough photo to read the outfit, while the first rows still show on an SE.
-  const photoHeight = compactPhoto
-    ? Math.max(200, Math.min(300, Math.round(height * 0.3)))
-    : Math.max(260, Math.min(420, Math.round(height * 0.42)));
+  const photoHeight = reviewPhotoHeight(height, compactPhoto);
 
   const main = useMemo(() => pieces.filter(piece => !duplicateIds?.has(piece.id)), [duplicateIds, pieces]);
   const duplicates = useMemo(() => pieces.filter(piece => duplicateIds?.has(piece.id)), [duplicateIds, pieces]);
   const hiddenIds = showDuplicates ? undefined : duplicateIds;
+  const marks = useMemo<PhotoMark[]>(() => pieces.filter(piece => !hiddenIds?.has(piece.id)).map((piece, index) => ({
+    id: piece.id, box: piece.cropBbox, label: piece.name, number: numbers.get(piece.id) ?? index + 1, off: piece.included === false,
+  })), [hiddenIds, numbers, pieces]);
 
   const reveal = (id: string) => {
     onActivate(id);
@@ -85,7 +85,7 @@ export function PhotoReview({ source, blurb, pieces, numbers, duplicateIds, note
     <ScrollView ref={scroll} style={styles.scroll} contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}>
       <Text style={styles.blurb}>{blurb}</Text>
 
-      <MarkedPhoto source={source} pieces={pieces} numbers={numbers} hiddenIds={hiddenIds} activeId={activeId} height={photoHeight} onMarkerPress={reveal} onPhotoPress={activeId ? onClearActive : undefined} />
+      <MarkedPhoto source={source} marks={marks} activeId={activeId} height={photoHeight} onMarkerPress={reveal} onPhotoPress={activeId ? onClearActive : undefined} />
 
       <View onLayout={event => { sectionTops.current.main = event.nativeEvent.layout.y; }}>
         {rows(main, false)}
