@@ -5,15 +5,12 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  FlatList,
   ScrollView,
-  Image,
   StyleSheet,
   Platform,
   KeyboardAvoidingView,
   ActivityIndicator,
   Alert,
-  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,11 +19,14 @@ import { track } from '../../lib/analytics';
 import { useItems } from '../../hooks/useItems';
 import { useCreateOutfitLog } from '../../hooks/useOutfitLogs';
 import { useCameraLaunch, useLibraryLaunch, type CapturedImage } from '../../hooks/useCameraLaunch';
-import { resolveImageUri } from '../../lib/resolveImageUri';
 import { itemImageContentFit, itemImageUri } from '../../lib/itemImage';
 import { LocationAutocompleteInput } from '../primitives/LocationAutocompleteInput';
 import { PhotoSourceSheet } from '../primitives/PhotoSourceSheet';
-import { colors, spacing, typography, radii } from '../../theme';
+import { colors, spacing, stroke, typography, radii } from '../../theme';
+import { PieceThumb } from '../wardrobe/scan-review/PieceThumb';
+import { PrimaryButton } from '../wardrobe/scan-review/ActionBar';
+import { OutlinePill } from '../wardrobe/scan-review/atoms';
+import { ClosetPicker } from './wear-review/ClosetMatchSheet';
 import type { Item } from '../../types/item';
 import type { OutfitLoggerLaunch } from '../../contexts/GlobalOutfitLoggerContext';
 import { mergeUniqueItemIds } from '../../lib/outfit-log-scan';
@@ -100,9 +100,8 @@ export function LogOutfitSheet({
   onSaved,
   onAddToWardrobe,
 }: Props) {
-  const { width: screenWidth } = useWindowDimensions();
   const { data: allItems = [] } = useItems();
-  const createLog = useCreateOutfitLog();
+  const createLog = useCreateOutfitLog({ alertOnError: false });
   const wearStatus = useWearLogStore((s) => s.flow.status);
   const launchCamera = useCameraLaunch();
   const launchLibrary = useLibraryLaunch();
@@ -126,7 +125,6 @@ export function LogOutfitSheet({
 
   // View
   const [view, setView] = useState<SheetView>('form');
-  const [search, setSearch] = useState('');
 
   const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
   const [autoLaunchPending, setAutoLaunchPending] = useState(false);
@@ -146,17 +144,6 @@ export function LogOutfitSheet({
     () => allItems.filter((it) => selectedIds.includes(it.id)),
     [allItems, selectedIds]
   );
-
-  const filteredItems = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return allItems;
-    return allItems.filter(
-      (it) =>
-        it.name.toLowerCase().includes(q) ||
-        it.category?.toLowerCase().includes(q) ||
-        it.color?.toLowerCase().includes(q)
-    );
-  }, [allItems, search]);
 
   // Seed the date when the sheet is opened for a specific day. Keyed on the
   // request id rather than `visible` so returning from the add-clothes detour
@@ -284,7 +271,6 @@ export function LogOutfitSheet({
     setLocation('');
     setRating(null);
     setDetailsExpanded(false);
-    setSearch('');
     setSourcePickerOpen(false);
     setAutoLaunchPending(false);
   }, []);
@@ -337,14 +323,6 @@ export function LogOutfitSheet({
     });
   };
 
-  // ── Picker grid sizing ────────────────────────────────────────────────────────
-
-  const PICKER_COLS = 3;
-  const PICKER_H_PAD = spacing.lg;
-  const PICKER_GAP = spacing.sm;
-  const pickerCardWidth =
-    (screenWidth - PICKER_H_PAD * 2 - PICKER_GAP * (PICKER_COLS - 1)) / PICKER_COLS;
-  const pickerCardHeight = pickerCardWidth * 1.3;
   const resumable = wearStatus === 'reviewing' || wearStatus === 'processing' || wearStatus === 'failed';
   const showAutoLaunchState = Boolean(
     initialLaunch &&
@@ -379,7 +357,6 @@ export function LogOutfitSheet({
           }}
           onPickManually={() => {
             discardWearFlow();
-            setSearch('');
             setView('picker');
           }}
         />
@@ -405,30 +382,15 @@ export function LogOutfitSheet({
               <View style={styles.header}>
                 <TouchableOpacity
                   onPress={handleClose}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={styles.headerIcon}
+                  hitSlop={4}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close"
                 >
-                  <Text style={styles.headerCancel}>Cancel</Text>
+                  <Ionicons name="close" size={24} color={colors.foreground} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle} accessibilityRole="header">What did you wear?</Text>
-                {/* Save appears once there's something to save. */}
-                {selectedIds.length === 0 ? <View style={styles.headerSpacer} /> : <TouchableOpacity
-                  onPress={handleSave}
-                  disabled={createLog.isPending}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  {createLog.isPending ? (
-                    <ActivityIndicator size="small" color={colors.primary} />
-                  ) : (
-                    <Text
-                      style={[
-                        styles.headerSave,
-                        selectedIds.length === 0 && styles.headerSaveDisabled,
-                      ]}
-                    >
-                      Save
-                    </Text>
-                  )}
-                </TouchableOpacity>}
+                <View style={styles.headerSpacer} />
               </View>
 
               <ScrollView
@@ -543,7 +505,7 @@ export function LogOutfitSheet({
                         : 'Take a selfie or choose a photo from your library'}
                     </Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+                  <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
                 </TouchableOpacity>
                 {resumable ? (
                   <TouchableOpacity onPress={() => { discardWearFlow(); setSourcePickerOpen(true); }} style={styles.newPhotoLink}>
@@ -554,21 +516,20 @@ export function LogOutfitSheet({
                 <TouchableOpacity
                   style={[styles.addItemsBtn, styles.closetRow]}
                   onPress={() => {
-                    setSearch('');
                     setView('picker');
                   }}
                   activeOpacity={0.7}
                   accessibilityRole="button"
                   accessibilityLabel={selectedItems.length > 0 ? 'Add more pieces from your closet' : 'Choose pieces from your closet'}
                 >
-                  <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
+                  <Ionicons name="shirt-outline" size={20} color={colors.foreground} />
                   <View style={styles.addItemsBtnCopy}>
                     <Text style={styles.addItemsBtnText}>
                       {selectedItems.length > 0 ? 'Add more from your closet' : 'Choose from your closet'}
                     </Text>
                     <Text style={styles.addItemsBtnSubtext}>Select the pieces you wore yourself</Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+                  <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
                 </TouchableOpacity>
 
                 {selectedItems.length > 0 && (
@@ -588,7 +549,7 @@ export function LogOutfitSheet({
                       <Ionicons
                         name={detailsExpanded ? 'chevron-up' : 'chevron-down'}
                         size={18}
-                        color={colors.primary}
+                        color={colors.mutedForeground}
                       />
                     </TouchableOpacity>
 
@@ -611,11 +572,14 @@ export function LogOutfitSheet({
                               onPress={() => setRating(rating === star ? null : star)}
                               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                               activeOpacity={0.7}
+                              accessibilityRole="button"
+                              accessibilityLabel={`${star} ${star === 1 ? 'star' : 'stars'}`}
+                              accessibilityState={{ selected: rating != null && rating >= star }}
                             >
                               <Ionicons
                                 name={rating != null && rating >= star ? 'star' : 'star-outline'}
                                 size={28}
-                                color={rating != null && rating >= star ? '#F59E0B' : colors.border}
+                                color={rating != null && rating >= star ? colors.accentInk : colors.controlOutline}
                               />
                             </TouchableOpacity>
                           ))}
@@ -644,6 +608,19 @@ export function LogOutfitSheet({
 
                 <View style={{ height: 48 }} />
               </ScrollView>
+              {/* The finishing action appears once there's something to log, as in the photo review. */}
+              {selectedIds.length > 0 ? (
+                <View style={styles.bar}>
+                  {createLog.isError ? (
+                    <Text style={styles.saveError} accessibilityRole="alert">Couldn’t log this outfit. Check your connection and try again.</Text>
+                  ) : null}
+                  <PrimaryButton
+                    label={createLog.isPending ? 'Logging' : `Log outfit · ${selectedIds.length === 1 ? '1 piece' : `${selectedIds.length} pieces`}`}
+                    busy={createLog.isPending}
+                    onPress={handleSave}
+                  />
+                </View>
+              ) : null}
             </>
           )}
 
@@ -659,7 +636,7 @@ export function LogOutfitSheet({
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
                   {initialLaunch || initialView === 'picker' ? (
-                    <Text style={styles.headerCancel}>Cancel</Text>
+                    <Ionicons name="close" size={24} color={colors.foreground} />
                   ) : (
                     <>
                       <Ionicons name="chevron-back-outline" size={20} color={colors.foreground} />
@@ -667,111 +644,25 @@ export function LogOutfitSheet({
                     </>
                   )}
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Select from Your Closet</Text>
-                <TouchableOpacity
-                  onPress={() => setView('form')}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Text
-                    style={[
-                      styles.headerSave,
-                      selectedIds.length === 0 && styles.headerSaveDisabled,
-                    ]}
-                  >
-                    {selectedIds.length > 0 ? `Done (${selectedIds.length})` : 'Done'}
-                  </Text>
-                </TouchableOpacity>
+                <Text style={styles.headerTitle} accessibilityRole="header">Choose pieces</Text>
+                <View style={styles.headerSpacer} />
               </View>
 
-              {/* Search bar */}
-              <View style={styles.searchBar}>
-                <Ionicons name="search-outline" size={16} color={colors.mutedForeground} />
-                <TextInput
-                  style={styles.searchInput}
-                  value={search}
-                  onChangeText={setSearch}
-                  placeholder="Search your closet…"
-                  placeholderTextColor={colors.mutedForeground}
-                  autoCapitalize="none"
-                  returnKeyType="search"
-                  clearButtonMode="while-editing"
+              <ClosetPicker
+                items={allItems}
+                selectedIds={selectedIds}
+                columns={3}
+                emptyHint="Add clothes to your closet, then come back to log what you wore."
+                footer={<OutlinePill label="Add new clothes to your closet" icon="add" onPress={handleAddToWardrobe} />}
+                onPick={toggleItem}
+              />
+              <View style={styles.bar}>
+                <PrimaryButton
+                  label={selectedIds.length === 0 ? 'Choose the pieces you wore' : `Done · ${selectedIds.length === 1 ? '1 piece' : `${selectedIds.length} pieces`}`}
+                  disabled={selectedIds.length === 0}
+                  onPress={() => setView('form')}
                 />
               </View>
-
-              <FlatList
-                data={filteredItems}
-                keyExtractor={(item) => String(item.id)}
-                numColumns={PICKER_COLS}
-                columnWrapperStyle={styles.pickerRow}
-                contentContainerStyle={styles.pickerContent}
-                showsVerticalScrollIndicator={false}
-                ListEmptyComponent={
-                  <View style={styles.pickerEmpty}>
-                    <Ionicons name="shirt-outline" size={44} color={colors.border} />
-                    <Text style={styles.pickerEmptyTitle}>
-                      {search.trim() ? 'No matching items' : 'No items yet'}
-                    </Text>
-                    {!search.trim() && (
-                      <Text style={styles.pickerEmptySubtitle}>
-                        Add clothes to your closet, then return to this wear record.
-                      </Text>
-                    )}
-                  </View>
-                }
-                ListFooterComponent={
-                  <TouchableOpacity
-                    style={styles.addToWardrobeBtn}
-                    onPress={handleAddToWardrobe}
-                    activeOpacity={0.75}
-                  >
-                    <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
-                    <Text style={styles.addToWardrobeBtnText}>Add new clothes to your closet</Text>
-                  </TouchableOpacity>
-                }
-                renderItem={({ item }) => {
-                  const isSelected = selectedIds.includes(item.id);
-                  const imgUri = itemImageUri(item);
-                  return (
-                    <TouchableOpacity
-                      style={[styles.pickerCard, isSelected && styles.pickerCardSelected, { width: pickerCardWidth }]}
-                      onPress={() => toggleItem(item.id)}
-                      activeOpacity={0.8}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: isSelected }}
-                      accessibilityLabel={`${isSelected ? 'Remove' : 'Select'} ${item.name}`}
-                    >
-                      <View style={[styles.pickerCardImage, isSelected && styles.pickerCardImageSelected, { height: pickerCardHeight }]}>
-                        {imgUri ? (
-                          <Image
-                            source={{ uri: imgUri }}
-                            style={StyleSheet.absoluteFill}
-                            resizeMode={itemImageContentFit(item)}
-                          />
-                        ) : (
-                          <View style={styles.pickerCardPlaceholder}>
-                            <Ionicons name="shirt-outline" size={24} color={colors.border} />
-                          </View>
-                        )}
-                        {isSelected && (
-                          <>
-                            <View style={styles.pickerOverlay} />
-                            <View style={styles.pickerCheck}>
-                              <Ionicons
-                                name="checkmark"
-                                size={14}
-                                color={colors.primaryForeground}
-                              />
-                            </View>
-                          </>
-                        )}
-                      </View>
-                      <Text style={styles.pickerCardName} numberOfLines={1}>
-                        {item.name}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                }}
-              />
             </>
           )}
 
@@ -798,16 +689,9 @@ export function LogOutfitSheet({
 // ─── SelectedItemRow ──────────────────────────────────────────────────────────
 
 function SelectedItemRow({ item, onRemove }: { item: Item; onRemove: () => void }) {
-  const imgUri = itemImageUri(item);
   return (
     <View style={styles.selectedRow}>
-      <View style={styles.selectedThumb}>
-        {imgUri ? (
-          <Image source={{ uri: imgUri }} style={StyleSheet.absoluteFill} resizeMode={itemImageContentFit(item)} />
-        ) : (
-          <Ionicons name="shirt-outline" size={16} color={colors.mutedForeground} />
-        )}
-      </View>
+      <PieceThumb uri={itemImageUri(item)} fit={itemImageContentFit(item)} width={40} height={50} />
       <View style={styles.selectedInfo}>
         <Text style={styles.selectedName} numberOfLines={1}>
           {item.name}
@@ -817,8 +701,10 @@ function SelectedItemRow({ item, onRemove }: { item: Item; onRemove: () => void 
       <TouchableOpacity
         onPress={onRemove}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        accessibilityRole="button"
+        accessibilityLabel={`Remove ${item.name}`}
       >
-        <Ionicons name="close-circle" size={20} color={colors.mutedForeground} />
+        <Ionicons name="close" size={18} color={colors.mutedForeground} />
       </TouchableOpacity>
     </View>
   );
@@ -849,32 +735,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    paddingHorizontal: spacing.md,
     minHeight: 52,
+    borderBottomWidth: stroke.hairline,
+    borderBottomColor: colors.hairline,
   },
-  headerCancel: {
-    fontSize: typography.text.body.fontSize,
-    color: colors.mutedForeground,
-    minWidth: 44,
+  headerIcon: { minWidth: 44, minHeight: 44, justifyContent: 'center' },
+  bar: {
+    gap: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+    borderTopWidth: stroke.hairline,
+    borderTopColor: colors.hairline,
+    backgroundColor: colors.background,
   },
+  saveError: { ...typography.text.meta, color: colors.destructive, textAlign: 'center' },
+
   headerTitle: {
     ...typography.text.editorialSection,
     color: colors.foreground,
   },
   headerSpacer: { minWidth: 44 },
-  headerSave: {
-    fontSize: typography.text.body.fontSize,
-    fontWeight: typography.weight.bold,
-    color: colors.primary,
-    minWidth: 44,
-    textAlign: 'right',
-  },
-  headerSaveDisabled: {
-    color: colors.mutedForeground,
-  },
+
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -919,16 +802,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   datePill: {
+    minHeight: 36,
+    justifyContent: 'center',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs + 2,
-    borderRadius: radii.full,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
+    borderRadius: radii.action,
+    borderWidth: stroke.fine,
+    borderColor: colors.controlOutline,
   },
   datePillActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: colors.foreground,
+    borderColor: colors.foreground,
   },
   datePillText: {
     fontSize: typography.text.bodySmall.fontSize,
@@ -956,55 +839,37 @@ const styles = StyleSheet.create({
   selectedHeaderTitle: {
     fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
-    color: colors.primary,
+    color: colors.mutedForeground,
     textTransform: 'uppercase',
     letterSpacing: typography.tracking.wide,
   },
   selectedHeaderCount: {
-    minWidth: 22,
-    paddingHorizontal: spacing.xs,
-    paddingVertical: 2,
-    borderRadius: radii.full,
-    backgroundColor: colors.surfaceSelected,
-    color: colors.primary,
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.semibold,
-    textAlign: 'center',
+    ...typography.text.meta,
+    color: colors.mutedForeground,
     fontVariant: ['tabular-nums'],
   },
   selectedList: {
     marginHorizontal: spacing.lg,
-    gap: spacing.sm,
     marginBottom: spacing.md,
+    borderTopWidth: stroke.hairline,
+    borderTopColor: colors.hairline,
   },
   selectedRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    minHeight: 56,
+    minHeight: 66,
+    borderBottomWidth: stroke.hairline,
+    borderBottomColor: colors.hairline,
   },
-  selectedThumb: {
-    width: 40,
-    height: 48,
-    borderRadius: radii.sm,
-    overflow: 'hidden',
-    backgroundColor: colors.muted,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
+
   selectedInfo: {
     flex: 1,
   },
   selectedName: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.semibold,
+    ...typography.text.body,
+    fontWeight: typography.weight.medium,
     color: colors.foreground,
   },
   selectedCat: {
@@ -1022,9 +887,9 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.lg,
     marginTop: spacing.xxl,
     paddingVertical: spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderTopWidth: stroke.hairline,
+    borderBottomWidth: stroke.hairline,
+    borderColor: colors.hairline,
   },
   detailsToggleCopy: {
     gap: 2,
@@ -1062,8 +927,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm + 2,
     backgroundColor: colors.card,
     borderRadius: radii.md,
-    borderWidth: 1.5,
-    borderColor: '#C5B8AC',
+    borderWidth: stroke.fine,
+    borderColor: colors.controlOutline,
     minHeight: 48,
   },
   ratingRow: {
@@ -1100,14 +965,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     borderRadius: radii.lg,
     borderCurve: 'continuous',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceElevated,
   },
   addItemsBtnText: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.primary,
+    ...typography.text.body,
+    fontWeight: typography.weight.medium,
+    color: colors.foreground,
   },
   addItemsBtnCopy: {
     flex: 1,
@@ -1120,106 +982,6 @@ const styles = StyleSheet.create({
   },
 
   // ── Picker
-  searchBar: {
-    minHeight: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginHorizontal: spacing.lg,
-    marginVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    backgroundColor: colors.card,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  searchInput: {
-    flex: 1,
-    height: 38,
-    paddingVertical: 0,
-    fontSize: typography.text.body.fontSize,
-    lineHeight: typography.inputLineHeight(typography.text.body.fontSize),
-    color: colors.foreground,
-  },
-  pickerRow: {
-    paddingHorizontal: spacing.lg,
-    gap: spacing.sm,
-  },
-  pickerContent: {
-    paddingTop: spacing.xs,
-    paddingBottom: 16,
-    gap: spacing.sm,
-  },
-  pickerCard: {
-    paddingBottom: spacing.xs,
-  },
-  pickerCardSelected: {
-    borderRadius: radii.lg,
-    borderCurve: 'continuous',
-    backgroundColor: colors.surfaceSelected,
-  },
-  pickerCardImage: {
-    borderRadius: radii.md,
-    borderCurve: 'continuous',
-    overflow: 'hidden',
-    backgroundColor: colors.muted,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  pickerCardImageSelected: {
-    borderWidth: 2,
-    borderColor: colors.primary,
-  },
-  pickerCardPlaceholder: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pickerOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(111, 89, 72, 0.12)',
-  },
-  pickerCheck: {
-    position: 'absolute',
-    top: spacing.sm,
-    right: spacing.sm,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pickerCardName: {
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.medium,
-    color: colors.foreground,
-    marginTop: spacing.xs,
-    paddingHorizontal: 2,
-  },
-  pickerEmpty: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.xxl,
-    paddingVertical: spacing.xxxl,
-  },
-  pickerEmptyTitle: {
-    fontSize: typography.text.sectionTitle.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  pickerEmptySubtitle: {
-    fontSize: typography.text.body.fontSize,
-    color: colors.mutedForeground,
-    textAlign: 'center',
-    lineHeight: typography.text.body.fontSize * 1.5,
-  },
 
   // ── Scan button variant
   // Photo matching is the main path: a taller, quieter card that leads.
@@ -1234,7 +996,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.foreground,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1245,32 +1007,16 @@ const styles = StyleSheet.create({
   },
   // The hand-picked path sits beneath as a plain row, not a second card.
   closetRow: {
-    borderWidth: 0,
     backgroundColor: 'transparent',
-    paddingHorizontal: spacing.md,
     gap: spacing.md,
+    borderTopWidth: stroke.hairline,
+    borderBottomWidth: stroke.hairline,
+    borderColor: colors.hairline,
+    borderRadius: 0,
   },
 
   // ── Scan review
 
   // ── "Add to wardrobe" footer in picker
-  addToWardrobeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.md,
-    marginBottom: spacing.xl,
-    paddingVertical: spacing.md,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: `${colors.primary}30`,
-    borderStyle: 'dashed',
-  },
-  addToWardrobeBtnText: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.medium,
-    color: colors.primary,
-  },
+
 });
