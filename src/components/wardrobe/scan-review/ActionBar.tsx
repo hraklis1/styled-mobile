@@ -11,7 +11,6 @@ export type ActionBarMode =
   | { kind: 'extract'; count: number; extractionCount: number; additional?: boolean; onExtract: () => void; onBatch?: () => void }
   | { kind: 'save'; count: number; flagged: number; onSave: () => void; onReviewFlagged: () => void; onBatch?: () => void; polish?: PolishRowState }
   | { kind: 'confirm'; last: boolean; onConfirm: () => void; onSkip: (() => void) | null }
-  | { kind: 'selecting'; count: number; review: boolean; onBrand: () => void; onSeason: () => void; onConfirm: () => void; onDone: () => void; onSelectAll: () => void; onClear: () => void }
   | { kind: 'failed'; count: number; onRetry: () => void; onKeepBasic: () => void }
   | { kind: 'busy'; label: string };
 
@@ -82,13 +81,6 @@ export function ActionBar({ mode, bottomInset }: { mode: ActionBarMode; bottomIn
         </View>
       ) : mode.kind === 'failed' ? (
         <><PrimaryButton label={`Retry ${pieceCountLabel(mode.count)}`} onPress={mode.onRetry} /><TextLink label="Keep basic details" onPress={mode.onKeepBasic} /></>
-      ) : mode.kind === 'selecting' ? (
-        <><View style={styles.bulkRow}><Text style={styles.bulkText}>{mode.count} selected</Text><TextLink label="Select all shown" onPress={mode.onSelectAll} /><TextLink label="Clear selection" onPress={mode.onClear} /></View><View style={styles.bulkRow}>
-          <BulkAction icon="pricetag-outline" label="Brand" disabled={mode.count === 0} onPress={mode.onBrand} />
-          <BulkAction icon="leaf-outline" label="Season" disabled={mode.count === 0 || !mode.review} onPress={mode.onSeason} hidden={!mode.review} />
-          <BulkAction icon="checkmark" label="Mark reviewed" disabled={mode.count === 0} onPress={mode.onConfirm} hidden={!mode.review} />
-          <BulkAction icon="checkmark-done" label="Done" disabled={false} onPress={mode.onDone} />
-        </View></>
       ) : (
         <View style={styles.busy} accessibilityLiveRegion="polite">
           <ActivityIndicator size="small" color={colors.primary} />
@@ -183,28 +175,6 @@ export function PrimaryButton({ label, icon, trailingIcon, onPress, disabled = f
   );
 }
 
-function BulkAction({ icon, label, disabled, hidden, onPress }: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  disabled: boolean;
-  hidden?: boolean;
-  onPress: () => void;
-}) {
-  if (hidden) return null;
-  return (
-    <TouchableOpacity
-      style={[styles.bulk, disabled && styles.bulkDisabled]}
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityState={{ disabled }}
-    >
-      <Ionicons name={icon} size={19} color={colors.foreground} />
-      <Text style={styles.bulkText}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
-
 const styles = StyleSheet.create({
   bar: {
     gap: spacing.xs,
@@ -236,10 +206,6 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   skip: { minHeight: 56, minWidth: 64, paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center' },
   skipText: { ...typography.text.label, color: colors.foreground },
-  bulkRow: { flexDirection: 'row', justifyContent: 'space-around', minHeight: 56 },
-  bulk: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3, minHeight: 56 },
-  bulkDisabled: { opacity: 0.35 },
-  bulkText: { ...typography.text.caption, fontWeight: typography.weight.medium, color: colors.foreground },
   polish: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 52, paddingVertical: spacing.xs },
   polishMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   polishTitleLine: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },

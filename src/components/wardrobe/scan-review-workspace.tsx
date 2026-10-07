@@ -53,7 +53,7 @@ import { ConfirmationPanel } from './scan-review/overlays';
 import { CategoryPicker, MaterialPicker, SeasonPicker, SheetButton } from './scan-review/pickers';
 import { ChipRow, TextLink } from './scan-review/atoms';
 import { WorkspaceSheet } from './scan-review/WorkspaceSheet';
-import { ArmedDiscardRow, MenuRow } from './scan-review/MenuRows';
+import { ScanOptionsRows, scanOptionsRowCount } from './scan-review/MenuRows';
 import {
   isReviewStage,
   pieceCountLabel,
@@ -212,7 +212,6 @@ export function ScanReviewWorkspace({
   const summary = useMemo(() => reviewSummary(Object.values(states)), [states]);
   const checkCount = summary.check;
 
-  const sheetEnabled = true;
   // One photo behind every piece: the photo-led review. A batch spans many
   // photos, so it keeps the contact sheet.
   const reviewPhoto = (preExtract || review) && visiblePieces.length > 0 && visiblePieces.every(piece => piece.cropSource === visiblePieces[0].cropSource)
@@ -296,11 +295,11 @@ export function ScanReviewWorkspace({
 
   // A walk whose pieces were all removed has nothing left to show.
   useEffect(() => {
-    if (effectiveView === 'loupe' && loupePieces.length === 0 && sheetEnabled && visiblePieces.length > 0) {
+    if (effectiveView === 'loupe' && loupePieces.length === 0 && visiblePieces.length > 0) {
       setWalk(null);
       setView('sheet');
     }
-  }, [effectiveView, loupePieces.length, sheetEnabled, visiblePieces.length]);
+  }, [effectiveView, loupePieces.length, visiblePieces.length]);
 
   const update = useCallback((id: string, patch: PiecePatch) => {
     onUpdate(id, patch);
@@ -324,8 +323,8 @@ export function ScanReviewWorkspace({
   const finishWalk = useCallback(() => {
     setWalk(null);
     setFilter('all');
-    if (sheetEnabled) setView('sheet');
-  }, [sheetEnabled]);
+    setView('sheet');
+  }, []);
 
   // The walk visits only what was flagged. Browsing outside it goes to the
   // next flagged piece while any remain, then simply onward, piece by piece.
@@ -416,7 +415,7 @@ export function ScanReviewWorkspace({
   const requestSystemClose = useCallback(() => {
     if (sheet) return dismissSheet();
     if (confirmClose) return setConfirmClose(false);
-    if (effectiveView === 'loupe' && sheetEnabled) {
+    if (effectiveView === 'loupe') {
       setWalk(null);
       return setView('sheet');
     }
@@ -424,7 +423,7 @@ export function ScanReviewWorkspace({
       return onMinimize();
     }
     if (!closeDisabled) setConfirmClose(true);
-  }, [closeDisabled, confirmClose, dismissSheet, effectiveView, onMinimize, sheet, sheetEnabled]);
+  }, [closeDisabled, confirmClose, dismissSheet, effectiveView, onMinimize, sheet]);
 
   // ── Crop editor (full screen: precise manipulation earns the takeover) ─────
 
@@ -512,7 +511,7 @@ export function ScanReviewWorkspace({
               : {
                 kind: 'save',
                 count: inclusion.included.length,
-                flagged: sheetEnabled ? checkCount : 0,
+                flagged: checkCount,
                 onSave: save,
                 onReviewFlagged: reviewPhoto
                   ? () => { const first = visiblePieces.find(p => states[p.id] === 'check'); if (first) openEditor(first.id); }
@@ -545,7 +544,7 @@ export function ScanReviewWorkspace({
           <WorkspaceHeader
             stage={stage}
             view={effectiveView}
-            canGoBack={effectiveView === 'loupe' && sheetEnabled && !busy}
+            canGoBack={effectiveView === 'loupe' && !busy}
             position={effectiveView === 'loupe' && activeIndex >= 0 ? { index: activeIndex, count: loupeIds.length, walk: Boolean(walk) } : null}
             includedCount={inclusion.included.length}
             totalCount={visiblePieces.length}
@@ -744,11 +743,12 @@ export function ScanReviewWorkspace({
             <PolishExample example={polish.example} />
           </WorkspaceSheet>
         ) : sheet?.kind === 'options' ? (
-          <WorkspaceSheet title="Import options" detent="fit" rows={onMinimize ? 2 : 1} reduceMotion={reduceMotion} dismissed={sheetDismissed} onClose={closeSheet}>
-            {onMinimize ? <MenuRow icon="chevron-down" label="Keep running in the background" onPress={() => thenDismiss(onMinimize)} /> : null}
-            <ArmedDiscardRow
+          <WorkspaceSheet title="Import options" detent="fit" rows={scanOptionsRowCount(onMinimize)} reduceMotion={reduceMotion} dismissed={sheetDismissed} onClose={closeSheet}>
+            <ScanOptionsRows
+              onKeep={onMinimize ? () => thenDismiss(onMinimize) : undefined}
+              discardLabel="Discard import"
               detail={`${pieceCountLabel(pieces.length)} and your edits`}
-              onConfirm={() => thenDismiss(() => {
+              onDiscard={() => thenDismiss(() => {
                 track('scan_review_discarded', { mode: 'batch', included_count: inclusion.included.length, detected_count: pieces.length });
                 onClose();
               })}
@@ -926,10 +926,6 @@ function WorkspaceHeader({ stage, view, canGoBack, position, includedCount, tota
 }
 
 const styles = StyleSheet.create({
-  menuRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, borderBottomWidth: stroke.hairline, borderBottomColor: colors.hairline },
-  menuLabel: { ...typography.text.body, flex: 1 },
-  discardArmed: { backgroundColor: colors.destructive, borderBottomColor: colors.destructive },
-  discardDetail: { ...typography.text.bodySmall, opacity: 0.85 },
   inclusionControl: { minHeight: 44, marginHorizontal: spacing.lg, marginVertical: spacing.sm },
   root: { flex: 1, backgroundColor: colors.background },
   addTypeBody: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm },

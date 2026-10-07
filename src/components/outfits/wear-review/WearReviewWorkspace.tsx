@@ -25,7 +25,7 @@ import { dispatchWear, useWearLogStore } from '../../../features/wear-log/store'
 import type { ReviewFlow, WearDetection } from '../../../features/wear-log/types';
 import { ClosetPicker } from './ClosetMatchSheet';
 import { WorkspaceSheet } from '../../wardrobe/scan-review/WorkspaceSheet';
-import { ArmedDiscardRow, MenuRow } from '../../wardrobe/scan-review/MenuRows';
+import { ScanOptionsRows, scanOptionsRowCount } from '../../wardrobe/scan-review/MenuRows';
 import { WearResolveSheet } from './WearResolveSheet';
 import { PieceImage } from './PieceImage';
 import { WornDateSheet } from './WornDateSheet';
@@ -168,9 +168,9 @@ function ScanOptions({ detail, disabled, reduceMotion, onMinimize, onDiscard }: 
       <Ionicons name="ellipsis-horizontal" size={22} color={colors.foreground} />
     </Pressable>
     {open ? <View style={styles.sheetHost} pointerEvents="box-none">
-      <WorkspaceSheet title="Outfit options" reduceMotion={reduceMotion} dismissed={dismissed} onClose={() => setOpen(false)}>
-        <MenuRow icon="chevron-down" label="Keep for later" onPress={() => then(onMinimize)} />
-        <ArmedDiscardRow label="Discard scan" detail={detail} onConfirm={() => then(() => { discardWearFlow(); onDiscard(); })} />
+      <WorkspaceSheet title="Outfit options" detent="fit" rows={scanOptionsRowCount(onMinimize)} reduceMotion={reduceMotion} dismissed={dismissed} onClose={() => setOpen(false)}>
+        <ScanOptionsRows onKeep={() => then(onMinimize)} discardLabel="Discard scan" detail={detail}
+          onDiscard={() => then(() => { discardWearFlow(); onDiscard(); })} />
       </WorkspaceSheet>
     </View> : null}
   </>;

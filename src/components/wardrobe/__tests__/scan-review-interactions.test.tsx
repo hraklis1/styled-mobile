@@ -1,8 +1,7 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { FlatList, Text } from 'react-native';
-import { ContactSheet } from '../scan-review/ContactSheet';
-import { BatchActionBar } from '../scan-review/BatchActionBar';
+import { PreExtractGrid as ContactSheet } from '../scan-review/PreExtractGrid';
 import { ActionBar } from '../scan-review/ActionBar';
 import type { ScanReviewPiece } from '../scan-review/types';
 import { useBatchExtractionReview } from '../../../hooks/useBatchExtractionReview';
@@ -130,24 +129,6 @@ it.each([0, 1, 35])('keeps %i pieces in stable order, including exclusions', cou
   expect(list.props.data.map((p: ScanReviewPiece) => p.id)).toEqual(pieces.map(p => p.id));
   if (count) expect(list.props.keyExtractor(pieces[count - 1])).toBe(String(count - 1));
   act(() => grid.unmount());
-});
-
-it('batch dock disables empty tagging and switches select all to deselect all', () => {
-  const all = jest.fn(), clear = jest.fn(), done = jest.fn(), tag = jest.fn();
-  let dock!: TestRenderer.ReactTestRenderer;
-  const render = (count: number) => <BatchActionBar count={count} total={35} bottomInset={34} onSelectAll={all} onClear={clear} onDone={done} onBrand={tag} />;
-  act(() => { dock = TestRenderer.create(render(0)); });
-  const button = (label: string) => dock.root.findAll(n => n.props.onPress && n.findAll(child => child.type === Text && child.props.children === label).length > 0)[0];
-  expect(button('Tag brand').props.disabled).toBe(true);
-  act(() => button('Select all (35)').props.onPress());
-  expect(all).toHaveBeenCalledTimes(1);
-  act(() => dock.update(render(35)));
-  expect(button('Tag brand').props.disabled).toBe(false);
-  act(() => button('Deselect all').props.onPress());
-  expect(clear).toHaveBeenCalledTimes(1);
-  act(() => button('Done').props.onPress());
-  expect(done).toHaveBeenCalledTimes(1);
-  act(() => dock.unmount());
 });
 
 describe('pre-extract curation card', () => {

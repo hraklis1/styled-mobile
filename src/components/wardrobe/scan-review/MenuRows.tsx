@@ -64,3 +64,22 @@ const styles = StyleSheet.create({
   discardArmed: { backgroundColor: colors.destructive, borderBottomColor: colors.destructive },
   discardDetail: { ...typography.text.bodySmall, opacity: 0.85 },
 });
+
+/**
+ * The "⋯" options sheet body shared by the closet scan and the outfit scan:
+ * keep the work running in the background, or discard it with a second tap.
+ * Host it in a `WorkspaceSheet` with `detent="fit"` and `rows={scanOptionsRowCount(onKeep)}`.
+ */
+export function ScanOptionsRows({ onKeep, discardLabel, detail, onDiscard }: {
+  onKeep?: () => void;
+  discardLabel: string;
+  detail: string;
+  onDiscard: () => void;
+}) {
+  return <>
+    {onKeep ? <MenuRow icon="chevron-down" label="Keep for later" onPress={onKeep} /> : null}
+    <ArmedDiscardRow label={discardLabel} detail={detail} onConfirm={onDiscard} />
+  </>;
+}
+
+export const scanOptionsRowCount = (onKeep?: () => void) => (onKeep ? 2 : 1);

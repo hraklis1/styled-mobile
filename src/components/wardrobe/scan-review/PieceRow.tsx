@@ -1,15 +1,17 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 
 import { shortPieceName } from '../../../lib/pieceNames';
 import { NORMALIZED_COLOR_HEX, isColorLight, normalizedColorDisplayName, resolveHex } from '../../../lib/colorUtils';
 import type { NormalizedColor } from '../../../types/item';
 import { colors, radii, spacing, typography } from '../../../theme';
+import { PieceThumb } from './PieceThumb';
+import { pieceRowText } from './pieceRowText';
 import { SelectBadge } from './SelectBadge';
 import type { ScanReviewPiece } from './types';
 
-const THUMB = 52;
+/** The shared 4:5 plate, scaled to keep long batch lists compact. */
+const THUMB = { width: 56, height: 70 } as const;
 
 /**
  * One detected piece under the review photo. The body (thumbnail and name)
@@ -53,11 +55,7 @@ export function PieceRow({ piece, number, active, note, polished = false, disabl
         accessibilityHint="Opens the editor"
       >
         <Text style={styles.number}>{number}</Text>
-        <View style={[styles.thumb, !included && styles.thumbOff]}>
-          {piece.photo ? (
-            <Image source={{ uri: piece.photo }} style={StyleSheet.absoluteFill} contentFit="cover" transition={reduceMotion ? 0 : 150} cachePolicy="memory-disk" />
-          ) : null}
-        </View>
+        <PieceThumb uri={piece.photo} width={THUMB.width} height={THUMB.height} dimmed={!included} transition={reduceMotion ? 0 : 150} />
         <View style={styles.text}>
           <View style={styles.nameLine}>
             <Text style={[styles.name, !included && styles.nameOff]} numberOfLines={1}>{name}</Text>
@@ -123,9 +121,7 @@ function rowSwatches(piece: Pick<ScanReviewPiece, 'color' | 'colorNormalized'>):
 export function PieceTag({ piece }: { piece: ScanReviewPiece }) {
   return (
     <View style={styles.tag}>
-      <View style={styles.tagThumb}>
-        {piece.photo ? <Image source={{ uri: piece.photo }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" /> : null}
-      </View>
+      <PieceThumb uri={piece.photo} width={24} height={30} />
       <Text style={styles.tagName} numberOfLines={1}>{shortPieceName(piece.name) || 'Unnamed piece'}</Text>
     </View>
   );
@@ -165,17 +161,14 @@ const styles = StyleSheet.create({
   body: { flex: 1, minWidth: 0, minHeight: 84, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
   pressed: { opacity: 0.6 },
   number: { ...typography.text.priorityNumeral, color: colors.mutedForeground, width: 16, textAlign: 'center' },
-  thumb: { width: THUMB, height: THUMB, borderRadius: radii.md, borderCurve: 'continuous', overflow: 'hidden', backgroundColor: colors.surfaceSubtle },
-  // Not selected: the picture recedes, the words stay readable.
-  thumbOff: { opacity: 0.45 },
   text: { flex: 1, minWidth: 0, gap: 5 },
   nameLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  name: { flexShrink: 1, ...typography.text.body, fontWeight: typography.weight.medium, color: colors.foreground },
+  name: { flexShrink: 1, ...pieceRowText.name },
   nameOff: { color: colors.mutedForeground },
   // Quieter than the name, and never the thing that gets squeezed out.
   sparkle: { flexShrink: 0 },
   meta: { flexDirection: 'row' },
-  detail: { ...typography.text.caption, color: colors.mutedForeground, flexShrink: 1 },
+  detail: { ...pieceRowText.detail, flexShrink: 1 },
   colourLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 14 },
   swatches: { flexDirection: 'row', gap: 4 },
   swatch: { width: 12, height: 12, borderRadius: 6 },
@@ -188,6 +181,5 @@ const styles = StyleSheet.create({
   // Muted, not warned: the question mark already says "check me".
   brandGuess: { color: colors.mutedForeground },
   tag: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  tagThumb: { width: 28, height: 28, borderRadius: radii.sm, borderCurve: 'continuous', overflow: 'hidden', backgroundColor: colors.surfaceSubtle },
   tagName: { ...typography.text.bodySmall, color: colors.mutedForeground, flexShrink: 1 },
 });
