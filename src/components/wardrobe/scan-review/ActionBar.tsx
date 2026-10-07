@@ -9,7 +9,7 @@ import { pieceCountLabel } from './types';
 
 export type ActionBarMode =
   | { kind: 'extract'; count: number; extractionCount: number; additional?: boolean; onExtract: () => void; onBatch?: () => void }
-  | { kind: 'save'; count: number; flagged: number; onSave: () => void; onReviewFlagged: () => void; onBatch?: () => void }
+  | { kind: 'save'; count: number; flagged: number; onSave: () => void; onReviewFlagged: () => void; onBatch?: () => void; onSeason?: () => void }
   | { kind: 'confirm'; last: boolean; onConfirm: () => void; onSkip: (() => void) | null }
   | { kind: 'selecting'; count: number; review: boolean; onBrand: () => void; onSeason: () => void; onConfirm: () => void; onDone: () => void; onSelectAll: () => void; onClear: () => void }
   | { kind: 'failed'; count: number; onRetry: () => void; onKeepBasic: () => void }
@@ -35,9 +35,10 @@ export function ActionBar({ mode, bottomInset }: { mode: ActionBarMode; bottomIn
               ? <PrimaryButton label={mode.flagged === 1 ? 'Review 1 flagged piece' : `Review ${mode.flagged} flagged pieces`} onPress={mode.onReviewFlagged} />
               : <PrimaryButton disabled={mode.count === 0} label={mode.count === 0 ? 'Choose at least 1 piece' : mode.count === 1 ? 'Add to closet' : `Add ${pieceCountLabel(mode.count)} to closet`} onPress={mode.onSave} />}
           </WithBatch>
-          {mode.flagged > 0 && mode.count > 0 ? (
-            <View style={styles.secondary}>
-              <TextLink label={mode.count === 1 ? 'Add to closet now' : `Add all ${mode.count} to closet now`} onPress={mode.onSave} />
+          {(mode.flagged > 0 || mode.onSeason) && mode.count > 0 ? (
+            <View style={[styles.secondary, styles.secondaryRow]}>
+              {mode.flagged > 0 ? <TextLink label={mode.count === 1 ? 'Add to closet now' : `Add all ${mode.count} to closet now`} onPress={mode.onSave} /> : null}
+              {mode.onSeason ? <TextLink label={mode.count === 1 ? 'Set season' : 'Season for all'} onPress={mode.onSeason} /> : null}
             </View>
           ) : null}
         </>
@@ -155,6 +156,7 @@ const styles = StyleSheet.create({
   batchText: { ...typography.text.label, color: colors.foreground },
   primaryText: { textAlign: 'center', ...typography.text.sectionTitle, color: colors.primaryForeground },
   secondary: { alignItems: 'center', minHeight: 36, justifyContent: 'center' },
+  secondaryRow: { flexDirection: 'row', gap: spacing.lg },
   confirmRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   flex: { flex: 1 },
   skip: { minHeight: 56, minWidth: 64, paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center' },

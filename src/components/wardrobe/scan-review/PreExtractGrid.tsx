@@ -145,7 +145,7 @@ export function PreExtractGrid({
             brandRevision={brandFeedback?.ids.has(piece.id) ? brandFeedback.revision : 0}
             onToggle={() => selecting ? onToggleSelect(piece.id) : onToggleIncluded(piece.id)}
             onCrop={onCrop && !selecting ? origin => { if (showCropTip) putAwayCropTip(); onCrop(piece.id, origin); } : undefined}
-            onBrand={onBrand && preExtract && !selecting ? () => { if (showTip) { setTipDismissed(true); void dismissBrandTip(); } onBrand(piece.id); } : undefined}
+            onBrand={onBrand && (preExtract || review) && !selecting ? () => { if (showTip) { setTipDismissed(true); void dismissBrandTip(); } onBrand(piece.id); } : undefined}
           />
         </Animated.View>
       )}

@@ -15,6 +15,7 @@ jest.mock('../scan-review/LoadingStates', () => ({ DetectionState: 'Detection', 
 jest.mock('../scan-review/overlays', () => ({ ConfirmationPanel: 'Confirmation' }));
 jest.mock('../scan-review/pickers', () => ({ CategoryPicker: 'Category', MaterialPicker: 'Material', SeasonPicker: 'Season', SheetButton: 'SheetButton' }));
 jest.mock('../CropAdjustModal', () => ({ CropAdjustEditor: 'Crop' }));
+jest.mock('../../primitives/UndoToast', () => ({ UndoToast: 'Toast' }));
 jest.mock('../scan-review/feedback', () => ({ selectionFeedback: jest.fn(), bulkFeedback: jest.fn(), cropFeedback: jest.fn() }));
 jest.mock('../../../hooks/useReviewReducedMotion', () => ({ useReviewReducedMotion: () => true }));
 jest.mock('../../../lib/analytics', () => ({ track: jest.fn() }));
@@ -50,24 +51,18 @@ function Harness() {
 let renderer: TestRenderer.ReactTestRenderer;
 const node = (name: string) => renderer.root.findByType(name as never);
 const menuRow = (label: string) => renderer.root.findAll(n => n.props.onPress && n.findAll(child => child.type === Text && child.props.children === label).length > 0)[0];
-function openBrands() {
-  act(() => node('Actions').props.mode.onBatch());
-  act(() => menuRow('Brand for included pieces').props.onPress());
-  // The menu finishes closing before the brand sheet is presented.
-  expect(renderer.root.findAllByType('BrandSheet' as never)).toHaveLength(0);
-  act(() => node('Sheet').props.onClose());
-}
+const toast = () => renderer.root.findAll(n => typeof n.props.message === 'string' && n.props.onUndo)[0];
+const header = () => renderer.root.findAll(n => 'onIncludeAll' in n.props)[0];
 beforeEach(() => { act(() => { renderer = TestRenderer.create(<Harness />); }); });
 afterEach(() => { act(() => renderer.unmount()); stage = 'review'; });
 
 it('never shows a piece removed before extraction once review begins', () => {
   act(() => setItems(ps => ps.map(p => p.id === '2' ? { ...p, extraction: 'not-started' } : p)));
   expect(node('Grid').props.pieces.map((p: ScanReviewPiece) => p.id)).toEqual(['0', '1']);
-  act(() => node('Actions').props.mode.onBatch());
-  act(() => menuRow('Exclude all').props.onPress());
-  act(() => node('Sheet').props.onClose());
-  act(() => node('Actions').props.mode.onBatch());
-  act(() => menuRow('Include all').props.onPress());
+  act(() => node('Grid').props.onToggleIncluded('0'));
+  act(() => node('Grid').props.onToggleIncluded('1'));
+  expect(header().props.onIncludeAll).toBeDefined();
+  act(() => header().props.onIncludeAll());
   expect(latest.map(p => p.included)).toEqual([true, true, false]);
 });
 
@@ -102,33 +97,31 @@ describe('before extraction', () => {
   });
 });
 
-it('opens brand search directly for included pieces without another selection step', () => {
-  act(() => node('Grid').props.onFilterChange('check'));
-  openBrands();
-  expect(node('BrandSheet').props.targetIds).toEqual(['0', '1']);
-  expect(renderer.root.findAllByType('Dock' as never)).toHaveLength(0);
-  expect(node('Grid').props.selection).toBe(null);
-  act(() => node('BrandSheet').props.onSelect(['0', '1'], 'COS'));
-  expect(latest.map(p => p.brand)).toEqual(['COS', 'COS', '']);
-  expect(latest.map(p => p.included)).toEqual([true, true, false]);
-  expect(node('Grid').props.brandFeedback.revision).toBe(1);
+it('brands one piece from its pill, then offers the brand to the other unbranded included pieces', () => {
+  act(() => node('Grid').props.onBrand('0'));
+  expect(node('BrandSheet').props.targetIds).toEqual(['0']);
+  act(() => node('BrandSheet').props.onSelect(['0'], 'COS'));
   act(() => node('BrandSheet').props.onClose());
-  expect(node('Grid').props.filter).toBe('check');
+  expect(toast().props.message).toBe('Add COS to 1 more piece?');
+  act(() => toast().props.onUndo());
+  expect(latest.map(p => p.brand)).toEqual(['COS', 'COS', '']);
+  expect(node('Grid').props.brandFeedback.revision).toBe(2);
 });
 
-it('ignores removed or newly skipped targets when applying a shared brand', () => {
-  openBrands();
-  act(() => setItems(ps => ps.filter(p => p.id !== '1').map(p => ({ ...p, included: false }))));
-  act(() => node('BrandSheet').props.onSelect(['0', '1'], 'COS'));
-  expect(latest.every(p => p.brand === '')).toBe(true);
+it('skips pieces excluded after the offer appeared', () => {
+  act(() => node('Grid').props.onBrand('0'));
+  act(() => node('BrandSheet').props.onSelect(['0'], 'COS'));
+  act(() => node('BrandSheet').props.onClose());
+  act(() => node('Grid').props.onToggleIncluded('1'));
+  act(() => toast().props.onUndo());
+  expect(latest.map(p => p.brand)).toEqual(['COS', '', '']);
 });
 
-it('disables the Brand action when nothing is included', () => {
+it('has no Edit menu; season for all lives under the button and needs an included piece', () => {
+  expect(node('Actions').props.mode.onBatch).toBeUndefined();
+  expect(node('Actions').props.mode.onSeason).toBeDefined();
   act(() => setItems(ps => ps.map(p => ({ ...p, included: false }))));
-  act(() => node('Actions').props.mode.onBatch());
-  const button = menuRow('Brand for included pieces');
-  expect(button.props.disabled).toBe(true);
-  expect(renderer.root.findAllByType('BrandSheet' as never)).toHaveLength(0);
+  expect(node('Actions').props.mode.onSeason).toBeUndefined();
 });
 
 it('still allows an individual skipped piece to be tagged from the loupe', () => {

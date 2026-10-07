@@ -128,6 +128,11 @@ export function BatchImportWorkspace() {
       stage={stageFor(batch)}
       previewImage={scanning ? scanning.masterUri ?? scanning.sourceUri : null}
       scanProgress={{ current: photos.settled, total: photos.total }}
+      scanPhotos={batch.photos.map((p) => ({
+        id: p.id,
+        uri: p.masterUri ?? p.sourceUri,
+        state: p.status === 'done' ? 'done' : p === scanning ? 'active' : 'pending',
+      }))}
       pieces={pieces}
       brandSuggestions={brandSuggestions}
       extractionProgress={{ current: counts.settled, total: counts.total }}

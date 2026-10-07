@@ -32,8 +32,10 @@ function useCyclingScanStatus(): string {
 // per-item signal yet (pose-scan is a single non-streamed request), so this
 // is deliberately a choreographed effect rather than data-driven, same as
 // the cycling status copy above.
-export function DetectionState({ previewImage, progress, heroHeight, reduceMotion, title = 'Detecting your pieces', stepLabels }: {
+export function DetectionState({ previewImage, progress, heroHeight, reduceMotion, title = 'Detecting your pieces', stepLabels, photos }: {
   previewImage: string | null;
+  /** A batch's photos: shown as the same filmstrip the extraction screen uses. */
+  photos?: FilmFrame[];
   progress: { current: number; total: number };
   heroHeight: number;
   reduceMotion: boolean;
@@ -80,8 +82,15 @@ export function DetectionState({ previewImage, progress, heroHeight, reduceMotio
         <View style={styles.detectFrame} pointerEvents="none" />
       </View>
       <Text style={styles.extractionTitle}>{title}</Text>
-      <Text style={styles.extractionCopy}>{statusMsg}</Text>
-      <ScanStepTrack stage="scanning" progress={progress} reduceMotion={reduceMotion} labels={stepLabels} />
+      {stepLabels ? <>
+        <Text style={styles.extractionCopy}>{statusMsg}</Text>
+        <ScanStepTrack stage="scanning" progress={progress} reduceMotion={reduceMotion} labels={stepLabels} />
+      </> : <>
+        {photos && photos.length > 1 ? <Filmstrip frames={photos} reduceMotion={reduceMotion} /> : null}
+        <Text style={styles.extractionCopy}>
+          {statusMsg.replace(/…$/, '')}{progress.total > 1 ? ` · photo ${Math.min(progress.current + 1, progress.total)} of ${progress.total}` : '…'}
+        </Text>
+      </>}
     </View>
   );
 }
@@ -111,7 +120,11 @@ export function ExtractionState({ piece, pieces, progress, heroHeight, reduceMot
         )}
       </View>
       <Text style={styles.extractionTitle}>Refining your pieces</Text>
-      {reel.length > 1 ? <Filmstrip pieces={reel} doneCount={doneCount} reduceMotion={reduceMotion} /> : null}
+      {reel.length > 1 ? <Filmstrip reduceMotion={reduceMotion} frames={reel.map((p, index) => ({
+        id: p.id,
+        uri: index < doneCount && p.cutout ? p.cutout : p.photo!,
+        state: index < doneCount ? 'done' : index === doneCount ? 'active' : 'pending',
+      }))} /> : null}
       <Text style={styles.extractionCopy} accessibilityLabel={`${status}, ${progress.current} of ${progress.total} done`}>
         {status}{progress.total > 0 ? ` · ${Math.min(progress.current + 1, progress.total)} of ${progress.total}` : ''}
       </Text>
@@ -119,8 +132,10 @@ export function ExtractionState({ piece, pieces, progress, heroHeight, reduceMot
   );
 }
 
-/** One small frame per piece: read ones in full colour with a tick, the current one breathing, the rest waiting. */
-function Filmstrip({ pieces, doneCount, reduceMotion }: { pieces: ScanReviewPiece[]; doneCount: number; reduceMotion: boolean }) {
+export type FilmFrame = { id: string; uri: string; state: 'done' | 'active' | 'pending' };
+
+/** One small frame per photo or piece: done ones in full colour with a tick, the active one breathing, the rest waiting. */
+export function Filmstrip({ frames, reduceMotion }: { frames: FilmFrame[]; reduceMotion: boolean }) {
   const pulse = useSharedValue(1);
   useEffect(() => {
     if (reduceMotion) { pulse.set(1); return; }
@@ -129,17 +144,13 @@ function Filmstrip({ pieces, doneCount, reduceMotion }: { pieces: ScanReviewPiec
   const pulseStyle = useAnimatedStyle(() => ({ opacity: pulse.get() }));
   return (
     <View style={styles.filmstrip} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      {pieces.map((p, index) => {
-        const done = index < doneCount;
-        const active = index === doneCount;
-        return (
-          <View key={p.id} style={[styles.frame, !done && !active && styles.framePending]}>
-            <Image source={{ uri: done && p.cutout ? p.cutout : p.photo! }} style={styles.frameImage} contentFit="contain" cachePolicy="memory-disk" transition={reduceMotion ? 0 : 300} />
-            {active ? <Animated.View pointerEvents="none" style={[styles.frameRing, pulseStyle]} /> : null}
-            {done ? <View style={styles.frameTick}><Ionicons name="checkmark" size={9} color={colors.primaryForeground} /></View> : null}
-          </View>
-        );
-      })}
+      {frames.map(frame => (
+        <View key={frame.id} style={[styles.frame, frame.state === 'pending' && styles.framePending]}>
+          <Image source={{ uri: frame.uri }} style={styles.frameImage} contentFit="contain" cachePolicy="memory-disk" transition={reduceMotion ? 0 : 300} />
+          {frame.state === 'active' ? <Animated.View pointerEvents="none" style={[styles.frameRing, pulseStyle]} /> : null}
+          {frame.state === 'done' ? <View style={styles.frameTick}><Ionicons name="checkmark" size={9} color={colors.primaryForeground} /></View> : null}
+        </View>
+      ))}
     </View>
   );
 }

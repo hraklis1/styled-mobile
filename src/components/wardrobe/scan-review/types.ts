@@ -48,7 +48,6 @@ export type SheetRequest =
   | { kind: 'category'; target: string[] }
   | { kind: 'season'; target: string[] }
   /** Menus: the footer's batch edits and the header's import options. */
-  | { kind: 'batch'; target: string[] }
   | { kind: 'options'; target: string[] };
 
 export function isReviewStage(stage: ScanReviewStage): boolean {

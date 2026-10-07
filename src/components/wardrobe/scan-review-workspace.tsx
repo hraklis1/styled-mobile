@@ -34,7 +34,7 @@ import { colors, ingestion, spacing, stroke, typography } from '../../theme';
 import { UndoToast } from '../primitives/UndoToast';
 import { ActionBar, type ActionBarMode } from './scan-review/ActionBar';
 import { PreExtractGrid, PieceLine, type SheetFilter } from './scan-review/PreExtractGrid';
-import { DetectionState, ExtractionState } from './scan-review/LoadingStates';
+import { DetectionState, ExtractionState, type FilmFrame } from './scan-review/LoadingStates';
 import { ItemInspectionModal } from './scan-review/ItemInspectionModal';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { BrandSearchSheet } from './scan-review/BrandSearchSheet';
@@ -68,6 +68,8 @@ type Props = {
   // needs a "photo 2 of 5" of its own. Single-photo flows leave this at zero
   // and the Detect stage reads exactly as it did before.
   scanProgress?: { current: number; total: number };
+  /** Batch photos for the detection filmstrip. */
+  scanPhotos?: FilmFrame[];
   pieces: ScanReviewPiece[];
   brandSuggestions: string[];
   extractionProgress: { current: number; total: number };
@@ -106,6 +108,7 @@ export function ScanReviewWorkspace({
   stage,
   previewImage = null,
   scanProgress = { current: 0, total: 0 },
+  scanPhotos,
   pieces,
   brandSuggestions,
   extractionProgress,
@@ -382,8 +385,6 @@ export function ScanReviewWorkspace({
   const heroHeight = loupeHeroHeight(height);
   const contentBottom = spacing.xxl;
 
-  const batchMenu = effectiveView === 'sheet' && pieces.length > 0 ? () => openSheet({ kind: 'batch', target: [] }) : undefined;
-  const allIncluded = inclusion.included.length === visiblePieces.length && visiblePieces.length > 0;
 
   // Scanning and extracting tell their own story in the hero; the footer
   // would only repeat it, so it holds its space empty.
@@ -411,7 +412,7 @@ export function ScanReviewWorkspace({
                 flagged: sheetEnabled ? checkCount : 0,
                 onSave: save,
                 onReviewFlagged: startFlaggedWalk,
-                onBatch: batchMenu,
+                onSeason: effectiveView === 'sheet' && inclusion.included.length ? () => openSheet({ kind: 'season', target: inclusion.snapshot().map(p => p.id) }) : undefined,
               };
 
   const sheetTargets = sheet ? pieces.filter((piece) => sheet.target.includes(piece.id) && (!(sheet.kind === 'brand' && sheet.includedOnly) || piece.included !== false)) : [];
@@ -454,7 +455,7 @@ export function ScanReviewWorkspace({
           ) : null}
 
           {stage === 'scanning' ? (
-            <DetectionState previewImage={previewImage} progress={scanProgress} heroHeight={heroHeight} reduceMotion={reduceMotion} />
+            <DetectionState previewImage={previewImage} photos={scanPhotos} progress={scanProgress} heroHeight={heroHeight} reduceMotion={reduceMotion} />
           ) : stage === 'extracting' ? (
             <ExtractionState piece={visiblePieces[0] ?? null} pieces={inclusion.included} progress={extractionProgress} heroHeight={heroHeight} reduceMotion={reduceMotion} />
           ) : effectiveView === 'sheet' ? (
@@ -518,8 +519,11 @@ export function ScanReviewWorkspace({
               message={`Add ${brandOffer.brand} to ${brandOffer.ids.length} more ${brandOffer.ids.length === 1 ? 'piece' : 'pieces'}?`}
               onUndo={() => {
                 bulkFeedback();
-                for (const id of brandOffer.ids) update(id, { brand: brandOffer.brand });
-                setBrandFeedback(current => ({ revision: current.revision + 1, ids: new Set(brandOffer.ids) }));
+                // Re-check at tap time: a piece skipped or branded since the offer is left alone.
+                const live = new Set(inclusion.snapshot().filter(p => !p.brand.trim()).map(p => p.id));
+                const ids = brandOffer.ids.filter(id => live.has(id));
+                for (const id of ids) update(id, { brand: brandOffer.brand });
+                setBrandFeedback(current => ({ revision: current.revision + 1, ids: new Set(ids) }));
                 setBrandOffer(null);
               }} />
           ) : null}
@@ -534,20 +538,10 @@ export function ScanReviewWorkspace({
               const targets = ids.filter(id => pieces.some(p => p.id === id && (!sheet.includedOnly || p.included !== false)));
               for (const id of targets) update(id, { brand });
               setBrandFeedback(current => ({ revision: current.revision + 1, ids: new Set(targets) }));
-              const rest = brand.trim() && targets.length === 1 && stage === 'pre-extract' ? piecesMissingBrand(pieces, targets[0]).map(p => p.id) : [];
+              const rest = brand.trim() && targets.length === 1 && (stage === 'pre-extract' || review) ? piecesMissingBrand(pieces, targets[0]).map(p => p.id) : [];
               setBrandOffer(rest.length ? { brand: brand.trim(), ids: rest } : null);
               dismissSheet();
             }} />
-        ) : sheet?.kind === 'batch' ? (
-          <WorkspaceSheet title="Edit pieces" detent="fit" rows={review ? 3 : 2} subtitle={<Text style={styles.sheetSubtitle}>{`${inclusion.included.length} of ${visiblePieces.length} included`}</Text>}
-            reduceMotion={reduceMotion} dismissed={sheetDismissed} onClose={closeSheet}>
-            <MenuRow icon={allIncluded ? 'remove-circle-outline' : 'checkmark-circle-outline'} label={allIncluded ? 'Exclude all' : 'Include all'}
-              onPress={() => { bulkFeedback(); inclusion.change(visiblePieces.map(p => p.id), !allIncluded); dismissSheet(); }} />
-            <MenuRow icon="pricetag-outline" label="Brand for included pieces" disabled={!inclusion.included.length}
-              onPress={() => thenDismiss(() => openSheet({ kind: 'brand', target: inclusion.snapshot().map(p => p.id), includedOnly: true }))} />
-            {review ? <MenuRow icon="leaf-outline" label="Season for included pieces" disabled={!inclusion.included.length}
-              onPress={() => thenDismiss(() => openSheet({ kind: 'season', target: inclusion.snapshot().map(p => p.id) }))} /> : null}
-          </WorkspaceSheet>
         ) : sheet?.kind === 'options' ? (
           <WorkspaceSheet title="Import options" detent="fit" rows={onMinimize ? 2 : 1} reduceMotion={reduceMotion} dismissed={sheetDismissed} onClose={closeSheet}>
             {onMinimize ? <MenuRow icon="chevron-down" label="Keep running in the background" onPress={() => thenDismiss(onMinimize)} /> : null}
