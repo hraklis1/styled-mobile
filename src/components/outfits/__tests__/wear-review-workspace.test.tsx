@@ -1,6 +1,7 @@
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 
+jest.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));
 jest.mock('react-native-mmkv', () => ({
   createMMKV: () => ({ getString: jest.fn(), set: jest.fn(), remove: jest.fn() }),
 }));
@@ -12,7 +13,7 @@ jest.mock('../../wardrobe/scan-review/ActionBar', () => ({ PrimaryButton: 'Prima
 jest.mock('../../wardrobe/scan-review/atoms', () => ({ TextLink: 'TextLink', TextSegment: 'TextSegment', GhostRow: 'GhostRow', OutlinePill: 'OutlinePill' }));
 jest.mock('../../primitives/UndoToast', () => ({ UndoToast: 'UndoToast' }));
 jest.mock('../../wardrobe/scan-review/feedback', () => ({ cropFeedback: jest.fn(), selectionFeedback: jest.fn() }));
-jest.mock('../wear-review/PieceImage', () => ({ PieceImage: 'PieceImage' }));
+jest.mock('../wear-review/PieceImage', () => ({ PieceImage: 'PieceImage', LocateInPhoto: 'LocateInPhoto' }));
 jest.mock('../wear-review/PhotoHero', () => ({ PhotoHero: 'PhotoHero' }));
 jest.mock('../wear-review/PairingRow', () => ({ PairingRow: 'PairingRow' }));
 jest.mock('../wear-review/ClosetMatchSheet', () => ({ ClosetPicker: 'ClosetPicker' }));

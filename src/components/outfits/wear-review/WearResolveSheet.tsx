@@ -11,7 +11,7 @@ import type { Item } from '../../../types/item';
 import { colors, spacing, stroke, typography } from '../../../theme';
 import { ClosetPicker } from './ClosetMatchSheet';
 import { NewPieceEditor } from './NewPieceSheet';
-import { PieceImage } from './PieceImage';
+import { LocateInPhoto, PieceImage } from './PieceImage';
 import { PhotoHero } from './PhotoHero';
 import { orderedDetections } from '../../../features/wear-log/reducer';
 
@@ -27,6 +27,8 @@ export function WearResolveSheet({ queue: initialQueue, startIndex = 0, reviewId
   const [mode, setMode] = useState<Mode>(initialPhoto ? 'photo' : flow.resolutions[queue[startIndex]]?.kind === 'new' ? 'new' : 'review');
   const [dismissed, setDismissed] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
+  // Set when the photo was opened from a piece's thumbnail: where "Back" returns.
+  const [returnTo, setReturnTo] = useState<Mode | null>(null);
   // Keep tentative choices through in-sheet browsing, but never persist them.
   const [pendingById, setPendingById] = useState<Record<string, number>>({});
   const id = queue[index];
@@ -35,7 +37,9 @@ export function WearResolveSheet({ queue: initialQueue, startIndex = 0, reviewId
   const ordered = orderedDetections(flow.scan);
   const dimmedIds = new Set(ordered.filter((d) => flow.resolutions[d.id].kind === 'dismissed').map((d) => d.id));
   if (mode !== 'photo' && (!detection || !resolution)) return null;
+  const locate = () => { Keyboard.dismiss(); setActiveId(id); setReturnTo(mode); setMode('photo'); };
   const openFromPhoto = (pieceId: string) => {
+    setReturnTo(null);
     const at = reviewIds.indexOf(pieceId);
     setQueue(at >= 0 ? reviewIds : [pieceId]);
     setIndex(Math.max(0, at));
@@ -67,6 +71,9 @@ export function WearResolveSheet({ queue: initialQueue, startIndex = 0, reviewId
       <View style={styles.center}><TextLink label="Skip this piece" tone="muted" onPress={skip} /></View>
     </View> : mode === 'library' ? <View style={styles.links}><TextLink label="Add as new" onPress={addNew} /><TextLink label="Skip this piece" tone="muted" onPress={skip} /></View> : undefined}>
     {mode === 'photo' ? <View>
+      {returnTo ? <Pressable style={styles.back} onPress={() => { setMode(returnTo); setReturnTo(null); }} hitSlop={6} accessibilityRole="button" accessibilityLabel="Back to piece">
+        <Ionicons name="chevron-back" size={16} color={colors.foreground} /><Text style={styles.backText}>Back to piece</Text>
+      </Pressable> : null}
       <PhotoHero
         uri={flow.photoUri}
         width={width}
@@ -90,7 +97,7 @@ export function WearResolveSheet({ queue: initialQueue, startIndex = 0, reviewId
         <Pressable style={styles.back} onPress={() => { Keyboard.dismiss(); dispatchWear({ type: 'clear', detectionId: id }); setMode('review'); }} hitSlop={6} accessibilityRole="button" accessibilityLabel="Back to matches. Undo new piece">
           <Ionicons name="chevron-back" size={16} color={colors.foreground} /><Text style={styles.backText}>Back to matches</Text>
         </Pressable>
-        <NewPieceEditor key={id} detection={detection} draft={resolution.draft} scanBrands={brands} onChange={(patch) => dispatchWear({ type: 'editDraft', detectionId: id, patch })} />
+        <NewPieceEditor key={id} detection={detection} draft={resolution.draft} scanBrands={brands} onLocate={locate} onChange={(patch) => dispatchWear({ type: 'editDraft', detectionId: id, patch })} />
       </>
       : mode === 'library' ? <>
         <View style={styles.pad}><TextLink label="Back to comparison" onPress={() => { Keyboard.dismiss(); setMode('review'); }} /></View>
@@ -108,16 +115,19 @@ export function WearResolveSheet({ queue: initialQueue, startIndex = 0, reviewId
         onBrowse={() => setMode('library')}
         onAddNew={addNew}
         onSkip={skip}
+        onLocate={locate}
       /> : null}
   </WorkspaceSheet>;
 }
 
 /** Candidate taps stay local until the primary confirmation action. */
-export function FocusedPiece({ detection, resolution, initialItemId, onPendingChange, items, last, editing = false, onConfirm, onBrowse, onAddNew, onSkip }: {
+export function FocusedPiece({ detection, resolution, initialItemId, onPendingChange, items, last, editing = false, onConfirm, onBrowse, onAddNew, onSkip, onLocate }: {
   detection: WearDetection; resolution: Resolution; items: Item[]; last: boolean; editing?: boolean;
   onConfirm: (id: number) => void; onBrowse: () => void; onAddNew: () => void; onSkip: () => void;
   initialItemId?: number;
   onPendingChange: (id: number) => void;
+  /** Show this piece outlined on the outfit photo. */
+  onLocate?: () => void;
 }) {
   const [pendingId, setPendingId] = useState<number | null>(initialItemId ?? (resolution.kind === 'matched' ? resolution.itemId : null));
   const selected = items.find((item) => item.id === pendingId);
@@ -127,7 +137,9 @@ export function FocusedPiece({ detection, resolution, initialItemId, onPendingCh
   return <View style={styles.root}>
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.detected}>
-        <PieceImage cropUrl={detection.cropUrl} cutoutUrl={detection.cutoutUrl} width={72} height={90} />
+        <LocateInPhoto name={detection.attributes.name} onPress={onLocate}>
+          <PieceImage cropUrl={detection.cropUrl} cutoutUrl={detection.cutoutUrl} width={72} height={90} />
+        </LocateInPhoto>
         <View style={styles.copy}>
           <Text style={styles.heading}>{detection.attributes.name}</Text>
           {detection.attributes.description ? <Text style={styles.meta} numberOfLines={2}>{detection.attributes.description}</Text> : null}

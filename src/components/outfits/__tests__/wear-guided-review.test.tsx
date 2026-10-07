@@ -13,7 +13,7 @@ jest.mock('../../wardrobe/scan-review/ActionBar', () => ({ PrimaryButton: 'Prima
 jest.mock('../../wardrobe/scan-review/atoms', () => ({ TextLink: 'TextLink' }));
 jest.mock('../../wardrobe/scan-review/feedback', () => ({ selectionFeedback: jest.fn() }));
 jest.mock('react-native-reanimated', () => ({ __esModule: true, default: { View: 'AnimatedView' }, FadeIn: { duration: () => ({}) } }));
-jest.mock('../wear-review/PieceImage', () => ({ PieceImage: 'PieceImage' }));
+jest.mock('../wear-review/PieceImage', () => ({ PieceImage: 'PieceImage', LocateInPhoto: 'LocateInPhoto' }));
 jest.mock('../wear-review/PhotoHero', () => ({ PhotoHero: 'PhotoHero' }));
 jest.mock('../wear-review/ClosetMatchSheet', () => ({ ClosetPicker: 'ClosetPicker' }));
 jest.mock('../wear-review/NewPieceSheet', () => ({ NewPieceEditor: 'NewPieceEditor' }));

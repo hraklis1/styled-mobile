@@ -10,7 +10,7 @@ import type { PiecePatch, ScanReviewPiece } from '../../wardrobe/scan-review/typ
 import { useBrandSuggestions } from '../../../hooks/useItems';
 import { pieceFlags } from '../../../lib/scan-review';
 import { colors, radii, spacing, stroke, typography } from '../../../theme';
-import { PieceImage } from './PieceImage';
+import { LocateInPhoto, PieceImage } from './PieceImage';
 import type { WearDetection, WearDraft } from '../../../features/wear-log/types';
 
 const DRAFT_KEYS: (keyof WearDraft)[] = [
@@ -48,12 +48,14 @@ function toDraftPatch(patch: PiecePatch): Partial<WearDraft> {
  * Every edit is saved to the review as it's made; nothing is created until
  * the outfit is logged.
  */
-export function NewPieceEditor({ detection, draft, scanBrands, onChange }: {
+export function NewPieceEditor({ detection, draft, scanBrands, onChange, onLocate }: {
   detection: WearDetection;
   draft: WearDraft;
   /** Brands already chosen for other new pieces in this review. */
   scanBrands: string[];
   onChange: (patch: Partial<WearDraft>) => void;
+  /** Show this piece outlined on the outfit photo. */
+  onLocate?: () => void;
 }) {
   const [picker, setPicker] = useState<SheetKind | null>(null);
   const [expandedRow, setExpandedRow] = useState<ExpandableRow | null>(null);
@@ -94,7 +96,9 @@ export function NewPieceEditor({ detection, draft, scanBrands, onChange }: {
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Text style={[styles.subtitle, styles.pad]}>Saved to your closet when you log</Text>
           <View style={styles.plate}>
-            <PieceImage cropUrl={detection.cropUrl} cutoutUrl={detection.cutoutUrl} width={168} height={210} />
+            <LocateInPhoto name={detection.attributes.name} onPress={onLocate}>
+              <PieceImage cropUrl={detection.cropUrl} cutoutUrl={detection.cutoutUrl} width={168} height={210} />
+            </LocateInPhoto>
           </View>
           <SpecSheet
             piece={piece}

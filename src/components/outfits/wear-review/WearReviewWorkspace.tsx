@@ -29,6 +29,7 @@ import { WearResolveSheet } from './WearResolveSheet';
 import { PieceImage } from './PieceImage';
 import { WornDateSheet } from './WornDateSheet';
 import { PairingRow } from './PairingRow';
+import { OutfitPhotoHeader, photoHeaderHeight } from './OutfitPhotoHeader';
 
 type Surface = { kind: 'resolve'; queue: string[]; startIndex?: number; initialPhoto?: boolean } | { kind: 'add' } | { kind: 'date' };
 
@@ -148,7 +149,7 @@ export function WearReviewWorkspace({ onClose, onMinimize, onLogged, onPickManua
   return (
     <Review
       flow={flow}
-      heroHeight={Math.min(Math.round(height * 0.28), 240)}
+      screenHeight={height}
       width={width}
       insets={insets}
       reduceMotion={reduceMotion}
@@ -191,15 +192,17 @@ function Header({ title, onClose, right }: { title: string; onClose: () => void;
   );
 }
 
-function Review({ flow, heroHeight, width, insets, reduceMotion, onClose, onMinimize }: {
+function Review({ flow, screenHeight, width, insets, reduceMotion, onClose, onMinimize }: {
   flow: ReviewFlow;
-  heroHeight: number;
+  screenHeight: number;
   width: number;
   insets: { top: number; bottom: number };
   reduceMotion: boolean;
   onClose: () => void;
   onMinimize: () => void;
 }) {
+  const [natural, setNatural] = useState<{ width: number; height: number } | null>(null);
+  const photoHeight = photoHeaderHeight(width, screenHeight, natural);
   const qc = useQueryClient();
   const { data: items = [], isSuccess, isError, refetch } = useItems();
   const itemsById = useMemo(() => new Map<number, Item>(items.map((i) => [i.id, i])), [items]);
@@ -211,14 +214,6 @@ function Review({ flow, heroHeight, width, insets, reduceMotion, onClose, onMini
   const queue = reviewQueue(flow, isSuccess ? availableIds : undefined);
   const missingAdditional = isSuccess ? flow.additionalItemIds.filter((id) => !availableIds.has(id)) : [];
   const saving = flow.status === 'saving';
-  // Crop the hero to the pieces rather than letterboxing the whole photo.
-  const heroFocus = useMemo(() => {
-    const boxes = flow.scan.detections.flatMap((d) => (d.bbox_pct ? [d.bbox_pct] : []));
-    if (!boxes.length) return 'center' as const;
-    const left = Math.min(...boxes.map((b) => b.x)), right = Math.max(...boxes.map((b) => b.x + b.width));
-    const top = Math.min(...boxes.map((b) => b.y)), bottom = Math.max(...boxes.map((b) => b.y + b.height));
-    return { left: `${(left + right) / 2}%`, top: `${(top + bottom) / 2}%` } as const;
-  }, [flow.scan.detections]);
   const [accessoriesOpen, setAccessoriesOpen] = useState(false);
   const sections = useMemo(() => {
     const accessories = ordered.filter((d) => d.layer === 'accessory');
@@ -305,10 +300,7 @@ function Review({ flow, heroHeight, width, insets, reduceMotion, onClose, onMini
       <View style={styles.body}>
         <SectionList sections={sections} keyExtractor={(d) => d.id} style={styles.body} stickySectionHeadersEnabled={false}
           ListHeaderComponent={<View>
-            <Pressable disabled={saving} onPress={() => setSurface({ kind: 'resolve', queue: [], initialPhoto: true })} accessibilityRole="button" accessibilityLabel="View outfit photo and detected pieces">
-              <Image source={{ uri: flow.photoUri }} style={{ width, height: heroHeight, backgroundColor: colors.surfaceSubtle }} contentFit="cover" contentPosition={heroFocus} />
-              <View style={styles.expand}><Ionicons name="expand-outline" size={14} color={colors.foreground} /></View>
-            </Pressable>
+            <OutfitPhotoHeader uri={flow.photoUri} width={width} height={photoHeight} onNatural={setNatural} disabled={saving} onPress={() => setSurface({ kind: 'resolve', queue: [], initialPhoto: true })} />
             <View style={styles.summary}>
               <View style={styles.summaryHead}>
                 <Text style={styles.summaryTitle} accessibilityRole="header">Your outfit</Text>
@@ -440,7 +432,6 @@ const styles = StyleSheet.create({
   itemName: { ...typography.text.bodySmall, color: colors.foreground },
   meta: { ...typography.text.meta, color: colors.mutedForeground },
   loadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  expand: { position: 'absolute', right: spacing.md, bottom: spacing.md, width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.7)', alignItems: 'center', justifyContent: 'center' },
   sectionTitle: { ...typography.text.meta, color: colors.mutedForeground, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xs },
   accessories: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, minHeight: 64, marginTop: spacing.sm, borderTopWidth: stroke.hairline, borderTopColor: colors.hairline },
   accessoryCopy: { flex: 1, gap: 4 },

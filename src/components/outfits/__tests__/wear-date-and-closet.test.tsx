@@ -10,7 +10,7 @@ jest.mock('../../wardrobe/scan-review/WorkspaceSheet', () => ({
 jest.mock('../../wardrobe/scan-review/ActionBar', () => ({ PrimaryButton: 'PrimaryButton' }));
 jest.mock('../../wardrobe/scan-review/atoms', () => ({ TextLink: 'TextLink', TextSegment: 'TextSegment' }));
 jest.mock('../../wardrobe/scan-review/feedback', () => ({ selectionFeedback: jest.fn() }));
-jest.mock('../wear-review/PieceImage', () => ({ PieceImage: 'PieceImage' }));
+jest.mock('../wear-review/PieceImage', () => ({ PieceImage: 'PieceImage', LocateInPhoto: 'LocateInPhoto' }));
 jest.mock('@expo/ui/community/datetime-picker', () => ({ DateTimePicker: 'DateTimePicker' }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Icon' }));
 
