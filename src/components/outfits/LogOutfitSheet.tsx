@@ -33,6 +33,7 @@ import { mergeUniqueItemIds } from '../../lib/outfit-log-scan';
 import { WearReviewWorkspace } from './wear-review/WearReviewWorkspace';
 import { discardWearFlow, startWearScan } from '../../features/wear-log/runner';
 import { useWearLogStore } from '../../features/wear-log/store';
+import { localISODate } from '../../lib/dates';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -52,10 +53,8 @@ function yesterdayNoon(): Date {
   return d;
 }
 
-// YYYY-MM-DD for the API
-function toISODate(d: Date): string {
-  return d.toISOString().split('T')[0];
-}
+// YYYY-MM-DD for the API, in the user's local calendar
+const toISODate = localISODate;
 
 function displayLogDate(d: Date): string {
   const today = todayNoon();

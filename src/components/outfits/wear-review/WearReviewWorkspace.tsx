@@ -10,6 +10,7 @@ import { DetectionState } from '../../wardrobe/scan-review/LoadingStates';
 import { PrimaryButton } from '../../wardrobe/scan-review/ActionBar';
 import { OutlinePill, TextLink } from '../../wardrobe/scan-review/atoms';
 import { cropFeedback, selectionFeedback } from '../../wardrobe/scan-review/feedback';
+import { localISODay } from '../../../lib/dates';
 import { UndoToast } from '../../primitives/UndoToast';
 import { useReviewReducedMotion } from '../../../hooks/useReviewReducedMotion';
 import { applySavedItems, useItems } from '../../../hooks/useItems';
@@ -49,12 +50,7 @@ function useSlowFlag(key: string | null, ms: number): boolean {
 }
 type DateChoice = 'today' | 'yesterday' | 'other';
 
-function isoDay(offset: number): string {
-  const d = new Date();
-  d.setHours(12, 0, 0, 0);
-  d.setDate(d.getDate() + offset);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
+const isoDay = localISODay;
 
 function dateChoice(date: string): DateChoice {
   if (date === isoDay(0)) return 'today';

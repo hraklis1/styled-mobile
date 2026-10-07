@@ -92,3 +92,27 @@ export function classifyError(
   // Any other 4xx is about this request; sending it again changes nothing.
   return { kind: 'fail', message: apiErrorMessage(error, 'This photo could not be processed.') };
 }
+
+export class GaveUp extends Error {
+  constructor(readonly decision: Exclude<RetryDecision, { kind: 'retry' }>) {
+    super(decision.message);
+  }
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Run `fn`, retrying per the batch retry policy; throws GaveUp when it stops. */
+export async function withRetries<T>(fn: () => Promise<T>): Promise<T> {
+  let attempts = 0;
+  for (;;) {
+    attempts += 1;
+    try {
+      return await fn();
+    } catch (error) {
+      const decision = classifyError(error, attempts);
+      if (decision.kind !== 'retry') throw new GaveUp(decision);
+      if (!decision.countsAttempt) attempts -= 1;
+      await sleep(decision.delayMs);
+    }
+  }
+}

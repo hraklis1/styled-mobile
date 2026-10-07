@@ -6,15 +6,8 @@ import { PrimaryButton } from '../../wardrobe/scan-review/ActionBar';
 import { TextLink } from '../../wardrobe/scan-review/atoms';
 import { colors, spacing, typography } from '../../../theme';
 
-export function isoDate(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
-export function dayOffset(offset: number): string {
-  const date = new Date();
-  date.setHours(12, 0, 0, 0);
-  date.setDate(date.getDate() + offset);
-  return isoDate(date);
-}
+export { localISODate as isoDate, localISODay as dayOffset } from '../../../lib/dates';
+import { localISODate as isoDate, localISODay as dayOffset } from '../../../lib/dates';
 
 export function WornDateSheet({ date, reduceMotion, onSelect, onClose }: {
   date: string; reduceMotion: boolean; onSelect: (date: string) => void; onClose: () => void;

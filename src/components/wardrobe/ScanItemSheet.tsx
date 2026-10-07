@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { enqueuePolish } from '../../features/polish-queue/runner';
+import { GaveUp, withRetries } from '../../features/batch-import/retryPolicy';
 import {
   View,
   Text,
@@ -526,11 +527,11 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
     let savedItems: Item[] = [];
     if (ready.length > 0) {
       try {
-        const result = await createItemsBatch(ready.map((item) => toBatchCreateInput(
+        const result = await withRetries(() => createItemsBatch(ready.map((item) => toBatchCreateInput(
           item,
           imageUrls.get(item.tempId) ?? null,
           cutoutUrls.get(item.tempId) ?? null,
-        )));
+        ))));
         // Applied even if the session moved on: the rows exist either way.
         applySavedItems(queryClient, result.items);
         savedItems = result.items;
@@ -540,7 +541,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
         }
       } catch (err) {
         // 402s (credits, free cap) are already surfaced by the api interceptor.
-        const message = apiErrorMessage(err, "Couldn't add this piece.");
+        const message = err instanceof GaveUp ? err.message : apiErrorMessage(err, "Couldn't add this piece.");
         for (const item of ready) failures.set(item.tempId, message);
       }
     }

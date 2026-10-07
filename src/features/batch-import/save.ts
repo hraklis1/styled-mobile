@@ -5,7 +5,7 @@ import { applySavedItems, createItemsBatch, type BatchCreateItemInput } from '..
 import type { Item, ItemCategory } from '../../types/item';
 import { track } from '../../lib/analytics';
 import { batchDirectory, cropRegion, fileExists } from './files';
-import { classifyError, type RetryDecision } from './retryPolicy';
+import { GaveUp, withRetries } from './retryPolicy';
 import { batchImport } from './store';
 import { enqueuePolish } from '../polish-queue/runner';
 import type { Batch, Piece } from './types';
@@ -25,30 +25,6 @@ export function onBatchItemsSaved(listener: SavedListener): () => void {
   return () => savedListeners.delete(listener);
 }
 const FULL_BBOX = { x: 0, y: 0, width: 100, height: 100 };
-
-class GaveUp extends Error {
-  constructor(readonly decision: Exclude<RetryDecision, { kind: 'retry' }>) {
-    super(decision.message);
-  }
-}
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/** Run `fn`, retrying per the batch retry policy; throws GaveUp when it stops. */
-async function withRetries<T>(fn: () => Promise<T>): Promise<T> {
-  let attempts = 0;
-  for (;;) {
-    attempts += 1;
-    try {
-      return await fn();
-    } catch (error) {
-      const decision = classifyError(error, attempts);
-      if (decision.kind !== 'retry') throw new GaveUp(decision);
-      if (!decision.countsAttempt) attempts -= 1;
-      await sleep(decision.delayMs);
-    }
-  }
-}
 
 function stillCurrent(batchId: string): boolean {
   return batchImport.batch()?.id === batchId;
