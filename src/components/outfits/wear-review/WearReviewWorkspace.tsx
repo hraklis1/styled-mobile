@@ -8,7 +8,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { DetectionState } from '../../wardrobe/scan-review/LoadingStates';
 import { SlowScanHint } from '../../wardrobe/scan-review/SlowScanHint';
-import { PrimaryButton } from '../../wardrobe/scan-review/ActionBar';
+import { PrimaryButton, actionBarStyle } from '../../wardrobe/scan-review/ActionBar';
 import { OutlinePill, TextLink } from '../../wardrobe/scan-review/atoms';
 import { cropFeedback, selectionFeedback } from '../../wardrobe/scan-review/feedback';
 import { localISODay } from '../../../lib/dates';
@@ -418,14 +418,7 @@ const styles = StyleSheet.create({
   accessoryCopy: { flex: 1, gap: 4 },
   accessoryStrip: { flexDirection: 'row', gap: spacing.xs },
   separator: { height: stroke.hairline, backgroundColor: colors.hairline, marginLeft: spacing.lg },
-  bar: {
-    gap: spacing.xs,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    borderTopWidth: stroke.hairline,
-    borderTopColor: colors.hairline,
-    backgroundColor: colors.background,
-  },
+  bar: actionBarStyle,
   dateChip: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, paddingHorizontal: spacing.md, borderRadius: 16, borderWidth: stroke.fine, borderColor: colors.controlOutline },
   dateText: { ...typography.text.meta, color: colors.foreground },
   pressed: { opacity: 0.6 },

@@ -24,7 +24,7 @@ import { LocationAutocompleteInput } from '../primitives/LocationAutocompleteInp
 import { PhotoSourceSheet } from '../primitives/PhotoSourceSheet';
 import { colors, spacing, stroke, typography, radii } from '../../theme';
 import { PieceThumb } from '../wardrobe/scan-review/PieceThumb';
-import { PrimaryButton } from '../wardrobe/scan-review/ActionBar';
+import { PrimaryButton, actionBarStyle } from '../wardrobe/scan-review/ActionBar';
 import { OutlinePill } from '../wardrobe/scan-review/atoms';
 import { ClosetPicker } from './wear-review/ClosetMatchSheet';
 import type { Item } from '../../types/item';
@@ -741,15 +741,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.hairline,
   },
   headerIcon: { minWidth: 44, minHeight: 44, justifyContent: 'center' },
-  bar: {
-    gap: spacing.xs,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
-    borderTopWidth: stroke.hairline,
-    borderTopColor: colors.hairline,
-    backgroundColor: colors.background,
-  },
+  bar: { ...actionBarStyle, paddingBottom: spacing.sm },
   saveError: { ...typography.text.meta, color: colors.destructive, textAlign: 'center' },
 
   headerTitle: {

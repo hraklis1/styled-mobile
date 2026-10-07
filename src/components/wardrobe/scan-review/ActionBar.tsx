@@ -167,15 +167,18 @@ export function PrimaryButton({ label, icon, trailingIcon, onPress, disabled = f
   );
 }
 
+/** The bottom action bar's frame, shared by every review footer so they sit the same. */
+export const actionBarStyle = {
+  gap: spacing.xs,
+  paddingHorizontal: spacing.lg,
+  paddingTop: spacing.sm,
+  borderTopWidth: stroke.hairline,
+  borderTopColor: colors.hairline,
+  backgroundColor: colors.background,
+} as const;
+
 const styles = StyleSheet.create({
-  bar: {
-    gap: spacing.xs,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    borderTopWidth: stroke.hairline,
-    borderTopColor: colors.hairline,
-    backgroundColor: colors.background,
-  },
+  bar: actionBarStyle,
   primary: {
     minHeight: 56,
     flexDirection: 'row',
