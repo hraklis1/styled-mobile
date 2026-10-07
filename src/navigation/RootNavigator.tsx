@@ -502,10 +502,8 @@ function AppTabNavigator() {
                 : baseTabBarStyle,
           })}
           listeners={({ navigation }) => ({
-            tabPress: (event) => {
-              event.preventDefault();
-              openShopHome(navigation);
-            },
+            // No tabPress override: the default returns to Shop where it was
+            // left, and a second tap pops the stack and scrolls to the top.
             tabLongPress: () => {
               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               setQuickMenu({

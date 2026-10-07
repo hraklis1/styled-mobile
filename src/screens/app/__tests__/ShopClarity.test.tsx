@@ -7,7 +7,7 @@ import type { ShoppingBrief } from '../../../lib/shopDecisionWorkspace';
 
 jest.mock('react-native/Libraries/Components/Pressable/Pressable', () => { const React = jest.requireActual('react'); return { __esModule: true, default: function MockPressable({ children, ...props }: any) { return React.createElement('Pressable', props, typeof children === 'function' ? children({ pressed: false }) : children); } }; });
 
-jest.mock('@react-navigation/native', () => ({ createNavigationContainerRef: () => ({ isReady: () => false }), useIsFocused: () => true, usePreventRemove: jest.fn(), CommonActions: { reset: jest.fn(() => ({ type: 'RESET' })), navigate: jest.fn((params) => ({ type: 'NAVIGATE', payload: params })) }, useFocusEffect: (callback: () => void) => require('react').useEffect(callback, [callback]) }));
+jest.mock('@react-navigation/native', () => ({ createNavigationContainerRef: () => ({ isReady: () => false }), useIsFocused: () => true, usePreventRemove: jest.fn(), CommonActions: { reset: jest.fn(() => ({ type: 'RESET' })), navigate: jest.fn((params) => ({ type: 'NAVIGATE', payload: params })) }, useFocusEffect: (callback: () => void) => require('react').useEffect(callback, [callback]), useScrollToTop: jest.fn() }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 47, bottom: 34, left: 0, right: 0 }) }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }));
 jest.mock('react-native-reanimated', () => ({

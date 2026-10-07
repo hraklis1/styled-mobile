@@ -7,6 +7,7 @@ import { getItemCardAccessibilityLabel } from '../../lib/closet-presentation';
 import type { Item } from '../../types/item';
 import { PressableScale } from '../primitives/PressableScale';
 import { GarmentImage } from './garment-image';
+import { PolishingBadge } from './PolishingBadge';
 import { ItemSecondaryMeta } from './item-secondary-meta';
 
 type Props = {
@@ -65,6 +66,8 @@ function GarmentCardComponent({
             />
           </View>
         )}
+
+        {!selectionMode && <PolishingBadge itemId={item.id} />}
 
         {/* Favorite heart — top-right, hidden in selection mode */}
         {!selectionMode && item.isFavorite && (

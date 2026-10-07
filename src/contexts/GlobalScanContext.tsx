@@ -65,6 +65,7 @@ export function GlobalScanProvider({ children }: Props) {
 
   // The scan closes the moment its pieces land; this is the arrival note.
   const [added, setAdded] = useState<number | null>(null);
+  const polishing = usePolishQueueStore((s) => s.jobs.filter((job) => job.status === 'pending' || job.status === 'running').length);
   useEffect(() => {
     if (added === null) return;
     const timer = setTimeout(() => setAdded(null), 4500);
@@ -199,12 +200,15 @@ export function GlobalScanProvider({ children }: Props) {
         />
       )}
       <BatchImportTray />
-      <PolishQueueTray />
+      {/* The "added" toast owns that spot while it shows, and carries the polish count itself. */}
+      <PolishQueueTray hidden={added !== null} />
       <ScanDraftTray hidden={scanVisible} onResume={resumeScanDraft} />
       <BatchImportWorkspace />
       {added !== null ? (
         <UndoToast
-          message={added === 1 ? '1 piece added to your closet' : `${added} pieces added to your closet`}
+          message={polishing > 0
+            ? `${added === 1 ? '1 piece' : `${added} pieces`} added · polishing ${polishing}`
+            : added === 1 ? '1 piece added to your closet' : `${added} pieces added to your closet`}
           actionLabel="View"
           onUndo={viewCloset}
           bottom={insets.bottom + 96}

@@ -3,7 +3,8 @@ jest.mock('react-native-mmkv', () => ({
 }));
 jest.mock('@react-native-community/netinfo', () => ({ addEventListener: jest.fn(() => jest.fn()) }));
 jest.mock('../../../lib/analytics', () => ({ track: jest.fn() }));
-jest.mock('../../../lib/queryClient', () => ({ queryClient: {} }));
+jest.mock('../../../lib/queryClient', () => ({ queryClient: { invalidateQueries: jest.fn() } }));
+jest.mock('../../../hooks/useProfile', () => ({ PROFILE_QUERY_KEY: ['profile'] }));
 jest.mock('../../../hooks/useItems', () => ({ requestPolish: jest.fn(), applyPolishedItem: jest.fn() }));
 
 import { applyPolishedItem, requestPolish } from '../../../hooks/useItems';

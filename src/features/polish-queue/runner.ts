@@ -2,6 +2,7 @@ import { AppState, type AppStateStatus } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { applyPolishedItem, requestPolish } from '../../hooks/useItems';
 import { queryClient } from '../../lib/queryClient';
+import { PROFILE_QUERY_KEY } from '../../hooks/useProfile';
 import { track } from '../../lib/analytics';
 import { classifyError } from '../batch-import/retryPolicy';
 import { polishQueue, usePolishQueueStore, type PolishJob } from './store';
@@ -29,6 +30,8 @@ async function runJob(job: PolishJob) {
   try {
     const { item } = await requestPolish(job.itemId, job.idempotencyKey);
     applyPolishedItem(queryClient, item);
+    // The charge landed server-side; the balance shown in the app follows it.
+    void queryClient.invalidateQueries({ queryKey: PROFILE_QUERY_KEY });
     polishQueue.get().patch(job.itemId, { status: 'done', error: null });
     track('item_polish_completed', { source: 'import' });
   } catch (error) {

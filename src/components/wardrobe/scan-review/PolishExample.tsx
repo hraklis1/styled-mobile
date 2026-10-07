@@ -2,9 +2,10 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 
 import { colors, radii, spacing, typography } from '../../../theme';
+import type { PolishExampleSource } from './usePolishChoice';
 
-/** One of the user's own pieces, as photographed and as polished, side by side. */
-export function PolishExample({ example }: { example: { name: string; before: string; after: string } }) {
+/** A piece as photographed and as polished, side by side: the user's own when they have one. */
+export function PolishExample({ example }: { example: PolishExampleSource }) {
   return (
     <View style={styles.body}>
       <View style={styles.pair}>
@@ -12,17 +13,17 @@ export function PolishExample({ example }: { example: { name: string; before: st
         <Panel uri={example.after} label="Polished" />
       </View>
       <Text style={styles.caption}>
-        {`${example.name}, from your closet. Polish redraws a piece as a clean catalog shot; your original photo is always kept.`}
+        {`${example.name ? `${example.name}, from your closet. ` : ''}Polish redraws a piece as a clean catalog shot; your original photo is always kept.`}
       </Text>
     </View>
   );
 }
 
-function Panel({ uri, label }: { uri: string; label: string }) {
+function Panel({ uri, label }: { uri: PolishExampleSource['before']; label: string }) {
   return (
     <View style={styles.panel}>
       <View style={styles.frame}>
-        <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory-disk" accessibilityLabel={label} />
+        <Image source={typeof uri === 'string' ? { uri } : uri} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory-disk" accessibilityLabel={label} />
       </View>
       <Text style={styles.label}>{label}</Text>
     </View>

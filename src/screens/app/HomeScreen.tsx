@@ -51,7 +51,7 @@ import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { useGlobalAddSheet } from '../../contexts/GlobalAddSheetContext';
 import { useGlobalScan } from '../../contexts/GlobalScanContext';
 import { useFabScroll } from '../../contexts/FabScrollContext';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import { useStylingWeatherToday } from '../../hooks/useWeather';
 import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
 import { useProfile } from '../../hooks/useProfile';
@@ -352,6 +352,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   // shortcut coach (which opens over Home on first run) to be settled, so the
   // two never stack; checking on focus means it lands on the next visit.
   const actionRowRef = useRef<HomeActionRowHandle>(null);
+  // Re-tapping the Home tab scrolls back to the top.
+  const scrollRef = useRef<ScrollView>(null);
+  useScrollToTop(scrollRef);
   const [tour, setTour] = useState<{ step: number; rect: { x: number; y: number; width: number; height: number } } | null>(null);
   const homeSheetOpenRef = useRef(false);
   useEffect(() => {
@@ -838,6 +841,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   return (
     <View style={styles.screenRoot}>
     <Animated.ScrollView
+      ref={scrollRef}
       style={styles.root}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}
       showsVerticalScrollIndicator={false}

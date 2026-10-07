@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Keyboard, Pressable, RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Ionicons } from '@expo/vector-icons';
@@ -41,6 +41,9 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
   const [view, setView] = useState<ShopView>(route.params?.view ?? (requestedSection === 'shortlist' ? 'shortlist' : 'for-you'));
   const [shortlistMounted, setShortlistMounted] = useState(view === 'shortlist');
   const [compact, setCompact] = useState(false);
+  // Re-tapping the Shop tab scrolls back to the top.
+  const scrollRef = useRef<ScrollView>(null);
+  useScrollToTop(scrollRef);
   const headerModes = useRef<Record<ShopView, boolean>>({ 'for-you': false, shortlist: false });
   const updateHeader = useCallback((offset: number, pane: ShopView) => {
     const current = headerModes.current[pane];
@@ -174,6 +177,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
       </ScrollView>
       <View style={[styles.pane, view !== 'for-you' && styles.hidden]} accessibilityElementsHidden={view !== 'for-you'} importantForAccessibility={view !== 'for-you' ? 'no-hide-descendants' : 'auto'}>
         <ScrollView
+          ref={scrollRef}
           contentInsetAdjustmentBehavior="never"
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} tintColor={colors.primary} />}

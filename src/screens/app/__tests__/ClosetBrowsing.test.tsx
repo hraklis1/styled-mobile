@@ -9,7 +9,7 @@ let mockAccount = 'account-a';
 jest.mock('../../../contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: mockAccount } }) }));
 jest.mock('../../../hooks/useClosetSearchHistory', () => ({ useClosetSearchHistory: () => ({ recent: mockRecent, record: mockRecord, clear: jest.fn() }) }));
 jest.mock('../../../lib/resolveImageUri', () => ({ resolveImageUri: (uri: string) => uri }));
-jest.mock('@react-navigation/native', () => ({ useFocusEffect: (callback: () => void) => require('react').useEffect(callback, [callback]) }));
+jest.mock('@react-navigation/native', () => ({ useFocusEffect: (callback: () => void) => require('react').useEffect(callback, [callback]), useScrollToTop: jest.fn() }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 47, bottom: 34 }) }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }));
 jest.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));
@@ -46,6 +46,7 @@ jest.mock('../../../components/primitives/GarmentCardSkeleton', () => ({ Garment
 jest.mock('../../../components/primitives/SkeletonLoader', () => ({ SkeletonBlock: 'SkeletonBlock' }));
 jest.mock('../../../components/primitives/ErrorState', () => ({ ErrorState: 'ErrorState' }));
 jest.mock('../../../components/wardrobe/garment-image', () => ({ GarmentImage: 'GarmentImage' }));
+jest.mock('../../../components/wardrobe/PolishingBadge', () => ({ PolishingBadge: () => null }));
 jest.mock('../../../components/wardrobe/item-secondary-meta', () => ({ ItemSecondaryMeta: 'ItemSecondaryMeta' }));
 
 const mockItems = [

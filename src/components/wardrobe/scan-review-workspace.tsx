@@ -524,7 +524,7 @@ export function ScanReviewWorkspace({
                   balance: polish.balance,
                   locked: !polish.isPremium,
                   onToggle: next => { void polish.setAll(next); },
-                  onExample: polish.example ? () => openSheet({ kind: 'polish-example', target: [] }) : undefined,
+                  onExample: () => openSheet({ kind: 'polish-example', target: [] }),
                 } : undefined,
               };
 
@@ -739,7 +739,7 @@ export function ScanReviewWorkspace({
               setBrandOffer(rest.length ? { brand: brand.trim(), ids: rest } : null);
               dismissSheet();
             }} />
-        ) : sheet?.kind === 'polish-example' && polish.example ? (
+        ) : sheet?.kind === 'polish-example' ? (
           <WorkspaceSheet title="What Polish does" reduceMotion={reduceMotion} dismissed={sheetDismissed} onClose={closeSheet}>
             <PolishExample example={polish.example} />
           </WorkspaceSheet>

@@ -17,7 +17,7 @@ const DONE_DISMISS_MS = 4_000;
  * Polishes queued from add-to-closet, running after the pieces have landed.
  * Yields to the batch tray, which owns the same spot while a batch is open.
  */
-export function PolishQueueTray() {
+export function PolishQueueTray({ hidden = false }: { hidden?: boolean }) {
   const insets = useSafeAreaInsets();
   const reduceMotion = useReducedMotion();
   const jobs = usePolishQueueStore((s) => s.jobs);
@@ -32,7 +32,7 @@ export function PolishQueueTray() {
     return () => clearTimeout(timer);
   }, [finished]);
 
-  if (summary.total === 0 || batchShowing) return null;
+  if (summary.total === 0 || batchShowing || hidden) return null;
 
   const store = usePolishQueueStore.getState;
   let title: string;

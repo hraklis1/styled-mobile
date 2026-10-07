@@ -46,7 +46,7 @@ import { useGlobalScan } from '../../contexts/GlobalScanContext';
 import { useGlobalAddSheet } from '../../contexts/GlobalAddSheetContext';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { useFabScroll } from '../../contexts/FabScrollContext';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import { PressableScale } from '../../components/primitives/PressableScale';
 import { SearchField } from '../../components/primitives/SearchField';
 import { GarmentCardSkeleton } from '../../components/primitives/GarmentCardSkeleton';
@@ -56,6 +56,7 @@ import type { ClosetScreenProps } from '../../navigation/types';
 import { useLibraryLaunch } from '../../hooks/useCameraLaunch';
 import type { Board } from '../../types/board';
 import { GarmentImage } from '../../components/wardrobe/garment-image';
+import { PolishingBadge } from '../../components/wardrobe/PolishingBadge';
 import {
   getItemCardAccessibilityLabel,
   hasActivePieceFilters,
@@ -302,6 +303,13 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     ? (piecesViewMode !== 'list' ? piecesGridRef.current : piecesListRef.current)
     : segment === 'outfits' ? outfitListRef.current : boardListRef.current,
   [segment, piecesViewMode]);
+  // Re-tapping the Closet tab scrolls whichever segment is showing back to the top.
+  const getActiveListRef = useRef(getActiveList);
+  getActiveListRef.current = getActiveList;
+  const scrollToTopTarget = useRef({
+    scrollToTop: () => getActiveListRef.current()?.scrollToOffset({ offset: 0, animated: true }),
+  });
+  useScrollToTop(scrollToTopTarget);
   const activeItems = segment === 'pieces' ? filteredItems : segment === 'outfits' ? filteredOutfits : sortedBoards;
   const columns = segment === 'pieces' ? (piecesViewMode === 'list' ? 1 : piecesViewMode === 'grid3' ? 3 : 2) : segment === 'outfits' ? (outfitViewMode === 'list' ? 1 : outfitViewMode === 'grid3' ? 3 : 2) : 2;
 
@@ -749,13 +757,16 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
               />
             </View>
           )}
-          <GarmentImage
-            item={item}
-            width={64}
-            height={64}
-            borderRadius={radii.md}
-            placeholderIconSize={20}
-          />
+          <View>
+            <GarmentImage
+              item={item}
+              width={64}
+              height={64}
+              borderRadius={radii.md}
+              placeholderIconSize={20}
+            />
+            {!selectionMode && <PolishingBadge itemId={item.id} size="thumb" />}
+          </View>
           <View key={fontScale} style={styles.itemRowInfo}>
             <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
             <ItemSecondaryMeta item={item} />

@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import type { ImageSourcePropType } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { ITEMS_QUERY_KEY } from '../../../hooks/useItems';
 import { resolveImageUri } from '../../../lib/resolveImageUri';
@@ -9,6 +10,20 @@ import { ensureEntitled } from '../../../lib/entitlementGate';
 import { track } from '../../../lib/analytics';
 
 export type PolishChoice = ReturnType<typeof usePolishChoice>;
+
+export type PolishExampleSource = {
+  before: ImageSourcePropType | string;
+  after: ImageSourcePropType | string;
+  /** The user's own piece, or null for the bundled sample. */
+  name: string | null;
+};
+
+/** Shown until the user has polished something of their own. */
+const BUNDLED_EXAMPLE: PolishExampleSource = {
+  before: require('../../../../assets/polish-example/before.jpg'),
+  after: require('../../../../assets/polish-example/after.jpg'),
+  name: null,
+};
 
 /**
  * Whether the pieces being added get a polished cover once they're saved.
@@ -48,12 +63,12 @@ export function usePolishChoice() {
 
   // A before/after from the user's own closet: the most convincing sample there is.
   const queryClient = useQueryClient();
-  const example = useMemo(() => {
+  const example = useMemo((): PolishExampleSource => {
     const items = queryClient.getQueryData<Item[]>(ITEMS_QUERY_KEY) ?? [];
     const item = items.find((candidate) => candidate.polishedUrl && candidate.imageUrl);
     const before = resolveImageUri(item?.imageUrl);
     const after = resolveImageUri(item?.polishedUrl);
-    return item && before && after ? { name: item.name, before, after } : null;
+    return item && before && after ? { name: item.name, before, after } : BUNDLED_EXAMPLE;
   }, [queryClient]);
 
   const costPerPiece = costOf('polish');

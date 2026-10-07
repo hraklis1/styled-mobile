@@ -6,6 +6,7 @@ import {
   StyleSheet,
   RefreshControl,
 } from 'react-native';
+import { useScrollToTop } from '@react-navigation/native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useReducedMotion } from 'react-native-reanimated';
@@ -156,6 +157,8 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   // Keep the masthead in the data so the sticky calendar has a real item
   // offset. FlashList can pin item zero early when using ListHeaderComponent.
   const flashListRef = useRef<FlashListRef<CalendarTimelineItem>>(null);
+  // Re-tapping the Calendar tab scrolls back to the top.
+  useScrollToTop(flashListRef);
   const [listHeaderHeight, setListHeaderHeight] = useState(0);
   const [weekStripHeight, setWeekStripHeight] = useState(0);
   const [isStripStuck, setIsStripStuck] = useState(false);
