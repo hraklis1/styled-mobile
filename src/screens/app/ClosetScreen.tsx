@@ -571,7 +571,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
 
   // Sections follow the active sort (letters, months, wear bands…) so each jump starts a run.
   const scrubberEntries = useMemo(() => (
-    piecesViewMode === 'list' && filteredItems.length >= 100 ? buildScrubberEntries(filteredItems, sortKey) : []
+    piecesViewMode === 'list' && filteredItems.length >= 90 ? buildScrubberEntries(filteredItems, sortKey) : []
   ), [filteredItems, piecesViewMode, sortKey]);
   const jumpToPiece = useCallback((index: number) => {
     piecesListRef.current?.scrollToIndex({ index, animated: false, viewOffset: headerHeight - collapseDistance });
