@@ -14,7 +14,12 @@ jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }));
 jest.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));
 jest.mock('react-native-reanimated', () => ({ __esModule: true, default: { View: 'AnimatedView' }, FadeIn: { duration: () => ({ reduceMotion: () => undefined }) }, FadeOut: { duration: () => ({ reduceMotion: () => undefined }) }, ReduceMotion: { System: 'system' }, useSharedValue: (value: number) => require('react').useRef({ value }).current, useAnimatedScrollHandler: () => jest.fn() }));
-jest.mock('../../../lib/closet-preferences', () => ({ loadPiecesViewMode: () => new Promise(() => {}), savePiecesViewMode: jest.fn() }));
+jest.mock('../../../lib/closet-preferences', () => ({ gridColumns: (mode: string) => mode === 'list' ? 1 : mode === 'grid3' ? 3 : mode === 'grid4' ? 4 : 2, pinchViewMode: (mode: string) => mode, loadPiecesViewMode: () => new Promise(() => {}), savePiecesViewMode: jest.fn() }));
+jest.mock('react-native-gesture-handler', () => {
+  const chain: any = new Proxy({}, { get: () => () => chain });
+  return { Gesture: { Pinch: () => chain }, GestureDetector: ({ children }: any) => children };
+});
+jest.mock('../../../components/wardrobe/ClosetRails', () => ({ ClosetRails: () => null }));
 jest.mock('../../../components/wardrobe/closet-header', () => ({ ClosetHeader: (props: any) => require('react').createElement('ClosetHeader', props, props.children, props.overflowAction) }));
 jest.mock('../../../features/closet-selection/SelectionActionBar', () => ({ SelectionActionBar: 'SelectionActionBar', selectionBarClearance: () => 0 }));
 jest.mock('../../../components/wardrobe/closet-navigation', () => ({ ClosetNavigation: 'ClosetNavigation' }));

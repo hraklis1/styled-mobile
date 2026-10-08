@@ -39,6 +39,9 @@ import { OutfitBuilderSheet } from '../../components/outfits/OutfitBuilderSheet'
 import { FilterPanel } from '../../components/wardrobe/FilterPanel';
 import { OutfitFilterPanel } from '../../components/outfits/OutfitFilterPanel';
 import { ClosetGrid } from '../../components/wardrobe/ClosetGrid';
+import { ClosetRails, type ClosetRail } from '../../components/wardrobe/ClosetRails';
+import { ListScrubber, buildScrubberEntries, nameInitial } from '../../components/wardrobe/ListScrubber';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { BoardCard } from '../../components/boards/BoardCard';
 import { BoardOptionsMenuSheet } from '../../components/boards/BoardOptionsMenuSheet';
 import { BoardNameSheet } from '../../components/boards/BoardNameSheet';
@@ -73,6 +76,8 @@ import {
 import { shouldShowBoardSearch } from '../../lib/boardPresentation';
 import {
   loadPiecesViewMode,
+  gridColumns,
+  pinchViewMode,
   savePiecesViewMode,
   type PiecesViewMode,
 } from '../../lib/closet-preferences';
@@ -212,6 +217,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const piecesViewTouched = useRef(false);
   const piecesGridRef = useRef<FlashListRef<Item>>(null);
   const piecesListRef = useRef<FlashListRef<Item>>(null);
+  const piecesRailsRef = useRef<FlashListRef<ClosetRail>>(null);
   const outfitListRef = useRef<FlashListRef<(typeof outfits)[number]>>(null);
   const boardListRef = useRef<FlashListRef<Board>>(null);
 
@@ -308,7 +314,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const restorationGeneration = useRef(0);
   const resettingResults = useRef(false);
   const getActiveList = useCallback(() => segment === 'pieces'
-    ? (piecesViewMode !== 'list' ? piecesGridRef.current : piecesListRef.current)
+    ? (piecesViewMode === 'rails' ? piecesRailsRef.current as unknown as FlashListRef<Item> | null : piecesViewMode !== 'list' ? piecesGridRef.current : piecesListRef.current)
     : segment === 'outfits' ? outfitListRef.current : boardListRef.current,
   [segment, piecesViewMode]);
   // Re-tapping the Closet tab scrolls whichever segment is showing back to the top.
@@ -338,11 +344,13 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   }, []);
 
   const activeItems = segment === 'pieces' ? filteredItems : segment === 'outfits' ? filteredOutfits : sortedBoards;
-  const columns = segment === 'pieces' ? (piecesViewMode === 'list' ? 1 : piecesViewMode === 'grid3' ? 3 : 2) : segment === 'outfits' ? (outfitViewMode === 'list' ? 1 : outfitViewMode === 'grid3' ? 3 : 2) : 2;
+  // Rails hold shelves, not pieces: item anchors don't apply, so they restore to the top.
+  const anchorable = !(segment === 'pieces' && piecesViewMode === 'rails');
+  const columns = segment === 'pieces' ? gridColumns(piecesViewMode) : segment === 'outfits' ? (outfitViewMode === 'list' ? 1 : outfitViewMode === 'grid3' ? 3 : 2) : 2;
 
   const capturePosition = useCallback(() => {
     const list = getActiveList();
-    if (!list || resettingResults.current || restoring.current || !activeItems.length) return;
+    if (!list || !anchorable || resettingResults.current || restoring.current || !activeItems.length) return;
     const y = Math.max(0, list.getAbsoluteLastScrollOffset());
     const visibleTop = y + headerHeight - Math.min(y, collapseDistance);
     let index = Math.min(activeItems.length - 1, Math.max(0, list.getFirstVisibleIndex()));
@@ -358,12 +366,12 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
       id: activeItems[index].id, index, scrollY: y, columns,
       offset: layout ? layout.y + list.getFirstItemOffset() - visibleTop : 0,
     };
-  }, [activeItems, collapseDistance, columns, getActiveList, headerHeight, segment]);
+  }, [activeItems, anchorable, collapseDistance, columns, getActiveList, headerHeight, segment]);
 
   const restorePosition = useCallback(async () => {
     const list = getActiveList();
     if (!list) return;
-    const anchor = resolveClosetAnchor(activeItems, anchors.current[segment], columns);
+    const anchor = anchorable ? resolveClosetAnchor(activeItems, anchors.current[segment], columns) : null;
     restoring.current = true;
     const generation = ++restorationGeneration.current;
     try {
@@ -378,7 +386,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         if (generation === restorationGeneration.current) scrollY.value = Math.max(0, list.getAbsoluteLastScrollOffset());
       }
     } finally { if (generation === restorationGeneration.current) restoring.current = false; }
-  }, [activeItems, collapseDistance, columns, getActiveList, headerHeight, scrollY, segment]);
+  }, [activeItems, anchorable, collapseDistance, columns, getActiveList, headerHeight, scrollY, segment]);
 
   // Like iOS large titles, the header rests fully expanded or fully collapsed so
   // every segment shares the same title position.
@@ -538,6 +546,37 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     setPiecesViewMode(next);
     void savePiecesViewMode(next);
   }, [piecesViewMode, capturePosition]);
+
+  // Photos-style density: pinch in for more per row, out for fewer. The menu stays the fallback.
+  const handlePiecesPinch = useCallback((direction: 'in' | 'out') => {
+    const next = pinchViewMode(piecesViewMode, direction);
+    if (next === piecesViewMode) return;
+    void Haptics.selectionAsync();
+    handlePiecesViewModeChange(next);
+  }, [handlePiecesViewModeChange, piecesViewMode]);
+  const piecesPinch = useMemo(() => Gesture.Pinch()
+    .enabled(piecesViewMode !== 'rails' && !selectionMode)
+    .onEnd(event => {
+      if (event.scale < 0.85) runOnJS(handlePiecesPinch)('in');
+      else if (event.scale > 1.18) runOnJS(handlePiecesPinch)('out');
+    }), [handlePiecesPinch, piecesViewMode, selectionMode]);
+
+  // A shelf's "See all" opens that category as a grid without changing the saved view.
+  const handleRailSeeAll = useCallback((category: ItemCategory) => {
+    capturePosition();
+    applySelectedCategories([category]);
+    setPiecesViewMode('grid');
+  }, [applySelectedCategories, capturePosition]);
+
+  const nameSorted = sortKey === 'name_asc' || sortKey === 'name_desc';
+  const scrubberEntries = useMemo(() => (
+    piecesViewMode === 'list' && filteredItems.length >= 100
+      ? buildScrubberEntries(filteredItems, item => nameSorted ? nameInitial(item.name) : (item.category ? CATEGORY_LABELS[item.category] : 'Other'))
+      : []
+  ), [filteredItems, nameSorted, piecesViewMode]);
+  const jumpToPiece = useCallback((index: number) => {
+    piecesListRef.current?.scrollToIndex({ index, animated: false, viewOffset: headerHeight - collapseDistance });
+  }, [collapseDistance, headerHeight]);
 
   // ── Subtitle ───────────────────────────────────────────────────────────────
 
@@ -993,12 +1032,13 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     if (outfitShowFavorites) filterTokens.push({ key: 'favorites', label: 'Favourites', remove: () => setOutfitShowFavorites(false) });
   }
   const browseHeader = (
-    <View style={[styles.browseHeader, (segment === 'pieces' ? piecesViewMode !== 'list' : segment === 'outfits' ? outfitViewMode !== 'list' : false) && { paddingHorizontal: COL_GAP / 2 }]}>
+    <View style={[styles.browseHeader, (segment === 'pieces' ? piecesViewMode !== 'list' && piecesViewMode !== 'rails' : segment === 'outfits' ? outfitViewMode !== 'list' : false) && { paddingHorizontal: COL_GAP / 2 }, segment === 'pieces' && piecesViewMode === 'rails' && { paddingHorizontal: SIDE_PAD }]}>
           {/* Category pills — pieces only */}
           {hasCategoryPills && (
             <View style={styles.pillRow}>
             <FadedPillScroll key={`${fontScale}-${categoryScrollReset}`}>
               <PressableScale
+                hitSlop={{ top: 6, bottom: 6 }}
                 contentStyle={[styles.pill, selectedCategories.length === 0 && styles.pillActive]}
                 onPress={() => applySelectedCategories([])}
                 accessibilityRole="checkbox"
@@ -1006,7 +1046,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
                 accessibilityState={{ checked: selectedCategories.length === 0 }}
               >
                 <Text style={[styles.pillLabel, selectedCategories.length === 0 && styles.pillLabelActive]}>
-                  All
+                  All{selectedCategories.length === 0 && <Text style={styles.pillCount}>  {filteredItems.length}</Text>}
                 </Text>
               </PressableScale>
               {availableCategories.map(cat => {
@@ -1014,7 +1054,8 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
                 return (
                   <PressableScale
                     key={cat}
-                    contentStyle={[styles.pill, active && styles.pillActive]}
+                    hitSlop={{ top: 6, bottom: 6 }}
+                contentStyle={[styles.pill, active && styles.pillActive]}
                     onPress={() => handleCategoryPress(cat)}
                     accessibilityRole="checkbox"
                     accessibilityLabel={CATEGORY_LABELS[cat]}
@@ -1022,6 +1063,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
                   >
                     <Text style={[styles.pillLabel, active && styles.pillLabelActive]}>
                       {CATEGORY_LABELS[cat]}
+                      {active && <Text style={styles.pillCount}>  {filteredItems.filter(item => item.category === cat).length}</Text>}
                     </Text>
                   </PressableScale>
                 );
@@ -1061,15 +1103,34 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             <ErrorState message="Couldn't load your closet" onRetry={refetchItems} />
           </View>
         ) : segment === 'pieces' ? (
+          <GestureDetector gesture={piecesPinch}>
           <View
             // FlashList needs a new layout instance when changing column count.
             key={`pieces-${piecesViewMode}`}
             style={styles.piecesListStage}
           >
-          {piecesViewMode !== 'list' ? (
+          {piecesViewMode === 'rails' ? (
+            <ClosetRails
+              ref={piecesRailsRef}
+              items={filteredItems}
+              selectedIds={selectedIds}
+              selectionMode={selectionMode}
+              onItemPress={handleItemPress}
+              onItemLongPress={handleLongPress}
+              onToggleSelect={toggleSelect}
+              onSeeAll={handleRailSeeAll}
+              ListEmptyComponent={itemsLoading ? null : emptyPieces}
+              onScroll={handleScroll}
+              onScrollBeginDrag={() => { Keyboard.dismiss(); }}
+              listPaddingTop={listPaddingTop}
+              listPaddingBottom={listPaddingBottom}
+              onLoad={() => { void restorePosition(); }}
+              ListHeaderComponent={browseHeader}
+            />
+          ) : piecesViewMode !== 'list' ? (
             <ClosetGrid
               ref={piecesGridRef}
-              numColumns={piecesViewMode === 'grid3' ? 3 : 2}
+              numColumns={gridColumns(piecesViewMode) as 2 | 3 | 4}
               items={filteredItems}
               selectedIds={selectedIds}
               selectionMode={selectionMode}
@@ -1106,7 +1167,13 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             />
           )
           }
+          {scrubberEntries.length > 0 && !selectionMode && (
+            <View style={[StyleSheet.absoluteFill, { top: listPaddingTop - collapseDistance }]} pointerEvents="box-none">
+              <ListScrubber entries={scrubberEntries} onJump={jumpToPiece} compactLabels={!nameSorted} />
+            </View>
+          )}
           </View>
+          </GestureDetector>
         ) : segment === 'outfits' ? (
           <View key={`outfits-${outfitViewMode}`} style={styles.piecesListStage}>
           <AnimatedClosetList
@@ -1183,7 +1250,8 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
           summary={subtitle}
           actionLabel={segment === 'pieces' ? 'Add' : segment === 'boards' ? 'New board' : 'Create outfit'}
           onAction={handlePrimaryAction}
-          overflowAction={segment !== 'boards' ? <ClosetViewMenu key={segment} value={segment === 'pieces' ? piecesViewMode : outfitViewMode} label={segment} selectionDisabled={resultCount === 0}
+          overflowAction={segment !== 'boards' ? <ClosetViewMenu key={segment} value={segment === 'pieces' ? piecesViewMode : outfitViewMode} label={segment}
+            modes={segment === 'pieces' ? ['grid', 'grid3', 'grid4', 'rails', 'list'] : undefined} selectionDisabled={resultCount === 0}
             onChange={next => { if (segment === 'pieces') handlePiecesViewModeChange(next); else { capturePosition(); setOutfitViewMode(next); } }}
             onSelect={() => { if (segment === 'pieces') enterPieceSelection(); else enterOutfitSelection(); }} /> : undefined}
           selection={selectionMode ? {
@@ -1505,17 +1573,21 @@ const styles = StyleSheet.create({
   },
   pillFadeLeft: { left: 0 },
   pillFadeRight: { right: 0 },
+  // Quiet text chips: the selected one is a small ink lozenge, the rest are plain words.
   pill: {
-    minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radii.full,
+    height: 32, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, borderRadius: radii.full,
   },
   pillActive: {
-    backgroundColor: colors.surfaceSelected, borderColor: colors.inkSubtle,
+    backgroundColor: colors.foreground,
   },
   pillLabel: {
     ...typography.text.bodySmall, color: colors.mutedForeground,
   },
   pillLabelActive: {
-    color: colors.foreground,
+    color: colors.background,
+  },
+  pillCount: {
+    color: colors.background, opacity: 0.6,
   },
 
   browseHeader: { paddingTop: spacing.sm, paddingBottom: 0 },

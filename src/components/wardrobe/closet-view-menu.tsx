@@ -4,20 +4,27 @@ import { Ionicons } from '@expo/vector-icons';
 import type { PiecesViewMode } from '../../lib/closet-preferences';
 import { colors } from '../../theme';
 
-export function ClosetViewMenu({ value, onChange, onSelect, selectionDisabled, label }: {
+const VIEW_TITLES: Record<PiecesViewMode, string> = {
+  grid: 'Grid · 2 per row',
+  grid3: 'Grid · 3 per row',
+  grid4: 'Grid · 4 per row',
+  rails: 'By category',
+  list: 'List',
+};
+
+export function ClosetViewMenu({ value, onChange, onSelect, selectionDisabled, label, modes = ['grid', 'grid3', 'list'] }: {
   value: PiecesViewMode; onChange: (value: PiecesViewMode) => void;
   onSelect: () => void; selectionDisabled: boolean; label: 'pieces' | 'outfits';
+  modes?: PiecesViewMode[];
 }) {
   return (
     <MenuView
       actions={[
-        { id: 'grid', title: 'Grid · 2 per row', state: value === 'grid' ? 'on' : 'off' },
-        { id: 'grid3', title: 'Grid · 3 per row', state: value === 'grid3' ? 'on' : 'off' },
-        { id: 'list', title: 'List', state: value === 'list' ? 'on' : 'off' },
+        ...modes.map(id => ({ id, title: VIEW_TITLES[id], state: value === id ? 'on' as const : 'off' as const })),
         { id: 'select', title: `Select ${label}`, attributes: { disabled: selectionDisabled } },
       ]}
       onPressAction={({ nativeEvent: { event } }) => {
-        if (event === 'grid' || event === 'grid3' || event === 'list') onChange(event);
+        if ((modes as string[]).includes(event)) onChange(event as PiecesViewMode);
         else if (event === 'select' && !selectionDisabled) onSelect();
       }}
     >

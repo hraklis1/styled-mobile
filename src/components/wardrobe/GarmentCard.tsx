@@ -8,7 +8,7 @@ import type { Item } from '../../types/item';
 import { PressableScale } from '../primitives/PressableScale';
 import { GarmentImage } from './garment-image';
 import { PolishingBadge } from './PolishingBadge';
-import { ItemSecondaryMeta } from './item-secondary-meta';
+import { CATEGORY_LABELS } from '../../types/item';
 import { SelectionCheck } from '../../features/closet-selection/SelectionCheck';
 
 type Props = {
@@ -24,6 +24,8 @@ type Props = {
   onToggleSelect?: () => void;
   /** Board Detail can own the outer grid rhythm without changing Closet cards. */
   bottomSpacing?: number;
+  /** Image-only tile for dense grids; the name lives in the accessibility label. */
+  compact?: boolean;
 };
 
 function GarmentCardComponent({
@@ -37,6 +39,7 @@ function GarmentCardComponent({
   dimmed = false,
   onToggleSelect,
   bottomSpacing = spacing.gridRow,
+  compact = false,
 }: Props) {
   const imageHeight = cardWidth / aspectRatio;
   const handlePress = selectionMode ? onToggleSelect : onPress;
@@ -95,15 +98,17 @@ function GarmentCardComponent({
         {selectionMode && <SelectionCheck selected={isSelected} onPhoto style={styles.selectionBadge} />}
       </View>
 
-      <View style={[styles.info, dimNow && styles.infoDimmed]}>
-        <Text style={styles.name} numberOfLines={2}>
-          {item.name || 'Unnamed Item'}
-        </Text>
-        {/* Kept in layout so the grid doesn't reflow on entering select mode. */}
-        <View style={selectionMode ? styles.metaHidden : undefined}>
-          <ItemSecondaryMeta item={item} />
+      {!compact && (
+        <View style={[styles.info, dimNow && styles.infoDimmed]}>
+          {/* Maker first, like a shop tag; category stands in when there's no brand. */}
+          <Text style={styles.eyebrow} numberOfLines={1}>
+            {item.brand?.trim() || (item.category ? CATEGORY_LABELS[item.category] : ' ')}
+          </Text>
+          <Text style={styles.name} numberOfLines={1}>
+            {item.name || 'Unnamed Item'}
+          </Text>
         </View>
-      </View>
+      )}
     </PressableScale>
   );
 }
@@ -133,7 +138,6 @@ const styles = StyleSheet.create({
     right: spacing.sm,
   },
   infoDimmed: { opacity: 0.6 },
-  metaHidden: { opacity: 0 },
   favBadge: {
     position: 'absolute',
     top: spacing.sm,
@@ -162,9 +166,12 @@ const styles = StyleSheet.create({
     borderColor: colors.white,
   },
   info: {
-    paddingTop: 10, paddingHorizontal: 0, gap: spacing.xs, minHeight: 64,
+    paddingTop: 10, gap: 2,
+  },
+  eyebrow: {
+    ...typography.text.eyebrow, fontSize: 10, letterSpacing: 1, color: colors.mutedForeground,
   },
   name: {
-    ...typography.text.productName, color: colors.foreground, minHeight: 36,
+    ...typography.text.productName, color: colors.foreground,
   },
 });
