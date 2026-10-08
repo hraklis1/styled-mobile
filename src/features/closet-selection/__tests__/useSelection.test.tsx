@@ -9,16 +9,18 @@ jest.mock('../../../lib/haptics', () => ({
 
 type Entry = { id: number };
 let current: Selection<Entry>;
-function Harness({ visible }: { visible: Entry[] }) {
-  current = useSelection(visible);
+function Harness({ visible, onRender }: { visible: Entry[]; onRender: (selection: Selection<Entry>) => void }) {
+  onRender(useSelection(visible));
   return null;
 }
 
 const all = [{ id: 1 }, { id: 2 }, { id: 3 }];
 
+const onRender = (selection: Selection<Entry>) => { current = selection; };
+
 function mount(visible: Entry[]) {
   let renderer!: ReturnType<typeof create>;
-  act(() => { renderer = create(createElement(Harness, { visible })); });
+  act(() => { renderer = create(createElement(Harness, { visible, onRender })); });
   return renderer;
 }
 
@@ -64,7 +66,7 @@ it('drops ids a filter hides', () => {
   const renderer = mount(all);
   act(() => current.enter());
   act(() => current.selectAll());
-  act(() => renderer.update(createElement(Harness, { visible: [all[0]] })));
+  act(() => renderer.update(createElement(Harness, { visible: [all[0]], onRender })));
   expect([...current.ids]).toEqual([1]);
   expect(current.isAllSelected).toBe(true);
 });

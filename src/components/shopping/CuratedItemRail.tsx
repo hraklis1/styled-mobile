@@ -92,6 +92,7 @@ export function CuratedItemRail({ editorial = false, offers, status = 'ready', h
     if (exploreRequest !== lastRequest.current) { lastRequest.current = exploreRequest; if (exploreRequest > 0) explore(); }
   });
   useEffect(() => { if (!eligible.length) setBrowserOpen(false); }, [eligible.length]);
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
   if (status === 'disabled' && !offers.length) return null;
   async function save(offer: ProductOffer) {
     const key = productKey(offer), currentGeneration = generation.current;
@@ -122,7 +123,6 @@ export function CuratedItemRail({ editorial = false, offers, status = 'ready', h
     setToast(entry);
     toastTimer.current = setTimeout(() => setToast(null), SAVED_TOAST_MS);
   }
-  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
   function openRetailer(offer: ProductOffer) {
     track('curated_product_opened', { surface: context.surface, targetKey: context.targetKey, offerId: offer.id, position: offers.indexOf(offer), provider: offer.provider, monetized: offer.monetized });
     void openShoppingLink(offer.url);
