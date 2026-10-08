@@ -116,11 +116,12 @@ export function NewPieceEditor({ detection, draft, scanBrands, photoUri, onChang
               {box ? <PieceThumb uri={cropPreview} width={168} height={210} />
                 : <PieceImage cropUrl={detection.cropUrl} cutoutUrl={detection.cutoutUrl} width={168} height={210} />}
             </LocateInPhoto>
-            {onAdjustCrop ? <View style={styles.cropActions}>
-              <AdjustCropButton onPress={onAdjustCrop} />
-              {box ? <TextLink label="Use the scan’s crop" tone="muted" onPress={() => onChange({ cropBbox: null })} /> : null}
-            </View> : null}
           </View>
+          {/* Under the plate, as in the closet scan's piece sheet: the mat stays snug to the photo. */}
+          {onAdjustCrop ? <View style={styles.cropActions}>
+            <AdjustCropButton onPress={onAdjustCrop} />
+            {box ? <TextLink label="Use the scan’s crop" tone="muted" onPress={() => onChange({ cropBbox: null })} /> : null}
+          </View> : null}
           <SpecSheet
             piece={piece}
             stage="review"
@@ -153,7 +154,7 @@ const styles = StyleSheet.create({
   content: { paddingBottom: spacing.xl, gap: spacing.lg },
   pad: { paddingHorizontal: spacing.lg },
   // A mat around the raw crop so an unsegmented photo reads as framed, not cut out.
-  cropActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, marginTop: spacing.md },
+  cropActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.lg },
   plate: {
     alignSelf: 'center',
     padding: spacing.md,

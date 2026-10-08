@@ -754,7 +754,7 @@ export function ScanReviewWorkspace({
             <PolishExample example={polish.example} />
           </WorkspaceSheet>
         ) : sheet?.kind === 'options' ? (
-          <WorkspaceSheet title="Import options" detent="fit" rows={scanOptionsRowCount(onMinimize ?? keepForLater)} reduceMotion={reduceMotion} dismissed={sheetDismissed} onClose={closeSheet}>
+          <WorkspaceSheet title={onMinimize ? 'Import options' : 'Scan options'} detent="fit" rows={scanOptionsRowCount(onMinimize ?? keepForLater)} reduceMotion={reduceMotion} dismissed={sheetDismissed} onClose={closeSheet}>
             <ScanOptionsRows
               onKeep={(onMinimize ?? keepForLater) ? () => thenDismiss((onMinimize ?? keepForLater)!) : undefined}
               discardLabel={onMinimize ? 'Discard import' : 'Discard scan'}

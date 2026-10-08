@@ -52,7 +52,7 @@ export function PieceDetailSheet({ piece, stage, confirmed, disabled, dismissed,
       reduceMotion={reduceMotion}
       dismissed={dismissed}
       onClose={onClose}
-      headerAction={<SheetClose onPress={picker ? back : onDone} />}
+      headerAction={picker ? <TextLink label="Back" weight="strong" onPress={back} accessibilityLabel="Back to piece details" /> : <SheetClose onPress={onDone} />}
       footer={<PrimaryButton label={picker ? 'Back to piece details' : 'Done'} onPress={picker ? back : onDone} disabled={disabled} />}
     >
       {picker === 'material' ? (
