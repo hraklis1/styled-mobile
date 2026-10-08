@@ -5,7 +5,7 @@ import Svg, { Circle, Path } from 'react-native-svg';
 import { colors, radii, spacing, typography } from '../../theme';
 import { PressableScale } from './PressableScale';
 
-const CARET_SIZE = 10;
+const CARET_SIZE = 9;
 
 type Props = {
   visible: boolean;
@@ -71,16 +71,19 @@ export function AiActionCoachmark({
   const light = tone === 'light';
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(-6)).current;
+  const scale = useRef(new Animated.Value(0.96)).current;
 
   useEffect(() => {
     if (!visible) return;
     opacity.setValue(0);
     translateY.setValue(-6);
+    scale.setValue(0.96);
     Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 220, useNativeDriver: true }),
-      Animated.timing(translateY, { toValue: 0, duration: 220, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.spring(translateY, { toValue: 0, damping: 18, stiffness: 260, useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1, damping: 18, stiffness: 260, useNativeDriver: true }),
     ]).start();
-  }, [visible, step, opacity, translateY]);
+  }, [visible, step, opacity, translateY, scale]);
 
   if (!visible) return null;
 
@@ -94,7 +97,7 @@ export function AiActionCoachmark({
       >
         {spotlight ? <Spotlight rect={spotlight} shape={spotlightShape} /> : null}
         <Animated.View
-          style={[styles.container, style, { opacity, transform: [{ translateY }] }]}
+          style={[styles.container, style, { opacity, transform: [{ translateY }, { scale }] }]}
           pointerEvents="box-none"
         >
           <View style={[
@@ -109,7 +112,7 @@ export function AiActionCoachmark({
             <Text style={[styles.body, light && styles.bodyLight]}>{body}</Text>
             <View style={[styles.footer, !(stepCount && stepCount > 1) && !onSkip && styles.footerSolo]}>
               {stepCount && stepCount > 1 ? (
-                <View style={styles.dots} accessibilityLabel={`Step ${(step ?? 0) + 1} of ${stepCount}`}>
+                <View style={styles.dots} accessible accessibilityLabel={`Step ${(step ?? 0) + 1} of ${stepCount}`}>
                   {Array.from({ length: stepCount }, (_, i) => (
                     <View key={i} style={[styles.dot, light && styles.dotLight, i === step && (light ? styles.dotActiveLight : styles.dotActive)]} />
                   ))}
@@ -122,12 +125,12 @@ export function AiActionCoachmark({
                   </PressableScale>
                 ) : null}
                 <PressableScale
-                  contentStyle={styles.dismissButton}
+                  contentStyle={[styles.dismissButton, light && styles.dismissButtonLight]}
                   onPress={onPrimary ?? onDismiss}
                   accessibilityRole="button"
                   accessibilityLabel={primaryLabel}
                 >
-                  <Text style={[styles.dismissText, light && styles.titleLight]}>{primaryLabel}</Text>
+                  <Text style={[styles.dismissText, light && styles.dismissTextLight]}>{primaryLabel}</Text>
                 </PressableScale>
               </View>
             </View>
@@ -138,12 +141,37 @@ export function AiActionCoachmark({
   );
 }
 
-const SCRIM = 'rgba(29,27,24,0.22)';
+const SCRIM = 'rgba(29,27,24,0.4)';
 const SPOT_PAD = 6;
 
 /** The scrim with a hole over the target, so the control itself stays lit. A
  *  square-ish target gets a circle; a wide one (a pill button) gets a pill,
  *  so the ring hugs it instead of ballooning across the screen. */
+/** A soft halo that breathes outward from the spotlight ring, so the eye
+ *  finds the target before it reads the card. */
+function SpotlightPulse({ x, y, w, h, radius }: { x: number; y: number; w: number; h: number; radius: number }) {
+  const t = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(t, { toValue: 1, duration: 1400, useNativeDriver: true }),
+      Animated.delay(500),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [t]);
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: 'absolute', left: x, top: y, width: w, height: h, borderRadius: radius,
+        borderWidth: 2, borderColor: 'rgba(251,250,247,0.85)',
+        opacity: t.interpolate({ inputRange: [0, 1], outputRange: [0.7, 0] }),
+        transform: [{ scale: t.interpolate({ inputRange: [0, 1], outputRange: [1, 1.18] }) }],
+      }}
+    />
+  );
+}
+
 function Spotlight({ rect, shape }: { rect: { x: number; y: number; width: number; height: number }; shape: 'circle' | 'fit' }) {
   const { width, height } = useWindowDimensions();
   const cx = rect.x + rect.width / 2;
@@ -157,6 +185,7 @@ function Spotlight({ rect, shape }: { rect: { x: number; y: number; width: numbe
           <Path d={`M0 0 H${width} V${height} H0 Z ${hole}`} fill={SCRIM} fillRule="evenodd" />
           <Circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(251,250,247,0.9)" strokeWidth={1.5} />
         </Svg>
+        <SpotlightPulse x={cx - r} y={cy - r} w={r * 2} h={r * 2} radius={r} />
       </View>
     );
   }
@@ -172,67 +201,76 @@ function Spotlight({ rect, shape }: { rect: { x: number; y: number; width: numbe
         <Path d={`M0 0 H${width} V${height} H0 Z ${hole}`} fill={SCRIM} fillRule="evenodd" />
         <Path d={hole} fill="none" stroke="rgba(251,250,247,0.9)" strokeWidth={1.5} />
       </Svg>
+      <SpotlightPulse x={x} y={y} w={w} h={h} radius={r} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  caretBottom: { top: undefined, bottom: -CARET_SIZE + 1 },
+  caretBottom: { top: undefined, bottom: -CARET_SIZE / 2 + 1 },
   caretLight: { backgroundColor: colors.background },
-  cardLight: { backgroundColor: colors.background, boxShadow: '0 6px 24px rgba(0,0,0,0.35)' },
+  cardLight: { backgroundColor: colors.background, boxShadow: '0 12px 32px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.2)' },
   titleLight: { color: colors.foreground },
   bodyLight: { color: colors.mutedForeground },
-  dotLight: { backgroundColor: 'rgba(29,27,24,0.2)' },
+  dotLight: { backgroundColor: 'rgba(29,27,24,0.28)' },
   dotActiveLight: { backgroundColor: colors.foreground, width: 14 },
   skipTextLight: { color: colors.mutedForeground },
   scrim: { flex: 1, backgroundColor: SCRIM },
   scrimClear: { backgroundColor: 'transparent' },
-  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.xs },
+  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm },
   footerSolo: { justifyContent: 'flex-start' },
   dots: { flexDirection: 'row', gap: 5 },
-  dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: 'rgba(251,250,247,0.35)' },
-  dotActive: { backgroundColor: colors.background, width: 14 },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(251,250,247,0.45)' },
+  dotActive: { backgroundColor: colors.background, width: 16 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md + 2 },
   skipText: { color: 'rgba(251,250,247,0.7)', fontSize: typography.text.caption.fontSize },
   container: {
     position: 'absolute',
     zIndex: 3,
-    maxWidth: 260,
+    maxWidth: 280,
   },
   caret: {
     position: 'absolute',
-    top: -CARET_SIZE + 1,
+    // Centred on the card's edge, so the card covers the lower half and
+    // only a small, seamless point shows.
+    top: -CARET_SIZE / 2 + 1,
     width: CARET_SIZE,
     height: CARET_SIZE,
     backgroundColor: colors.foreground,
     transform: [{ rotate: '45deg' }],
-    borderRadius: 2,
+    borderRadius: 1.5,
   },
   card: {
     gap: spacing.xs,
-    padding: spacing.md,
-    borderRadius: radii.lg,
+    paddingHorizontal: spacing.md + 4,
+    paddingTop: spacing.md + 2,
+    paddingBottom: spacing.md,
+    borderRadius: radii.xl,
     borderCurve: 'continuous',
     backgroundColor: colors.foreground,
-    boxShadow: '0 4px 16px rgba(29,27,24,0.24)',
+    boxShadow: '0 12px 32px rgba(29,27,24,0.28), 0 2px 6px rgba(29,27,24,0.16)',
   },
   title: {
+    ...typography.text.editorialCard,
     color: colors.background,
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.semibold,
   },
   body: {
-    color: 'rgba(251,250,247,0.82)',
-    fontSize: typography.text.caption.fontSize,
-    lineHeight: 17,
+    color: 'rgba(251,250,247,0.88)',
+    fontSize: typography.text.label.fontSize,
+    lineHeight: 20,
   },
   dismissButton: {
     alignSelf: 'flex-start',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: radii.action,
+    backgroundColor: colors.background,
   },
+  dismissButtonLight: { backgroundColor: colors.foreground },
   dismissText: {
-    color: colors.background,
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.bold,
-    textDecorationLine: 'underline',
+    color: colors.foreground,
+    fontSize: typography.text.label.fontSize,
+    fontWeight: typography.weight.semibold,
   },
+  dismissTextLight: { color: colors.background },
 });
