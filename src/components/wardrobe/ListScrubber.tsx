@@ -3,35 +3,12 @@ import { StyleSheet, Text, View, type GestureResponderEvent, type LayoutChangeEv
 import * as Haptics from '../../lib/haptics';
 import { colors, radii, spacing, typography } from '../../theme';
 
-export type ScrubberEntry = { label: string; index: number };
-
-/**
- * Builds index entries for the first row of each run: letters when the list is
- * sorted by name, otherwise one entry per category in order of first appearance.
- */
-export function buildScrubberEntries<T>(rows: T[], keyOf: (row: T) => string): ScrubberEntry[] {
-  const entries: ScrubberEntry[] = [];
-  const seen = new Set<string>();
-  rows.forEach((row, index) => {
-    const label = keyOf(row);
-    if (seen.has(label)) return;
-    seen.add(label);
-    entries.push({ label, index });
-  });
-  return entries;
-}
-
-export function nameInitial(name: string | null | undefined): string {
-  const first = (name ?? '').trim().charAt(0).toUpperCase();
-  return /[A-Z]/.test(first) ? first : '#';
-}
+import type { ScrubberEntry } from '../../lib/closet-scrubber';
 
 /** Right-edge index: touch or drag to jump; a bubble names the current entry. */
-export function ListScrubber({ entries, onJump, compactLabels = false }: {
+export function ListScrubber({ entries, onJump }: {
   entries: ScrubberEntry[];
   onJump: (index: number) => void;
-  /** Category names are long: show their first letters on the rail, full name in the bubble. */
-  compactLabels?: boolean;
 }) {
   const height = useRef(0);
   const last = useRef<number | null>(null);
@@ -54,7 +31,7 @@ export function ListScrubber({ entries, onJump, compactLabels = false }: {
     <View style={styles.root} pointerEvents="box-none">
       {active && (
         <View style={styles.bubble} pointerEvents="none">
-          <Text style={styles.bubbleText} numberOfLines={1}>{active.label}</Text>
+          <Text style={styles.bubbleText} numberOfLines={1}>{active.title}</Text>
         </View>
       )}
       <View
@@ -69,9 +46,10 @@ export function ListScrubber({ entries, onJump, compactLabels = false }: {
         onResponderTerminate={release}
         accessibilityRole="adjustable"
         accessibilityLabel="Jump to section"
+        accessibilityValue={active ? { text: active.title } : undefined}
         accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
         onAccessibilityAction={({ nativeEvent }) => {
-          const current = entries.findIndex(entry => entry.label === active?.label);
+          const current = entries.findIndex(entry => entry.title === active?.title);
           const next = Math.max(0, Math.min(entries.length - 1, current + (nativeEvent.actionName === 'increment' ? 1 : -1)));
           setActive(entries[next]);
           onJump(entries[next].index);
@@ -79,11 +57,11 @@ export function ListScrubber({ entries, onJump, compactLabels = false }: {
       >
         {entries.map(entry => (
           <Text
-            key={entry.label}
-            style={[styles.label, active?.label === entry.label && styles.labelActive]}
+            key={entry.title}
+            style={[styles.label, active?.title === entry.title && styles.labelActive]}
             numberOfLines={1}
           >
-            {compactLabels ? entry.label.slice(0, 3) : entry.label}
+            {entry.label}
           </Text>
         ))}
       </View>

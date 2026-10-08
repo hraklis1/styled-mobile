@@ -40,7 +40,8 @@ import { FilterPanel } from '../../components/wardrobe/FilterPanel';
 import { OutfitFilterPanel } from '../../components/outfits/OutfitFilterPanel';
 import { ClosetGrid } from '../../components/wardrobe/ClosetGrid';
 import { ClosetRails, type ClosetRail } from '../../components/wardrobe/ClosetRails';
-import { ListScrubber, buildScrubberEntries, nameInitial } from '../../components/wardrobe/ListScrubber';
+import { ListScrubber } from '../../components/wardrobe/ListScrubber';
+import { buildScrubberEntries } from '../../lib/closet-scrubber';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { BoardCard } from '../../components/boards/BoardCard';
 import { BoardOptionsMenuSheet } from '../../components/boards/BoardOptionsMenuSheet';
@@ -568,12 +569,10 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     setPiecesViewMode('grid');
   }, [applySelectedCategories, capturePosition]);
 
-  const nameSorted = sortKey === 'name_asc' || sortKey === 'name_desc';
+  // Sections follow the active sort (letters, months, wear bands…) so each jump starts a run.
   const scrubberEntries = useMemo(() => (
-    piecesViewMode === 'list' && filteredItems.length >= 100
-      ? buildScrubberEntries(filteredItems, item => nameSorted ? nameInitial(item.name) : (item.category ? CATEGORY_LABELS[item.category] : 'Other'))
-      : []
-  ), [filteredItems, nameSorted, piecesViewMode]);
+    piecesViewMode === 'list' && filteredItems.length >= 100 ? buildScrubberEntries(filteredItems, sortKey) : []
+  ), [filteredItems, piecesViewMode, sortKey]);
   const jumpToPiece = useCallback((index: number) => {
     piecesListRef.current?.scrollToIndex({ index, animated: false, viewOffset: headerHeight - collapseDistance });
   }, [collapseDistance, headerHeight]);
@@ -1169,7 +1168,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
           }
           {scrubberEntries.length > 0 && !selectionMode && (
             <View style={[StyleSheet.absoluteFill, { top: listPaddingTop - collapseDistance }]} pointerEvents="box-none">
-              <ListScrubber entries={scrubberEntries} onJump={jumpToPiece} compactLabels={!nameSorted} />
+              <ListScrubber entries={scrubberEntries} onJump={jumpToPiece} />
             </View>
           )}
           </View>
