@@ -25,7 +25,7 @@ import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
 import { ShoppingPriorityTargetCard } from '../../components/shopping/ShoppingPriorityTargetCard';
 import { useItems } from '../../hooks/useItems';
 import { useShoppingPriorityEdit } from '../../hooks/useShoppingPriorityEdit';
-import { addOutfitToWishlist, useWishlist } from '../../hooks/useWishlist';
+import { addOutfitToWishlist, useRemoveFromWishlist, useWishlist } from '../../hooks/useWishlist';
 import { wearableWardrobe, withoutOutfitCount } from '../../lib/shopClarity';
 import { shoppingGarmentTitle, styleFollowupQuestions } from '../../lib/shoppingEditorial';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
@@ -48,6 +48,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { openStylist } = useGlobalAIStylist();
   const [savedId, setSavedId] = useState<string | null>(null);
+  const removeFromWishlist = useRemoveFromWishlist();
   const [saving, setSaving] = useState(false);
   const [showSaveToast, setShowSaveToast] = useState(false);
   const reduceMotion = useReducedMotion();
@@ -163,10 +164,20 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
       edit.data.status !== 'ready' ||
       edit.data.targets.length < 1 ||
       edit.data.targets.length > 5 ||
-      isSaved ||
       saving
     )
       return;
+    if (selectedSavedId) {
+      // Tapping "Saved" again undoes the save. The removal is optimistic, so
+      // the bookmark clears immediately and comes back if the server refuses.
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      toastTimer.current = null;
+      setShowSaveToast(false);
+      setSavedId(null);
+      removeFromWishlist.mutate(selectedSavedId);
+      track('shopping_brief_edit_unsaved', { category: priority.category, source: source ?? 'shopping_brief' });
+      return;
+    }
     const outfit: ShopOutfit = {
       recommendationType: 'list',
       source: 'shopping_brief',
@@ -195,7 +206,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
     } finally {
       setSaving(false);
     }
-  }, [edit.data, isSaved, priority, saving, showSavedToast, source]);
+  }, [edit.data, priority, removeFromWishlist, saving, selectedSavedId, showSavedToast, source]);
 
   if (edit.isLoading) {
     // The guide is one generation, so nothing real can stream in early — but
@@ -492,12 +503,12 @@ function SaveEditAction({
       scaleTo={0.94}
       contentStyle={styles.saveIcon}
       onPress={() => void onPress()}
-      disabled={saving || isSaved}
-      haptic={!isSaved}
+      disabled={saving}
+      haptic
       accessibilityRole="button"
       accessibilityLabel={saving ? 'Saving list' : isSaved ? 'List saved in wishlist' : 'Save list'}
-      accessibilityHint={isSaved ? undefined : 'Adds this guide to your wishlist'}
-      accessibilityState={{ selected: isSaved, busy: saving, disabled: saving || isSaved }}
+      accessibilityHint={isSaved ? 'Removes this guide from your wishlist' : 'Adds this guide to your wishlist'}
+      accessibilityState={{ selected: isSaved, busy: saving, disabled: saving }}
     >
       {saving ? (
         <ActivityIndicator size="small" color={shoppingSurfaces.olive.accent} />
