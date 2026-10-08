@@ -26,7 +26,7 @@ const SAVED_TOAST_MS = 3000;
 /** Surfaces where a listing can be hidden as "Not for me" (learned server-side). */
 const HIDEABLE_SURFACES = new Set(['shopping_guide', 'saved_guide']);
 
-export function CuratedItemRail({ editorial = false, offers, status = 'ready', heading = 'Pieces to consider', context, onRetry, savedDetail = false, reason, browserTitle, collectionAction = 'rail', exploreRequest = 0, target, wardrobe, openDirect = false, previewLimit = 3, hero = false, budget }: {
+export function CuratedItemRail({ editorial = false, offers, status = 'ready', heading = 'Pieces to consider', context, onRetry, savedDetail = false, reason, browserTitle, collectionAction = 'rail', exploreRequest = 0, target, wardrobe, openDirect = false, previewLimit = 3, hero = false, budget, compact = false }: {
   editorial?: boolean; offers: ProductOffer[]; status?: OfferStatus; heading?: string; context: OfferContext; onRetry?: () => void; savedDetail?: boolean;
   reason?: string; browserTitle?: string; collectionAction?: 'rail' | 'external'; exploreRequest?: number;
   target?: ShoppingPriorityTarget; wardrobe?: ReadonlyMap<number, Item>;
@@ -37,6 +37,8 @@ export function CuratedItemRail({ editorial = false, offers, status = 'ready', h
   hero?: boolean;
   /** The chapter's suggested budget; cards note when a price falls inside it. */
   budget?: string | null;
+  /** Small cards running edge to edge, two and a bit per screen — for scanning many rows. */
+  compact?: boolean;
 }) {
   const viewWishlist = useContext(WishlistNavigationContext);
   const { width } = useWindowDimensions();
@@ -47,7 +49,7 @@ export function CuratedItemRail({ editorial = false, offers, status = 'ready', h
   const [toast, setToast] = useState<WishlistEntry | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [contentWidth, setContentWidth] = useState(width - spacing.page * 2);
-  const cardWidth = hero ? Math.round(Math.min(320, contentWidth * 0.72)) : editorial ? Math.min(240, Math.max(160, (contentWidth - spacing.md) / 1.5)) : Math.min(contentWidth, Math.max(curatedProducts.minWidth, Math.min(curatedProducts.maxWidth, contentWidth * curatedProducts.previewFraction)));
+  const cardWidth = compact ? Math.round(contentWidth * 0.42) : hero ? Math.round(Math.min(320, contentWidth * 0.72)) : editorial ? Math.min(240, Math.max(160, (contentWidth - spacing.md) / 1.5)) : Math.min(contentWidth, Math.max(curatedProducts.minWidth, Math.min(curatedProducts.maxWidth, contentWidth * curatedProducts.previewFraction)));
   const [browserOpen, setBrowserOpen] = useState(false);
   const [selectedOffer, setSelectedOffer] = useState<ProductOffer | null>(null);
   const [saving, setSaving] = useState<Set<string>>(new Set());
@@ -158,7 +160,7 @@ export function CuratedItemRail({ editorial = false, offers, status = 'ready', h
   const error = Object.values(errors)[0];
   return <View style={styles.section} onLayout={event => { if (event.nativeEvent.layout.width > 0) setContentWidth(event.nativeEvent.layout.width); }}>
     {heading ? <Text style={styles.heading}>{heading}</Text> : null}
-    {preview.length ? <Animated.ScrollView ref={scroll} horizontal showsHorizontalScrollIndicator={false} style={hero && styles.bleed} contentContainerStyle={[styles.rail, hero && styles.bleedRail]} snapToInterval={step} decelerationRate="fast"
+    {preview.length ? <Animated.ScrollView ref={scroll} horizontal showsHorizontalScrollIndicator={false} style={(hero || compact) && styles.bleed} contentContainerStyle={[styles.rail, (hero || compact) && styles.bleedRail]} snapToInterval={step} decelerationRate="fast"
       scrollEventThrottle={16} onScroll={hero ? Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], { useNativeDriver: true, listener: (event: { nativeEvent: { contentOffset: { x: number } } }) => setPage(Math.max(0, Math.min(pageCount - 1, Math.round(event.nativeEvent.contentOffset.x / step)))) }) : undefined}>
       {preview.map((offer, index) => hero ? heroCard(offer, index) : renderCard(offer, cardWidth))}
       {seeAllCard ? <Pressable onPress={explore} accessibilityRole="button" accessibilityLabel={`See all ${eligible.length} options`}

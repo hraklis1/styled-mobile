@@ -101,6 +101,7 @@ export type ShopStackParamList = {
   ShoppingCamera: undefined;
   ShoppingVisitReview: { sessionId: string };
   ShoppingBriefDetail: { returnTo?: 'Home' } | undefined;
+  ShoppingEditAll: undefined;
   ShoppingPriorityEdit: {
     priority: ShoppingBriefPriority;
     source?: 'home_daily_look';
@@ -156,6 +157,7 @@ export type ShoppingBriefDetailScreenProps = CompositeScreenProps<
   NativeStackScreenProps<ShopStackParamList, 'ShoppingBriefDetail'>,
   BottomTabScreenProps<AppTabParamList>
 >;
+export type ShoppingEditAllScreenProps = NativeStackScreenProps<ShopStackParamList, 'ShoppingEditAll'>;
 export type ShoppingPriorityEditScreenProps = CompositeScreenProps<
   NativeStackScreenProps<ShopStackParamList, 'ShoppingPriorityEdit'>,
   BottomTabScreenProps<AppTabParamList>

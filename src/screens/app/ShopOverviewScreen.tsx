@@ -202,6 +202,10 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
               track('shopping_brief_priority_opened', { category: priority.category, reason: priority.reason, rank: priority.priority });
               navigation.navigate('ShoppingPriorityEdit', shoppingPriorityRoute(priority, brief.data!.generatedAt));
             }}
+            onShopAll={() => {
+              track('shopping_edit_shop_all_opened');
+              navigation.navigate('ShoppingEditAll');
+            }}
           />
           {brief.isError && brief.data ? <AppText variant="caption" tone="muted">Your saved edit is here. We couldn’t refresh it just now.</AppText> : null}
         </View> : <EditorialSection

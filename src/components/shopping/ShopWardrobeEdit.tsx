@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { PressableScale } from '../primitives/PressableScale';
 import { colors, radii, shoppingSurfaces, spacing, typography } from '../../theme';
 import { BriefNote, briefIssueLabel } from './ShoppingBriefCard';
 import type { ShoppingBrief, ShoppingBriefPriority } from '../../lib/shopDecisionWorkspace';
@@ -14,14 +16,22 @@ import { ShoppingChapterContents } from './ShoppingChapterContents';
 
 // The Shop page in two parts: the stylist's brief, then today's additions.
 // Each addition's full styling and shopping lives on its own guide page.
-export function ShopWardrobeEdit({ brief, onGuide }: {
+/** The edit's additions in order, minus any the user just set aside with "Not now". */
+export function useVisibleEditPriorities(brief: ShoppingBrief | undefined) {
+  const feedback = useShoppingFeedback();
+  const localDate = brief?.localDate ?? toLocalDateKey(new Date());
+  const hiddenKeys = new Set(feedback.pending.filter(entry => entry.localDate === localDate).map(entry => entry.recommendationKey));
+  const priorities = [...(brief?.priorities ?? [])].filter(priority => !priority.recommendationKey || !hiddenKeys.has(priority.recommendationKey)).sort((a, b) => a.priority - b.priority);
+  return { feedback, localDate, priorities };
+}
+
+export function ShopWardrobeEdit({ brief, onGuide, onShopAll }: {
   brief: ShoppingBrief;
   onGuide: (priority: ShoppingBriefPriority) => void;
+  /** Every listing across the edit on one page, without the commentary. */
+  onShopAll?: () => void;
 }) {
-  const feedback = useShoppingFeedback();
-  const localDate = brief.localDate ?? toLocalDateKey(new Date());
-  const hiddenKeys = new Set(feedback.pending.filter(entry => entry.localDate === localDate).map(entry => entry.recommendationKey));
-  const priorities = [...brief.priorities].filter(priority => !priority.recommendationKey || !hiddenKeys.has(priority.recommendationKey)).sort((a, b) => a.priority - b.priority);
+  const { feedback, localDate, priorities } = useVisibleEditPriorities(brief);
   const pending = feedback.pending.filter(entry => entry.localDate === localDate && !entry.submitting);
   const [previews, setPreviews] = useState<Record<string, ShoppingPriorityTarget>>({});
   // Query results may be rebuilt each render, so compare what the thumbnail
@@ -49,6 +59,18 @@ export function ShopWardrobeEdit({ brief, onGuide }: {
       }))}
       onSelect={key => { const priority = priorities.find(entry => priorityIdentity(entry) === key); if (priority) onGuide(priority); }}
     />
+    {onShopAll && priorities.length ? <PressableScale
+      motion="crisp"
+      scaleTo={0.985}
+      contentStyle={styles.shopAll}
+      onPress={onShopAll}
+      accessibilityRole="button"
+      accessibilityLabel="Shop all"
+      accessibilityHint="Shows every suggested piece in the edit on one page"
+    >
+      <Ionicons name="grid-outline" size={15} color={colors.primaryForeground} />
+      <Text style={styles.shopAllLabel}>Shop all</Text>
+    </PressableScale> : null}
     {pending.map(entry => <View key={entry.id} style={styles.undo} accessibilityLiveRegion="polite"><Text style={styles.caption}>Suggestion hidden</Text><Pressable accessibilityRole="button" accessibilityLabel={`Undo hiding ${entry.label}`} onPress={() => feedback.undo(entry.id)} style={({ pressed }) => [styles.quiet, pressed && styles.pressed]}><Text style={styles.link}>Undo</Text></Pressable></View>)}
     {feedback.error ? <Text accessibilityRole="alert" style={styles.error}>{feedback.error}</Text> : null}
     {priorities.map(priority => <PreviewProbe key={`${priorityIdentity(priority)}:${brief.generatedAt}`} priority={priority} briefGeneratedAt={brief.generatedAt} onTarget={reportTarget} />)}
@@ -81,4 +103,20 @@ const styles = StyleSheet.create({
   link: { ...typography.text.label, color: shoppingSurfaces.olive.accent }, quiet: { minWidth: 44, minHeight: 44, justifyContent: 'center', flexShrink: 1 },
   undo: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md, alignItems: 'center' },
   error: { ...typography.text.bodySmall, color: colors.error },
+  // The section's one filled control, in the Shop espresso: full width so it
+  // closes the list as "all of the above" rather than reading as another row.
+  shopAll: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    borderRadius: radii.full,
+    backgroundColor: shoppingSurfaces.espresso,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: shoppingSurfaces.highlight,
+    boxShadow: shoppingSurfaces.buttonShadow,
+  },
+  shopAllLabel: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.primaryForeground, letterSpacing: 0.2 },
 });

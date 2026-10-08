@@ -53,6 +53,7 @@ import { ShoppingVisitReviewScreen } from '../screens/app/ShoppingVisitReviewScr
 import { ShoppingGalleryScreen } from '../screens/app/ShoppingGalleryScreen';
 import { ShoppingHaulDetailScreen } from '../screens/app/ShoppingHaulDetailScreen';
 import { ShoppingBriefDetailScreen } from '../screens/app/ShoppingBriefDetailScreen';
+import { ShoppingEditAllScreen } from '../screens/app/ShoppingEditAllScreen';
 import { ShoppingPriorityEditScreen } from '../screens/app/ShoppingPriorityEditScreen';
 import { navigationRef } from './savedRecommendations';
 import { StylistScreen } from '../screens/app/StylistScreen';
@@ -188,6 +189,7 @@ function ShopNavigator() {
     <ShopStack.Navigator screenOptions={{ headerShown: false }}>
       <ShopStack.Screen name="ShopMain" component={ShopOverviewScreen} />
       <ShopStack.Screen name="ShoppingBriefDetail" component={ShoppingBriefDetailScreen} />
+      <ShopStack.Screen name="ShoppingEditAll" component={ShoppingEditAllScreen} />
       <ShopStack.Screen name="ShoppingPriorityEdit" component={ShoppingPriorityEditScreen} />
       <ShopStack.Screen name="Wishlist" component={WishlistScreen} />
       <ShopStack.Screen name="SavedShopping" component={SavedShoppingScreen} />
