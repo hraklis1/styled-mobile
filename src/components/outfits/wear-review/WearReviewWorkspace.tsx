@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, SectionList, Pressable, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { Modal, Platform, SectionList, Pressable, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,13 +31,16 @@ import type { ReviewFlow, WearDetection } from '../../../features/wear-log/types
 import { ClosetPicker } from './ClosetMatchSheet';
 import { WorkspaceSheet } from '../../wardrobe/scan-review/WorkspaceSheet';
 import { ScanOptionsRows, scanOptionsRowCount } from '../../wardrobe/scan-review/MenuRows';
-import { WearResolveSheet } from './WearResolveSheet';
+import { WearResolveSheet, type CropRequest } from './WearResolveSheet';
+import { CropAdjustEditor } from '../../wardrobe/CropAdjustModal';
 import { PieceImage } from './PieceImage';
 import { WornDateSheet } from './WornDateSheet';
 import { PairingRow } from './PairingRow';
 import { OutfitPhotoHeader, photoHeaderHeight } from './OutfitPhotoHeader';
 
-type Surface = { kind: 'resolve'; queue: string[]; startIndex?: number; initialPhoto?: boolean } | { kind: 'add' } | { kind: 'date' };
+type Surface = { kind: 'resolve'; queue: string[]; startIndex?: number; initialPhoto?: boolean } | { kind: 'add' } | { kind: 'date' } | ({ kind: 'crop' } & CropRequest);
+
+const FULL_BOX = { x: 0, y: 0, width: 100, height: 100 };
 
 type DateChoice = 'today' | 'yesterday' | 'other';
 
@@ -247,7 +250,15 @@ function Review({ flow, screenHeight, width, insets, reduceMotion, onClose, onMi
     const t = setTimeout(() => setSkipToast(null), 4000);
     return () => clearTimeout(t);
   }, [skipToast]);
-  const closeSurface = () => { dispatchWear({ type: 'closeResolve' }); setSurface(null); };
+  const closeSurface = (crop?: CropRequest) => {
+    if (crop) { setSurface({ kind: 'crop', ...crop }); return; }
+    dispatchWear({ type: 'closeResolve' });
+    setSurface(null);
+  };
+  // Back to the same piece, in the same walk, once the crop is applied or cancelled.
+  const resumeAfterCrop = (crop: CropRequest) => setSurface({ kind: 'resolve', queue: crop.queue, startIndex: crop.index });
+  const cropTarget = surface?.kind === 'crop' ? flow.scan.detections.find((d) => d.id === surface.detectionId) : undefined;
+  const cropResolution = surface?.kind === 'crop' ? flow.resolutions[surface.detectionId] : undefined;
 
   // New pieces join the closet when the outfit is logged; they can get a
   // polished cover like any import, on the same terms (Premium, credits).
@@ -354,6 +365,19 @@ function Review({ flow, screenHeight, width, insets, reduceMotion, onClose, onMi
         {surface?.kind === 'resolve' ? <WearResolveSheet queue={surface.queue} startIndex={surface.startIndex} reviewIds={queue} initialPhoto={surface.initialPhoto} flow={flow} items={items} reduceMotion={reduceMotion} onClose={closeSurface} />
           : surface?.kind === 'add' ? <AdditionalPieceSheet items={items} selectedIds={selectedItemIds(flow)} reduceMotion={reduceMotion} onClose={closeSurface} />
           : surface?.kind === 'date' ? <WornDateSheet date={flow.date} reduceMotion={reduceMotion} onSelect={(date) => dispatchWear({ type: 'setDate', date })} onClose={closeSurface} /> : null}
+        {surface?.kind === 'crop' && cropTarget && cropResolution?.kind === 'new' ? (
+          <Modal visible animationType={reduceMotion ? 'fade' : 'slide'} presentationStyle="fullScreen" onRequestClose={() => resumeAfterCrop(surface)}>
+            <GestureHandlerRootView style={styles.root}>
+              <CropAdjustEditor
+                sourceImage={flow.photoUri}
+                initialBbox={cropResolution.draft.cropBbox ?? cropTarget.bbox_pct ?? FULL_BOX}
+                itemName={cropResolution.draft.name || cropTarget.attributes.name}
+                onApply={(bbox) => { dispatchWear({ type: 'editDraft', detectionId: cropTarget.id, patch: { cropBbox: bbox } }); resumeAfterCrop(surface); }}
+                onCancel={() => resumeAfterCrop(surface)}
+              />
+            </GestureHandlerRootView>
+          </Modal>
+        ) : null}
       </View>
     </GestureHandlerRootView>
   );

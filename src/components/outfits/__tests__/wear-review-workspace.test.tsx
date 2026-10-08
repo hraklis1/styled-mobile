@@ -22,6 +22,7 @@ jest.mock('../wear-review/PhotoHero', () => ({ PhotoHero: 'PhotoHero' }));
 jest.mock('../wear-review/PairingRow', () => ({ PairingRow: 'PairingRow' }));
 jest.mock('../wear-review/ClosetMatchSheet', () => ({ ClosetPicker: 'ClosetPicker' }));
 jest.mock('../wear-review/WearResolveSheet', () => ({ WearResolveSheet: 'WearResolveSheet' }));
+jest.mock('../../wardrobe/CropAdjustModal', () => ({ CropAdjustEditor: 'CropAdjustEditor' }));
 jest.mock('../wear-review/WornDateSheet', () => ({ WornDateSheet: 'WornDateSheet' }));
 jest.mock('../../wardrobe/scan-review/MenuRows', () => ({ ScanOptionsRows: 'ScanOptionsRows', scanOptionsRowCount: () => 2 }));
 jest.mock('../../wardrobe/scan-review/WorkspaceSheet', () => ({ WorkspaceSheet: 'WorkspaceSheet' }));
@@ -44,6 +45,7 @@ import { useItems } from '../../../hooks/useItems';
 import { saveWearLog } from '../../../features/wear-log/api';
 import { closetItems, detection, reviewFixture } from '../../../features/wear-log/__fixtures__/review';
 import { reviewQueue } from '../../../features/wear-log/reducer';
+import type { ReviewFlow } from '../../../features/wear-log/types';
 import { dispatchWear, useWearLogStore } from '../../../features/wear-log/store';
 
 function linkLabels(tree: TestRenderer.ReactTestRenderer): string[] {
@@ -272,7 +274,7 @@ describe('compact outfit overview', () => {
 describe('polish for new pieces', () => {
   const created = [{ id: 41, clientImportId: 'wear-flow-test-d0' }];
   const newPieceFlow = () => {
-    useWearLogStore.setState({ flow: reviewFixture([detection('d0', 'none', null)]) });
+    useWearLogStore.setState({ flow: reviewFixture([detection('d0', 'low', null)]) });
     act(() => dispatchWear({ type: 'markNew', detectionId: 'd0' }));
     jest.mocked(saveWearLog).mockResolvedValue({ logId: 9, itemIds: [41], createdItems: created, alreadyLoggedItemIds: [] } as never);
   };
@@ -304,6 +306,24 @@ describe('polish for new pieces', () => {
     useWearLogStore.setState({ flow: reviewFixture([detection('d0', 'high')]) });
     const tree = mountReview();
     expect(tree.root.findAll((n) => (n.type as unknown) === 'PolishRow')).toHaveLength(0);
+    act(() => { tree.unmount(); });
+  });
+});
+
+describe('cropping a new piece', () => {
+  it('leaves the sheet for the crop editor, saves the box, and returns to the same piece', () => {
+    useWearLogStore.setState({ flow: reviewFixture([detection('d0', 'low', null), detection('d1', 'low', null)]) });
+    act(() => dispatchWear({ type: 'markNew', detectionId: 'd1' }));
+    const tree = mountReview();
+    act(() => named(tree, 'PrimaryButton').props.onPress());
+    act(() => named(tree, 'WearResolveSheet').props.onClose({ detectionId: 'd1', queue: ['d0', 'd1'], index: 1 }));
+    expect(tree.root.findAll((n) => (n.type as unknown) === 'WearResolveSheet')).toHaveLength(0);
+    const editor = named(tree, 'CropAdjustEditor');
+    expect(editor.props.sourceImage).toBe('file:///outfit.jpg');
+    act(() => editor.props.onApply({ x: 5, y: 5, width: 50, height: 60 }));
+    const flow = useWearLogStore.getState().flow as ReviewFlow;
+    expect(flow.resolutions.d1).toMatchObject({ kind: 'new', draft: { cropBbox: { x: 5, y: 5, width: 50, height: 60 } } });
+    expect(named(tree, 'WearResolveSheet').props).toMatchObject({ queue: ['d0', 'd1'], startIndex: 1 });
     act(() => { tree.unmount(); });
   });
 });

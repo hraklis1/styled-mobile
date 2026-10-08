@@ -52,6 +52,11 @@ export type WearDraft = {
   fit: string | null;
   sizeProfile: SizeProfile | null;
   sleeveLength: SleeveLength | null;
+  /**
+   * The user's own crop, in percent of the outfit photo. The cover is cut from
+   * the stored photo at save time; absent means the scan's crop is used.
+   */
+  cropBbox?: { x: number; y: number; width: number; height: number } | null;
 };
 
 /**

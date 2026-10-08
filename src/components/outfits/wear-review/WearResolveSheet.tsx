@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Keyboard, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { WorkspaceSheet } from '../../wardrobe/scan-review/WorkspaceSheet';
@@ -17,9 +17,12 @@ import { GuidedFooter, guidedLabel } from '../../wardrobe/scan-review/GuidedFoot
 
 type Mode = 'review' | 'library' | 'new' | 'photo';
 
+/** Leaving the sheet for the full-screen crop editor, and where to come back to. */
+export type CropRequest = { detectionId: string; queue: string[]; index: number };
+
 /** One native presentation owns the complete queue and its sub-screens. */
 export function WearResolveSheet({ queue: initialQueue, startIndex = 0, reviewIds = [], initialPhoto = false, flow, items, reduceMotion, onClose }: {
-  queue: string[]; startIndex?: number; reviewIds?: string[]; initialPhoto?: boolean; flow: ReviewFlow; items: Item[]; reduceMotion: boolean; onClose: () => void;
+  queue: string[]; startIndex?: number; reviewIds?: string[]; initialPhoto?: boolean; flow: ReviewFlow; items: Item[]; reduceMotion: boolean; onClose: (crop?: CropRequest) => void;
 }) {
   const { width, height } = useWindowDimensions();
   const [queue, setQueue] = useState(initialQueue);
@@ -31,6 +34,8 @@ export function WearResolveSheet({ queue: initialQueue, startIndex = 0, reviewId
   const [returnTo, setReturnTo] = useState<Mode | null>(null);
   // Keep tentative choices through in-sheet browsing, but never persist them.
   const [pendingById, setPendingById] = useState<Record<string, number>>({});
+  // Set when leaving for the crop editor; read when the sheet has gone.
+  const cropRequest = useRef<CropRequest | null>(null);
   const id = queue[index];
   const detection = flow.scan.detections.find((d) => d.id === id);
   const resolution = flow.resolutions[id];
@@ -58,7 +63,15 @@ export function WearResolveSheet({ queue: initialQueue, startIndex = 0, reviewId
   };
   const skip = () => { dispatchWear({ type: 'dismiss', detectionId: id }); advance(); };
   const addNew = () => { Keyboard.dismiss(); dispatchWear({ type: 'markNew', detectionId: id }); setMode('new'); };
-  const close = () => { dispatchWear({ type: 'closeResolve' }); onClose(); };
+  // The crop editor needs the whole screen: the sheet goes first (never a
+  // sheet under a modal), and the workspace reopens it here afterwards.
+  const adjustCrop = () => { Keyboard.dismiss(); cropRequest.current = { detectionId: id, queue, index }; setDismissed(true); };
+  const close = () => {
+    const crop = cropRequest.current ?? undefined;
+    cropRequest.current = null;
+    if (!crop) dispatchWear({ type: 'closeResolve' });
+    onClose(crop);
+  };
   // A piece opened outside the review queue is an edit, not a step in a sequence.
   const editing = queue.length === 1 && !reviewIds.includes(id);
   const title = mode === 'library' ? 'Choose matching piece' : mode === 'new' ? 'New piece' : mode === 'photo' ? 'Your outfit' : editing ? 'Edit piece' : 'Match your pieces';
@@ -95,7 +108,7 @@ export function WearResolveSheet({ queue: initialQueue, startIndex = 0, reviewId
         <Pressable style={styles.back} onPress={() => { Keyboard.dismiss(); dispatchWear({ type: 'clear', detectionId: id }); setMode('review'); }} hitSlop={6} accessibilityRole="button" accessibilityLabel="Back to matches. Undo new piece">
           <Ionicons name="chevron-back" size={16} color={colors.foreground} /><Text style={styles.backText}>Back to matches</Text>
         </Pressable>
-        <NewPieceEditor key={id} detection={detection} draft={resolution.draft} scanBrands={brands} onLocate={locate} onChange={(patch) => dispatchWear({ type: 'editDraft', detectionId: id, patch })} />
+        <NewPieceEditor key={id} detection={detection} draft={resolution.draft} scanBrands={brands} photoUri={flow.photoUri} onAdjustCrop={adjustCrop} onLocate={locate} onChange={(patch) => dispatchWear({ type: 'editDraft', detectionId: id, patch })} />
       </>
       : mode === 'library' ? <>
         <View style={styles.pad}><TextLink label="Back to comparison" onPress={() => { Keyboard.dismiss(); setMode('review'); }} /></View>
