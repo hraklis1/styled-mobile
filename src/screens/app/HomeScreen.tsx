@@ -37,6 +37,7 @@ import { useOutfits } from '../../hooks/useOutfits';
 import { useEvents } from '../../hooks/useEvents';
 import { useOutfitLogs, useDeleteOutfitLog, type OutfitLog } from '../../hooks/useOutfitLogs';
 import { WearWeekStrip } from '../../components/home/WearWeekStrip';
+import { WearEntryDetails } from '../../components/home/WearEntryDetails';
 import { presentCalendarEvent } from '../../components/calendar/calendar-presentation';
 import { formatCountdown } from '../../components/calendar/calendarUtils';
 import { OCCASIONS } from '../../lib/occasions';
@@ -1246,7 +1247,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       />
       <ActionMenuSheet
         visible={wearLogMenuEntry !== null}
-        title="Wear entry"
+        title="What you wore"
         subtitle={wearLogMenuEntry ? formatLogDate(wearLogMenuEntry.date) : undefined}
         options={wearLogMenuEntry ? [{
           label: 'Delete entry',
@@ -1256,7 +1257,20 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           onPress: () => confirmDeleteLog(wearLogMenuEntry),
         }] : []}
         onClose={() => setWearLogMenuEntry(null)}
-      />
+      >
+        {wearLogMenuEntry ? (
+          <WearEntryDetails
+            log={wearLogMenuEntry}
+            items={items}
+            onOpenItem={(itemId) => {
+              setWearLogMenuEntry(null);
+              setTimeout(() => {
+                navigation.navigate('Closet', { screen: 'ItemDetail', params: { itemId, returnTo: 'Home' } });
+              }, 220);
+            }}
+          />
+        ) : null}
+      </ActionMenuSheet>
       {locationSheetVisible && (
         <StylingLocationSheet
           visible

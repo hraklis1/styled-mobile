@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -29,10 +29,12 @@ type Props = {
   title: string;
   subtitle?: string;
   options: ActionMenuOption[];
+  /** Optional content shown above the options, inside the scroll area. */
+  children?: ReactNode;
   onClose: () => void;
 };
 
-export function ActionMenuSheet({ visible, title, subtitle, options, onClose }: Props) {
+export function ActionMenuSheet({ visible, title, subtitle, options, children, onClose }: Props) {
   const insets = useSafeAreaInsets();
   const animation = useRef(new Animated.Value(0)).current;
   const [mounted, setMounted] = useState(visible);
@@ -85,6 +87,7 @@ export function ActionMenuSheet({ visible, title, subtitle, options, onClose }: 
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
 
           <ScrollView style={styles.optionsScroll} contentContainerStyle={styles.options} showsVerticalScrollIndicator={false}>
+            {children}
             {options.map((option) => (
               <TouchableOpacity
                 key={option.label}
