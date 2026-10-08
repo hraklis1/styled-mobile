@@ -65,11 +65,11 @@ describe('guided piece review', () => {
     const candidate = tree.root.find((n) => n.props.accessibilityRole === 'button' && n.props.accessibilityLabel === 'Cotton shirt, COS');
     act(() => candidate.props.onPress());
     expect(resolutions().d0).toMatchObject({ itemId: 1, source: 'suggested' });
-    press(tree, 'PrimaryButton', 'Save & next');
+    press(tree, 'PrimaryButton', 'Confirm & next');
     expect(resolutions().d0).toEqual({ kind: 'matched', itemId: 2, source: 'user' });
     // Nothing chosen yet: the anchored confirm is there but disabled.
     expect(node(tree, 'PrimaryButton', 'Add to outfit').props.disabled).toBe(true);
-    press(tree, 'TextLink', 'Skip this piece');
+    press(tree, 'TextLink', 'Skip');
     expect(resolutions().d1.kind).toBe('dismissed');
     expect(node(tree, 'WorkspaceSheet').props.dismissed).toBe(true);
     act(() => tree.unmount());
@@ -77,7 +77,7 @@ describe('guided piece review', () => {
 
   it('closing partway through preserves decisions and discards an unconfirmed pick', () => {
     const tree = mount(['d0', 'd1']);
-    press(tree, 'PrimaryButton', 'Save & next');
+    press(tree, 'PrimaryButton', 'Confirm & next');
     const candidate = tree.root.find((n) => n.props.accessibilityRole === 'button' && n.props.accessibilityLabel === 'Cotton shirt, COS');
     act(() => candidate.props.onPress());
     closeSheet(tree);
@@ -127,7 +127,7 @@ describe('guided piece review', () => {
     act(() => node(tree, 'NewPieceEditor').props.onChange({ brand: 'Arket', name: 'Summer shirt' }));
     expect(resolutions().d0).toMatchObject({ kind: 'new', draft: { brand: 'Arket', name: 'Summer shirt' } });
     expect(node(tree, 'WorkspaceSheet').props.headerAction.props.label).toBeUndefined();
-    press(tree, 'PrimaryButton', 'Save & next');
+    press(tree, 'PrimaryButton', 'Confirm & next');
     expect(node(tree, 'WorkspaceSheet').props.title).toBe('Match your pieces');
     expect(has(tree, 'NewPieceEditor')).toBe(false);
     expect(resolutions().d0).toMatchObject({ draft: { brand: 'Arket' } });
@@ -172,7 +172,7 @@ describe('guided piece review', () => {
     // No candidates: full-width options instead of a lone half-width tile.
     tree.root.find((n) => n.props.accessibilityLabel === 'Find it in my closet' && typeof n.props.onPress === 'function');
     tree.root.find((n) => n.props.accessibilityLabel === 'Add as a new piece' && typeof n.props.onPress === 'function');
-    press(tree, 'TextLink', 'Skip this piece');
+    press(tree, 'TextLink', 'Skip');
     expect(resolutions().d0.kind).toBe('dismissed');
     act(() => tree.unmount());
   });

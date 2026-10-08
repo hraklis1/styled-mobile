@@ -7,11 +7,12 @@ import { ScanItemSheet } from '../ScanItemSheet';
 import { scanItemDirect, useScanVisionPose, createItemsBatch } from '../../../hooks/useItems';
 import { enqueuePolish } from '../../../features/polish-queue/runner';
 import { useLibraryLaunch } from '../../../hooks/useCameraLaunch';
+import { SCAN_DRAFT_KEY } from '../../../features/scan-draft/store';
 
 jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'));
 jest.mock('../scan-review-workspace', () => ({ ScanReviewWorkspace: 'ReviewWorkspace' }));
 jest.mock('../../../features/polish-queue/runner', () => ({ enqueuePolish: jest.fn() }));
-jest.mock('@gorhom/bottom-sheet', () => ({ BottomSheetModal: 'BottomSheetModal', BottomSheetScrollView: 'BottomSheetScrollView', BottomSheetBackdrop: 'Backdrop' }));
+jest.mock('../../primitives/PhotoSourceSheet', () => ({ PhotoSourceSheet: 'PhotoSourceSheet' }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }));
 jest.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({}) }));
 jest.mock('../../../contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'test-user' } }) }));
@@ -115,4 +116,16 @@ it('scans a photo the caller already picked without opening the library', async 
   expect(library).not.toHaveBeenCalled();
   expect(detect).toHaveBeenCalled();
   expect(workspace().stage).toBe('pre-extract');
+});
+
+it('keep for later closes the scan and leaves its draft for the tray', async () => {
+  const onClose = jest.fn();
+  await act(async () => { renderer = TestRenderer.create(<ScanItemSheet visible autoLaunch="library" onClose={onClose} />); await settle(); });
+  expect(workspace().stage).toBe('pre-extract');
+  act(() => workspace().onUpdate(workspace().pieces[0].id, { name: 'Kept shirt' }));
+  await act(async () => { workspace().onKeepForLater(); await settle(); });
+  expect(onClose).toHaveBeenCalledTimes(1);
+  const draft = JSON.parse((await AsyncStorage.getItem(SCAN_DRAFT_KEY))!);
+  expect(draft.phase).toBe('pre-extract');
+  expect(draft.pending.map((p: { name: string }) => p.name)).toContain('Kept shirt');
 });

@@ -9,7 +9,11 @@ jest.mock('expo-file-system', () => ({
   Paths: { document: { uri: 'file:///var/mobile/Containers/Data/Application/NEW/Documents/' } },
 }));
 jest.mock('../../wardrobe/scan-review/LoadingStates', () => ({ DetectionState: 'Detection' }));
-jest.mock('../../wardrobe/scan-review/ActionBar', () => ({ PrimaryButton: 'PrimaryButton' }));
+jest.mock('../../wardrobe/scan-review/ActionBar', () => ({ PrimaryButton: 'PrimaryButton', PolishRow: 'PolishRow' }));
+const mockPolish = { polishAll: false, isPremium: true, balance: 10, costFor: (n: number) => n, setAll: jest.fn() };
+jest.mock('../../wardrobe/scan-review/usePolishChoice', () => ({ usePolishChoice: () => mockPolish }));
+jest.mock('../../../features/polish-queue/runner', () => ({ enqueuePolish: jest.fn() }));
+jest.mock('../../../contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'user-1' } }) }));
 jest.mock('../../wardrobe/scan-review/atoms', () => ({ TextLink: 'TextLink', TextSegment: 'TextSegment', GhostRow: 'GhostRow', OutlinePill: 'OutlinePill' }));
 jest.mock('../../primitives/UndoToast', () => ({ UndoToast: 'UndoToast' }));
 jest.mock('../../wardrobe/scan-review/feedback', () => ({ cropFeedback: jest.fn(), selectionFeedback: jest.fn() }));
@@ -18,11 +22,13 @@ jest.mock('../wear-review/PhotoHero', () => ({ PhotoHero: 'PhotoHero' }));
 jest.mock('../wear-review/PairingRow', () => ({ PairingRow: 'PairingRow' }));
 jest.mock('../wear-review/ClosetMatchSheet', () => ({ ClosetPicker: 'ClosetPicker' }));
 jest.mock('../wear-review/WearResolveSheet', () => ({ WearResolveSheet: 'WearResolveSheet' }));
+jest.mock('../../wardrobe/CropAdjustModal', () => ({ CropAdjustEditor: 'CropAdjustEditor' }));
 jest.mock('../wear-review/WornDateSheet', () => ({ WornDateSheet: 'WornDateSheet' }));
-jest.mock('../../wardrobe/scan-review/MenuRows', () => ({ MenuRow: 'MenuRow', ArmedDiscardRow: 'ArmedDiscardRow' }));
+jest.mock('../../wardrobe/scan-review/MenuRows', () => ({ ScanOptionsRows: 'ScanOptionsRows', scanOptionsRowCount: () => 2 }));
 jest.mock('../../wardrobe/scan-review/WorkspaceSheet', () => ({ WorkspaceSheet: 'WorkspaceSheet' }));
 jest.mock('../wear-review/NewPieceSheet', () => ({ NewPieceSheet: 'NewPieceSheet', NewPieceEditor: 'NewPieceEditor' }));
 jest.mock('../../../features/wear-log/runner', () => ({ discardWearFlow: jest.fn(), retryWearScan: jest.fn() }));
+jest.mock('../../../lib/paywall', () => ({ presentPaywall: jest.fn() }));
 jest.mock('../../../features/wear-log/api', () => ({ saveWearLog: jest.fn() }));
 jest.mock('../../../hooks/useReviewReducedMotion', () => ({ useReviewReducedMotion: () => true }));
 jest.mock('../../../hooks/useItems', () => ({ useItems: jest.fn(), applySavedItems: jest.fn() }));
@@ -39,6 +45,7 @@ import { useItems } from '../../../hooks/useItems';
 import { saveWearLog } from '../../../features/wear-log/api';
 import { closetItems, detection, reviewFixture } from '../../../features/wear-log/__fixtures__/review';
 import { reviewQueue } from '../../../features/wear-log/reducer';
+import type { ReviewFlow } from '../../../features/wear-log/types';
 import { dispatchWear, useWearLogStore } from '../../../features/wear-log/store';
 
 function linkLabels(tree: TestRenderer.ReactTestRenderer): string[] {
@@ -84,9 +91,9 @@ describe('WearReviewWorkspace while processing', () => {
       tree = TestRenderer.create(<WearReviewWorkspace onClose={onClose} onMinimize={jest.fn()} onLogged={jest.fn()} onPickManually={jest.fn()} />);
     });
     act(() => tree.root.find((n) => n.props.accessibilityLabel === 'More options' && typeof n.props.onPress === 'function').props.onPress());
-    const discard = tree.root.find((n) => (n.type as unknown) === 'ArmedDiscardRow');
-    expect(discard.props.label).toBe('Discard scan');
-    act(() => discard.props.onConfirm());
+    const options = tree.root.find((n) => (n.type as unknown) === 'ScanOptionsRows');
+    expect(options.props.discardLabel).toBe('Discard scan');
+    act(() => options.props.onDiscard());
     expect(jest.requireMock('../../../features/wear-log/runner').discardWearFlow).toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
     act(() => { tree.unmount(); });
@@ -104,6 +111,31 @@ describe('WearReviewWorkspace while processing', () => {
     });
     const buttons = tree.root.findAll((n) => (n.type as unknown) === 'PrimaryButton').map((n) => n.props.label);
     expect(buttons).toEqual(['Keep it for later']);
+    act(() => { tree.unmount(); });
+  });
+
+  it('an out-of-credits failure offers a top-up, then reads the same photo again', async () => {
+    useWearLogStore.setState({
+      flow: { status: 'failed', id: 'flow-1', photoUri: 'file:///p.jpg', date: '2026-09-30', message: 'credits', offline: false, needsCredits: true },
+    });
+    const paywall = jest.mocked(jest.requireMock('../../../lib/paywall').presentPaywall as () => Promise<boolean>);
+    const retry = jest.requireMock('../../../features/wear-log/runner').retryWearScan as jest.Mock;
+    retry.mockReturnValue(true);
+    paywall.mockResolvedValue(false);
+    let tree!: TestRenderer.ReactTestRenderer;
+    act(() => {
+      tree = TestRenderer.create(
+        <WearReviewWorkspace onClose={jest.fn()} onMinimize={jest.fn()} onLogged={jest.fn()} onPickManually={jest.fn()} />,
+      );
+    });
+    const button = tree.root.find((n) => (n.type as unknown) === 'PrimaryButton');
+    expect(button.props.label).toBe('Get credits');
+    // Dismissing the paywall leaves the scan alone.
+    await act(async () => { button.props.onPress(); });
+    expect(retry).not.toHaveBeenCalled();
+    paywall.mockResolvedValue(true);
+    await act(async () => { button.props.onPress(); });
+    expect(retry).toHaveBeenCalledTimes(1);
     act(() => { tree.unmount(); });
   });
 });
@@ -236,5 +268,62 @@ describe('compact outfit overview', () => {
     act(() => toast.props.onUndo());
     expect(useWearLogStore.getState().flow).toMatchObject({ resolutions: { d0: { kind: 'matched' } } });
     act(() => tree.unmount());
+  });
+});
+
+describe('polish for new pieces', () => {
+  const created = [{ id: 41, clientImportId: 'wear-flow-test-d0' }];
+  const newPieceFlow = () => {
+    useWearLogStore.setState({ flow: reviewFixture([detection('d0', 'low', null)]) });
+    act(() => dispatchWear({ type: 'markNew', detectionId: 'd0' }));
+    jest.mocked(saveWearLog).mockResolvedValue({ logId: 9, itemIds: [41], createdItems: created, alreadyLoggedItemIds: [] } as never);
+  };
+  const enqueue = () => jest.requireMock('../../../features/polish-queue/runner').enqueuePolish as jest.Mock;
+  afterEach(() => { mockPolish.polishAll = false; enqueue().mockClear(); });
+
+  it('offers polish only when the log creates pieces, and queues it after the log lands', async () => {
+    newPieceFlow();
+    mockPolish.polishAll = true;
+    const tree = mountReview();
+    const row = named(tree, 'PolishRow');
+    expect(row.props.state).toMatchObject({ count: 1, total: 1, cost: 1, locked: false });
+    await act(async () => { named(tree, 'PrimaryButton').props.onPress(); });
+    expect(enqueue()).toHaveBeenCalledWith('user-1', created);
+    act(() => { tree.unmount(); });
+  });
+
+  it('logs without polishing when the switch is off', async () => {
+    newPieceFlow();
+    const tree = mountReview();
+    expect(named(tree, 'PolishRow').props.state.count).toBe(0);
+    await act(async () => { named(tree, 'PrimaryButton').props.onPress(); });
+    expect(saveWearLog).toHaveBeenCalled();
+    expect(enqueue()).not.toHaveBeenCalled();
+    act(() => { tree.unmount(); });
+  });
+
+  it('shows no polish row when every piece is already in the closet', () => {
+    useWearLogStore.setState({ flow: reviewFixture([detection('d0', 'high')]) });
+    const tree = mountReview();
+    expect(tree.root.findAll((n) => (n.type as unknown) === 'PolishRow')).toHaveLength(0);
+    act(() => { tree.unmount(); });
+  });
+});
+
+describe('cropping a new piece', () => {
+  it('leaves the sheet for the crop editor, saves the box, and returns to the same piece', () => {
+    useWearLogStore.setState({ flow: reviewFixture([detection('d0', 'low', null), detection('d1', 'low', null)]) });
+    act(() => dispatchWear({ type: 'markNew', detectionId: 'd1' }));
+    const tree = mountReview();
+    act(() => named(tree, 'PrimaryButton').props.onPress());
+    act(() => named(tree, 'WearResolveSheet').props.onClose({ detectionId: 'd1', queue: ['d0', 'd1'], index: 1 }));
+    expect(tree.root.findAll((n) => (n.type as unknown) === 'WearResolveSheet')).toHaveLength(0);
+    const editor = named(tree, 'CropAdjustEditor');
+    expect(editor.props.sourceImage).toBe('file:///outfit.jpg');
+    act(() => editor.props.onApply({ x: 5, y: 5, width: 50, height: 60 }));
+    const flow = useWearLogStore.getState().flow as ReviewFlow;
+    expect(flow.resolutions.d1).toMatchObject({ kind: 'new', draft: { cropBbox: { x: 5, y: 5, width: 50, height: 60 } } });
+    expect(named(tree, 'WearResolveSheet').props).toMatchObject({ queue: ['d0', 'd1'], startIndex: 1 });
+    act(() => { tree.unmount(); });
   });
 });

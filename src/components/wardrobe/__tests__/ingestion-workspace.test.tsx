@@ -11,7 +11,6 @@ jest.mock('../scan-review/PhotoReview', () => ({ PhotoReview: 'PhotoReview' }));
 jest.mock('../scan-review/PieceEditorSheet', () => ({ PieceEditorSheet: 'Editor' }));
 jest.mock('../scan-review/PieceDetailSheet', () => ({ PieceDetailSheet: 'PieceDetail' }));
 jest.mock('../scan-review/atoms', () => ({ ChipRow: 'Chips', TextLink: 'TextLink' }));
-jest.mock('../scan-review/BatchActionBar', () => ({ BatchActionBar: 'Dock' }));
 jest.mock('../scan-review/BrandSearchSheet', () => ({ BrandSearchSheet: 'BrandSheet' }));
 jest.mock('../scan-review/ActionBar', () => ({ ActionBar: 'Actions' }));
 jest.mock('../scan-review/usePolishChoice', () => ({ usePolishChoice: () => ({ isPremium: true, polishAll: false, isPolished: () => false, setAll: jest.fn(), setPiece: jest.fn(), costPerPiece: 4, costFor: (n: number) => n * 4, balance: 20 }) }));

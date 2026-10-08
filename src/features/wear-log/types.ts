@@ -52,6 +52,11 @@ export type WearDraft = {
   fit: string | null;
   sizeProfile: SizeProfile | null;
   sleeveLength: SleeveLength | null;
+  /**
+   * The user's own crop, in percent of the outfit photo. The cover is cut from
+   * the stored photo at save time; absent means the scan's crop is used.
+   */
+  cropBbox?: { x: number; y: number; width: number; height: number } | null;
 };
 
 /**
@@ -73,7 +78,7 @@ export type WearFlow =
   | { status: 'idle' }
   | (Base & { status: 'processing'; startedAt: number })
   /** `offline` failures wait for the connection and retry on their own. */
-  | (Base & { status: 'failed'; message: string; offline: boolean })
+  | (Base & { status: 'failed'; message: string; offline: boolean; /** Out of credits: retrying waits on a top-up. Absent on flows saved before it existed. */ needsCredits?: boolean })
   | (Base & {
       status: 'reviewing' | 'saving';
       scan: WearScan;
@@ -91,7 +96,7 @@ export type ReviewFlow = Extract<WearFlow, { status: 'reviewing' | 'saving' }>;
 export type WearEvent =
   | { type: 'capture'; id: string; photoUri: string; date: string; now: number }
   | { type: 'scanSucceeded'; id: string; scan: WearScan; now: number }
-  | { type: 'scanFailed'; id: string; message: string; offline?: boolean }
+  | { type: 'scanFailed'; id: string; message: string; offline?: boolean; needsCredits?: boolean }
   | { type: 'retry'; now: number }
   | { type: 'confirm'; detectionId: string; itemId: number }
   | { type: 'addAdditionalItem'; itemId: number }

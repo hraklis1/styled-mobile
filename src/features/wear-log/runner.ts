@@ -46,9 +46,11 @@ function isOfflineError(err: unknown): boolean {
   return !(err as { response?: unknown })?.response;
 }
 
+const statusOf = (err: unknown) => (err as { response?: { status?: number } })?.response?.status;
+
 function messageFor(err: unknown): string {
-  const status = (err as { response?: { status?: number } })?.response?.status;
-  if (status === 402) return 'You’re out of scan credits. You can still pick the pieces yourself.';
+  const status = statusOf(err);
+  if (status === 402) return 'You’re out of scan credits. Top up to read this photo, or pick the pieces yourself.';
   if (status === 503) return 'The scanner is busy. Try again in a moment.';
   if (!status) return 'You’re offline. We’ll finish reading this photo when you’re back.';
   return 'Couldn’t read this photo. Try again, or pick the pieces yourself.';
@@ -74,7 +76,7 @@ async function run(id: string, photoUri: string) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     }
   } catch (err) {
-    dispatchWear({ type: 'scanFailed', id, message: messageFor(err), offline: isOfflineError(err) });
+    dispatchWear({ type: 'scanFailed', id, message: messageFor(err), offline: isOfflineError(err), needsCredits: statusOf(err) === 402 });
   } finally {
     if (running === id) running = null;
   }

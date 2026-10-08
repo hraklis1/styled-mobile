@@ -3,13 +3,17 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { colors } from '../../../theme';
+import { reviewPhotoHeight } from '../../wardrobe/scan-review/MarkedPhoto';
 
 type Size = { width: number; height: number };
 
-/** Full-photo height for a given width: the photo's own shape, within sane bounds. */
+/**
+ * The photo's own shape at this width, capped at the closet scan's review
+ * photo height so the first rows still show; a tap opens the whole photo.
+ */
 export function photoHeaderHeight(width: number, screenHeight: number, natural: Size | null) {
   const aspect = natural && natural.width && natural.height ? natural.height / natural.width : 5 / 4;
-  return Math.round(Math.min(width * aspect, screenHeight * 0.62));
+  return Math.round(Math.min(width * aspect, reviewPhotoHeight(screenHeight)));
 }
 
 /**

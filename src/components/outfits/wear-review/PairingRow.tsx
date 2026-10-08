@@ -6,6 +6,7 @@ import type { Resolution, WearDetection } from '../../../features/wear-log/types
 import type { Item } from '../../../types/item';
 import { colors, radii, spacing, stroke, typography } from '../../../theme';
 import { PieceImage } from './PieceImage';
+import { pieceRowText } from '../../wardrobe/scan-review/pieceRowText';
 
 export const PairingRow = memo(function PairingRow({ detection, resolution, itemsById, sharedWith, wardrobeReady, disabled, onOpen, onRestore }: {
   detection: WearDetection;
@@ -53,8 +54,8 @@ export const PairingRow = memo(function PairingRow({ detection, resolution, item
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, minHeight: 96 },
   copy: { flex: 1, minWidth: 0, gap: 4 },
-  name: { ...typography.text.bodySmall, color: colors.foreground },
-  meta: { ...typography.text.meta, color: colors.mutedForeground, flexShrink: 1 },
+  name: pieceRowText.name,
+  meta: { ...pieceRowText.detail, flexShrink: 1 },
   undo: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 28, paddingHorizontal: spacing.sm, borderRadius: radii.action, borderWidth: stroke.hairline, borderColor: colors.controlOutline },
   undoPressed: { backgroundColor: colors.surfaceSubtle },
   undoDisabled: { opacity: 0.4 },

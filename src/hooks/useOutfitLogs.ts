@@ -33,7 +33,7 @@ export type CreateOutfitLogInput = {
   rating?: number | null;
 };
 
-export function useCreateOutfitLog() {
+export function useCreateOutfitLog({ alertOnError = true }: { alertOnError?: boolean } = {}) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateOutfitLogInput) =>
@@ -44,7 +44,8 @@ export function useCreateOutfitLog() {
       qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
     },
     onError: () => {
-      Alert.alert('Error', "Couldn't log outfit. Please try again.");
+      // Callers that show the failure in place opt out of the alert.
+      if (alertOnError) Alert.alert('Error', "Couldn't log outfit. Please try again.");
     },
   });
 }

@@ -9,6 +9,8 @@ import { PrimaryButton } from './ActionBar';
 import { AdjustCropButton, CropPreview, SheetClose } from './PieceEditorSheet';
 import { SpecSheet, type ExpandableRow, type SheetKind } from './SpecSheet';
 import { WorkspaceSheet } from './WorkspaceSheet';
+import { CategoryPicker, MaterialPicker } from './pickers';
+import { selectionFeedback } from './feedback';
 import { TextLink } from './atoms';
 import { coverUri, type PiecePatch, type ScanReviewPiece, type ScanReviewStage } from './types';
 
@@ -16,7 +18,10 @@ import { coverUri, type PiecePatch, type ScanReviewPiece, type ScanReviewStage }
  * After extraction: the same sheet as the pre-extract editor (preview, crop,
  * Done), with the full spec list in place of Type and Brand. Edits save as
  * they're made; Done also marks the piece as looked at, which retires its
- * "worth a look" note.
+ * "worth a look" note. Material and category open in place, as in the
+ * outfit log's new-piece editor: a sheet over a sheet is the
+ * dismiss-before-present trap. Brand keeps its own search sheet, which can
+ * offer the brand to the scan's other pieces.
  */
 export function PieceDetailSheet({ piece, stage, confirmed, disabled, dismissed, reduceMotion, onClose, onDone, onCrop, onToggleCutout, polish, onUpdate, onOpenSheet }: {
   piece: ScanReviewPiece;
@@ -36,18 +41,27 @@ export function PieceDetailSheet({ piece, stage, confirmed, disabled, dismissed,
   onOpenSheet: (kind: SheetKind) => void;
 }) {
   const [expandedRow, setExpandedRow] = useState<ExpandableRow | null>(null);
+  const [picker, setPicker] = useState<Exclude<SheetKind, 'brand'> | null>(null);
   const showingCutout = Boolean(piece.cutout && piece.useCutout);
+  const openPicker = (kind: SheetKind) => (kind === 'brand' ? onOpenSheet(kind) : setPicker(kind));
+  const back = () => setPicker(null);
   return (
     <WorkspaceSheet
-      title="Piece details"
+      title={picker === 'material' ? 'Material' : picker === 'category' ? 'Category' : 'Piece details'}
       detent="large"
       reduceMotion={reduceMotion}
       dismissed={dismissed}
       onClose={onClose}
-      headerAction={<SheetClose onPress={onDone} />}
-      footer={<PrimaryButton label="Done" onPress={onDone} disabled={disabled} />}
+      headerAction={picker ? <TextLink label="Back" weight="strong" onPress={back} accessibilityLabel="Back to piece details" /> : <SheetClose onPress={onDone} />}
+      footer={<PrimaryButton label={picker ? 'Back to piece details' : 'Done'} onPress={picker ? back : onDone} disabled={disabled} />}
     >
-      <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" bottomOffset={spacing.lg}>
+      {picker === 'material' ? (
+        <MaterialPicker current={piece.material} onSelect={(material) => { selectionFeedback(); onUpdate({ material }); back(); }} />
+      ) : picker === 'category' ? (
+        <View style={styles.pickerPad}>
+          <CategoryPicker category={piece.category} subcategory={piece.subcategory} style={piece.style} onChange={(patch) => onUpdate(patch)} />
+        </View>
+      ) : <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" bottomOffset={spacing.lg}>
         <View style={styles.media}>
           <CropPreview uri={coverUri(piece, stage)} name={piece.name} reduceMotion={reduceMotion} />
           <View style={styles.mediaActions}>
@@ -82,15 +96,16 @@ export function PieceDetailSheet({ piece, stage, confirmed, disabled, dismissed,
           disabled={disabled}
           onExpand={setExpandedRow}
           onUpdate={onUpdate}
-          onOpenSheet={onOpenSheet}
+          onOpenSheet={openPicker}
         />
-      </KeyboardAwareScrollView>
+      </KeyboardAwareScrollView>}
     </WorkspaceSheet>
   );
 }
 
 const styles = StyleSheet.create({
   content: { paddingBottom: spacing.lg, gap: spacing.lg },
+  pickerPad: { paddingHorizontal: spacing.lg },
   media: { alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg },
   mediaActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
   polish: {

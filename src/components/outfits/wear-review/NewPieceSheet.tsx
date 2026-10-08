@@ -1,10 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { WorkspaceSheet } from '../../wardrobe/scan-review/WorkspaceSheet';
 import { SpecSheet, type ExpandableRow, type SheetKind } from '../../wardrobe/scan-review/SpecSheet';
 import { BrandPicker, CategoryPicker, MaterialPicker } from '../../wardrobe/scan-review/pickers';
 import { TextLink } from '../../wardrobe/scan-review/atoms';
+import { AdjustCropButton } from '../../wardrobe/scan-review/PieceEditorSheet';
+import { PieceThumb } from '../../wardrobe/scan-review/PieceThumb';
+import { cropImage } from '../../../lib/cropImage';
 import { selectionFeedback } from '../../wardrobe/scan-review/feedback';
 import type { PiecePatch, ScanReviewPiece } from '../../wardrobe/scan-review/types';
 import { useBrandSuggestions } from '../../../hooks/useItems';
@@ -48,7 +51,7 @@ function toDraftPatch(patch: PiecePatch): Partial<WearDraft> {
  * Every edit is saved to the review as it's made; nothing is created until
  * the outfit is logged.
  */
-export function NewPieceEditor({ detection, draft, scanBrands, onChange, onLocate }: {
+export function NewPieceEditor({ detection, draft, scanBrands, photoUri, onChange, onLocate, onAdjustCrop }: {
   detection: WearDetection;
   draft: WearDraft;
   /** Brands already chosen for other new pieces in this review. */
@@ -56,10 +59,23 @@ export function NewPieceEditor({ detection, draft, scanBrands, onChange, onLocat
   onChange: (patch: Partial<WearDraft>) => void;
   /** Show this piece outlined on the outfit photo. */
   onLocate?: () => void;
+  /** The stored outfit photo: the user's crop is previewed from it. */
+  photoUri?: string;
+  /** Opens the crop editor; omitted where cropping isn't offered. */
+  onAdjustCrop?: () => void;
 }) {
   const [picker, setPicker] = useState<SheetKind | null>(null);
   const [expandedRow, setExpandedRow] = useState<ExpandableRow | null>(null);
   const brandSuggestions = useBrandSuggestions();
+  // The user's crop, cut locally for the preview; the saved cover is cut again at full size.
+  const [cropPreview, setCropPreview] = useState<string | null>(null);
+  const box = draft.cropBbox;
+  useEffect(() => {
+    if (!box || !photoUri) { setCropPreview(null); return; }
+    let live = true;
+    void cropImage(photoUri, box, { maxDim: 800 }).then((uri) => { if (live) setCropPreview(uri); });
+    return () => { live = false; };
+  }, [photoUri, box?.x, box?.y, box?.width, box?.height]); // eslint-disable-line react-hooks/exhaustive-deps
   const piece = useMemo(() => toPiece(detection, draft), [detection, draft]);
   const flags = pieceFlags(piece);
   const update = (patch: PiecePatch) => onChange(toDraftPatch(patch));
@@ -97,9 +113,15 @@ export function NewPieceEditor({ detection, draft, scanBrands, onChange, onLocat
           <Text style={[styles.subtitle, styles.pad]}>Saved to your closet when you log</Text>
           <View style={styles.plate}>
             <LocateInPhoto name={detection.attributes.name} onPress={onLocate}>
-              <PieceImage cropUrl={detection.cropUrl} cutoutUrl={detection.cutoutUrl} width={168} height={210} />
+              {box ? <PieceThumb uri={cropPreview} width={168} height={210} />
+                : <PieceImage cropUrl={detection.cropUrl} cutoutUrl={detection.cutoutUrl} width={168} height={210} />}
             </LocateInPhoto>
           </View>
+          {/* Under the plate, as in the closet scan's piece sheet: the mat stays snug to the photo. */}
+          {onAdjustCrop ? <View style={styles.cropActions}>
+            <AdjustCropButton onPress={onAdjustCrop} />
+            {box ? <TextLink label="Use the scan’s crop" tone="muted" onPress={() => onChange({ cropBbox: null })} /> : null}
+          </View> : null}
           <SpecSheet
             piece={piece}
             stage="review"
@@ -132,6 +154,7 @@ const styles = StyleSheet.create({
   content: { paddingBottom: spacing.xl, gap: spacing.lg },
   pad: { paddingHorizontal: spacing.lg },
   // A mat around the raw crop so an unsegmented photo reads as framed, not cut out.
+  cropActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.lg },
   plate: {
     alignSelf: 'center',
     padding: spacing.md,

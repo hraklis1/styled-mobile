@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, SectionList, Pressable, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { Modal, Platform, SectionList, Pressable, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,9 +7,15 @@ import { Image } from 'expo-image';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { DetectionState } from '../../wardrobe/scan-review/LoadingStates';
-import { PrimaryButton } from '../../wardrobe/scan-review/ActionBar';
+import { SlowScanHint } from '../../wardrobe/scan-review/SlowScanHint';
+import { PolishRow, PrimaryButton, actionBarStyle } from '../../wardrobe/scan-review/ActionBar';
+import { usePolishChoice } from '../../wardrobe/scan-review/usePolishChoice';
+import { enqueuePolish } from '../../../features/polish-queue/runner';
+import { useAuth } from '../../../contexts/AuthContext';
 import { OutlinePill, TextLink } from '../../wardrobe/scan-review/atoms';
 import { cropFeedback, selectionFeedback } from '../../wardrobe/scan-review/feedback';
+import { localISODay } from '../../../lib/dates';
+import { presentPaywall } from '../../../lib/paywall';
 import { UndoToast } from '../../primitives/UndoToast';
 import { useReviewReducedMotion } from '../../../hooks/useReviewReducedMotion';
 import { applySavedItems, useItems } from '../../../hooks/useItems';
@@ -18,43 +24,27 @@ import { track } from '../../../lib/analytics';
 import { colors, radii, spacing, stroke, typography } from '../../../theme';
 import type { Item } from '../../../types/item';
 import { saveWearLog } from '../../../features/wear-log/api';
-import { canLog, matchedItemIds, orderedDetections, reviewCounts, reviewQueue, selectedItemIds, sharedMatch } from '../../../features/wear-log/reducer';
+import { canLog, matchedItemIds, newDetections, orderedDetections, reviewCounts, reviewQueue, selectedItemIds, sharedMatch } from '../../../features/wear-log/reducer';
 import { discardWearFlow, retryWearScan } from '../../../features/wear-log/runner';
 import { dispatchWear, useWearLogStore } from '../../../features/wear-log/store';
 import type { ReviewFlow, WearDetection } from '../../../features/wear-log/types';
 import { ClosetPicker } from './ClosetMatchSheet';
 import { WorkspaceSheet } from '../../wardrobe/scan-review/WorkspaceSheet';
-import { ArmedDiscardRow, MenuRow } from '../../wardrobe/scan-review/MenuRows';
-import { WearResolveSheet } from './WearResolveSheet';
+import { ScanOptionsRows, scanOptionsRowCount } from '../../wardrobe/scan-review/MenuRows';
+import { WearResolveSheet, type CropRequest } from './WearResolveSheet';
+import { CropAdjustEditor } from '../../wardrobe/CropAdjustModal';
 import { PieceImage } from './PieceImage';
 import { WornDateSheet } from './WornDateSheet';
 import { PairingRow } from './PairingRow';
 import { OutfitPhotoHeader, photoHeaderHeight } from './OutfitPhotoHeader';
 
-type Surface = { kind: 'resolve'; queue: string[]; startIndex?: number; initialPhoto?: boolean } | { kind: 'add' } | { kind: 'date' };
+type Surface = { kind: 'resolve'; queue: string[]; startIndex?: number; initialPhoto?: boolean } | { kind: 'add' } | { kind: 'date' } | ({ kind: 'crop' } & CropRequest);
 
-/** After this long a scan offers to carry on without the user watching. */
-const SLOW_SCAN_MS = 8_000;
+const FULL_BOX = { x: 0, y: 0, width: 100, height: 100 };
 
-/** True once `key` has stayed the same for `ms`; resets when it changes. */
-function useSlowFlag(key: string | null, ms: number): boolean {
-  const [slow, setSlow] = useState(false);
-  useEffect(() => {
-    setSlow(false);
-    if (!key) return;
-    const t = setTimeout(() => setSlow(true), ms);
-    return () => clearTimeout(t);
-  }, [key, ms]);
-  return slow;
-}
 type DateChoice = 'today' | 'yesterday' | 'other';
 
-function isoDay(offset: number): string {
-  const d = new Date();
-  d.setHours(12, 0, 0, 0);
-  d.setDate(d.getDate() + offset);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
+const isoDay = localISODay;
 
 function dateChoice(date: string): DateChoice {
   if (date === isoDay(0)) return 'today';
@@ -88,7 +78,6 @@ export function WearReviewWorkspace({ onClose, onMinimize, onLogged, onPickManua
     setWorkspaceOpen(true);
     return () => setWorkspaceOpen(false);
   }, [setWorkspaceOpen]);
-  const slow = useSlowFlag(flow.status === 'processing' ? flow.id : null, SLOW_SCAN_MS);
   const safe = useSafeAreaInsets();
   // The logger is an iOS page sheet, which already starts below the status
   // bar; the window's top inset would push the header down a second time.
@@ -112,16 +101,11 @@ export function WearReviewWorkspace({ onClose, onMinimize, onLogged, onPickManua
         ) : null}
         {flow.status === 'processing' ? (
           <View style={[styles.bar, styles.bottom, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
-            {slow ? (
-              <View style={styles.center} accessibilityLiveRegion="polite">
-                <Text style={styles.slowText}>Taking longer than usual</Text>
-                <TextLink label="Keep going in the background" onPress={onMinimize} />
-              </View>
-            ) : (
+            <SlowScanHint watchKey={flow.id} background={{ onPress: onMinimize }}>
               <View style={styles.center}>
                 <TextLink label="Pick the pieces yourself" tone="muted" onPress={onPickManually} />
               </View>
-            )}
+            </SlowScanHint>
           </View>
         ) : (
           <View style={styles.failed} accessibilityLiveRegion="polite">
@@ -131,7 +115,10 @@ export function WearReviewWorkspace({ onClose, onMinimize, onLogged, onPickManua
             <View style={[styles.bar, styles.bottom, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
               {flow.offline
                 ? <PrimaryButton label="Keep it for later" onPress={onMinimize} />
-                : <PrimaryButton label="Try again" onPress={() => { if (!retryWearScan()) onPickManually(); }} />}
+                : flow.needsCredits
+                  // As in the closet scan: top up, then the same photo is read with no re-pick.
+                  ? <PrimaryButton label="Get credits" onPress={() => { void presentPaywall().then((ok) => { if (ok && !retryWearScan()) onPickManually(); }); }} />
+                  : <PrimaryButton label="Try again" onPress={() => { if (!retryWearScan()) onPickManually(); }} />}
               <View style={styles.center}><TextLink label="Pick the pieces yourself" onPress={onPickManually} /></View>
             </View>
           </View>
@@ -172,9 +159,9 @@ function ScanOptions({ detail, disabled, reduceMotion, onMinimize, onDiscard }: 
       <Ionicons name="ellipsis-horizontal" size={22} color={colors.foreground} />
     </Pressable>
     {open ? <View style={styles.sheetHost} pointerEvents="box-none">
-      <WorkspaceSheet title="Outfit options" reduceMotion={reduceMotion} dismissed={dismissed} onClose={() => setOpen(false)}>
-        <MenuRow icon="chevron-down" label="Keep for later" onPress={() => then(onMinimize)} />
-        <ArmedDiscardRow label="Discard scan" detail={detail} onConfirm={() => then(() => { discardWearFlow(); onDiscard(); })} />
+      <WorkspaceSheet title="Outfit options" detent="fit" rows={scanOptionsRowCount(onMinimize)} reduceMotion={reduceMotion} dismissed={dismissed} onClose={() => setOpen(false)}>
+        <ScanOptionsRows onKeep={() => then(onMinimize)} discardLabel="Discard scan" detail={detail}
+          onDiscard={() => then(() => { discardWearFlow(); onDiscard(); })} />
       </WorkspaceSheet>
     </View> : null}
   </>;
@@ -263,7 +250,24 @@ function Review({ flow, screenHeight, width, insets, reduceMotion, onClose, onMi
     const t = setTimeout(() => setSkipToast(null), 4000);
     return () => clearTimeout(t);
   }, [skipToast]);
-  const closeSurface = () => { dispatchWear({ type: 'closeResolve' }); setSurface(null); };
+  const closeSurface = (crop?: CropRequest) => {
+    if (crop) { setSurface({ kind: 'crop', ...crop }); return; }
+    dispatchWear({ type: 'closeResolve' });
+    setSurface(null);
+  };
+  // Back to the same piece, in the same walk, once the crop is applied or cancelled.
+  const resumeAfterCrop = (crop: CropRequest) => setSurface({ kind: 'resolve', queue: crop.queue, startIndex: crop.index });
+  const cropTarget = surface?.kind === 'crop' ? flow.scan.detections.find((d) => d.id === surface.detectionId) : undefined;
+  const cropResolution = surface?.kind === 'crop' ? flow.resolutions[surface.detectionId] : undefined;
+
+  // New pieces join the closet when the outfit is logged; they can get a
+  // polished cover like any import, on the same terms (Premium, credits).
+  const { user } = useAuth();
+  const polish = usePolishChoice();
+  const newCount = newDetections(flow).length;
+  const polishing = polish.polishAll && newCount > 0;
+  const polishRef = useRef(polishing);
+  polishRef.current = polishing;
 
   const save = useCallback(async () => {
     const current = useWearLogStore.getState().flow;
@@ -273,6 +277,8 @@ function Review({ flow, screenHeight, width, insets, reduceMotion, onClose, onMi
     try {
       const saved = await saveWearLog(current);
       applySavedItems(qc, saved.createdItems);
+      // Queued only once the log has landed, so a polish can never hold it up or fail it.
+      if (polishRef.current && user && saved.createdItems.length) enqueuePolish(user.id, saved.createdItems);
       void qc.invalidateQueries({ queryKey: OUTFIT_LOGS_QUERY_KEY });
       void qc.invalidateQueries({ queryKey: ['items'] });
       cropFeedback(true);
@@ -282,6 +288,7 @@ function Review({ flow, screenHeight, width, insets, reduceMotion, onClose, onMi
         manually_added_count: current.additionalItemIds.length,
         skipped_count: Object.values(current.resolutions).filter((r) => r.kind === 'dismissed').length,
         already_logged_count: saved.alreadyLoggedItemIds.length,
+        polish_count: polishRef.current ? saved.createdItems.length : 0,
       });
       dispatchWear({ type: 'saved', logId: saved.logId, itemIds: saved.itemIds, alreadyLoggedItemIds: saved.alreadyLoggedItemIds });
     } catch (err) {
@@ -289,7 +296,7 @@ function Review({ flow, screenHeight, width, insets, reduceMotion, onClose, onMi
       const offline = !(err as { response?: unknown })?.response;
       dispatchWear({ type: 'saveFailed', message: offline ? 'You’re offline. Your review is saved — log it when you’re back.' : 'Couldn’t log this outfit. Try again.' });
     }
-  }, [qc, availableIds, isSuccess]);
+  }, [qc, availableIds, isSuccess, user]);
   const dateLabel = dateChoice(flow.date) === 'today' ? 'Worn today' : dateChoice(flow.date) === 'yesterday' ? 'Worn yesterday' : `Worn ${shortDate(flow.date)}`;
   const buttonLabel = saving ? 'Logging' : queue.length ? `Review pieces · ${queue.length} left` : 'Log outfit';
   const status = queue.length ? `${queue.length} to confirm${ready ? ` · ${ready} ready` : ''}`
@@ -339,6 +346,14 @@ function Review({ flow, screenHeight, width, insets, reduceMotion, onClose, onMi
         <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
           {flow.saveError ? <Text style={styles.error} accessibilityLiveRegion="assertive">{flow.saveError}</Text> : null}
           {missingAdditional.length ? <Text style={styles.error}>Remove unavailable pieces before logging.</Text> : null}
+          {newCount > 0 && !queue.length && !saving ? <PolishRow state={{
+            count: polishing ? newCount : 0,
+            total: newCount,
+            cost: polish.costFor(newCount),
+            balance: polish.balance,
+            locked: !polish.isPremium,
+            onToggle: (next) => { void polish.setAll(next); },
+          }} /> : null}
           {!isSuccess ? <View style={styles.loadingRow}><Text style={styles.meta}>{isError ? 'Couldn’t load your closet' : 'Loading your closet…'}</Text>{isError ? <TextLink label="Try again" onPress={() => { void refetch(); }} /> : null}</View> : null}
           <PrimaryButton label={buttonLabel} busy={saving} variant={queue.length && !saving ? 'secondary' : 'primary'} disabled={saving || !isSuccess || (!queue.length && (!canLog(flow) || missingAdditional.length > 0))}
             onPress={() => { if (queue.length) setSurface({ kind: 'resolve', queue }); else void save(); }} />
@@ -350,6 +365,19 @@ function Review({ flow, screenHeight, width, insets, reduceMotion, onClose, onMi
         {surface?.kind === 'resolve' ? <WearResolveSheet queue={surface.queue} startIndex={surface.startIndex} reviewIds={queue} initialPhoto={surface.initialPhoto} flow={flow} items={items} reduceMotion={reduceMotion} onClose={closeSurface} />
           : surface?.kind === 'add' ? <AdditionalPieceSheet items={items} selectedIds={selectedItemIds(flow)} reduceMotion={reduceMotion} onClose={closeSurface} />
           : surface?.kind === 'date' ? <WornDateSheet date={flow.date} reduceMotion={reduceMotion} onSelect={(date) => dispatchWear({ type: 'setDate', date })} onClose={closeSurface} /> : null}
+        {surface?.kind === 'crop' && cropTarget && cropResolution?.kind === 'new' ? (
+          <Modal visible animationType={reduceMotion ? 'fade' : 'slide'} presentationStyle="fullScreen" onRequestClose={() => resumeAfterCrop(surface)}>
+            <GestureHandlerRootView style={styles.root}>
+              <CropAdjustEditor
+                sourceImage={flow.photoUri}
+                initialBbox={cropResolution.draft.cropBbox ?? cropTarget.bbox_pct ?? FULL_BOX}
+                itemName={cropResolution.draft.name || cropTarget.attributes.name}
+                onApply={(bbox) => { dispatchWear({ type: 'editDraft', detectionId: cropTarget.id, patch: { cropBbox: bbox } }); resumeAfterCrop(surface); }}
+                onCancel={() => resumeAfterCrop(surface)}
+              />
+            </GestureHandlerRootView>
+          </Modal>
+        ) : null}
       </View>
     </GestureHandlerRootView>
   );
@@ -437,14 +465,7 @@ const styles = StyleSheet.create({
   accessoryCopy: { flex: 1, gap: 4 },
   accessoryStrip: { flexDirection: 'row', gap: spacing.xs },
   separator: { height: stroke.hairline, backgroundColor: colors.hairline, marginLeft: spacing.lg },
-  bar: {
-    gap: spacing.xs,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    borderTopWidth: stroke.hairline,
-    borderTopColor: colors.hairline,
-    backgroundColor: colors.background,
-  },
+  bar: actionBarStyle,
   dateChip: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, paddingHorizontal: spacing.md, borderRadius: 16, borderWidth: stroke.fine, borderColor: colors.controlOutline },
   dateText: { ...typography.text.meta, color: colors.foreground },
   pressed: { opacity: 0.6 },
@@ -454,7 +475,6 @@ const styles = StyleSheet.create({
   failedCopy: { ...typography.text.bodySmall, color: colors.mutedForeground, textAlign: 'center', paddingHorizontal: spacing.xl },
   center: { alignItems: 'center' },
   bottom: { marginTop: 'auto', alignSelf: 'stretch' },
-  slowText: { ...typography.text.meta, color: colors.mutedForeground },
   logged: { alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   loggedTitle: { ...typography.text.editorialSection, color: colors.foreground, marginTop: spacing.md },
   loggedMeta: { ...typography.text.meta, color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 1.2 },

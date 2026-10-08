@@ -1,5 +1,7 @@
 jest.mock('../../../lib/api', () => ({ api: { post: jest.fn() } }));
 jest.mock('../../../hooks/useItems', () => ({ createItemsBatch: jest.fn() }));
+jest.mock('../../../lib/cropImage', () => ({ cropImage: jest.fn(async () => 'data:image/jpeg;base64,crop') }));
+jest.mock('../../../lib/uploadImage', () => ({ uploadDataUrlsToR2: jest.fn(async () => [{ status: 'fulfilled', value: 'https://r2.example/crop.jpg' }]) }));
 
 import { api } from '../../../lib/api';
 import { createItemsBatch } from '../../../hooks/useItems';
@@ -29,7 +31,7 @@ it('saves a manual-only outfit', async () => {
 it('retries new-item creation and logging with the same idempotency keys', async () => {
   const flow = reduce(reviewFixture([detection('d0', 'low', null)]), { type: 'markNew', detectionId: 'd0' }) as ReviewFlow;
   flow.additionalItemIds = [3];
-  batch.mockResolvedValue({ items: [closetItems[0]], rejected: [] });
+  batch.mockResolvedValue({ items: [{ ...closetItems[0], clientImportId: 'wear-flow-test-d0' }], rejected: [] });
   post.mockRejectedValueOnce(new Error('connection lost'));
   await expect(saveWearLog(flow)).rejects.toThrow('connection lost');
   await expect(saveWearLog(flow)).resolves.toMatchObject({ itemIds: [3, 1] });
@@ -48,4 +50,39 @@ describe('new piece cover image', () => {
     const input = newItemInput('flow-test', { ...detection('d0'), cropUrl: null, cutoutUrl: 'https://x/cut.png' }, draft);
     expect(input.coverImageVariant).toBe('cutout');
   });
+});
+
+describe('a user crop', () => {
+  const cropped = () => {
+    const marked = reduce(reviewFixture([detection('d0', 'low', null)]), { type: 'markNew', detectionId: 'd0' }) as ReviewFlow;
+    return reduce(marked, { type: 'editDraft', detectionId: 'd0', patch: { cropBbox: { x: 10, y: 20, width: 30, height: 40 } } }) as ReviewFlow;
+  };
+
+  it('is cut from the stored photo, uploaded, and becomes the cover without the scan cutout', async () => {
+    batch.mockResolvedValue({ items: [{ ...closetItems[0], clientImportId: 'wear-flow-test-d0' }], rejected: [] });
+    await saveWearLog(cropped());
+    const { cropImage } = jest.requireMock('../../../lib/cropImage');
+    expect(cropImage).toHaveBeenCalledWith('file:///outfit.jpg', { x: 10, y: 20, width: 30, height: 40 }, { maxDim: 1200, quality: 0.88 });
+    expect(batch.mock.calls[0][0][0]).toMatchObject({ clientImportId: 'wear-flow-test-d0', imageUrl: 'https://r2.example/crop.jpg', cutoutUrl: null, coverImageVariant: 'original' });
+  });
+
+  it('fails the save instead of falling back when the crop cannot be made', async () => {
+    const { cropImage } = jest.requireMock('../../../lib/cropImage');
+    cropImage.mockResolvedValueOnce(null);
+    await expect(saveWearLog(cropped())).rejects.toThrow('cropped photo');
+    expect(batch).not.toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('leaves uncropped pieces on the scan crop', () => {
+    const d = { ...detection('d0'), cropUrl: 'https://scan/crop.jpg', cutoutUrl: 'https://scan/cut.webp' };
+    expect(newItemInput('flow-test', d, draftFrom(d))).toMatchObject({ imageUrl: 'https://scan/crop.jpg', cutoutUrl: 'https://scan/cut.webp', coverImageVariant: 'original' });
+  });
+});
+
+it('fails the save when the server leaves out a new piece, so the log never goes out short', async () => {
+  const flow = reduce(reviewFixture([detection('d0', 'low', null)]), { type: 'markNew', detectionId: 'd0' }) as ReviewFlow;
+  batch.mockResolvedValue({ items: [], rejected: [{ clientImportId: 'wear-flow-test-d0', message: 'Your free closet is full.' }] });
+  await expect(saveWearLog(flow)).rejects.toThrow('Your free closet is full.');
+  expect(post).not.toHaveBeenCalled();
 });
