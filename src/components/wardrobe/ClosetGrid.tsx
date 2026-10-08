@@ -18,7 +18,7 @@ type ExtraData = {
 
 type Props = {
   items: Item[];
-  numColumns?: 2 | 3;
+  numColumns?: 2 | 3 | 4;
   selectedIds: Set<number>;
   selectionMode: boolean;
   onItemPress: (item: Item) => void;
@@ -39,8 +39,10 @@ type Props = {
   viewabilityConfig?: { itemVisiblePercentThreshold?: number };
 };
 
-// Overhead reserves two title lines, one metadata line, and the card's spacing.
-const CARD_OVERHEAD = 88;
+// Overhead reserves the brand eyebrow, one title line, and the card's spacing.
+const CARD_OVERHEAD = 46 + spacing.gridRow;
+// Four across is image-only: names don't fit, so rows close up to the column gap.
+const COMPACT_OVERHEAD = COL_GAP;
 
 const ClosetGridComponent = forwardRef<FlashListRef<Item>, Props>(function ClosetGridComponent({
   items,
@@ -65,7 +67,8 @@ const ClosetGridComponent = forwardRef<FlashListRef<Item>, Props>(function Close
 }, ref) {
   const { width, fontScale } = useWindowDimensions();
   const cardWidth = (width - SIDE_PAD * 2 - COL_GAP * (numColumns - 1)) / numColumns;
-  const itemHeight = Math.round(cardWidth / CARD_ASPECT_RATIO) + CARD_OVERHEAD;
+  const compact = numColumns === 4;
+  const itemHeight = Math.round(cardWidth / CARD_ASPECT_RATIO) + (compact ? COMPACT_OVERHEAD : CARD_OVERHEAD);
 
   const extraData: ExtraData = { selectedIds, selectionMode };
 
@@ -83,10 +86,12 @@ const ClosetGridComponent = forwardRef<FlashListRef<Item>, Props>(function Close
         onPress={() => onItemPress(item)}
         onLongPress={() => onItemLongPress(item)}
         onToggleSelect={() => onToggleSelect(item.id)}
+        compact={compact}
+        bottomSpacing={compact ? COMPACT_OVERHEAD : spacing.gridRow}
       />
       </View>
     ),
-    [cardWidth, fontScale, selectionMode, selectedIds, onItemPress, onItemLongPress, onToggleSelect],
+    [cardWidth, compact, fontScale, selectionMode, selectedIds, onItemPress, onItemLongPress, onToggleSelect],
   );
 
   const overrideItemLayout = useCallback(
