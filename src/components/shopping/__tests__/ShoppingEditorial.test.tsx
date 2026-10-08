@@ -1,3 +1,8 @@
+jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 20, left: 0, right: 0 }) }));
+jest.mock('expo-blur', () => ({ BlurView: 'BlurView' }));
+jest.mock('../../../lib/haptics', () => ({ impactAsync: jest.fn(() => Promise.resolve()), ImpactFeedbackStyle: { Light: 'light', Medium: 'medium' } }));
+jest.mock('react-native-screens', () => ({ FullWindowOverlay: 'FullWindowOverlay' }));
+jest.mock('../../primitives/UndoToast', () => ({ UndoToast: 'UndoToast' }));
 jest.mock('../../../lib/api', () => ({ api: { post: jest.fn().mockResolvedValue({ data: { productKey: 'k' } }), delete: jest.fn().mockResolvedValue({}) } }));
 jest.mock('../../../hooks/useWishlist', () => ({ useWishlist: () => ({ data: [] }), saveProductOffer: jest.fn() }));
 import React from 'react';

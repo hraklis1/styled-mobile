@@ -1,5 +1,8 @@
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, Platform, type StyleProp, type ViewStyle, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { FullWindowOverlay } from 'react-native-screens';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useReducedMotion } from 'react-native-reanimated';
 import { colors, curatedProducts, radii, spacing, typography } from '../../theme';
 import type { OfferContext, OfferStatus, ProductOffer } from '../../types/commerce';
 import type { WishlistEntry } from '../../lib/wishlist';
@@ -16,11 +19,14 @@ import type { ShoppingPriorityTarget } from '../../lib/shoppingPriorityEdit';
 import type { Item } from '../../types/item';
 import { WishlistNavigationContext } from '../../contexts/WishlistNavigationContext';
 import { openShoppingLink } from './ShoppingRetailerLinks';
+import { UndoToast } from '../primitives/UndoToast';
+
+const SAVED_TOAST_MS = 3000;
 
 /** Surfaces where a listing can be hidden as "Not for me" (learned server-side). */
 const HIDEABLE_SURFACES = new Set(['shopping_guide', 'saved_guide']);
 
-export function CuratedItemRail({ editorial = false, offers, status = 'ready', heading = 'Pieces to consider', context, onRetry, savedDetail = false, reason, browserTitle, collectionAction = 'rail', exploreRequest = 0, target, wardrobe, openDirect = false, previewLimit = 3, hero = false }: {
+export function CuratedItemRail({ editorial = false, offers, status = 'ready', heading = 'Pieces to consider', context, onRetry, savedDetail = false, reason, browserTitle, collectionAction = 'rail', exploreRequest = 0, target, wardrobe, openDirect = false, previewLimit = 3, hero = false, budget }: {
   editorial?: boolean; offers: ProductOffer[]; status?: OfferStatus; heading?: string; context: OfferContext; onRetry?: () => void; savedDetail?: boolean;
   reason?: string; browserTitle?: string; collectionAction?: 'rail' | 'external'; exploreRequest?: number;
   target?: ShoppingPriorityTarget; wardrobe?: ReadonlyMap<number, Item>;
@@ -29,9 +35,17 @@ export function CuratedItemRail({ editorial = false, offers, status = 'ready', h
   previewLimit?: number;
   /** Large, swipeable cards that lead a chapter; "see all" becomes the rail's last card. */
   hero?: boolean;
+  /** The chapter's suggested budget; cards note when a price falls inside it. */
+  budget?: string | null;
 }) {
   const viewWishlist = useContext(WishlistNavigationContext);
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const reduceMotion = useReducedMotion();
+  const scrollX = useRef(new Animated.Value(0)).current;
+  const [page, setPage] = useState(0);
+  const [toast, setToast] = useState<WishlistEntry | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [contentWidth, setContentWidth] = useState(width - spacing.page * 2);
   const cardWidth = hero ? Math.round(Math.min(320, contentWidth * 0.72)) : editorial ? Math.min(240, Math.max(160, (contentWidth - spacing.md) / 1.5)) : Math.min(contentWidth, Math.max(curatedProducts.minWidth, Math.min(curatedProducts.maxWidth, contentWidth * curatedProducts.previewFraction)));
   const [browserOpen, setBrowserOpen] = useState(false);
@@ -69,7 +83,7 @@ export function CuratedItemRail({ editorial = false, offers, status = 'ready', h
   }
   useEffect(() => {
     generation.current += 1;
-    setBrowserOpen(false); setSelectedOffer(null); setErrors({}); setPanels(new Map()); setSavedLocally(new Map()); setSaving(new Set()); pending.current.clear();
+    setBrowserOpen(false); setSelectedOffer(null); setErrors({}); setPanels(new Map()); setSavedLocally(new Map()); setSaving(new Set()); pending.current.clear(); setToast(null); setPage(0);
     scroll.current?.scrollTo({ x: 0, animated: false });
   }, [context.reference, context.wishlistId, context.targetKey]);
   useEffect(() => {
@@ -91,6 +105,7 @@ export function CuratedItemRail({ editorial = false, offers, status = 'ready', h
         const entry = await saveProductOffer(offer, context);
         if (currentGeneration !== generation.current) return;
         setSavedLocally(old => new Map(old).set(key, entry));
+        showSaved(entry);
       }
       track(savedEntry ? 'curated_product_unsaved' : 'curated_product_saved', { surface: context.surface, targetKey: context.targetKey, offerId: offer.id });
     } catch (error) {
@@ -99,6 +114,13 @@ export function CuratedItemRail({ editorial = false, offers, status = 'ready', h
       if (currentGeneration === generation.current) { pending.current.delete(key); setSaving(new Set(pending.current)); }
     }
   }
+  function showSaved(entry: WishlistEntry) {
+    if (savedDetail) return;
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(entry);
+    toastTimer.current = setTimeout(() => setToast(null), SAVED_TOAST_MS);
+  }
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
   function openRetailer(offer: ProductOffer) {
     track('curated_product_opened', { surface: context.surface, targetKey: context.targetKey, offerId: offer.id, position: offers.indexOf(offer), provider: offer.provider, monetized: offer.monetized });
     void openShoppingLink(offer.url);
@@ -109,16 +131,22 @@ export function CuratedItemRail({ editorial = false, offers, status = 'ready', h
       imageAspectRatio={editorial || hero ? 0.8 : curatedProducts.imageAspectRatio} reason={hidden.get(offer.id)?.reason ?? null}
       onReason={reason => productFeedbackStore.setReason(offer, context, reason)}
       onUndo={() => { void productFeedbackStore.undo(offer.id); closePanel(offer.id); }} /></View>;
-    const savedEntry = savedLocally.get(key) ?? wishlist.find(entry => entry.outfit.product && productKey(entry.outfit.product.offer) === key);
-    return <View key={key} style={{ width: size }}><CuratedItemCard editorial={editorial} offer={offer} width={size}
+    return <View key={key} style={{ width: size }}><CuratedItemCard editorial={editorial} offer={offer} width={size} fit={hero ? 'cover' : 'contain'} budget={budget}
       saved={savedLocally.has(key) || wishlist.some(entry => entry.outfit.product && productKey(entry.outfit.product.offer) === key)}
       saving={saving.has(key)} saveFailed={!!errors[key]}
       onHide={canHide ? () => { const index = eligible.indexOf(offer); setPanels(old => new Map(old).set(offer.id, { offer, index })); productFeedbackStore.hide(offer, context); } : undefined}
       onSave={!savedDetail && (context.reference || context.wishlistId || savedLocally.has(key) || wishlist.some(entry => entry.outfit.product && productKey(entry.outfit.product.offer) === key)) ? () => void save(offer) : undefined}
       onOpen={() => openDirect ? openRetailer(offer) : (track('curated_product_detail_viewed', { surface: context.surface, targetKey: context.targetKey, offerId: offer.id, position: offers.indexOf(offer), provider: offer.provider, monetized: offer.monetized }), setSelectedOffer(offer))} />
-      {savedEntry && !savedDetail ? <Pressable accessibilityRole="button" accessibilityLabel={`View ${offer.title} in wishlist`} style={styles.quiet} onPress={() => viewWishlist(savedEntry.id)}><Text style={styles.link}>View wishlist</Text></Pressable> : null}
     </View>;
   }
+  const step = cardWidth + spacing.md;
+  /** Hero cards ease up to full size as they reach the leading edge. */
+  function heroCard(offer: ProductOffer, index: number) {
+    if (reduceMotion) return renderCard(offer, cardWidth);
+    const scale = scrollX.interpolate({ inputRange: [(index - 1) * step, index * step, (index + 1) * step], outputRange: [0.96, 1, 0.96], extrapolate: 'clamp' });
+    return <Animated.View key={productKey(offer)} style={{ transform: [{ scale }] }}>{renderCard(offer, cardWidth)}</Animated.View>;
+  }
+  const pageCount = preview.length + (seeAllCard ? 1 : 0);
   const selectedKey = selectedOffer ? productKey(selectedOffer) : '';
   const selectedSaved = savedLocally.has(selectedKey) || wishlist.some(entry => entry.outfit.product && productKey(entry.outfit.product.offer) === selectedKey);
   const canSave = !savedDetail && !!(context.reference || context.wishlistId || selectedSaved);
@@ -130,31 +158,56 @@ export function CuratedItemRail({ editorial = false, offers, status = 'ready', h
   const error = Object.values(errors)[0];
   return <View style={styles.section} onLayout={event => { if (event.nativeEvent.layout.width > 0) setContentWidth(event.nativeEvent.layout.width); }}>
     {heading ? <Text style={styles.heading}>{heading}</Text> : null}
-    {preview.length ? <ScrollView ref={scroll} horizontal showsHorizontalScrollIndicator={false} style={hero && styles.bleed} contentContainerStyle={[styles.rail, hero && styles.bleedRail]} snapToInterval={cardWidth + spacing.md} decelerationRate="fast">
-      {preview.map(offer => renderCard(offer, cardWidth))}
+    {preview.length ? <Animated.ScrollView ref={scroll} horizontal showsHorizontalScrollIndicator={false} style={hero && styles.bleed} contentContainerStyle={[styles.rail, hero && styles.bleedRail]} snapToInterval={step} decelerationRate="fast"
+      scrollEventThrottle={16} onScroll={hero ? Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], { useNativeDriver: true, listener: (event: { nativeEvent: { contentOffset: { x: number } } }) => setPage(Math.max(0, Math.min(pageCount - 1, Math.round(event.nativeEvent.contentOffset.x / step)))) }) : undefined}>
+      {preview.map((offer, index) => hero ? heroCard(offer, index) : renderCard(offer, cardWidth))}
       {seeAllCard ? <Pressable onPress={explore} accessibilityRole="button" accessibilityLabel={`See all ${eligible.length} options`}
         style={({ pressed }) => [styles.seeAll, { width: Math.round(cardWidth * 0.6) }, pressed && styles.pressed]}>
         <Text style={styles.seeAllCount}>{eligible.length}</Text>
         <Text style={styles.link}>See all options →</Text>
       </Pressable> : null}
-    </ScrollView> : status === 'pending' ? <View style={styles.rail} accessibilityLabel="Finding considered pieces" accessibilityState={{ busy: true }}>{[0, 1].map(key => <View key={key} style={{ width: cardWidth }}><View style={[styles.skeleton, { aspectRatio: editorial || hero ? 0.8 : curatedProducts.imageAspectRatio }]} /><View style={styles.skeletonLine} /><View style={[styles.skeletonLine, { width: '65%' }]} /></View>)}</View> : <Text style={styles.copy}>{status === 'unavailable' ? 'Shopping options are unavailable right now. Your styling guide is still here.' : 'No suitable listings right now. Use the style notes as your shopping guide.'}</Text>}
+    </Animated.ScrollView> : status === 'pending' ? <View style={styles.rail} accessibilityLabel="Finding considered pieces" accessibilityState={{ busy: true }}>{[0, 1].map(key => <View key={key} style={{ width: cardWidth }}><Shimmer style={[styles.skeleton, { aspectRatio: curatedProducts.imageAspectRatio }]} /><Shimmer style={styles.skeletonLine} /><Shimmer style={[styles.skeletonLine, { width: '65%' }]} /></View>)}</View> : <Text style={styles.copy}>{status === 'unavailable' ? 'Shopping options are unavailable right now. Your styling guide is still here.' : 'No suitable listings right now. Use the style notes as your shopping guide.'}</Text>}
+    {hero && pageCount > 1 ? <Text style={styles.pager} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">{page + 1} / {pageCount}</Text> : null}
     {collectionAction === 'rail' && eligible.length && !hero ? <Pressable onPress={explore} style={({ pressed }) => [styles.quiet, editorial && styles.collectionButton, pressed && styles.pressed]} accessibilityRole="button"><Text style={styles.link}>{editorial ? `Browse all ${eligible.length} ${eligible.length === 1 ? 'option' : 'options'}` : 'Explore all options'}</Text></Pressable> : null}
     {status === 'unavailable' && onRetry ? <Pressable onPress={retry} accessibilityRole="button" style={styles.quiet}><Text style={styles.link}>Try again</Text></Pressable> : null}
     {error ? <Text style={styles.copy} accessibilityRole="alert">{error}</Text> : null}
     {preview.some(offer => offer.monetized) ? <Text style={styles.copy}>{productDisclosure}</Text> : null}
     {browserOpen ? <CuratedProductBrowser editorial={editorial} visible title={browserTitle ?? (heading || 'Pieces to consider')} reason={reason} offers={eligible} status={status} context={context} onRetry={onRetry ? retry : undefined} onClose={() => { setSelectedOffer(null); setBrowserOpen(false); }} onCloseDetail={() => setSelectedOffer(null)} detail={detail} renderCard={renderCard} error={error} /> : null}
     {!browserOpen ? detail : null}
+    {toast ? <SavedToast bottom={insets.bottom + 96} onView={() => { setToast(null); setSelectedOffer(null); setBrowserOpen(false); viewWishlist(toast.id); }} /> : null}
   </View>;
 }
+/** A placeholder that breathes while listings load; still under Reduce Motion. */
+function Shimmer({ style }: { style: StyleProp<ViewStyle> }) {
+  const reduceMotion = useReducedMotion();
+  const opacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (reduceMotion) return;
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(opacity, { toValue: 0.5, duration: 700, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: 700, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [opacity, reduceMotion]);
+  return <Animated.View style={[style, { opacity }]} />;
+}
+
+/** Floats above every modal on iOS, so a save from "see all" or the detail confirms in the same place. */
+function SavedToast({ bottom, onView }: { bottom: number; onView: () => void }) {
+  const toast = <UndoToast message="Saved to wishlist" actionLabel="View" onUndo={onView} bottom={bottom} />;
+  return Platform.OS === 'ios' ? <FullWindowOverlay><View style={StyleSheet.absoluteFill} pointerEvents="box-none">{toast}</View></FullWindowOverlay> : toast;
+}
+
 const styles = StyleSheet.create({
   collectionButton: { alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.controlOutline, borderRadius: radii.full, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
-  seeAll: { aspectRatio: 0.48, alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderRadius: radii.photo, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.controlOutline },
+  seeAll: { aspectRatio: 0.48, alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderRadius: radii.photo, backgroundColor: curatedProducts.background, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.hairline },
   seeAllCount: { ...typography.text.editorialCompact, color: colors.foreground, fontVariant: ['tabular-nums'] },
-  section: { gap: spacing.md }, heading: { ...typography.text.label, color: colors.foreground },
+  section: { gap: spacing.md }, pager: { ...typography.text.caption, color: colors.mutedForeground, fontVariant: ['tabular-nums'], alignSelf: 'center' }, heading: { ...typography.text.label, color: colors.foreground },
   bleed: { marginHorizontal: -spacing.page }, bleedRail: { paddingHorizontal: spacing.page },
   rail: { flexDirection: 'row', gap: spacing.md, paddingBottom: spacing.xs },
   copy: { ...typography.text.bodySmall, color: colors.mutedForeground },
   quiet: { minWidth: 44, minHeight: 44, justifyContent: 'center' }, pressed: { opacity: 0.5 }, link: { ...typography.text.label, color: curatedProducts.accent },
-  skeleton: { backgroundColor: colors.surfaceSubtle, borderRadius: radii.photo },
+  skeleton: { backgroundColor: curatedProducts.background, borderRadius: radii.photo },
   skeletonLine: { backgroundColor: colors.surfaceSubtle, height: spacing.md, marginTop: spacing.sm, borderRadius: radii.sm },
 });

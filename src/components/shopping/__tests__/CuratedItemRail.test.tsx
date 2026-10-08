@@ -1,3 +1,7 @@
+jest.mock('expo-blur', () => ({ BlurView: 'BlurView' }));
+jest.mock('../../../lib/haptics', () => ({ impactAsync: jest.fn(() => Promise.resolve()), ImpactFeedbackStyle: { Light: 'light', Medium: 'medium' } }));
+jest.mock('react-native-screens', () => ({ FullWindowOverlay: 'FullWindowOverlay' }));
+jest.mock('../../primitives/UndoToast', () => ({ UndoToast: 'UndoToast' }));
 jest.mock('../../../lib/api', () => ({ api: { post: jest.fn().mockResolvedValue({ data: { productKey: 'k' } }), delete: jest.fn().mockResolvedValue({}) } }));
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
@@ -141,13 +145,16 @@ test('details preserve the collection and share save and unsave state', async ()
   expect(renderer.root.findByType(CuratedProductBrowser)).toBe(browser);
 });
 
-test('offers a link to the exact independently saved product', async () => {
+test('a save confirms with a toast that opens the exact saved product, without growing the card', async () => {
   (saveProductOffer as jest.Mock).mockResolvedValueOnce({ id: 'saved-product' });
   render({ offers: [offers[0]] });
   await act(async () => { renderer.root.findByType(CuratedItemCard).props.onSave(); });
-  const view = renderer.root.findAllByType(Pressable).find(node => node.props.accessibilityLabel === `View ${offers[0].title} in wishlist`)!;
-  act(() => view.props.onPress());
+  expect(renderer.root.findAllByType(Pressable).some(node => node.props.accessibilityLabel === `View ${offers[0].title} in wishlist`)).toBe(false);
+  const toast = renderer.root.findByType('UndoToast' as any);
+  expect(toast.props).toMatchObject({ message: 'Saved to wishlist', actionLabel: 'View', bottom: 20 + 96 });
+  act(() => toast.props.onUndo());
   expect(mockViewWishlist).toHaveBeenCalledWith('saved-product');
+  expect(renderer.root.findAllByType('UndoToast' as any)).toHaveLength(0);
 });
 
 test('editorial collection counts eligible options and carries its presentation into the browser', () => {

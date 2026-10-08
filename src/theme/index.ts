@@ -562,4 +562,11 @@ export const curatedProducts = {
   minWidth: 160, maxWidth: 280, previewFraction: 0.64, gridFontScaleLimit: 1.3, imageAspectRatio: 0.8,
   title: typography.text.bodySmall, metadata: typography.text.caption,
   background: shoppingSurfaces.bone, accent: shoppingSurfaces.olive.accent,
+  /** Serif product name, so a listing reads as part of the edit rather than a retailer feed. */
+  cardTitle: { fontFamily: editorialFamily.editorialRegular, fontSize: 16, lineHeight: 21 },
+  /** Whole-product images sit on the plate with this much air on every side. */
+  imageInset: '6%',
+  /** Translucent controls over photography; the Pressable around each keeps 44pt. */
+  control: { size: 32, icon: 16 },
+  pressedScale: 0.98,
 } as const;

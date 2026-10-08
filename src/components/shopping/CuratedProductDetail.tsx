@@ -1,8 +1,8 @@
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useReducedMotion } from 'react-native-reanimated';
-import { colors, curatedProducts, spacing, typography } from '../../theme';
+import { colors, curatedProducts, radii, spacing, typography } from '../../theme';
 import { productDisclosure, productDisplayTitle, productListingAction, productMerchantLabel } from '../../lib/productPresentation';
 import { targetOutfitIdeas, type ShoppingPriorityTarget } from '../../lib/shoppingPriorityEdit';
 import type { ProductOffer } from '../../types/commerce';
@@ -24,31 +24,39 @@ export type ProductDetailProps = {
   priceNote?: string;
 };
 
-/** Shared content also used inside the existing saved-product sheet. */
-export function ProductDetailContent({ offer, reason, target, wardrobe, saved, saving, error, onSave, onRetailer, priceNote }: ProductDetailProps) {
+/** Shop now, plus a bookmark that doesn't compete with it. */
+export function ProductDetailActions({ offer, saved, saving, onSave, onRetailer }: Pick<ProductDetailProps, 'offer' | 'saved' | 'saving' | 'onSave' | 'onRetailer'>) {
+  return <View style={styles.actions}>
+    <ActionButton label={productListingAction(offer)} icon="open-outline" onPress={onRetailer} style={styles.primary} />
+    {onSave ? <Pressable onPress={onSave} disabled={saving} accessibilityRole="button" accessibilityLabel={saving ? 'Updating wishlist' : saved ? 'Remove from wishlist' : 'Add to wishlist'} accessibilityState={{ disabled: saving, busy: saving, selected: saved }} style={({ pressed }) => [styles.bookmark, pressed && styles.pressed]}>
+      {saving ? <ActivityIndicator size="small" color={curatedProducts.accent} /> : <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={20} color={curatedProducts.accent} />}
+    </Pressable> : null}
+  </View>;
+}
+
+/** Shared content also used inside the existing saved-product sheet. Actions render inline unless a host pins them. */
+export function ProductDetailContent({ offer, reason, target, wardrobe, saved, saving, error, onSave, onRetailer, priceNote, inlineActions = true }: ProductDetailProps & { inlineActions?: boolean }) {
   const looks = target && wardrobe ? targetOutfitIdeas(target).filter(look => look.itemIds.some(id => wardrobe.has(id))) : [];
+  const brand = offer.brand || productMerchantLabel(offer.merchant);
   return <View style={styles.content}>
     <ProductImage offer={offer} />
     <View style={styles.identity}>
-      {offer.brand ? <Text style={styles.brand}>{offer.brand}</Text> : null}
+      {brand ? <Text style={styles.brand}>{brand}</Text> : null}
       <Text selectable accessibilityRole="header" style={styles.title}>{productDisplayTitle(offer)}</Text>
-      <Text selectable style={styles.price}>{offer.formattedPrice || 'See price at the listing'}</Text>
-      <Text selectable style={styles.copy}>{productMerchantLabel(offer.merchant)}</Text>
+      <Text selectable style={styles.price}>{offer.formattedPrice || 'See price at the listing'}<Text style={styles.merchant}>{` · ${productMerchantLabel(offer.merchant)}`}</Text></Text>
     </View>
-    {reason ? <View style={styles.context}><Text accessibilityRole="header" style={styles.heading}>Why I’d consider this style</Text><Text selectable style={styles.copy}>{reason}</Text></View> : null}
-    <View style={styles.actions}>
-      <ActionButton label={productListingAction(offer)} icon="open-outline" onPress={onRetailer} />
-      {onSave ? <ActionButton label={saving ? 'Updating…' : saved ? 'Added to wishlist · remove' : 'Add to wishlist'} icon={saved ? 'bookmark' : 'bookmark-outline'} variant="secondary" onPress={onSave} disabled={saving} /> : null}
-    </View>
+    {inlineActions ? <ProductDetailActions offer={offer} saved={saved} saving={saving} onSave={onSave} onRetailer={onRetailer} /> : null}
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
-    <Text selectable style={styles.caption}>{priceNote ?? 'Confirm price and availability at the listing.'}{offer.inStock === false ? ' This listing is currently unavailable.' : ''}</Text>
-    {offer.monetized ? <Text selectable style={styles.caption}>{productDisclosure}</Text> : null}
-
+    {reason ? <View style={styles.context}><Text accessibilityRole="header" style={styles.heading}>Why I’d consider this style</Text><Text selectable style={styles.copy}>{reason}</Text></View> : null}
     {looks.length && target && wardrobe ? <View style={styles.context}>
       <Text accessibilityRole="header" style={styles.heading}>With your wardrobe</Text>
       <Text style={styles.caption}>Ways to wear this suggested style with pieces you own.</Text>
       {looks.map((look, index) => <ShoppingOutfitPreview key={`${target.key}-${index}`} look={look} target={target} wardrobe={wardrobe} />)}
     </View> : null}
+    <View style={styles.notes}>
+      <Text selectable style={styles.caption}>{priceNote ?? 'Confirm price and availability at the listing.'}{offer.inStock === false ? ' This listing is currently unavailable.' : ''}</Text>
+      {offer.monetized ? <Text selectable style={styles.caption}>{productDisclosure}</Text> : null}
+    </View>
   </View>;
 }
 
@@ -61,9 +69,12 @@ export function CuratedProductDetail({ embedded = false, onClose, ...props }: Pr
       <Text style={styles.eyebrow}>THE SHOPPING EDIT</Text>
       <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Back to product options" style={styles.close}><Ionicons name="close" size={22} color={colors.foreground} /></Pressable>
     </View>
-    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.page, paddingBottom: insets.bottom + spacing.xl }}>
-      <ProductDetailContent {...props} />
+    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.page, paddingBottom: spacing.xl }}>
+      <ProductDetailContent {...props} inlineActions={false} />
     </ScrollView>
+    <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+      <ProductDetailActions offer={props.offer} saved={props.saved} saving={props.saving} onSave={props.onSave} onRetailer={props.onRetailer} />
+    </View>
   </View>;
   return embedded ? content : <Modal visible presentationStyle="fullScreen" animationType={reduceMotion ? 'none' : 'slide'} onRequestClose={onClose}>{content}</Modal>;
 }
@@ -75,13 +86,19 @@ const styles = StyleSheet.create({
   eyebrow: { ...typography.text.masthead, color: colors.accentInk },
   close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   content: { gap: spacing.lg }, identity: { gap: spacing.xs },
-  brand: { ...typography.text.label, color: colors.foreground },
+  brand: { ...typography.text.eyebrow, color: colors.mutedForeground },
+  merchant: { ...typography.text.caption, fontWeight: typography.text.caption.fontWeight, color: colors.mutedForeground },
   title: { ...typography.text.editorialCompact, color: colors.foreground },
   price: { ...typography.text.label, color: colors.foreground, fontVariant: ['tabular-nums'] },
   copy: { ...typography.text.bodySmall, color: colors.inkSubtle },
   caption: { ...curatedProducts.metadata, color: colors.mutedForeground },
   heading: { ...typography.text.label, color: colors.foreground },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  primary: { flex: 1 },
+  bookmark: { width: 48, height: 48, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.controlOutline },
+  pressed: { opacity: 0.6 },
+  notes: { gap: spacing.xs },
+  footer: { paddingHorizontal: spacing.page, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline, backgroundColor: colors.background },
   context: { gap: spacing.md, paddingTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
   error: { ...typography.text.bodySmall, color: colors.error },
 });

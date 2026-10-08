@@ -34,6 +34,8 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTit
   const offers = target.offers ?? [];
   const price = splitPriceRange(target.priceRange);
   const notes = targetShoppingNotes(target);
+  // Cards note "In budget" even when the page states one shared budget above.
+  const railBudget = price.compact && price.currency ? `${price.compact} ${price.currency}` : null;
   const hasShop = !!(target.offerState || offers.length || target.productUrl || target.retailerExamples?.length);
   const criteria = notes.length ? <View style={styles.section}>
       <Text accessibilityRole="header" style={styles.label}>What to look for</Text>
@@ -47,7 +49,7 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTit
     return <View style={styles.editorialCard}>
       <ChapterOpener index={index} eyebrow="Style to consider" title={displayTitle || target.title} headingRef={headingRef} />
       {productsLead ? <View style={styles.hero}>
-        <ShoppingOfferRail hero editorial offers={offers} status={target.offerState?.status} context={offerContext} onRetry={onRetryOffers} targetKey={target.key} targetTitle={target.title} target={target} wardrobe={wardrobe} />
+        <ShoppingOfferRail budget={railBudget} hero editorial offers={offers} status={target.offerState?.status} context={offerContext} onRetry={onRetryOffers} targetKey={target.key} targetTitle={target.title} target={target} wardrobe={wardrobe} />
         {budget ? <Text style={styles.budget}>Suggested budget · {budget}</Text> : null}
       </View> : <ChapterHero target={target} budget={budget} />}
       {target.rationale ? <Text selectable style={styles.lede}>{humanizeInlineTokens(target.rationale)}</Text> : null}
@@ -58,7 +60,7 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTit
       </View> : null}
       {hasShop && !productsLead ? <View style={styles.section}>
         <SectionKicker title="Shop this style" />
-        {target.offerState ? <ShoppingOfferRail editorial offers={offers} status={target.offerState.status} context={offerContext} onRetry={onRetryOffers} targetKey={target.key} targetTitle={target.title} target={target} wardrobe={wardrobe} /> : null}
+        {target.offerState ? <ShoppingOfferRail budget={railBudget} editorial offers={offers} status={target.offerState.status} context={offerContext} onRetry={onRetryOffers} targetKey={target.key} targetTitle={target.title} target={target} wardrobe={wardrobe} /> : null}
         <ShoppingRetailerLinks target={target} />
       </View> : null}
       {onNext ? <NextChapterLink title={nextTitle} onPress={onNext} /> : null}
@@ -81,7 +83,7 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTit
     </View> : null}
     {hasShop ? <View style={styles.section}>
       <Text accessibilityRole="header" style={styles.label}>Pieces to consider</Text>
-      {target.offerState || offers.length ? <ShoppingOfferRail offers={offers} status={target.offerState?.status} context={offerContext} onRetry={onRetryOffers} targetKey={target.key} targetTitle={target.title} target={target} wardrobe={wardrobe} /> : <ShoppingRetailerLinks target={target} />}
+      {target.offerState || offers.length ? <ShoppingOfferRail budget={railBudget} offers={offers} status={target.offerState?.status} context={offerContext} onRetry={onRetryOffers} targetKey={target.key} targetTitle={target.title} target={target} wardrobe={wardrobe} /> : <ShoppingRetailerLinks target={target} />}
       {!offers.length && target.offerState && target.offerState.status !== 'pending' ? <ShoppingRetailerLinks target={target} /> : null}
     </View> : null}
     {criteria}
