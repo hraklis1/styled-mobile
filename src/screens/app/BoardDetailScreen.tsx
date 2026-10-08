@@ -325,6 +325,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
 
   // ── First-time "Ask" coachmark ─────────────────────────────────────────────
   const showAsk = totalCount > 0 && !organizeMode;
+  const askCoachTarget = useRef<View>(null);
   const [askCoachVisible, setAskCoachVisible] = useState(false);
   useEffect(() => {
     const userId = user?.id;
@@ -543,6 +544,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
             {showAsk && (
               <TouchableOpacity
                 style={[styles.headerBtn, styles.askBtn]}
+                ref={askCoachTarget}
                 onPress={handleAskPress}
                 accessibilityRole="button"
                 accessibilityLabel={`Ask about ${board?.name ?? 'this board'}`}
@@ -567,6 +569,7 @@ export function BoardDetailScreen({ route, navigation }: BoardDetailScreenProps)
 
       <AiActionCoachmark
         visible={askCoachVisible}
+        targetRef={askCoachTarget}
         title="Ask your stylist"
         body="Get outfit ideas, gaps to fill, and advice built from everything saved on this board."
         onDismiss={() => dismissAskCoach('got_it')}

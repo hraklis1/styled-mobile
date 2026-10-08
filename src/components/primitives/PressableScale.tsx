@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, type Ref } from 'react';
 import {
   Platform,
   Pressable,
@@ -6,6 +6,7 @@ import {
   type PressableProps,
   type StyleProp,
   type ViewStyle,
+  type View,
 } from 'react-native';
 import Animated, {
   Easing,
@@ -19,6 +20,7 @@ import * as Haptics from '../../lib/haptics';
 
 type Props = Omit<PressableProps, 'children'> & {
   children?: React.ReactNode;
+  ref?: Ref<View>;
   /** Visual styles (bg, border, radius) applied to the inner Animated.View that scales.
    *  Keep layout props (flex, margin, width) on the outer `style` to avoid reflow mid-animation. */
   contentStyle?: StyleProp<ViewStyle>;

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 
 import Svg, { Circle, Path } from 'react-native-svg';
@@ -30,6 +30,8 @@ type Props = {
   onSkip?: () => void;
   /** Window rect of the control being explained; it stays lit through the scrim. */
   spotlight?: { x: number; y: number; width: number; height: number };
+  /** Measures the actual anchor when the tip opens, including scroll offsets. */
+  targetRef?: RefObject<View | null>;
   /** 'bottom' points the caret down, for a callout sitting above its anchor. */
   caretPlacement?: 'top' | 'bottom';
   /** 'light' draws a pale card, for dark surfaces such as the camera. */
@@ -40,7 +42,7 @@ type Props = {
 
 /**
  * A one-time callout pointed at the control it explains. It carries its own
- * dimming layer: the page behind it greys out so the tip is the only lit thing
+ * dimming layer: the page behind it greys out so the tip and its target stay lit
  * on screen, and tapping anywhere on that layer dismisses it.
  *
  * The scrim lives in a transparent modal rather than a view in the host screen,
@@ -64,10 +66,39 @@ export function AiActionCoachmark({
   onPrimary,
   onSkip,
   spotlight,
+  targetRef,
   caretPlacement = 'top',
   tone = 'dark',
   spotlightShape = 'circle',
 }: Props) {
+  const [measuredTarget, setMeasuredTarget] = useState<Props['spotlight']>();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  useEffect(() => {
+    setMeasuredTarget(undefined);
+    if (!visible || !targetRef) return;
+    let active = true;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const measure = () => {
+      if (!active) return;
+      const target = targetRef.current;
+      if (!target) {
+        retry = setTimeout(measure, 100);
+        return;
+      }
+      target.measureInWindow((x, y, width, height) => {
+        if (!active) return;
+        if (width > 0 && height > 0) setMeasuredTarget({ x, y, width, height });
+        else retry = setTimeout(measure, 100);
+      });
+    };
+    const frame = requestAnimationFrame(measure);
+    return () => {
+      active = false;
+      cancelAnimationFrame(frame);
+      if (retry) clearTimeout(retry);
+    };
+  }, [visible, targetRef, windowWidth, windowHeight]);
+  const targetRect = spotlight ?? measuredTarget;
   const light = tone === 'light';
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(-6)).current;
@@ -85,7 +116,7 @@ export function AiActionCoachmark({
     ]).start();
   }, [visible, step, opacity, translateY, scale]);
 
-  if (!visible) return null;
+  if (!visible || (targetRef && !targetRect)) return null;
 
   return (
     <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={onDismiss}>
@@ -93,9 +124,9 @@ export function AiActionCoachmark({
         accessibilityRole="button"
         accessibilityLabel={scrimAccessibilityLabel}
         onPress={onDismiss}
-        style={[styles.scrim, spotlight && styles.scrimClear]}
+        style={[styles.scrim, targetRect && styles.scrimClear]}
       >
-        {spotlight ? <Spotlight rect={spotlight} shape={spotlightShape} /> : null}
+        {targetRect ? <Spotlight rect={targetRect} shape={spotlightShape} /> : null}
         <Animated.View
           style={[styles.container, style, { opacity, transform: [{ translateY }, { scale }] }]}
           pointerEvents="box-none"

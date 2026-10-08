@@ -187,6 +187,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const [cuttingOut, setCuttingOut] = useState(false);
 
   // ── First-time "AI Polish" coachmark ────────────────────────────────────────
+  const polishCoachTarget = useRef<View>(null);
   const [polishCoachVisible, setPolishCoachVisible] = useState(false);
 
   // Handlers run before the `viewItem` narrowing below, so read the cutout flags
@@ -814,6 +815,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
                 { top: insets.top + spacing.sm },
                 isBusy && styles.actionDisabled,
               ]}
+              ref={polishCoachTarget}
               onPress={handlePolish}
               disabled={isBusy}
               accessibilityRole="button"
@@ -833,6 +835,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           )}
           <AiActionCoachmark
             visible={polishCoachVisible}
+            targetRef={polishCoachTarget}
             title="AI Polish"
             body={`Creates a clean catalog-style photo of this item. Uses ${polishCost} credit${polishCost === 1 ? '' : 's'}.`}
             onDismiss={() => dismissPolishCoach('got_it')}

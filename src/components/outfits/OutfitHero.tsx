@@ -104,6 +104,7 @@ export function OutfitHero({
   onCoachDismiss,
 }: Props) {
   const insets = useSafeAreaInsets();
+  const flatLayCoachTarget = useRef<View>(null);
   const { data: items = [] } = useItems();
 
   const generateLabel = isGenerating
@@ -166,6 +167,7 @@ export function OutfitHero({
         <PressableScale
           style={[styles.generateChip, { top: insets.top + spacing.sm }]}
           contentStyle={[styles.generateChipSurface, isGenerating && styles.disabled]}
+          ref={flatLayCoachTarget}
           onPress={onGenerate}
           disabled={isGenerating}
           accessibilityRole="button"
@@ -185,6 +187,8 @@ export function OutfitHero({
 
       <AiActionCoachmark
         visible={coachVisible}
+        targetRef={flatLayCoachTarget}
+        spotlightShape="fit"
         title="AI Flat-lay"
         body={coachBody}
         onDismiss={() => onCoachDismiss?.()}
