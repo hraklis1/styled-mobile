@@ -135,6 +135,7 @@ export function buildDailyLookContextRevision({ items, outfits, events, weather,
     weather: weather ? [
       weather.current.condition,
       Math.round(weather.current.temperatureC / 3) * 3,
+      Math.round(weather.forecast.tempMinC / 3) * 3,
     ] : null,
     location: location ? [
       location.source,
@@ -176,6 +177,7 @@ export function buildDailyLookResolveInput({
     weather: weather ? {
       condition: weather.current.condition,
       temperatureC: weather.current.temperatureC,
+      temperatureLowC: weather.forecast.tempMinC,
       summary: weather.current.summary,
     } : undefined,
     trigger: decision.trigger,

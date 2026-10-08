@@ -62,6 +62,7 @@ export type DailyLookResolveInput = {
   weather?: {
     condition: 'sunny' | 'rainy' | 'cold' | 'mild';
     temperatureC: number;
+    temperatureLowC?: number;
     summary?: string;
   };
   trigger: DailyLookGenerationTrigger;
