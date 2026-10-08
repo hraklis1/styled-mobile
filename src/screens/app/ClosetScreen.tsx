@@ -1070,7 +1070,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
               })}
             </FadedPillScroll>
             {activeFilterCount > 0 && (
-              <TouchableOpacity onPress={clearPieceFiltersAndResetCategories} style={styles.clearFilters} accessibilityRole="button" accessibilityLabel="Clear filters">
+              <TouchableOpacity onPress={clearPieceFiltersAndResetCategories} style={[styles.clearFilters, styles.clearFiltersInPillRow]} hitSlop={{ top: 6, bottom: 6 }} accessibilityRole="button" accessibilityLabel="Clear filters">
                 <Text style={styles.clearFiltersText}>Clear</Text>
               </TouchableOpacity>
             )}
@@ -1594,6 +1594,8 @@ const styles = StyleSheet.create({
   browseHeader: { paddingTop: spacing.sm, paddingBottom: 0 },
   resultCount: { ...typography.text.bodySmall, color: colors.mutedForeground },
   clearFilters: { minHeight: 44, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.sm },
+  // Chip height, so the row doesn't grow (and the chips shift) when Clear appears.
+  clearFiltersInPillRow: { minHeight: 32, height: 32 },
   clearFiltersText: { ...typography.text.bodySmall, color: colors.foreground, fontWeight: typography.weight.medium },
   filterTokens: { gap: spacing.sm, paddingBottom: spacing.sm },
   filterToken: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: 44, paddingHorizontal: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radii.full },
