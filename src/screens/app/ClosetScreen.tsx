@@ -345,14 +345,23 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   }, []);
 
   const activeItems = segment === 'pieces' ? filteredItems : segment === 'outfits' ? filteredOutfits : sortedBoards;
-  // Rails hold shelves, not pieces: item anchors don't apply, so they restore to the top.
+  // Rails hold shelves, not pieces: item anchors don't apply, so they keep a plain scroll
+  // offset instead. Each layout only trusts its own memory: crossing between rails and the
+  // item views starts the other at the top.
   const anchorable = !(segment === 'pieces' && piecesViewMode === 'rails');
+  const railsScrollY = useRef<number | null>(null);
   const columns = segment === 'pieces' ? gridColumns(piecesViewMode) : segment === 'outfits' ? (outfitViewMode === 'list' ? 1 : outfitViewMode === 'grid3' ? 3 : 2) : 2;
 
   const capturePosition = useCallback(() => {
     const list = getActiveList();
-    if (!list || !anchorable || resettingResults.current || restoring.current || !activeItems.length) return;
+    if (!list || resettingResults.current || restoring.current || !activeItems.length) return;
     const y = Math.max(0, list.getAbsoluteLastScrollOffset());
+    if (!anchorable) {
+      railsScrollY.current = y;
+      anchors.current.pieces = null;
+      return;
+    }
+    if (segment === 'pieces') railsScrollY.current = null;
     const visibleTop = y + headerHeight - Math.min(y, collapseDistance);
     let index = Math.min(activeItems.length - 1, Math.max(0, list.getFirstVisibleIndex()));
     // Account for the pinned overlay: FlashList itself sees the full viewport.
@@ -376,7 +385,11 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     restoring.current = true;
     const generation = ++restorationGeneration.current;
     try {
-      if (!anchor || anchor.scrollY < collapseDistance) {
+      if (!anchorable && (railsScrollY.current ?? 0) >= collapseDistance) {
+        const offset = railsScrollY.current!;
+        list.scrollToOffset({ offset, animated: false });
+        scrollY.value = offset;
+      } else if (!anchor || anchor.scrollY < collapseDistance) {
         // A partially collapsed header is never a resting state: restore to the top.
         const offset = 0;
         list.scrollToOffset({ offset, animated: false });
@@ -574,7 +587,8 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     piecesViewMode === 'list' && filteredItems.length >= 90 ? buildScrubberEntries(filteredItems, sortKey) : []
   ), [filteredItems, piecesViewMode, sortKey]);
   const jumpToPiece = useCallback((index: number) => {
-    piecesListRef.current?.scrollToIndex({ index, animated: false, viewOffset: headerHeight - collapseDistance });
+    // Negative, like anchor restores: the row lands just below the collapsed header.
+    piecesListRef.current?.scrollToIndex({ index, animated: false, viewOffset: closetAnchorViewOffset(headerHeight - collapseDistance, 0) });
   }, [collapseDistance, headerHeight]);
 
   // ── Subtitle ───────────────────────────────────────────────────────────────
