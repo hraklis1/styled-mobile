@@ -1,9 +1,10 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { humanizeInlineTokens, splitPriceRange, targetOutfitIdeas, targetShoppingNotes, type ShoppingPriorityTarget } from '../../lib/shoppingPriorityEdit';
+import { displayBudget, humanizeInlineTokens, splitPriceRange, targetOutfitIdeas, targetShoppingNotes, type ShoppingPriorityTarget } from '../../lib/shoppingPriorityEdit';
 import type { Item } from '../../types/item';
 import { colors, spacing, typography } from '../../theme';
+import { useHiddenProducts } from '../../lib/productFeedback';
 import { ShoppingStyleVisual } from './ShoppingStyleVisual';
-import { ShoppingOutfitPreview } from './ShoppingOutfitPreview';
+import { ShoppingOutfitGroup, ShoppingOutfitPreview } from './ShoppingOutfitPreview';
 import { ShoppingRetailerLinks } from './ShoppingRetailerLinks';
 import { ShoppingOfferRail } from './ShoppingOfferRail';
 import { ChapterHero, ChapterOpener, NextChapterLink, SectionKicker, SpecList } from './ShoppingEditorialParts';
@@ -30,6 +31,7 @@ type Props = {
   onNext?: () => void;
 };
 export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTitle, isLast, offerContext, onRetryOffers, editorial = false, headingRef, hideCriteria = false, showBudget = true, nextTitle, onNext }: Props) {
+  const hidden = useHiddenProducts();
   const looks = targetOutfitIdeas(target).filter(look => look.itemIds.some(id => wardrobe.has(id)));
   const offers = target.offers ?? [];
   const price = splitPriceRange(target.priceRange);
@@ -42,21 +44,26 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTit
       {notes.map((note, noteIndex) => <Text key={noteIndex} selectable style={styles.copy}>{note}</Text>)}
     </View> : null;
   if (editorial) {
-    const budget = showBudget && price.compact ? `${price.compact}${price.currency ? ` ${price.currency}` : ''}` : null;
-    // Real listings lead the chapter; the reasoning follows. Without any,
-    // the illustrative hero stands in and shopping falls back to the end.
+    const budget = showBudget ? displayBudget(target.priceRange) || null : null;
+    // The case for the style comes before its listings: decide on the
+    // direction, then shop it. Without listings the illustrative hero stands
+    // in and shopping falls back to the end.
     const productsLead = offers.length > 0 || target.offerState?.status === 'pending';
+    const optionCount = offers.filter(offer => offer.inStock !== false && !hidden.has(offer.id)).length;
+    const meta = [budget ? `Budget ${budget}` : null, productsLead && optionCount ? `${optionCount} ${optionCount === 1 ? 'option' : 'options'}` : null].filter(Boolean).join(' · ');
     return <View style={styles.editorialCard}>
-      <ChapterOpener index={index} eyebrow="Style to consider" title={displayTitle || target.title} headingRef={headingRef} />
-      {productsLead ? <View style={styles.hero}>
-        <ShoppingOfferRail budget={railBudget} hero editorial offers={offers} status={target.offerState?.status} context={offerContext} onRetry={onRetryOffers} targetKey={target.key} targetTitle={target.title} target={target} wardrobe={wardrobe} />
-        {budget ? <Text style={styles.budget}>Suggested budget · {budget}</Text> : null}
-      </View> : <ChapterHero target={target} budget={budget} />}
-      {target.rationale ? <Text selectable style={styles.lede}>{humanizeInlineTokens(target.rationale)}</Text> : null}
+      <ChapterOpener index={index} title={displayTitle || target.title} headingRef={headingRef} />
+      {target.rationale || meta ? <View style={styles.hero}>
+        {target.rationale ? <Text selectable style={styles.lede}>{humanizeInlineTokens(target.rationale)}</Text> : null}
+        {meta && productsLead ? <Text style={styles.budget}>{meta}</Text> : null}
+      </View> : null}
+      {productsLead ? <ShoppingOfferRail budget={railBudget} hero editorial offers={offers} status={target.offerState?.status} context={offerContext} onRetry={onRetryOffers} targetKey={target.key} targetTitle={target.title} target={target} wardrobe={wardrobe} />
+        : <ChapterHero target={target} budget={budget} />}
       {notes.length && !hideCriteria ? <View style={styles.section}><SectionKicker title="What to look for" /><SpecList notes={notes} /></View> : null}
       {looks.length ? <View style={styles.section}>
         <SectionKicker title="Ways to wear it" />
-        <View style={styles.outfits}>{looks.map((look, lookIndex) => <ShoppingOutfitPreview editorial key={`${target.key}-${lookIndex}`} look={look} target={target} wardrobe={wardrobe} />)}</View>
+        {looks.length > 1 ? <ShoppingOutfitGroup looks={looks} target={target} wardrobe={wardrobe} />
+          : <View style={styles.outfits}>{looks.map((look, lookIndex) => <ShoppingOutfitPreview editorial key={`${target.key}-${lookIndex}`} look={look} target={target} wardrobe={wardrobe} />)}</View>}
       </View> : null}
       {hasShop && !productsLead ? <View style={styles.section}>
         <SectionKicker title="Shop this style" />

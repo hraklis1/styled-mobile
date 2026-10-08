@@ -179,7 +179,7 @@ test('style tabs appear once the comparison scrolls away and follow the current 
   expect(renderer.root.findAllByProps({ accessibilityRole: 'tab' })).toHaveLength(0);
   act(() => scroll().props.onScroll({ nativeEvent: { contentOffset: { y: 400 } } }));
   const tabs = renderer.root.findAll(node => node.props.accessibilityRole === 'tab' && typeof node.type !== 'string' && node.props.onPress);
-  expect(tabs.map(tab => tab.props.accessibilityLabel)).toEqual(['Charcoal wool', 'Deep navy', 'Deep navy']);
+  expect(tabs.map(tab => tab.props.accessibilityLabel)).toEqual(['Charcoal wool', 'Deep navy', 'Deep navy', 'Questions for your stylist']);
   act(() => scroll().props.onScroll({ nativeEvent: { contentOffset: { y: 0 } } }));
   expect(renderer.root.findAllByProps({ accessibilityRole: 'tab' })).toHaveLength(0);
 });

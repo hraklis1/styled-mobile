@@ -11,12 +11,12 @@ export function SectionKicker({ title }: { title: string }) {
 
 /** Number, eyebrow and serif title that open every chapter on Shop and in the Guide. */
 export function ChapterOpener({ index, eyebrow, title, headingRef, trailing }: {
-  index: number; eyebrow: string; title: string; headingRef?: Ref<Text>; trailing?: ReactNode;
+  index: number; eyebrow?: string; title: string; headingRef?: Ref<Text>; trailing?: ReactNode;
 }) {
   return <View style={styles.opener}>
     <View style={styles.openerMeta}>
       <Text style={styles.numeral} accessibilityElementsHidden importantForAccessibility="no">{String(index).padStart(2, '0')}</Text>
-      <Text style={styles.eyebrow}>{eyebrow}</Text>
+      {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
     </View>
     <View style={styles.titleRow}>
       <Text ref={headingRef} accessibilityRole="header" style={styles.title}>{title}</Text>

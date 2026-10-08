@@ -153,12 +153,12 @@ test('editorial guide hides criteria shared at guide level and links to the next
 
 const offer = (id: string, price: number) => ({ id, provider: 'serper' as const, title: `Trouser ${id}`, brand: null, merchant: 'Shop', price, currency: 'CAD', formattedPrice: `$${price}`, imageUrl: null, url: `https://example.com/${id}`, inStock: true, monetized: false, imagePolicy: 'hotlink' as const });
 
-test('editorial guide leads with real listings before the reasoning', () => {
+test('editorial guide gives the reasoning before the real listings', () => {
   const offers = [offer('a', 120), offer('b', 180)];
   render(<ShoppingPriorityTargetCard editorial offerContext={{ reference: 'r', targetKey: 'charcoal', surface: 'shopping_guide' }}
     target={{ ...target, shoppingNotes: ['Smooth wool'], offers, offerState: { status: 'ready', offers, retrievedAt: null, expiresAt: null } }} index={1} wardrobe={new Map()} />);
   const json = JSON.stringify(renderer.toJSON());
-  expect(json.indexOf('Trouser a')).toBeLessThan(json.indexOf(target.rationale));
+  expect(json.indexOf(target.rationale)).toBeLessThan(json.indexOf('Trouser a'));
   expect(json).not.toContain('Shop this style');
 });
 

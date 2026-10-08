@@ -19,6 +19,7 @@ import { CommonActions, usePreventRemove } from '@react-navigation/native';
 import { useShoppingChapters } from '../../components/shopping/ShoppingChapterContents';
 import { SectionKicker, SpecList } from '../../components/shopping/ShoppingEditorialParts';
 import { ShoppingStyleSwatches } from '../../components/shopping/ShoppingStyleSwatches';
+import { ShoppingStyleVisual } from '../../components/shopping/ShoppingStyleVisual';
 import { PressableScale } from '../../components/primitives/PressableScale';
 import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
 import { ShoppingPriorityTargetCard } from '../../components/shopping/ShoppingPriorityTargetCard';
@@ -29,10 +30,13 @@ import { wearableWardrobe, withoutOutfitCount } from '../../lib/shopClarity';
 import { shoppingGarmentTitle, styleFollowupQuestions } from '../../lib/shoppingEditorial';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { track } from '../../lib/analytics';
-import { splitPriceRange, targetShoppingNotes, withoutInlineImages, type ShoppingPriorityTarget } from '../../lib/shoppingPriorityEdit';
+import { displayBudget, targetShoppingNotes, withoutInlineImages, type ShoppingPriorityTarget } from '../../lib/shoppingPriorityEdit';
 import { shoppingSurfaces, colors, radii, spacing, typography } from '../../theme';
 import type { ShopOutfit } from '../../types/shop';
 import type { ShoppingPriorityEditScreenProps } from '../../navigation/types';
+
+/** The sticky tab for the closing questions, alongside one per style. */
+const ASK_TAB = '__ask';
 
 export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriorityEditScreenProps) {
   const insets = useSafeAreaInsets();
@@ -94,19 +98,18 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
   const [tabsHeight, setTabsHeight] = useState(52);
   const chapterTops = useRef(new Map<string, number>());
   const comparisonBottom = useRef(Number.POSITIVE_INFINITY);
-  const tabsScroll = useRef<ScrollView>(null);
-  const tabOffsets = useRef(new Map<string, number>());
+  const closingTop = useRef(Number.POSITIVE_INFINITY);
   const onGuideScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const y = event.nativeEvent.contentOffset.y;
     setTabsVisible(y > comparisonBottom.current - tabsHeight);
     let current: string | null = null;
     for (const [key, top] of [...chapterTops.current].sort((a, b) => a[1] - b[1])) if (top <= y + tabsHeight + 1) current = key;
+    // The closing questions count as reached once they're well into view,
+    // since the page often can't scroll them all the way up to the tabs.
+    const { layoutMeasurement, contentSize } = event.nativeEvent;
+    if (closingTop.current <= y + tabsHeight + 1 || (!!contentSize && closingTop.current < contentSize.height && y + (layoutMeasurement?.height ?? 0) >= contentSize.height - 1)) current = ASK_TAB;
     setActiveKey(current);
   }, [tabsHeight]);
-  useEffect(() => {
-    const x = activeKey ? tabOffsets.current.get(activeKey) : undefined;
-    if (x != null) tabsScroll.current?.scrollTo({ x: Math.max(0, x - spacing.page), animated: !reduceMotion });
-  }, [activeKey, reduceMotion]);
   const guideIdentity = `${priority.recommendationKey ?? priority.label}:${edit.data?.generatedAt ?? ''}`;
   const lastGuideIdentity = useRef('');
   useEffect(() => {
@@ -330,17 +333,15 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
 
   const directionCount = data.targets.length;
   const intro = withoutOutfitCount(data.summary || priority.context, priority.impactScore);
-  const formatBudget = (target: ShoppingPriorityTarget) => {
-    const price = splitPriceRange(target.priceRange);
-    return price.compact ? `${price.compact}${price.currency ? ` ${price.currency}` : ''}` : '';
-  };
-  const budgets = data.targets.map(formatBudget);
+  const budgets = data.targets.map((target: ShoppingPriorityTarget) => displayBudget(target.priceRange));
   const sharedBudget = budgets.length && budgets.every(budget => budget && budget === budgets[0]) ? budgets[0] : null;
   const noteSets = data.targets.map(targetShoppingNotes);
   const sharedNotes = directionCount > 1 && noteSets[0].length && noteSets.every(notes => notes.join('|').toLowerCase() === noteSets[0].join('|').toLowerCase()) ? noteSets[0] : null;
   // Chapters land with their heading just below the style tabs, which are
   // showing by the time the scroll settles; the chapter's top padding tucks under them.
-  const jumpTo = (key: string) => chapterNav.jump(key, directionCount > 1 ? tabsHeight + spacing.lg - spacing.chapter : 0, chapterTops.current.get(key));
+  const jumpTo = (key: string) => key === ASK_TAB
+    ? chapterNav.scroll.current?.scrollTo({ y: Math.max(0, closingTop.current - tabsHeight), animated: !reduceMotion })
+    : chapterNav.jump(key, directionCount > 1 ? tabsHeight + spacing.lg - spacing.chapter : 0, chapterTops.current.get(key));
   const askStylist = (initialQuery?: string) =>
     openStylist({
       source: 'shop',
@@ -404,7 +405,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
             />
           </View>
         ))}
-        <View style={styles.closing}>
+        <View style={styles.closing} onLayout={event => { closingTop.current = event.nativeEvent.layout.y; }}>
           <SectionKicker title="Questions about this?" />
           <View style={styles.chips}>
             {styleFollowupQuestions(data.targets).map((question) => (
@@ -437,19 +438,19 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
           style={styles.tabs}
           onLayout={event => setTabsHeight(event.nativeEvent.layout.height)}
         >
-          <ScrollView ref={tabsScroll} horizontal showsHorizontalScrollIndicator={false} accessibilityRole="tablist"
-            contentContainerStyle={[styles.tabsRow, { paddingLeft: spacing.page + insets.left, paddingRight: spacing.page + insets.right }]}>
-            {data.targets.map((target, index) => {
-              const selected = activeKey === target.key;
-              return <Pressable key={target.key} onPress={() => jumpTo(target.key)}
-                onLayout={event => { tabOffsets.current.set(target.key, event.nativeEvent.layout.x); }}
-                accessibilityRole="tab" accessibilityState={{ selected }} accessibilityLabel={target.title}
-                style={({ pressed }) => [styles.tab, selected && styles.tabSelected, pressed && styles.pressed]}>
-                <Text style={[styles.tabNumber, selected && styles.tabTextSelected]}>{String(index + 1).padStart(2, '0')}</Text>
-                <Text style={[styles.tabText, selected && styles.tabTextSelected]} numberOfLines={1}>{target.title}</Text>
+          <View accessibilityRole="tablist" style={[styles.tabsRow, { paddingLeft: spacing.page + insets.left, paddingRight: spacing.page + insets.right }]}>
+            {[...data.targets.map((target, index) => ({ key: target.key, label: String(index + 1).padStart(2, '0'), title: target.title, target })), { key: ASK_TAB, label: 'Ask', title: 'Questions for your stylist', target: null }].map(tab => {
+              const selected = activeKey === tab.key;
+              return <Pressable key={tab.key} onPress={() => jumpTo(tab.key)}
+                accessibilityRole="tab" accessibilityState={{ selected }} accessibilityLabel={tab.title}
+                style={({ pressed }) => [styles.tab, selected && styles.tabSelected, pressed && styles.tabPressed]}>
+                <View style={[styles.tabThumb, selected && styles.tabThumbSelected]}>
+                  {tab.target ? <ShoppingStyleVisual plain fill target={tab.target} /> : <Ionicons name="chatbubble-outline" size={15} color={colors.mutedForeground} />}
+                </View>
+                <Text style={[styles.tabNumber, selected && styles.tabTextSelected]} numberOfLines={1}>{tab.label}</Text>
               </Pressable>;
             })}
-          </ScrollView>
+          </View>
         </Animated.View>
       ) : null}
       </View>
@@ -501,8 +502,9 @@ function SaveEditAction({
       {saving ? (
         <ActivityIndicator size="small" color={shoppingSurfaces.olive.accent} />
       ) : (
-        <Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={20} color={shoppingSurfaces.olive.accent} />
+        <Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={18} color={shoppingSurfaces.olive.accent} />
       )}
+      <Text style={styles.saveLabel}>{isSaved ? 'Saved' : 'Save guide'}</Text>
     </PressableScale>
   );
 }
@@ -558,7 +560,8 @@ const styles = StyleSheet.create({
   askLink: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
   link: { ...typography.text.label, color: shoppingSurfaces.olive.accent },
   toastAction: { minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'flex-end' },
-  saveIcon: { width: 44, height: 44, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center' },
+  saveIcon: { minWidth: 44, height: 44, flexDirection: 'row', gap: spacing.xs, alignItems: 'center', justifyContent: 'center' },
+  saveLabel: { ...typography.text.label, color: shoppingSurfaces.olive.accent },
   skeleton: { gap: spacing.lg },
   loadingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   skeletonTile: { flex: 1, gap: spacing.sm },
@@ -567,12 +570,14 @@ const styles = StyleSheet.create({
   skeletonHero: { width: '72%', aspectRatio: 0.8, backgroundColor: colors.surfaceSubtle, borderRadius: radii.photo },
   scrollArea: { flex: 1 },
   tabs: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: shoppingSurfaces.canvas, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  tabsRow: { gap: spacing.sm, paddingVertical: spacing.xs },
-  tab: { minHeight: 44, maxWidth: 220, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radii.full, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.ghostStroke },
-  tabSelected: { backgroundColor: colors.foreground, borderColor: colors.foreground },
-  tabNumber: { ...typography.text.meta, color: shoppingSurfaces.olive.accent, fontVariant: ['tabular-nums'] },
-  tabText: { ...typography.text.bodySmall, color: colors.foreground, flexShrink: 1 },
-  tabTextSelected: { color: colors.primaryForeground },
+  tabsRow: { flexDirection: 'row' },
+  tab: { flex: 1, minHeight: 44, alignItems: 'center', gap: spacing.xs, paddingTop: spacing.sm, paddingBottom: spacing.xs, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tabSelected: { borderBottomColor: colors.foreground },
+  tabPressed: { opacity: 0.6 },
+  tabThumb: { width: 28, height: 35, borderRadius: radii.sm, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  tabThumbSelected: { borderWidth: 1.5, borderColor: colors.foreground },
+  tabNumber: { ...typography.text.meta, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
+  tabTextSelected: { color: colors.foreground },
   skeletonLine: { height: 14, backgroundColor: colors.surfaceSubtle, borderRadius: radii.sm },
   skeletonSwatches: { flexDirection: 'row', gap: spacing.sm },
   skeletonSwatch: { aspectRatio: 0.8, backgroundColor: colors.surfaceSubtle, borderRadius: radii.photo },

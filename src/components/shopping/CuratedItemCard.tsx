@@ -35,7 +35,9 @@ function ControlDisc({ children }: { children: ReactNode }) {
   return <View style={styles.disc}><BlurView intensity={40} tint="light" style={StyleSheet.absoluteFill} />{children}</View>;
 }
 
-export function CuratedItemCard({ offer, editorial = false, fit = 'contain', budget, saved = false, saving = false, saveFailed = false, onSave, onHide, onOpen, width = curatedProducts.minWidth }: {
+export function CuratedItemCard({ offer, editorial = false, quietHide = false, fit = 'contain', budget, saved = false, saving = false, saveFailed = false, onSave, onHide, onOpen, width = curatedProducts.minWidth }: {
+  /** "Not for me" as a text action under the price instead of a disc over the photo. */
+  quietHide?: boolean;
   offer: ProductOffer; editorial?: boolean; fit?: ProductImageFit; budget?: string | null; saved?: boolean; saving?: boolean; saveFailed?: boolean; onSave?: () => void; onHide?: () => void; onOpen: () => void; width?: number;
 }) {
   const reduceMotion = useReducedMotion();
@@ -43,7 +45,8 @@ export function CuratedItemCard({ offer, editorial = false, fit = 'contain', bud
   const pop = useRef(new Animated.Value(1)).current;
   const brand = offer.brand || productMerchantLabel(offer.merchant);
   const merchant = productMerchantLabel(offer.merchant);
-  const inBudget = priceFitsBudget(offer, budget) === true;
+  const budgetFit = priceFitsBudget(offer, budget);
+  const inBudget = budgetFit === true;
   function pressTo(value: number) {
     if (reduceMotion) return;
     Animated.spring(press, { toValue: value, useNativeDriver: true, speed: 40, bounciness: 0 }).start();
@@ -68,14 +71,17 @@ export function CuratedItemCard({ offer, editorial = false, fit = 'contain', bud
         <Text style={styles.priceRow} numberOfLines={1}>
           <Text style={styles.price}>{offer.formattedPrice || 'See price'}</Text>
           {merchant && merchant.toLowerCase() !== brand?.toLowerCase() ? <Text style={styles.metadata}>{` · ${merchant}`}</Text> : null}
-          {offer.inStock === false ? <Text style={styles.metadata}> · Unavailable</Text> : inBudget ? <Text style={styles.budget}> · In budget</Text> : null}
+          {offer.inStock === false ? <Text style={styles.metadata}> · Unavailable</Text> : inBudget ? <Text style={styles.budget}> · In budget</Text> : budgetFit === false && quietHide ? <Text style={styles.metadata}> · Over budget</Text> : null}
         </Text>
       </View>
     </Pressable>
     {onSave ? <Pressable onPress={save} disabled={saving} accessibilityRole="button" accessibilityLabel={`${saving ? saved ? 'Unsaving' : 'Saving' : saveFailed ? saved ? 'Retry unsaving' : 'Retry saving' : saved ? 'Remove from wishlist:' : 'Add to wishlist:'} ${offer.title}`} accessibilityState={{ disabled: saving, busy: saving, selected: saved }} style={({ pressed }) => [styles.control, styles.save, pressed && styles.pressed]}>
       <ControlDisc>{saving ? <ActivityIndicator size="small" color={curatedProducts.accent} /> : <Animated.View style={{ transform: [{ scale: pop }] }}><Ionicons name={saveFailed ? 'refresh-outline' : saved ? 'bookmark' : 'bookmark-outline'} size={curatedProducts.control.icon} color={curatedProducts.accent} /></Animated.View>}</ControlDisc>
     </Pressable> : null}
-    {onHide ? <Pressable onPress={onHide} accessibilityRole="button" accessibilityLabel={`Not for me: hide ${offer.title}`} style={({ pressed }) => [styles.control, styles.hide, pressed && styles.pressed]}>
+    {onHide && quietHide ? <Pressable onPress={onHide} hitSlop={{ top: 8, bottom: 8 }} accessibilityRole="button" accessibilityLabel={`Not for me: hide ${offer.title}`} style={({ pressed }) => [styles.quietHide, pressed && styles.pressed]}>
+      <Text style={styles.metadata}>Not for me</Text>
+    </Pressable> : null}
+    {onHide && !quietHide ? <Pressable onPress={onHide} accessibilityRole="button" accessibilityLabel={`Not for me: hide ${offer.title}`} style={({ pressed }) => [styles.control, styles.hide, pressed && styles.pressed]}>
       <ControlDisc><Ionicons name="close" size={curatedProducts.control.icon} color={colors.mutedForeground} /></ControlDisc>
     </Pressable> : null}
   </View>;
@@ -96,6 +102,7 @@ const styles = StyleSheet.create({
   metadata: { ...curatedProducts.metadata, color: colors.mutedForeground },
   budget: { ...curatedProducts.metadata, color: curatedProducts.accent },
   control: { position: 'absolute', top: spacing.xs, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  quietHide: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center', marginTop: spacing.xs },
   save: { right: spacing.xs }, hide: { left: spacing.xs },
   disc: { width: curatedProducts.control.size, height: curatedProducts.control.size, borderRadius: radii.full, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.55)' },
 });

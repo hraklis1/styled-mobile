@@ -261,6 +261,20 @@ export function splitPriceRange(priceRange: string): { compact: string; currency
   return { compact: compact || normalized, currency };
 }
 
+const DOLLAR_PREFIX: Record<string, string> = { CAD: 'CA$', AUD: 'A$', NZD: 'NZ$', USD: 'US$' };
+
+/**
+ * A budget in the same shape listing spans use ("CA$90–160"), so a guide
+ * never shows "$90–160 CAD" beside "CA$72–149". Other currencies keep the
+ * trailing code.
+ */
+export function displayBudget(priceRange: string) {
+  const { compact, currency } = splitPriceRange(priceRange);
+  if (!compact) return '';
+  if (currency && DOLLAR_PREFIX[currency] && compact.startsWith('$')) return `${DOLLAR_PREFIX[currency]}${compact.slice(1)}`;
+  return currency ? `${compact} ${currency}` : compact;
+}
+
 /**
  * The looks to render for a target, tolerant of both target shapes.
  *

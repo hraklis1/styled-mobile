@@ -133,7 +133,7 @@ export function CuratedItemRail({ editorial = false, offers, status = 'ready', h
       imageAspectRatio={editorial || hero ? 0.8 : curatedProducts.imageAspectRatio} reason={hidden.get(offer.id)?.reason ?? null}
       onReason={reason => productFeedbackStore.setReason(offer, context, reason)}
       onUndo={() => { void productFeedbackStore.undo(offer.id); closePanel(offer.id); }} /></View>;
-    return <View key={key} style={{ width: size }}><CuratedItemCard editorial={editorial} offer={offer} width={size} fit={hero ? 'cover' : 'contain'} budget={budget}
+    return <View key={key} style={{ width: size }}><CuratedItemCard editorial={editorial} quietHide={hero} offer={offer} width={size} fit={hero ? 'cover' : 'contain'} budget={budget}
       saved={savedLocally.has(key) || wishlist.some(entry => entry.outfit.product && productKey(entry.outfit.product.offer) === key)}
       saving={saving.has(key)} saveFailed={!!errors[key]}
       onHide={canHide ? () => { const index = eligible.indexOf(offer); setPanels(old => new Map(old).set(offer.id, { offer, index })); productFeedbackStore.hide(offer, context); } : undefined}
@@ -160,7 +160,8 @@ export function CuratedItemRail({ editorial = false, offers, status = 'ready', h
   const error = Object.values(errors)[0];
   return <View style={styles.section} onLayout={event => { if (event.nativeEvent.layout.width > 0) setContentWidth(event.nativeEvent.layout.width); }}>
     {heading ? <Text style={styles.heading}>{heading}</Text> : null}
-    {preview.length ? <Animated.ScrollView ref={scroll} horizontal showsHorizontalScrollIndicator={false} style={(hero || compact) && styles.bleed} contentContainerStyle={[styles.rail, (hero || compact) && styles.bleedRail]} snapToInterval={step} decelerationRate="fast"
+    {preview.length ? <View>
+    <Animated.ScrollView ref={scroll} horizontal showsHorizontalScrollIndicator={false} style={(hero || compact) && styles.bleed} contentContainerStyle={[styles.rail, (hero || compact) && styles.bleedRail]} snapToInterval={step} decelerationRate="fast"
       scrollEventThrottle={16} onScroll={hero ? Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], { useNativeDriver: true, listener: (event: { nativeEvent: { contentOffset: { x: number } } }) => setPage(Math.max(0, Math.min(pageCount - 1, Math.round(event.nativeEvent.contentOffset.x / step)))) }) : undefined}>
       {preview.map((offer, index) => hero ? heroCard(offer, index) : renderCard(offer, cardWidth))}
       {seeAllCard ? <Pressable onPress={explore} accessibilityRole="button" accessibilityLabel={`See all ${eligible.length} options`}
@@ -168,8 +169,12 @@ export function CuratedItemRail({ editorial = false, offers, status = 'ready', h
         <Text style={styles.seeAllCount}>{eligible.length}</Text>
         <Text style={styles.link}>See all options →</Text>
       </Pressable> : null}
-    </Animated.ScrollView> : status === 'pending' ? <View style={styles.rail} accessibilityLabel="Finding considered pieces" accessibilityState={{ busy: true }}>{[0, 1].map(key => <View key={key} style={{ width: cardWidth }}><Shimmer style={[styles.skeleton, { aspectRatio: curatedProducts.imageAspectRatio }]} /><Shimmer style={styles.skeletonLine} /><Shimmer style={[styles.skeletonLine, { width: '65%' }]} /></View>)}</View> : <Text style={styles.copy}>{status === 'unavailable' ? 'Shopping options are unavailable right now. Your styling guide is still here.' : 'No suitable listings right now. Use the style notes as your shopping guide.'}</Text>}
-    {hero && pageCount > 1 ? <Text style={styles.pager} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">{page + 1} / {pageCount}</Text> : null}
+    </Animated.ScrollView>
+    {hero && pageCount > 1 ? <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+      style={[styles.pagerSlot, { width: cardWidth, top: cardWidth / curatedProducts.imageAspectRatio - spacing.sm - 24 }]}>
+      <Text style={styles.pager}>{page + 1} / {pageCount}</Text>
+    </View> : null}
+    </View> : status === 'pending' ? <View style={styles.rail} accessibilityLabel="Finding considered pieces" accessibilityState={{ busy: true }}>{[0, 1].map(key => <View key={key} style={{ width: cardWidth }}><Shimmer style={[styles.skeleton, { aspectRatio: curatedProducts.imageAspectRatio }]} /><Shimmer style={styles.skeletonLine} /><Shimmer style={[styles.skeletonLine, { width: '65%' }]} /></View>)}</View> : <Text style={styles.copy}>{status === 'unavailable' ? 'Shopping options are unavailable right now. Your styling guide is still here.' : 'No suitable listings right now. Use the style notes as your shopping guide.'}</Text>}
     {collectionAction === 'rail' && eligible.length && !hero ? <Pressable onPress={explore} style={({ pressed }) => [styles.quiet, editorial && styles.collectionButton, pressed && styles.pressed]} accessibilityRole="button"><Text style={styles.link}>{editorial ? `Browse all ${eligible.length} ${eligible.length === 1 ? 'option' : 'options'}` : 'Explore all options'}</Text></Pressable> : null}
     {status === 'unavailable' && onRetry ? <Pressable onPress={retry} accessibilityRole="button" style={styles.quiet}><Text style={styles.link}>Try again</Text></Pressable> : null}
     {error ? <Text style={styles.copy} accessibilityRole="alert">{error}</Text> : null}
@@ -205,7 +210,8 @@ const styles = StyleSheet.create({
   collectionButton: { alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.controlOutline, borderRadius: radii.full, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   seeAll: { aspectRatio: 0.48, alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderRadius: radii.photo, backgroundColor: curatedProducts.background, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.hairline },
   seeAllCount: { ...typography.text.editorialCompact, color: colors.foreground, fontVariant: ['tabular-nums'] },
-  section: { gap: spacing.md }, pager: { ...typography.text.caption, color: colors.mutedForeground, fontVariant: ['tabular-nums'], alignSelf: 'center' }, heading: { ...typography.text.label, color: colors.foreground },
+  section: { gap: spacing.md }, pager: { ...typography.text.caption, color: colors.foreground, fontVariant: ['tabular-nums'], backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: radii.full, paddingHorizontal: spacing.sm, height: 24, lineHeight: 24, overflow: 'hidden' },
+  pagerSlot: { position: 'absolute', left: 0, alignItems: 'flex-end', paddingRight: spacing.sm }, heading: { ...typography.text.label, color: colors.foreground },
   bleed: { marginHorizontal: -spacing.page }, bleedRail: { paddingHorizontal: spacing.page },
   rail: { flexDirection: 'row', gap: spacing.md, paddingBottom: spacing.xs },
   copy: { ...typography.text.bodySmall, color: colors.mutedForeground },
