@@ -1,7 +1,7 @@
 import { mapWithConcurrency } from '../../lib/asyncPool';
 import { queryClient } from '../../lib/queryClient';
 import { requestUploadUrls, uploadFileToR2 } from '../../lib/uploadImage';
-import { applySavedItems, createItemsBatch, type BatchCreateItemInput } from '../../hooks/useItems';
+import type { BatchCreateItemInput } from '../../hooks/useItems';
 import type { Item, ItemCategory } from '../../types/item';
 import { track } from '../../lib/analytics';
 import { batchDirectory, cropRegion, fileExists } from './files';
@@ -9,6 +9,7 @@ import { GaveUp, withRetries } from './retryPolicy';
 import { batchImport } from './store';
 import { enqueuePolish } from '../polish-queue/runner';
 import type { Batch, Piece } from './types';
+import { commitItems } from '../../lib/commitItems';
 
 const UPLOAD_CONCURRENCY = 4;
 
@@ -137,22 +138,17 @@ export async function runSave(batchId: string): Promise<void> {
     );
     const savedIds: string[] = [];
     if (ready.length) {
-      const result = await withRetries(() => createItemsBatch(ready.map(toCreateInput)));
+      // The cache takes the new rows even if the batch was discarded meanwhile:
+      // they exist on the server either way.
+      const result = await commitItems(ready.map(toCreateInput), queryClient);
       if (!stillCurrent(batchId)) return;
-      applySavedItems(queryClient, result.items);
       for (const listener of savedListeners) listener(batchId, result.items);
       const polishIds = new Set(batch.polishIds ?? []);
       enqueuePolish(batch.userId, result.items.filter((item) => item.clientImportId && polishIds.has(item.clientImportId)));
-      const created = new Set(result.items.map((item) => item.clientImportId));
       for (const piece of ready) {
-        if (created.has(piece.id)) savedIds.push(piece.id);
+        if (result.savedIds.has(piece.id)) savedIds.push(piece.id);
       }
-      for (const rejected of result.rejected) {
-        if (rejected.clientImportId) failures.set(rejected.clientImportId, rejected.message);
-      }
-      for (const piece of ready) {
-        if (!created.has(piece.id) && !failures.has(piece.id)) failures.set(piece.id, "Couldn't add this piece.");
-      }
+      for (const [id, message] of result.failures) failures.set(id, message);
       track('closet_batch_saved', { saved: savedIds.length, failed: failures.size });
     }
 

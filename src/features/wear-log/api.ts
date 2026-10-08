@@ -1,5 +1,6 @@
 import { api } from '../../lib/api';
-import { createItemsBatch, type BatchCreateItemInput } from '../../hooks/useItems';
+import type { BatchCreateItemInput } from '../../hooks/useItems';
+import { commitItems } from '../../lib/commitItems';
 import { normalizeScanCategory } from '../../lib/outfit-log-scan';
 import type { Item } from '../../types/item';
 import { cropImage } from '../../lib/cropImage';
@@ -99,11 +100,15 @@ export async function saveWearLog(flow: ReviewFlow): Promise<WearLogSaved> {
   let createdItems: Item[] = [];
   if (drafts.length) {
     const croppedUrls = await uploadCrops(flow, drafts);
-    const result = await createItemsBatch(drafts.map((d) => {
+    // The workspace applies the new rows to the cache, and queues any polish,
+    // only once the log itself has landed.
+    const result = await commitItems(drafts.map((d) => {
       const r = flow.resolutions[d.id];
       return newItemInput(flow.id, d, r.kind === 'new' ? r.draft : draftFrom(d), croppedUrls.get(d.id));
     }));
-    if (result.rejected.length) throw new Error(result.rejected[0].message || 'Couldn’t add a new piece.');
+    // All or nothing: a log never goes out missing a piece the user chose to add.
+    const [firstFailure] = result.failures.values();
+    if (firstFailure) throw new Error(firstFailure || 'Couldn’t add a new piece.');
     createdItems = result.items;
   }
 

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { enqueuePolish } from '../../features/polish-queue/runner';
-import { GaveUp, withRetries } from '../../features/batch-import/retryPolicy';
+import { GaveUp } from '../../features/batch-import/retryPolicy';
+import { commitItems } from '../../lib/commitItems';
 import {
   Platform,
   UIManager,
@@ -16,8 +17,6 @@ import { useCameraLaunch, useLibraryLaunch, type CapturedImage } from '../../hoo
 import {
   useScanVisionPose,
   scanItemDirect,
-  createItemsBatch,
-  applySavedItems,
   useBrandSuggestions,
   useClosetBrands,
   type BatchCreateItemInput,
@@ -508,18 +507,15 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
     let savedItems: Item[] = [];
     if (ready.length > 0) {
       try {
-        const result = await withRetries(() => createItemsBatch(ready.map((item) => toBatchCreateInput(
+        // Applied to the cache even if the session moved on: the rows exist either way.
+        const result = await commitItems(ready.map((item) => toBatchCreateInput(
           item,
           imageUrls.get(item.tempId) ?? null,
           cutoutUrls.get(item.tempId) ?? null,
-        ))));
-        // Applied even if the session moved on: the rows exist either way.
-        applySavedItems(queryClient, result.items);
+        )), queryClient);
         savedItems = result.items;
         enqueuePolish(user.id, result.items.filter((saved) => saved.clientImportId && polishIds.includes(saved.clientImportId)));
-        for (const rejected of result.rejected) {
-          if (rejected.clientImportId) failures.set(rejected.clientImportId, rejected.message);
-        }
+        for (const [id, message] of result.failures) failures.set(id, message);
       } catch (err) {
         // 402s (credits, free cap) are already surfaced by the api interceptor.
         const message = err instanceof GaveUp ? err.message : apiErrorMessage(err, "Couldn't add this piece.");
@@ -529,11 +525,6 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
     if (sessionRef.current !== session) return;
 
     const savedIds = new Set(savedItems.map((item) => item.clientImportId));
-    for (const item of ready) {
-      if (!savedIds.has(item.tempId) && !failures.has(item.tempId)) {
-        failures.set(item.tempId, "Couldn't add this piece.");
-      }
-    }
     for (const item of savedItems) track('item_added', { category: item.category });
 
     if (failures.size > 0) {
