@@ -146,7 +146,7 @@ const s = StyleSheet.create({
   hero: { alignItems: 'center', gap: spacing.sm, paddingTop: spacing.sm },
   avatar: { width: 96, height: 96, borderRadius: 48, backgroundColor: colors.surfaceSelected, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
   avatarPhoto: { width: 96, height: 96, borderRadius: 48 },
-  avatarText: { ...typography.text.editorialTitle, color: colors.foreground },
+  avatarText: { ...typography.text.editorialTitle, color: colors.foreground, transform: [{ translateY: 2.8 }] }, // Newsreader caps sit 0.1em high
   avatarBadge: {
     position: 'absolute', bottom: 2, right: 2, width: 26, height: 26, borderRadius: 13,
     backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.background,

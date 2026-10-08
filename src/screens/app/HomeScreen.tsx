@@ -1399,6 +1399,8 @@ const styles = StyleSheet.create({
     fontSize: 20,
     lineHeight: 24,
     color: colors.foreground,
+    // Newsreader's ascent/descent sit capitals 0.1em above the line box's centre.
+    transform: [{ translateY: 2 }],
   },
   avatarBtn: {
     width: 44,
