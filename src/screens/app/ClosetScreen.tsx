@@ -1559,16 +1559,17 @@ const styles = StyleSheet.create({
   searchDone: { ...typography.text.bodySmall, color: colors.foreground },
   closeSearch: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   // ── Category pills
-  pillRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  pillScrollWrap: { flex: 1, minWidth: 0 },
+  // Bottom spacing lives on the row, not the scroll, so Clear centres on the chips.
+  pillRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingBottom: spacing.xs },
+  pillScrollWrap: { flex: 1, minWidth: 0, alignSelf: 'stretch' },
   pillScroll: { flexShrink: 0 },
   pillContent: {
-    paddingHorizontal: 0, paddingBottom: spacing.xs, gap: spacing.sm,
+    paddingHorizontal: 0, gap: spacing.sm, alignItems: 'center', flexGrow: 1,
   },
   pillFade: {
     position: 'absolute',
     top: 0,
-    bottom: spacing.sm,
+    bottom: 0,
     width: 24,
   },
   pillFadeLeft: { left: 0 },
