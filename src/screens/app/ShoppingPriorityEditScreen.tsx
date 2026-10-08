@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CommonActions, usePreventRemove } from '@react-navigation/native';
 
 import { useShoppingChapters } from '../../components/shopping/ShoppingChapterContents';
-import { SectionKicker, SpecList } from '../../components/shopping/ShoppingEditorialParts';
+import { SectionKicker, SpecList, StylistAsk } from '../../components/shopping/ShoppingEditorialParts';
 import { ShoppingStyleSwatches } from '../../components/shopping/ShoppingStyleSwatches';
 import { ShoppingStyleVisual } from '../../components/shopping/ShoppingStyleVisual';
 import { PressableScale } from '../../components/primitives/PressableScale';
@@ -27,7 +27,7 @@ import { useItems } from '../../hooks/useItems';
 import { useShoppingPriorityEdit } from '../../hooks/useShoppingPriorityEdit';
 import { addOutfitToWishlist, useRemoveFromWishlist, useWishlist } from '../../hooks/useWishlist';
 import { wearableWardrobe, withoutOutfitCount } from '../../lib/shopClarity';
-import { shoppingGarmentTitle, styleFollowupQuestions } from '../../lib/shoppingEditorial';
+import { compareAskQuestions, shoppingGarmentTitle } from '../../lib/shoppingEditorial';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { track } from '../../lib/analytics';
 import { displayBudget, targetShoppingNotes, withoutInlineImages, type ShoppingPriorityTarget } from '../../lib/shoppingPriorityEdit';
@@ -353,12 +353,12 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
   const jumpTo = (key: string) => key === ASK_TAB
     ? chapterNav.scroll.current?.scrollTo({ y: Math.max(0, closingTop.current - tabsHeight), animated: !reduceMotion })
     : chapterNav.jump(key, directionCount > 1 ? tabsHeight + spacing.lg - spacing.chapter : 0, chapterTops.current.get(key));
-  const askStylist = (initialQuery?: string) =>
+  const askStylist = (initialQuery?: string, focusTargetKey?: string) =>
     openStylist({
       source: 'shop',
       initialMode: 'advice',
       initialQuery,
-      context: { kind: 'shopping_brief_edit', priority, targets: data.targets },
+      context: { kind: 'shopping_brief_edit', priority, targets: data.targets, ...(focusTargetKey ? { focusTargetKey } : {}) },
     });
 
   return (
@@ -406,6 +406,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
               isLast={index === directionCount - 1}
               hideCriteria={!!sharedNotes}
               showBudget={!sharedBudget}
+              onAsk={question => askStylist(question, target.key)}
               onSaveFind={() => {
                 track('shopping_brief_save_find_tapped', {
                   category: priority.category,
@@ -416,30 +417,9 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
             />
           </View>
         ))}
-        <View style={styles.closing} onLayout={event => { closingTop.current = event.nativeEvent.layout.y; }}>
-          <SectionKicker title="Questions about this?" />
-          <View style={styles.chips}>
-            {styleFollowupQuestions(data.targets).map((question) => (
-              <Pressable
-                key={question}
-                onPress={() => askStylist(question)}
-                accessibilityRole="button"
-                accessibilityLabel={question}
-                style={({ pressed }) => [styles.chip, pressed && { opacity: 0.6 }]}
-              >
-                <Text style={styles.chipText}>{question}</Text>
-              </Pressable>
-            ))}
-          </View>
-          <Pressable
-            onPress={() => askStylist()}
-            accessibilityRole="button"
-            accessibilityLabel="Ask your stylist"
-            style={({ pressed }) => [styles.askLink, pressed && { opacity: 0.6 }]}
-          >
-            <Text style={styles.link}>Ask your stylist →</Text>
-          </Pressable>
-        </View>
+        {directionCount > 1 ? <View style={styles.closing} onLayout={event => { closingTop.current = event.nativeEvent.layout.y; }}>
+          <StylistAsk title="Still deciding?" questions={compareAskQuestions(data.targets)} openLabel="Ask about this guide" onAsk={question => askStylist(question)} />
+        </View> : null}
         </View>
       </ScrollView>
       {tabsVisible && directionCount > 1 ? (
@@ -450,7 +430,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
           onLayout={event => setTabsHeight(event.nativeEvent.layout.height)}
         >
           <View accessibilityRole="tablist" style={[styles.tabsRow, { paddingLeft: spacing.page + insets.left, paddingRight: spacing.page + insets.right }]}>
-            {[...data.targets.map((target, index) => ({ key: target.key, label: String(index + 1).padStart(2, '0'), title: target.title, target })), { key: ASK_TAB, label: 'Ask', title: 'Questions for your stylist', target: null }].map(tab => {
+            {[...data.targets.map((target, index) => ({ key: target.key, label: String(index + 1).padStart(2, '0'), title: target.title, target })), { key: ASK_TAB, label: 'Ask', title: 'Compare styles with your stylist', target: null }].map(tab => {
               const selected = activeKey === tab.key;
               return <Pressable key={tab.key} onPress={() => jumpTo(tab.key)}
                 accessibilityRole="tab" accessibilityState={{ selected }} accessibilityLabel={tab.title}
@@ -568,7 +548,6 @@ const styles = StyleSheet.create({
   meta: { ...typography.text.meta, color: colors.mutedForeground },
   contents: { gap: spacing.md, paddingBottom: spacing.subsection },
   closing: { gap: spacing.md, paddingTop: spacing.chapter },
-  askLink: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
   link: { ...typography.text.label, color: shoppingSurfaces.olive.accent },
   toastAction: { minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'flex-end' },
   saveIcon: { minWidth: 44, height: 44, flexDirection: 'row', gap: spacing.xs, alignItems: 'center', justifyContent: 'center' },
@@ -592,16 +571,6 @@ const styles = StyleSheet.create({
   skeletonLine: { height: 14, backgroundColor: colors.surfaceSubtle, borderRadius: radii.sm },
   skeletonSwatches: { flexDirection: 'row', gap: spacing.sm },
   skeletonSwatch: { aspectRatio: 0.8, backgroundColor: colors.surfaceSubtle, borderRadius: radii.photo },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip: {
-    minHeight: 44,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.full,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.ghostStroke,
-  },
-  chipText: { ...typography.text.bodySmall, color: colors.foreground },
   screen: { flex: 1, backgroundColor: shoppingSurfaces.canvas },
   content: { paddingHorizontal: spacing.page },
   fullBleedHeader: {

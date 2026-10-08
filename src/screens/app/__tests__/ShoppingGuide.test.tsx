@@ -32,6 +32,7 @@ jest.mock('../../../lib/analytics', () => ({ track: jest.fn() }));
 const mockSave = jest.fn().mockResolvedValue({ id: 'saved-guide' });
 jest.mock('../../../hooks/useWishlist', () => ({
   useWishlist: () => ({ data: [] }),
+  useRemoveFromWishlist: () => ({ mutateAsync: jest.fn() }),
   addOutfitToWishlist: (...args: unknown[]) => mockSave(...args),
 }));
 const mockOpen = jest.fn();
@@ -119,7 +120,7 @@ test('all styles remain visible across an unchanged refresh and stylist return',
   mockData = { ...mockData, targets: [...mockData.targets] };
   await act(async () => renderer.update(<ShoppingPriorityEditScreen {...(props as any)} />));
   expect(cards()).toHaveLength(3);
-  const ask = renderer.root.findAllByProps({ accessibilityLabel: 'Ask your stylist' })[0];
+  const ask = renderer.root.findAllByProps({ accessibilityLabel: 'Ask about this guide' })[0];
   act(() => ask.props.onPress());
   expect(mockOpen).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -130,21 +131,25 @@ test('all styles remain visible across an unchanged refresh and stylist return',
   expect(cards()).toHaveLength(3);
 });
 
-test('a suggested follow-up is dispatched exactly once with actual guide context', async () => {
+test('a question asked inside a chapter is focused on that style', async () => {
   mockData = fixture(3);
   await render();
-  const question = renderer.root.findAllByProps({
-    accessibilityLabel: 'Would navy work better for me?',
-  })[0];
-  act(() => question.props.onPress());
+  act(() => cards()[1].props.onAsk('Is there a cheaper take on the deep navy?'));
   expect(mockOpen).toHaveBeenCalledTimes(1);
   expect(mockOpen).toHaveBeenCalledWith(
     expect.objectContaining({
       initialMode: 'advice',
-      initialQuery: 'Would navy work better for me?',
-      context: expect.objectContaining({ targets: mockData.targets }),
+      initialQuery: 'Is there a cheaper take on the deep navy?',
+      context: expect.objectContaining({ targets: mockData.targets, focusTargetKey: '1' }),
     }),
   );
+});
+
+test('a single-style guide has no comparison block', async () => {
+  mockData = fixture(1);
+  await render();
+  expect(renderer.root.findAllByProps({ accessibilityLabel: 'Ask about this guide' })).toHaveLength(0);
+  expect(typeof cards()[0].props.onAsk).toBe('function');
 });
 
 test.each([1, 3])('a guide with %i styles uses chapter contents only when useful', async count => {
@@ -179,7 +184,7 @@ test('style tabs appear once the comparison scrolls away and follow the current 
   expect(renderer.root.findAllByProps({ accessibilityRole: 'tab' })).toHaveLength(0);
   act(() => scroll().props.onScroll({ nativeEvent: { contentOffset: { y: 400 } } }));
   const tabs = renderer.root.findAll(node => node.props.accessibilityRole === 'tab' && typeof node.type !== 'string' && node.props.onPress);
-  expect(tabs.map(tab => tab.props.accessibilityLabel)).toEqual(['Charcoal wool', 'Deep navy', 'Deep navy', 'Questions for your stylist']);
+  expect(tabs.map(tab => tab.props.accessibilityLabel)).toEqual(['Charcoal wool', 'Deep navy', 'Deep navy', 'Compare styles with your stylist']);
   act(() => scroll().props.onScroll({ nativeEvent: { contentOffset: { y: 0 } } }));
   expect(renderer.root.findAllByProps({ accessibilityRole: 'tab' })).toHaveLength(0);
 });

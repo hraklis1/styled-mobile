@@ -28,6 +28,7 @@ type Props = {
   attachment: StylistComposerAttachment | null;
   onRemoveAttachment: () => void;
   onOpenAttachmentSheet: () => void;
+  placeholder?: string;
 };
 
 type RightSlotMode = 'stop' | 'done' | 'send' | 'mic';
@@ -62,6 +63,7 @@ export function StylistComposer({
   attachment,
   onRemoveAttachment,
   onOpenAttachmentSheet,
+  placeholder = 'Ask about an outfit or tag @a piece',
 }: Props) {
   const dictation = useDictation({ onText: onDictatedText });
   const isDictating = dictation.state !== 'idle';
@@ -166,7 +168,7 @@ export function StylistComposer({
             onChangeText={onChangeText}
             onFocus={() => { focusProgress.value = withTiming(1, { duration: 150 }); }}
             onBlur={() => { focusProgress.value = withTiming(0, { duration: 150 }); }}
-            placeholder="Ask about an outfit or tag @a piece"
+            placeholder={placeholder}
             placeholderTextColor={colors.mutedForeground}
             multiline
             textAlignVertical="top"

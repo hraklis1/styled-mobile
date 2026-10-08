@@ -7,7 +7,8 @@ import { ShoppingStyleVisual } from './ShoppingStyleVisual';
 import { ShoppingOutfitGroup, ShoppingOutfitPreview } from './ShoppingOutfitPreview';
 import { ShoppingRetailerLinks } from './ShoppingRetailerLinks';
 import { ShoppingOfferRail } from './ShoppingOfferRail';
-import { ChapterHero, ChapterOpener, NextChapterLink, SectionKicker, SpecList } from './ShoppingEditorialParts';
+import { ChapterHero, ChapterOpener, NextChapterLink, SectionKicker, SpecList, StylistAsk } from './ShoppingEditorialParts';
+import { styleAskQuestions } from '../../lib/shoppingEditorial';
 
 type Props = {
   target: ShoppingPriorityTarget;
@@ -29,8 +30,10 @@ type Props = {
   showBudget?: boolean;
   nextTitle?: string;
   onNext?: () => void;
+  /** Editorial: asks the stylist about this style; the question is optional. */
+  onAsk?: (question?: string) => void;
 };
-export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTitle, isLast, offerContext, onRetryOffers, editorial = false, headingRef, hideCriteria = false, showBudget = true, nextTitle, onNext }: Props) {
+export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTitle, isLast, offerContext, onRetryOffers, editorial = false, headingRef, hideCriteria = false, showBudget = true, nextTitle, onNext, onAsk }: Props) {
   const hidden = useHiddenProducts();
   const looks = targetOutfitIdeas(target).filter(look => look.itemIds.some(id => wardrobe.has(id)));
   const offers = target.offers ?? [];
@@ -70,6 +73,7 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTit
         {target.offerState ? <ShoppingOfferRail budget={railBudget} editorial offers={offers} status={target.offerState.status} context={offerContext} onRetry={onRetryOffers} targetKey={target.key} targetTitle={target.title} target={target} wardrobe={wardrobe} /> : null}
         <ShoppingRetailerLinks target={target} />
       </View> : null}
+      {onAsk ? <StylistAsk title="Ask about this style" questions={styleAskQuestions(target)} openLabel={`Ask about the ${(displayTitle || target.title).toLowerCase()}`} onAsk={onAsk} /> : null}
       {onNext ? <NextChapterLink title={nextTitle} onPress={onNext} /> : null}
     </View>;
   }

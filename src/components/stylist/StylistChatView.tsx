@@ -57,6 +57,9 @@ import { conversationLocation, type StylingLocationContext } from '../../lib/sty
 import { formatTemp, resolveTempUnit } from '../../lib/temperature';
 import { sanitizeStylistResponseText } from '../../lib/stylistResponseText';
 import { resolveShoppingAlternativeMode } from '../../features/stylist/shoppingIntent';
+import { compareAskQuestions, styleAskQuestions, styleName } from '../../lib/shoppingEditorial';
+import { displayBudget } from '../../lib/shoppingPriorityEdit';
+import { ShoppingStyleVisual } from '../shopping/ShoppingStyleVisual';
 import {
   useAcceptEventOutfitPlan,
   useCreateOutfit,
@@ -198,9 +201,17 @@ const CHIPS_KNOWLEDGE = [
   "What's missing from my closet?",
 ];
 
+type GuideContext = Extract<StylistEntryContext, { kind: 'shopping_brief_edit' }>;
+function guideFocus(context: GuideContext) {
+  return context.focusTargetKey ? context.targets.find(target => target.key === context.focusTargetKey) : undefined;
+}
+
 function useContextualChips(lastMessage: ChatMessage | undefined, entryContext?: StylistEntryContext): string[] {
   return useMemo(() => {
-    if (entryContext?.kind === 'shopping_brief_edit') return ['Which option is most versatile?', 'Make these more polished.', 'Keep this within my budget.'];
+    if (entryContext?.kind === 'shopping_brief_edit') {
+      const focus = guideFocus(entryContext);
+      return focus ? [...styleAskQuestions(focus), 'Make it more polished.'] : ['Which option is most versatile?', 'Make these more polished.', 'Keep this within my budget.'];
+    }
     if (!lastMessage || lastMessage.role !== 'assistant') return CHIPS_DEFAULT;
     if (lastMessage.wardrobeAudit || lastMessage.mode === 'wardrobe_audit') return CHIPS_AUDIT;
     if (lastMessage.tripPlan || lastMessage.mode === 'trip') return CHIPS_TRIP;
@@ -1342,7 +1353,9 @@ export function StylistChatView({
             ) : null}
           </TouchableOpacity>
         </View>
-        {isEmpty ? (
+        {isEmpty && entryContext?.kind === 'shopping_brief_edit' ? (
+          <GuideEmptyState context={entryContext} onPrompt={(q) => sendMessage({ text: q, mode: 'advice' })} />
+        ) : isEmpty ? (
           <EmptyState
             weather={weather.data?.current}
             tempUnit={tempUnit}
@@ -1525,6 +1538,7 @@ export function StylistChatView({
           attachment={composerAttachment}
           onRemoveAttachment={() => { setComposerAttachment(null); setComposerPhotoData(null); }}
           onOpenAttachmentSheet={() => setAttachmentSheetVisible(true)}
+          placeholder={entryContext?.kind === 'shopping_brief_edit' ? guidePlaceholder(entryContext) : undefined}
         />
       </BlurView>
 
@@ -2590,6 +2604,54 @@ function TypingIndicator() {
           />
         ))}
       </View>
+    </View>
+  );
+}
+
+// ── GuideEmptyState ──────────────────────────────────────────────────────────
+// Opened from a shopping guide: say what is being asked about before anything is sent.
+
+function guidePlaceholder(context: GuideContext) {
+  const focus = guideFocus(context);
+  return focus ? `Ask about the ${styleName(focus)}…` : 'Ask about this shopping guide…';
+}
+
+function GuideEmptyState({ context, onPrompt }: { context: GuideContext; onPrompt: (q: string) => void }) {
+  const focus = guideFocus(context);
+  const shown = focus ? [focus] : context.targets;
+  const budget = focus ? displayBudget(focus.priceRange) : null;
+  const questions = focus ? styleAskQuestions(focus) : compareAskQuestions(context.targets);
+  return (
+    <View style={styles.emptyState}>
+      <View style={styles.emptyHero}>
+        <Text style={styles.promptSectionLabel}>ASKING ABOUT</Text>
+        <View style={styles.guideCard} accessible accessibilityLabel={`Asking about ${focus ? focus.title : context.priority.label}`}>
+          <View style={styles.guideThumbs}>
+            {shown.slice(0, 3).map(target => (
+              <View key={target.key} style={styles.guideThumb}><ShoppingStyleVisual plain fill target={target} /></View>
+            ))}
+          </View>
+          <View style={styles.guideCopy}>
+            <Text style={styles.guideTitle} numberOfLines={2}>{focus ? focus.title : context.priority.label}</Text>
+            <Text style={styles.guideMeta} numberOfLines={1}>
+              {focus ? ['From your shopping guide', budget].filter(Boolean).join(' · ') : `${context.targets.length} styles in your shopping guide`}
+            </Text>
+          </View>
+        </View>
+      </View>
+      {questions.length ? (
+        <View style={styles.promptList}>
+          <Text style={styles.promptSectionLabel}>TRY ASKING</Text>
+          <View style={styles.starterRows}>
+            {questions.map(question => (
+              <TouchableOpacity key={question} style={styles.starterRow} activeOpacity={0.65} onPress={() => onPrompt(question)} accessibilityRole="button" accessibilityLabel={question}>
+                <Text style={[styles.starterTitle, styles.guideQuestion]}>{question}</Text>
+                <Ionicons name="arrow-forward" size={14} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -4001,6 +4063,13 @@ const styles = StyleSheet.create({
   },
   followUpText: { color: colors.foreground, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.medium },
   // Empty state
+  guideCard: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  guideThumbs: { flexDirection: 'row', gap: spacing.xs },
+  guideThumb: { width: 64, aspectRatio: 0.8, borderRadius: radii.photo, overflow: 'hidden' },
+  guideCopy: { flex: 1, gap: spacing.xs },
+  guideTitle: { ...typography.text.editorialCompact, color: colors.foreground },
+  guideMeta: { ...typography.text.meta, color: colors.inkSubtle },
+  guideQuestion: { flex: 1 },
   emptyState: {
     paddingHorizontal: spacing.sm,
     gap: spacing.xxxl,

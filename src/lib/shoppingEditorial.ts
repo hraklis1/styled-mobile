@@ -20,14 +20,25 @@ export function shoppingGarmentTitle(value: string): string {
   return title.charAt(0).toUpperCase() + title.slice(1);
 }
 
-export function styleFollowupQuestions(targets: ShoppingPriorityTarget[]): string[] {
-  const alternative = targets[1];
-  return [
-    alternative
-      ? `Would ${alternative.color || alternative.title} work better for me?`
-      : 'Could this feel more casual?',
-    'Can we find a less expensive version?',
-  ];
+/** A style title mid-sentence: Title Case words are lowercased, acronyms (UK, OCBD) are kept. */
+export function styleName(target: ShoppingPriorityTarget): string {
+  const title = (target.title || target.color || 'this style').trim();
+  return title.split(/(\s+)/).map(word => /^[A-Z][a-z]/.test(word) ? word.toLowerCase() : word).join('');
+}
+
+/** Questions asked from inside one style's chapter; each names the style so it reads on its own in chat. */
+export function styleAskQuestions(target: ShoppingPriorityTarget): string[] {
+  const name = styleName(target);
+  return [`Is there a cheaper take on the ${name}?`, `What else could I wear the ${name} with?`];
+}
+
+/** Questions across the whole guide; only meaningful when there is more than one style to weigh. */
+export function compareAskQuestions(targets: ShoppingPriorityTarget[]): string[] {
+  if (targets.length < 2) return [];
+  const which = targets.length === 2
+    ? `The ${styleName(targets[0])} or the ${styleName(targets[1])} — which suits me better?`
+    : `Which of these ${targets.length} styles suits me best?`;
+  return [which, 'Which one works with more of my closet?'];
 }
 
 /** Compatibility for deterministic rationale templates stored in older daily briefs. */

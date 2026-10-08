@@ -227,6 +227,8 @@ export type StylistEntryContext =
       kind: 'shopping_brief_edit';
       priority: ShoppingBriefPriority;
       targets: ShoppingPriorityTarget[];
+      /** The style whose chapter the question was asked from. */
+      focusTargetKey?: string;
     };
 
 export type StylistLocationContext = {

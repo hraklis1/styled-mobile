@@ -1,6 +1,6 @@
 import type { ReactNode, Ref } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, shoppingSurfaces, spacing, typography } from '../../theme';
+import { colors, radii, shoppingSurfaces, spacing, typography } from '../../theme';
 import type { ShoppingPriorityTarget } from '../../lib/shoppingPriorityEdit';
 import { ShoppingStyleVisual } from './ShoppingStyleVisual';
 
@@ -51,7 +51,30 @@ export function SpecList({ notes }: { notes: string[] }) {
   return <View>{notes.map((note, index) => <Text key={index} selectable style={[styles.spec, index > 0 && styles.specRule]}>{sentenceCase(note)}</Text>)}</View>;
 }
 
+/** Suggested stylist questions plus an open-ended ask; every chip names its subject. */
+export function StylistAsk({ title, questions, openLabel, onAsk }: {
+  title: string; questions: string[]; openLabel: string; onAsk: (question?: string) => void;
+}) {
+  return <View style={styles.ask}>
+    <SectionKicker title={title} />
+    {questions.length ? <View style={styles.chips}>
+      {questions.map(question => <Pressable key={question} onPress={() => onAsk(question)} accessibilityRole="button" accessibilityLabel={question}
+        style={({ pressed }) => [styles.chip, pressed && styles.pressed]}>
+        <Text style={styles.chipText}>{question}</Text>
+      </Pressable>)}
+    </View> : null}
+    <Pressable onPress={() => onAsk()} accessibilityRole="button" accessibilityLabel={openLabel} style={({ pressed }) => [styles.askLink, pressed && styles.pressed]}>
+      <Text style={styles.nextText}>{openLabel} →</Text>
+    </Pressable>
+  </View>;
+}
+
 const styles = StyleSheet.create({
+  ask: { gap: spacing.md },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chip: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radii.full, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.ghostStroke },
+  chipText: { ...typography.text.bodySmall, color: colors.foreground },
+  askLink: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
   kicker: { paddingTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
   kickerText: { ...typography.text.sectionKicker, color: colors.mutedForeground },
   opener: { gap: spacing.sm },
