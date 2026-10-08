@@ -9,7 +9,7 @@ jest.mock('../../wardrobe/scan-review/WorkspaceSheet', () => ({
     return React.createElement('WorkspaceSheet', props, props.headerAction, props.children, props.footer);
   },
 }));
-jest.mock('../../wardrobe/scan-review/ActionBar', () => ({ PrimaryButton: 'PrimaryButton' }));
+jest.mock('../../wardrobe/scan-review/PrimaryButton', () => ({ PrimaryButton: 'PrimaryButton' }));
 jest.mock('../../wardrobe/scan-review/atoms', () => ({ TextLink: 'TextLink' }));
 jest.mock('../../wardrobe/scan-review/feedback', () => ({ selectionFeedback: jest.fn() }));
 jest.mock('react-native-reanimated', () => ({ __esModule: true, default: { View: 'AnimatedView' }, FadeIn: { duration: () => ({}) } }));
