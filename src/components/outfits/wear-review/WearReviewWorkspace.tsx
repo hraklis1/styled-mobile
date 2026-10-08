@@ -323,7 +323,7 @@ function Review({ flow, screenHeight, width, insets, reduceMotion, onClose, onMi
           renderSectionHeader={({ section }) => section.key === 'accessories'
             ? <AccessoriesHeader pieces={section.all ?? []} open={accessoriesOpen} toConfirm={(section.all ?? []).filter((d) => queue.includes(d.id)).length} onToggle={() => setAccessoriesOpen((o) => !o)} />
             : section.title ? <Text style={styles.sectionTitle}>{section.title}</Text> : null}
-          renderItem={({ item: d }) => <PairingRow detection={d} resolution={flow.resolutions[d.id]} itemsById={itemsById} sharedWith={sharedMatch(flow, d.id).map((id) => numbers[id])} wardrobeReady={!!isSuccess} disabled={saving}
+          renderItem={({ item: d }) => <PairingRow detection={d} resolution={flow.resolutions[d.id]} photoUri={flow.photoUri} itemsById={itemsById} sharedWith={sharedMatch(flow, d.id).map((id) => numbers[id])} wardrobeReady={!!isSuccess} disabled={saving}
             onOpen={() => openPiece(d.id)} onRestore={() => dispatchWear({ type: 'restore', detectionId: d.id })} />}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListFooterComponent={<View style={styles.listFooter}>

@@ -6,18 +6,24 @@ import type { Resolution, WearDetection } from '../../../features/wear-log/types
 import type { Item } from '../../../types/item';
 import { colors, radii, spacing, stroke, typography } from '../../../theme';
 import { PieceImage } from './PieceImage';
+import { useCropPreview } from './useCropPreview';
+import { PieceThumb } from '../../wardrobe/scan-review/PieceThumb';
 import { pieceRowText } from '../../wardrobe/scan-review/pieceRowText';
 
-export const PairingRow = memo(function PairingRow({ detection, resolution, itemsById, sharedWith, wardrobeReady, disabled, onOpen, onRestore }: {
+export const PairingRow = memo(function PairingRow({ detection, resolution, itemsById, sharedWith, wardrobeReady, disabled, photoUri, onOpen, onRestore }: {
   detection: WearDetection;
   resolution: Resolution;
   itemsById: Map<number, Item>;
   sharedWith: number[];
   wardrobeReady: boolean;
   disabled: boolean;
+  /** The stored outfit photo, for a new piece the user re-cropped. */
+  photoUri?: string;
   onOpen: () => void;
   onRestore: () => void;
 }) {
+  // Hooks first: a dismissed row returns early below.
+  const cropPreview = useCropPreview(photoUri, resolution.kind === 'new' ? resolution.draft.cropBbox : null, 240);
   if (resolution.kind === 'dismissed') {
     return <View style={styles.skipped}>
       <View style={styles.faded}><PieceImage cropUrl={detection.cropUrl} cutoutUrl={detection.cutoutUrl} width={48} height={60} /></View>
@@ -39,7 +45,9 @@ export const PairingRow = memo(function PairingRow({ detection, resolution, item
   const brand = resolution.kind === 'new' ? resolution.draft.brand : item?.brand;
   const status = missing ? 'Choose another' : uncertain ? 'Needs review' : resolution.kind === 'new' ? 'New' : 'Matched';
   return <Pressable style={styles.row} onPress={onOpen} disabled={disabled} accessibilityRole="button" accessibilityLabel={`${name}, ${status}`} accessibilityHint="Review or change this piece" accessibilityState={{ disabled }}>
-    <PieceImage item={uncertain ? undefined : item} cropUrl={detection.cropUrl} cutoutUrl={detection.cutoutUrl} />
+    {resolution.kind === 'new' && resolution.draft.cropBbox
+      ? <PieceThumb uri={cropPreview} />
+      : <PieceImage item={uncertain ? undefined : item} cropUrl={detection.cropUrl} cutoutUrl={detection.cutoutUrl} />}
     <View style={styles.copy}>
       <Text style={styles.name} numberOfLines={2}>{name}</Text>
       {brand ? <Text style={styles.meta} numberOfLines={1}>{brand}</Text> : null}

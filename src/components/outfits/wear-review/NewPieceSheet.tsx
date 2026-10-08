@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { WorkspaceSheet } from '../../wardrobe/scan-review/WorkspaceSheet';
@@ -7,7 +7,7 @@ import { BrandPicker, CategoryPicker, MaterialPicker } from '../../wardrobe/scan
 import { TextLink } from '../../wardrobe/scan-review/atoms';
 import { AdjustCropButton } from '../../wardrobe/scan-review/PieceEditorSheet';
 import { PieceThumb } from '../../wardrobe/scan-review/PieceThumb';
-import { cropImage } from '../../../lib/cropImage';
+import { useCropPreview } from './useCropPreview';
 import { selectionFeedback } from '../../wardrobe/scan-review/feedback';
 import type { PiecePatch, ScanReviewPiece } from '../../wardrobe/scan-review/types';
 import { useBrandSuggestions } from '../../../hooks/useItems';
@@ -67,15 +67,8 @@ export function NewPieceEditor({ detection, draft, scanBrands, photoUri, onChang
   const [picker, setPicker] = useState<SheetKind | null>(null);
   const [expandedRow, setExpandedRow] = useState<ExpandableRow | null>(null);
   const brandSuggestions = useBrandSuggestions();
-  // The user's crop, cut locally for the preview; the saved cover is cut again at full size.
-  const [cropPreview, setCropPreview] = useState<string | null>(null);
   const box = draft.cropBbox;
-  useEffect(() => {
-    if (!box || !photoUri) { setCropPreview(null); return; }
-    let live = true;
-    void cropImage(photoUri, box, { maxDim: 800 }).then((uri) => { if (live) setCropPreview(uri); });
-    return () => { live = false; };
-  }, [photoUri, box?.x, box?.y, box?.width, box?.height]); // eslint-disable-line react-hooks/exhaustive-deps
+  const cropPreview = useCropPreview(photoUri, box);
   const piece = useMemo(() => toPiece(detection, draft), [detection, draft]);
   const flags = pieceFlags(piece);
   const update = (patch: PiecePatch) => onChange(toDraftPatch(patch));
