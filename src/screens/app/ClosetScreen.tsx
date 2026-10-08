@@ -1154,7 +1154,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
               renderItem={renderItemRow}
               style={styles.list}
               ListEmptyComponent={itemsLoading ? null : emptyPieces}
-              contentContainerStyle={{ paddingTop: listPaddingTop, ...styles.listContent, paddingBottom: listPaddingBottom }}
+              contentContainerStyle={{ paddingTop: listPaddingTop, ...styles.listContent, paddingBottom: listPaddingBottom, ...(scrubberEntries.length > 0 && !selectionMode && { paddingRight: SIDE_PAD + spacing.lg }) }}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="on-drag"
