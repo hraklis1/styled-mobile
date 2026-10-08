@@ -14,7 +14,7 @@ jest.mock('react-native/Libraries/Components/Pressable/Pressable', () => {
 });
 
 jest.mock('@expo/ui/community/menu', () => ({ MenuView: 'MenuView' }));
-jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }));
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons', MaterialCommunityIcons: 'MaterialCommunityIcons' }));
 jest.mock('../../shopping/WardrobeThumbnail', () => ({ WardrobeThumbnail: 'WardrobeThumbnail' }));
 jest.mock('../../../hooks/useShoppingPriorityEdit', () => ({
   useShoppingPriorityEdit: () => ({ data: undefined, refreshOffers: jest.fn() }),

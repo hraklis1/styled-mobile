@@ -1,8 +1,8 @@
 import { forwardRef, useImperativeHandle, useRef } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { PressableScale } from '../primitives/PressableScale';
-import { colors, radii, shadows, spacing, stroke, typography } from '../../theme';
+import { colors, radii, spacing, stroke, typography } from '../../theme';
 
 export type HomeActionKey = 'stylist' | 'closet' | 'shop' | 'wear';
 
@@ -20,13 +20,13 @@ type Props = {
 };
 
 const DISC = 56;
+const GLYPH = 25;
 
 /**
- * Home's everyday actions as one quiet row of discs. The stylist is the
- * charcoal primary; closet, wear and shop sit beside it as outlined
- * twins. Add and Save find both open a camera, so each wears its own glyph
- * (camera + plus for the closet, price tag + camera for shopping). What each
- * does is taught once by the first-run tour, so the captions stay one word.
+ * Home's everyday actions as one quiet row of four equal discs. Log wear
+ * uses a calendar-with-check (Ionicons has none, so it borrows Material
+ * Community's) to read as an action rather than the Calendar tab. No badges:
+ * the captions carry it.
  */
 export const HomeActionRow = forwardRef<HomeActionRowHandle, Props>(function HomeActionRow(
   { onAskStylist, onAddToCloset, onSaveFind, onLogWear, style },
@@ -43,23 +43,23 @@ export const HomeActionRow = forwardRef<HomeActionRowHandle, Props>(function Hom
   }));
 
   const actions: {
-    key: HomeActionKey; label: string; icon: keyof typeof Ionicons.glyphMap; primary?: boolean;
-    badge?: keyof typeof Ionicons.glyphMap; onPress: () => void; a11y: string; hint: string;
+    key: HomeActionKey; label: string; icon: keyof typeof Ionicons.glyphMap | { mci: keyof typeof MaterialCommunityIcons.glyphMap };
+    onPress: () => void; a11y: string; hint: string;
   }[] = [
     {
-      key: 'stylist', label: 'Stylist', icon: 'chatbubble-ellipses-outline', primary: true, onPress: onAskStylist,
+      key: 'stylist', label: 'Stylist', icon: 'chatbubble-ellipses-outline', onPress: onAskStylist,
       a11y: 'Ask your stylist', hint: 'Opens your stylist',
     },
     {
-      key: 'closet', label: 'Add', icon: 'camera-outline', badge: 'add', onPress: onAddToCloset,
+      key: 'closet', label: 'Add', icon: 'camera-outline', onPress: onAddToCloset,
       a11y: 'Add to my closet', hint: 'Take a photo, choose from your library, or import several pieces',
     },
     {
-      key: 'wear', label: 'Log wear', icon: 'calendar-outline',
+      key: 'wear', label: 'Log wear', icon: { mci: 'calendar-check-outline' },
       onPress: onLogWear, a11y: 'Log today’s outfit', hint: 'Record what you wore today',
     },
     {
-      key: 'shop', label: 'Save find', icon: 'pricetag-outline', badge: 'camera', onPress: onSaveFind,
+      key: 'shop', label: 'Save find', icon: 'bookmark-outline', onPress: onSaveFind,
       a11y: 'Save a find while shopping', hint: 'Opens the shopping camera to capture something you saw in a store',
     },
   ];
@@ -81,19 +81,13 @@ export const HomeActionRow = forwardRef<HomeActionRowHandle, Props>(function Hom
           <View
             ref={refs[action.key]}
             collapsable={false}
-            style={[styles.disc, action.primary ? styles.discPrimary : styles.discQuiet]}
+            style={styles.disc}
           >
-            <Ionicons
-              name={action.icon}
-              size={22}
-              color={action.primary ? colors.primaryForeground : colors.foreground}
-              accessible={false}
-            />
-            {action.badge ? (
-              <View style={styles.badge}>
-                <Ionicons name={action.badge} size={action.badge === 'add' ? 11 : 10} color={colors.primaryForeground} accessible={false} />
-              </View>
-            ) : null}
+            {typeof action.icon === 'string' ? (
+              <Ionicons name={action.icon} size={GLYPH} color={colors.foreground} accessible={false} />
+            ) : (
+              <MaterialCommunityIcons name={action.icon.mci} size={GLYPH + 1} color={colors.foreground} accessible={false} />
+            )}
           </View>
           <Text style={styles.label} numberOfLines={1} maxFontSizeMultiplier={1.3}>{action.label}</Text>
         </PressableScale>
@@ -109,13 +103,7 @@ const styles = StyleSheet.create({
   disc: {
     width: DISC, height: DISC, borderRadius: radii.full,
     alignItems: 'center', justifyContent: 'center',
-  },
-  discPrimary: { backgroundColor: colors.primary, ...shadows.control },
-  discQuiet: { backgroundColor: colors.surfaceSubtle, borderWidth: stroke.fine, borderColor: colors.ghostStroke },
-  badge: {
-    position: 'absolute', right: -1, bottom: -1, width: 20, height: 20, borderRadius: 10,
-    backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: colors.background,
+    backgroundColor: colors.surfaceSubtle, borderWidth: stroke.fine, borderColor: colors.ghostStroke,
   },
   label: { ...typography.text.caption, color: colors.inkSubtle, letterSpacing: 0.2 },
 });
