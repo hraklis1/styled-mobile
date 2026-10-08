@@ -8,7 +8,10 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { DetectionState } from '../../wardrobe/scan-review/LoadingStates';
 import { SlowScanHint } from '../../wardrobe/scan-review/SlowScanHint';
-import { PrimaryButton, actionBarStyle } from '../../wardrobe/scan-review/ActionBar';
+import { PolishRow, PrimaryButton, actionBarStyle } from '../../wardrobe/scan-review/ActionBar';
+import { usePolishChoice } from '../../wardrobe/scan-review/usePolishChoice';
+import { enqueuePolish } from '../../../features/polish-queue/runner';
+import { useAuth } from '../../../contexts/AuthContext';
 import { OutlinePill, TextLink } from '../../wardrobe/scan-review/atoms';
 import { cropFeedback, selectionFeedback } from '../../wardrobe/scan-review/feedback';
 import { localISODay } from '../../../lib/dates';
@@ -21,7 +24,7 @@ import { track } from '../../../lib/analytics';
 import { colors, radii, spacing, stroke, typography } from '../../../theme';
 import type { Item } from '../../../types/item';
 import { saveWearLog } from '../../../features/wear-log/api';
-import { canLog, matchedItemIds, orderedDetections, reviewCounts, reviewQueue, selectedItemIds, sharedMatch } from '../../../features/wear-log/reducer';
+import { canLog, matchedItemIds, newDetections, orderedDetections, reviewCounts, reviewQueue, selectedItemIds, sharedMatch } from '../../../features/wear-log/reducer';
 import { discardWearFlow, retryWearScan } from '../../../features/wear-log/runner';
 import { dispatchWear, useWearLogStore } from '../../../features/wear-log/store';
 import type { ReviewFlow, WearDetection } from '../../../features/wear-log/types';
@@ -246,6 +249,15 @@ function Review({ flow, screenHeight, width, insets, reduceMotion, onClose, onMi
   }, [skipToast]);
   const closeSurface = () => { dispatchWear({ type: 'closeResolve' }); setSurface(null); };
 
+  // New pieces join the closet when the outfit is logged; they can get a
+  // polished cover like any import, on the same terms (Premium, credits).
+  const { user } = useAuth();
+  const polish = usePolishChoice();
+  const newCount = newDetections(flow).length;
+  const polishing = polish.polishAll && newCount > 0;
+  const polishRef = useRef(polishing);
+  polishRef.current = polishing;
+
   const save = useCallback(async () => {
     const current = useWearLogStore.getState().flow;
     if (current.status !== 'reviewing' || !canLog(current) || !isSuccess
@@ -254,6 +266,8 @@ function Review({ flow, screenHeight, width, insets, reduceMotion, onClose, onMi
     try {
       const saved = await saveWearLog(current);
       applySavedItems(qc, saved.createdItems);
+      // Queued only once the log has landed, so a polish can never hold it up or fail it.
+      if (polishRef.current && user && saved.createdItems.length) enqueuePolish(user.id, saved.createdItems);
       void qc.invalidateQueries({ queryKey: OUTFIT_LOGS_QUERY_KEY });
       void qc.invalidateQueries({ queryKey: ['items'] });
       cropFeedback(true);
@@ -263,6 +277,7 @@ function Review({ flow, screenHeight, width, insets, reduceMotion, onClose, onMi
         manually_added_count: current.additionalItemIds.length,
         skipped_count: Object.values(current.resolutions).filter((r) => r.kind === 'dismissed').length,
         already_logged_count: saved.alreadyLoggedItemIds.length,
+        polish_count: polishRef.current ? saved.createdItems.length : 0,
       });
       dispatchWear({ type: 'saved', logId: saved.logId, itemIds: saved.itemIds, alreadyLoggedItemIds: saved.alreadyLoggedItemIds });
     } catch (err) {
@@ -270,7 +285,7 @@ function Review({ flow, screenHeight, width, insets, reduceMotion, onClose, onMi
       const offline = !(err as { response?: unknown })?.response;
       dispatchWear({ type: 'saveFailed', message: offline ? 'You’re offline. Your review is saved — log it when you’re back.' : 'Couldn’t log this outfit. Try again.' });
     }
-  }, [qc, availableIds, isSuccess]);
+  }, [qc, availableIds, isSuccess, user]);
   const dateLabel = dateChoice(flow.date) === 'today' ? 'Worn today' : dateChoice(flow.date) === 'yesterday' ? 'Worn yesterday' : `Worn ${shortDate(flow.date)}`;
   const buttonLabel = saving ? 'Logging' : queue.length ? `Review pieces · ${queue.length} left` : 'Log outfit';
   const status = queue.length ? `${queue.length} to confirm${ready ? ` · ${ready} ready` : ''}`
@@ -320,6 +335,14 @@ function Review({ flow, screenHeight, width, insets, reduceMotion, onClose, onMi
         <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
           {flow.saveError ? <Text style={styles.error} accessibilityLiveRegion="assertive">{flow.saveError}</Text> : null}
           {missingAdditional.length ? <Text style={styles.error}>Remove unavailable pieces before logging.</Text> : null}
+          {newCount > 0 && !queue.length && !saving ? <PolishRow state={{
+            count: polishing ? newCount : 0,
+            total: newCount,
+            cost: polish.costFor(newCount),
+            balance: polish.balance,
+            locked: !polish.isPremium,
+            onToggle: (next) => { void polish.setAll(next); },
+          }} /> : null}
           {!isSuccess ? <View style={styles.loadingRow}><Text style={styles.meta}>{isError ? 'Couldn’t load your closet' : 'Loading your closet…'}</Text>{isError ? <TextLink label="Try again" onPress={() => { void refetch(); }} /> : null}</View> : null}
           <PrimaryButton label={buttonLabel} busy={saving} variant={queue.length && !saving ? 'secondary' : 'primary'} disabled={saving || !isSuccess || (!queue.length && (!canLog(flow) || missingAdditional.length > 0))}
             onPress={() => { if (queue.length) setSurface({ kind: 'resolve', queue }); else void save(); }} />

@@ -85,9 +85,10 @@ export function ActionBar({ mode, bottomInset }: { mode: ActionBarMode; bottomIn
 
 /**
  * Opt-in for polished covers, decided with the save. The polishes run after
- * the pieces land, so the button never waits on a generation.
+ * the pieces land, so the button never waits on a generation. Shared by the
+ * closet scan's save bar and the outfit log's, for the pieces it creates.
  */
-function PolishRow({ state }: { state: PolishRowState }) {
+export function PolishRow({ state }: { state: PolishRowState }) {
   const on = state.count > 0;
   const mixed = on && state.count < state.total;
   // Partial means "turn the rest on"; only a full set turns off.
