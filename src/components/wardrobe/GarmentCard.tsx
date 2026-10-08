@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { LinearTransition } from 'react-native-reanimated';
+import Animated, { LinearTransition, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, spacing, typography } from '../../theme';
 import { getItemCardAccessibilityLabel } from '../../lib/closet-presentation';
@@ -9,6 +9,7 @@ import { PressableScale } from '../primitives/PressableScale';
 import { GarmentImage } from './garment-image';
 import { PolishingBadge } from './PolishingBadge';
 import { ItemSecondaryMeta } from './item-secondary-meta';
+import { SelectionCheck } from '../../features/closet-selection/SelectionCheck';
 
 type Props = {
   item: Item;
@@ -18,6 +19,8 @@ type Props = {
   onLongPress?: () => void;
   selectionMode?: boolean;
   isSelected?: boolean;
+  /** Something else is selected: recede so the selection reads at a glance. */
+  dimmed?: boolean;
   onToggleSelect?: () => void;
   /** Board Detail can own the outer grid rhythm without changing Closet cards. */
   bottomSpacing?: number;
@@ -31,6 +34,7 @@ function GarmentCardComponent({
   onLongPress,
   selectionMode = false,
   isSelected = false,
+  dimmed = false,
   onToggleSelect,
   bottomSpacing = spacing.gridRow,
 }: Props) {
@@ -43,6 +47,18 @@ function GarmentCardComponent({
 
   const itemLabel = getItemCardAccessibilityLabel(item);
 
+  const reduceMotion = useReducedMotion();
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(1);
+  const selectedNow = selectionMode && isSelected;
+  const dimNow = selectionMode && dimmed && !isSelected;
+  useEffect(() => {
+    const target = selectedNow ? 0.94 : 1;
+    scale.value = reduceMotion ? target : withSpring(target, { damping: 18, stiffness: 260 });
+    opacity.value = withTiming(dimNow ? 0.82 : 1, { duration: 160 });
+  }, [selectedNow, dimNow, reduceMotion, scale, opacity]);
+  const plateStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }], opacity: opacity.value }));
+
   return (
     <PressableScale
       contentStyle={[styles.card, { width: cardWidth, marginBottom: bottomSpacing }]}
@@ -54,40 +70,39 @@ function GarmentCardComponent({
       accessibilityLabel={selectionMode ? `${itemLabel}, ${isSelected ? 'selected' : 'not selected'}` : itemLabel}
       accessibilityState={selectionMode ? { selected: isSelected } : undefined}
     >
-      <GarmentImage item={item} width={cardWidth} height={imageHeight}>
-        {selectionMode && isSelected && <View style={styles.selectedOverlay} />}
+      <View style={[styles.plateWell, selectedNow && styles.plateWellSelected]}>
+        <Animated.View style={plateStyle}>
+          <GarmentImage item={item} width={cardWidth} height={imageHeight}>
+            {selectedNow && <View style={styles.selectedOverlay} />}
 
-        {selectionMode && (
-          <View style={styles.selectionBadge}>
-            <Ionicons
-              name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
-              size={22}
-              color={isSelected ? colors.primary : colors.white}
-            />
-          </View>
-        )}
+            {!selectionMode && <PolishingBadge itemId={item.id} />}
 
-        {!selectionMode && <PolishingBadge itemId={item.id} />}
+            {/* Favorite heart — top-right, hidden in selection mode */}
+            {!selectionMode && item.isFavorite && (
+              <View style={styles.favBadge}>
+                <Ionicons name="heart" size={12} color={colors.primary} />
+              </View>
+            )}
 
-        {/* Favorite heart — top-right, hidden in selection mode */}
-        {!selectionMode && item.isFavorite && (
-          <View style={styles.favBadge}>
-            <Ionicons name="heart" size={12} color={colors.primary} />
-          </View>
-        )}
+            {/* Condition warning dot — bottom-left */}
+            {!selectionMode && showConditionDot && (
+              <View style={[styles.conditionDot, { backgroundColor: conditionColor }]} />
+            )}
+          </GarmentImage>
+        </Animated.View>
 
+        {/* Outside the scaled plate so the check stays pinned to the corner. */}
+        {selectionMode && <SelectionCheck selected={isSelected} onPhoto style={styles.selectionBadge} />}
+      </View>
 
-        {/* Condition warning dot — bottom-left */}
-        {showConditionDot && (
-          <View style={[styles.conditionDot, { backgroundColor: conditionColor }]} />
-        )}
-      </GarmentImage>
-
-      <View style={styles.info}>
+      <View style={[styles.info, dimNow && styles.infoDimmed]}>
         <Text style={styles.name} numberOfLines={2}>
           {item.name || 'Unnamed Item'}
         </Text>
-        <ItemSecondaryMeta item={item} />
+        {/* Kept in layout so the grid doesn't reflow on entering select mode. */}
+        <View style={selectionMode ? styles.metaHidden : undefined}>
+          <ItemSecondaryMeta item={item} />
+        </View>
       </View>
     </PressableScale>
   );
@@ -99,23 +114,26 @@ const styles = StyleSheet.create({
   card: {
     marginBottom: spacing.gridRow,
   },
+  plateWell: {
+    borderRadius: radii.photo,
+    backgroundColor: colors.surfaceSelected,
+  },
+  plateWellSelected: {
+    // The well shows around the shrunken plate as a quiet inset frame.
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.controlOutline,
+  },
   selectedOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(149, 109, 81, 0.12)',
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(36, 36, 34, 0.06)',
   },
   selectionBadge: {
     position: 'absolute',
     top: spacing.sm,
     right: spacing.sm,
-    shadowColor: '#000',
-    shadowOpacity: 0.14,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
   },
+  infoDimmed: { opacity: 0.6 },
+  metaHidden: { opacity: 0 },
   favBadge: {
     position: 'absolute',
     top: spacing.sm,

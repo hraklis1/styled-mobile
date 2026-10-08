@@ -31,6 +31,8 @@ type Props = {
   scrollEventThrottle?: number;
   contentInset?: { top?: number; bottom?: number };
   listPaddingTop?: number;
+  /** Room under the last row, e.g. for a floating selection bar. */
+  listPaddingBottom?: number;
   initialScrollIndex?: number;
   onLoad?: () => void;
   onViewableItemsChanged?: (info: { viewableItems: ViewToken<Item>[]; changed: ViewToken<Item>[] }) => void;
@@ -55,6 +57,7 @@ const ClosetGridComponent = forwardRef<FlashListRef<Item>, Props>(function Close
   scrollEventThrottle = 16,
   contentInset,
   listPaddingTop = 0,
+  listPaddingBottom = spacing.xxxl * 2,
   initialScrollIndex,
   onLoad,
   onViewableItemsChanged,
@@ -76,6 +79,7 @@ const ClosetGridComponent = forwardRef<FlashListRef<Item>, Props>(function Close
         cardWidth={cardWidth}
         selectionMode={selectionMode}
         isSelected={selectedIds.has(item.id)}
+        dimmed={selectedIds.size > 0}
         onPress={() => onItemPress(item)}
         onLongPress={() => onItemLongPress(item)}
         onToggleSelect={() => onToggleSelect(item.id)}
@@ -119,7 +123,7 @@ const ClosetGridComponent = forwardRef<FlashListRef<Item>, Props>(function Close
         drawDistance={600}
         contentContainerStyle={{
           paddingTop: listPaddingTop,
-          paddingBottom: spacing.xxxl * 2,
+          paddingBottom: listPaddingBottom,
         }}
       />
     </View>

@@ -14,6 +14,7 @@ import { startPolishRunner } from '../features/polish-queue/runner';
 import { usePolishQueueStore } from '../features/polish-queue/store';
 import { PolishQueueTray } from '../components/wardrobe/PolishQueueTray';
 import { ScanDraftTray } from '../components/wardrobe/ScanDraftTray';
+import { useSelectionChromeActive } from '../features/closet-selection/selectionChrome';
 import { onBatchItemsSaved } from '../features/batch-import/save';
 import { useStartBatch } from '../features/batch-import/useStartBatch';
 import { processLibraryAsset, useLibraryLaunchMany, type CapturedImage } from '../hooks/useCameraLaunch';
@@ -65,6 +66,7 @@ export function GlobalScanProvider({ children }: Props) {
 
   // The scan closes the moment its pieces land; this is the arrival note.
   const [added, setAdded] = useState<number | null>(null);
+  const selectionChromeActive = useSelectionChromeActive();
   const polishing = usePolishQueueStore((s) => s.jobs.filter((job) => job.status === 'pending' || job.status === 'running').length);
   useEffect(() => {
     if (added === null) return;
@@ -199,10 +201,11 @@ export function GlobalScanProvider({ children }: Props) {
           }}
         />
       )}
-      <BatchImportTray />
+      {/* A closet selection's action bar owns the bottom of the screen while it shows. */}
+      {!selectionChromeActive && <BatchImportTray />}
       {/* The "added" toast owns that spot while it shows, and carries the polish count itself. */}
-      <PolishQueueTray hidden={added !== null} />
-      <ScanDraftTray hidden={scanVisible} onResume={resumeScanDraft} />
+      <PolishQueueTray hidden={added !== null || selectionChromeActive} />
+      <ScanDraftTray hidden={scanVisible || selectionChromeActive} onResume={resumeScanDraft} />
       <BatchImportWorkspace />
       {added !== null ? (
         <UndoToast

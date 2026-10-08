@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { baseTabBarStyleFor } from './tabBarStyle';
 import { ActivityIndicator, Easing, View, Text, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SplashScreen from 'expo-splash-screen';
@@ -320,13 +321,7 @@ function AppTabNavigator() {
     void syncLocalWishlistToServer();
   }, []);
 
-  const baseTabBarStyle = {
-    height: 60 + insets.bottom,
-    paddingBottom: insets.bottom,
-    backgroundColor: colors.background,
-    borderTopColor: colors.hairline,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  };
+  const baseTabBarStyle = baseTabBarStyleFor(insets.bottom);
 
   return (
     <View style={{ flex: 1 }}>

@@ -16,6 +16,7 @@ jest.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));
 jest.mock('react-native-reanimated', () => ({ __esModule: true, default: { View: 'AnimatedView' }, FadeIn: { duration: () => ({ reduceMotion: () => undefined }) }, FadeOut: { duration: () => ({ reduceMotion: () => undefined }) }, ReduceMotion: { System: 'system' }, useSharedValue: (value: number) => require('react').useRef({ value }).current, useAnimatedScrollHandler: () => jest.fn() }));
 jest.mock('../../../lib/closet-preferences', () => ({ loadPiecesViewMode: () => new Promise(() => {}), savePiecesViewMode: jest.fn() }));
 jest.mock('../../../components/wardrobe/closet-header', () => ({ ClosetHeader: (props: any) => require('react').createElement('ClosetHeader', props, props.children, props.overflowAction) }));
+jest.mock('../../../features/closet-selection/SelectionActionBar', () => ({ SelectionActionBar: 'SelectionActionBar', selectionBarClearance: () => 0 }));
 jest.mock('../../../components/wardrobe/closet-navigation', () => ({ ClosetNavigation: 'ClosetNavigation' }));
 jest.mock('../../../components/wardrobe/closet-view-menu', () => ({ ClosetViewMenu: 'ClosetViewMenu' }));
 jest.mock('../../../components/wardrobe/animated-closet-list', () => ({ AnimatedClosetList: (props: any) => require('react').createElement('AnimatedClosetList', props, props.children, props.ListHeaderComponent, props.ListEmptyComponent) }));
@@ -81,7 +82,12 @@ it('enters selection from the menu with zero selected items and stays there afte
   act(() => node('ClosetGrid').props.onToggleSelect(1));
   expect(node('ClosetGrid').props.selectionMode).toBe(true);
   expect(node('ClosetGrid').props.selectedIds.size).toBe(0);
-  act(() => button('Cancel selection').props.onPress());
+  expect(node('ClosetHeader').props.selection).toMatchObject({ count: 0, noun: 'piece', isAllSelected: false });
+  act(() => node('ClosetHeader').props.selection.onToggleAll());
+  expect(node('ClosetGrid').props.selectedIds.size).toBe(node('ClosetGrid').props.items.length);
+  expect(node('ClosetHeader').props.selection.isAllSelected).toBe(true);
+  expect(node('SelectionActionBar').props.count).toBe(node('ClosetGrid').props.items.length);
+  act(() => node('ClosetHeader').props.selection.onCancel());
   expect(node('ClosetGrid').props.selectionMode).toBe(false);
 });
 it('preserves separate searches and category filters while switching sections', () => {
