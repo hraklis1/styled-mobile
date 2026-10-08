@@ -9,6 +9,15 @@ jest.mock('../../primitives/SearchField', () => ({ SearchField: 'SearchField' })
 const texts = (renderer: TestRenderer.ReactTestRenderer) =>
   renderer.root.findAllByType(Text).map(node => [node.props.children].flat().join(''));
 
+const renderers: TestRenderer.ReactTestRenderer[] = [];
+
+afterEach(() => {
+  // Unmount the real list so its deferred cell updates cannot outlive the test.
+  act(() => {
+    renderers.splice(0).forEach(renderer => renderer.unmount());
+  });
+});
+
 function render(props: Partial<React.ComponentProps<typeof BrandPicker>> = {}) {
   let renderer!: TestRenderer.ReactTestRenderer;
   act(() => {
@@ -16,6 +25,7 @@ function render(props: Partial<React.ComponentProps<typeof BrandPicker>> = {}) {
       <BrandPicker current="" suggestions={['Levi’s', 'COS', 'Nike']} scanBrands={[]} closetBrands={['Levi’s']} onSelect={jest.fn()} {...props} />,
     );
   });
+  renderers.push(renderer);
   // The search bar renders its field after the first layout.
   act(() => { renderer.root.findAll(node => typeof node.props.onLayout === 'function')[0]?.props.onLayout(); });
   return renderer;
