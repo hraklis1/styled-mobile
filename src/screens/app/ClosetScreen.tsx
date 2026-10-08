@@ -1574,12 +1574,13 @@ const styles = StyleSheet.create({
   },
   pillFadeLeft: { left: 0 },
   pillFadeRight: { right: 0 },
-  // Quiet text chips: the selected one is a small ink lozenge, the rest are plain words.
+  // Quiet chips: a faint stone fill marks the rest; only the selected one is solid ink.
   pill: {
     height: 32, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, borderRadius: radii.full,
+    backgroundColor: colors.surfaceSubtle, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.hairline,
   },
   pillActive: {
-    backgroundColor: colors.foreground,
+    backgroundColor: colors.foreground, borderColor: colors.foreground,
   },
   pillLabel: {
     ...typography.text.bodySmall, color: colors.mutedForeground,
