@@ -3,7 +3,8 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, radii, spacing, typography } from '../../theme';
-import type { OutfitLog } from '../../hooks/useOutfitLogs';
+import { OptionChips } from '../primitives/EditAtoms';
+import { useSetOutfitLogFeedback, WEAR_FEEDBACK_OPTIONS, type OutfitLog, type WearFeedback } from '../../hooks/useOutfitLogs';
 import type { Item } from '../../types/item';
 import { itemCoverPresentation } from '../../lib/itemImage';
 import { resolveImageUri } from '../../lib/resolveImageUri';
@@ -20,6 +21,12 @@ export function WearEntryDetails({ log, items, onOpenItem }: Props) {
   const worn = log.itemIds.map((id) => byId.get(id)).filter((item): item is Item => !!item);
   const missing = log.itemIds.length - worn.length;
   const photoUri = log.imageUrl ? resolveImageUri(log.imageUrl) : undefined;
+  const setFeedback = useSetOutfitLogFeedback();
+  const feedback = log.feedback ?? [];
+  const toggleFeedback = (value: string) => {
+    const v = value as WearFeedback;
+    setFeedback.mutate({ id: log.id, feedback: feedback.includes(v) ? feedback.filter((f) => f !== v) : [...feedback, v] });
+  };
 
   return (
     <View style={styles.root}>
@@ -72,6 +79,14 @@ export function WearEntryDetails({ log, items, onOpenItem }: Props) {
         </View>
       ) : null}
       {log.notes ? <Text style={styles.notes}>{log.notes}</Text> : null}
+
+      <Text style={[styles.heading, styles.feedbackHeading]}>How did it wear?</Text>
+      <OptionChips
+        options={WEAR_FEEDBACK_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+        multi
+        multiValue={feedback}
+        onMultiToggle={toggleFeedback}
+      />
     </View>
   );
 }
@@ -130,4 +145,5 @@ const styles = StyleSheet.create({
   detailLine: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   detailText: { color: colors.mutedForeground, fontSize: typography.text.bodySmall.fontSize },
   notes: { color: colors.foreground, fontSize: typography.text.bodySmall.fontSize },
+  feedbackHeading: { marginTop: spacing.sm },
 });

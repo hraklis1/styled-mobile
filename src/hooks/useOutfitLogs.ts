@@ -11,10 +11,22 @@ export type OutfitLog = {
   notes: string | null;
   location: string | null;
   rating: number | null;
+  /** After-wear feedback; the stylist calibrates warmth and formality from it. */
+  feedback?: WearFeedback[];
   /** The scan photo, when the log came from one. */
   imageUrl?: string | null;
   createdAt: string;
 };
+
+export const WEAR_FEEDBACK_OPTIONS = [
+  { value: 'too_cold', label: 'Too cold' },
+  { value: 'too_warm', label: 'Too warm' },
+  { value: 'underdressed', label: 'Underdressed' },
+  { value: 'overdressed', label: 'Overdressed' },
+  { value: 'uncomfortable', label: 'Uncomfortable' },
+  { value: 'felt_great', label: 'Felt great' },
+] as const;
+export type WearFeedback = (typeof WEAR_FEEDBACK_OPTIONS)[number]['value'];
 
 export const OUTFIT_LOGS_QUERY_KEY = ['outfit-logs'] as const;
 
@@ -47,6 +59,25 @@ export function useCreateOutfitLog({ alertOnError = true }: { alertOnError?: boo
       // Callers that show the failure in place opt out of the alert.
       if (alertOnError) Alert.alert('Error', "Couldn't log outfit. Please try again.");
     },
+  });
+}
+
+export function useSetOutfitLogFeedback() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, feedback }: { id: number; feedback: WearFeedback[] }) =>
+      api.patch<OutfitLog>(`/api/outfit-logs/${id}/feedback`, { feedback }).then((r) => r.data),
+    // Optimistic: a chip should light up on tap, not after a round trip.
+    onMutate: async ({ id, feedback }) => {
+      await qc.cancelQueries({ queryKey: OUTFIT_LOGS_QUERY_KEY });
+      const previous = qc.getQueryData<OutfitLog[]>(OUTFIT_LOGS_QUERY_KEY);
+      qc.setQueryData<OutfitLog[]>(OUTFIT_LOGS_QUERY_KEY, (old) => old?.map((l) => (l.id === id ? { ...l, feedback } : l)));
+      return { previous };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous) qc.setQueryData(OUTFIT_LOGS_QUERY_KEY, ctx.previous);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: OUTFIT_LOGS_QUERY_KEY }),
   });
 }
 

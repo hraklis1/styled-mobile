@@ -216,6 +216,16 @@ export const CONDITION_LABELS: Record<ItemCondition, string> = {
   donate:       "Donate",
 };
 
+// ── Availability & wear feedback ────────────────────────────────────────────
+
+/** Whether an owned item can be worn right now. Repair/donate stay on `condition`. */
+export const AVAILABILITY_OPTIONS = ["available", "laundry", "lent", "stored"] as const;
+export type Availability = (typeof AVAILABILITY_OPTIONS)[number];
+
+/** Structured wear-log feedback; drives thermal and formality calibration. */
+export const WEAR_FEEDBACK_OPTIONS = ["too_warm", "too_cold", "underdressed", "overdressed", "uncomfortable", "felt_great"] as const;
+export type WearFeedback = (typeof WEAR_FEEDBACK_OPTIONS)[number];
+
 // ── Colour ──────────────────────────────────────────────────────────────────
 
 export const NORMALIZED_COLORS = [

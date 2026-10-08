@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { compressImageToDataUrl } from '../../lib/compressImage';
+import { AVAILABILITY_LABELS, availabilityPatch, isAvailableNow, type Availability } from '../../lib/availability';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   ITEMS_QUERY_KEY, useItems, useUpdateItem, useDeleteItem, useMarkItemWorn, usePolishItem,
@@ -254,6 +255,12 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     if (!item) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     updateItem.mutate({ id: item.id, isFavorite: !item.isFavorite });
+  };
+
+  const handleSetAvailability = (next: Availability) => {
+    if (!item) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    updateItem.mutate({ id: item.id, ...availabilityPatch(next) });
   };
 
   const handleMarkWorn = () => {
@@ -613,6 +620,10 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   if (viewItem.condition && viewItem.condition !== 'good') {
     styleProfileRows.push({ label: 'Condition', value: titleCase(viewItem.condition) });
   }
+  const available = isAvailableNow(viewItem);
+  const unavailableLabel = !available && viewItem.availability && viewItem.availability !== 'available'
+    ? AVAILABILITY_LABELS[viewItem.availability]
+    : null;
   const hasStyleProfile = styleProfileRows.length > 0;
 
   const wearSentence = viewItem.wearCount === 0
@@ -648,6 +659,12 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
       icon: 'camera-outline',
       onPress: handleChangePhoto,
     },
+    ...(!isCreateMode && !!itemId ? (available ? [
+      { key: 'lent', label: 'Mark as lent out', icon: 'people-outline' as const, onPress: () => handleSetAvailability('lent') },
+      { key: 'stored', label: 'Store for the season', icon: 'archive-outline' as const, onPress: () => handleSetAvailability('stored') },
+    ] : [
+      { key: 'available', label: 'Back in rotation', icon: 'checkmark-outline' as const, onPress: () => handleSetAvailability('available') },
+    ]) : []),
     ...(viewItem.imageUrl ? [{
       key: 'rescan',
       label: 'Re-scan style profile',
@@ -902,6 +919,23 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
             <Text style={styles.actionLabel}>{viewItem.isFavorite ? 'Favourited' : 'Favourite'}</Text>
           </TouchableOpacity>
           {!isCreateMode && !!itemId && (
+            <TouchableOpacity
+              style={[styles.actionButton, isBusy && styles.actionDisabled]}
+              onPress={() => handleSetAvailability(viewItem.availability === 'laundry' && !available ? 'available' : 'laundry')}
+              disabled={isBusy}
+              accessibilityRole="button"
+              accessibilityLabel={viewItem.availability === 'laundry' && !available ? `Mark ${viewItem.name} as clean` : `Mark ${viewItem.name} as in the wash`}
+              accessibilityState={{ selected: viewItem.availability === 'laundry' && !available, disabled: isBusy }}
+            >
+              <Ionicons
+                name={viewItem.availability === 'laundry' && !available ? 'water' : 'water-outline'}
+                size={20}
+                color={viewItem.availability === 'laundry' && !available ? colors.primary : colors.foreground}
+              />
+              <Text style={styles.actionLabel}>{viewItem.availability === 'laundry' && !available ? 'In the wash' : 'Laundry'}</Text>
+            </TouchableOpacity>
+          )}
+          {!isCreateMode && !!itemId && (
             <>
                   <TouchableOpacity
                 style={[styles.actionButton, isBusy && styles.actionDisabled]}
@@ -955,6 +989,11 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
 
         <EditorialSection title="Wear history">
           <Text style={styles.wearSentence}>{wearSentence}</Text>
+          {unavailableLabel ? (
+            <Text style={styles.wearSentence}>
+              {unavailableLabel}{viewItem.availabilityUntil ? ` until ${formatDate(`${viewItem.availabilityUntil}T12:00:00`)}` : ''}. The stylist will leave it out until then.
+            </Text>
+          ) : null}
           {wearHistoryRows.length > 0 ? <EditorialDetailList rows={wearHistoryRows} /> : null}
         </EditorialSection>
 

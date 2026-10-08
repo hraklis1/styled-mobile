@@ -154,6 +154,10 @@ export type Item = {
   notes: string | null;
   care: string | null;
   condition: string | null;
+  /** available | laundry | lent | stored. Read through lib/availability. */
+  availability?: 'available' | 'laundry' | 'lent' | 'stored';
+  /** YYYY-MM-DD; the state lapses back to available after this date. */
+  availabilityUntil?: string | null;
   warmthRating: number | null;
   purchasePrice: number | null;
   purchaseDate: string | null;

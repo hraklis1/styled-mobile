@@ -5,6 +5,7 @@ import type { Item } from '../types/item';
 import type { Outfit } from '../types/outfit';
 import { parseEventDate } from './outfitAssignments';
 import { formatTemp } from './temperature';
+import { isAvailableNow } from './availability';
 
 export type DailyPickHistoryEntry = {
   date: string;
@@ -152,7 +153,7 @@ function scoreWearRotation(outfit: Outfit, now: Date): number {
 }
 
 function isWearable(item: Item): boolean {
-  return !item.isArchived && item.condition !== 'needs_repair' && item.condition !== 'donate';
+  return !item.isArchived && item.condition !== 'needs_repair' && item.condition !== 'donate' && isAvailableNow(item);
 }
 
 /**
