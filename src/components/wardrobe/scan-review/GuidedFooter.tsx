@@ -1,6 +1,6 @@
 import { StyleSheet, View } from 'react-native';
 import { colors, spacing, stroke } from '../../../theme';
-import { PrimaryButton } from './ActionBar';
+import { PrimaryButton } from './PrimaryButton';
 import { TextLink } from './atoms';
 
 /**
