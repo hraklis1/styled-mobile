@@ -15,3 +15,6 @@ export async function markShortcutCoachSeen(userId: string): Promise<void> {
   await AsyncStorage.setItem(keyForUser(userId), '1');
 }
 
+export async function resetShortcutCoach(userId: string): Promise<void> {
+  await AsyncStorage.removeItem(keyForUser(userId));
+}

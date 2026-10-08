@@ -22,3 +22,7 @@ export async function dismissCropTip(): Promise<void> {
     // Losing the flag only means the tip shows once more.
   }
 }
+
+export async function resetCropTip(): Promise<void> {
+  await AsyncStorage.removeItem(KEY);
+}

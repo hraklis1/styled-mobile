@@ -23,3 +23,7 @@ export async function dismissOrganizerHint(): Promise<void> {
     // Losing the flag only means the hint shows once more.
   }
 }
+
+export async function resetOrganizerHint(): Promise<void> {
+  await AsyncStorage.removeItem(KEY);
+}

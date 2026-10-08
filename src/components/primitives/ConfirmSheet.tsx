@@ -26,7 +26,7 @@ export type ConfirmSheetRequest = {
 
 const MAX_THUMBS = 4;
 
-const useConfirmSheetStore = create<{ request: ConfirmSheetRequest | null }>(() => ({ request: null }));
+const useConfirmSheetStore = create<{ request: ConfirmSheetRequest | null; nestedHosts: number }>(() => ({ request: null, nestedHosts: 0 }));
 
 /**
  * Imperative entry point, shaped like Alert.alert so call sites swap in
@@ -36,9 +36,22 @@ export function confirmSheet(request: ConfirmSheetRequest) {
   useConfirmSheetStore.setState({ request });
 }
 
-export function ConfirmSheetHost() {
+/**
+ * iOS presents a Modal from the root view controller, which refuses while a
+ * native modal screen (e.g. Profile) is already up — the sheet silently never
+ * shows. Screens presented that way mount their own `nested` host, and the
+ * root host stands aside while one exists.
+ */
+export function ConfirmSheetHost({ nested = false }: { nested?: boolean }) {
   const request = useConfirmSheetStore((state) => state.request);
-  return <ConfirmSheet request={request} onClose={() => useConfirmSheetStore.setState({ request: null })} />;
+  const nestedHosts = useConfirmSheetStore((state) => state.nestedHosts);
+  useEffect(() => {
+    if (!nested) return undefined;
+    useConfirmSheetStore.setState((state) => ({ nestedHosts: state.nestedHosts + 1 }));
+    return () => useConfirmSheetStore.setState((state) => ({ nestedHosts: state.nestedHosts - 1 }));
+  }, [nested]);
+  const active = nested || nestedHosts === 0;
+  return <ConfirmSheet request={active ? request : null} onClose={() => useConfirmSheetStore.setState({ request: null })} />;
 }
 
 /**

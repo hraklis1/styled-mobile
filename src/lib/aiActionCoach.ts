@@ -22,3 +22,12 @@ export async function markAiActionCoachSeen(
 ): Promise<void> {
   await AsyncStorage.setItem(keyForUser(surface, userId), '1');
 }
+
+const AI_ACTION_COACH_SURFACES: AiActionCoachSurface[] = [
+  'item_polish', 'outfit_flatlay', 'shop_save_find', 'board_ask', 'home_action_tour', 'shopping_camera_tour',
+];
+
+/** Forgets every coachmark this user has seen, so each shows again. */
+export async function resetAiActionCoaches(userId: string): Promise<void> {
+  await AsyncStorage.multiRemove(AI_ACTION_COACH_SURFACES.map((surface) => keyForUser(surface, userId)));
+}

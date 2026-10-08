@@ -1,9 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Text, StyleSheet, Linking, Alert } from 'react-native';
 import Constants from 'expo-constants';
 import { SettingsScaffold, Group, NavRow } from '../../components/profile/SettingsUI';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useAppPreferences } from '../../hooks/useAppPreferences';
+import { useAuth } from '../../contexts/AuthContext';
+import { resetAllTips } from '../../lib/resetTips';
+import { track } from '../../lib/analytics';
+import { confirmSheet } from '../../components/primitives/ConfirmSheet';
+import * as Haptics from '../../lib/haptics';
 import { colors, spacing, typography } from '../../theme';
 import type { ProfileStackScreenProps } from './types';
 import { planTierLabel } from './membership';
@@ -37,6 +42,30 @@ export function SettingsScreen({ navigation }: ProfileStackScreenProps<'Settings
   const n = prefs.notifications;
   const remindersOn = [n.dailyLook.enabled, n.wearLog, n.events].filter(Boolean).length;
   const version = Constants.expoConfig?.version ?? '';
+  const { user } = useAuth();
+
+  // The row itself confirms the reset, rather than a second sheet on top.
+  const [tipsReset, setTipsReset] = useState(false);
+
+  const confirmResetTips = () => {
+    const userId = user?.id;
+    if (!userId) return;
+    confirmSheet({
+      title: 'Show tips again?',
+      message: 'The hints that explain each feature will reappear as you move around the app.',
+      confirmLabel: 'Show tips',
+      onConfirm: async () => {
+        try {
+          await resetAllTips(String(userId));
+          track('tips_reset');
+          setTipsReset(true);
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch {
+          confirmSheet({ title: 'Couldn’t reset tips', message: 'Please try again.', confirmLabel: 'OK', cancelLabel: null, onConfirm: () => {} });
+        }
+      },
+    });
+  };
 
   return (
     <SettingsScaffold title="Settings">
@@ -55,6 +84,9 @@ export function SettingsScreen({ navigation }: ProfileStackScreenProps<'Settings
           onPress={() => navigation.navigate('SettingsNotifications')} />
         <NavRow icon="accessibility-outline" label="Accessibility"
           onPress={() => navigation.navigate('SettingsAccessibility')} />
+        <NavRow icon="help-circle-outline" label="Show tips again"
+          value={tipsReset ? 'Tips are back' : undefined}
+          onPress={confirmResetTips} />
       </Group>
 
       <Group title="Your data">

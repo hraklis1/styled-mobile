@@ -22,3 +22,7 @@ export async function dismissBrandTip(): Promise<void> {
     // Losing the flag only means the tip shows once more.
   }
 }
+
+export async function resetBrandTip(): Promise<void> {
+  await AsyncStorage.removeItem(KEY);
+}
