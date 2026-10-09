@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { Alert, View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { UndoToast } from '../components/primitives/UndoToast';
 import { navigationRef } from '../navigation/savedRecommendations';
@@ -187,6 +187,16 @@ export function GlobalScanProvider({ children }: Props) {
           autoLaunch={scanAutoLaunch}
           initialImage={scanInitialImage}
           resumeDraft={scanResumeDraft}
+          onCameraBatch={async photos => {
+            if (useBatchImportStore.getState().batch) {
+              Alert.alert('Batch already in progress', 'Finish your current batch before scanning these photos. Your photos are still here.');
+              return false;
+            }
+            const batchId = await startBatch(photos);
+            if (!batchId) return false;
+            batchSavedRef.current = { batchId, onItemsSaved: scanCallbacks.onItemsSaved };
+            return true;
+          }}
           onItemsSaved={(items) => {
             if (items.length > 0) setAdded(items.length);
             scanCallbacks.onItemsSaved?.(items);

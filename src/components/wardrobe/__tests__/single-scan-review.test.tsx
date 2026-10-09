@@ -6,17 +6,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ScanItemSheet } from '../ScanItemSheet';
 import { scanItemDirect, useScanVisionPose, createItemsBatch } from '../../../hooks/useItems';
 import { enqueuePolish } from '../../../features/polish-queue/runner';
-import { useLibraryLaunch } from '../../../hooks/useCameraLaunch';
+import { processLibraryAsset, useLibraryLaunch } from '../../../hooks/useCameraLaunch';
 import { SCAN_DRAFT_KEY } from '../../../features/scan-draft/store';
 
 jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'));
+jest.mock('../ClothesCamera', () => ({ ClothesCamera: 'ClothesCamera' }));
 jest.mock('../scan-review-workspace', () => ({ ScanReviewWorkspace: 'ReviewWorkspace' }));
 jest.mock('../../../features/polish-queue/runner', () => ({ enqueuePolish: jest.fn() }));
 jest.mock('../../primitives/PhotoSourceSheet', () => ({ PhotoSourceSheet: 'PhotoSourceSheet' }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }));
 jest.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({}) }));
 jest.mock('../../../contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'test-user' } }) }));
-jest.mock('../../../hooks/useCameraLaunch', () => ({ useCameraLaunch: jest.fn(() => jest.fn()), useLibraryLaunch: jest.fn() }));
+jest.mock('../../../hooks/useCameraLaunch', () => ({ useCameraLaunch: jest.fn(() => jest.fn()), useLibraryLaunch: jest.fn(), processLibraryAsset: jest.fn() }));
 jest.mock('../../../hooks/useItems', () => ({ useScanVisionPose: jest.fn(), scanItemDirect: jest.fn(), createItemsBatch: jest.fn(), applySavedItems: jest.fn(), useBrandSuggestions: () => [], useClosetBrands: () => [] }));
 jest.mock('../../../lib/api', () => ({ apiErrorMessage: (_error: unknown, fallback: string) => fallback }));
 jest.mock('../../../lib/cropImage', () => ({ cropImage: jest.fn(async () => 'data:image/jpeg;base64,crop') }));
@@ -127,4 +128,35 @@ it('keep for later closes the scan and leaves its draft for the tray', async () 
   const draft = JSON.parse((await AsyncStorage.getItem(SCAN_DRAFT_KEY))!);
   expect(draft.phase).toBe('pre-extract');
   expect(draft.pending.map((p: { name: string }) => p.name)).toContain('Kept shirt');
+});
+
+
+it('opens the camera and hands multiple shots to the batch pathway without single-photo detection', async () => {
+  const onCameraBatch = jest.fn(async () => true);
+  const onClose = jest.fn();
+  await act(async () => { renderer = TestRenderer.create(<ScanItemSheet visible autoLaunch="camera" onClose={onClose} onCameraBatch={onCameraBatch} />); await settle(); });
+  const photos = [1, 2].map(i => ({ uri: `file:///shot${i}.jpg`, width: 100, height: 100 }));
+  expect(detect).not.toHaveBeenCalled();
+  await act(async () => { await renderer.root.findByType('ClothesCamera' as never).props.onUse(photos); });
+  expect(onCameraBatch).toHaveBeenCalledWith(photos);
+  expect(onClose).toHaveBeenCalledTimes(1);
+  expect(detect).not.toHaveBeenCalled();
+});
+
+it('keeps the camera photos when starting a batch is cancelled', async () => {
+  const onClose = jest.fn();
+  await act(async () => { renderer = TestRenderer.create(<ScanItemSheet visible autoLaunch="camera" onClose={onClose} onCameraBatch={async () => false} />); await settle(); });
+  await act(async () => { await renderer.root.findByType('ClothesCamera' as never).props.onUse([{ uri: 'one' }, { uri: 'two' }]); });
+  expect(renderer.root.findByType('ClothesCamera' as never)).toBeTruthy();
+  expect(onClose).not.toHaveBeenCalled();
+});
+
+it('routes one camera photo through single-scan review', async () => {
+  const onCameraBatch = jest.fn();
+  jest.mocked(processLibraryAsset).mockResolvedValue({ uri: 'file:///shot.jpg', dataUrl: 'data:image/jpeg;base64,shot', width: 100, height: 100 });
+  await act(async () => { renderer = TestRenderer.create(<ScanItemSheet visible autoLaunch="camera" onClose={jest.fn()} onCameraBatch={onCameraBatch} />); await settle(); });
+  await act(async () => { await renderer.root.findByType('ClothesCamera' as never).props.onUse([{ uri: 'file:///shot.jpg', width: 100, height: 100 }]); await settle(); });
+  expect(onCameraBatch).not.toHaveBeenCalled();
+  expect(detect).toHaveBeenCalledTimes(1);
+  expect(workspace().stage).toBe('pre-extract');
 });

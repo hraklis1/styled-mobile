@@ -10,10 +10,12 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SCAN_DRAFT_KEY, countDraftPieces, readScanDraft, useScanDraftStore } from '../../features/scan-draft/store';
+import type { ImagePickerAsset } from 'expo-image-picker';
+import { ClothesCamera } from './ClothesCamera';
 import { PhotoSourceSheet } from '../primitives/PhotoSourceSheet';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Crypto from 'expo-crypto';
-import { useCameraLaunch, useLibraryLaunch, type CapturedImage } from '../../hooks/useCameraLaunch';
+import { processLibraryAsset, useLibraryLaunch, type CapturedImage } from '../../hooks/useCameraLaunch';
 import {
   useScanVisionPose,
   scanItemDirect,
@@ -115,6 +117,7 @@ interface ScanItemSheetProps {
   initialImage?: CapturedImage;
   /** Opened from the unfinished-scan tray: restore the saved draft without asking. */
   resumeDraft?: boolean;
+  onCameraBatch?: (photos: ImagePickerAsset[]) => Promise<boolean>;
 }
 const EXTRACTION_CONCURRENCY = 4;
 /** Long edge of the frame sent to /api/scan-vision-pose; matches batch import. */
@@ -246,7 +249,7 @@ async function buildPreExtractItemFromPose(
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, initialImage, resumeDraft }: ScanItemSheetProps) {
+export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, initialImage, resumeDraft, onCameraBatch }: ScanItemSheetProps) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [detectedItems, setDetectedItems] = useState<EditableItem[]>([]);
@@ -278,7 +281,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
   const { user } = useAuth();
   const poseScan = useScanVisionPose();
   const queryClient = useQueryClient();
-  const launchCamera = useCameraLaunch();
+  const [cameraOpen, setCameraOpen] = useState(false);
   const launchLibrary = useLibraryLaunch();
   const brandSuggestions = useBrandSuggestions();
   const closetBrands = useClosetBrands();
@@ -353,16 +356,14 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
       setSourceOpen(true);
       return;
     }
+    if (autoLaunch === 'camera') { setCameraOpen(true); return; }
     let active = true;
     (async () => {
-      const captured =
-        autoLaunch === 'camera'
-          ? await launchCamera({ maxDim: 1600, compress: 0.85, captureExif: true })
-          : initialImage ?? await launchLibrary({ maxDim: 1600, compress: 0.85, captureExif: true });
+      const captured = initialImage ?? await launchLibrary({ maxDim: 1600, compress: 0.85, captureExif: true });
       if (!active) return;
       if (!captured) { onClose(); return; }
       photoLocationRef.current = null;
-      capturePhotoLocation(captured.exif, autoLaunch === 'camera').then((loc) => {
+      capturePhotoLocation(captured.exif, false).then((loc) => {
         photoLocationRef.current = loc;
       });
       setImageDataUrl(captured.dataUrl);
@@ -658,11 +659,12 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
   }, [resumeIds, imageDataUrl]);
 
   const pickImage = async (source: 'camera' | 'library') => {
-    // Both hooks handle permission checks, denial alerts, and compression internally
-    const captured =
-      source === 'camera'
-        ? await launchCamera({ maxDim: 1600, compress: 0.85, captureExif: true })
-        : await launchLibrary({ maxDim: 1600, compress: 0.85, captureExif: true });
+    if (source === 'camera') { setCameraOpen(true); return true; }
+    const captured = await launchLibrary({ maxDim: 1600, compress: 0.85, captureExif: true });
+    return scanCaptured(captured, source);
+  };
+
+  const scanCaptured = async (captured: CapturedImage | null, source: 'camera' | 'library') => {
 
     if (!captured) return false;
     track('item_scan_started', { source });
@@ -905,6 +907,19 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
 
   return (
     <>
+      {cameraOpen && <ClothesCamera
+        onCancel={() => { setCameraOpen(false); if (autoLaunch) finishClose(); else setSourceOpen(true); }}
+        onUse={async photos => {
+          if (photos.length > 1 && onCameraBatch) {
+            if (await onCameraBatch(photos)) { setCameraOpen(false); onClose(); }
+            return;
+          }
+          const captured = await processLibraryAsset(photos[0], { maxDim: 1600, compress: 0.85, captureExif: true });
+          if (!captured) return;
+          setCameraOpen(false);
+          await scanCaptured(captured, 'camera');
+        }}
+      />}
       <PhotoSourceSheet
         visible={sourceOpen && phase === 'idle'}
         title="Add to your closet"
