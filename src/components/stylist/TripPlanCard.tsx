@@ -250,6 +250,9 @@ export function TripPlanCard({
   const [packingExpanded, setPackingExpanded] = useState(false);
   const isBoardCapsule = plan.kind === 'board_capsule';
   const isStyleItem = plan.kind === 'style_item';
+  // Only a real trip (it comes with a packing list) talks about packing;
+  // capsules, style-item looks and multi-event plans just need the piece.
+  const isPackingTrip = (!plan.kind || plan.kind === 'trip') && plan.packingList.length > 0;
 
   return (
     <View style={styles.container}>
@@ -280,7 +283,7 @@ export function TripPlanCard({
             }}
           >
           <TripOutfitCard
-            gapsTitle={isStyleItem ? 'Complete the look' : 'Complete before packing'}
+            gapsTitle={isPackingTrip ? 'Complete before packing' : 'Complete the look'}
             index={i}
             total={plan.outfits.length}
             outfit={o}
