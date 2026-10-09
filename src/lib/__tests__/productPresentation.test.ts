@@ -44,6 +44,7 @@ test('budget fit is only claimed when currency and range are both readable', () 
   expect(priceFitsBudget({ price: 84.99, currency: 'CAD' }, '$80–180 CAD')).toBe(true);
   expect(priceFitsBudget({ price: 220, currency: 'CAD' }, '$80–180 CAD')).toBe(false);
   expect(priceFitsBudget({ price: 1200, currency: 'CAD' }, '$1,000-1,500 CAD')).toBe(true);
+  expect(priceFitsBudget({ price: 40, currency: 'CAD' }, '$80–180 CAD')).toBeNull();
   expect(priceFitsBudget({ price: 84.99, currency: 'USD' }, '$80–180 CAD')).toBeNull();
   expect(priceFitsBudget({ price: 84.99, currency: 'CAD' }, 'Around $100')).toBeNull();
   expect(priceFitsBudget({ price: null, currency: 'CAD' }, '$80–180 CAD')).toBeNull();

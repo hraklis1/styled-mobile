@@ -67,7 +67,9 @@ export function priceFitsBudget(offer: Pick<ProductOffer, 'price' | 'currency'>,
   const code = budget.match(/\b([A-Z]{3})\b/)?.[1];
   if (!range || !code || code !== offer.currency.toUpperCase()) return null;
   const [low, high] = [Number(range[1]), Number(range[2])];
-  return offer.price >= low && offer.price <= high;
+  // Cheaper than the band is not "over budget" — say nothing rather than mislabel it.
+  if (offer.price < low) return null;
+  return offer.price <= high;
 }
 export const productKey = (offer: ProductOffer) => `${offer.provider}:${offer.id}`;
 export const productDisclosure = 'We may earn a commission on these links. It never affects what we recommend.';
