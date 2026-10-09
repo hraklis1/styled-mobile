@@ -27,7 +27,7 @@ import { useItems } from '../../hooks/useItems';
 import { useShoppingPriorityEdit } from '../../hooks/useShoppingPriorityEdit';
 import { addOutfitToWishlist, useRemoveFromWishlist, useWishlist } from '../../hooks/useWishlist';
 import { wearableWardrobe, withoutOutfitCount } from '../../lib/shopClarity';
-import { compareAskQuestions, shoppingGarmentTitle } from '../../lib/shoppingEditorial';
+import { compareAskQuestions, isGuideListingQuestion, shoppingGarmentTitle } from '../../lib/shoppingEditorial';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
 import { track } from '../../lib/analytics';
 import { displayBudget, targetShoppingNotes, withoutInlineImages, type ShoppingPriorityTarget } from '../../lib/shoppingPriorityEdit';
@@ -356,7 +356,9 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
   const askStylist = (initialQuery?: string, focusTargetKey?: string) =>
     openStylist({
       source: 'shop',
-      initialMode: 'advice',
+      // Listing questions ("a cheaper take…") go unmoded so the server routes
+      // them to a shop list; styling questions stay advice.
+      ...(initialQuery && isGuideListingQuestion(initialQuery) ? {} : { initialMode: 'advice' as const }),
       initialQuery,
       context: { kind: 'shopping_brief_edit', priority, targets: data.targets, ...(focusTargetKey ? { focusTargetKey } : {}) },
     });

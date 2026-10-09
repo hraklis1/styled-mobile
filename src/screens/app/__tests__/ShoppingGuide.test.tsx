@@ -138,11 +138,14 @@ test('a question asked inside a chapter is focused on that style', async () => {
   expect(mockOpen).toHaveBeenCalledTimes(1);
   expect(mockOpen).toHaveBeenCalledWith(
     expect.objectContaining({
-      initialMode: 'advice',
       initialQuery: 'Is there a cheaper take on the deep navy?',
       context: expect.objectContaining({ targets: mockData.targets, focusTargetKey: '1' }),
     }),
   );
+  // A listing question is left unmoded so the server routes it to products.
+  expect(mockOpen.mock.calls[0][0]).not.toHaveProperty('initialMode');
+  act(() => cards()[1].props.onAsk('What else could I wear the deep navy with?'));
+  expect(mockOpen.mock.calls[1][0]).toMatchObject({ initialMode: 'advice' });
 });
 
 test('a single-style guide has no comparison block', async () => {

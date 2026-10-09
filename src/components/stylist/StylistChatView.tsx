@@ -57,7 +57,7 @@ import { conversationLocation, type StylingLocationContext } from '../../lib/sty
 import { formatTemp, resolveTempUnit } from '../../lib/temperature';
 import { sanitizeStylistResponseText } from '../../lib/stylistResponseText';
 import { resolveShoppingAlternativeMode } from '../../features/stylist/shoppingIntent';
-import { compareAskQuestions, styleAskQuestions, styleName } from '../../lib/shoppingEditorial';
+import { compareAskQuestions, isGuideListingQuestion, styleAskQuestions, styleName } from '../../lib/shoppingEditorial';
 import { displayBudget } from '../../lib/shoppingPriorityEdit';
 import { ShoppingStyleVisual } from '../shopping/ShoppingStyleVisual';
 import {
@@ -204,6 +204,12 @@ const CHIPS_KNOWLEDGE = [
 type GuideContext = Extract<StylistEntryContext, { kind: 'shopping_brief_edit' }>;
 function guideFocus(context: GuideContext) {
   return context.focusTargetKey ? context.targets.find(target => target.key === context.focusTargetKey) : undefined;
+}
+
+// Guide questions that want products go unmoded so the server routes them to a
+// shop list; the rest stay advice (styling the target, comparing styles).
+function guideQuestionMode(question: string): { mode?: StylistMode } {
+  return isGuideListingQuestion(question) ? {} : { mode: 'advice' };
 }
 
 function useContextualChips(lastMessage: ChatMessage | undefined, entryContext?: StylistEntryContext): string[] {
@@ -1354,7 +1360,7 @@ export function StylistChatView({
           </TouchableOpacity>
         </View>
         {isEmpty && entryContext?.kind === 'shopping_brief_edit' ? (
-          <GuideEmptyState context={entryContext} onPrompt={(q) => sendMessage({ text: q, mode: 'advice' })} />
+          <GuideEmptyState context={entryContext} onPrompt={(q) => sendMessage({ text: q, ...guideQuestionMode(q) })} />
         ) : isEmpty ? (
           <EmptyState
             weather={weather.data?.current}
@@ -1366,6 +1372,9 @@ export function StylistChatView({
           />
         ) : (
           <>
+            {entryContext?.kind === 'shopping_brief_edit' ? (
+              <View style={styles.guideContextPinned}><GuideContextCard context={entryContext} /></View>
+            ) : null}
             {messages.map((msg) => (
               <Fragment key={msg.id}>
                 {dividers.has(msg.id) ? (
@@ -2616,28 +2625,38 @@ function guidePlaceholder(context: GuideContext) {
   return focus ? `Ask about the ${styleName(focus)}…` : 'Ask about this shopping guide…';
 }
 
-function GuideEmptyState({ context, onPrompt }: { context: GuideContext; onPrompt: (q: string) => void }) {
+// The style (or whole guide) a guide-launched chat is about. Shown in the empty
+// state and kept pinned above the thread once messages exist, so a chip tapped
+// on the guide still reads as being about that style.
+function GuideContextCard({ context }: { context: GuideContext }) {
   const focus = guideFocus(context);
   const shown = focus ? [focus] : context.targets;
   const budget = focus ? displayBudget(focus.priceRange) : null;
+  return (
+    <View style={styles.guideCard} accessible accessibilityLabel={`Asking about ${focus ? focus.title : context.priority.label}`}>
+      <View style={styles.guideThumbs}>
+        {shown.slice(0, 3).map(target => (
+          <View key={target.key} style={styles.guideThumb}><ShoppingStyleVisual plain fill target={target} /></View>
+        ))}
+      </View>
+      <View style={styles.guideCopy}>
+        <Text style={styles.guideTitle} numberOfLines={2}>{focus ? focus.title : context.priority.label}</Text>
+        <Text style={styles.guideMeta} numberOfLines={1}>
+          {focus ? ['From your shopping guide', budget].filter(Boolean).join(' · ') : `${context.targets.length} styles in your shopping guide`}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function GuideEmptyState({ context, onPrompt }: { context: GuideContext; onPrompt: (q: string) => void }) {
+  const focus = guideFocus(context);
   const questions = focus ? styleAskQuestions(focus) : compareAskQuestions(context.targets);
   return (
     <View style={styles.emptyState}>
       <View style={styles.emptyHero}>
         <Text style={styles.promptSectionLabel}>ASKING ABOUT</Text>
-        <View style={styles.guideCard} accessible accessibilityLabel={`Asking about ${focus ? focus.title : context.priority.label}`}>
-          <View style={styles.guideThumbs}>
-            {shown.slice(0, 3).map(target => (
-              <View key={target.key} style={styles.guideThumb}><ShoppingStyleVisual plain fill target={target} /></View>
-            ))}
-          </View>
-          <View style={styles.guideCopy}>
-            <Text style={styles.guideTitle} numberOfLines={2}>{focus ? focus.title : context.priority.label}</Text>
-            <Text style={styles.guideMeta} numberOfLines={1}>
-              {focus ? ['From your shopping guide', budget].filter(Boolean).join(' · ') : `${context.targets.length} styles in your shopping guide`}
-            </Text>
-          </View>
-        </View>
+        <GuideContextCard context={context} />
       </View>
       {questions.length ? (
         <View style={styles.promptList}>
@@ -4063,6 +4082,7 @@ const styles = StyleSheet.create({
   },
   followUpText: { color: colors.foreground, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.medium },
   // Empty state
+  guideContextPinned: { paddingBottom: spacing.lg, marginBottom: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   guideCard: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   guideThumbs: { flexDirection: 'row', gap: spacing.xs },
   guideThumb: { width: 64, aspectRatio: 0.8, borderRadius: radii.photo, overflow: 'hidden' },

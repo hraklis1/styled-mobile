@@ -32,6 +32,15 @@ export function styleAskQuestions(target: ShoppingPriorityTarget): string[] {
   return [`Is there a cheaper take on the ${name}?`, `What else could I wear the ${name} with?`];
 }
 
+/**
+ * A guide question that wants products rather than styling advice. Mirrors the
+ * server's guide listing predicate; the client only uses it to leave such
+ * questions unmoded so the server can route them to a shop list.
+ */
+export function isGuideListingQuestion(text: string): boolean {
+  return /\b(cheaper|less expensive|more affordable|budget (take|version|option)s?|listings?|alternatives?|options|show me|where (can|do|could|should) i (buy|get|find)|links?)\b/i.test(text);
+}
+
 /** Questions across the whole guide; only meaningful when there is more than one style to weigh. */
 export function compareAskQuestions(targets: ShoppingPriorityTarget[]): string[] {
   if (targets.length < 2) return [];

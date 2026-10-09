@@ -62,7 +62,7 @@ export function CuratedItemCard({ offer, editorial = false, quietHide = false, f
   return <View style={[styles.card, { width }]}>
     <Pressable onPress={onOpen} onLongPress={onHide ? () => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); onHide(); } : undefined}
       onPressIn={() => pressTo(curatedProducts.pressedScale)} onPressOut={() => pressTo(1)}
-      accessibilityRole="button" accessibilityLabel={`${offer.title}, ${offer.merchant}, ${offer.formattedPrice || 'see price'}. View product`}
+      accessibilityRole="button" accessibilityLabel={`${offer.title}, ${offer.merchant}, ${offer.formattedPrice || 'see price'}${offer.colorUnconfirmed ? ', check colour options' : ''}. View product`}
       style={({ pressed }) => pressed && styles.pressed}>
       <Animated.View style={{ transform: [{ scale: press }] }}><ProductImage offer={offer} fit={fit} /></Animated.View>
       <View style={styles.copy}>
@@ -73,6 +73,7 @@ export function CuratedItemCard({ offer, editorial = false, quietHide = false, f
           {merchant && merchant.toLowerCase() !== brand?.toLowerCase() ? <Text style={styles.metadata}>{` · ${merchant}`}</Text> : null}
           {offer.inStock === false ? <Text style={styles.metadata}> · Unavailable</Text> : inBudget ? <Text style={styles.budget}> · In budget</Text> : budgetFit === false && quietHide ? <Text style={styles.metadata}> · Over budget</Text> : null}
         </Text>
+        {offer.colorUnconfirmed ? <Text style={styles.metadata} numberOfLines={1}>Check colour options</Text> : null}
       </View>
     </Pressable>
     {onSave ? <Pressable onPress={save} disabled={saving} accessibilityRole="button" accessibilityLabel={`${saving ? saved ? 'Unsaving' : 'Saving' : saveFailed ? saved ? 'Retry unsaving' : 'Retry saving' : saved ? 'Remove from wishlist:' : 'Add to wishlist:'} ${offer.title}`} accessibilityState={{ disabled: saving, busy: saving, selected: saved }} style={({ pressed }) => [styles.control, styles.save, pressed && styles.pressed]}>

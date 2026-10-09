@@ -28,6 +28,8 @@ export type ProductOffer = {
    */
   monetized: boolean;
   imagePolicy?: 'hotlink' | 'licensed';
+  /** The title doesn't confirm the target colour; the photo may be another colourway. */
+  colorUnconfirmed?: boolean;
   retrievedAt?: string;
   expiresAt?: string;
 };
@@ -74,6 +76,7 @@ export function parseProductOffers(value: unknown): ProductOffer[] {
       inStock: typeof offer.inStock === 'boolean' ? offer.inStock : null,
       monetized: offer.monetized,
       imagePolicy: offer.imagePolicy === 'licensed' ? 'licensed' : 'hotlink',
+      ...(offer.colorUnconfirmed === true ? { colorUnconfirmed: true } : {}),
       retrievedAt: typeof offer.retrievedAt === 'string' ? offer.retrievedAt : undefined,
       expiresAt: typeof offer.expiresAt === 'string' ? offer.expiresAt : undefined,
     });
