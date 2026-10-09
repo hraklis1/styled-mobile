@@ -94,20 +94,10 @@ export function useLibraryLaunch() {
     async (options: Options = {}): Promise<CapturedImage | null> => {
       const { allowsEditing = false, captureExif = false } = options;
 
-      // Request photo library permission if not already granted
-      const { status } = await ImagePicker.getMediaLibraryPermissionsAsync();
-      if (status === 'denied') {
-        showLibraryDeniedAlert();
-        return null;
-      }
-      if (status !== 'granted') {
-        const { status: requested } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (requested !== 'granted') {
-          showLibraryDeniedAlert();
-          return null;
-        }
-      }
-
+      // No library permission needed: the system picker runs out of process and
+      // hands back only what's chosen. Asking first also broke the first launch —
+      // the picker was presented while the permission alert was still dismissing
+      // and iOS silently dropped it.
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         quality: 1,
@@ -160,19 +150,10 @@ export async function processLibraryAsset(
 export function useLibraryLaunchMany() {
   return useCallback(
     async ({ limit, captureExif = false }: { limit: number; captureExif?: boolean }): Promise<ImagePicker.ImagePickerAsset[]> => {
-      const { status } = await ImagePicker.getMediaLibraryPermissionsAsync();
-      if (status === 'denied') {
-        showLibraryDeniedAlert();
-        return [];
-      }
-      if (status !== 'granted') {
-        const { status: requested } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (requested !== 'granted') {
-          showLibraryDeniedAlert();
-          return [];
-        }
-      }
-
+      // No library permission needed: the system picker runs out of process and
+      // hands back only what's chosen. Asking first also broke the first launch —
+      // the picker was presented while the permission alert was still dismissing
+      // and iOS silently dropped it.
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsMultipleSelection: true,
@@ -216,25 +197,5 @@ function showCaptureFailedAlert(source: 'camera' | 'library') {
       ? 'Something went wrong preparing your photo. Please try taking it again.'
       : 'Something went wrong preparing that photo. Please try picking it again.',
     [{ text: 'OK' }],
-  );
-}
-
-function showLibraryDeniedAlert() {
-  Alert.alert(
-    'Photo library access needed',
-    'Styled needs photo library access to scan items. Enable it in Settings.',
-    [
-      { text: 'Not now', style: 'cancel' },
-      {
-        text: 'Open Settings',
-        onPress: () => {
-          if (Platform.OS === 'ios') {
-            Linking.openURL('app-settings:');
-          } else {
-            Linking.openSettings();
-          }
-        },
-      },
-    ],
   );
 }
