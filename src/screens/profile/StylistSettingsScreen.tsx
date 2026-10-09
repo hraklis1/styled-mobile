@@ -5,7 +5,7 @@ import { LocationAutocompleteInput } from '../../components/primitives/LocationA
 import { styles as fieldStyles } from '../../components/profile/fields';
 import { useAppPreferences } from '../../hooks/useAppPreferences';
 import { useProfile, useUpdateProfile } from '../../hooks/useProfile';
-import { resolveTempUnit } from '../../lib/temperature';
+import { TemperatureSetting } from '../../components/profile/TemperatureSetting';
 import { resolveCurrencyCode } from '../../lib/currency';
 import { CURRENCY_OPTIONS } from '../../lib/appPreferences';
 import { SelectionGroup } from '../../components/primitives/SelectionGroup';
@@ -55,8 +55,6 @@ export function StylistSettingsScreen() {
   latest.current = { location, saveLocation };
   useEffect(() => () => latest.current.saveLocation(latest.current.location), []);
 
-  const tempUnit = (profile?.tempUnit === 'C' || profile?.tempUnit === 'F') ? profile.tempUnit : 'auto';
-  const autoTemp = resolveTempUnit(null, location);
   const autoCurrency = resolveCurrencyCode(location);
 
   return (
@@ -86,12 +84,7 @@ export function StylistSettingsScreen() {
       </Group>
 
       <Group title="Units">
-        <SegmentRow
-          label="Temperature"
-          options={[{ value: 'auto', label: `Auto (°${autoTemp})` }, { value: 'C', label: '°C' }, { value: 'F', label: '°F' }] as const}
-          value={tempUnit}
-          onChange={(value) => update.mutate({ tempUnit: value === 'auto' ? null : value })}
-        />
+        <TemperatureSetting />
         <GroupBlock>
           <View style={fieldStyles.field}>
             <Text style={fieldStyles.fieldLabel}>Currency</Text>

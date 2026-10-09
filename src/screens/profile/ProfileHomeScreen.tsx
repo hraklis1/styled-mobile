@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, Image, Pressable, StyleSheet, ActivityIndicator, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +10,8 @@ import { useProfile, useUpdateProfile } from '../../hooks/useProfile';
 import { useProfileForm } from '../../hooks/useProfileForm';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { ErrorState } from '../../components/primitives/ErrorState';
+import { SearchField } from '../../components/primitives/SearchField';
+import { searchSettings, SETTINGS_INDEX, type SettingsSearchEntry } from './settingsSearch';
 import { Group, NavRow } from '../../components/profile/SettingsUI';
 import {
   BUDGET_OPTIONS,
@@ -25,6 +27,15 @@ import { colors, spacing, typography, radii } from '../../theme';
 import type { ProfileStackScreenProps } from './types';
 import { planTierLabel } from './membership';
 
+const PROFILE_SEARCH_INDEX: SettingsSearchEntry[] = [
+  { id: 'style', title: 'Style', path: 'Style DNA', icon: 'sparkles-outline', keywords: ['aesthetic', 'silhouette', 'preferences'], target: { route: 'EditStyle' } },
+  { id: 'color', title: 'Color', path: 'Style DNA', icon: 'color-palette-outline', keywords: ['palette', 'jewelry', 'favorite colors'], target: { route: 'EditColor' } },
+  { id: 'fit', title: 'Fit & Sizes', path: 'Style DNA', icon: 'resize-outline', keywords: ['measurements', 'shoe', 'top', 'waist', 'body'], target: { route: 'EditFit' } },
+  { id: 'shopping', title: 'Shopping', path: 'Style DNA', icon: 'bag-handle-outline', keywords: ['budget', 'retailers', 'brands'], target: { route: 'EditShopping' } },
+  { id: 'life', title: 'Your Life', path: 'Style DNA', icon: 'calendar-outline', keywords: ['occasions', 'work', 'lifestyle'], target: { route: 'EditOccasions' } },
+  ...SETTINGS_INDEX.filter(entry => 'route' in entry.target),
+];
+
 function summary(values: string[], empty = 'Add'): string {
   const filled = values.filter(Boolean);
   return filled.length ? filled.slice(0, 3).join(' · ') : empty;
@@ -36,6 +47,9 @@ function summary(values: string[], empty = 'Add'): string {
  * Save, replacing the old 60-field scroll with a single Save button at the bottom.
  */
 export function ProfileHomeScreen({ navigation }: ProfileStackScreenProps<'ProfileHome'>) {
+  const [query, setQuery] = useState('');
+  const searching = query.trim().length > 0;
+  const results = searchSettings(query, PROFILE_SEARCH_INDEX);
   const insets = useSafeAreaInsets();
   const parent = useNavigation();
   const { user } = useAuth();
@@ -78,7 +92,21 @@ export function ProfileHomeScreen({ navigation }: ProfileStackScreenProps<'Profi
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={[s.content, { paddingBottom: insets.bottom + spacing.xxxl }]} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[s.content, { paddingBottom: insets.bottom + spacing.xxxl }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+        <SearchField value={query} onChangeText={setQuery} placeholder="Search profile & settings"
+          accessibilityLabel="Search profile and settings" autoCorrect={false} autoCapitalize="none"
+          clearButtonMode="never" style={{ flex: 0 }} />
+        {searching ? (results.length ? (
+          <Group title={`${results.length} ${results.length === 1 ? 'result' : 'results'}`}>
+            {results.map(entry => <NavRow key={entry.id} icon={entry.icon} label={entry.title} detail={entry.path}
+              onPress={() => { if ('route' in entry.target) navigation.navigate(entry.target.route); }} />)}
+          </Group>
+        ) : (
+          <View style={s.empty} accessibilityLiveRegion="polite">
+            <Text style={s.emptyTitle}>No matches for “{query.trim()}”</Text>
+            <Text style={s.emptyBody}>Try “sizes”, “budget”, or “temperature”.</Text>
+          </View>
+        )) : (<>
         <View style={s.hero}>
           <Pressable onPress={pickPhoto} style={s.avatar} accessibilityRole="button" accessibilityLabel="Change profile photo">
             {form.photoPreview
@@ -133,12 +161,16 @@ export function ProfileHomeScreen({ navigation }: ProfileStackScreenProps<'Profi
             detail="Tastes picked up from your conversations"
             onPress={() => navigation.navigate('SettingsLearned')} />
         </Group>
+        </>)}
       </ScrollView>
     </View>
   );
 }
 
 const s = StyleSheet.create({
+  empty: { paddingVertical: spacing.xxl, gap: spacing.sm, alignItems: 'center' },
+  emptyTitle: { ...typography.text.body, color: colors.foreground, textAlign: 'center' },
+  emptyBody: { ...typography.text.caption, color: colors.mutedForeground, textAlign: 'center' },
   root: { flex: 1, backgroundColor: colors.background },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
   topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, minHeight: 44 },

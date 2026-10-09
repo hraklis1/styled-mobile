@@ -15,6 +15,14 @@ describe('unitForLocation', () => {
     expect(unitForLocation('Berlin, Berlin, DE')).toBe('C');
   });
 
+  it('resolves London, Ontario to Celsius unless explicitly overridden', () => {
+    for (const location of ['London,Ontario, Canada', 'London, Ontario, CA', 'London, Ontario, Canada']) {
+      expect(resolveTempUnit(null, location)).toBe('C');
+      expect(resolveTempUnit('auto', location)).toBe('C');
+      expect(resolveTempUnit('F', location)).toBe('F');
+    }
+  });
+
   it('handles hand-typed "City, ST" as US states', () => {
     expect(unitForLocation('Brooklyn, NY')).toBe('F');
     expect(unitForLocation('Sacramento, CA')).toBe('F');

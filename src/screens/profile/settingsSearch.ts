@@ -50,7 +50,7 @@ export const SETTINGS_INDEX: SettingsSearchEntry[] = [
     keywords: ['shopping', 'shop', 'links', 'buy', 'products', 'recommendations'] },
   { id: 'home', title: 'Home location', path: 'Stylist › Home', icon: 'home-outline', target: route('SettingsStylist'),
     keywords: ['city', 'location', 'weather', 'stores', 'address'] },
-  { id: 'temperature', title: 'Temperature units', path: 'Stylist › Units', icon: 'thermometer-outline', target: route('SettingsStylist'),
+  { id: 'temperature', title: 'Temperature units', path: 'Settings › Units · also in Stylist', icon: 'thermometer-outline', target: route('SettingsStylist'),
     keywords: ['celsius', 'fahrenheit', 'units', 'weather', 'metric', 'imperial'] },
   { id: 'currency', title: 'Currency', path: 'Stylist › Units', icon: 'cash-outline', target: route('SettingsStylist'),
     keywords: ['money', 'prices', 'dollars', 'euros', 'pounds', 'usd', 'eur', 'gbp'] },

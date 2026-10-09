@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Linking, Alert } from 'react-native';
+import { TemperatureSetting } from '../../components/profile/TemperatureSetting';
 import Constants from 'expo-constants';
 import { SettingsScaffold, Group, NavRow } from '../../components/profile/SettingsUI';
 import { useEntitlement } from '../../hooks/useEntitlement';
@@ -122,6 +123,10 @@ export function SettingsScreen({ navigation }: ProfileStackScreenProps<'Settings
             <NavRow icon="diamond-outline" label="Membership & credits"
               value={[planTierLabel(planTier), credits ? `${credits.total} credits` : ''].filter(Boolean).join(' · ')}
               onPress={() => navigation.navigate('SettingsMembership')} />
+          </Group>
+
+          <Group title="Units">
+            <TemperatureSetting />
           </Group>
 
           <Group title="Experience">
