@@ -422,9 +422,9 @@ Where the implementation differs from the plan above, and why.
 
 ### Shipping order
 
-1. **Baseline build (Phase 0 only).** `docs/onboarding-phase0-baseline.patch`
-   applies cleanly to the last commit and contains only the v1 funnel events.
-   Ship it alone and collect 1–2 weeks of `onboarding_step_viewed`.
-2. **Backend deploy** (route + schema). Safe before the app: nothing old calls it.
-3. **App build with v2.** Compare funnels by the `version` property (1 vs 2).
+No baseline build — decided 2026-10-09 to ship v2 directly rather than compare
+against v1. The v2 funnel is still measurable on its own (events carry
+`version: 2`).
 
+1. **Backend deploy** (reveal route + schema). Migration 0066 is already on prod.
+2. **App build from `main`.**
