@@ -1,7 +1,9 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { ProfileStackParamList } from './types';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { ConfirmSheetHost } from '../../components/primitives/ConfirmSheet';
+import { ProfilePromptHost } from '../../features/profilePrompts/ProfilePromptHost';
 import { ProfileHomeScreen } from './ProfileHomeScreen';
 import { EditStyleScreen } from './EditStyleScreen';
 import { EditColorScreen } from './EditColorScreen';
@@ -22,9 +24,11 @@ import { PasswordScreen } from './PasswordScreen';
 const Stack = createNativeStackNavigator<ProfileStackParamList>();
 
 export function ProfileNavigator() {
-  // Profile is a native modal, so confirm sheets need a host inside it.
+  // Profile is a native modal, so confirm sheets — and the deferred profile
+  // questions' sheet — need hosts inside it.
   return (
-    <>
+    <BottomSheetModalProvider>
+    <ProfilePromptHost listen={false}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="ProfileHome" component={ProfileHomeScreen} />
         <Stack.Screen name="EditStyle" component={EditStyleScreen} />
@@ -44,6 +48,7 @@ export function ProfileNavigator() {
         <Stack.Screen name="SettingsPassword" component={PasswordScreen} />
       </Stack.Navigator>
       <ConfirmSheetHost nested />
-    </>
+    </ProfilePromptHost>
+    </BottomSheetModalProvider>
   );
 }

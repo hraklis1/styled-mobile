@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useProfile, useUpdateProfile, type ProfileInput } from '../../hooks/useProfile';
+import { derivePalette, deviceCountryCode, sizingRegionForCountry } from '../../lib/onboardingDefaults';
 import {
+  collapseToOnboardingOccasions,
   createEmptyStyleProfileDetails,
+  expandOnboardingOccasions,
+  hasStyleProfileDetailsValue,
   normalizeBodyType,
   normalizeBudgetRange,
   normalizeOccasions,
@@ -44,6 +48,11 @@ export type OnboardingValues = {
   sizeBottom: string;
   sizeShoe: string;
   sizeDress: string;
+  // v2
+  /** Onboarding's 7 occasion picks; expanded to stored values on save. */
+  occasionPicks: string[];
+  /** Whether the user opened and changed the palette; otherwise it is derived. */
+  paletteTouched: boolean;
 };
 
 const EMPTY: OnboardingValues = {
@@ -65,6 +74,8 @@ const EMPTY: OnboardingValues = {
   sizeBottom: '',
   sizeShoe: '',
   sizeDress: '',
+  occasionPicks: [],
+  paletteTouched: false,
 };
 
 export function useOnboardingForm() {
@@ -104,6 +115,10 @@ export function useOnboardingForm() {
       sizeBottom: profile.sizeBottom ?? '',
       sizeShoe: profile.sizeShoe ?? '',
       sizeDress: profile.sizeDress ?? '',
+      occasionPicks: collapseToOnboardingOccasions(normalizeOccasions(profile.occasions)),
+      // A palette the user chose before counts as touched, so a retake
+      // never quietly swaps it for a derived one.
+      paletteTouched: details.paletteSource !== 'derived' && uniqueClean(profile.colorPalette).length > 0,
     });
   }, [profile]);
 
@@ -111,6 +126,11 @@ export function useOnboardingForm() {
     setValues((current) => ({ ...current, [key]: value }));
 
   const buildPayload = (v: OnboardingValues, onboardingComplete?: boolean): ProfileInput => {
+    // Palette: the user's own if they touched it, otherwise a guess from the
+    // chosen aesthetics, flagged so the stylist treats it as a soft default.
+    const derived = !v.paletteTouched;
+    const colorPalette = derived ? derivePalette(v.stylePreference) : uniqueClean(v.colorPalette);
+
     // Merge rather than replace: the Profile screen writes a much richer
     // styleProfileDetails than onboarding asks about, and a re-run must not
     // wipe the fields it never showed.
@@ -119,30 +139,33 @@ export function useOnboardingForm() {
       styleAvoids: uniqueClean(v.styleAvoids),
       avoidedColors: uniqueClean(v.avoidedColors),
       shoppingPriorities: uniqueClean(v.shoppingPriorities),
+      paletteSource: derived && colorPalette.length ? ('derived' as const) : ('user' as const),
     };
-    const hasDetails =
-      details.styleAvoids.length > 0 ||
-      details.avoidedColors.length > 0 ||
-      details.shoppingPriorities.length > 0;
+    // Judge the whole merged blob, not just onboarding's fields: checking only
+    // those sent null on a retake and erased everything Profile had written.
+    const hasDetails = hasStyleProfileDetailsValue(details);
+
+    const occasions = expandOnboardingOccasions(v.occasionPicks, normalizeOccasions(profile?.occasions));
 
     return {
       displayName: v.displayName.trim() || null,
       fitPreference: v.fitPreference || null,
-      occasions: v.occasions.length ? v.occasions : null,
+      occasions: occasions.length ? occasions : null,
       stylePreference: v.stylePreference.length ? v.stylePreference : null,
-      colorPalette: v.colorPalette.length ? v.colorPalette : null,
+      colorPalette: colorPalette.length ? colorPalette : null,
       budgetRange: v.budgetRange.length ? v.budgetRange : null,
       bodyType: v.bodyType.length ? v.bodyType : null,
       fitSilhouette: v.fitSilhouette || null,
       location: v.location.trim() || null,
-      sizingRegion: v.sizingRegion || null,
+      // Inferred from the device region when never set; editable in Profile.
+      sizingRegion: v.sizingRegion || sizingRegionForCountry(deviceCountryCode()),
       sizeTop: v.sizeTop || null,
       sizeBottom: v.sizeBottom || null,
       sizeShoe: v.sizeShoe || null,
       sizeDress: v.sizeDress || null,
       favoriteRetailers: v.retailers.length ? v.retailers : null,
       styleProfileDetails: hasDetails ? details : null,
-      ...(onboardingComplete != null ? { onboardingComplete } : {}),
+      ...(onboardingComplete != null ? { onboardingComplete, onboardingVersion: 2 } : {}),
     };
   };
 
@@ -157,6 +180,19 @@ export function useOnboardingForm() {
     commit.mutate(buildPayload(values, true), { onSuccess: () => onDone?.() });
   };
 
+  /**
+   * Save only the named profile fields. The deferred questions (Profile's
+   * "Sharpen your stylist", in-context prompts) reuse this form's field UIs
+   * but must not rewrite answers they never showed — e.g. re-deriving the
+   * palette or re-stamping the onboarding version.
+   */
+  const savePartial = (fields: (keyof ProfileInput)[]) => {
+    const full = buildPayload(values);
+    const partial: ProfileInput = {};
+    for (const f of fields) (partial as Record<string, unknown>)[f] = full[f];
+    return commit.mutateAsync(partial);
+  };
+
   return {
     values,
     set,
@@ -164,5 +200,6 @@ export function useOnboardingForm() {
     isSaving: commit.isPending,
     saveCheckpoint,
     finish,
+    savePartial,
   };
 }

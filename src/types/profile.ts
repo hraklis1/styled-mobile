@@ -6,6 +6,8 @@ export type StyleProfileDetails = {
   styleAvoids: string[];
   favoriteColors: string[];
   avoidedColors: string[];
+  /** Where `colorPalette` came from; 'derived' = onboarding guessed it from aesthetics. */
+  paletteSource?: 'user' | 'derived';
   colorAnalysis: {
     undertone: string | null;
     contrast: string | null;
@@ -39,6 +41,15 @@ export type StyleProfileDetails = {
   };
 };
 
+export type ProfilePromptKey = 'budget' | 'sizes' | 'retailers' | 'fit' | 'avoids';
+export type ProfilePromptState = {
+  shownAt: string | null;
+  dismissedAt: string | null;
+  dismissCount: number;
+  answeredAt: string | null;
+};
+export type ProfilePrompts = Partial<Record<ProfilePromptKey, ProfilePromptState>>;
+
 export type PlanTier = 'free' | 'premium' | 'beta';
 
 export type CreditBalances = {
@@ -62,6 +73,11 @@ export type Profile = {
   id: number;
   userId: number;
   onboardingComplete: boolean;
+  /** Which questionnaire the user went through (backend migration 0066). Absent = 1. */
+  onboardingVersion?: number | null;
+  onboardingCompletedAt?: string | null;
+  /** Deferred profile-question ledger. */
+  profilePrompts?: ProfilePrompts | null;
   // ── Entitlements (server-authoritative) ──────────────────────────────────
   // Absent on a response captured before the credits system existed, or if the
   // server omitted them — always optional-check before reading.

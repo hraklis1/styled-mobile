@@ -594,7 +594,13 @@ export function useProfileForm() {
     photoPreview, setPhotoPreview,
     displayName, setDisplayName,
     stylePreference, setStylePreference,
-    colorPalette, setColorPalette,
+    colorPalette,
+    // Touching the palette in Profile makes it the user's own, even if they
+    // keep the derived values; the stylist then treats it as a stated choice.
+    setColorPalette: (next: string[]) => {
+      setColorPalette(next);
+      setStyleProfileDetails((d) => ({ ...d, paletteSource: 'user' }));
+    },
     budgetRange, setBudgetRange,
     bodyType, setBodyType,
     fitPreference, setFitPreference,

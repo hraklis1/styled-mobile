@@ -25,6 +25,7 @@ import { presentPaywall } from '../../lib/paywall';
 import { colors, radii, shoppingSurfaces, spacing } from '../../theme';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import type { ShopOverviewScreenProps, ShopView } from '../../navigation/types';
+import { recordPromptSignal } from '../../features/profilePrompts/signals';
 
 export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProps) {
   const insets = useSafeAreaInsets();
@@ -92,6 +93,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
   }, [brief.data]);
 
   useFocusEffect(useCallback(() => {
+    void recordPromptSignal('shop_opened');
     track('shop_overview_viewed', {
       active_find_count: activeFinds.length,
       shortlist_count: spotlight.itemCount,

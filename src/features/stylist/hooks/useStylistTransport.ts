@@ -7,6 +7,7 @@ import type {
   StylistTransportSendInput,
   StylistTripOutfit,
 } from '../types';
+import { recordPromptSignal } from '../../profilePrompts/signals';
 
 const STYLIST_ERROR_MESSAGE = 'Could not reach the stylist. Please try again.';
 const TOKEN_FLUSH_MS = 32;
@@ -70,6 +71,7 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
   }, []);
 
   const sendMessage = useCallback(async (input: StylistTransportSendInput) => {
+    void recordPromptSignal('stylist_message');
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
 

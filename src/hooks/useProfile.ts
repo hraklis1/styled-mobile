@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'react-native';
 import { api } from '../lib/api';
-import type { AppPreferences, Profile, StyleProfileDetails } from '../types/profile';
+import type { AppPreferences, Profile, ProfilePrompts, StyleProfileDetails } from '../types/profile';
 
 export const PROFILE_QUERY_KEY = ['profile'] as const;
 
@@ -14,6 +14,9 @@ export function useProfile() {
 
 export type ProfileInput = {
   onboardingComplete?: boolean;
+  onboardingVersion?: number;
+  /** Merged per key on the server; send only the entries that changed. */
+  profilePrompts?: ProfilePrompts;
   displayName?: string | null;
   photoUrl?: string | null;
   stylePreference?: string[] | null;

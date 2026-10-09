@@ -104,6 +104,52 @@ export const OCCASION_OPTIONS: ProfileOption[] = [
 ];
 
 /**
+ * Onboarding v2's aesthetic choices: eight, not eleven, because a picture grid
+ * of eleven is a scanning task. Values are the stored STYLE_OPTIONS values —
+ * only the labels are onboarding's own. The three left out (trend-forward,
+ * preppy, athleisure) stay valid and editable in Profile.
+ */
+export const ONBOARDING_STYLE_OPTIONS: ProfileOption[] = [
+  { value: 'minimalist', label: 'Minimalist', description: 'Clean lines, restraint, negative space' },
+  { value: 'classic', label: 'Classic', description: 'Timeless staples and polished structure' },
+  { value: 'casual', label: 'Relaxed', description: 'Easy everyday pieces with intention' },
+  { value: 'smart_casual', label: 'Tailored', description: 'Refined but never stiff' },
+  { value: 'streetwear', label: 'Street', description: 'Relaxed proportions and urban codes' },
+  { value: 'bohemian', label: 'Romantic', description: 'Texture, print and movement' },
+  { value: 'edgy', label: 'Edgy', description: 'Sharper lines, contrast, statement pieces' },
+  { value: 'vintage', label: 'Vintage', description: 'Retro references and timeless finds' },
+];
+
+/**
+ * Onboarding v2's occasions: seven plain answers instead of thirteen
+ * overlapping ones. Each expands to the EXISTING stored values, so the backend
+ * vocabulary, matching and every older client are untouched. "Smart casual" is
+ * gone from this list because it is a style, not somewhere you go.
+ */
+export const ONBOARDING_OCCASION_OPTIONS: (ProfileOption & { stores: string[] })[] = [
+  { value: 'work', label: 'Work', stores: ['work_office'] },
+  { value: 'weekends', label: 'Weekends', stores: ['everyday', 'casual_weekend'] },
+  { value: 'evenings', label: 'Evenings out', stores: ['date_night', 'night_out'] },
+  { value: 'events', label: 'Events & weddings', stores: ['formal_events', 'wedding_guest'] },
+  { value: 'active', label: 'Active', stores: ['athletic_active'] },
+  { value: 'travel', label: 'Travel', stores: ['travel', 'vacation'] },
+  { value: 'campus', label: 'Campus', stores: ['school'] },
+];
+
+/** Onboarding picks → stored occasion values, keeping any stored value no pick covers. */
+export function expandOnboardingOccasions(picks: readonly string[], existing: readonly string[] = []): string[] {
+  const covered = new Set(ONBOARDING_OCCASION_OPTIONS.flatMap((o) => o.stores));
+  const chosen = ONBOARDING_OCCASION_OPTIONS.filter((o) => picks.includes(o.value)).flatMap((o) => o.stores);
+  // Values onboarding can't show (interview, custom ones) survive a retake.
+  return uniqueClean([...chosen, ...existing.filter((v) => !covered.has(v))]);
+}
+
+/** Stored occasion values → the onboarding picks that represent them (for prefill). */
+export function collapseToOnboardingOccasions(stored: readonly string[]): string[] {
+  return ONBOARDING_OCCASION_OPTIONS.filter((o) => o.stores.some((v) => stored.includes(v))).map((o) => o.value);
+}
+
+/**
  * Common "never put me in this" answers, offered as chips so the onboarding
  * step costs a tap instead of a sentence. Free-text entry stays alongside —
  * these are a starting point, not the vocabulary.
@@ -367,6 +413,7 @@ export function createEmptyStyleProfileDetails(): StyleProfileDetails {
     styleAvoids: [],
     favoriteColors: [],
     avoidedColors: [],
+    paletteSource: 'user',
     colorAnalysis: { undertone: null, contrast: null, metalPreference: [] },
     materialLikes: [],
     materialAvoids: [],
@@ -424,6 +471,9 @@ export function normalizeStyleProfileDetails(raw: unknown): StyleProfileDetails 
     patternLikes: withoutConflicts(details.patternLikes, patternAvoids),
     patternAvoids,
     brandAvoids: uniqueClean(details.brandAvoids),
+    // Must survive the round trip: dropping it would silently promote a
+    // derived palette to a chosen one on the next save.
+    paletteSource: details.paletteSource === 'derived' ? 'derived' : 'user',
     shoppingPriorities: uniqueClean(details.shoppingPriorities),
     careConstraints: uniqueClean(details.careConstraints),
     categoryBudgets: cleanObjectStrings(details.categoryBudgets),
@@ -441,6 +491,7 @@ export function hasStyleProfileDetailsValue(details: StyleProfileDetails): boole
   const normalized = normalizeStyleProfileDetails(details);
   return (
     Object.keys(normalized.customOccasionCategories ?? {}).length > 0 ||
+    normalized.paletteSource === 'derived' ||
     normalized.styleAvoids.length > 0 ||
     normalized.favoriteColors.length > 0 ||
     normalized.avoidedColors.length > 0 ||

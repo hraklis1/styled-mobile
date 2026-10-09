@@ -4,6 +4,5 @@ export type User = {
   displayName: string | null;
   photoUrl: string | null;
   isPremium: boolean;
-  onboardingComplete: boolean;
   authProvider: 'local' | 'google' | 'apple' | null;
 };

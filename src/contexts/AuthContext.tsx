@@ -37,7 +37,6 @@ function mapSupabaseUser(su: SupabaseUser): User {
     displayName: su.user_metadata?.full_name ?? su.email?.split('@')[0] ?? '',
     photoUrl: su.user_metadata?.avatar_url ?? null,
     isPremium: false, // RevenueCat is the sole source of truth; set via hydrateRcPremium
-    onboardingComplete: su.user_metadata?.onboarding_complete ?? false,
     authProvider: provider === 'google' ? 'google' : provider === 'apple' ? 'apple' : 'local',
   };
 }

@@ -20,12 +20,26 @@ having to find it again.
 | File | Source | Photographer | Licence | Retrieved |
 |---|---|---|---|---|
 | `welcome-wardrobe.jpg` | https://www.pexels.com/photo/close-up-of-a-clothing-rack-8989864/ | A. Darmel | [Pexels License](https://www.pexels.com/license/) | 2026-08-06 |
-| `welcome-scan.jpg` | https://www.pexels.com/photo/close-up-of-bent-linen-11125918/ | Qiana Zhang | [Pexels License](https://www.pexels.com/license/) | 2026-08-06 |
-| `welcome-stylist.jpg` | https://www.pexels.com/photo/white-blazer-hanging-on-black-metal-rack-7671167/ | Ivan S | [Pexels License](https://www.pexels.com/license/) | 2026-08-06 |
 | `profile-hero.jpg` | https://www.pexels.com/photo/photo-of-brown-textile-4862928/ | Karola G | [Pexels License](https://www.pexels.com/license/) | 2026-08-06 |
+| `cut-mens.jpg` | https://www.pexels.com/photo/flat-lay-of-jackets-on-brown-wooden-floor-3998647/ | Hana Brannigan | [Pexels License](https://www.pexels.com/license/) | 2026-10-09 |
+| `cut-womens.jpg` | https://www.pexels.com/photo/clothes-hanging-on-black-clothes-hanger-6773800/ | Rachel Claire | [Pexels License](https://www.pexels.com/license/) | 2026-10-09 |
+| `cut-fluid.jpg` | https://www.pexels.com/photo/interior-of-apartment-with-apparels-on-hangers-6347892/ | Liza Summer | [Pexels License](https://www.pexels.com/license/) | 2026-10-09 |
+| `aesthetic-minimalist.jpg` | https://www.pexels.com/photo/white-t-shirt-hanging-on-a-hanger-18257675/ | dayong tien | [Pexels License](https://www.pexels.com/license/) | 2026-10-09 |
+| `aesthetic-classic.jpg` | https://www.pexels.com/photo/brown-button-up-long-sleeve-shirt-hanging-on-black-hanger-5424917/ | Arina Krasnikova | [Pexels License](https://www.pexels.com/license/) | 2026-10-09 |
+| `aesthetic-relaxed.jpg` | https://www.pexels.com/photo/shirt-on-hanger-on-branch-22441297/ | dayong tien | [Pexels License](https://www.pexels.com/license/) | 2026-10-09 |
+| `aesthetic-tailored.jpg` | https://www.pexels.com/photo/elegant-beige-blazer-hanging-on-hanger-indoors-32427323/ | Alexander Mass | [Pexels License](https://www.pexels.com/license/) | 2026-10-09 |
+| `aesthetic-street.jpg` | https://www.pexels.com/photo/hoodie-sweaters-hanged-on-a-clothes-rack-9594679/ | Ron Lach | [Pexels License](https://www.pexels.com/license/) | 2026-10-09 |
+| `aesthetic-romantic.jpg` | https://www.pexels.com/photo/elegant-floral-dress-on-wooden-hanger-36213224/ | Taylor Thompson | [Pexels License](https://www.pexels.com/license/) | 2026-10-09 |
+| `aesthetic-edgy.jpg` | https://www.pexels.com/photo/modern-black-leather-jacket-on-white-background-6044143/ | Skylar Kang | [Pexels License](https://www.pexels.com/license/) | 2026-10-09 |
+| `aesthetic-vintage.jpg` | https://www.pexels.com/photo/vintage-clothing-on-hanging-rack-in-retro-setting-30173375/ | Soner Arkan | [Pexels License](https://www.pexels.com/license/) | 2026-10-09 |
 
-All four were downscaled to 1000px on the long edge and re-encoded at quality 72
-on the way in. Total bundled weight: ~450 KB.
+welcome-wardrobe and profile-hero were downscaled to 1000px on the long edge
+and re-encoded at quality 72 on the way in (welcome-scan and welcome-stylist
+went with the old welcome carousel, Oct 9 2026). The onboarding v2 cut and aesthetic cards
+(cut-*, aesthetic-*) are 900px at quality 72 (~1 MB together). A first pick
+for Street showed a readable Converse insole and was replaced rather than
+blurred. Edgy and Relaxed were replaced the same day: the first picks were
+too dark to read and fabric rather than a garment.
 
 ## Pexels License, in short
 

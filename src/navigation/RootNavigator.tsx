@@ -28,10 +28,10 @@ import { track } from '../lib/analytics';
 import { GlobalOutfitLoggerProvider, useGlobalOutfitLogger } from '../contexts/GlobalOutfitLoggerContext';
 import { GlobalAIStylistProvider } from '../contexts/GlobalAIStylistContext';
 import { GlobalScanProvider, useGlobalScan } from '../contexts/GlobalScanContext';
+import { ProfilePromptHost } from '../features/profilePrompts/ProfilePromptHost';
 import { useGlobalAddSheet } from '../contexts/GlobalAddSheetContext';
 import { FabScrollProvider } from '../contexts/FabScrollContext';
 import { OnboardingScreen } from '../screens/onboarding/OnboardingScreen';
-import { WelcomeScreen } from '../screens/onboarding/WelcomeScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
 import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
 import { ResetPasswordScreen } from '../screens/auth/ResetPasswordScreen';
@@ -558,6 +558,23 @@ const tabStyles = StyleSheet.create({
 
 const WELCOME_SEEN_KEY = 'welcome_seen';
 
+/**
+ * Runs the onboarding reveal's chosen next step from inside the app's
+ * providers, which don't exist while onboarding is on screen. The short delay
+ * lets the tab navigator mount so the picker opens over Home, not over nothing.
+ */
+function OnboardingHandoff({ action, onDone }: { action: 'addClothes'; onDone: () => void }) {
+  const { openFromPhotos } = useGlobalScan();
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (action === 'addClothes') openFromPhotos();
+      onDone();
+    }, 400);
+    return () => clearTimeout(t);
+  }, [action, onDone, openFromPhotos]);
+  return null;
+}
+
 function AppGate() {
   const { data: profile, isLoading, isError, refetch } = useProfile();
   const [welcomeSeen, setWelcomeSeen] = useState<boolean | null>(null);
@@ -572,6 +589,10 @@ function AppGate() {
    * quiz" reopen the flow from inside the app.
    */
   const [onboardingActive, setOnboardingActive] = useState(false);
+  /** What the onboarding reveal asked the app to do once it mounts. */
+  const [pendingOnboardingAction, setPendingOnboardingAction] = useState<'addClothes' | null>(null);
+  // Stable, so a re-render of AppGate doesn't restart the handoff's timer.
+  const clearOnboardingAction = useCallback(() => setPendingOnboardingAction(null), []);
   const needsOnboarding = !!profile && !profile.onboardingComplete;
 
   useEffect(() => {
@@ -601,13 +622,20 @@ function AppGate() {
     return <ErrorState message="Couldn't load your account" onRetry={refetch} />;
   }
 
-  // Show welcome intro only to new users who haven't completed onboarding
-  if (!welcomeSeen && !profile?.onboardingComplete) {
-    return <WelcomeScreen onComplete={handleWelcomeComplete} />;
-  }
-
-  if (onboardingActive) {
-    return <OnboardingScreen onExit={() => setOnboardingActive(false)} />;
+  // The welcome is the flow's first screen, shown once: retakes from Account
+  // start straight at the questions. `needsOnboarding` covers the first
+  // render, before the effect has set the latch, so the app never flashes.
+  if (onboardingActive || needsOnboarding) {
+    return (
+      <OnboardingScreen
+        showWelcome={!welcomeSeen}
+        onWelcomeSeen={handleWelcomeComplete}
+        onExit={(next) => {
+          if (next) setPendingOnboardingAction(next);
+          setOnboardingActive(false);
+        }}
+      />
+    );
   }
 
   return (
@@ -615,8 +643,13 @@ function AppGate() {
       <GlobalOutfitLoggerProvider>
         <GlobalAIStylistProvider>
           <FabScrollProvider>
+            <ProfilePromptHost>
             <AppPreferencesEffects />
+            {pendingOnboardingAction ? (
+              <OnboardingHandoff action={pendingOnboardingAction} onDone={clearOnboardingAction} />
+            ) : null}
             <AppTabNavigator />
+            </ProfilePromptHost>
           </FabScrollProvider>
         </GlobalAIStylistProvider>
       </GlobalOutfitLoggerProvider>

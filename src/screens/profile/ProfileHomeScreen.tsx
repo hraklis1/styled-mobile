@@ -13,6 +13,7 @@ import { ErrorState } from '../../components/primitives/ErrorState';
 import { SearchField } from '../../components/primitives/SearchField';
 import { searchSettings, SETTINGS_INDEX, type SettingsSearchEntry } from './settingsSearch';
 import { Group, NavRow } from '../../components/profile/SettingsUI';
+import { SharpenStylistCard } from '../../components/profile/SharpenStylistCard';
 import {
   BUDGET_OPTIONS,
   FIT_PREFERENCE_OPTIONS,
@@ -153,6 +154,8 @@ export function ProfileHomeScreen({ navigation }: ProfileStackScreenProps<'Profi
             </Text>
           </View>
         </View>
+
+        <SharpenStylistCard />
 
         <Group title="Style DNA" footer="Each section feeds Today's Look, your stylist, and shopping picks.">
           <NavRow icon="sparkles-outline" label="Style"

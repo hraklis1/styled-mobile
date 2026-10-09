@@ -129,6 +129,11 @@ const CURRENCY_BY_COUNTRY_NAME: Record<string, string> = {
  * the label carries no usable country signal. Same segment-reading strategy
  * as temperature.ts's `unitForLocation` — see locationSegments.ts.
  */
+/** ISO 4217 code for an ISO alpha-2 country, or undefined if unknown. */
+export function currencyForCountry(countryCode?: string | null): string | undefined {
+  return countryCode ? CURRENCY_BY_COUNTRY_CODE[countryCode.toUpperCase()] : undefined;
+}
+
 export function currencyForLocation(location?: string | null): string | undefined {
   const segments = splitLocationSegments(location);
   if (segments.length === 0) return undefined;

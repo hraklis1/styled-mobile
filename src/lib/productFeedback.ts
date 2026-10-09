@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import type { api } from './api';
 import { track } from './analytics';
 import type { OfferContext, ProductOffer } from '../types/commerce';
+import { recordPromptSignal } from '../features/profilePrompts/signals';
 
 export const productFeedbackOptions = [
   { id: 'not_my_style', title: 'Not my style' },
@@ -46,6 +47,7 @@ export function createProductFeedbackStore(override?: Pick<typeof api, 'post' | 
       if (snapshot.has(offer.id)) return;
       set(new Map(snapshot).set(offer.id, { offerId: offer.id, reason: null, request: send(offer, context, null) }));
       track('curated_product_hidden', { surface: context.surface, targetKey: context.targetKey, offerId: offer.id });
+      void recordPromptSignal('product_hidden');
     },
     setReason(offer: ProductOffer, context: OfferContext, reason: ProductFeedbackReason) {
       const entry = snapshot.get(offer.id);
