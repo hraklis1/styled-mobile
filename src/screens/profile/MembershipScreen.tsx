@@ -12,7 +12,6 @@ import { planTierLabel } from './membership';
 const COST_LABELS: [string, string][] = [
   ['stylist', 'Stylist reply'],
   ['daily_look', "Today's Look"],
-  ['cutout', 'Background removal'],
   ['outfit_generate', 'Outfit generation'],
   ['flatlay', 'Flat lay image'],
   ['studio_voice', 'Voice reply'],

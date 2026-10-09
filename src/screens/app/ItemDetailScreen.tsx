@@ -8,6 +8,7 @@ import {
   View,
   Text,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   Alert,
   Modal,
@@ -34,7 +35,6 @@ import type { Outfit } from '../../types/outfit';
 import { api, apiErrorCode, apiErrorMessage, isNetworkError } from '../../lib/api';
 import {
   coverImageVariantLabel,
-  hasCutout,
   hasPolished,
   itemCoverPresentation,
 } from '../../lib/itemImage';
@@ -47,8 +47,11 @@ import * as Haptics from '../../lib/haptics';
 import * as Crypto from 'expo-crypto';
 import { useTagScanner } from '../../hooks/useTagScanner';
 import { EditItemModal } from '../../components/item/EditItemModal';
+import { BrandSheet } from '../../components/item/BrandSheet';
+import { LendSheet } from '../../components/lending/LendSheet';
+import { useLendContacts, useLendItem, useLoans, useReturnItem } from '../../hooks/useLendContacts';
+import { openLoanStatus, pastLoanRange, relationshipLabel } from '../../lib/lending';
 import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
-import { generateCutoutForItem } from '../../lib/cutout';
 import { SLEEVE_LENGTH_LABELS } from '../../types/item';
 import { ErrorState } from '../../components/primitives/ErrorState';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
@@ -84,6 +87,8 @@ function sentenceCase(value: string): string {
 }
 
 type EditorialDetailRow = {
+  /** Defaults to label; set when labels can repeat (lending history). */
+  key?: string;
   label: string;
   value: string;
   numeric?: boolean;
@@ -107,7 +112,7 @@ function EditorialDetailList({ rows }: { rows: EditorialDetailRow[] }) {
     <View>
       {rows.map((row, index) => (
         <View
-          key={row.label}
+          key={row.key ?? row.label}
           style={[styles.editorialDetailRow, index < rows.length - 1 && styles.editorialDetailRowBorder]}
         >
           <Text style={styles.detailLabel}>{row.label}</Text>
@@ -147,6 +152,10 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
 
   const qc = useQueryClient();
   const updateItem = useUpdateItem();
+  const { data: lendContacts = [] } = useLendContacts();
+  const { data: loans = [] } = useLoans(!!itemId);
+  const lendItem = useLendItem();
+  const returnItem = useReturnItem();
   const deleteItem = useDeleteItem();
   const markWorn = useMarkItemWorn();
   const { openStylist, resumeStylist } = useGlobalAIStylist();
@@ -176,6 +185,8 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const [saveSheetOpen, setSaveSheetOpen] = useState(false);
   const [photoMenuOpen, setPhotoMenuOpen] = useState(false);
   const [itemMenuOpen, setItemMenuOpen] = useState(false);
+  const [brandSheetOpen, setBrandSheetOpen] = useState(false);
+  const [lendSheetOpen, setLendSheetOpen] = useState(false);
 
   // ── Inline tag state ─────────────────────────────────────────────────────────
   const [inlineTagActive, setInlineTagActive] = useState(false);
@@ -187,15 +198,13 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
 
   // ── Cover image selection ────────────────────────────────────────────────────
   const [coverSheetOpen, setCoverSheetOpen] = useState(false);
-  const [cuttingOut, setCuttingOut] = useState(false);
 
   // ── First-time "AI Polish" coachmark ────────────────────────────────────────
   const polishCoachTarget = useRef<View>(null);
   const [polishCoachVisible, setPolishCoachVisible] = useState(false);
 
-  // Handlers run before the `viewItem` narrowing below, so read the cutout flags
+  // Handlers run before the `viewItem` narrowing below, so read the polish flag
   // off the possibly-null item here.
-  const viewHasCutout = hasCutout(item);
   const viewIsPolished = hasPolished(item);
 
   const polishItem = usePolishItem();
@@ -265,6 +274,19 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     if (!item) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     updateItem.mutate({ id: item.id, ...availabilityPatch(next) });
+  };
+
+  const handleLend = (contactId: number | null, dueBack: string | null) => {
+    if (!item) return;
+    setLendSheetOpen(false);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    lendItem.mutate({ itemId: item.id, contactId, dueBack });
+  };
+
+  const handleReturn = () => {
+    if (!item) return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    returnItem.mutate(item.id);
   };
 
   const handleMarkWorn = () => {
@@ -378,36 +400,6 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     if (result.canceled || !result.assets[0]) return;
     const { uri, dataUrl } = await compressImageToDataUrl(result.assets[0], 1024, 0.8);
     await handleRescan(dataUrl, uri);
-    if (item) void refreshCutout(dataUrl);
-  };
-
-  /**
-   * Regenerate this item's cutout in the background.
-   *
-   * Deliberately detached from the save: the new photo is already on screen,
-   * and a cutout is an enhancement to it rather than a precondition. Silent on
-   * failure — the item simply keeps its plain photo.
-   */
-  const refreshCutout = async (imageDataUrl?: string) => {
-    if (!item) return;
-    try {
-      const cutoutUrl = await generateCutoutForItem({
-        item: {
-          id: item.id,
-          imageUrl: item.imageUrl,
-          name: item.name,
-          category: item.category,
-          subcategory: item.subcategory,
-          style: item.style,
-          color: item.color,
-        },
-        userId: item.userId,
-        imageDataUrl,
-      });
-      if (cutoutUrl) updateItem.mutate({ id: item.id, cutoutUrl });
-    } catch {
-      // Busy or unavailable — leave the item on its original photo.
-    }
   };
 
   /**
@@ -482,40 +474,6 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         Alert.alert('Polish failed', apiErrorMessage(err, 'Could not generate a catalog image. Your photo is unchanged.'));
       },
     });
-  };
-
-  /** Re-run background removal against the item's current photo. */
-  const handleCreateCutout = async () => {
-    if (!item) return;
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setCuttingOut(true);
-    try {
-      const cutoutUrl = await generateCutoutForItem({
-        item: {
-          id: item.id,
-          imageUrl: item.imageUrl,
-          name: item.name,
-          category: item.category,
-          subcategory: item.subcategory,
-          style: item.style,
-          color: item.color,
-        },
-        userId: item.userId,
-      });
-      if (cutoutUrl) {
-        await updateItem.mutateAsync({ id: item.id, cutoutUrl });
-        setCoverSheetOpen(true);
-      } else {
-        Alert.alert(
-          "Couldn't isolate this item",
-          'The background here is too close to the garment to separate cleanly. The original photo is unchanged.',
-        );
-      }
-    } catch {
-      Alert.alert('Busy', 'Background removal is busy right now. Please try again in a moment.');
-    } finally {
-      setCuttingOut(false);
-    }
   };
 
   const handleChangePhoto = () => {
@@ -628,6 +586,16 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const unavailableLabel = !available && viewItem.availability && viewItem.availability !== 'available'
     ? AVAILABILITY_LABELS[viewItem.availability]
     : null;
+  const isLent = !available && viewItem.availability === 'lent';
+  const contactName = (id: number | null) => (id == null ? null : lendContacts.find((c) => c.id === id) ?? null);
+  const itemLoans = itemId ? loans.filter((l) => l.itemId === itemId) : [];
+  const openLoan = isLent ? itemLoans.find((l) => !l.returnedAt) ?? null : null;
+  const borrower = contactName(openLoan?.contactId ?? null);
+  const loanStatus = openLoan ? openLoanStatus(openLoan) : null;
+  // Already newest first from the server.
+  const lendingHistoryRows: EditorialDetailRow[] = itemLoans
+    .filter((l) => l.returnedAt)
+    .map((l) => ({ key: String(l.id), label: contactName(l.contactId)?.name ?? 'Someone', value: pastLoanRange(l) }));
   const hasStyleProfile = styleProfileRows.length > 0;
 
   const wearSentence = viewItem.wearCount === 0
@@ -649,7 +617,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   }
 
   const isBusy = updateItem.isPending || markWorn.isPending || deleteItem.isPending
-    || cuttingOut || polishItem.isPending;
+    || polishItem.isPending;
   const itemMenuOptions: TabQuickMenuOption[] = [
     {
       key: 'edit',
@@ -664,10 +632,11 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
       onPress: handleChangePhoto,
     },
     ...(!isCreateMode && !!itemId ? (available ? [
-      { key: 'lent', label: 'Mark as lent out', icon: 'people-outline' as const, onPress: () => handleSetAvailability('lent') },
+      { key: 'lent', label: 'Mark as lent out', icon: 'people-outline' as const, onPress: () => setLendSheetOpen(true) },
       { key: 'stored', label: 'Store for the season', icon: 'archive-outline' as const, onPress: () => handleSetAvailability('stored') },
     ] : [
-      { key: 'available', label: 'Back in rotation', icon: 'checkmark-outline' as const, onPress: () => handleSetAvailability('available') },
+      ...(isLent ? [{ key: 'borrower', label: 'Edit loan', icon: 'person-outline' as const, onPress: () => setLendSheetOpen(true) }] : []),
+      { key: 'available', label: isLent ? 'Mark as returned' : 'Back in rotation', icon: 'checkmark-outline' as const, onPress: isLent ? handleReturn : () => handleSetAvailability('available') },
     ]) : []),
     ...(viewItem.imageUrl ? [{
       key: 'rescan',
@@ -697,14 +666,6 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
       iconColor: colors.foreground,
       iconBg: colors.secondary,
       onPress: () => { void pickAndChangePhoto('library'); },
-    },
-    {
-      key: 'cutout',
-      label: viewHasCutout ? 'Recreate Cutout' : 'Remove Background',
-      icon: 'cut-outline',
-      iconColor: colors.foreground,
-      iconBg: colors.secondary,
-      onPress: () => { void handleCreateCutout(); },
     },
     ...(viewIsPolished ? [{
       key: 'polish',
@@ -865,8 +826,32 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerText}>
+            {/* Brand sits where a label would: above the name. Missing, it's an invitation. */}
+            {viewItem.brand ? (
+              <Pressable
+                onPress={() => setBrandSheetOpen(true)}
+                disabled={isBusy}
+                hitSlop={8}
+                style={({ pressed }) => [styles.brandRow, pressed && styles.pressedFade]}
+                accessibilityRole="button"
+                accessibilityLabel={`Brand ${viewItem.brand}, change`}
+              >
+                <Text style={styles.brand}>{viewItem.brand}</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={() => setBrandSheetOpen(true)}
+                disabled={isBusy}
+                hitSlop={8}
+                style={({ pressed }) => [styles.addBrandPill, pressed && styles.addBrandPillPressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Add brand"
+              >
+                <Ionicons name="add" size={13} color={colors.mutedForeground} />
+                <Text style={styles.addBrandText}>Add brand</Text>
+              </Pressable>
+            )}
             <Text selectable style={styles.name}>{viewItem.name || 'Unnamed Item'}</Text>
-            {viewItem.brand ? <Text selectable style={styles.brand}>{viewItem.brand}</Text> : null}
             {breadcrumb ? <Text selectable style={styles.breadcrumb}>{breadcrumb}</Text> : null}
             {summary ? (
               <Text selectable style={styles.summary}>{summary}</Text>
@@ -995,13 +980,24 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
 
         <EditorialSection title="Wear history">
           <Text style={styles.wearSentence}>{wearSentence}</Text>
-          {unavailableLabel ? (
+          {isLent ? (
+            <Text style={[styles.wearSentence, loanStatus?.overdue && { color: colors.destructive }]}>
+              {borrower ? `Lent to ${borrower.name} (${relationshipLabel(borrower.relationship).toLowerCase()})` : 'Lent out'}
+              {loanStatus ? `. ${loanStatus.text}` : ''}. The stylist will leave it out until it's back.
+            </Text>
+          ) : unavailableLabel ? (
             <Text style={styles.wearSentence}>
               {unavailableLabel}{viewItem.availabilityUntil ? ` until ${formatDate(`${viewItem.availabilityUntil}T12:00:00`)}` : ''}. The stylist will leave it out until then.
             </Text>
           ) : null}
           {wearHistoryRows.length > 0 ? <EditorialDetailList rows={wearHistoryRows} /> : null}
         </EditorialSection>
+
+        {lendingHistoryRows.length > 0 ? (
+          <EditorialSection title="Lending history">
+            <EditorialDetailList rows={lendingHistoryRows} />
+          </EditorialSection>
+        ) : null}
 
         {/* Notes & care — tags, care, label scan and free notes in one ruled section */}
         <EditorialSection title="Notes & care">
@@ -1199,6 +1195,32 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
         onCreateSuccess={() => {}}
       />
 
+      {item ? (
+        <BrandSheet
+          visible={brandSheetOpen}
+          current={item.brand ?? ''}
+          onClose={() => setBrandSheetOpen(false)}
+          onSelect={(brand) => {
+            setBrandSheetOpen(false);
+            if (brand === (item.brand ?? '')) return;
+            updateItem.mutate({ id: item.id, brand: brand || null });
+          }}
+        />
+      ) : null}
+
+      {item ? (
+        <LendSheet
+          visible={lendSheetOpen}
+          itemName={item.name}
+          itemImageUri={itemThumbUri(item)}
+          currentContactId={openLoan?.contactId ?? null}
+          currentDueBack={openLoan?.dueBack ?? null}
+          lentAt={openLoan?.lentAt ?? null}
+          onClose={() => setLendSheetOpen(false)}
+          onConfirm={handleLend}
+        />
+      ) : null}
+
       {saveSheetOpen && !!itemId && (
         <SaveToBoardSheet
           target={{ type: 'item', id: itemId }}
@@ -1366,9 +1388,18 @@ const styles = StyleSheet.create({
     ...typography.text.editorialTitle,
     color: colors.foreground,
   },
+  brandRow: { alignSelf: 'flex-start' },
   brand: {
-    ...typography.text.meta, fontWeight: typography.weight.medium, color: colors.inkSubtle,
+    ...typography.text.eyebrow, color: colors.inkSubtle,
   },
+  pressedFade: { opacity: 0.5 },
+  addBrandPill: {
+    alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 3,
+    minHeight: 26, paddingHorizontal: spacing.md, borderRadius: radii.full,
+    borderWidth: StyleSheet.hairlineWidth, borderStyle: 'dashed', borderColor: colors.mutedForeground,
+  },
+  addBrandPillPressed: { backgroundColor: colors.surfaceSelected },
+  addBrandText: { ...typography.text.eyebrow, color: colors.mutedForeground },
   breadcrumb: {
     ...typography.text.meta, color: colors.mutedForeground,
   },

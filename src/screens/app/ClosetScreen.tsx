@@ -40,6 +40,8 @@ import { FilterPanel } from '../../components/wardrobe/FilterPanel';
 import { OutfitFilterPanel } from '../../components/outfits/OutfitFilterPanel';
 import { ClosetGrid } from '../../components/wardrobe/ClosetGrid';
 import { ClosetRails, type ClosetRail } from '../../components/wardrobe/ClosetRails';
+import { useLendContacts, useLoans } from '../../hooks/useLendContacts';
+import { isLentNow } from '../../lib/lending';
 import { ListScrubber } from '../../components/wardrobe/ListScrubber';
 import { buildScrubberEntries } from '../../lib/closet-scrubber';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -234,6 +236,19 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   }, []);
 
   const { data: items = [], isLoading: itemsLoading, isError: itemsError, refetch: refetchItems } = useItems();
+  const lentItems = useMemo(() => items.filter(isLentNow), [items]);
+  const { data: lendContacts = [] } = useLendContacts(lentItems.length > 0);
+  const { data: loans = [] } = useLoans(lentItems.length > 0);
+  const lentSummary = useMemo(() => {
+    if (!lentItems.length) return null;
+    const lentIds = new Set(lentItems.map((i) => i.id));
+    const names = [...new Set(loans
+      .filter((l) => !l.returnedAt && lentIds.has(l.itemId))
+      .map((l) => lendContacts.find((c) => c.id === l.contactId)?.name)
+      .filter((n): n is string => !!n))];
+    const who = names.length > 2 ? `${names.slice(0, 2).join(', ')} +${names.length - 2}` : names.join(', ');
+    return `${lentItems.length} ${lentItems.length === 1 ? 'piece' : 'pieces'} lent out${who ? ` · ${who}` : ''}`;
+  }, [lentItems, loans, lendContacts]);
   const { data: outfits = [] } = useOutfits();
   const { data: events = [] } = useEvents();
   const { data: boards = [], isLoading: boardsLoading } = useBoards();
@@ -1091,6 +1106,19 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
           )}
 
 
+      {segment === 'pieces' && lentSummary ? (
+        <PressableScale
+          contentStyle={styles.lentStrip}
+          onPress={() => navigation.navigate('LentOut')}
+          accessibilityRole="button"
+          accessibilityLabel={`${lentSummary}. See who has what`}
+        >
+          <Ionicons name="people-outline" size={16} color={colors.foreground} />
+          <Text style={styles.lentStripText} numberOfLines={1}>{lentSummary}</Text>
+          <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />
+        </PressableScale>
+      ) : null}
+
       {(filterTokens.length > 0 || (!hasCategoryPills && (segment === 'pieces' ? activeFilterCount : outfitActiveFilterCount) > 0)) && <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterTokens}>
         {!hasCategoryPills && <TouchableOpacity onPress={segment === 'pieces' ? clearPieceFiltersAndResetCategories : clearOutfitFiltersOnly} style={styles.clearFilters} accessibilityRole="button" accessibilityLabel="Clear filters"><Text style={styles.clearFiltersText}>Clear</Text></TouchableOpacity>}
         {filterTokens.map(token => <PressableScale key={token.key} contentStyle={styles.filterToken} onPress={token.remove} accessibilityRole="button" accessibilityLabel={`Remove ${token.label} filter`}>
@@ -1613,6 +1641,8 @@ const styles = StyleSheet.create({
   clearFiltersText: { ...typography.text.bodySmall, color: colors.foreground, fontWeight: typography.weight.medium },
   filterTokens: { gap: spacing.sm, paddingBottom: spacing.sm },
   filterToken: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: 44, paddingHorizontal: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radii.full },
+  lentStrip: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, paddingHorizontal: spacing.md, marginTop: spacing.sm, marginBottom: spacing.md, borderRadius: radii.full, backgroundColor: colors.surfaceSubtle, alignSelf: 'flex-start', maxWidth: '100%' },
+  lentStripText: { ...typography.text.caption, color: colors.foreground, flexShrink: 1 },
   wearHistory: { ...typography.text.caption, color: colors.mutedForeground },
 
   // ── List layout

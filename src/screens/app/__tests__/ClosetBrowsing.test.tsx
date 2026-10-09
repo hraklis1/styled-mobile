@@ -66,6 +66,7 @@ const mockMutation = { mutate: jest.fn(), mutateAsync: jest.fn() };
 jest.mock('../../../hooks/useItems', () => ({ useItems: () => ({ data: mockItems }), useUpdateItem: () => mockMutation, useDeleteItem: () => mockMutation, useMarkItemWorn: () => mockMutation }));
 jest.mock('../../../hooks/useOutfits', () => ({ useOutfits: () => ({ data: mockOutfits }), useMarkOutfitWorn: () => mockMutation, useDeleteOutfit: () => mockMutation, useUpdateOutfit: () => mockMutation }));
 jest.mock('../../../hooks/useEvents', () => ({ useEvents: () => ({ data: mockEmpty }) }));
+jest.mock('../../../hooks/useLendContacts', () => ({ useLendContacts: () => ({ data: mockEmpty }), useLoans: () => ({ data: mockEmpty }) }));
 jest.mock('../../../hooks/useBoards', () => ({ useBoards: () => ({ data: mockBoards }), useCreateBoard: () => mockMutation, useDeleteBoard: () => mockMutation, useUpdateBoard: () => mockMutation }));
 jest.mock('../../../hooks/useCameraLaunch', () => ({ useLibraryLaunch: () => jest.fn() }));
 jest.mock('../../../contexts/GlobalScanContext', () => ({ useGlobalScan: () => ({ openScanItem: jest.fn(), openBatchScan: jest.fn() }) }));

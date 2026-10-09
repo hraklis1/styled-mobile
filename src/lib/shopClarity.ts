@@ -17,7 +17,7 @@ export function wearableWardrobe(items: readonly Item[]): ReadonlyMap<number, It
  * "works with your navy blazer" is evidence you can check against your
  * closet. The count still orders the brief server-side.
  *
- * Pieces with a cutout or polished cover lead: at swatch size a product-style
+ * Pieces with a catalog-style cover (a polish) lead: at swatch size a product-style
  * frame reads as the garment, while a full-length photo of the wearer reads
  * as noise. Server order is kept within each group.
  */
@@ -26,7 +26,9 @@ export function priorityAnchorPieces(priority: ShoppingBriefPriority, wardrobe?:
   const pieces = (priority.anchorItemIds ?? [])
     .map((id) => wardrobe.get(id))
     .filter((item): item is Item => Boolean(item));
-  const catalogStyle = (item: Item) => Boolean(item.cutoutUrl || item.polishedUrl);
+  // Mirrors itemCoverPresentation: a polish is the cover unless the user
+  // chose their photo. Not imported, to keep this module free of the API client.
+  const catalogStyle = (item: Item) => Boolean(item.polishedUrl) && item.coverImageVariant !== 'original';
   return [...pieces.filter(catalogStyle), ...pieces.filter((item) => !catalogStyle(item))];
 }
 

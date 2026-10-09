@@ -34,13 +34,24 @@ describe('item cover presentation', () => {
     });
   });
 
-  it('uses a selected cutout with catalog presentation', () => {
+  it('retires a stored cutout cover to the photo when there is no polish', () => {
     expect(itemCoverPresentation(item({ coverImageVariant: 'cutout' }))).toEqual({
-      uri: 'https://cdn.test/cutout.webp',
-      variant: 'cutout',
-      contentFit: 'contain',
-      isCatalogStyle: true,
+      uri: 'https://cdn.test/photo.jpg',
+      variant: 'original',
+      contentFit: 'cover',
+      isCatalogStyle: false,
     });
+  });
+
+  it('retires a stored cutout cover to the polish when one exists', () => {
+    expect(itemCoverPresentation(item({
+      coverImageVariant: 'cutout',
+      polishedUrl: 'https://cdn.test/polished.webp',
+    })).variant).toBe('polished');
+  });
+
+  it('still shows a cutout when it is the only image the item has', () => {
+    expect(itemCoverPresentation(item({ imageUrl: null })).variant).toBe('cutout');
   });
 
   it('uses a selected AI polish without discarding the other assets', () => {
@@ -86,12 +97,13 @@ describe('thumbnail preference', () => {
     expect(itemThumbUri(item({ thumbUrl: null }))).toBe('https://cdn.test/photo.jpg');
   });
 
-  it('does not substitute a thumbnail for a selected cutout or polish', () => {
-    const cutoutSelected = item({
+  it('does not substitute a thumbnail for a selected polish', () => {
+    const polishSelected = item({
       thumbUrl: 'https://cdn.test/thumb.webp',
-      coverImageVariant: 'cutout',
+      polishedUrl: 'https://cdn.test/polished.webp',
+      coverImageVariant: 'polished',
     });
-    expect(itemThumbUri(cutoutSelected)).toBe('https://cdn.test/cutout.webp');
+    expect(itemThumbUri(polishSelected)).toBe('https://cdn.test/polished.webp');
   });
 
   it('leaves itemImageUri (no preferThumb) using the full photo even when a thumbnail exists', () => {

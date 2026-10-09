@@ -18,11 +18,10 @@ import {
   reviewCarouselMetrics,
   type PieceReviewState,
 } from '../../../lib/scan-review';
-import { colors, cutoutScaleFor, ingestion, radii, spacing, surfaces, typography } from '../../../theme';
+import { colors, ingestion, radii, spacing, surfaces, typography } from '../../../theme';
 import { SpecSheet, type ExpandableRow, type SheetKind } from './SpecSheet';
-import { TextSegment } from './atoms';
 import { SelectBadge } from './SelectBadge';
-import { coverUri, isReviewStage, type PiecePatch, type ScanReviewPiece, type ScanReviewStage } from './types';
+import { isReviewStage, type PiecePatch, type ScanReviewPiece, type ScanReviewStage } from './types';
 
 type Props = {
   pieces: ScanReviewPiece[];
@@ -36,7 +35,6 @@ type Props = {
   onUpdate: (id: string, patch: PiecePatch) => void;
   onOpenSheet: (kind: SheetKind, id: string) => void;
   onCrop: (id: string) => void;
-  onToggleCutout: (id: string) => void;
   onToggleIncluded: (id: string) => void;
   footerHeight: number;
 };
@@ -57,7 +55,7 @@ export function ItemInspectionModal({
   onUpdate,
   onOpenSheet,
   onCrop,
-  onToggleCutout, onToggleIncluded,
+  onToggleIncluded,
   footerHeight,
 }: Props) {
   const { width, height: windowHeight } = useWindowDimensions();
@@ -69,7 +67,6 @@ export function ItemInspectionModal({
   const ids = useMemo(() => pieces.map((piece) => piece.id), [pieces]);
   const activeIndex = Math.max(0, ids.indexOf(activeId));
   const active = pieces[activeIndex] ?? null;
-  const review = isReviewStage(stage);
 
   const initialIndex = useRef(activeIndex).current;
   const scrollX = useSharedValue(initialIndex * metrics.snapInterval);
@@ -202,7 +199,6 @@ export function ItemInspectionModal({
             disabled={disabled || paging}
             onCrop={() => onCrop(item.id)}
             onToggleIncluded={() => onToggleIncluded(item.id)}
-            onToggleCutout={review && item.cutout ? () => onToggleCutout(item.id) : null}
             index={index}
             stage={stage}
             width={metrics.cardWidth}
@@ -258,13 +254,11 @@ function InspectionPageDot({ slot, count, index }: { slot: number; count: number
   return <Animated.View testID={`inspection-page-dot-${slot}`} style={[styles.dot, style]} />;
 }
 
-function LoupeHero({ piece, disabled, onCrop, onToggleIncluded, onToggleCutout, index, stage, width, height, gap, snapInterval, scrollX, reduceMotion }: {
+function LoupeHero({ piece, disabled, onCrop, onToggleIncluded, index, stage, width, height, gap, snapInterval, scrollX, reduceMotion }: {
   piece: ScanReviewPiece;
   disabled: boolean;
   onCrop: () => void;
   onToggleIncluded: () => void;
-  /** Present only once a cutout exists to switch to. */
-  onToggleCutout: (() => void) | null;
   index: number;
   stage: ScanReviewStage;
   width: number;
@@ -274,10 +268,9 @@ function LoupeHero({ piece, disabled, onCrop, onToggleIncluded, onToggleCutout, 
   scrollX: SharedValue<number>;
   reduceMotion: boolean;
 }) {
-  const uri = coverUri(piece, stage);
-  const isCutout = uri !== null && uri === piece.cutout;
+  const uri = piece.photo;
   const canCrop = Boolean(piece.canAdjustCrop && piece.cropSource && piece.cropBbox);
-  const scale = isCutout ? cutoutScaleFor(piece.category) : ingestion.printInset;
+  const scale = ingestion.printInset;
 
   // Neighbours wait a step back — slightly smaller and quieter — and come
   // forward as they slide into the centre.
@@ -296,7 +289,6 @@ function LoupeHero({ piece, disabled, onCrop, onToggleIncluded, onToggleCutout, 
       style={[
         styles.hero,
         !isReviewStage(stage) && styles.heroPreExtract,
-        isCutout && styles.heroCutout,
         { width, height },
       ]}
     >
@@ -306,7 +298,7 @@ function LoupeHero({ piece, disabled, onCrop, onToggleIncluded, onToggleCutout, 
           style={{ width: `${scale * 100}%`, height: `${scale * 100}%` }}
           contentFit="contain"
           cachePolicy="memory-disk"
-          recyclingKey={`${piece.id}-${isCutout ? 'cutout' : 'photo'}`}
+          recyclingKey={piece.id}
           transition={150}
           accessibilityLabel={`Photo of ${piece.name}`}
         />
@@ -317,27 +309,13 @@ function LoupeHero({ piece, disabled, onCrop, onToggleIncluded, onToggleCutout, 
         accessibilityLabel={`Include ${piece.name}`} style={styles.badge} />
     </View>
       {/* Image tools sit under the photo, never over the garment. */}
-      {canCrop || onToggleCutout ? (
+      {canCrop ? (
         <View style={styles.capsule}>
-          {canCrop ? (
-            <Pressable onPress={onCrop} disabled={disabled} accessibilityRole="button" accessibilityLabel={`Adjust crop for ${piece.name}`}
-              style={({ pressed }) => [styles.capsuleItem, pressed && { opacity: 0.6 }]}>
-              <Ionicons name="crop-outline" size={17} color={colors.foreground} />
-              <Text style={styles.capsuleText}>Crop</Text>
-            </Pressable>
-          ) : null}
-          {canCrop && onToggleCutout ? <View style={styles.capsuleRule} /> : null}
-          {onToggleCutout ? (
-            <View style={styles.capsuleItem}>
-              <TextSegment
-                options={[{ value: 'cutout' as const, label: 'Cutout' }, { value: 'photo' as const, label: 'Original' }]}
-                value={piece.useCutout ? 'cutout' : 'photo'}
-                onChange={onToggleCutout}
-                disabled={disabled}
-                accessibilityLabel="Cover image"
-              />
-            </View>
-          ) : null}
+          <Pressable onPress={onCrop} disabled={disabled} accessibilityRole="button" accessibilityLabel={`Adjust crop for ${piece.name}`}
+            style={({ pressed }) => [styles.capsuleItem, pressed && { opacity: 0.6 }]}>
+            <Ionicons name="crop-outline" size={17} color={colors.foreground} />
+            <Text style={styles.capsuleText}>Crop</Text>
+          </Pressable>
         </View>
       ) : null}
     </Animated.View>
@@ -350,7 +328,6 @@ const styles = StyleSheet.create({
   badge: { position: 'absolute', top: spacing.xs, right: spacing.xs },
   capsule: { minHeight: 44, marginTop: spacing.xs, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   capsuleItem: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  capsuleRule: { width: 1, height: 16, backgroundColor: colors.controlOutline },
   capsuleText: { ...typography.text.label, color: colors.foreground },
   scroll: { flex: 1 },
   content: { paddingTop: spacing.md, gap: spacing.sm },
@@ -364,5 +341,4 @@ const styles = StyleSheet.create({
   // Before extraction the job is judging the crop, so the plate steps a
   // shade darker and the crop's own edges stay visible against it.
   heroPreExtract: { backgroundColor: colors.surfaceSelected },
-  heroCutout: { backgroundColor: colors.card },
 });

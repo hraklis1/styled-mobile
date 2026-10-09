@@ -26,9 +26,7 @@ function toPiece(detection: WearDetection, draft: WearDraft): ScanReviewPiece {
   return {
     id: detection.id,
     ...draft,
-    photo: detection.cropUrl ?? detection.cutoutUrl,
-    cutout: detection.cutoutUrl,
-    useCutout: !detection.cropUrl,
+    photo: detection.cropUrl ?? null,
     canAdjustCrop: false,
     cropSource: null,
     cropBbox: null,
@@ -107,7 +105,7 @@ export function NewPieceEditor({ detection, draft, scanBrands, photoUri, onChang
           <View style={styles.plate}>
             <LocateInPhoto name={detection.attributes.name} onPress={onLocate}>
               {box ? <PieceThumb uri={cropPreview} width={168} height={210} />
-                : <PieceImage cropUrl={detection.cropUrl} cutoutUrl={detection.cutoutUrl} width={168} height={210} />}
+                : <PieceImage cropUrl={detection.cropUrl} width={168} height={210} />}
             </LocateInPhoto>
           </View>
           {/* Under the plate, as in the closet scan's piece sheet: the mat stays snug to the photo. */}

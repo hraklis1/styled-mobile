@@ -42,13 +42,15 @@ it('retries new-item creation and logging with the same idempotency keys', async
 
 describe('new piece cover image', () => {
   const draft = draftFrom(detection('d0'));
-  it('uses the background-intact crop as the cover, keeping the cutout on the item', () => {
-    const input = newItemInput('flow-test', { ...detection('d0'), cropUrl: 'https://x/crop.jpg', cutoutUrl: 'https://x/cut.png' }, draft);
-    expect(input).toMatchObject({ imageUrl: 'https://x/crop.jpg', cutoutUrl: 'https://x/cut.png', coverImageVariant: 'original' });
+  it('uses the background-intact crop as the cover', () => {
+    const input = newItemInput('flow-test', { ...detection('d0'), cropUrl: 'https://x/crop.jpg' }, draft);
+    expect(input).toMatchObject({ imageUrl: 'https://x/crop.jpg', coverImageVariant: 'original' });
+    expect(input).not.toHaveProperty('cutoutUrl');
   });
-  it('falls back to the cutout only when there is no crop', () => {
-    const input = newItemInput('flow-test', { ...detection('d0'), cropUrl: null, cutoutUrl: 'https://x/cut.png' }, draft);
-    expect(input.coverImageVariant).toBe('cutout');
+  it('sends no photo when the scan has no crop', () => {
+    const input = newItemInput('flow-test', { ...detection('d0'), cropUrl: null }, draft);
+    expect(input).not.toHaveProperty('imageUrl');
+    expect(input.coverImageVariant).toBe('original');
   });
 });
 
@@ -58,12 +60,12 @@ describe('a user crop', () => {
     return reduce(marked, { type: 'editDraft', detectionId: 'd0', patch: { cropBbox: { x: 10, y: 20, width: 30, height: 40 } } }) as ReviewFlow;
   };
 
-  it('is cut from the stored photo, uploaded, and becomes the cover without the scan cutout', async () => {
+  it('is cut from the stored photo, uploaded, and becomes the cover', async () => {
     batch.mockResolvedValue({ items: [{ ...closetItems[0], clientImportId: 'wear-flow-test-d0' }], rejected: [] });
     await saveWearLog(cropped());
     const { cropImage } = jest.requireMock('../../../lib/cropImage');
     expect(cropImage).toHaveBeenCalledWith('file:///outfit.jpg', { x: 10, y: 20, width: 30, height: 40 }, { maxDim: 1200, quality: 0.88 });
-    expect(batch.mock.calls[0][0][0]).toMatchObject({ clientImportId: 'wear-flow-test-d0', imageUrl: 'https://r2.example/crop.jpg', cutoutUrl: null, coverImageVariant: 'original' });
+    expect(batch.mock.calls[0][0][0]).toMatchObject({ clientImportId: 'wear-flow-test-d0', imageUrl: 'https://r2.example/crop.jpg', coverImageVariant: 'original' });
   });
 
   it('fails the save instead of falling back when the crop cannot be made', async () => {
@@ -75,8 +77,8 @@ describe('a user crop', () => {
   });
 
   it('leaves uncropped pieces on the scan crop', () => {
-    const d = { ...detection('d0'), cropUrl: 'https://scan/crop.jpg', cutoutUrl: 'https://scan/cut.webp' };
-    expect(newItemInput('flow-test', d, draftFrom(d))).toMatchObject({ imageUrl: 'https://scan/crop.jpg', cutoutUrl: 'https://scan/cut.webp', coverImageVariant: 'original' });
+    const d = { ...detection('d0'), cropUrl: 'https://scan/crop.jpg' };
+    expect(newItemInput('flow-test', d, draftFrom(d))).toMatchObject({ imageUrl: 'https://scan/crop.jpg', coverImageVariant: 'original' });
   });
 });
 

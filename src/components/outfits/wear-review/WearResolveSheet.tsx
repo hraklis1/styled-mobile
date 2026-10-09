@@ -99,7 +99,7 @@ export function WearResolveSheet({ queue: initialQueue, startIndex = 0, reviewId
         {ordered.map((d) => <Pressable key={d.id} onPress={() => (d.id === activeId ? openFromPhoto(d.id) : setActiveId(d.id))}
           style={[styles.stripItem, d.id === activeId && styles.stripActive, dimmedIds.has(d.id) && styles.dimmed]}
           accessibilityRole="button" accessibilityLabel={d.attributes.name} accessibilityState={{ selected: d.id === activeId }}>
-          <PieceImage cropUrl={d.cropUrl} cutoutUrl={d.cutoutUrl} width={56} height={70} />
+          <PieceImage cropUrl={d.cropUrl} width={56} height={70} />
         </Pressable>)}
       </ScrollView>
       {activeId ? null : <Text style={[styles.meta, styles.stripHint]}>Tap a piece to see it in the photo</Text>}
@@ -149,7 +149,7 @@ export function FocusedPiece({ detection, resolution, initialItemId, onPendingCh
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.detected}>
         <LocateInPhoto name={detection.attributes.name} onPress={onLocate}>
-          <PieceImage cropUrl={detection.cropUrl} cutoutUrl={detection.cutoutUrl} width={72} height={90} />
+          <PieceImage cropUrl={detection.cropUrl} width={72} height={90} />
         </LocateInPhoto>
         <View style={styles.copy}>
           <Text style={styles.heading}>{detection.attributes.name}</Text>

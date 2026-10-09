@@ -4,7 +4,6 @@ jest.mock('react-native-mmkv', () => ({
 jest.mock('expo-file-system', () => ({ Paths: { document: { uri: 'file:///docs/' } } }));
 jest.mock('@react-native-community/netinfo', () => ({ addEventListener: jest.fn(() => jest.fn()) }));
 jest.mock('expo-haptics', () => ({ notificationAsync: jest.fn(), NotificationFeedbackType: { Success: 'success' } }));
-jest.mock('../../../lib/cutout', () => ({ tryRequestCutout: jest.fn() }));
 jest.mock('../../../lib/analytics', () => ({ track: jest.fn() }));
 jest.mock('../files', () => ({
   batchDirectory: jest.fn(),
@@ -46,9 +45,9 @@ function pieceFor(photoId: string, index: number): Piece {
     color: 'White', style: null, seasons: [], occasions: [], material: null, fit: null, pattern: null,
     neckline: null, sleeveLength: null, care: null, notableDetails: [], colorPalette: [],
     colorNormalized: null, colorTemperature: null, warmthRating: null, sizeProfile: null,
-    detectedName: 'Tee', detectedCategory: 'top', bbox: null, previewUri: null, cutoutUri: null,
-    useCutout: false, edited: [], status: 'pending', failedStep: null, attempts: 0, notBefore: 0,
-    error: null, imageUrl: null, cutoutUrl: null,
+    detectedName: 'Tee', detectedCategory: 'top', bbox: null, previewUri: null,
+    edited: [], status: 'pending', failedStep: null, attempts: 0, notBefore: 0,
+    error: null, imageUrl: null,
   };
 }
 

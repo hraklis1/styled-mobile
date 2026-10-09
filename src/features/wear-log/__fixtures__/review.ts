@@ -9,7 +9,7 @@ export const closetItems = [
 ] as Item[];
 
 export function detection(id: string, band: WearDetection['match']['band'] = 'medium', itemId: number | null = 1): WearDetection {
-  return { id, layer: 'base', bbox_pct: null, cutoutUrl: null,
+  return { id, layer: 'base', bbox_pct: null,
     attributes: { name: 'Beige shirt', category: 'top', color: 'beige', description: 'Short sleeve shirt' },
     lowConfidenceFields: [], match: { band, itemId, confidence: 0.6 }, candidates: [{ itemId: 1, score: 0.8 }, { itemId: 2, score: 0.5 }] };
 }

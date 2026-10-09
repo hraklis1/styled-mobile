@@ -76,7 +76,7 @@ describe('scanVisionPoseDirect', () => {
     expect(keys).toEqual(['scan-photo-1', 'scan-photo-1']);
   });
 
-  it('asks for the v2 shape, with hosted cutouts instead of inline base64', async () => {
+  it('asks for the v2 shape, without inline base64', async () => {
     mockPost.mockResolvedValue({ data: { format: 2, items: [] } });
 
     await scanVisionPoseDirect('photo', 'scan-photo-1');

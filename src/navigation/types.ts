@@ -47,6 +47,7 @@ export type ClosetStackParamList = {
     scanImageUrl?: string;
   };
   ClosetRefresh: undefined;
+  LentOut: undefined;
   OutfitDetail: {
     outfitId: number;
     returnTo?: 'Calendar' | 'Home' | 'Stylist';
@@ -169,6 +170,7 @@ export type CalendarScreenProps = BottomTabScreenProps<AppTabParamList, 'Calenda
 // Screens now registered in ClosetStack
 export type ItemDetailScreenProps = NativeStackScreenProps<ClosetStackParamList, 'ItemDetail'>;
 export type ClosetRefreshScreenProps = NativeStackScreenProps<ClosetStackParamList, 'ClosetRefresh'>;
+export type LentOutScreenProps = NativeStackScreenProps<ClosetStackParamList, 'LentOut'>;
 export type OutfitDetailScreenProps = NativeStackScreenProps<ClosetStackParamList, 'OutfitDetail'>;
 export type BoardDetailScreenProps = NativeStackScreenProps<ClosetStackParamList, 'BoardDetail'>;
 

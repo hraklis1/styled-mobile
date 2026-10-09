@@ -1,9 +1,8 @@
 import { AppState, type AppStateStatus } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import * as Haptics from '../../lib/haptics';
-import { tryRequestCutout } from '../../lib/cutout';
 import { track } from '../../lib/analytics';
-import { batchDirectory, cropRegion, deleteBatchFiles, deleteFile, pruneBatchFiles, readBase64, writeBase64 } from './files';
+import { batchDirectory, cropRegion, deleteBatchFiles, deleteFile, pruneBatchFiles } from './files';
 import { classifyError } from './retryPolicy';
 import { runSave } from './save';
 import { applyExtraction, extractPiece, preparePhoto, scanPhoto } from './steps';
@@ -232,11 +231,7 @@ export function discardBatch(): void {
   if (batch) deleteBatchFiles(batch.id);
 }
 
-/**
- * The review's crop editor: re-cut the preview from the master straight away,
- * then fetch a new cutout in the background (the old one was masked to the
- * previous box, so it is dropped rather than shown against the new crop).
- */
+/** The review's crop editor: re-cut the preview from the master. */
 export async function applyPieceCrop(pieceId: string, bbox: Bbox): Promise<void> {
   const batch = batchImport.batch();
   const piece = batch?.pieces.find((p) => p.id === pieceId);
@@ -253,23 +248,10 @@ export async function applyPieceCrop(pieceId: string, bbox: Bbox): Promise<void>
   );
   if (!previewUri || !isCurrent(batch.id)) return;
   deleteFile(piece.previewUri);
-  deleteFile(piece.cutoutUri);
   batchImport.get().patchPiece(pieceId, {
     extractionInput: undefined,
     bbox,
     previewUri,
-    cutoutUri: null,
-    cutoutUrl: null,
     imageUrl: null,
-    useCutout: false,
   });
-
-  if (!photo.scanUri) return;
-  const imageDataUrl = `data:image/jpeg;base64,${await readBase64(photo.scanUri)}`;
-  const cutout = await tryRequestCutout({ imageDataUrl, bbox, category: piece.category });
-  if (!cutout || !isCurrent(batch.id)) return;
-  const current = batchImport.batch()?.pieces.find((p) => p.id === pieceId);
-  if (!current || current.bbox !== bbox) return;
-  const cutoutUri = await writeBase64(dir, `${pieceId}-cutout-${Date.now()}.webp`, cutout.slice(cutout.indexOf(',') + 1));
-  batchImport.get().patchPiece(pieceId, { cutoutUri });
 }

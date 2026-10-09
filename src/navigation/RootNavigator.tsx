@@ -38,6 +38,7 @@ import { ResetPasswordScreen } from '../screens/auth/ResetPasswordScreen';
 import { HomeScreen } from '../screens/app/HomeScreen';
 import { ItemDetailScreen } from '../screens/app/ItemDetailScreen';
 import { ClosetRefreshScreen } from '../screens/app/ClosetRefreshScreen';
+import { LentOutScreen } from '../screens/app/LentOutScreen';
 import { ClosetInsightsScreen } from '../screens/app/ClosetInsightsScreen';
 import { OutfitDetailScreen } from '../screens/app/OutfitDetailScreen';
 import { BoardDetailScreen } from '../screens/app/BoardDetailScreen';
@@ -98,7 +99,7 @@ const linking: LinkingOptions<RootStackParamList> = {
           },
           Calendar: 'calendar',
           Stylist: { screens: { StylistMain: 'stylist' } },
-          Closet: { screens: { ItemDetail: { path: 'wardrobe-item/:itemId', parse: { itemId: Number } } } },
+          Closet: { screens: { ItemDetail: { path: 'wardrobe-item/:itemId', parse: { itemId: Number } }, LentOut: 'lent-out' } },
           Shop: {
             screens: {
               ShopMain: 'shop',
@@ -212,6 +213,7 @@ function ClosetNavigator() {
       <ClosetStack.Screen name="ClosetMain" component={ClosetScreen} />
       <ClosetStack.Screen name="ItemDetail" component={ItemDetailScreen} />
       <ClosetStack.Screen name="ClosetRefresh" component={ClosetRefreshScreen} />
+      <ClosetStack.Screen name="LentOut" component={LentOutScreen} />
       <ClosetStack.Screen name="OutfitDetail" component={OutfitDetailScreen} />
       <ClosetStack.Screen name="BoardDetail" component={BoardDetailScreen} />
     </ClosetStack.Navigator>

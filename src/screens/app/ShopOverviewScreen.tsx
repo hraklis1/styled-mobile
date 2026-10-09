@@ -9,6 +9,7 @@ import { ShopWardrobeEdit } from '../../components/shopping/ShopWardrobeEdit';
 import { ShoppingBriefCard, briefIssueLabel } from '../../components/shopping/ShoppingBriefCard';
 import { EditorialSection, ScreenHeader, SegmentedControl } from '../../components/primitives/Editorial';
 import { AppText } from '../../components/primitives/AppText';
+import { AiActionCoachmark } from '../../components/primitives/AiActionCoachmark';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrencyCode } from '../../hooks/useCurrencyCode';
 import { useEntitlement } from '../../hooks/useEntitlement';
@@ -27,7 +28,7 @@ import type { ShopOverviewScreenProps, ShopView } from '../../navigation/types';
 
 export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProps) {
   const insets = useSafeAreaInsets();
-  const { fontScale } = useWindowDimensions();
+  const { fontScale, width: windowWidth } = useWindowDimensions();
   const { user } = useAuth();
   const { isPremium } = useEntitlement();
   const { data: items = [], refetch: refetchItems } = useItems();
@@ -109,6 +110,14 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
   }, [brief, isPremium, refetchItems, refetchSnaps]);
 
   const [saveFindCoachVisible, setSaveFindCoachVisible] = useState(false);
+  const saveFindCoachTarget = useRef<View>(null);
+  const [saveFindCoachCaret, setSaveFindCoachCaret] = useState<{ top: number; right: number }>();
+  useEffect(() => {
+    if (!saveFindCoachVisible) return;
+    saveFindCoachTarget.current?.measureInWindow((x, y, w, h) => {
+      if (w) setSaveFindCoachCaret({ top: y + h + spacing.sm, right: windowWidth - spacing.sm - (x + w / 2) - 9 });
+    });
+  }, [saveFindCoachVisible, windowWidth]);
 
   useEffect(() => {
     const userId = user?.id;
@@ -149,7 +158,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
           {compact ? <View style={[styles.compactHeader, { paddingTop: insets.top + spacing.md }, fontScale > 1.3 && styles.stackedHeader]}>
             <AppText variant="editorialCompact">Shop</AppText>
             <View style={styles.headerActions}>
-              <Pressable onPress={openShoppingCamera} accessibilityRole="button" accessibilityLabel="Save a find" style={({ pressed }) => [styles.headerControl, pressed && styles.pressed]}><Ionicons name="camera-outline" size={20} color={colors.foreground} /></Pressable>
+              <Pressable ref={saveFindCoachTarget} onPress={openShoppingCamera} accessibilityRole="button" accessibilityLabel="Save a find" style={({ pressed }) => [styles.headerControl, pressed && styles.pressed]}><Ionicons name="camera-outline" size={20} color={colors.foreground} /></Pressable>
               <Pressable onPress={() => navigation.navigate('Wishlist')} accessibilityRole="button" style={({ pressed }) => [styles.headerControl, styles.wishlistControl, pressed && styles.pressed]}><Ionicons name="bookmark-outline" size={18} color={colors.foreground} /><AppText variant="label">Wishlist</AppText></Pressable>
             </View>
           </View> : <ScreenHeader
@@ -158,7 +167,7 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
             subtitle="Buy fewer, better pieces"
             safeTop={false}
             style={{ paddingTop: insets.top + spacing.md }}
-            secondaryActions={[{ label: 'Save a find', icon: 'camera-outline', onPress: openShoppingCamera }]}
+            secondaryActions={[{ label: 'Save a find', icon: 'camera-outline', onPress: openShoppingCamera, anchorRef: saveFindCoachTarget }]}
             primaryAction={{
               label: 'Wishlist',
               icon: 'bookmark-outline',
@@ -166,10 +175,6 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
               onPress: () => navigation.navigate('Wishlist'),
             }}
           />}
-          {saveFindCoachVisible ? <View style={styles.saveFindTip} accessibilityLiveRegion="polite">
-            <AppText variant="caption" tone="muted">Save a find: photograph a piece or price tag to revisit on your shortlist.</AppText>
-            <Pressable accessibilityRole="button" accessibilityLabel="Dismiss Save a find tip" onPress={() => dismissSaveFindCoach('got_it')} style={({ pressed }) => [{ minHeight: 44, justifyContent: 'center' }, pressed && styles.pressed]}><AppText variant="caption" tone="primary">Got it</AppText></Pressable>
-          </View> : null}
         </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.viewSwitch} contentContainerStyle={[styles.viewSwitchContent, { paddingLeft: spacing.page + insets.left, paddingRight: spacing.page + insets.right }]}>
@@ -250,6 +255,16 @@ export function ShopOverviewScreen({ navigation, route }: ShopOverviewScreenProp
         accessibilityElementsHidden
         style={[styles.safeAreaScrim, { height: insets.top }]}
       />
+      <AiActionCoachmark
+        visible={saveFindCoachVisible}
+        targetRef={saveFindCoachTarget}
+        title="Save a find"
+        body="Photograph a piece or price tag to revisit on your shortlist."
+        onDismiss={() => dismissSaveFindCoach('got_it')}
+        scrimAccessibilityLabel="Dismiss the Save a find tip"
+        style={{ top: saveFindCoachCaret?.top ?? insets.top + spacing.md + 44 + spacing.sm, right: spacing.sm }}
+        caretRight={saveFindCoachCaret?.right}
+      />
 
     </View>
   );
@@ -263,7 +278,6 @@ const styles = StyleSheet.create({
   wishlistControl: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.md },
   pressed: { backgroundColor: colors.surfaceSelected },
   root: { flex: 1, backgroundColor: colors.background },
-  saveFindTip: { paddingHorizontal: spacing.page, paddingBottom: spacing.md, gap: spacing.xs },
   content: { paddingBottom: spacing.xxxl },
   briefPanel: {
     padding: spacing.lg,

@@ -44,20 +44,12 @@ export function CoverImageSheet({
   const options = useMemo<CoverOption[]>(() => {
     const next: CoverOption[] = [];
     const original = resolveImageUri(item.imageUrl);
-    const cutout = resolveImageUri(item.cutoutUrl);
     const polished = resolveImageUri(item.polishedUrl);
     if (original) {
       next.push({
         variant: 'original',
         uri: original,
         description: 'Your real cropped photo',
-      });
-    }
-    if (cutout) {
-      next.push({
-        variant: 'cutout',
-        uri: cutout,
-        description: 'Background removed',
       });
     }
     if (polished) {
@@ -68,7 +60,7 @@ export function CoverImageSheet({
       });
     }
     return next;
-  }, [item.cutoutUrl, item.imageUrl, item.polishedUrl]);
+  }, [item.imageUrl, item.polishedUrl]);
 
   useEffect(() => {
     if (visible) {

@@ -392,7 +392,7 @@ function AccessoriesHeader({ pieces: list, open, toConfirm, onToggle }: {
       <Text style={styles.itemName}>Accessories · {list.length}</Text>
       {toConfirm ? <Text style={styles.meta}>{toConfirm} to confirm</Text> : null}
     </View>
-    {!open ? <View style={styles.accessoryStrip}>{list.slice(0, 4).map((d) => <PieceImage key={d.id} cropUrl={d.cropUrl} cutoutUrl={d.cutoutUrl} width={32} height={40} />)}</View> : null}
+    {!open ? <View style={styles.accessoryStrip}>{list.slice(0, 4).map((d) => <PieceImage key={d.id} cropUrl={d.cropUrl} width={32} height={40} />)}</View> : null}
     <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={colors.mutedForeground} />
   </Pressable>;
 }

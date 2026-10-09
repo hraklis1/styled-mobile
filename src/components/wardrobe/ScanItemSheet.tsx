@@ -29,7 +29,6 @@ import { type Item, type ItemCategory, type SleeveLength } from '../../types/ite
 import type { SizeProfile } from '../../lib/sizes';
 import { type Bbox } from './CropAdjustModal';
 import { cropImage } from '../../lib/cropImage';
-import { tryRequestCutout } from '../../lib/cutout';
 import { mapWithConcurrency } from '../../lib/asyncPool';
 import {
   createExtractionCache,
@@ -81,10 +80,6 @@ type EditableItem = {
   colorTemperature: string | null;
   warmthRating: number | null;
   croppedImage: string | null;
-  /** Background-removed thumbnail from the scan, if segmentation produced one. */
-  cutoutImage: string | null;
-  /** True when the user selects the cutout as the initial cover. */
-  useCutout: boolean;
   sizeProfile: SizeProfile | null;
   bbox: Bbox | null;
   sourceImage: string | null;
@@ -99,9 +94,6 @@ type PreExtractItemData = {
   name: string;
   category: string;
   croppedImage: string | null;
-  cutoutImage: string | null;
-  /** True when the user selects the cutout as the initial cover. */
-  useCutout: boolean;
   targetImage: string | null;
   bbox: Bbox | null;
   previewBbox: Bbox | null;
@@ -109,8 +101,6 @@ type PreExtractItemData = {
   brandHint: string;
   /** Prevent detail extraction from replacing a correction the user made. */
   nameEdited: boolean;
-  /** Scene the server routed this photo to — decides the cutout mask model. */
-  scene: string | null;
 };
 
 interface ScanItemSheetProps {
@@ -176,7 +166,6 @@ function extractionRequestFor(
 function toBatchCreateInput(
   item: EditableItem,
   imageUrl: string | null,
-  cutoutUrl: string | null,
 ): BatchCreateItemInput {
   // Progressive profiling: flag items whose enrichment fields are sparse so
   // the backend (and future UI prompts) know to ask for more details later.
@@ -204,8 +193,7 @@ function toBatchCreateInput(
     notableDetails: item.notableDetails.length > 0 ? item.notableDetails : undefined,
     colorPalette: item.colorPalette.length > 0 ? item.colorPalette : undefined,
     imageUrl,
-    cutoutUrl,
-    coverImageVariant: item.useCutout && cutoutUrl ? 'cutout' : 'original',
+    coverImageVariant: 'original',
     sizeProfile: item.sizeProfile ?? null,
     purchaseLocation: item.purchaseLocation ?? null,
     needsDetails,
@@ -247,18 +235,12 @@ async function buildPreExtractItemFromPose(
     name: poseItem.name,
     category: poseItem.category,
     croppedImage: previewImage,
-    // Comes back with the scan itself — the pipeline reuses a mask it already
-    // computed, so there's no extra request and nothing to wait on here.
-    cutoutImage: poseItem.cutoutUrl
-      ?? (poseItem.cutoutWebP ? `data:image/webp;base64,${poseItem.cutoutWebP}` : null),
-    useCutout: false,
     targetImage,
     bbox: targetBbox,
     previewBbox,
     sourceImage,
     brandHint: '',
     nameEdited: false,
-    scene: poseItem.scene ?? null,
   };
 }
 
@@ -469,17 +451,11 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
     // ── Uploads: one presign round trip, then native PUTs four at a time ──
     const photos = await Promise.all(items.map((item) => buildUploadImage(item)));
     const imageUrls = new Map<string, string>();
-    const cutoutUrls = new Map<string, string>();
-    const uploads: { tempId: string; kind: 'image' | 'cutout'; dataUrl: string }[] = [];
+    const uploads: { tempId: string; dataUrl: string }[] = [];
     items.forEach((item, index) => {
       const photo = photos[index];
-      if (photo && isDataUri(photo)) uploads.push({ tempId: item.tempId, kind: 'image', dataUrl: photo });
+      if (photo && isDataUri(photo)) uploads.push({ tempId: item.tempId, dataUrl: photo });
       else if (photo) imageUrls.set(item.tempId, photo);
-      if (item.cutoutImage && isDataUri(item.cutoutImage)) {
-        uploads.push({ tempId: item.tempId, kind: 'cutout', dataUrl: item.cutoutImage });
-      } else if (item.cutoutImage) {
-        cutoutUrls.set(item.tempId, item.cutoutImage);
-      }
     });
 
     let uploaded: PromiseSettledResult<string>[];
@@ -492,14 +468,12 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
     uploads.forEach((upload, index) => {
       const result = uploaded[index];
       if (result.status === 'fulfilled') {
-        (upload.kind === 'image' ? imageUrls : cutoutUrls).set(upload.tempId, result.value);
-      } else if (upload.kind === 'image') {
+        imageUrls.set(upload.tempId, result.value);
+      } else {
         // Never fall back to storing the data URL: base64 in Postgres ships
         // with every closet payload.
         failures.set(upload.tempId, "Couldn't upload this photo.");
       }
-      // A failed cutout is dropped rather than failing the piece: it's an
-      // optional companion (~30 KB) and the photo stays authoritative.
     });
 
     // ── Create: every uploaded piece in one idempotent request ───────────
@@ -511,7 +485,6 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
         const result = await commitItems(ready.map((item) => toBatchCreateInput(
           item,
           imageUrls.get(item.tempId) ?? null,
-          cutoutUrls.get(item.tempId) ?? null,
         )), queryClient);
         savedItems = result.items;
         enqueuePolish(user.id, result.items.filter((saved) => saved.clientImportId && polishIds.includes(saved.clientImportId)));
@@ -588,8 +561,6 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
             brandHint: preItem.brandHint,
             result,
             croppedImage: preItem.croppedImage,
-            cutoutImage: preItem.cutoutImage,
-            useCutout: preItem.useCutout,
             bbox: preItem.bbox,
           };
         } finally {
@@ -618,8 +589,6 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
         brandHint,
         result,
         croppedImage,
-        cutoutImage,
-        useCutout,
         bbox,
       } = s.value;
       const identity = resolveExtractedIdentity({
@@ -653,8 +622,6 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
         warmthRating: result.warmthRating ?? null,
         lowConfidenceFields: result.lowConfidenceFields ?? [],
         croppedImage,
-        cutoutImage,
-        useCutout,
         sizeProfile: null,
         bbox,
         sourceImage: fullImageDataUrl,
@@ -731,8 +698,7 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
 
     // Long edge 1024 px, the same frame batch import sends (SCAN_MAX_DIM), so
     // both entry points get the same detections. SAM 3 is priced per request,
-    // so the size costs nothing extra; the cutouts are cut from this frame, so
-    // it sets their resolution too. Benched 2026-09-29 on the 25-case set:
+    // so the size costs nothing extra. Benched 2026-09-29 on the 25-case set:
     // recall 0.965 at width 512 vs 0.976 here, +~0.3s median.
     const poseFrame = await ImageManipulator.manipulateAsync(
       sourceUri,
@@ -817,38 +783,19 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
     const preExtractItem = preExtractItems.find((item) => item.tempId === tempId);
     const scope = reviewItem ? 'review' : 'pre-extract';
     const sourceImage = reviewItem?.sourceImage ?? preExtractItem?.sourceImage;
-    const category = reviewItem?.category ?? preExtractItem?.category ?? null;
-    const scene = preExtractItem?.scene ?? null;
     if (!sourceImage) return;
     const newCrop = await cropImage(sourceImage, newBbox, { maxDim: 800 });
     if (newCrop) {
-      // Drop the old cutout straight away — it was masked to the previous box,
-      // so keeping it visible would contradict the crop the user just chose.
       if (scope === 'pre-extract') {
         updatePreExtractItem(tempId, {
           croppedImage: newCrop,
           targetImage: newCrop,
-          cutoutImage: null,
           bbox: newBbox,
           previewBbox: newBbox,
         });
       } else {
-        updateItem(tempId, { croppedImage: newCrop, cutoutImage: null, bbox: newBbox });
+        updateItem(tempId, { croppedImage: newCrop, bbox: newBbox });
       }
-
-      // Re-cut in the background against the new box. The user carries on
-      // editing; if it never lands, the item simply keeps its plain crop.
-      const session = sessionRef.current;
-      void tryRequestCutout({
-        imageDataUrl: sourceImage,
-        bbox: newBbox,
-        category,
-        scene,
-      }).then((cutoutImage) => {
-        if (!cutoutImage || sessionRef.current !== session) return;
-        if (scope === 'pre-extract') updatePreExtractItem(tempId, { cutoutImage });
-        else updateItem(tempId, { cutoutImage });
-      });
     }
   }, [detectedItems, preExtractItems, updatePreExtractItem, updateItem]);
 
@@ -864,15 +811,12 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
       name: PIECE_NOUN[category] ?? 'Piece',
       category,
       croppedImage: crop,
-      cutoutImage: null,
-      useCutout: false,
       targetImage: crop,
       bbox,
       previewBbox: bbox,
       sourceImage: template.sourceImage,
       brandHint: '',
       nameEdited: false,
-      scene: template.scene,
     }]);
     track('scan_review_piece_added', { category });
     return tempId;
@@ -886,8 +830,6 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
         name: item.name,
         brand: item.brand ?? '',
         photo: item.croppedImage,
-        cutout: item.cutoutImage,
-        useCutout: item.useCutout,
         canAdjustCrop: Boolean(item.sourceImage && item.bbox),
         cropSource: item.sourceImage,
         cropBbox: item.bbox,
@@ -911,8 +853,6 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
       name: item.name,
       brand: item.brandHint,
       photo: item.croppedImage,
-      cutout: item.cutoutImage,
-      useCutout: item.useCutout,
       canAdjustCrop: Boolean(item.bbox),
       cropSource: item.sourceImage,
       cropBbox: item.bbox,
@@ -991,15 +931,6 @@ export function ScanItemSheet({ visible, onClose, onItemsSaved, autoLaunch, init
           onRetry: retryFailedExtractions,
         } : null}
         onUpdate={handleWorkspaceUpdate}
-        onToggleCutout={(tempId) => {
-          if (detectedItems.some(candidate => candidate.tempId === tempId)) {
-            const item = detectedItems.find((candidate) => candidate.tempId === tempId);
-            if (item) updateItem(tempId, { useCutout: !item.useCutout });
-          } else {
-            const item = preExtractItems.find((candidate) => candidate.tempId === tempId);
-            if (item) updatePreExtractItem(tempId, { useCutout: !item.useCutout });
-          }
-        }}
         onApplyCrop={handleWorkspaceCropApply}
         onAddPiece={phase === 'pre-extract' ? handleAddPiece : undefined}
         onInclusionChange={changes => {

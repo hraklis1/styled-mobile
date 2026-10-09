@@ -58,8 +58,6 @@ function piece(id: string, photoId: string, patch: Partial<Piece> = {}): Piece {
     detectedCategory: 'outerwear',
     bbox: { x: 10, y: 10, width: 50, height: 60 },
     previewUri: null,
-    cutoutUri: null,
-    useCutout: false,
     edited: [],
     status: 'pending',
     failedStep: null,
@@ -67,7 +65,6 @@ function piece(id: string, photoId: string, patch: Partial<Piece> = {}): Piece {
     notBefore: 0,
     error: null,
     imageUrl: null,
-    cutoutUrl: null,
     ...patch,
   };
 }
@@ -140,8 +137,8 @@ describe('store actions', () => {
 
   it('remembers which fields the user edited', () => {
     store().start(batch({ photos: [photo('a', { status: 'done' })], pieces: [piece('a-0', 'a', { status: 'ready' })] }));
-    store().editPiece('a-0', { brand: 'COS', useCutout: true });
-    expect(store().batch?.pieces[0]).toMatchObject({ brand: 'COS', useCutout: true, edited: ['brand'] });
+    store().editPiece('a-0', { brand: 'COS' });
+    expect(store().batch?.pieces[0]).toMatchObject({ brand: 'COS', edited: ['brand'] });
   });
 
   it('blocks every photo still waiting when credits run out, and releases them on unblock', () => {

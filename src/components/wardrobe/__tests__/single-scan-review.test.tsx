@@ -20,7 +20,6 @@ jest.mock('../../../hooks/useCameraLaunch', () => ({ useCameraLaunch: jest.fn(()
 jest.mock('../../../hooks/useItems', () => ({ useScanVisionPose: jest.fn(), scanItemDirect: jest.fn(), createItemsBatch: jest.fn(), applySavedItems: jest.fn(), useBrandSuggestions: () => [], useClosetBrands: () => [] }));
 jest.mock('../../../lib/api', () => ({ apiErrorMessage: (_error: unknown, fallback: string) => fallback }));
 jest.mock('../../../lib/cropImage', () => ({ cropImage: jest.fn(async () => 'data:image/jpeg;base64,crop') }));
-jest.mock('../../../lib/cutout', () => ({ tryRequestCutout: jest.fn(async () => null) }));
 jest.mock('../../../lib/uploadImage', () => ({ isDataUri: () => false, uploadDataUrlsToR2: jest.fn(async () => []) }));
 jest.mock('../../../lib/photoLocation', () => ({ capturePhotoLocation: jest.fn(async () => null) }));
 jest.mock('../../../lib/analytics', () => ({ track: jest.fn() }));

@@ -37,7 +37,7 @@ jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({
 let onePhoto = false;
 const fixture = (): ScanReviewPiece[] => Array.from({ length: 3 }, (_, i) => ({
   id: String(i), name: `Piece ${i}`, brand: '', included: i !== 2, extraction: 'ready',
-  photo: null, cutout: null, useCutout: false, canAdjustCrop: true, cropSource: onePhoto ? 'file:///source.jpg' : `file:///source${i}.jpg`, cropBbox: { x: 0, y: 0, width: 1, height: 1 },
+  photo: null, canAdjustCrop: true, cropSource: onePhoto ? 'file:///source.jpg' : `file:///source${i}.jpg`, cropBbox: { x: 0, y: 0, width: 1, height: 1 },
   category: null, subcategory: null, color: null, style: null, seasons: [], occasions: [],
   material: null, fit: null, sizeProfile: null, sleeveLength: null,
 }));
@@ -53,7 +53,7 @@ function Harness() {
     extractionProgress={{ current: 0, total: 0 }}
     onUpdate={(id, patch) => setPieces(ps => ps.map(p => p.id === id ? { ...p, ...patch } : p))}
     onInclusionChange={changes => setPieces(ps => applyInclusionChanges(ps, changes))}
-    onToggleCutout={jest.fn()} onApplyCrop={applyCrop} onKeepBasic={jest.fn()} onExtract={jest.fn()} onSave={jest.fn()} onClose={jest.fn()} onAddPiece={addPiece} />;
+    onApplyCrop={applyCrop} onKeepBasic={jest.fn()} onExtract={jest.fn()} onSave={jest.fn()} onClose={jest.fn()} onAddPiece={addPiece} />;
 }
 let renderer: TestRenderer.ReactTestRenderer;
 const node = (name: string) => renderer.root.findByType(name as never);

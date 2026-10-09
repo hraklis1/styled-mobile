@@ -93,3 +93,50 @@ export async function syncReminders(prefs: AppPreferences, events: readonly Even
     }
   }
 }
+
+// ── Lent items ───────────────────────────────────────────────────────────────
+
+const LOAN_TAG = 'styled-loan';
+const LOAN_REMINDER_HOUR = 10;
+/** iOS keeps at most 64 pending local notifications; leave room for the rest. */
+const MAX_LOAN_REMINDERS = 30;
+
+type LoanForReminder = { itemName: string; contactName: string | null; dueBack: string };
+
+/**
+ * One reminder per back-by day, at 10am, naming who has what. Rebuilt from
+ * scratch like syncReminders, under its own tag so the two never cancel each
+ * other's work.
+ */
+export async function syncLoanReminders(enabled: boolean, loans: readonly LoanForReminder[]): Promise<void> {
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  await Promise.all(
+    scheduled
+      .filter((entry) => entry.content.data?.tag === LOAN_TAG)
+      .map((entry) => Notifications.cancelScheduledNotificationAsync(entry.identifier)),
+  );
+  if (!enabled || !loans.length) return;
+  if ((await getNotificationPermission()) !== 'granted') return;
+
+  const byDay = new Map<string, LoanForReminder[]>();
+  for (const loan of loans) byDay.set(loan.dueBack, [...(byDay.get(loan.dueBack) ?? []), loan]);
+  const now = Date.now();
+  const days = [...byDay.keys()].sort().slice(0, MAX_LOAN_REMINDERS);
+  for (const day of days) {
+    const remindAt = new Date(`${day}T00:00:00`);
+    remindAt.setHours(LOAN_REMINDER_HOUR, 0, 0, 0);
+    if (remindAt.getTime() <= now) continue;
+    const due = byDay.get(day)!;
+    const [first] = due;
+    const title = due.length === 1
+      ? `${first.itemName} is due back today`
+      : `${due.length} lent pieces are due back today`;
+    const body = due.length === 1
+      ? (first.contactName ? `${first.contactName} has it. A quick nudge?` : 'Time to get it back.')
+      : due.map((l) => (l.contactName ? `${l.itemName} (${l.contactName})` : l.itemName)).join(', ');
+    await Notifications.scheduleNotificationAsync({
+      content: { title, body, data: { tag: LOAN_TAG, url: 'styled://lent-out' } },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: remindAt },
+    });
+  }
+}

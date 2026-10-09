@@ -89,9 +89,6 @@ export type Piece = PieceFields & {
   bbox: Bbox | null;
   /** Review-size crop (800px) of `bbox`, on disk. */
   previewUri: string | null;
-  /** Background-removed WebP from the scan, on disk. */
-  cutoutUri: string | null;
-  useCutout: boolean;
   /**
    * Fields the user changed in review. Extraction that lands afterwards
    * (a retry, or a resume after an app kill) must not overwrite them.
@@ -108,9 +105,8 @@ export type Piece = PieceFields & {
   attempts: number;
   notBefore: number;
   error: string | null;
-  /** Hosted URLs once uploaded, so a retried save does not upload twice. */
+  /** Hosted URL once uploaded, so a retried save does not upload twice. */
   imageUrl: string | null;
-  cutoutUrl: string | null;
 };
 
 export type BlockReason = 'credits' | 'free_limit';

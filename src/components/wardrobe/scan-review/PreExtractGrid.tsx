@@ -135,7 +135,7 @@ export function PreExtractGrid({
       ListEmptyComponent={<Text style={styles.hint}>No pieces found. Try another photo or retry the scan.</Text>}
       renderItem={({ item: piece, index }) => (
         <Animated.View style={{ width: tileWidth }} layout={reduceMotion ? undefined : LinearTransition.duration(220)} exiting={reduceMotion ? undefined : FadeOut.duration(140)}>
-          <GridCard piece={piece} index={index} count={displayedPieces.length} stage={stage}
+          <GridCard piece={piece} index={index} count={displayedPieces.length}
             state={review ? states[piece.id] ?? 'ready' : null} width={tileWidth}
             selected={selection?.has(piece.id) ?? false}
             selecting={selecting} disabled={disabled} reduceMotion={reduceMotion}

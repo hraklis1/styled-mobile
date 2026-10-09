@@ -20,18 +20,6 @@ export type PoseScanItem = {
   color: string;
   description?: string;
   croppedWebP?: string | null;
-  /**
-   * Background-removed thumbnail, base64 WebP with alpha — v1 responses only.
-   * Produced inline by the scan (it reuses a mask the pipeline already
-   * computed), so it costs no extra round trip.
-   */
-  cutoutWebP?: string | null;
-  /**
-   * v2 responses: the same cutout, already hosted by the server (under a
-   * temporary folder it promotes when the item is created). Read this first
-   * and fall back to cutoutWebP, so a server without v2 still works.
-   */
-  cutoutUrl?: string | null;
   bbox_pct?: PoseScanBbox | null;
   targetBbox_pct?: PoseScanBbox | null;
   previewBbox_pct?: PoseScanBbox | null;
@@ -92,8 +80,8 @@ function idempotencyHeaders(key?: string) {
 }
 
 /**
- * Ask /api/scan-vision-pose for its v2 shape: cutout URLs instead of inline
- * base64, one box per item. A server without v2 ignores the header and sends
+ * Ask /api/scan-vision-pose for its v2 shape: no inline base64, one box per
+ * item. A server without v2 ignores the header and sends
  * v1, which PoseScanItem still describes.
  */
 const POSE_SCAN_HEADERS = { 'X-Scan-Format': '2' } as const;
@@ -147,7 +135,7 @@ export function useBrandSuggestions(enabled = true): string[] {
 
 /**
  * A pose scan is the heaviest call in the add-to-closet pipeline: SAM 3
- * segmentation, then labelling and mask fetches, then per-garment cutouts.
+ * segmentation, then labelling, then per-garment crops.
  * That routinely outlives the 15s axios default, and a client-side timeout
  * does not cancel the server's work — it just abandons a scan the user has
  * already been charged for. Bound it like the other model-backed routes
@@ -318,8 +306,7 @@ export function useScanTag() {
  *
  * Metered server-side (`polish` meter: premium only, credit-priced) because it
  * is the only genuinely expensive call in the image pipeline. The result lands
- * in its own column and becomes the cover without touching the real photo or
- * cutout. The idempotency key lets a retry join the original in-flight work or
+ * in its own column and becomes the cover without touching the real photo. The idempotency key lets a retry join the original in-flight work or
  * replay its result rather than start another paid generation.
  */
 export function requestPolish(itemId: number, idempotencyKey: string, previousPolishedUrl?: string | null) {

@@ -6,11 +6,11 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming, withSequence } from 'react-native-reanimated';
 
 import { pieceFlags, type PieceReviewState, type ReviewField } from '../../../lib/scan-review';
-import { colors, cutoutScaleFor, editorial, ingestion, motion, radii, spacing, surfaces, typography } from '../../../theme';
+import { colors, editorial, ingestion, motion, radii, spacing, surfaces, typography } from '../../../theme';
 import { BrandPill } from './BrandPill';
 import { FlagDot } from './atoms';
 import { SelectBadge } from './SelectBadge';
-import { coverUri, type ScanReviewPiece, type ScanReviewStage } from './types';
+import { type ScanReviewPiece } from './types';
 
 
 const FIELD_NAMES: Record<ReviewField, string> = { name: 'name', category: 'category', color: 'colour', material: 'material', fit: 'details', brand: 'brand' };
@@ -24,11 +24,10 @@ function checkLabel(piece: ScanReviewPiece): string {
   return `Check ${names.length > 2 ? `${names[0]} +${names.length - 1}` : names.join(' & ')}`;
 }
 
-export const GridCard = memo(function GridCard({ piece, index, count, stage, state, width, selected, selecting, disabled, reduceMotion, restoreFocus, onPress, onToggle, onCrop, onBrand, brandRevision = 0 }: {
+export const GridCard = memo(function GridCard({ piece, index, count, state, width, selected, selecting, disabled, reduceMotion, restoreFocus, onPress, onToggle, onCrop, onBrand, brandRevision = 0 }: {
   piece: ScanReviewPiece;
   index: number;
   count: number;
-  stage: ScanReviewStage;
   state: PieceReviewState | null;
   width: number;
   selected: boolean;
@@ -45,12 +44,11 @@ export const GridCard = memo(function GridCard({ piece, index, count, stage, sta
   reduceMotion: boolean;
   restoreFocus: boolean;
 }) {
-  const uri = coverUri(piece, stage);
-  const isCutout = uri !== null && uri === piece.cutout;
+  const uri = piece.photo;
   const plateHeight = Math.round(width / editorial.garmentAspectRatio);
   // The crop is shown whole, inset on the plate; zooming to fill the 3:4
   // plate cut wide crops (a pair of shoes) down to a heel.
-  const inset = `${Math.round((isCutout ? cutoutScaleFor(piece.category) : ingestion.printInset) * 100)}%` as const;
+  const inset = `${Math.round(ingestion.printInset * 100)}%` as const;
   const stateLabel = state === 'check' ? ', worth a look' : state === 'confirmed' ? ', confirmed' : '';
 
   const target = useRef<View>(null);
@@ -74,10 +72,10 @@ export const GridCard = memo(function GridCard({ piece, index, count, stage, sta
   const lastUri = useRef(uri);
   useEffect(() => {
     if (lastUri.current === uri) return;
-    const recropped = lastUri.current !== null && uri !== null && !isCutout;
+    const recropped = lastUri.current !== null && uri !== null;
     lastUri.current = uri;
     if (recropped && !reduceMotion) settle.value = withSequence(withTiming(0.94, { duration: 120 }), withTiming(1, { duration: 260 }));
-  }, [uri, isCutout, reduceMotion, settle]);
+  }, [uri, reduceMotion, settle]);
   const settleStyle = useAnimatedStyle(() => ({ transform: [{ scale: settle.value }] }));
   const flash = useSharedValue(0);
   useEffect(() => {

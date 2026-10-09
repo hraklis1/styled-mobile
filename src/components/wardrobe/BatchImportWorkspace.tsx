@@ -62,8 +62,6 @@ export function BatchImportWorkspace() {
         name: piece.name,
         brand: piece.brand ?? '',
         photo: piece.previewUri,
-        cutout: piece.cutoutUri ?? piece.cutoutUrl,
-        useCutout: piece.useCutout,
         canAdjustCrop: Boolean(piece.bbox && photo?.masterUri),
         cropSource: photo?.masterUri ?? null,
         cropBbox: piece.bbox,
@@ -138,10 +136,6 @@ export function BatchImportWorkspace() {
       extractionProgress={{ current: counts.settled, total: counts.total }}
       failure={failureFor(batch, retry, () => { void getCredits(); })}
       onUpdate={onUpdate}
-      onToggleCutout={(id) => {
-        const piece = batch.pieces.find((p) => p.id === id);
-        if (piece) store().editPiece(id, { useCutout: !piece.useCutout });
-      }}
       onApplyCrop={(id, bbox) => applyPieceCrop(id, bbox)}
       onInclusionChange={changes => store().setInclusion(changes)}
       onKeepBasic={ids => store().keepBasicDetails(ids)}

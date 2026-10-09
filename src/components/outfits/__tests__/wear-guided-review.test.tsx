@@ -163,12 +163,12 @@ describe('guided piece review', () => {
     act(() => tree.unmount());
   });
 
-  it('empty candidates and missing cutouts still permit browsing, new, or skip', () => {
+  it('empty candidates and a missing crop still permit browsing, new, or skip', () => {
     const d = { ...detection('d0', 'low', null), candidates: [] };
     useWearLogStore.setState({ flow: reviewFixture([d]) });
     const tree = mount(['d0']);
     expect(node(tree, 'PrimaryButton').props.disabled).toBe(true);
-    expect(node(tree, 'PieceImage').props.cutoutUrl).toBeNull();
+    expect(node(tree, 'PieceImage').props.cropUrl).toBeUndefined();
     // No candidates: full-width options instead of a lone half-width tile.
     tree.root.find((n) => n.props.accessibilityLabel === 'Find it in my closet' && typeof n.props.onPress === 'function');
     tree.root.find((n) => n.props.accessibilityLabel === 'Add as a new piece' && typeof n.props.onPress === 'function');

@@ -13,7 +13,6 @@ function det(id: string, band: WearDetection['match']['band'], itemId: number | 
   return {
     id,
     bbox_pct: null,
-    cutoutUrl: null,
     layer,
     attributes: { name: id, category: 'top', color: 'black', description: '' },
     lowConfidenceFields: [],

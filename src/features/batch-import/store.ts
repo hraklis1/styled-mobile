@@ -64,7 +64,7 @@ type BatchImportState = {
   completeScan: (photoId: string, pieces: Piece[]) => void;
   patchPiece: (id: string, patch: Partial<Piece>) => void;
   /** A change made by the user in review; remembered so extraction won't clobber it. */
-  editPiece: (id: string, patch: Partial<PieceFields> & Partial<Pick<Piece, 'useCutout'>>) => void;
+  editPiece: (id: string, patch: Partial<PieceFields>) => void;
   removePiece: (id: string) => void;
   setInclusion: (changes: InclusionChange[]) => void;
   beginExtraction: (ids: readonly string[]) => boolean;
@@ -117,7 +117,7 @@ export const useBatchImportStore = create<BatchImportState>()(
         ...b,
         pieces: b.pieces.map((p) => {
           if (p.id !== id) return p;
-          const keys = Object.keys(patch).filter((k) => k !== 'useCutout') as (keyof PieceFields)[];
+          const keys = Object.keys(patch) as (keyof PieceFields)[];
           return { ...p, ...patch, extractionInput: undefined, edited: [...new Set([...p.edited, ...keys])] };
         }),
       }))),

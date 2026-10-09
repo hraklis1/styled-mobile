@@ -13,6 +13,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
     dailyLook: { enabled: false, time: '07:30' },
     wearLog: false,
     events: false,
+    loans: false,
   },
 };
 

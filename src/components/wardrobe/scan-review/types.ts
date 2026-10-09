@@ -12,8 +12,6 @@ export type ScanReviewPiece = {
   name: string;
   brand: string;
   photo: string | null;
-  cutout: string | null;
-  useCutout: boolean;
   canAdjustCrop: boolean;
   cropSource: string | null;
   cropBbox: Bbox | null;
@@ -60,11 +58,6 @@ export type SheetRequest =
 
 export function isReviewStage(stage: ScanReviewStage): boolean {
   return stage === 'review' || stage === 'saving';
-}
-
-export function coverUri(piece: ScanReviewPiece, stage: ScanReviewStage): string | null {
-  const showingCutout = isReviewStage(stage) && Boolean(piece.cutout && piece.useCutout);
-  return showingCutout ? piece.cutout : piece.photo;
 }
 
 

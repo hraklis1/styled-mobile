@@ -14,7 +14,7 @@ jest.mock('expo-image', () => ({ Image: 'Image' }));
 
 const makePieces = (): ScanReviewPiece[] => Array.from({ length: 6 }, (_, i) => ({
   id: String(i), name: `Piece ${i}`, brand: '', included: true, extraction: 'not-started', photo: null,
-  cutout: null, useCutout: false, canAdjustCrop: false, cropSource: null, cropBbox: null,
+  canAdjustCrop: false, cropSource: null, cropBbox: null,
   category: null, subcategory: null, color: null, style: null, seasons: [], occasions: [],
   material: null, fit: null, sizeProfile: null, sleeveLength: null,
 }));

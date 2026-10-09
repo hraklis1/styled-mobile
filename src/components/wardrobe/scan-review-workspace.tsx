@@ -86,7 +86,6 @@ type Props = {
   extractionProgress: { current: number; total: number };
   failure?: { message: string; retryLabel?: string; onRetry: () => void } | null;
   onUpdate: (id: string, patch: Partial<ScanReviewPiece>) => void;
-  onToggleCutout: (id: string) => void;
   onApplyCrop: (id: string, bbox: Bbox) => void | Promise<void>;
   onInclusionChange: (changes: InclusionChange[]) => void;
   onKeepBasic: (ids: string[]) => void;
@@ -143,7 +142,6 @@ export function ScanReviewWorkspace({
   extractionProgress,
   failure,
   onUpdate,
-  onToggleCutout,
   onApplyCrop,
   onInclusionChange,
   onKeepBasic,
@@ -647,7 +645,6 @@ export function ScanReviewWorkspace({
                 selectionFeedback();
                 inclusion.change([id], !inclusion.snapshot().some(p => p.id === id));
               }}
-              onToggleCutout={onToggleCutout}
               footerHeight={footerHeight}
             />
           ) : <View style={styles.root} />}
@@ -694,7 +691,6 @@ export function ScanReviewWorkspace({
             onCrop={singleTarget.canAdjustCrop && singleTarget.cropSource && singleTarget.cropBbox
               ? () => thenDismiss(() => { setCropReturn(singleTarget.id); setCropId(singleTarget.id); })
               : undefined}
-            onToggleCutout={() => onToggleCutout(singleTarget.id)}
             polish={singleTarget.extraction === 'ready' && polish.isPremium
               ? { on: polish.isPolished(singleTarget.id), cost: polish.costPerPiece, onToggle: next => polish.setPiece(singleTarget.id, next) }
               : undefined}

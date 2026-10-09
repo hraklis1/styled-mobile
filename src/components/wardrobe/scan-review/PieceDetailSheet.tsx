@@ -12,7 +12,7 @@ import { WorkspaceSheet } from './WorkspaceSheet';
 import { CategoryPicker, MaterialPicker } from './pickers';
 import { selectionFeedback } from './feedback';
 import { TextLink } from './atoms';
-import { coverUri, type PiecePatch, type ScanReviewPiece, type ScanReviewStage } from './types';
+import { type PiecePatch, type ScanReviewPiece, type ScanReviewStage } from './types';
 
 /**
  * After extraction: the same sheet as the pre-extract editor (preview, crop,
@@ -23,7 +23,7 @@ import { coverUri, type PiecePatch, type ScanReviewPiece, type ScanReviewStage }
  * dismiss-before-present trap. Brand keeps its own search sheet, which can
  * offer the brand to the scan's other pieces.
  */
-export function PieceDetailSheet({ piece, stage, confirmed, disabled, dismissed, reduceMotion, onClose, onDone, onCrop, onToggleCutout, polish, onUpdate, onOpenSheet }: {
+export function PieceDetailSheet({ piece, stage, confirmed, disabled, dismissed, reduceMotion, onClose, onDone, onCrop, polish, onUpdate, onOpenSheet }: {
   piece: ScanReviewPiece;
   stage: ScanReviewStage;
   /** Already looked at: its field marks are retired. */
@@ -34,7 +34,6 @@ export function PieceDetailSheet({ piece, stage, confirmed, disabled, dismissed,
   onClose: () => void;
   onDone: () => void;
   onCrop?: () => void;
-  onToggleCutout: () => void;
   /** This piece's own polish choice, overriding the footer's switch. Omitted when polish isn't on offer. */
   polish?: { on: boolean; cost: number; onToggle: (next: boolean) => void };
   onUpdate: (patch: PiecePatch) => void;
@@ -42,7 +41,6 @@ export function PieceDetailSheet({ piece, stage, confirmed, disabled, dismissed,
 }) {
   const [expandedRow, setExpandedRow] = useState<ExpandableRow | null>(null);
   const [picker, setPicker] = useState<Exclude<SheetKind, 'brand'> | null>(null);
-  const showingCutout = Boolean(piece.cutout && piece.useCutout);
   const openPicker = (kind: SheetKind) => (kind === 'brand' ? onOpenSheet(kind) : setPicker(kind));
   const back = () => setPicker(null);
   return (
@@ -63,10 +61,9 @@ export function PieceDetailSheet({ piece, stage, confirmed, disabled, dismissed,
         </View>
       ) : <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" bottomOffset={spacing.lg}>
         <View style={styles.media}>
-          <CropPreview uri={coverUri(piece, stage)} name={piece.name} reduceMotion={reduceMotion} />
+          <CropPreview uri={piece.photo} name={piece.name} reduceMotion={reduceMotion} />
           <View style={styles.mediaActions}>
             {onCrop ? <AdjustCropButton onPress={onCrop} /> : null}
-            {piece.cutout ? <TextLink label={showingCutout ? 'Show photo' : 'Show cutout'} tone="muted" onPress={onToggleCutout} disabled={disabled} /> : null}
           </View>
         </View>
         {polish ? (

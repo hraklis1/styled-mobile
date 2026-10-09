@@ -124,5 +124,7 @@ export type AppPreferences = {
     dailyLook: { enabled: boolean; time: string };
     wearLog: boolean;
     events: boolean;
+    /** Morning of a lent item's back-by date. */
+    loans: boolean;
   };
 };

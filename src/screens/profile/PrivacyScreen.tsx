@@ -6,7 +6,6 @@ import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File, Paths } from 'expo-file-system';
 import { SettingsScaffold, Group, NavRow, ToggleRow } from '../../components/profile/SettingsUI';
-import { ClosetVisualsCard } from '../../components/profile/ClosetVisualsCard';
 import { useAppPreferences } from '../../hooks/useAppPreferences';
 import { api } from '../../lib/api';
 import type { ProfileStackScreenProps } from './types';
@@ -80,8 +79,6 @@ export function PrivacyScreen({ navigation }: ProfileStackScreenProps<'SettingsP
         <NavRow icon="bulb-outline" label="What Styled has learned" onPress={() => navigation.navigate('SettingsLearned')} />
         <NavRow icon="chatbubbles-outline" label="Clear stylist history" onPress={clearHistory} />
       </Group>
-
-      <ClosetVisualsCard />
 
       <Group title="Your data">
         <NavRow icon="download-outline" label={exporting ? 'Preparing export…' : 'Export my data'}

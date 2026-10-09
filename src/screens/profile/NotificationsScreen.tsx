@@ -94,6 +94,10 @@ export function NotificationsScreen() {
           detail="The evening before an event with no outfit planned yet."
           value={n.events}
           onChange={(value) => toggle(value, () => setPrefs({ notifications: { events: value } }))} />
+        <ToggleRow icon="people-outline" label="Lent items"
+          detail="The morning a lent piece is due back, if you gave it a back-by date."
+          value={n.loans}
+          onChange={(value) => toggle(value, () => setPrefs({ notifications: { loans: value } }))} />
       </Group>
     </SettingsScaffold>
   );

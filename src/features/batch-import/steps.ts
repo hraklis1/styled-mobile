@@ -3,12 +3,12 @@ import type { ImagePickerAsset } from 'expo-image-picker';
 import * as Crypto from 'expo-crypto';
 import { scanItemDirect, scanVisionPoseDirect, type PoseScanItem } from '../../hooks/useItems';
 import type { ScanResult } from '../../types/item';
-import { batchDirectory, cropRegion, readBase64, resizeToFile, writeBase64 } from './files';
+import { batchDirectory, cropRegion, readBase64, resizeToFile } from './files';
 import type { Batch, Bbox, Piece, PieceFields, PhotoJob } from './types';
 
 /** Long edge of the working copy every crop (review, extraction, saved photo) is cut from. */
 export const MASTER_MAX_DIM = 2048;
-/** Long edge of the frame sent to SAM 3. It bills per call, not per pixel, and its cutouts are cut from this frame. */
+/** Long edge of the frame sent to SAM 3. It bills per call, not per pixel. */
 export const SCAN_MAX_DIM = 1024;
 
 export function normalizeBbox(bbox: PoseScanItem['bbox_pct'] | null | undefined): Bbox | null {
@@ -139,12 +139,6 @@ export async function scanPhoto(batchId: string, photo: PhotoJob): Promise<Piece
     const previewUri = previewBbox
       ? await cropRegion(photo.masterUri, size, previewBbox, { maxDim: 800, compress: 0.82 }, { dir, name: `${id}-preview.jpg` })
       : null;
-    // v2 scans return the cutout already hosted; v1 inlines it as base64,
-    // which is written to disk and uploaded at save time.
-    const cutoutUrl = item.cutoutUrl ?? null;
-    const cutoutUri = !cutoutUrl && item.cutoutWebP
-      ? await writeBase64(dir, `${id}-cutout.webp`, item.cutoutWebP)
-      : null;
     pieces.push({
       ...EMPTY_FIELDS,
       id,
@@ -156,8 +150,6 @@ export async function scanPhoto(batchId: string, photo: PhotoJob): Promise<Piece
       detectedCategory: item.category,
       bbox,
       previewUri: previewUri ?? photo.masterUri,
-      cutoutUri,
-      useCutout: false,
       edited: [],
       status: 'pending',
       failedStep: null,
@@ -165,7 +157,6 @@ export async function scanPhoto(batchId: string, photo: PhotoJob): Promise<Piece
       notBefore: 0,
       error: null,
       imageUrl: null,
-      cutoutUrl,
     });
   }
   return pieces;

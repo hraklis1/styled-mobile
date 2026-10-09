@@ -26,7 +26,7 @@ export const PairingRow = memo(function PairingRow({ detection, resolution, item
   const cropPreview = useCropPreview(photoUri, resolution.kind === 'new' ? resolution.draft.cropBbox : null, 240);
   if (resolution.kind === 'dismissed') {
     return <View style={styles.skipped}>
-      <View style={styles.faded}><PieceImage cropUrl={detection.cropUrl} cutoutUrl={detection.cutoutUrl} width={48} height={60} /></View>
+      <View style={styles.faded}><PieceImage cropUrl={detection.cropUrl} width={48} height={60} /></View>
       <View style={styles.copy}>
         <Text style={[styles.name, styles.skippedName]} numberOfLines={1}>{detection.attributes.name}</Text>
         <Text style={styles.meta}>Not logging</Text>
@@ -47,7 +47,7 @@ export const PairingRow = memo(function PairingRow({ detection, resolution, item
   return <Pressable style={styles.row} onPress={onOpen} disabled={disabled} accessibilityRole="button" accessibilityLabel={`${name}, ${status}`} accessibilityHint="Review or change this piece" accessibilityState={{ disabled }}>
     {resolution.kind === 'new' && resolution.draft.cropBbox
       ? <PieceThumb uri={cropPreview} />
-      : <PieceImage item={uncertain ? undefined : item} cropUrl={detection.cropUrl} cutoutUrl={detection.cutoutUrl} />}
+      : <PieceImage item={uncertain ? undefined : item} cropUrl={detection.cropUrl} />}
     <View style={styles.copy}>
       <Text style={styles.name} numberOfLines={2}>{name}</Text>
       {brand ? <Text style={styles.meta} numberOfLines={1}>{brand}</Text> : null}

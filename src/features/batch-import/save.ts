@@ -71,14 +71,13 @@ function toCreateInput(piece: Piece): BatchCreateItemInput {
     notableDetails: piece.notableDetails.length ? piece.notableDetails : undefined,
     colorPalette: piece.colorPalette.length ? piece.colorPalette : undefined,
     imageUrl: piece.imageUrl,
-    cutoutUrl: piece.cutoutUrl,
-    coverImageVariant: piece.useCutout && piece.cutoutUrl ? 'cutout' : 'original',
+    coverImageVariant: 'original',
     sizeProfile: piece.sizeProfile,
     needsDetails: Boolean(piece.basicDetails) || !enriched,
   };
 }
 
-type UploadTask = { pieceId: string; kind: 'image' | 'cutout'; uri: string; contentType: string };
+type UploadTask = { pieceId: string; uri: string; contentType: string };
 
 /**
  * Upload whatever each piece still lacks, then save every uploaded piece in
@@ -105,13 +104,8 @@ export async function runSave(batchId: string): Promise<void> {
     for (const piece of pieces) {
       if (!piece.imageUrl) {
         const uri = await buildItemImage(batch, piece);
-        if (uri) tasks.push({ pieceId: piece.id, kind: 'image', uri, contentType: 'image/jpeg' });
+        if (uri) tasks.push({ pieceId: piece.id, uri, contentType: 'image/jpeg' });
         else failures.set(piece.id, "This piece's photo is missing.");
-      }
-      // The cutout is an optional companion: always uploaded when the scan
-      // made one (so it can be picked later), but never a reason to fail.
-      if (!piece.cutoutUrl && piece.cutoutUri && fileExists(piece.cutoutUri)) {
-        tasks.push({ pieceId: piece.id, kind: 'cutout', uri: piece.cutoutUri, contentType: 'image/webp' });
       }
     }
 
@@ -120,12 +114,11 @@ export async function runSave(batchId: string): Promise<void> {
       const results = await mapWithConcurrency(tasks, UPLOAD_CONCURRENCY, async (task, index) => {
         const publicUrl = await withRetries(() => uploadFileToR2(task.uri, task.contentType, urls[index]));
         if (!stillCurrent(batchId)) return;
-        batchImport.get().patchPiece(task.pieceId, task.kind === 'image' ? { imageUrl: publicUrl } : { cutoutUrl: publicUrl });
+        batchImport.get().patchPiece(task.pieceId, { imageUrl: publicUrl });
       });
       results.forEach((result, index) => {
         const task = tasks[index];
-        // A failed image fails the piece; a failed cutout is simply dropped.
-        if (result.status === 'rejected' && task.kind === 'image') {
+        if (result.status === 'rejected') {
           failures.set(task.pieceId, "Couldn't upload this piece's photo.");
         }
       });

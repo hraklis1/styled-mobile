@@ -29,7 +29,7 @@ it('anchors a priority to wearable owned pieces in server order', () => {
   expect(priorityAnchorPieces(anchored)).toEqual([]);
 });
 it('leads the anchor strip with product-style covers, keeping server order within groups', () => {
-  const wardrobe = wearableWardrobe([piece(1, 'Selfie'), piece(2, 'Cutout', { cutoutUrl: 'c' } as Partial<Item>), piece(3, 'Photo'), piece(4, 'Polished', { polishedUrl: 'p' } as Partial<Item>)]);
+  const wardrobe = wearableWardrobe([piece(1, 'Selfie'), piece(2, 'Polished', { polishedUrl: 'p2' } as Partial<Item>), piece(3, 'Photo'), piece(4, 'Polished', { polishedUrl: 'p' } as Partial<Item>)]);
   expect(priorityAnchorPieces({ ...priority, anchorItemIds: [1, 2, 3, 4] }, wardrobe).map((item) => item.id)).toEqual([2, 4, 1, 3]);
 });
 it('recognises a sentence that is only the generic outfit claim', () => {

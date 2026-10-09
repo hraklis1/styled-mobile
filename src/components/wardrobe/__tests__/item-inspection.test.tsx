@@ -24,7 +24,7 @@ jest.mock('../scan-review/feedback', () => ({ selectionFeedback: jest.fn() }));
 
 const pieces: ScanReviewPiece[] = Array.from({ length: 35 }, (_, index) => ({
   id: String(index), name: `Piece ${index}`, brand: '', included: true, extraction: 'not-started',
-  photo: 'file:///photo.jpg', cutout: null, useCutout: false, canAdjustCrop: true, cropSource: 'file:///source.jpg',
+  photo: 'file:///photo.jpg', canAdjustCrop: true, cropSource: 'file:///source.jpg',
   cropBbox: { x: 0, y: 0, width: 1, height: 1 }, category: null, subcategory: null, color: null, style: null,
   seasons: [], occasions: [], material: null, fit: null, sizeProfile: null, sleeveLength: null,
 }));
@@ -33,7 +33,7 @@ it('commits paging only at settlement and disables metadata during the gesture',
   let renderer!: TestRenderer.ReactTestRenderer;
   act(() => { renderer = TestRenderer.create(<ItemInspectionModal pieces={pieces} activeId="0" stage="pre-extract" states={{}}
     disabled={false} reduceMotion bottomPadding={20} footerHeight={60} onActiveChange={active}
-    onUpdate={jest.fn()} onOpenSheet={jest.fn()} onCrop={jest.fn()} onToggleCutout={jest.fn()} onToggleIncluded={toggle} />); });
+    onUpdate={jest.fn()} onOpenSheet={jest.fn()} onCrop={jest.fn()} onToggleIncluded={toggle} />); });
   const handlers = renderer.root.findByType(FlatList).props.onScroll as any;
   const interval = renderer.root.findByType(FlatList).props.snapToInterval;
   act(() => handlers.onBeginDrag());

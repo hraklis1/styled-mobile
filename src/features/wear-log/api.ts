@@ -29,8 +29,8 @@ export async function scanWear(flowId: string, imageData: string): Promise<WearS
 
 /**
  * The closet item a "new" row becomes: the user's draft plus the scan's
- * cutout, with the background-intact crop as its original photo so it can be
- * viewed and polished like any other item.
+ * background-intact crop as its photo, so it can be viewed and polished like
+ * any other item.
  */
 export function newItemInput(flowId: string, d: WearDetection, draft: WearDraft, croppedUrl?: string | null): BatchCreateItemInput {
   return {
@@ -49,15 +49,9 @@ export function newItemInput(flowId: string, d: WearDetection, draft: WearDraft,
     sizeProfile: draft.sizeProfile,
     sleeveLength: draft.sleeveLength,
     notes: d.attributes.description || null,
-    // The user's own crop replaces the scan's; the scan's cutout was masked to
-    // the old box, so it is dropped rather than paired with the new photo.
-    ...(croppedUrl ? { imageUrl: croppedUrl, cutoutUrl: null, coverImageVariant: 'original' as const } : {
-      ...(d.cropUrl ? { imageUrl: d.cropUrl } : {}),
-      cutoutUrl: d.cutoutUrl,
-      // The background-intact crop is the cover; the cutout stays on the item
-      // as an option. Detection cutouts can lose hands, collars and edges.
-      coverImageVariant: d.cropUrl || !d.cutoutUrl ? 'original' as const : 'cutout' as const,
-    }),
+    // The user's own crop replaces the scan's.
+    ...((croppedUrl ?? d.cropUrl) ? { imageUrl: croppedUrl ?? d.cropUrl } : {}),
+    coverImageVariant: 'original',
   };
 }
 

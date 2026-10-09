@@ -45,14 +45,14 @@ export function itemCoverPresentation(
     return { uri: undefined, variant: 'original', contentFit: 'cover', isCatalogStyle: false };
   }
 
-  const preferred: CoverImageVariant = item.coverImageVariant
+  // Cutouts are no longer offered as a cover: a hard mask of a piled garment
+  // reads worse than either the photo or the polish. Items that picked one
+  // earlier get the polish when there is one, otherwise their photo.
+  const stored = item.coverImageVariant === 'cutout' ? undefined : item.coverImageVariant;
+  const preferred: CoverImageVariant = stored
     ?? (item.polishedUrl ? 'polished' : 'original');
   const candidates: Array<[CoverImageVariant, string | null | undefined]> = [
-    [preferred, preferred === 'original'
-      ? item.imageUrl
-      : preferred === 'cutout'
-        ? item.cutoutUrl
-        : item.polishedUrl],
+    [preferred, preferred === 'original' ? item.imageUrl : item.polishedUrl],
     ['original', item.imageUrl],
     ['polished', item.polishedUrl],
     ['cutout', item.cutoutUrl],

@@ -122,7 +122,7 @@ export function ExtractionState({ piece, pieces, progress, heroHeight, reduceMot
       <Text style={styles.extractionTitle}>Refining your pieces</Text>
       {reel.length > 1 ? <Filmstrip reduceMotion={reduceMotion} frames={reel.map((p, index) => ({
         id: p.id,
-        uri: index < doneCount && p.cutout ? p.cutout : p.photo!,
+        uri: p.photo!,
         state: index < doneCount ? 'done' : index === doneCount ? 'active' : 'pending',
       }))} /> : null}
       <Text style={styles.extractionCopy} accessibilityLabel={`${status}, ${progress.current} of ${progress.total} done`}>

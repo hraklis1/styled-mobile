@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import {
   StyleSheet,
   useWindowDimensions,
@@ -23,6 +23,8 @@ type HeaderAction = {
   onPress: () => void;
   variant?: 'primary' | 'secondary' | 'ghost';
   accessibilityLabel?: string;
+  /** Lets a coachmark measure and spotlight this action. */
+  anchorRef?: RefObject<View | null>;
 };
 
 type ScreenHeaderProps = {
@@ -90,8 +92,10 @@ export function ScreenHeader({
       </View>
       {(primaryAction || secondaryActions.length > 0) && (
         <View style={styles.headerActions}>
-          {secondaryActions.map((action) => (
-            <IconButton key={action.label} {...action} variant={action.variant ?? 'secondary'} />
+          {secondaryActions.map(({ anchorRef, ...action }) => (
+            <View key={action.label} ref={anchorRef} collapsable={false}>
+              <IconButton {...action} variant={action.variant ?? 'secondary'} />
+            </View>
           ))}
           {primaryAction ? <ActionButton {...primaryAction} /> : null}
         </View>

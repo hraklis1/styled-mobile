@@ -14,8 +14,7 @@ export type WearCandidate = { itemId: number; score: number; reason?: 'color' | 
 export type WearDetection = {
   id: string;
   bbox_pct: BboxPct | null;
-  cutoutUrl: string | null;
-  /** Background-intact crop for thumbnails; absent on scans from before it existed. */
+  /** Background-intact crop; absent on scans from before it existed. */
   cropUrl?: string | null;
   layer: WearLayer;
   occludedBy?: string;
