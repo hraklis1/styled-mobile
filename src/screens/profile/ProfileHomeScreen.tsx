@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Image, Pressable, StyleSheet, ActivityIndicator, ScrollView, Alert } from 'react-native';
+import { View, Text, Image, Pressable, StyleSheet, ActivityIndicator, ScrollView, Alert, Keyboard } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
@@ -48,6 +48,12 @@ function summary(values: string[], empty = 'Add'): string {
  */
 export function ProfileHomeScreen({ navigation }: ProfileStackScreenProps<'ProfileHome'>) {
   const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const closeSearch = () => {
+    Keyboard.dismiss();
+    setQuery('');
+    setSearchOpen(false);
+  };
   const searching = query.trim().length > 0;
   const results = searchSettings(query, PROFILE_SEARCH_INDEX);
   const insets = useSafeAreaInsets();
@@ -84,29 +90,48 @@ export function ProfileHomeScreen({ navigation }: ProfileStackScreenProps<'Profi
   return (
     <View style={s.root}>
       <View style={[s.topBar, { paddingTop: spacing.md }]}>
-        <Pressable onPress={() => parent.goBack()} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close">
-          <Ionicons name="close" size={24} color={colors.foreground} />
+        <Pressable onPress={searchOpen ? closeSearch : () => parent.goBack()} style={s.toolbarButton} accessibilityRole="button" accessibilityLabel={searchOpen ? 'Close search' : 'Close'}>
+          <Ionicons name={searchOpen ? 'chevron-back' : 'close'} size={24} color={colors.foreground} />
         </Pressable>
-        <Pressable onPress={() => navigation.navigate('Settings')} hitSlop={12} accessibilityRole="button" accessibilityLabel="Settings">
-          <Ionicons name="settings-outline" size={22} color={colors.foreground} />
-        </Pressable>
+        {searchOpen ? <Text style={s.searchTitle} accessibilityRole="header">Search</Text> : null}
+        <View style={s.toolbarActions}>
+          {searchOpen ? (
+            <Pressable onPress={closeSearch} style={s.toolbarButton} accessibilityRole="button" accessibilityLabel="Cancel search">
+              <Text style={s.cancelText}>Cancel</Text>
+            </Pressable>
+          ) : (<>
+            <Pressable onPress={() => setSearchOpen(true)} style={s.toolbarButton} accessibilityRole="button" accessibilityLabel="Search profile and settings">
+              <Ionicons name="search-outline" size={22} color={colors.foreground} />
+            </Pressable>
+            <Pressable onPress={() => navigation.navigate('Settings')} style={s.toolbarButton} accessibilityRole="button" accessibilityLabel="Settings">
+              <Ionicons name="settings-outline" size={22} color={colors.foreground} />
+            </Pressable>
+          </>)}
+        </View>
       </View>
 
-      <ScrollView contentContainerStyle={[s.content, { paddingBottom: insets.bottom + spacing.xxxl }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+      {searchOpen && <View style={s.searchContainer}>
         <SearchField value={query} onChangeText={setQuery} placeholder="Search profile & settings"
           accessibilityLabel="Search profile and settings" autoCorrect={false} autoCapitalize="none"
-          clearButtonMode="never" style={{ flex: 0 }} />
+          autoFocus variant="subtle" focusOnClear clearButtonMode="never" style={{ flex: 0 }} />
+      </View>}
+      <ScrollView contentContainerStyle={[s.content, { paddingBottom: insets.bottom + spacing.xxxl }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
         {searching ? (results.length ? (
           <Group title={`${results.length} ${results.length === 1 ? 'result' : 'results'}`}>
             {results.map(entry => <NavRow key={entry.id} icon={entry.icon} label={entry.title} detail={entry.path}
-              onPress={() => { if ('route' in entry.target) navigation.navigate(entry.target.route); }} />)}
+              onPress={() => { if ('route' in entry.target) { closeSearch(); navigation.navigate(entry.target.route); } }} />)}
           </Group>
         ) : (
           <View style={s.empty} accessibilityLiveRegion="polite">
             <Text style={s.emptyTitle}>No matches for “{query.trim()}”</Text>
             <Text style={s.emptyBody}>Try “sizes”, “budget”, or “temperature”.</Text>
           </View>
-        )) : (<>
+        )) : searchOpen ? (
+          <View style={s.empty}>
+            <Text style={s.emptyTitle}>Find your preferences</Text>
+            <Text style={s.emptyBody}>Search style, sizes, membership, and settings.</Text>
+          </View>
+        ) : (<>
         <View style={s.hero}>
           <Pressable onPress={pickPhoto} style={s.avatar} accessibilityRole="button" accessibilityLabel="Change profile photo">
             {form.photoPreview
@@ -168,6 +193,11 @@ export function ProfileHomeScreen({ navigation }: ProfileStackScreenProps<'Profi
 }
 
 const s = StyleSheet.create({
+  toolbarActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  toolbarButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  searchTitle: { ...typography.text.editorialTitle, color: colors.foreground, flex: 1, textAlign: 'center' },
+  cancelText: { ...typography.text.bodySmall, color: colors.foreground },
+  searchContainer: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
   empty: { paddingVertical: spacing.xxl, gap: spacing.sm, alignItems: 'center' },
   emptyTitle: { ...typography.text.body, color: colors.foreground, textAlign: 'center' },
   emptyBody: { ...typography.text.caption, color: colors.mutedForeground, textAlign: 'center' },

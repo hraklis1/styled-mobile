@@ -12,6 +12,7 @@ type Props = Omit<TextInputProps, 'style' | 'value' | 'onChangeText'> & {
   dismissible?: boolean;
   style?: StyleProp<ViewStyle>;
   focusOnClear?: boolean;
+  variant?: 'outlined' | 'subtle';
   keepFocusOnSubmit?: boolean;
 };
 
@@ -27,6 +28,7 @@ export function SearchField({
   onChangeText,
   onClear,
   dismissible = false,
+  variant = 'outlined',
   focusOnClear = false,
   keepFocusOnSubmit = false,
   style,
@@ -45,7 +47,7 @@ export function SearchField({
   };
 
   return (
-    <View style={[styles.wrap, style]}>
+    <View style={[styles.wrap, variant === 'subtle' && styles.subtle, style]}>
       <Ionicons name="search-outline" size={16} color={colors.mutedForeground} style={styles.icon} />
       <TextInput
         {...inputProps}
@@ -92,6 +94,7 @@ const styles = StyleSheet.create({
     paddingRight: spacing.xs,
     gap: spacing.sm,
   },
+  subtle: { backgroundColor: colors.surfaceSubtle, borderColor: colors.hairline },
   clear: { width: 44, height: 44, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center' },
   pressed: { backgroundColor: colors.surfaceSelected },
   icon: { flexShrink: 0 },

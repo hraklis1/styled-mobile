@@ -92,6 +92,8 @@ export function SettingsScreen({ navigation }: ProfileStackScreenProps<'Settings
   return (
     <SettingsScaffold title="Settings">
       <SearchField
+        variant="subtle"
+        style={s.searchField}
         value={query}
         onChangeText={setQuery}
         placeholder="Search settings"
@@ -166,6 +168,7 @@ export function SettingsScreen({ navigation }: ProfileStackScreenProps<'Settings
 }
 
 const s = StyleSheet.create({
+  searchField: { flex: 0, marginTop: -spacing.sm },
   empty: { alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.xxl, paddingHorizontal: spacing.lg },
   emptyTitle: { ...typography.text.body, color: colors.foreground, textAlign: 'center' },
   emptyBody: { ...typography.text.caption, color: colors.mutedForeground, textAlign: 'center' },
