@@ -34,6 +34,7 @@ export function StylistScreen({ navigation, route }: StylistScreenProps) {
       onViewSaved={viewSaved}
       onClose={() => navigation.navigate('Home')}
       onNavigateToCloset={(outfitId) => navigation.navigate('Closet', { screen: 'OutfitDetail', params: { outfitId, returnTo: 'Stylist' } })}
+      onOpenItem={(itemId) => navigation.navigate('Closet', { screen: 'ItemDetail', params: { itemId } })}
       onNavigateToShop={(gap?: StylistMissingEssential) => {
         if (gap?.label) navigation.navigate('Shop', { screen: 'ShoppingPriorityEdit', params: { priority: shoppingPriorityFromDailyLookGap(gap) } });
       }}

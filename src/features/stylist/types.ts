@@ -162,6 +162,10 @@ export type StylistAssistantMessage = StylistBaseMessage & {
   eventPlan?: StylistEventPlanData;
   recId?: number;
   boardAction?: 'outfit' | 'complete' | 'capsule' | 'theme' | 'ask';
+  critique?: StylistCritique;
+  pieceNotes?: StylistPieceNote[];
+  stylingMoves?: string[];
+  followUps?: StylistFollowUp[];
 };
 
 export type StylistMessage = StylistUserMessage | StylistAssistantMessage;
@@ -293,11 +297,28 @@ export type StylistAskDoneEvent = {
   tripPlan?: StylistTripPlanData | null;
   wardrobeAudit?: StylistWardrobeAuditData | null;
   eventPlan?: StylistEventPlanData | null;
+  /** Advice pairing verdict (server v12+). */
+  critique?: StylistCritique | null;
+  /** How to wear each put-forward piece (server v13+). */
+  pieceNotes?: StylistPieceNote[];
+  /** 0–3 look-level styling moves (server v13+). */
+  stylingMoves?: string[];
+  /** Answer-specific follow-up chips (server v13+). */
+  followUps?: StylistFollowUp[];
   mode?: StylistMode;
   recId?: number | null;
   conversationId?: number | null;
   boardAction?: 'outfit' | 'complete' | 'capsule' | 'theme' | 'ask';
 };
+
+export type StylistCritiqueVerdict = 'works' | 'works_if' | 'clash';
+export type StylistCritique = {
+  verdict: StylistCritiqueVerdict;
+  reasons: Array<{ principle: 'colour' | 'proportion' | 'formality' | 'texture' | 'pattern' | 'season'; detail: string }>;
+  fixItemIds: number[];
+};
+export type StylistPieceNote = { itemId: number; role: 'anchor' | 'base' | 'layer' | 'accent'; tip: string };
+export type StylistFollowUp = { label: string; prompt: string };
 
 export type StylistSendOptions = {
   text?: string;

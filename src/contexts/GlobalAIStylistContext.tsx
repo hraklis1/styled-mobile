@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { Modal, Platform, View, StyleSheet } from 'react-native';
 import { WishlistNavigationContext } from './WishlistNavigationContext';
 
-import { openWishlist, openClosetOutfit } from '../navigation/savedRecommendations';
+import { openWishlist, openClosetItem, openClosetOutfit } from '../navigation/savedRecommendations';
 import { StylistChatView, type StylistSessionSnapshot } from '../components/stylist/StylistChatView';
 import { useEntitlement } from '../hooks/useEntitlement';
 import { track } from '../lib/analytics';
@@ -68,8 +68,15 @@ export function GlobalAIStylistProvider({ children }: Props) {
   const [visible, setVisible] = useState(false);
   const sessionRef = useRef<StylistSessionSnapshot | null>(null);
   const pendingClosetId = useRef<number | null>(null);
+  const pendingItemId = useRef<number | null>(null);
   const pendingSavedId = useRef<string | null>(null);
   const finishSavedNavigation = useCallback(() => {
+    if (pendingItemId.current !== null) {
+      const itemId = pendingItemId.current;
+      pendingItemId.current = null;
+      openClosetItem(itemId, true);
+      return;
+    }
     if (pendingClosetId.current !== null) {
       const outfitId = pendingClosetId.current;
       pendingClosetId.current = null;
@@ -83,7 +90,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
   }, []);
   // iOS waits for native dismissal; Android/web have no Modal onDismiss event.
   useEffect(() => {
-    if (visible || Platform.OS === 'ios' || (!pendingSavedId.current && pendingClosetId.current === null)) return;
+    if (visible || Platform.OS === 'ios' || (!pendingSavedId.current && pendingClosetId.current === null && pendingItemId.current === null)) return;
     const frame = requestAnimationFrame(finishSavedNavigation);
     return () => cancelAnimationFrame(frame);
   }, [finishSavedNavigation, visible]);
@@ -149,6 +156,11 @@ export function GlobalAIStylistProvider({ children }: Props) {
     setVisible(false);
     pendingClosetId.current = outfitId;
   }, []);
+  const openItem = useCallback((itemId: number) => {
+    // Same native-modal handoff as navigateToCloset.
+    setVisible(false);
+    pendingItemId.current = itemId;
+  }, []);
   const consumePrompt = useCallback(() => setInitialQuery(undefined), []);
 
   return (
@@ -177,6 +189,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
             threadMode={threadMode}
             onViewSaved={viewSaved}
             onNavigateToCloset={navigateToCloset}
+            onOpenItem={openItem}
             onNavigateToShop={onNavigateToShop}
             onPromptConsumed={consumePrompt}
             onClose={closeStylist}

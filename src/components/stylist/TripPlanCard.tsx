@@ -2,6 +2,7 @@ import { StylistRichText } from './StylistRichText';
 import { useCallback, useMemo, useState } from 'react';
 import {
   Image,
+  LayoutAnimation,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,7 +17,7 @@ import { itemImageContentFit, itemImageUri } from '../../lib/itemImage';
 import { ResolvedOutfitCollage } from '../outfits/ResolvedOutfitCollage';
 import { GapCard } from './GapCard';
 import { useCreateOutfit, type CreateOutfitInput } from '../../hooks/useOutfits';
-import { colors, radii, spacing, typography } from '../../theme';
+import { colors, radii, spacing, stroke, typography } from '../../theme';
 import type { Item } from '../../types/item';
 
 export type TripOutfit = { label: string; note: string; itemIds: number[]; status?: 'ready' | 'incomplete'; foundationItemIds?: number[]; missingEssentials?: Array<{ label: string; category: string; reason: string; context: string; priority: number; unlocks?: string[] }> };
@@ -24,7 +25,11 @@ export type TripPlanData = {
   intro: string;
   outfits: TripOutfit[];
   packingList: string[];
-  kind?: 'trip' | 'board_capsule';
+  /** Owned pieces in packingList (server v12+). */
+  packingItemIds?: number[];
+  kind?: 'trip' | 'board_capsule' | 'style_item';
+  /** style_item: the owned piece every look is built around. */
+  anchorItemId?: number;
   // Set while the stream is still delivering outfit events so the carousel can
   // show placeholder slots ("filling in…") before the done event arrives.
   pending?: boolean;
@@ -48,7 +53,13 @@ function TripOutfitCard({
   onNavigateToCloset,
   onSaveOutfit,
   saveLabel,
+  gapsTitle = 'Complete before packing',
+  index,
+  total,
 }: {
+  gapsTitle?: string;
+  index: number;
+  total: number;
   outfit: TripOutfit;
   allItems: Item[];
   createOutfit: ReturnType<typeof useCreateOutfit>;
@@ -116,66 +127,78 @@ function TripOutfitCard({
     }
   }, [onAddToEvent, added, adding, items]);
 
-  const collageSize = cardWidth - spacing.lg * 2;
+  // Full card width: at carousel size the collage clears the editorial
+  // threshold and gets the same white mat as the single-look card.
+  const collageSize = cardWidth;
+  const incomplete = outfit.status === 'incomplete';
+  const actionLabel = saving ? 'Saving…' : saved ? 'Saved' : saveLabel ?? (incomplete ? 'Save as draft' : 'Save outfit');
 
   return (
     <View style={[styles.outfitCard, { width: cardWidth }]}>
       <View style={styles.outfitHeader}>
-        {outfit.label ? <Text style={styles.outfitLabel} numberOfLines={1}>{outfit.label}</Text> : null}
-        {outfit.status === 'incomplete' && <Text style={styles.incompleteLabel}>FOUNDATION</Text>}
+        <Text style={styles.lookIndex}>{total > 1 ? `Look ${index + 1} of ${total}` : 'The look'}</Text>
+        {incomplete ? (
+          <View style={styles.statusTag}>
+            <View style={styles.statusDot} />
+            <Text style={styles.statusText}>Needs a piece</Text>
+          </View>
+        ) : null}
       </View>
+      {outfit.label ? <Text style={styles.outfitLabel} numberOfLines={2}>{outfit.label}</Text> : null}
       {slots.length > 0 && (
-        <View style={styles.collageFrame}>
-          <ResolvedOutfitCollage
-            slots={slots}
-            size={collageSize}
-            height={Math.round(collageSize * 0.82)}
-            borderRadius={radii.md}
-          />
-        </View>
+        <ResolvedOutfitCollage
+          slots={slots}
+          size={collageSize}
+          height={Math.round(collageSize * 0.84)}
+          borderRadius={radii.mat}
+        />
       )}
       {outfit.note ? <Text style={styles.outfitNote}>{outfit.note}</Text> : null}
-      {outfit.status === 'incomplete' && outfit.missingEssentials?.length ? (
+      {incomplete && outfit.missingEssentials?.length ? (
         <View style={styles.tripGaps}>
-          <Text style={styles.tripGapsTitle}>Complete before packing</Text>
-          {outfit.missingEssentials.slice(0, 3).map((gap, index) => <GapCard key={`${gap.category}-${index}`} item={gap} />)}
+          <Text style={styles.tripGapsTitle}>{gapsTitle}</Text>
+          {outfit.missingEssentials.slice(0, 3).map((gap, gapIndex) => <GapCard key={`${gap.category}-${gapIndex}`} item={gap} />)}
         </View>
       ) : null}
-      {onAddToEvent && eventContext && (
+      <View style={styles.actions}>
+        {onAddToEvent && eventContext && (
+          <TouchableOpacity
+            style={styles.primaryBtn}
+            onPress={handleAddToEvent}
+            disabled={added || adding || items.length === 0}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={`Add this look to ${eventContext.title}`}
+          >
+            <Ionicons name={added ? 'checkmark' : 'calendar-outline'} size={15} color={colors.primaryForeground} />
+            <Text style={styles.primaryBtnText} numberOfLines={1}>
+              {adding ? 'Adding…' : added ? 'Added to event' : `Add to ${eventContext.title}`}
+            </Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
-          style={[styles.addEventBtn, added && styles.addEventBtnDone]}
-          onPress={handleAddToEvent}
-          disabled={added || adding || items.length === 0}
-          activeOpacity={0.85}
+          style={[styles.saveBtn, saved && styles.saveBtnDone]}
+          onPress={handleSave}
+          disabled={saved || saving || items.length === 0}
+          activeOpacity={0.8}
           accessibilityRole="button"
-          accessibilityLabel={`Add this look to ${eventContext.title}`}
+          accessibilityLabel={saved ? 'Saved to Closet' : actionLabel}
+          accessibilityState={{ selected: saved, busy: saving }}
         >
           <Ionicons
-            name={added ? 'checkmark-circle' : 'calendar-outline'}
-            size={14}
-            color={colors.primaryForeground}
+            name={saved ? 'checkmark' : 'bookmark-outline'}
+            size={15}
+            color={saved ? colors.primaryForeground : colors.primary}
           />
-          <Text style={styles.addEventBtnText} numberOfLines={1}>
-            {adding ? 'Adding…' : added ? 'Added to event' : `Add to ${eventContext.title}`}
-          </Text>
+          <Text style={[styles.saveBtnText, saved && styles.saveBtnTextDone]}>{actionLabel}</Text>
         </TouchableOpacity>
-      )}
-      <TouchableOpacity
-        style={[styles.saveBtn, (saved || saving) && styles.saveBtnDone]}
-        onPress={handleSave}
-        disabled={saved || saving || items.length === 0}
-        activeOpacity={0.8}
-      >
-        <Ionicons
-          name={saved ? 'checkmark-circle' : 'bookmark-outline'}
-          size={14}
-          color={saved ? colors.primaryForeground : colors.primary}
-        />
-        <Text style={[styles.saveBtnText, saved && styles.saveBtnTextDone]}>
-          {saving ? 'Saving…' : saved ? 'Saved' : saveLabel ?? (outfit.status === 'incomplete' ? 'Save foundation' : 'Save outfit')}
-        </Text>
-      </TouchableOpacity>
-      {savedOutfitId !== null && onNavigateToCloset ? <TouchableOpacity style={styles.saveBtn} accessibilityRole="button" onPress={() => onNavigateToCloset(savedOutfitId)}><Text style={styles.saveBtnText}>View outfit</Text></TouchableOpacity> : null}
+        {savedOutfitId !== null && onNavigateToCloset ? (
+          <TouchableOpacity style={styles.viewLink} accessibilityRole="button" onPress={() => onNavigateToCloset(savedOutfitId)}>
+            <Text style={styles.viewLinkText}>View outfit</Text>
+            <Ionicons name="arrow-forward" size={14} color={colors.primary} />
+          </TouchableOpacity>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -204,34 +227,62 @@ export function TripPlanCard({
   eyebrowLabel?: string;
 }) {
   const { width } = useWindowDimensions();
-  const cardWidth = Math.min(width - spacing.xxl * 2, 320);
+  // One card fills the column with the next peeking in by a clear margin,
+  // so the rail reads as swipeable rather than clipped.
+  const CARD_GAP = spacing.lg;
+  const PEEK = 36;
+  const cardWidth = Math.min(width - spacing.page * 2 - PEEK, 360);
+  // Trailing room equal to the leftover column width lets the LAST card snap
+  // flush left too, instead of stopping with the previous card showing.
+  const trailing = Math.max(0, width - spacing.page * 2 - cardWidth);
   const [packed, setPacked] = useState<Record<number, boolean>>({});
   const [activeOutfit, setActiveOutfit] = useState(0);
+  // A horizontal rail is as tall as its tallest card, which strands a short
+  // look above empty space. Measure each card and fit the rail to the one in
+  // view, easing the change as the reader swipes.
+  const [cardHeights, setCardHeights] = useState<Record<number, number>>({});
+  const activeHeight = cardHeights[activeOutfit];
+  const goToOutfit = (next: number) => {
+    if (next === activeOutfit) return;
+    LayoutAnimation.configureNext(LayoutAnimation.create(220, 'easeInEaseOut', 'opacity'));
+    setActiveOutfit(next);
+  };
   const [packingExpanded, setPackingExpanded] = useState(false);
   const isBoardCapsule = plan.kind === 'board_capsule';
+  const isStyleItem = plan.kind === 'style_item';
 
   return (
     <View style={styles.container}>
       <View style={styles.sectionEyebrow}>
-        <Ionicons name={isBoardCapsule ? 'albums-outline' : 'briefcase-outline'} size={13} color={colors.primary} />
-        <Text style={styles.sectionEyebrowText}>{eyebrowLabel ?? (isBoardCapsule ? 'Board capsule' : 'Trip plan')}</Text>
+        <Ionicons name={isBoardCapsule ? 'albums-outline' : isStyleItem ? 'shirt-outline' : 'briefcase-outline'} size={13} color={colors.primary} />
+        <Text style={styles.sectionEyebrowText}>{eyebrowLabel ?? (isBoardCapsule ? 'Board capsule' : isStyleItem ? 'Ways to wear it' : 'Trip plan')}</Text>
       </View>
       {plan.intro ? <StylistRichText text={plan.intro} /> : null}
 
       <ScrollView
         horizontal
+        style={activeHeight && !plan.pending ? { height: activeHeight + spacing.xs * 2 } : undefined}
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.carousel}
+        contentContainerStyle={[styles.carousel, { paddingRight: trailing }]}
         decelerationRate="fast"
-        snapToInterval={cardWidth + spacing.md}
+        snapToInterval={cardWidth + CARD_GAP}
         onMomentumScrollEnd={(event) => {
-          const page = Math.round(event.nativeEvent.contentOffset.x / (cardWidth + spacing.md));
-          setActiveOutfit(Math.max(0, Math.min(page, plan.outfits.length - 1)));
+          const page = Math.round(event.nativeEvent.contentOffset.x / (cardWidth + CARD_GAP));
+          goToOutfit(Math.max(0, Math.min(page, plan.outfits.length - 1)));
         }}
       >
         {plan.outfits.map((o, i) => (
-          <TripOutfitCard
+          <View
             key={`${o.label}-${i}`}
+            onLayout={(event) => {
+              const h = Math.round(event.nativeEvent.layout.height);
+              setCardHeights((prev) => (prev[i] === h ? prev : { ...prev, [i]: h }));
+            }}
+          >
+          <TripOutfitCard
+            gapsTitle={isStyleItem ? 'Complete the look' : 'Complete before packing'}
+            index={i}
+            total={plan.outfits.length}
             outfit={o}
             allItems={allItems}
             createOutfit={createOutfit}
@@ -243,6 +294,7 @@ export function TripPlanCard({
             onSaveOutfit={onSaveOutfit}
             saveLabel={saveLabel}
           />
+          </View>
         ))}
         {plan.pending && (
           <View style={[styles.outfitCard, styles.placeholderCard, { width: cardWidth }]}>
@@ -252,11 +304,6 @@ export function TripPlanCard({
         )}
       </ScrollView>
 
-      {plan.outfits.length > 1 ? (
-        <View style={styles.pagination} accessibilityLabel={`Look ${activeOutfit + 1} of ${plan.outfits.length}`}>
-          {plan.outfits.map((_, index) => <View key={index} style={[styles.pageDot, index === activeOutfit && styles.pageDotActive]} />)}
-        </View>
-      ) : null}
 
       {plan.packingList.length > 0 && (
         <View style={styles.packing}>
@@ -300,49 +347,59 @@ const styles = StyleSheet.create({
     color: colors.foreground,
     lineHeight: typography.text.sheetTitle.fontSize * 1.4,
   },
-  carousel: { gap: spacing.md, paddingVertical: spacing.xs, paddingRight: spacing.lg },
-  outfitCard: {
-    padding: spacing.lg, gap: spacing.sm,
+  // Top-aligned, content-height cards: a short look keeps its button close
+  // instead of stretching to the tallest card in the rail.
+  carousel: { gap: spacing.lg, paddingVertical: spacing.xs, alignItems: 'flex-start' },
+  outfitCard: { gap: spacing.md },
+  placeholderCard: {
+    alignItems: 'center', justifyContent: 'center', minHeight: 320,
+    borderWidth: stroke.hairline, borderColor: colors.hairline, borderStyle: 'dashed',
   },
-  placeholderCard: { alignItems: 'center', justifyContent: 'center', minHeight: 220 },
   placeholderText: { color: colors.mutedForeground, fontSize: typography.text.bodySmall.fontSize, marginTop: spacing.xs },
+  outfitHeader: { minHeight: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  lookIndex: { ...typography.text.eyebrow, color: colors.mutedForeground },
+  statusTag: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  statusDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.accentInk },
+  statusText: { ...typography.text.eyebrow, color: colors.accentInk },
   outfitLabel: {
-    fontSize: typography.text.sectionTitle.fontSize,
+    ...typography.text.editorialSection,
     color: colors.foreground,
+    marginTop: -spacing.xs,
   },
-  outfitHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  incompleteLabel: { ...typography.text.eyebrow, color: colors.action },
-  collageFrame: { borderRadius: radii.md, overflow: 'hidden' },
   outfitNote: {
     fontSize: typography.text.bodySmall.fontSize,
-    color: colors.mutedForeground,
+    color: colors.inkSubtle,
     lineHeight: typography.text.bodySmall.fontSize * 1.5,
   },
-  tripGaps: { backgroundColor: '#F7F1E8', borderRadius: radii.md, padding: spacing.sm, gap: spacing.xs },
-  tripGapsTitle: { fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.bold, color: colors.action, textTransform: 'uppercase', letterSpacing: typography.tracking.label },
-  addEventBtn: {
-    minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.page, paddingVertical: 14, borderRadius: radii.action, backgroundColor: colors.primary,
+  tripGaps: {
+    gap: spacing.sm,
+    paddingTop: spacing.md,
+    borderTopWidth: stroke.hairline,
+    borderTopColor: colors.hairline,
   },
-  addEventBtnDone: { backgroundColor: colors.primary },
-  addEventBtnText: {
-    ...typography.text.label, color: colors.primaryForeground, flexShrink: 1,
+  tripGapsTitle: { ...typography.text.eyebrow, color: colors.accentInk },
+  actions: { paddingTop: spacing.xs, gap: spacing.sm },
+  primaryBtn: {
+    minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
+    paddingHorizontal: spacing.lg, borderRadius: radii.action, backgroundColor: colors.primary,
   },
+  primaryBtnText: { ...typography.text.label, color: colors.primaryForeground, flexShrink: 1 },
   saveBtn: {
+    minHeight: 46,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.action,
+    borderWidth: stroke.fine,
+    borderColor: colors.ghostStroke,
   },
   saveBtnDone: { backgroundColor: colors.primary, borderColor: colors.primary },
-  saveBtnText: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.bold, color: colors.primary },
+  saveBtnText: { ...typography.text.label, color: colors.primary },
   saveBtnTextDone: { color: colors.primaryForeground },
-  pagination: { minHeight: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  pageDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.border },
-  pageDotActive: { width: 18, backgroundColor: colors.primary },
+  viewLink: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: spacing.xs },
+  viewLinkText: { ...typography.text.label, color: colors.primary, textDecorationLine: 'underline' },
   packing: {
     paddingVertical: spacing.md, gap: spacing.xs,
   },

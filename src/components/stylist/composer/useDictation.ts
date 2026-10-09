@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Linking, Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import * as Haptics from '../../../lib/haptics';
+import { confirmSheet } from '../../primitives/ConfirmSheet';
 import { useSharedValue, withTiming } from 'react-native-reanimated';
 import {
   ExpoSpeechRecognitionModule,
@@ -69,7 +70,7 @@ export function useDictation({ onText }: Options) {
     if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
       showPermissionAlert();
     } else if (event.error !== 'aborted' && event.error !== 'no-speech') {
-      Alert.alert('Dictation stopped', 'Please try again.');
+      confirmSheet({ title: 'Dictation stopped', message: 'Please try again.', confirmLabel: 'OK', cancelLabel: null, onConfirm: () => {} });
     }
     // 'end' fires after every error and handles the state reset.
   });
@@ -95,7 +96,7 @@ export function useDictation({ onText }: Options) {
     setState((prev) => (prev === 'idle' ? 'requesting' : prev));
 
     if (!ExpoSpeechRecognitionModule.isRecognitionAvailable()) {
-      Alert.alert('Dictation unavailable', "Speech recognition isn't available on this device.");
+      confirmSheet({ title: 'Dictation unavailable', message: "Speech recognition isn't available on this device.", confirmLabel: 'OK', cancelLabel: null, onConfirm: () => {} });
       setState('idle');
       return;
     }
@@ -142,13 +143,14 @@ export function useDictation({ onText }: Options) {
   return { state, startedAt, level, start, done, cancel };
 }
 
+// The app's own sheet rather than the system alert, so the prompt matches
+// the rest of the stylist (same sheet as "Start a new styling session?").
 function showPermissionAlert() {
-  Alert.alert(
-    'Microphone access needed',
-    'To dictate to your stylist, enable Microphone and Speech Recognition for Styled in Settings.',
-    [
-      { text: 'Not now', style: 'cancel' },
-      { text: 'Open Settings', onPress: () => { Linking.openSettings().catch(() => {}); } },
-    ],
-  );
+  confirmSheet({
+    title: 'Turn on the microphone?',
+    message: 'To dictate to your stylist, allow Microphone and Speech Recognition for Styled in Settings.',
+    confirmLabel: 'Open Settings',
+    cancelLabel: 'Not now',
+    onConfirm: () => { Linking.openSettings().catch(() => {}); },
+  });
 }

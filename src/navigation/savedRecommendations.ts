@@ -21,6 +21,11 @@ export function openSavedRecommendations(selectedId?: string, tab: SavedShopping
   openWishlist(selectedId, wishlistSectionFromLegacy(tab));
 }
 
+export function openClosetItem(itemId: number, resumeStylist = false) {
+  if (!navigationRef.isReady()) return;
+  navigationRef.navigate('App', { screen: 'Closet', params: { screen: 'ItemDetail', params: { itemId, resumeStylist } } });
+}
+
 export function openClosetOutfit(outfitId: number, resumeStylist = false) {
   if (!navigationRef.isReady()) return;
   navigationRef.navigate('App', { screen: 'Closet', params: { screen: 'OutfitDetail', params: { outfitId, resumeStylist } } });

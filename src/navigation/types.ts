@@ -41,6 +41,8 @@ export type ClosetStackParamList = {
   ItemDetail: {
     returnTo?: 'Home';
     itemId?: number;
+    /** Opened from the modal Stylist: reopen it when this screen is left. */
+    resumeStylist?: boolean;
     scanData?: ScanResult;
     scanImageUrl?: string;
   };

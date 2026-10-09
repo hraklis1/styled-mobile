@@ -149,8 +149,11 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const updateItem = useUpdateItem();
   const deleteItem = useDeleteItem();
   const markWorn = useMarkItemWorn();
-  const { openStylist } = useGlobalAIStylist();
+  const { openStylist, resumeStylist } = useGlobalAIStylist();
   const { user } = useAuth();
+  useEffect(() => navigation.addListener('beforeRemove', () => {
+    if (route.params.resumeStylist) requestAnimationFrame(resumeStylist);
+  }), [navigation, resumeStylist, route.params.resumeStylist]);
   const { costOf } = useEntitlement();
   const polishCost = costOf('polish');
 

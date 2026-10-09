@@ -1,5 +1,5 @@
 import { confirmSheet } from '../primitives/ConfirmSheet';
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode, MutableRefObject } from 'react';
 import { StylistCardStateContext, useStylistCardState, type StylistCardState } from './StylistCardState';
 import {
@@ -65,6 +65,7 @@ import {
   useCreateOutfit,
   useDeleteOutfit,
   useGenerateEventOutfitPlan,
+  useMarkOutfitWorn,
   type CreateOutfitInput,
 } from '../../hooks/useOutfits';
 import { useAssignEventItems } from '../../hooks/useEvents';
@@ -78,6 +79,8 @@ import type { BoardEntryRef } from '../../hooks/useBoards';
 import { ResolvedOutfitCollage } from '../outfits/ResolvedOutfitCollage';
 import { StylistRichText } from './StylistRichText';
 import { GapCard } from './GapCard';
+import { CritiqueCard } from './CritiqueCard';
+import { StylingMovesStrip } from './StylingMovesStrip';
 import { TripPlanCard } from './TripPlanCard';
 import { StylistIntakeSheet } from './StylistIntakeSheet';
 import { WardrobeAuditCard } from './WardrobeAuditCard';
@@ -107,6 +110,9 @@ import {
   type StylistTripPlanData,
   type StylistWardrobeAuditData,
   type StylistWorkflow,
+  type StylistCritique,
+  type StylistPieceNote,
+  type StylistFollowUp,
 } from '../../features/stylist/types';
 import { deviceTimeContext, summarizeStylistWorkflow } from '../../features/stylist/workflows';
 import { BUDGET_OPTIONS, OCCASION_OPTIONS, STYLE_OPTIONS } from '../../lib/profileOptions';
@@ -212,7 +218,22 @@ function guideQuestionMode(question: string): { mode?: StylistMode } {
   return isGuideListingQuestion(question) ? {} : { mode: 'advice' };
 }
 
-function useContextualChips(lastMessage: ChatMessage | undefined, entryContext?: StylistEntryContext): string[] {
+type ChipSpec = { label: string; prompt: string };
+const asChips = (prompts: readonly string[]): ChipSpec[] => prompts.map((prompt) => ({ label: prompt, prompt }));
+
+// Server follow-ups are specific to the answer, so they lead; the mode's fixed
+// set fills the "More" list behind them.
+function useContextualChips(lastMessage: ChatMessage | undefined, entryContext?: StylistEntryContext): ChipSpec[] {
+  const base = useBaseChips(lastMessage, entryContext);
+  return useMemo(() => {
+    const server = entryContext?.kind !== 'shopping_brief_edit' && lastMessage?.role === 'assistant' ? lastMessage.followUps ?? [] : [];
+    if (!server.length) return asChips(base);
+    const seen = new Set(server.map((f) => f.prompt.toLowerCase()));
+    return [...server, ...asChips(base.filter((prompt) => !seen.has(prompt.toLowerCase())))];
+  }, [base, entryContext, lastMessage]);
+}
+
+function useBaseChips(lastMessage: ChatMessage | undefined, entryContext?: StylistEntryContext): string[] {
   return useMemo(() => {
     if (entryContext?.kind === 'shopping_brief_edit') {
       const focus = guideFocus(entryContext);
@@ -256,6 +277,10 @@ type ServerMessagePayload = {
   tripPlan?: StylistTripPlanData;
   wardrobeAudit?: StylistWardrobeAuditData;
   boardAction?: 'outfit' | 'complete' | 'capsule' | 'theme' | 'ask';
+  critique?: StylistCritique;
+  pieceNotes?: StylistPieceNote[];
+  stylingMoves?: string[];
+  followUps?: StylistFollowUp[];
 };
 
 type ServerMessage = { id: number; role: Role; text: string; recId?: number | null; payload?: ServerMessagePayload | null; createdAt?: string };
@@ -321,6 +346,16 @@ function isRichAssistantMessage(message: ChatMessage | undefined): message is Ex
 // Map a server-stored thread into chat messages. The recId is preserved so
 // feedback still links; the payload (when present) rehydrates rich replies —
 // without it, an assistant turn falls back to a plain stylist note.
+// Critique + v13 extras, shared by the live done event and reloaded threads.
+function responseExtras(p: Pick<ServerMessagePayload, 'critique' | 'pieceNotes' | 'stylingMoves' | 'followUps'> | null | undefined) {
+  return {
+    ...(p?.critique?.verdict ? { critique: p.critique } : {}),
+    ...(p?.pieceNotes?.length ? { pieceNotes: p.pieceNotes } : {}),
+    ...(p?.stylingMoves?.length ? { stylingMoves: p.stylingMoves } : {}),
+    ...(p?.followUps?.length ? { followUps: p.followUps } : {}),
+  };
+}
+
 function mapServerMessages(rows: ServerMessage[]): ChatMessage[] {
   return rows.map((m) => {
     const p = m.payload ?? undefined;
@@ -354,6 +389,7 @@ function mapServerMessages(rows: ServerMessage[]): ChatMessage[] {
       ...(p?.tripPlan ? { tripPlan: { ...p.tripPlan, pending: false } } : {}),
       ...(p?.wardrobeAudit ? { wardrobeAudit: p.wardrobeAudit } : {}),
       ...(p?.boardAction ? { boardAction: p.boardAction } : {}),
+      ...responseExtras(p),
       ...(m.createdAt ? { createdAt: new Date(m.createdAt).getTime() } : {}),
     };
   });
@@ -446,7 +482,13 @@ type Props = {
   onViewSaved?: (id: string) => void;
   onNavigateToShop?: (gap?: StylistMissingEssential) => void;
   onNavigateToCloset?: (outfitId: number) => void;
+  /** Opens the full Closet item screen from an item sheet inside the chat. */
+  onOpenItem?: (itemId: number) => void;
 };
+
+// Lets every ItemDetailSheet in the thread reach the full item screen without
+// threading a callback through each card.
+const OpenItemContext = createContext<((itemId: number) => void) | undefined>(undefined);
 
 export function StylistChatView({
   sessionRef,
@@ -466,6 +508,7 @@ export function StylistChatView({
   onViewSaved,
   onNavigateToShop,
   onNavigateToCloset,
+  onOpenItem,
 }: Props) {
   const restored = useRef(sessionRef?.current?.openRequestId === openRequestId ? sessionRef.current : null).current;
   const restoreScroll = useRef(restored?.scrollY ?? null);
@@ -764,6 +807,7 @@ export function StylistChatView({
         ...(hydratedEssentials.length ? { missingEssentials: hydratedEssentials } : {}),
         ...(typeof recId === 'number' ? { recId } : {}),
         ...(boardAction ? { boardAction } : {}),
+        ...responseExtras({ critique: event.critique ?? undefined, pieceNotes: event.pieceNotes, stylingMoves: event.stylingMoves, followUps: event.followUps }),
       };
       delete streamingAssistantTextRef.current[assistantId];
 
@@ -1393,6 +1437,7 @@ export function StylistChatView({
                   }}
                 >
                   <StylistCardStateContext.Provider value={cardStates.current[msg.id] ?? (cardStates.current[msg.id] = {})}>
+                  <OpenItemContext.Provider value={onOpenItem}>
                   <MessageBubble
                     message={msg}
                     allItems={allItems}
@@ -1416,6 +1461,7 @@ export function StylistChatView({
                         : undefined
                     }
                   />
+                  </OpenItemContext.Provider>
                   </StylistCardStateContext.Provider>
                 </View>
               </Fragment>
@@ -1486,12 +1532,13 @@ export function StylistChatView({
             >
               {contextualChips.slice(0, 2).map((chip) => (
                 <TouchableOpacity
-                  key={chip}
+                  key={chip.label}
                   style={styles.chip}
-                  onPress={() => sendMessage({ text: chip })}
+                  onPress={() => sendMessage({ text: chip.prompt })}
                   disabled={isLoading}
+                  accessibilityHint={chip.prompt !== chip.label ? chip.prompt : undefined}
                 >
-                  <Text style={styles.chipText}>{chip}</Text>
+                  <Text style={styles.chipText}>{chip.label}</Text>
                 </TouchableOpacity>
               ))}
               {contextualChips.length > 2 ? (
@@ -1599,8 +1646,8 @@ export function StylistChatView({
         <Text style={styles.attachmentSheetTitle}>Refine the edit</Text>
         <View style={styles.followUpList}>
           {contextualChips.map((chip) => (
-            <TouchableOpacity key={chip} style={styles.followUpRow} onPress={() => { setFollowUpsOpen(false); sendMessage({ text: chip }); }}>
-              <Text style={styles.followUpText}>{chip}</Text>
+            <TouchableOpacity key={chip.label} style={styles.followUpRow} onPress={() => { setFollowUpsOpen(false); sendMessage({ text: chip.prompt }); }}>
+              <Text style={styles.followUpText}>{chip.prompt}</Text>
               <Ionicons name="arrow-forward" size={17} color={colors.primary} />
             </TouchableOpacity>
           ))}
@@ -1728,9 +1775,12 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
             <Text style={styles.sectionEyebrowText}>{message.boardAction === 'theme' ? 'Board direction' : message.boardAction === 'complete' ? 'Board edit' : message.mode === 'knowledge' ? 'Good to know' : 'My take'}</Text>
           </View>
           <StylistRichText text={message.text} streaming={message.isStreaming} />
+          {message.critique ? (
+            <CritiqueCard critique={message.critique} allItems={allItems} onItemPress={setDetailItem} />
+          ) : null}
           {!!message.suggestedItemIds?.length && (
             <View style={styles.responseSection}>
-              <Text style={styles.responseSectionTitle}>{entryContext?.kind === 'shopping_brief_edit' ? 'Pairs from your wardrobe' : 'Wear it with'}</Text>
+              <Text style={styles.responseSectionTitle}>{entryContext?.kind === 'shopping_brief_edit' ? 'Pairs from your wardrobe' : message.critique ? 'The pieces' : 'Wear it with'}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.adviceThumbs}>
                 {message.suggestedItemIds
                   .map((id) => allItems.find((i) => i.id === id))
@@ -1747,8 +1797,20 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
                     </TouchableOpacity>
                   ))}
               </ScrollView>
+              {/* Thumbnails are too narrow for a tip, so tips list beneath the rail. */}
+              {message.suggestedItemIds
+                .map((id) => allItems.find((i) => i.id === id))
+                .filter((i): i is Item => !!i && !!pieceTip(message.pieceNotes, i.id))
+                .map((item) => (
+                  <Text key={item.id} style={styles.pieceTipRow}>
+                    <Text style={styles.pieceTipName}>{item.name}</Text>
+                    {'  '}
+                    {pieceTip(message.pieceNotes, item.id)}
+                  </Text>
+                ))}
             </View>
           )}
+          <StylingMovesStrip moves={message.stylingMoves} />
           {!!message.missingEssentials?.length && (
             <View style={styles.responseSection}>
               <Text style={styles.responseSectionTitle}>Closet gaps</Text>
@@ -1791,6 +1853,8 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
             onToggleAudio={onToggleAudio}
             onNavigateToCloset={onNavigateToCloset}
             onSaveToBoard={onSaveToBoard}
+            pieceNotes={message.pieceNotes}
+            stylingMoves={message.stylingMoves}
           />
         </View>
       </EditorialEntrance>
@@ -1905,6 +1969,7 @@ function outfitNameFromItems(items: Item[]): string {
 
 type OutfitCompleteLookOverviewProps = {
   items: Item[];
+  pieceNotes?: StylistPieceNote[];
   onItemPress: (item: Item) => void;
   onSwapItem: (itemId: number) => void;
   onAddItem: () => void;
@@ -1914,8 +1979,15 @@ function categoryLabel(category: Item['category']): string {
   return category ? category.replace(/_/g, ' ') : 'piece';
 }
 
+// The stylist's wearing tip for a piece ("half-tuck the front"), if it gave one.
+function pieceTip(notes: StylistPieceNote[] | undefined, itemId: number): string | undefined {
+  const tip = notes?.find((note) => note.itemId === itemId)?.tip;
+  return tip ? tip.charAt(0).toUpperCase() + tip.slice(1) : undefined;
+}
+
 function OutfitCompleteLookOverview({
   items,
+  pieceNotes,
   onItemPress,
   onSwapItem,
   onAddItem,
@@ -1966,6 +2038,11 @@ function OutfitCompleteLookOverview({
             <Text style={styles.lineSheetName} numberOfLines={1}>
               {item.name}
             </Text>
+            {pieceTip(pieceNotes, item.id) ? (
+              <Text style={styles.lineSheetTip} numberOfLines={2}>
+                {pieceTip(pieceNotes, item.id)}
+              </Text>
+            ) : null}
           </View>
           <Pressable
             style={styles.lineSheetSwapBtn}
@@ -2016,6 +2093,9 @@ type OutfitSuggestionCardProps = {
   onNavigateToCloset?: (outfitId: number) => void;
   /** Offered only once the look exists in the closet — boards reference real outfit ids. */
   onSaveToBoard?: (ref: BoardEntryRef) => void;
+  /** Per-piece wearing tips; a swapped-in piece simply has none. */
+  pieceNotes?: StylistPieceNote[];
+  stylingMoves?: string[];
 };
 
 function OutfitSuggestionCard({
@@ -2032,6 +2112,8 @@ function OutfitSuggestionCard({
   onToggleAudio,
   onNavigateToCloset,
   onSaveToBoard,
+  pieceNotes,
+  stylingMoves,
 }: OutfitSuggestionCardProps) {
   const [saved, setSaved] = useStylistCardState('outfit-saved', false);
   const [saving, setSaving] = useState(false);
@@ -2039,6 +2121,8 @@ function OutfitSuggestionCard({
   const [added, setAdded] = useState(false);
   const [adding, setAdding] = useState(false);
   const [savedOutfitId, setSavedOutfitId] = useStylistCardState<number | null>('outfit-id', null);
+  const [wornToday, setWornToday] = useStylistCardState('outfit-worn-today', false);
+  const markWorn = useMarkOutfitWorn();
   const [activeEventPlan, setActiveEventPlan] = useState<StylistEventPlanData | null>(eventPlan ?? null);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
@@ -2142,8 +2226,9 @@ function OutfitSuggestionCard({
     }).catch(() => {});
   }
 
-  async function handleSave() {
-    if (saved || saving || matchedItems.length === 0) return;
+  async function handleSave(): Promise<number | null> {
+    if (saved) return savedOutfitId;
+    if (saving || matchedItems.length === 0) return null;
     setSaving(true);
     try {
       const input: CreateOutfitInput = {
@@ -2156,10 +2241,28 @@ function OutfitSuggestionCard({
       setSaved(true);
       recordStylistFeedback({ rating: 'up', signal: 'saved' });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      return outfit.id;
     } catch {
       // Error alert handled by the mutation
+      return null;
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Logging a wear needs a real outfit, so an unsaved look is saved first.
+  // The wear feeds wear counts, idle/pairs hints and the stylist's learning.
+  async function handleWoreToday() {
+    if (wornToday || markWorn.isPending) return;
+    const outfitId = await handleSave();
+    if (outfitId == null) return;
+    try {
+      await markWorn.mutateAsync(outfitId);
+      setWornToday(true);
+      recordStylistFeedback({ rating: 'up', signal: 'worn_later' });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    } catch {
+      // Error alert and optimistic rollback are handled by the mutation.
     }
   }
 
@@ -2324,11 +2427,17 @@ function OutfitSuggestionCard({
       {matchedItems.length > 0 && (
         <OutfitCompleteLookOverview
           items={matchedItems}
+          pieceNotes={pieceNotes}
           onItemPress={setSelectedItem}
           onSwapItem={(itemId) => setPicker({ swapId: itemId })}
           onAddItem={() => setPicker('add')}
         />
       )}
+      {stylingMoves?.length ? (
+        <View style={styles.stylingMoves}>
+          <StylingMovesStrip moves={stylingMoves} />
+        </View>
+      ) : null}
 
       {onAddToEvent && eventContext && (
         <View style={styles.eventActionGroup}>
@@ -2407,7 +2516,8 @@ function OutfitSuggestionCard({
               matchedItems.length === 0 && styles.saveBtnDisabled,
             ]}
             onPress={handleSaveToggle}
-            disabled={saving || unsaving || matchedItems.length === 0}
+            // A worn look is in the wear log; unsaving would delete that history.
+            disabled={saving || unsaving || matchedItems.length === 0 || (saved && wornToday)}
             activeOpacity={0.8}
             accessibilityRole="button"
             accessibilityLabel={saved ? 'Remove this saved outfit from Closet' : 'Save this outfit to Closet'}
@@ -2420,6 +2530,20 @@ function OutfitSuggestionCard({
             />
             <Text style={styles.saveBtnText} numberOfLines={1}>
               {saving ? 'Saving…' : unsaving ? 'Removing…' : saved ? 'Saved to Closet → Outfits' : 'Save outfit'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.woreBtn, wornToday && styles.woreBtnDone]}
+            onPress={handleWoreToday}
+            disabled={wornToday || saving || unsaving || markWorn.isPending || matchedItems.length === 0}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={wornToday ? 'Logged as worn today' : 'Log this outfit as worn today'}
+            accessibilityState={{ selected: wornToday, busy: markWorn.isPending }}
+          >
+            <Ionicons name={wornToday ? 'checkmark-circle' : 'calendar-outline'} size={15} color={colors.primary} />
+            <Text style={styles.woreBtnText} numberOfLines={1}>
+              {markWorn.isPending ? 'Logging…' : wornToday ? 'Worn today' : 'Wore it'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -2497,6 +2621,7 @@ type ItemDetailSheetProps = {
 
 function ItemDetailSheet({ item, onClose }: ItemDetailSheetProps) {
   const insets = useSafeAreaInsets();
+  const openItem = useContext(OpenItemContext);
   const imgUri = item ? itemImageUri(item) : null;
   const imageFit = itemImageContentFit(item);
 
@@ -2553,6 +2678,22 @@ function ItemDetailSheet({ item, onClose }: ItemDetailSheetProps) {
                 ))}
               </View>
             )}
+
+            {openItem ? (
+              <TouchableOpacity
+                style={styles.sheetOpenItemBtn}
+                onPress={() => {
+                  const id = item.id;
+                  onClose();
+                  openItem(id);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${item.name} in Closet`}
+              >
+                <Text style={styles.sheetOpenItemText}>Open in Closet</Text>
+                <Ionicons name="arrow-forward-outline" size={15} color={colors.primary} />
+              </TouchableOpacity>
+            ) : null}
           </ScrollView>
         </View>
       )}
@@ -3842,6 +3983,24 @@ const styles = StyleSheet.create({
     ...typography.text.eyebrow,
     color: colors.primary,
   },
+  lineSheetTip: {
+    fontSize: typography.text.caption.fontSize,
+    lineHeight: typography.text.caption.fontSize * 1.35,
+    color: colors.accentInk,
+    marginTop: 2,
+  },
+  pieceTipRow: {
+    fontSize: typography.text.caption.fontSize,
+    lineHeight: typography.text.caption.fontSize * 1.4,
+    color: colors.accentInk,
+  },
+  pieceTipName: {
+    color: colors.foreground,
+    fontWeight: typography.weight.semibold,
+  },
+  stylingMoves: {
+    marginTop: spacing.md,
+  },
   lineSheetName: {
     fontSize: typography.text.bodySmall.fontSize,
     color: colors.foreground,
@@ -3967,6 +4126,40 @@ const styles = StyleSheet.create({
     fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.primary,
+  },
+  sheetOpenItemBtn: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  sheetOpenItemText: {
+    fontSize: typography.text.bodySmall.fontSize,
+    color: colors.primary,
+    fontWeight: typography.weight.semibold,
+    textDecorationLine: 'underline',
+  },
+  woreBtn: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    borderRadius: radii.full,
+    borderWidth: 1,
+    borderColor: colors.ghostStroke,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
+  },
+  woreBtnDone: {
+    borderColor: colors.primary,
+  },
+  woreBtnText: {
+    fontSize: typography.text.bodySmall.fontSize,
+    color: colors.primary,
+    fontWeight: typography.weight.semibold,
   },
   outfitCardActions: {
     flexDirection: 'row',
