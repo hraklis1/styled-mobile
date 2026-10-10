@@ -1,6 +1,6 @@
 # Conversational AI stylist v2
 
-Implemented October 10, 2026. **Rollout is off by default.** Existing local edits were preserved; nothing was committed, pushed or deployed.
+Implemented October 10, 2026. **The conversational stylist is enabled by default for supported clients.** Explicit backend rollout overrides still apply.
 
 ## Behavior
 
@@ -23,7 +23,14 @@ Replies contain ordered text and optional cards. Existing outfit, trip, audit, c
 
 ## Enablement and rollback
 
-Set these **backend** environment variables for internal testing:
+The backend defaults to enabled with a 100% cohort. The deployment configuration and environment example explicitly set:
+
+```dotenv
+STYLIST_V2_ENABLED=true
+STYLIST_V2_PERCENT=100
+```
+
+Restart the local backend to pick up code changes; production requires deploying the updated backend. Existing environment overrides take precedence. Set these **backend** environment variables to restrict access to internal testing:
 
 ```dotenv
 STYLIST_V2_ENABLED=true
@@ -33,7 +40,7 @@ STYLIST_V2_PERCENT=0
 
 Replace the example IDs with internal users. The allowlist is subject to the master switch and client capability check. Leave `STYLIST_FLAGSHIP_*` unset to use the current production default, or use its existing OpenAI model override. No model-price assumptions were added.
 
-After evaluation passes, set `STYLIST_V2_PERCENT=10` for a stable 10% cohort. Expand only after reviewing matched traffic quality, known average interaction spend and p95 latency. The code exposes the cohort controls; it does not autonomously change rollout percentage. Set `STYLIST_V2_ENABLED=false` for immediate rollback. Stored v2 messages remain readable by the updated mobile client after rollback.
+Set `STYLIST_V2_PERCENT=10` for a stable 10% cohort if a staged rollout is desired. Review matched traffic quality, known average interaction spend and p95 latency; the paid comparisons and blind review remain pending. The code exposes the cohort controls; it does not autonomously change rollout percentage. Set `STYLIST_V2_ENABLED=false` for immediate rollback. Stored v2 messages remain readable by the updated mobile client after rollback.
 
 ## Evaluation
 
