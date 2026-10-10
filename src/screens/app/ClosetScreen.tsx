@@ -101,8 +101,6 @@ const OUTFIT_SORT_OPTIONS: { key: OutfitSortKey; label: string }[] = [
 ];
 
 const SIDE_PAD = spacing.page;
-/** Matches the 12 piece names handleStyleSelected spells out for the stylist. */
-const MAX_STYLIST_SELECTION = 12;
 
 function pluralCount(count: number, noun: string) {
   return `${count} ${noun}${count === 1 ? '' : 's'}`;
@@ -346,7 +344,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   const { active: outfitSelectionMode, ids: selectedOutfitIds, toggle: toggleOutfitSelect, exit: exitOutfitSelectionMode, enter: enterOutfitSelection } = outfitSelection;
   useHideTabBar(selectionMode || outfitSelectionMode, navigation);
   const listPaddingBottom = selectionMode || outfitSelectionMode
-    ? Math.max(spacing.xxxl * 2, selectionBarClearance(insets.bottom, selectionMode))
+    ? Math.max(spacing.xxxl * 2, selectionBarClearance(insets.bottom, false))
     : spacing.xxxl * 2;
   const [selectionToast, setSelectionToast] = useState<string | null>(null);
   useEffect(() => {
@@ -775,22 +773,18 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
   }, [handleAddPieces, handleNewBoard, segment]);
 
 
-  const handleStyleSelected = useCallback(() => {
-    if (selectedIds.size === 0) return;
-    const names = items.filter((item) => selectedIds.has(item.id)).map((item) => item.name);
-    const namedPieces = names.slice(0, 12).join(', ');
-    const remainingCount = Math.max(0, names.length - 12);
+  const handleAskAboutSelected = useCallback(() => {
+    const pieces = items.filter((item) => selectedIds.has(item.id));
+    if (!pieces.length) return;
     openStylist({
-      initialQuery: `Build an outfit using these pieces from my closet: ${namedPieces}${remainingCount ? `, plus ${remainingCount} more selected pieces` : ''}`,
       source: 'closet_selection',
-      onNavigateToCloset: (outfitId) => navigation.navigate('OutfitDetail', { outfitId }),
-      context: {
-        kind: 'closet_selection',
-        itemIds: Array.from(selectedIds),
-        label: 'Selected closet pieces',
+      initialAttachment: {
+        type: 'items',
+        label: `${pieces.length} closet pieces`,
+        items: pieces.map((item) => ({ itemId: item.id, label: item.name, uri: itemThumbUri(item) })),
       },
     });
-  }, [items, navigation, openStylist, selectedIds]);
+  }, [items, openStylist, selectedIds]);
 
   const renderItemRow = useCallback(
     ({ item }: { item: (typeof items)[number] }) => {
@@ -1333,18 +1327,11 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         <SelectionActionBar
           count={selectedIds.size}
           noun="piece"
-          primary={{
-            label: selectedIds.size === 1 ? 'Style this piece' : 'Build an outfit',
-            icon: 'sparkles',
-            onPress: handleStyleSelected,
-            disabled: selectedIds.size > MAX_STYLIST_SELECTION,
-            hint: `Select up to ${MAX_STYLIST_SELECTION} to style`,
-            accessibilityLabel: 'Ask AI Stylist to build an outfit with the selected pieces',
-          }}
           actions={[
+            { label: 'Stylist', icon: 'sparkles', onPress: handleAskAboutSelected, disabled: selectedIds.size > 80, hint: 'Select up to 80 pieces to discuss with your stylist', accessibilityLabel: 'Ask stylist about selected pieces' },
             { label: 'Outfit', icon: 'layers-outline', onPress: handleCreateOutfit, accessibilityLabel: 'Create outfit from selected pieces' },
             { label: 'Board', icon: 'albums-outline', onPress: handleBulkAddToBoard, accessibilityLabel: 'Add selected pieces to a board' },
-            { label: 'Worn today', icon: 'shirt-outline', onPress: handleBulkMarkWorn, accessibilityLabel: 'Mark selected pieces as worn today' },
+            { label: 'Log wear', icon: 'shirt-outline', onPress: handleBulkMarkWorn, accessibilityLabel: 'Mark selected pieces as worn today' },
           ]}
           overflow={[
             allSelectedPiecesFavorite
@@ -1359,7 +1346,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
           count={selectedOutfitIds.size}
           noun="outfit"
           actions={[
-            { label: 'Worn today', icon: 'shirt-outline', onPress: handleBulkMarkOutfitsWorn, accessibilityLabel: 'Mark selected outfits as worn today' },
+            { label: 'Log wear', icon: 'shirt-outline', onPress: handleBulkMarkOutfitsWorn, accessibilityLabel: 'Mark selected outfits as worn today' },
             { label: 'Board', icon: 'albums-outline', onPress: handleBulkAddOutfitsToBoard, accessibilityLabel: 'Add selected outfits to a board' },
             allSelectedOutfitsFavorite
               ? { label: 'Unfavourite', icon: 'heart-dislike-outline', onPress: handleBulkFavoriteOutfits, accessibilityLabel: 'Remove selected outfits from favourites' }

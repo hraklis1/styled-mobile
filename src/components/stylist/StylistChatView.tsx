@@ -91,6 +91,8 @@ import { GarmentImage } from '../wardrobe/garment-image';
 import { SkeletonBlock } from '../primitives/SkeletonLoader';
 import { useStylistTransport } from '../../features/stylist/hooks/useStylistTransport';
 import { buildInitialStylistSendOptions } from '../../features/stylist/initialPrompt';
+import { messageForResponseBlock, responseBlockItemIds } from '../../features/stylist/responseBlocks';
+import type { StylistResponseBlock } from '../../features/stylist/types';
 import { dayDividers } from '../../features/stylist/dayDivider';
 import {
   STYLIST_NEGATIVE_REASON_CHIPS,
@@ -265,6 +267,8 @@ const threadKey = (id: number) => `stylist_thread_${id}`;
 // reloaded thread redraws outfit cards, shop edits, and trip carousels instead
 // of degrading them to plain notes. Mirrors the /ask `done` event's rich fields.
 type ServerMessagePayload = {
+  responseVersion?: 2;
+  blocks?: StylistResponseBlock[];
   readinessStatus?: StylistReadinessStatus;
   foundationItemIds?: number[];
   clarification?: StylistClarification;
@@ -340,6 +344,7 @@ function isRichAssistantMessage(message: ChatMessage | undefined): message is Ex
       || !!message.shopOutfit
       || !!message.tripPlan
       || !!message.wardrobeAudit
+      || !!message.blocks?.some(block => block.type === 'card')
     );
 }
 
@@ -375,6 +380,7 @@ function mapServerMessages(rows: ServerMessage[]): ChatMessage[] {
       kind: 'assistant',
       renderType: renderTypeForAssistantPayload(p),
       text: sanitizeStylistResponseText(m.text),
+      ...(p?.responseVersion === 2 && p.blocks ? { responseVersion: 2 as const, blocks: p.blocks } : {}),
       ...(typeof m.recId === 'number' ? { recId: m.recId } : {}),
       ...(p?.mode ? { mode: p.mode } : {}),
       ...(p?.readinessStatus ? { readinessStatus: p.readinessStatus } : {}),
@@ -461,6 +467,7 @@ export type StylistSessionSnapshot = {
 type Props = {
   sessionRef?: MutableRefObject<StylistSessionSnapshot | null>;
   initialQuery?: string;
+  initialAttachment?: ComposerAttachment;
   initialAttachmentUri?: string;
   initialMode?: StylistMode;
   initialDestination?: string;
@@ -493,6 +500,7 @@ const OpenItemContext = createContext<((itemId: number) => void) | undefined>(un
 export function StylistChatView({
   sessionRef,
   initialQuery,
+  initialAttachment,
   initialAttachmentUri,
   initialMode,
   initialDestination,
@@ -637,7 +645,9 @@ export function StylistChatView({
   function buildHistory(msgs: ChatMessage[]) {
     return msgs.slice(-12).map((m) => ({
       role: m.role,
-      content: m.transcript ?? m.text,
+      content: m.role === 'user' && m.attachment?.items?.length
+        ? `${m.transcript ?? m.text}\nAttached closet pieces: ${m.attachment.items.map((item) => `${item.label} (item ID ${item.itemId})`).join(', ')}`
+        : m.transcript ?? m.text,
     }));
   }
 
@@ -743,6 +753,14 @@ export function StylistChatView({
         prev.map((m) => (m.id === assistantId ? { ...m, text: sanitizeStylistResponseText(rawText) } : m)),
       );
     },
+    onBlock: (assistantId, index, block) => {
+      setMessages(prev => prev.map(message => {
+        if (message.id !== assistantId || message.role !== 'assistant') return message;
+        const blocks = [...(message.blocks ?? [])];
+        blocks[index] = block;
+        return { ...message, responseVersion: 2, blocks, text: blocks.map(part => part?.text ?? '').filter(Boolean).join('\n\n') };
+      }));
+    },
     onAssistantDone: (assistantId, event) => {
       const {
         responseText,
@@ -793,6 +811,7 @@ export function StylistChatView({
                 ? 'closet_outfit'
                 : 'text',
         text: sanitizeStylistResponseText(responseText ?? ''),
+        ...(event.responseVersion === 2 && event.blocks ? { responseVersion: 2 as const, blocks: event.blocks } : {}),
         isStreaming: false,
         ...(readinessStatus ? { readinessStatus } : {}),
         ...(foundationItemIds?.length ? { foundationItemIds } : {}),
@@ -855,9 +874,13 @@ export function StylistChatView({
       delete streamingAssistantTextRef.current[request.assistantMessageId];
       setErrorMessage(message);
       setFailedRequest(request.originalOptions ?? null);
-      setMessages((prev) =>
-        prev.filter((m) => m.id !== request.userMessageId && m.id !== request.assistantMessageId),
-      );
+      setMessages((prev) => {
+        const partial = prev.find(m => m.id === request.assistantMessageId);
+        if (partial?.role === 'assistant' && partial.blocks?.length) {
+          return prev.map(m => m.id === partial.id ? { ...m, isStreaming: false } : m);
+        }
+        return prev.filter(m => m.id !== request.userMessageId && m.id !== request.assistantMessageId);
+      });
       delete tripOutfitsRef.current[request.assistantMessageId];
       delete transportRequestMetaRef.current[request.assistantMessageId];
     },
@@ -908,6 +931,7 @@ export function StylistChatView({
       const continuationItemIds = lastAssistant
         ? Array.from(new Set([
             ...(lastAssistant.suggestedItemIds ?? []),
+            ...responseBlockItemIds(lastAssistant.blocks),
             ...(lastAssistant.tripPlan?.outfits.flatMap((outfit) => outfit.itemIds) ?? []),
             ...(lastAssistant.wardrobeAudit?.workhorses.map((entry) => entry.itemId) ?? []),
             ...(lastAssistant.wardrobeAudit?.underused.map((entry) => entry.itemId) ?? []),
@@ -920,7 +944,14 @@ export function StylistChatView({
       }
 
       const occasionHint = text ? detectOccasionHint(text) : undefined;
-      const requestContext = context ?? entryContext;
+      // Keep attached pieces available to follow-up questions after the tray clears.
+      // A later photo or single-piece attachment replaces that selection context.
+      const latestAttachment = attachment ?? [...messagesRef.current].reverse()
+        .find((message): message is Extract<ChatMessage, { role: 'user' }> => message.role === 'user' && !!message.attachment)?.attachment;
+      const selectionContext: StylistEntryContext | undefined = latestAttachment?.type === 'items' && latestAttachment.items?.length
+        ? { kind: 'closet_selection', itemIds: latestAttachment.items.map((item) => item.itemId), label: latestAttachment.label }
+        : undefined;
+      const requestContext = context ?? entryContext ?? selectionContext;
       const locationSource = activeLocation.source === 'destination' ? 'conversation' : activeLocation.source;
       const request: StylistAskRequest = {
         ...(text ? { text } : {}),
@@ -1111,6 +1142,7 @@ export function StylistChatView({
     lastOpenRequestIdRef.current = openRequestId;
     if (threadMode === 'new') {
       startFreshThread();
+      setComposerAttachment(initialAttachment ?? null);
     } else {
       resumeActiveThread();
     }
@@ -1198,15 +1230,19 @@ export function StylistChatView({
     }
   }
 
-  function handleSendText() {
-    const trimmed = inputText.trim();
+  function handleSendText(question?: string) {
+    const trimmed = (question ?? inputText).trim();
     if (!trimmed && !composerAttachment) return;
-    const attachmentText = composerAttachment?.type === 'item'
+    if (isLoading) return;
+    const attachmentText = composerAttachment?.type === 'items'
+      ? trimmed || 'How would you style these pieces?'
+      : composerAttachment?.type === 'item'
       ? `@${composerAttachment.label}${trimmed ? ` ${trimmed}` : ''}`
       : trimmed || 'What do you think of this look?';
     sendMessage({
       text: attachmentText,
-      displayText: trimmed || (composerAttachment?.type === 'photo' ? 'What do you think of this look?' : 'How would you style this?'),
+      ...(composerAttachment?.items?.length ? { context: { kind: 'closet_selection' as const, itemIds: composerAttachment.items.map((item) => item.itemId), label: composerAttachment.label } } : {}),
+      displayText: trimmed || (composerAttachment?.type === 'items' ? 'How would you style these pieces?' : composerAttachment?.type === 'photo' ? 'What do you think of this look?' : 'How would you style this?'),
       ...(composerPhotoData ? { photoData: composerPhotoData } : {}),
       ...(composerAttachment ? { attachment: composerAttachment } : {}),
     });
@@ -1403,7 +1439,19 @@ export function StylistChatView({
             ) : null}
           </TouchableOpacity>
         </View>
-        {isEmpty && entryContext?.kind === 'shopping_brief_edit' ? (
+        {isEmpty && composerAttachment?.type === 'items' ? (
+          <View style={{ paddingHorizontal: spacing.page, paddingVertical: spacing.xl, gap: spacing.lg }}>
+            <Ionicons name="sparkles-outline" size={28} color={colors.primary} />
+            <Text style={{ ...typography.text.sheetTitle, color: colors.foreground }}>Your pieces, a fresh perspective</Text>
+            <Text style={{ ...typography.text.body, color: colors.mutedForeground }}>Ask about pairing, fit, colour, or how to wear them. Your selected pieces are attached below.</Text>
+            {['How can I style these pieces together?', 'Which of these pieces work best together?', 'What would complete these looks?'].map((question) => (
+              <TouchableOpacity key={question} onPress={() => handleSendText(question)} accessibilityRole="button" style={{ padding: spacing.md, borderRadius: radii.card, backgroundColor: colors.surfaceSubtle, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                <Text style={{ ...typography.text.bodySmall, color: colors.foreground, flex: 1 }}>{question}</Text>
+                <Ionicons name="arrow-up-outline" size={16} color={colors.primary} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : isEmpty && entryContext?.kind === 'shopping_brief_edit' ? (
           <GuideEmptyState context={entryContext} onPrompt={(q) => sendMessage({ text: q, ...guideQuestionMode(q) })} />
         ) : isEmpty ? (
           <EmptyState
@@ -1588,13 +1636,17 @@ export function StylistChatView({
           value={inputText}
           onChangeText={handleTextChange}
           onDictatedText={setInputText}
-          onSend={handleSendText}
+          onSend={() => handleSendText()}
           onStopGeneration={stopGeneration}
           isLoading={isLoading}
           attachment={composerAttachment}
+          onRemoveItem={(itemId) => setComposerAttachment((current) => {
+            const items = current?.items?.filter((item) => item.itemId !== itemId);
+            return items?.length ? { ...current!, items, label: `${items.length} closet pieces` } : null;
+          })}
           onRemoveAttachment={() => { setComposerAttachment(null); setComposerPhotoData(null); }}
           onOpenAttachmentSheet={() => setAttachmentSheetVisible(true)}
-          placeholder={entryContext?.kind === 'shopping_brief_edit' ? guidePlaceholder(entryContext) : undefined}
+          placeholder={composerAttachment?.type === 'items' ? 'What would you like to know about these pieces?' : entryContext?.kind === 'shopping_brief_edit' ? guidePlaceholder(entryContext) : undefined}
         />
       </BlurView>
 
@@ -1703,6 +1755,40 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
   // (which offers to board it) without widening the card's public contract.
   const [savedWishlistId, setSavedWishlistId] = useStylistCardState<string | null>('wishlist-id', null);
 
+  const parentCardState = useContext(StylistCardStateContext);
+  const fallbackBlockState = useRef<StylistCardState>({});
+  if (!isUser && message.responseVersion === 2 && message.blocks?.length) {
+    const states = parentCardState ?? fallbackBlockState.current;
+    return (
+      <View style={styles.editorialResponse}>
+        {message.blocks.map((block, index) => {
+          if (!block) return null;
+          const key = `block:${index}`;
+          if (block.type === 'text') return <StylistRichText key={key} text={block.text} />;
+          const state = (states[key] ??= {}) as StylistCardState;
+          return (
+            <StylistCardStateContext.Provider key={key} value={state}>
+              <MessageBubble
+                message={messageForResponseBlock(message, block, index)}
+                allItems={allItems} isPlaying={isPlaying} createOutfit={createOutfit}
+                eventContext={eventContext} entryContext={entryContext} onAddToEvent={onAddToEvent}
+                onNavigateToShop={onNavigateToShop} onClarificationSelect={onClarificationSelect}
+                onNavigateToCloset={onNavigateToCloset} onStyleAuditItem={onStyleAuditItem}
+                onSaveToBoard={onSaveToBoard} onViewSaved={onViewSaved}
+              />
+            </StylistCardStateContext.Provider>
+          );
+        })}
+        {onToggleAudio && !message.isStreaming ? (
+          <TouchableOpacity style={styles.quietAudioBtn} onPress={onToggleAudio} accessibilityLabel="Read stylist response aloud">
+            <Ionicons name={isPlaying ? 'pause-circle-outline' : 'volume-medium-outline'} size={18} color={colors.mutedForeground} />
+            <Text style={styles.quietActionText}>{isPlaying ? 'Pause' : 'Listen'}</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+    );
+  }
+
   if (!isUser && message.wardrobeAudit) {
     return (
       <EditorialEntrance>
@@ -1780,7 +1866,7 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
           ) : null}
           {!!message.suggestedItemIds?.length && (
             <View style={styles.responseSection}>
-              <Text style={styles.responseSectionTitle}>{entryContext?.kind === 'shopping_brief_edit' ? 'Pairs from your wardrobe' : message.critique ? 'The pieces' : 'Wear it with'}</Text>
+              <Text style={styles.responseSectionTitle}>{entryContext?.kind === 'shopping_brief_edit' ? 'Pairs from your wardrobe' : message.critique ? 'The pieces' : 'Referenced pieces'}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.adviceThumbs}>
                 {message.suggestedItemIds
                   .map((id) => allItems.find((i) => i.id === id))
@@ -1932,7 +2018,11 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
       <View style={[styles.bubble, styles.bubbleUser]}>
         {message.attachment ? (
           <View style={styles.userAttachment}>
-            {message.attachment.uri ? (
+            {message.attachment.items ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.xs }}>
+                {message.attachment.items.map((item) => item.uri ? <Image key={item.itemId} source={{ uri: item.uri }} style={styles.userAttachmentImage} accessibilityLabel={item.label} /> : <View key={item.itemId} style={styles.userAttachmentFallback}><Ionicons name="shirt-outline" size={19} color={colors.primaryForeground} /></View>)}
+              </ScrollView>
+            ) : message.attachment.uri ? (
               <Image source={{ uri: message.attachment.uri }} style={styles.userAttachmentImage} resizeMode="cover" />
             ) : (
               <View style={styles.userAttachmentFallback}>

@@ -58,10 +58,10 @@ export function ClosetHeader({ scrollY, actionLabel, onAction, summary, overflow
 }
 function SelectionRow({ selection, style }: { selection: ClosetHeaderSelection; style: ReturnType<typeof useAnimatedStyle> }) {
   const { count, noun, isAllSelected, canSelectAll, onCancel, onToggleAll } = selection;
-  const title = count === 0 ? `Select ${noun}s` : `${count} ${noun}${count === 1 ? '' : 's'}`;
+  const title = count === 0 ? `Select ${noun}s` : `${count} selected`;
   useEffect(() => {
-    if (count > 0) AccessibilityInfo.announceForAccessibility(`${title} selected`);
-  }, [count, title]);
+    if (count > 0) AccessibilityInfo.announceForAccessibility(`${count} ${noun}${count === 1 ? '' : 's'} selected`);
+  }, [count, noun]);
   return (
     <Animated.View style={[styles.selectionRow, style]}>
       <PressableScale onPress={onCancel} contentStyle={styles.selectionSide} accessibilityRole="button" accessibilityLabel="Cancel selection">

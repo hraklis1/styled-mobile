@@ -14,6 +14,27 @@ let resume: ReturnType<typeof useGlobalAIStylist>['resumeStylist'];
 let open: ReturnType<typeof useGlobalAIStylist>['openStylist'];
 function Launcher() { const { openStylist, resumeStylist } = useGlobalAIStylist(); React.useEffect(() => { open = openStylist; resume = resumeStylist; }, [openStylist]); return null; }
 
+it('opens a fresh closet discussion with the selected pieces pending in the composer', async () => {
+  let renderer!: TestRenderer.ReactTestRenderer;
+  const attachment = {
+    type: 'items' as const,
+    label: '2 closet pieces',
+    items: [{ itemId: 1, label: 'Cream sweater', uri: 'https://example.com/sweater.jpg' }, { itemId: 2, label: 'Dark trousers' }],
+  };
+  try {
+    act(() => { renderer = TestRenderer.create(<GlobalAIStylistProvider><Launcher /></GlobalAIStylistProvider>); });
+    await act(async () => { await open({ source: 'closet_selection', initialAttachment: attachment }); });
+    expect(renderer.root.findByType(Modal).props.visible).toBe(true);
+    const chat = renderer.root.findByType('StylistChatView' as any);
+    expect(chat.props.threadMode).toBe('new');
+    expect(chat.props.initialAttachment).toEqual(attachment);
+    expect(chat.props.initialQuery).toBeUndefined();
+    expect(chat.props.promptRequestId).toBe(0);
+  } finally {
+    act(() => renderer?.unmount());
+  }
+});
+
 it('dismisses the native modal before navigating to the saved recommendation', async () => {
   const originalOS = Platform.OS;
   Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true });

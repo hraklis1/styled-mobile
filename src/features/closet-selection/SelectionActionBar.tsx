@@ -17,6 +17,9 @@ export type SelectionAction = {
   onPress: () => void;
   accessibilityLabel?: string;
   destructive?: boolean;
+  highlighted?: boolean;
+  disabled?: boolean;
+  hint?: string;
 };
 
 export type SelectionPrimaryAction = SelectionAction & {
@@ -107,11 +110,14 @@ export function SelectionActionBar({ count, noun, primary, actions, overflow }: 
 }
 
 function ActionButton({ action }: { action: SelectionAction }) {
-  const tint = action.destructive ? colors.error : colors.foreground;
+  const tint = action.highlighted ? colors.primaryForeground : action.destructive ? colors.error : colors.foreground;
   return (
     <PressableScale
       onPress={action.onPress}
-      contentStyle={styles.action}
+      disabled={action.disabled}
+      accessibilityState={{ disabled: !!action.disabled }}
+      accessibilityHint={action.hint}
+      contentStyle={[styles.action, action.highlighted && styles.actionHighlighted, action.disabled && { opacity: 0.4 }]}
       accessibilityRole="button"
       accessibilityLabel={action.accessibilityLabel ?? action.label}
     >
@@ -155,5 +161,6 @@ const styles = StyleSheet.create({
   primaryTextDisabled: { color: colors.mutedForeground },
   actions: { flexDirection: 'row', justifyContent: 'space-around' },
   action: { minWidth: 64, height: 56, alignItems: 'center', justifyContent: 'center', gap: 3, paddingHorizontal: spacing.xs },
+  actionHighlighted: { backgroundColor: colors.primary, borderRadius: radii.action },
   actionText: { ...typography.text.caption, fontSize: 11, letterSpacing: 0.2 },
 });

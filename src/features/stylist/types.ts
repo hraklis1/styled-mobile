@@ -44,7 +44,8 @@ export type StylistClarification = {
 };
 
 export type StylistComposerAttachment = {
-  type: 'photo' | 'item';
+  type: 'photo' | 'item' | 'items';
+  items?: Array<{ itemId: number; label: string; uri?: string | null }>;
   label: string;
   uri?: string | null;
   itemId?: number;
@@ -147,6 +148,8 @@ export type StylistUserMessage = StylistBaseMessage & {
 };
 
 export type StylistAssistantMessage = StylistBaseMessage & {
+  responseVersion?: 2;
+  blocks?: StylistResponseBlock[];
   role: 'assistant';
   kind: 'assistant';
   mode?: StylistMode;
@@ -252,6 +255,7 @@ export type StylistSwapContext = {
 };
 
 export type StylistAskRequest = {
+  capabilities?: ['stylist_blocks_v2'];
   text?: string;
   history?: StylistHistoryMessage[];
   mode?: StylistMode;
@@ -280,6 +284,8 @@ export type StylistAskRequest = {
 };
 
 export type StylistAskDoneEvent = {
+  responseVersion?: 2;
+  blocks?: StylistResponseBlock[];
   transcript: string;
   responseText: string;
   itemIds?: number[];
@@ -387,6 +393,7 @@ export type StylistTransportError = {
 };
 
 export type StylistTransportCallbacks = {
+  onBlock?: (assistantMessageId: string, index: number, block: StylistResponseBlock) => void;
   onAssistantStart?: (assistantMessageId: string) => void;
   onAssistantToken?: (assistantMessageId: string, token: string) => void;
   onAssistantDone?: (assistantMessageId: string, event: StylistAskDoneEvent) => void;
@@ -394,3 +401,8 @@ export type StylistTransportCallbacks = {
   onConversationResolved?: (conversationId: number) => void;
   onError?: (error: StylistTransportError) => void;
 };
+
+/** Ordered v2 presentation; card payloads reuse the existing response actions. */
+export type StylistResponseBlock =
+  | { type: 'text'; text: string }
+  | { type: 'card'; text: string; payload: Omit<StylistAskDoneEvent, 'transcript' | 'responseText' | 'responseVersion' | 'blocks'> };

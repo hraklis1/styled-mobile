@@ -71,7 +71,8 @@ jest.mock('../../../hooks/useBoards', () => ({ useBoards: () => ({ data: mockBoa
 jest.mock('../../../hooks/useCameraLaunch', () => ({ useLibraryLaunch: () => jest.fn() }));
 jest.mock('../../../contexts/GlobalScanContext', () => ({ useGlobalScan: () => ({ openScanItem: jest.fn(), openBatchScan: jest.fn() }) }));
 jest.mock('../../../contexts/GlobalAddSheetContext', () => ({ useGlobalAddSheet: () => ({ openAddSheet: jest.fn() }) }));
-jest.mock('../../../contexts/GlobalAIStylistContext', () => ({ useGlobalAIStylist: () => ({ openStylist: jest.fn() }) }));
+const mockOpenStylist = jest.fn();
+jest.mock('../../../contexts/GlobalAIStylistContext', () => ({ useGlobalAIStylist: () => ({ openStylist: mockOpenStylist }) }));
 jest.mock('../../../contexts/FabScrollContext', () => ({ useFabScroll: () => ({ fabCollapsed: { value: 0 } }) }));
 
 let renderer: TestRenderer.ReactTestRenderer;
@@ -295,4 +296,18 @@ it('offers three columns for outfits without changing the pieces layout', () => 
   expect(node('AnimatedClosetList').props.numColumns).toBe(3);
   act(() => node('ClosetNavigation').props.onChange('pieces'));
   expect(node('ClosetGrid').props.numColumns).toBe(2);
+});
+
+it('opens the stylist with all selected pieces attached and waits for a question', () => {
+  act(() => node('ClosetViewMenu').props.onSelect());
+  act(() => node('ClosetGrid').props.onToggleSelect(1));
+  act(() => node('ClosetGrid').props.onToggleSelect(2));
+  act(() => node('SelectionActionBar').props.actions.find((action: any) => action.label === 'Stylist').onPress());
+  expect(mockOpenStylist).toHaveBeenCalledWith(expect.objectContaining({
+    source: 'closet_selection',
+    initialAttachment: expect.objectContaining({ type: 'items', items: expect.arrayContaining([
+      expect.objectContaining({ itemId: 1 }), expect.objectContaining({ itemId: 2 }),
+    ]) }),
+  }));
+  expect(mockOpenStylist.mock.calls[0][0].initialQuery).toBeUndefined();
 });

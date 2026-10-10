@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { fetch } from 'expo/fetch';
+import { isResponseBlock } from '../responseBlocks';
 
 import { API_BASE_URL, getAccessToken } from '../../../lib/api';
 import type {
@@ -83,6 +85,7 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
     let pendingText = '';
     let flushTimer: ReturnType<typeof setTimeout> | null = null;
     let assistantStarted = false;
+    let receivedDone = false;
 
     const isCurrentRequest = () => requestIdRef.current === requestId;
 
@@ -117,6 +120,8 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
     };
 
     const handleDone = (event: StylistAskDoneEvent) => {
+      if (receivedDone) return;
+      receivedDone = true;
       clearFlushTimer();
       flushPending();
       const conversationId = event.conversationId;
@@ -149,6 +154,12 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
 
       if (currentEventRef.current === 'done') {
         handleDone(parsed as StylistAskDoneEvent);
+      } else if (currentEventRef.current === 'block' && parsed.responseVersion === 2 && Number.isInteger(parsed.index) && Number(parsed.index) >= 0 && Number(parsed.index) < 16 && isResponseBlock(parsed.block)) {
+        if (!assistantStarted) {
+          assistantStarted = true;
+          callbacksRef.current.onAssistantStart?.(input.assistantMessageId);
+        }
+        callbacksRef.current.onBlock?.(input.assistantMessageId, Number(parsed.index), parsed.block);
       } else if (currentEventRef.current === 'trip_outfit') {
         callbacksRef.current.onTripOutfit?.(
           input.assistantMessageId,
@@ -169,7 +180,7 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ ...input.request, _stream: true }),
+        body: JSON.stringify({ ...input.request, capabilities: ['stylist_blocks_v2'], _stream: true }),
         signal: controller.signal,
       });
 
@@ -208,6 +219,7 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
       if (isCurrentRequest() && sseBuffer.trim()) {
         processSseLine(sseBuffer, currentEventRef);
       }
+      if (isCurrentRequest() && !receivedDone) throw new Error('The stylist response was interrupted. Please try again.');
     } catch (error) {
       clearFlushTimer();
       if (!isCurrentRequest() || isAbortError(error)) return;

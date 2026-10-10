@@ -7,7 +7,7 @@ import { StylistChatView, type StylistSessionSnapshot } from '../components/styl
 import { useEntitlement } from '../hooks/useEntitlement';
 import { track } from '../lib/analytics';
 import { ensureEntitled } from '../lib/entitlementGate';
-import type { StylistEntryContext, StylistMissingEssential, StylistMode } from '../features/stylist/types';
+import type { StylistComposerAttachment, StylistEntryContext, StylistMissingEssential, StylistMode } from '../features/stylist/types';
 
 // ─── Context ──────────────────────────────────────────────────────────────────
 
@@ -27,6 +27,7 @@ export type StylistEventContext = { id: number; title: string };
 
 type OpenStylistOptions = {
   initialQuery?: string;
+  initialAttachment?: StylistComposerAttachment;
   initialAttachmentUri?: string;
   initialMode?: StylistMode;
   destination?: string;
@@ -98,6 +99,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
     pendingSavedId.current = id;
     setVisible(false);
   }, []);
+  const [initialAttachment, setInitialAttachment] = useState<StylistComposerAttachment | undefined>();
   const [initialQuery, setInitialQuery] = useState<string | undefined>(undefined);
   const [initialAttachmentUri, setInitialAttachmentUri] = useState<string | undefined>(undefined);
   const [initialMode, setInitialMode] = useState<StylistMode | undefined>(undefined);
@@ -111,7 +113,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
   const [threadMode, setThreadMode] = useState<'new' | 'resume'>('resume');
   const { isPremium } = useEntitlement();
 
-  const openStylist = useCallback(async ({ initialQuery: query, initialAttachmentUri: attachmentUri, initialMode: mode, destination, source, eventContext: event, context, onNavigateToShop: navigateToShop }: OpenStylistOptions) => {
+  const openStylist = useCallback(async ({ initialQuery: query, initialAttachment: attachment, initialAttachmentUri: attachmentUri, initialMode: mode, destination, source, eventContext: event, context, onNavigateToShop: navigateToShop }: OpenStylistOptions) => {
     const entitled = await ensureEntitled(isPremium, {
       title: 'Unlock your AI Stylist',
       message: 'Chat with your personal stylist for daily outfit advice, wardrobe insights, and event planning.',
@@ -122,6 +124,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
     setSource(source);
     setThreadMode(threadModeForSource(source));
     setInitialQuery(query);
+    setInitialAttachment(attachment);
     setInitialAttachmentUri(attachmentUri);
     setInitialMode(mode);
     setInitialDestination(destination);
@@ -178,6 +181,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
           <StylistChatView
             sessionRef={sessionRef}
             initialQuery={initialQuery}
+            initialAttachment={initialAttachment}
             initialAttachmentUri={initialAttachmentUri}
             initialMode={initialMode}
             initialDestination={initialDestination}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Image, Platform, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Image, ScrollView, Platform, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
   FadeIn,
@@ -27,6 +27,7 @@ type Props = {
   isLoading: boolean;
   attachment: StylistComposerAttachment | null;
   onRemoveAttachment: () => void;
+  onRemoveItem?: (itemId: number) => void;
   onOpenAttachmentSheet: () => void;
   placeholder?: string;
 };
@@ -62,6 +63,7 @@ export function StylistComposer({
   isLoading,
   attachment,
   onRemoveAttachment,
+  onRemoveItem,
   onOpenAttachmentSheet,
   placeholder = 'Ask about an outfit or tag @a piece',
 }: Props) {
@@ -106,7 +108,30 @@ export function StylistComposer({
   return (
     <View style={styles.inputBar}>
       <Animated.View style={[styles.composer, cardAnimatedStyle]}>
-        {attachment ? (
+        {attachment?.type === 'items' ? (
+          <View style={{ padding: spacing.sm, gap: spacing.sm }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+              <Ionicons name="sparkles-outline" size={14} color={colors.primary} />
+              <Text style={styles.attachmentPillLabel}>{attachment.items?.length} {attachment.items?.length === 1 ? 'piece' : 'pieces'} attached</Text>
+              <TouchableOpacity onPress={onRemoveAttachment} style={{ marginLeft: 'auto', padding: spacing.xs }} accessibilityRole="button" accessibilityLabel="Remove all selected pieces">
+                <Ionicons name="close" size={16} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingTop: spacing.xs }}>
+              {attachment.items?.map((item) => (
+                <View key={item.itemId} style={{ width: 72, gap: spacing.xs }}>
+                  <View style={{ width: 64, height: 64, borderRadius: radii.lg, backgroundColor: colors.surfaceSubtle, alignItems: 'center', justifyContent: 'center' }}>
+                    {item.uri ? <Image source={{ uri: item.uri }} style={{ width: 64, height: 64, borderRadius: radii.lg }} resizeMode="contain" /> : <Ionicons name="shirt-outline" size={24} color={colors.mutedForeground} />}
+                    <TouchableOpacity onPress={() => onRemoveItem?.(item.itemId)} style={styles.attachmentBadge} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Remove ${item.label}`}>
+                      <Ionicons name="close" size={12} color={colors.white} />
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={{ ...typography.text.caption, color: colors.mutedForeground }} numberOfLines={1}>{item.label}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        ) : attachment ? (
           <Animated.View
             style={styles.attachmentRow}
             entering={FadeIn.duration(160)}
