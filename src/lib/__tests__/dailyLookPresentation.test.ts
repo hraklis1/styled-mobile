@@ -92,7 +92,7 @@ describe('daily look presentation', () => {
     expect(resolveDailyLookPresentation({
       ...base,
       response: { outcome: 'failed', candidate: null },
-    }).kind).toBe('empty');
+    }).kind).toBe('unavailable');
   });
 
   it('uses a validated fallback for a dismissed recommendation', () => {
@@ -108,6 +108,13 @@ describe('daily look presentation', () => {
       ...base,
       response: { outcome: 'none', candidate: null },
     }).kind).toBe('empty');
+  });
+
+  it('distinguishes request errors and missing results from wardrobe gaps', () => {
+    expect(resolveDailyLookPresentation({ ...base, failed: true }).kind).toBe('unavailable');
+    expect(resolveDailyLookPresentation({ ...base }).kind).toBe('unavailable');
+    expect(resolveDailyLookPresentation({ ...base, response: { outcome: 'generating', candidate: null } }).kind).toBe('unavailable');
+    expect(resolveDailyLookPresentation({ ...base, response: { outcome: 'dismissed', candidate: null } }).kind).toBe('dismissed');
   });
 
   it('keeps a newly saved ready outfit authoritative', () => {

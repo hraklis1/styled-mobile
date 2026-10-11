@@ -12,12 +12,15 @@ export type DailyLookPresentation =
   | { kind: 'priority'; candidate: DailyLookCandidate; gap: DailyLookMissingEssential }
   | { kind: 'owned'; outfit: Outfit; reason: string; source: 'ranked' | 'fallback' | 'saved' }
   | { kind: 'loading' }
+  | { kind: 'unavailable' }
+  | { kind: 'dismissed' }
   | { kind: 'empty' };
 
 type PresentationInput = {
   premium: boolean;
   shouldResolve: boolean;
   fetching: boolean;
+  failed?: boolean;
   response?: DailyLookResolveResponse;
   rankedOutfit?: Outfit | null;
   rankedReason?: string;
@@ -30,6 +33,7 @@ export function resolveDailyLookPresentation({
   premium,
   shouldResolve,
   fetching,
+  failed = false,
   response,
   rankedOutfit,
   rankedReason = 'Today’s Look',
@@ -76,6 +80,9 @@ export function resolveDailyLookPresentation({
     : fallbackOutfits.find((entry) => entry.outfit.id === response.fallbackOutfitId);
   if (fallback) return { kind: 'owned', outfit: fallback.outfit, reason: fallback.reason, source: 'fallback' };
   if (fetching && !response) return { kind: 'loading' };
+  if (failed || response?.outcome === 'failed' || !response) return { kind: 'unavailable' };
+  if (response.outcome === 'generating') return { kind: 'unavailable' };
+  if (response.outcome === 'dismissed') return { kind: 'dismissed' };
   return { kind: 'empty' };
 }
 

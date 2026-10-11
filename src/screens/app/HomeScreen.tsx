@@ -583,6 +583,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     premium: isPremium,
     shouldResolve: dailyLookDecision.shouldResolve,
     fetching: dailyLookQuery.isFetching,
+    failed: dailyLookQuery.isError,
     response: dailyLookQuery.data,
     rankedOutfit: dailyPick?.outfit,
     rankedReason: dailyPick?.reason,
@@ -1025,17 +1026,29 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           <LookMatEmpty
             width={plate.width}
             height={Math.round(plate.height * 0.6)}
-            title={items.length === 0
+            title={dailyLookPresentation.kind === 'unavailable'
+              ? 'Today’s look couldn’t be prepared'
+              : dailyLookPresentation.kind === 'dismissed'
+                ? 'Today’s suggestion was dismissed'
+                : items.length === 0
               ? 'Your closet is ready for its first look'
               : outfits.length > 0
-                ? 'No suitable look for today'
+                ? 'No recommendation for today'
                 : 'No saved outfits yet'}
-            subtitle={items.length === 0
+            subtitle={dailyLookPresentation.kind === 'unavailable'
+              ? 'Your stylist couldn’t finish checking a look for today. Try again later, or choose from your saved outfits.'
+              : dailyLookPresentation.kind === 'dismissed'
+                ? 'You can still choose a look from your saved outfits.'
+                : items.length === 0
               ? 'Add a few pieces to unlock personalized outfit suggestions.'
               : outfits.length > 0
-                ? 'Your stylist won’t force a combination that misses today’s needs.'
+                ? 'We couldn’t recommend a complete look from your available clothes for today’s weather and plans. You can still browse your saved outfits.'
                 : 'Build an outfit from your closet to see it here'}
-            cta={items.length === 0 ? {
+            cta={dailyLookPresentation.kind === 'unavailable' ? {
+              label: 'Try again',
+              accessibilityLabel: 'Try preparing today’s look again',
+              onPress: () => { void dailyLookQuery.refetch(); },
+            } : items.length === 0 ? {
               label: 'Add clothes',
               accessibilityLabel: 'Add clothes to unlock outfit suggestions',
               onPress: handleAddToCloset,
