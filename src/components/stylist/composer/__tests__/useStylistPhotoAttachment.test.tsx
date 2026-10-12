@@ -35,7 +35,7 @@ it('waits for native sheet dismissal before opening the photo library and ignore
   expect(picker.busy).toBe(true);
   await act(async () => { await picker.afterDismiss(); await picker.afterDismiss(); });
   expect(library).toHaveBeenCalledTimes(1);
-  expect(library).toHaveBeenCalledWith({ mediaTypes: ['images'], quality: 1 });
+  expect(library).toHaveBeenCalledWith({ mediaTypes: ['images'], quality: 1, allowsMultipleSelection: true, orderedSelection: true, selectionLimit: 10 });
   expect(picker.busy).toBe(false);
   expect(onPhoto).not.toHaveBeenCalled();
 });
@@ -84,4 +84,13 @@ it('does not launch a queued picker after the chat unmounts', async () => {
   act(() => renderer.unmount());
   await act(async () => picker.afterDismiss());
   expect(library).not.toHaveBeenCalled();
+});
+
+ it('attaches every selected library photo in order', async () => {
+  const assets = [{ uri: 'file:///one', width: 10, height: 10 }, { uri: 'file:///two', width: 10, height: 10 }];
+  library.mockResolvedValue({ canceled: false, assets });
+  compress.mockImplementation(async asset => ({ uri: asset.uri, dataUrl: asset.uri }));
+  act(() => picker.choosePhoto('library'));
+  await act(async () => picker.afterDismiss());
+  expect(onPhoto.mock.calls.map(call => call[0].uri)).toEqual(assets.map(asset => asset.uri));
 });

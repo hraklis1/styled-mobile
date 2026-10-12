@@ -27,6 +27,7 @@ type Props = {
   isLoading: boolean;
   attachment: StylistComposerAttachment | null;
   onRemoveAttachment: () => void;
+  onRemovePhoto?: (uri: string) => void;
   onRemoveItem?: (itemId: number) => void;
   onOpenAttachmentSheet: () => void;
   placeholder?: string;
@@ -61,7 +62,7 @@ export function StylistComposer({
   isLoading,
   attachment,
   onRemoveAttachment,
-  onRemoveItem,
+  onRemoveItem, onRemovePhoto,
   onOpenAttachmentSheet,
   placeholder = 'What are you dressing for?',
   inputRef,
@@ -94,12 +95,20 @@ export function StylistComposer({
           <View style={{ padding: spacing.sm, gap: spacing.sm }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
               <Ionicons name="sparkles-outline" size={14} color={colors.primary} />
-              <Text style={styles.attachmentPillLabel}>{attachment.items?.length} {attachment.items?.length === 1 ? 'piece' : 'pieces'} attached</Text>
+              <Text style={styles.attachmentPillLabel}>{(attachment.items?.length ?? 0) + (attachment.photos?.length ?? 0)} attached</Text>
               <TouchableOpacity onPress={onRemoveAttachment} style={{ marginLeft: 'auto', padding: spacing.xs }} accessibilityRole="button" accessibilityLabel="Remove all selected pieces">
                 <Ionicons name="close" size={16} color={colors.mutedForeground} />
               </TouchableOpacity>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingTop: spacing.xs }}>
+              {attachment.photos?.map(photo => (
+                <View key={photo.uri} style={styles.attachmentThumbWrap}>
+                  <Image source={{ uri: photo.uri }} style={styles.attachmentThumb} resizeMode="cover" />
+                  <TouchableOpacity onPress={() => onRemovePhoto?.(photo.uri)} style={styles.attachmentBadge} hitSlop={12} accessibilityRole="button" accessibilityLabel="Remove photo">
+                    <Ionicons name="close" size={12} color={colors.white} />
+                  </TouchableOpacity>
+                </View>
+              ))}
               {attachment.items?.map((item) => (
                 <View key={item.itemId} style={{ width: 56, gap: spacing.xs }}>
                   <View style={{ width: 48, height: 48, borderRadius: radii.lg, backgroundColor: colors.surfaceSubtle, alignItems: 'center', justifyContent: 'center' }}>

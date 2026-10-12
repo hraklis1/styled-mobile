@@ -46,6 +46,7 @@ export type StylistClarification = {
 
 export type StylistComposerAttachment = {
   type: 'photo' | 'item' | 'items';
+  photos?: Array<{ uri: string; dataUrl: string }>;
   items?: Array<{ itemId: number; label: string; uri?: string | null }>;
   label: string;
   uri?: string | null;
@@ -282,7 +283,7 @@ export type StylistAskRequest = {
   };
   weatherSummary?: string;
   swapContext?: StylistSwapContext;
-  photoData?: string;
+  photoData?: string | string[];
   occasionHint?: StylistOccasionHint;
   recId?: number;
   conversationId?: number;
@@ -343,7 +344,7 @@ export type StylistFollowUp = { label: string; prompt: string };
 export type StylistSendOptions = {
   text?: string;
   displayText?: string;
-  photoData?: string;
+  photoData?: string | string[];
   attachment?: StylistComposerAttachment;
   context?: StylistEntryContext;
   mode?: StylistMode;

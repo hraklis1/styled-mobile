@@ -1,6 +1,7 @@
 import { StylistChecklist } from "./StylistChecklist";
 import { StylistEditorialFrame } from "./StylistEditorialFrame";
 import { StylistInsight, StylistTagSuggestions } from "./StylistEditorialEntities";
+import { appendStylistAttachment } from '../../features/stylist/attachments';
 import { useStylistPhotoAttachment } from './composer/useStylistPhotoAttachment';
 import { confirmSheet } from '../primitives/ConfirmSheet';
 import { Fragment, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -1206,11 +1207,21 @@ export function StylistChatView({
 
   // ── Input handlers ─────────────────────────────────────────────────────────
 
+  function appendAttachment(added: ComposerAttachment) {
+    setComposerAttachment(current => appendStylistAttachment(
+      current?.type === 'photo' && current.uri && composerPhotoData
+        ? { ...current, photos: [{ uri: current.uri, dataUrl: composerPhotoData }] }
+        : current,
+      added,
+    ));
+    setComposerPhotoData(null);
+  }
+
   const photoPicker = useStylistPhotoAttachment({
+    photoCount: (composerAttachment?.photos?.length ?? 0) + (composerPhotoData ? 1 : 0),
     closeSheet: () => setAttachmentSheetVisible(false),
     onPhoto: ({ uri, dataUrl }) => {
-      setComposerAttachment({ type: 'photo', label: 'Photo', uri });
-      setComposerPhotoData(dataUrl);
+      appendAttachment({ type: 'photo', label: 'Photo', photos: [{ uri, dataUrl }] });
     },
     onChooseCloset: () => setWardrobePickerVisible(true),
   });
@@ -1229,7 +1240,7 @@ export function StylistChatView({
       ...(entryContext?.kind === 'shopping_brief_edit' ? guideQuestionMode(attachmentText) : {}),
       ...(composerAttachment?.items?.length ? { context: { kind: 'closet_selection' as const, itemIds: composerAttachment.items.map((item) => item.itemId), label: composerAttachment.label } } : {}),
       displayText: trimmed || (composerAttachment?.type === 'items' ? 'How would you style these pieces?' : composerAttachment?.type === 'photo' ? 'What do you think of this look?' : 'How would you style this?'),
-      ...(composerPhotoData ? { photoData: composerPhotoData } : {}),
+      ...(composerAttachment?.photos?.length ? { photoData: [...(composerPhotoData ? [composerPhotoData] : []), ...composerAttachment.photos.map(photo => photo.dataUrl)] } : composerPhotoData ? { photoData: composerPhotoData } : {}),
       ...(composerAttachment ? { attachment: composerAttachment } : {}),
     });
     setComposerAttachment(null);
@@ -1267,7 +1278,7 @@ export function StylistChatView({
     const uri = itemImageUri(item);
     const lastAt = inputText.lastIndexOf('@');
     setInputText(lastAt >= 0 ? inputText.slice(0, lastAt) : inputText);
-    setComposerAttachment({ type: 'item', label: item.name, uri, itemId: item.id });
+    appendAttachment({ type: 'item', label: item.name, uri, itemId: item.id });
     setMentionQuery(null);
   }
 
@@ -1641,7 +1652,11 @@ export function StylistChatView({
           attachment={composerAttachment}
           onRemoveItem={(itemId) => setComposerAttachment((current) => {
             const items = current?.items?.filter((item) => item.itemId !== itemId);
-            return items?.length ? { ...current!, items, label: `${items.length} closet pieces` } : null;
+            return items?.length || current?.photos?.length ? { ...current!, items, label: `${(items?.length ?? 0) + (current?.photos?.length ?? 0)} attachments` } : null;
+          })}
+          onRemovePhoto={(uri) => setComposerAttachment(current => {
+            const photos = current?.photos?.filter(photo => photo.uri !== uri);
+            return photos?.length || current?.items?.length ? { ...current!, photos, label: `${(photos?.length ?? 0) + (current?.items?.length ?? 0)} attachments` } : null;
           })}
           onRemoveAttachment={() => { setComposerAttachment(null); setComposerPhotoData(null); }}
           onOpenAttachmentSheet={() => { if (!photoPicker.busy) setAttachmentSheetVisible(true); }}
@@ -1680,13 +1695,20 @@ export function StylistChatView({
       <ItemPickerSheet
         visible={wardrobePickerVisible}
         onClose={() => setWardrobePickerVisible(false)}
-        title="Choose a wardrobe piece"
+        title="Choose wardrobe pieces"
+        multiple
+        selectedIds={attachmentItemIds(composerAttachment ?? undefined)}
         items={allItems}
         selectedId={composerAttachment?.type === 'item' ? composerAttachment.itemId : undefined}
         onSelect={(item) => {
-          setComposerAttachment({ type: 'item', label: item.name, itemId: item.id, uri: itemImageUri(item) });
-          setComposerPhotoData(null);
-          setWardrobePickerVisible(false);
+          if (attachmentItemIds(composerAttachment ?? undefined).includes(item.id)) {
+            setComposerAttachment(current => {
+              const items = current?.items?.filter(piece => piece.itemId !== item.id) ?? [];
+              return items.length || current?.photos?.length ? { ...current!, items, label: `${items.length + (current?.photos?.length ?? 0)} attachments` } : null;
+            });
+          } else {
+            appendAttachment({ type: 'item', label: item.name, itemId: item.id, uri: itemImageUri(item) });
+          }
         }}
       />
 
@@ -2040,6 +2062,7 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
           <View style={styles.userAttachment}>
             {message.attachment.items ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.xs }}>
+                {message.attachment.photos?.map(photo => <Image key={photo.uri} source={{ uri: photo.uri }} style={styles.userAttachmentImage} accessibilityLabel="Attached photo" />)}
                 {message.attachment.items.map((item) => item.uri ? <Image key={item.itemId} source={{ uri: item.uri }} style={styles.userAttachmentImage} accessibilityLabel={item.label} /> : <View key={item.itemId} style={styles.userAttachmentFallback}><Ionicons name="shirt-outline" size={19} color={colors.primaryForeground} /></View>)}
               </ScrollView>
             ) : message.attachment.uri ? (
@@ -2049,7 +2072,6 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
                 <Ionicons name={message.attachment.type === 'photo' ? 'image-outline' : 'shirt-outline'} size={19} color={colors.primaryForeground} />
               </View>
             )}
-            <Text style={styles.userAttachmentLabel} numberOfLines={1}>{message.attachment.label}</Text>
           </View>
         ) : null}
         <Text style={[styles.bubbleText, styles.bubbleTextUser]}>
@@ -3958,7 +3980,6 @@ const styles = StyleSheet.create({
   userAttachment: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs },
   userAttachmentImage: { width: 52, height: 58, borderRadius: radii.md },
   userAttachmentFallback: { width: 38, height: 38, borderRadius: radii.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceElevated },
-  userAttachmentLabel: { flexShrink: 1, color: colors.foreground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold },
   editorialResponse: { gap: spacing.sm },
   shopCardContainer: { gap: spacing.sm },
   stylistNote: {

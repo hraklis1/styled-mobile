@@ -77,6 +77,8 @@ type ItemPickerSheetProps = {
   items: Item[];
   /** Highlights the current item when swapping. */
   selectedId?: number;
+  multiple?: boolean;
+  selectedIds?: number[];
   onSelect: (item: Item) => void;
 };
 
@@ -89,6 +91,8 @@ export function ItemPickerSheet({
   title,
   items,
   selectedId,
+  multiple = false,
+  selectedIds = [],
   onSelect,
 }: ItemPickerSheetProps) {
   const { width: screenWidth } = useWindowDimensions();
@@ -194,8 +198,8 @@ export function ItemPickerSheet({
 
   const handleSelect = useCallback((item: Item) => {
     onSelect(item);
-    handleClose();
-  }, [onSelect, handleClose]);
+    if (!multiple) handleClose();
+  }, [onSelect, handleClose, multiple]);
 
   // ── Grid sizing ─────────────────────────────────────────────────────────
   const PICKER_COLS = 3;
@@ -219,7 +223,9 @@ export function ItemPickerSheet({
 
           <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
 
-          <View style={{ width: 70 }} />
+          {multiple ? <TouchableOpacity onPress={handleClose} style={{ width: 70 }} accessibilityRole="button" accessibilityLabel="Done selecting pieces">
+            <Text style={styles.backText}>Done ({selectedIds.length})</Text>
+          </TouchableOpacity> : <View style={{ width: 70 }} />}
         </View>
 
         <View style={styles.pickerSearchRow}>
@@ -360,7 +366,7 @@ export function ItemPickerSheet({
             </View>
           }
           renderItem={({ item }) => {
-            const isSelected = selectedId === item.id;
+            const isSelected = selectedId === item.id || selectedIds.includes(item.id);
             const itemCover = itemCoverPresentation(item);
             const imgUri = itemCover.uri;
             return (
