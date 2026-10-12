@@ -1,0 +1,28 @@
+diff --git a/node_modules/@posthog/core/dist/posthog-core-stateless.js b/node_modules/@posthog/core/dist/posthog-core-stateless.js
+--- a/node_modules/@posthog/core/dist/posthog-core-stateless.js
++++ b/node_modules/@posthog/core/dist/posthog-core-stateless.js
+@@ -68,6 +68,10 @@
+             text = await err.text;
+         } catch  {}
+         console.error(`Error while flushing PostHog: message=${err.message}, response body=${text}`, err);
++    } else if (isPostHogFetchNetworkError(err)) {
++        // Offline analytics must not trigger React Native's error overlay.
++        // The SDK retains these events in its queue for a later flush.
++        console.warn('PostHog upload deferred: network unavailable; events remain queued.');
+     } else console.error('Error while flushing PostHog', err);
+     return Promise.resolve();
+ }
+diff --git a/node_modules/@posthog/core/dist/posthog-core-stateless.mjs b/node_modules/@posthog/core/dist/posthog-core-stateless.mjs
+--- a/node_modules/@posthog/core/dist/posthog-core-stateless.mjs
++++ b/node_modules/@posthog/core/dist/posthog-core-stateless.mjs
+@@ -36,6 +36,10 @@
+             text = await err.text;
+         } catch  {}
+         console.error(`Error while flushing PostHog: message=${err.message}, response body=${text}`, err);
++    } else if (isPostHogFetchNetworkError(err)) {
++        // Offline analytics must not trigger React Native's error overlay.
++        // The SDK retains these events in its queue for a later flush.
++        console.warn('PostHog upload deferred: network unavailable; events remain queued.');
+     } else console.error('Error while flushing PostHog', err);
+     return Promise.resolve();
+ }
