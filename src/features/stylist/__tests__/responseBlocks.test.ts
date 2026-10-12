@@ -1,4 +1,4 @@
-import { groupResponseBlocks, responseBlockItemIds, isResponseBlock, messageForResponseBlock } from '../responseBlocks';
+import { attachmentItemIds, additionalReferenceIds, groupResponseBlocks, responseBlockItemIds, isResponseBlock, messageForResponseBlock } from '../responseBlocks';
 import type { StylistAssistantMessage, StylistResponseBlock } from '../types';
 
 const parent: StylistAssistantMessage = { id: 'turn', role: 'assistant', kind: 'assistant', renderType: 'text', text: 'Whole reply', recId: 7 };
@@ -57,4 +57,19 @@ test('malformed new entities and owned snapshots do not enter rendering', () => 
   expect(isResponseBlock({ type: 'card', text: '', payload: { insight: { label: 'Fit', explanation: '', supportingItemIds: [-1] } } })).toBe(false);
   expect(isResponseBlock({ type: 'text', text: '', wardrobeItems: [{ id: 1 }] })).toBe(false);
   expect(isResponseBlock({ type: 'text', text: '', ownedItemIds: [999] })).toBe(true);
+});
+
+test('single closet attachment carries its exact anchor ID; photos carry no stale ID', () => {
+  expect(attachmentItemIds({ type: 'item', itemId: 42, label: 'Beige cap' })).toEqual([42]);
+  expect(attachmentItemIds({ type: 'items', items: [{ itemId: 42, label: 'Cap' }], label: 'Selection' })).toEqual([42]);
+  expect(attachmentItemIds({ type: 'photo', itemId: 42, label: 'Photo' })).toEqual([]);
+  expect(attachmentItemIds(undefined)).toEqual([]);
+});
+
+test('outfit references are not repeated while optional additional pieces remain visible', () => {
+  const look: StylistResponseBlock = { type: 'card', text: 'A walk', payload: { mode: 'from_closet', itemIds: [1, 2, 3, 42] } };
+  const prose: StylistResponseBlock = { type: 'text', text: 'Add a jacket over the shirt.', ownedItemIds: [1, 2, 3, 42, 99] };
+  expect(additionalReferenceIds(prose, [look, prose])).toEqual([99]);
+  expect(additionalReferenceIds(prose, [prose])).toEqual([1, 2, 3, 42, 99]);
+  expect(prose.ownedItemIds).toEqual([1, 2, 3, 42, 99]);
 });

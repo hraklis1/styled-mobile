@@ -91,7 +91,7 @@ import { colors, editorial, radii, shadows, spacing, surfaces, typography } from
 import { GarmentImage } from '../wardrobe/garment-image';
 import { useStylistTransport } from '../../features/stylist/hooks/useStylistTransport';
 import { buildInitialStylistSendOptions } from '../../features/stylist/initialPrompt';
-import { mergeWardrobeEvidence, groupResponseBlocks, messageForResponseBlock, responseBlockItemIds } from '../../features/stylist/responseBlocks';
+import { attachmentItemIds, additionalReferenceIds, mergeWardrobeEvidence, groupResponseBlocks, messageForResponseBlock, responseBlockItemIds } from '../../features/stylist/responseBlocks';
 import type { StylistResponseBlock } from '../../features/stylist/types';
 import { dayDividers } from '../../features/stylist/dayDivider';
 import {
@@ -938,13 +938,14 @@ export function StylistChatView({
       // A later photo or single-piece attachment replaces that selection context.
       const latestAttachment = attachment ?? [...messagesRef.current].reverse()
         .find((message): message is Extract<ChatMessage, { role: 'user' }> => message.role === 'user' && !!message.attachment)?.attachment;
-      const selectionContext: StylistEntryContext | undefined = latestAttachment?.type === 'items' && latestAttachment.items?.length
-        ? { kind: 'closet_selection', itemIds: latestAttachment.items.map((item) => item.itemId), label: latestAttachment.label }
+      const selectedIds = attachmentItemIds(latestAttachment);
+      const selectionContext: StylistEntryContext | undefined = selectedIds.length && latestAttachment
+        ? { kind: 'closet_selection', itemIds: selectedIds, label: latestAttachment.label }
         : undefined;
       const requestContext = context ?? selectionContext ?? entryContext;
       // Only a newly selected piece is mandatory. Prior attachments remain evidence,
       // allowing the model to release them when the user changes topic.
-      const freshIds = attachment?.type === 'items' ? attachment.items?.map(item => item.itemId)
+      const freshIds = attachment ? attachmentItemIds(attachment)
         : context?.kind === 'item' ? [context.itemId]
         : context?.kind === 'closet_selection' ? context.itemIds : [];
       const anchorItemId = freshIds?.length === 1 ? freshIds[0] : undefined;
@@ -1766,13 +1767,14 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
             const index = group.start + offset;
           if (!block) return null;
           const key = block.blockId ?? `block:${index}`;
-          if (block.type === 'text' && !block.ownedItemIds?.length) return <StylistRichText key={key} text={block.text} />;
+          const displayBlock = block.type === 'text' ? { ...block, ownedItemIds: additionalReferenceIds(block, message.blocks ?? []) } : block;
+          if (displayBlock.type === 'text' && !displayBlock.ownedItemIds?.length) return <StylistRichText key={key} text={block.text} />;
           const state = (states[key] ??= {}) as StylistCardState;
           return (
             <StylistCardStateContext.Provider key={key} value={state}>
               <StylistEditorialFrame unit={block.editorial} onRefine={message.isStreaming ? undefined : onClarificationSelect}>
               <MessageBubble
-                message={messageForResponseBlock(message, block, index)}
+                message={messageForResponseBlock(message, displayBlock, index)}
                 allItems={mergeWardrobeEvidence(allItems, block.wardrobeItems)} isPlaying={isPlaying} createOutfit={createOutfit}
                 eventContext={eventContext} entryContext={entryContext} onAddToEvent={onAddToEvent}
                 onNavigateToShop={onNavigateToShop} onClarificationSelect={onClarificationSelect}

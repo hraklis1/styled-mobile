@@ -1,5 +1,19 @@
 import type { Item } from '../../types/item';
-import type { StylistAssistantMessage, StylistResponseBlock } from './types';
+import type { StylistAssistantMessage, StylistResponseBlock, StylistComposerAttachment } from './types';
+
+export function attachmentItemIds(attachment?: StylistComposerAttachment): number[] {
+  if (attachment?.type === 'item') return attachment.itemId ? [attachment.itemId] : [];
+  if (attachment?.type === 'items') return attachment.items?.map(item => item.itemId) ?? [];
+  return [];
+}
+
+/** Prose keeps its explanation; its rail only needs pieces absent from look cards. */
+export function additionalReferenceIds(block: StylistResponseBlock, blocks: StylistResponseBlock[]): number[] {
+  const shown = new Set(blocks.flatMap(candidate => candidate.type === 'card'
+    && (candidate.payload.mode === 'from_closet' || candidate.payload.mode === 'event_plan')
+    ? candidate.payload.itemIds ?? [] : []));
+  return (block.type === 'text' ? block.ownedItemIds ?? [] : []).filter(id => !shown.has(id));
+}
 
 /** Each child gets its own state and action identity; parent text is not repeated. */
 export function messageForResponseBlock(parent: StylistAssistantMessage, block: StylistResponseBlock, index: number): StylistAssistantMessage {
