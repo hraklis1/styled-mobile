@@ -215,9 +215,9 @@ export function StylistComposer({
             </>
           )}
         </View>
-        {(isLoading || (isDictating && !isListening)) ? (
+        {isDictating && !isListening && (dictation.state === 'requesting' || dictation.state === 'stopping') ? (
           <Text style={styles.statusText} accessibilityLiveRegion="polite">
-            {dictation.state === 'requesting' ? 'Starting microphone…' : dictation.state === 'stopping' ? 'Finishing dictation…' : 'You can draft your next question while your stylist replies.'}
+            {dictation.state === 'requesting' ? 'Starting microphone…' : 'Finishing dictation…'}
           </Text>
         ) : null}
 
