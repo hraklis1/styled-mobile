@@ -41,6 +41,16 @@ test('inactive previews do not generate a recommendation', async () => {
   await render('preview', false);
   expect(api.post).not.toHaveBeenCalled();
 });
+test('guide generation can finish after the ordinary API deadline', async () => {
+  (api.post as jest.Mock).mockImplementation(() => new Promise(resolve => {
+    setTimeout(() => resolve({ data: response }), 20_000);
+  }));
+  await render('guide');
+  expect(api.post).toHaveBeenCalledWith('/api/shop/brief/priority-edit', expect.anything(), expect.objectContaining({ timeout: 180_000, signal: expect.anything() }));
+  await act(async () => { await jest.advanceTimersByTimeAsync(20_000); });
+  expect(result.data?.status).toBe('no_buy');
+  expect(api.post).toHaveBeenCalledTimes(1);
+});
 test('no-buy reconciliation updates the brief without overwriting the priority-edit cache', async () => {
   const updatedBrief = { status: 'balanced', headline: 'Well covered', summary: 'Nothing to add.', source: 'rules', generatedAt: response.generatedAt, priorities: [], localDate: '2026-10-05' };
   (api.post as jest.Mock).mockResolvedValue({ data: { ...response, briefUpdated: true, updatedBrief } });

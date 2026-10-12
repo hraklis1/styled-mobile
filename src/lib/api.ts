@@ -72,6 +72,9 @@ function refreshAccessToken(): Promise<string | null> {
 api.interceptors.response.use(
   (res) => res,
   async (error: AxiosError<ApiErrorBody>) => {
+    // Query cancellation is expected when a screen closes or its inputs change.
+    if (axios.isCancel(error)) return Promise.reject(error);
+
     const status = error.response?.status;
 
     // An access token can expire while the app is backgrounded or mid-batch

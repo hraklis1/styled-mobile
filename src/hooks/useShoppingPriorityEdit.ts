@@ -45,7 +45,8 @@ export function useShoppingPriorityEdit(
       purpose,
       ...(origin ? { origin } : {}),
       ...(briefGeneratedAt ? { briefGeneratedAt } : {}),
-    }, { signal }).then((response) => parseShoppingPriorityEdit(response.data)),
+    // Generating a guide can outlast the ordinary API's 15-second deadline.
+    }, { signal, timeout: 180_000 }).then((response) => parseShoppingPriorityEdit(response.data)),
     staleTime: 24 * 60 * 60 * 1000,
     retry: 1,
 
