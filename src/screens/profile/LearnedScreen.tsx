@@ -1,5 +1,9 @@
 import { confirmSheet } from '../../components/primitives/ConfirmSheet';
-import React from 'react';
+import React, { useState } from 'react';
+import { useStylistMemory } from '../../hooks/useStylistMemory';
+import { StylistMemoryCard } from '../../components/stylist/StylistMemoryCard';
+import { BUDGET_OPTIONS, STYLE_OPTIONS, FIT_SILHOUETTE_OPTIONS } from '../../lib/profileOptions';
+import { useProfile } from '../../hooks/useProfile';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -42,7 +46,7 @@ function TagCloud({ tags, onRemove, empty }: { tags: string[]; onRemove: (tag: s
  * it. The server reads these fresh on every request, so removing one takes
  * effect on the next reply.
  */
-export function LearnedScreen() {
+function LegacyLearnedScreen() {
   const qc = useQueryClient();
   const navigation = useNavigation<NativeStackNavigationProp<ProfileStackParamList>>();
   const { data, isLoading } = useQuery({
@@ -114,3 +118,28 @@ const s = StyleSheet.create({
   fingerprint: { ...typography.text.body, color: colors.foreground, lineHeight: 23 },
   link: { ...typography.text.bodySmall, color: colors.foreground, textDecorationLine: 'underline' },
 });
+
+
+export function LearnedScreen() {
+  const memory = useStylistMemory();
+  const { data: profile } = useProfile();
+  const navigation = useNavigation<NativeStackNavigationProp<ProfileStackParamList>>();
+  const [visibleCount, setVisibleCount] = useState(20);
+  if (memory.data?.enabled === false) return <LegacyLearnedScreen />;
+  return <SettingsScaffold title="Your stylist’s memory" lede="What your stylist knows about you. Correct an impression or forget it at any time.">
+    <Group title="What you’ve shared" footer="Your profile answers stay separate from impressions. Edit them whenever your needs change.">
+      <NavRow label="Style and preferences" detail={profile?.stylePreference?.map(value => STYLE_OPTIONS.find(option => option.value === value)?.label ?? value).join(' · ') || 'Your aesthetic and the directions you enjoy'} onPress={() => navigation.navigate('EditStyle')} />
+      <NavRow label="Fit, sizes and comfort" detail={[FIT_SILHOUETTE_OPTIONS.find(option => option.value === profile?.fitSilhouette)?.label, profile?.fitNotes, profile?.sizeShoe ? `Shoes: ${profile.sizeShoe}` : null].filter(Boolean).join(' · ').replaceAll('_', ' ') || 'Sizes, proportions and practical requirements'} onPress={() => navigation.navigate('EditFit')} />
+      <NavRow label="Budget and brands" detail={[profile?.budgetRange?.map(value => BUDGET_OPTIONS.find(option => option.value === value)?.label ?? value).join(', '), profile?.favoriteRetailers?.join(', ')].filter(Boolean).join(' · ').replaceAll('_', ' ') || 'Your price ranges and preferred retailers'} onPress={() => navigation.navigate('EditShopping')} />
+      <NavRow label="Colors and materials" onPress={() => navigation.navigate('EditColor')} />
+      <NavRow label="Occasions" onPress={() => navigation.navigate('EditOccasions')} />
+    </Group>
+    {memory.isError && <Group><GroupBlock><Text accessibilityRole="alert" style={s.empty}>Couldn’t refresh your stylist’s memory. Any saved information below is still available.</Text><Pressable accessibilityRole="button" onPress={() => void memory.refetch()} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={s.link}>Try again</Text></Pressable></GroupBlock></Group>}
+    {!memory.data && !memory.isError && <Group><GroupBlock>{memory.fetchStatus === 'paused' ? <Text style={s.empty}>Connect to the internet to see your stylist’s memory.</Text> : <ActivityIndicator accessibilityLabel="Loading stylist memory" color={colors.primary} />}</GroupBlock></Group>}
+    {memory.data?.enabled && <Group title="From your consultations" footer="Impressions are tentative. Forgetting one also prevents the same old evidence from restoring it.">
+      {memory.data.entries.length ? memory.data.entries.slice(0, visibleCount).map(entry => <StylistMemoryCard key={entry.id} memory={entry} />) : <GroupBlock><Text style={s.empty}>No additional memories yet. Your stylist already uses your profile and will learn from what you share over time.</Text></GroupBlock>}
+      {memory.data.entries.length > visibleCount && <NavRow label="Show more memories" onPress={() => setVisibleCount(count => count + 20)} />}
+    </Group>}
+    <Group title="Shopping"><NavRow label="Products marked “Not for me”" onPress={() => navigation.navigate('SettingsHiddenProducts')} /></Group>
+  </SettingsScaffold>;
+}

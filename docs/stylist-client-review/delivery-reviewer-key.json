@@ -1,0 +1,35 @@
+{
+  "promptVersion": "client-relationship-v4.4",
+  "summary": {
+    "candidate": {
+      "estimatedUsd": 0.0097812,
+      "medianElapsedMs": 4397.0,
+      "statuses": {
+        "complete": 2,
+        "partial": 0,
+        "failed": 0
+      }
+    },
+    "baseline": {
+      "estimatedUsd": 0.00516615,
+      "medianElapsedMs": 2928.0,
+      "statuses": {
+        "complete": 2,
+        "partial": 0,
+        "failed": 0
+      }
+    }
+  },
+  "assignments": [
+    {
+      "case": "temporary-exception",
+      "A": "candidate",
+      "B": "baseline"
+    },
+    {
+      "case": "buy-nothing",
+      "A": "candidate",
+      "B": "baseline"
+    }
+  ]
+}

@@ -1,3 +1,7 @@
+import { StylistChecklist } from "./StylistChecklist";
+import { StylistEditorialFrame } from "./StylistEditorialFrame";
+import { StylistInsight, StylistTagSuggestions } from "./StylistEditorialEntities";
+import { useStylistPhotoAttachment } from './composer/useStylistPhotoAttachment';
 import { confirmSheet } from '../primitives/ConfirmSheet';
 import { Fragment, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode, MutableRefObject } from 'react';
@@ -39,13 +43,9 @@ import Reanimated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
-import { useAudioPlayer, setAudioModeAsync } from 'expo-audio';
-import { File, Paths, EncodingType } from 'expo-file-system';
 import * as onDeviceSpeech from '../../lib/speech';
 import { api } from '../../lib/api';
 import { track } from '../../lib/analytics';
-import { compressImageToDataUrl } from '../../lib/compressImage';
 import { prepareStylistPhoto } from '../../lib/prepareStylistPhoto';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { itemImageContentFit, itemImageUri } from '../../lib/itemImage';
@@ -56,6 +56,7 @@ import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
 import { conversationLocation, type StylingLocationContext } from '../../lib/stylingLocation';
 import { formatTemp, resolveTempUnit } from '../../lib/temperature';
 import { sanitizeStylistResponseText } from '../../lib/stylistResponseText';
+import { buildStylistHistory } from '../../features/stylist/history';
 import { resolveShoppingAlternativeMode } from '../../features/stylist/shoppingIntent';
 import { compareAskQuestions, isGuideListingQuestion, styleAskQuestions, styleName } from '../../lib/shoppingEditorial';
 import { displayBudget } from '../../lib/shoppingPriorityEdit';
@@ -88,10 +89,9 @@ import { StylistLookResponseCard } from './StylistLookResponseCard';
 import { buildStylistStarters, buildTodayPrompt, type StylistStarter } from './stylist-empty-state';
 import { colors, editorial, radii, shadows, spacing, surfaces, typography } from '../../theme';
 import { GarmentImage } from '../wardrobe/garment-image';
-import { SkeletonBlock } from '../primitives/SkeletonLoader';
 import { useStylistTransport } from '../../features/stylist/hooks/useStylistTransport';
 import { buildInitialStylistSendOptions } from '../../features/stylist/initialPrompt';
-import { messageForResponseBlock, responseBlockItemIds } from '../../features/stylist/responseBlocks';
+import { mergeWardrobeEvidence, groupResponseBlocks, messageForResponseBlock, responseBlockItemIds } from '../../features/stylist/responseBlocks';
 import type { StylistResponseBlock } from '../../features/stylist/types';
 import { dayDividers } from '../../features/stylist/dayDivider';
 import {
@@ -121,12 +121,8 @@ import { BUDGET_OPTIONS, OCCASION_OPTIONS, STYLE_OPTIONS } from '../../lib/profi
 import type { ShopOutfit } from '../../types/shop';
 import type { Item } from '../../types/item';
 
-// The streaming placeholder's plate: shallow, so a short answer doesn't
-// arrive under a tall empty frame.
-const TYPING_PLATE_HEIGHT = 160;
-
 // "Wear it with" thumbnails are the same 3:4 plate as a closet card, scaled down.
-const ADVICE_THUMB_WIDTH = 56;
+const ADVICE_THUMB_WIDTH = 104;
 const ADVICE_THUMB_HEIGHT = Math.round(ADVICE_THUMB_WIDTH / editorial.garmentAspectRatio);
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -144,10 +140,6 @@ type Conversation = {
   source?: string | null;
   updatedAt: string;
   preview?: string | null;
-};
-
-type TtsResponse = {
-  audioReply: string;
 };
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -229,6 +221,7 @@ function useContextualChips(lastMessage: ChatMessage | undefined, entryContext?:
   const base = useBaseChips(lastMessage, entryContext);
   return useMemo(() => {
     const server = entryContext?.kind !== 'shopping_brief_edit' && lastMessage?.role === 'assistant' ? lastMessage.followUps ?? [] : [];
+    if (lastMessage?.role === 'assistant' && (lastMessage.responseVersion === 2 || lastMessage.responseVersion === 3)) return server;
     if (!server.length) return asChips(base);
     const seen = new Set(server.map((f) => f.prompt.toLowerCase()));
     return [...server, ...asChips(base.filter((prompt) => !seen.has(prompt.toLowerCase())))];
@@ -267,7 +260,9 @@ const threadKey = (id: number) => `stylist_thread_${id}`;
 // reloaded thread redraws outfit cards, shop edits, and trip carousels instead
 // of degrading them to plain notes. Mirrors the /ask `done` event's rich fields.
 type ServerMessagePayload = {
-  responseVersion?: 2;
+  deliveryStatus?: 'complete' | 'partial' | 'failed';
+  failureCode?: 'malformed_output' | 'truncated_output' | 'evidence_unavailable' | 'provider_failure' | 'budget_exhausted' | 'validation_failed';
+  responseVersion?: 2 | 3;
   blocks?: StylistResponseBlock[];
   readinessStatus?: StylistReadinessStatus;
   foundationItemIds?: number[];
@@ -371,6 +366,7 @@ function mapServerMessages(rows: ServerMessage[]): ChatMessage[] {
         kind: 'user',
         renderType: 'text',
         text: m.text,
+        ...(p?.itemIds?.length ? { attachment: { type: 'items' as const, label: 'Closet selection', items: p.itemIds.map(itemId => ({ itemId, label: 'Closet piece' })) } } : {}),
         ...(m.createdAt ? { createdAt: new Date(m.createdAt).getTime() } : {}),
       };
     }
@@ -380,9 +376,10 @@ function mapServerMessages(rows: ServerMessage[]): ChatMessage[] {
       kind: 'assistant',
       renderType: renderTypeForAssistantPayload(p),
       text: sanitizeStylistResponseText(m.text),
-      ...(p?.responseVersion === 2 && p.blocks ? { responseVersion: 2 as const, blocks: p.blocks } : {}),
+      ...((p?.responseVersion === 2 || p?.responseVersion === 3) && p.blocks ? { responseVersion: p.responseVersion, blocks: p.blocks } : {}),
       ...(typeof m.recId === 'number' ? { recId: m.recId } : {}),
       ...(p?.mode ? { mode: p.mode } : {}),
+      deliveryStatus: p?.deliveryStatus, failureCode: p?.failureCode,
       ...(p?.readinessStatus ? { readinessStatus: p.readinessStatus } : {}),
       ...(p?.foundationItemIds?.length ? { foundationItemIds: p.foundationItemIds } : {}),
       ...(p?.clarification ? { clarification: p.clarification } : {}),
@@ -568,7 +565,38 @@ export function StylistChatView({
   );
 
   const [messages, setMessages] = useState<ChatMessage[]>(restored?.messages ?? []);
-  const [inputText, setInputText] = useState(restored?.inputText ?? '');
+  const [inputText, updateInputText] = useState(restored?.inputText ?? '');
+  const draftTextRef = useRef(restored?.inputText ?? '');
+  const draftKeyRef = useRef(`stylist_draft_${restored?.conversationId ?? 'new'}`);
+  const draftRevisionRef = useRef(restored ? 1 : 0);
+  const draftWritesRef = useRef(Promise.resolve());
+  const setInputText = useCallback((value: string | ((previous: string) => string)) => {
+    const next = typeof value === 'function' ? value(draftTextRef.current) : value;
+    draftTextRef.current = next;
+    draftRevisionRef.current += 1;
+    updateInputText(next);
+    const key = draftKeyRef.current;
+    // Serialize writes so clearing a sent draft cannot race an older keystroke.
+    draftWritesRef.current = draftWritesRef.current.then(() => next
+      ? AsyncStorage.setItem(key, next)
+      : AsyncStorage.removeItem(key)).catch(() => {});
+  }, []);
+  const restoreDraft = useCallback((id: number | null) => {
+    const key = `stylist_draft_${id ?? 'new'}`;
+    if (key === draftKeyRef.current && draftRevisionRef.current > 0) return;
+    draftKeyRef.current = key;
+    const revision = ++draftRevisionRef.current;
+    draftTextRef.current = '';
+    updateInputText('');
+    void draftWritesRef.current.then(() => AsyncStorage.getItem(key)).then((text) => {
+      if (draftKeyRef.current !== key || draftRevisionRef.current !== revision) return;
+      draftTextRef.current = text ?? '';
+      updateInputText(text ?? '');
+    }).catch(() => {});
+  }, []);
+  useEffect(() => {
+    if (!restored) restoreDraft(null);
+  }, [restored, restoreDraft]);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   // Active server thread. null means "unsaved draft" — the next send lazily
@@ -588,13 +616,13 @@ export function StylistChatView({
   const [intakeKind, setIntakeKind] = useState<Exclude<StylistWorkflow['kind'], 'wardrobe_audit'> | null>(null);
   const [intakeInitialItemId, setIntakeInitialItemId] = useState<number | null>(null);
 
+  const composerInputRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
   const messageLayoutsRef = useRef<Record<string, number>>({});
   const pendingFocusMessageIdRef = useRef<string | null>(null);
   const focusedRichMessageIdRef = useRef<string | null>(null);
   const streamingAssistantTextRef = useRef<Record<string, string>>({});
-  const player = useAudioPlayer(null);
-  const playingFileRef = useRef<File | null>(null);
+  const speechRequestRef = useRef(0);
   const lastPromptRequestIdRef = useRef(restored?.promptRequestId ?? 0);
   const lastOpenRequestIdRef = useRef(restored?.openRequestId ?? 0);
   // Mirror of `messages` so sendMessage can read the latest history without being
@@ -605,7 +633,7 @@ export function StylistChatView({
   // cleared id rather than the previous render's value.
   const conversationIdRef = useRef<number | null>(restored?.conversationId ?? null);
   const tripOutfitsRef = useRef<Record<string, StylistTripPlanData['outfits']>>({});
-  const transportRequestMetaRef = useRef<Record<string, { userMessageId: string }>>({});
+  const transportRequestMetaRef = useRef<Record<string, { userMessageId: string; originalOptions: SendOptions }>>({});
 
   const setActiveConversationId = useCallback((id: number | null) => {
     conversationIdRef.current = id;
@@ -642,15 +670,6 @@ export function StylistChatView({
 
   // ── Audio helpers ──────────────────────────────────────────────────────────
 
-  function buildHistory(msgs: ChatMessage[]) {
-    return msgs.slice(-12).map((m) => ({
-      role: m.role,
-      content: m.role === 'user' && m.attachment?.items?.length
-        ? `${m.transcript ?? m.text}\nAttached closet pieces: ${m.attachment.items.map((item) => `${item.label} (item ID ${item.itemId})`).join(', ')}`
-        : m.transcript ?? m.text,
-    }));
-  }
-
   // Keep the history mirror in sync with rendered messages.
   useEffect(() => {
     messagesRef.current = messages;
@@ -664,64 +683,25 @@ export function StylistChatView({
   }, []);
 
   function stopCurrentAudio() {
+    speechRequestRef.current += 1;
     onDeviceSpeech.stop();
-    try { player.pause(); } catch { /* ignore */ }
-    try { player.replace(null); } catch { /* ignore */ }
-    if (playingFileRef.current) {
-      try { playingFileRef.current.delete(); } catch { /* ignore */ }
-      playingFileRef.current = null;
-    }
     setPlayingId(null);
-  }
-
-  async function playAudioFromBase64(messageId: string, base64: string) {
-    const ttsFile = new File(Paths.cache, `stylist_tts_${Date.now()}.mp3`);
-    ttsFile.write(base64, { encoding: EncodingType.Base64 });
-    playingFileRef.current = ttsFile;
-    await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
-    player.replace({ uri: ttsFile.uri });
-    player.play();
-    setPlayingId(messageId);
-    const sub = player.addListener('playbackStatusUpdate', (status) => {
-      if (status.didJustFinish) {
-        sub.remove();
-        try { ttsFile.delete(); } catch { /* ignore */ }
-        playingFileRef.current = null;
-        setPlayingId(null);
-      }
-    });
   }
 
   async function playTts(messageId: string, text: string) {
     stopCurrentAudio();
-
-    // On-device speech is the default: it's free, instant, and works offline.
-    // The server round-trip below only runs on a build where expo-speech's
-    // native module isn't linked yet (isAvailable() proves that with a real
-    // bridge call, not just a successful import) — see src/lib/speech.ts.
-    if (await onDeviceSpeech.isAvailable()) {
-      setPlayingId(messageId);
-      // Functional updates below: onDone/onError fire later and must not
-      // clear a DIFFERENT message's playingId if the user tapped another
-      // speaker icon in the meantime.
-      onDeviceSpeech.speak(text, {
-        onDone: () => setPlayingId((id) => (id === messageId ? null : id)),
-        onError: () => setPlayingId((id) => (id === messageId ? null : id)),
-      });
+    const request = speechRequestRef.current;
+    const available = await onDeviceSpeech.isAvailable();
+    if (request !== speechRequestRef.current) return;
+    if (!available) {
+      confirmSheet({ title: 'Read aloud unavailable', message: 'Update Styled to use your device’s voice. You can still read the stylist’s reply here.', confirmLabel: 'OK', cancelLabel: null, onConfirm: () => {} });
       return;
     }
-
-    try {
-      const { data } = await api.post<TtsResponse>(
-        '/api/stylist/tts',
-        { text },
-        { timeout: 30_000 },
-      );
-      if (!data.audioReply) return;
-      await playAudioFromBase64(messageId, data.audioReply);
-    } catch {
-      // TTS failure is non-fatal
-    }
+    setPlayingId(messageId);
+    onDeviceSpeech.speak(text, {
+      onDone: () => { if (request === speechRequestRef.current) setPlayingId(null); },
+      onError: () => { if (request === speechRequestRef.current) setPlayingId(null); },
+    });
   }
 
   const {
@@ -758,7 +738,7 @@ export function StylistChatView({
         if (message.id !== assistantId || message.role !== 'assistant') return message;
         const blocks = [...(message.blocks ?? [])];
         blocks[index] = block;
-        return { ...message, responseVersion: 2, blocks, text: blocks.map(part => part?.text ?? '').filter(Boolean).join('\n\n') };
+        return { ...message, responseVersion: block.turnId ? 3 : 2, blocks, text: blocks.map(part => part?.text ?? '').filter(Boolean).join('\n\n') };
       }));
     },
     onAssistantDone: (assistantId, event) => {
@@ -811,8 +791,10 @@ export function StylistChatView({
                 ? 'closet_outfit'
                 : 'text',
         text: sanitizeStylistResponseText(responseText ?? ''),
-        ...(event.responseVersion === 2 && event.blocks ? { responseVersion: 2 as const, blocks: event.blocks } : {}),
+        ...((event.responseVersion === 2 || event.responseVersion === 3) && event.blocks ? { responseVersion: event.responseVersion, blocks: event.blocks } : {}),
         isStreaming: false,
+        deliveryStatus: event.deliveryStatus,
+        failureCode: event.failureCode,
         ...(readinessStatus ? { readinessStatus } : {}),
         ...(foundationItemIds?.length ? { foundationItemIds } : {}),
         ...(clarification ? { clarification } : {}),
@@ -845,6 +827,10 @@ export function StylistChatView({
         return next;
       });
 
+      if (event.deliveryStatus === 'failed' || event.deliveryStatus === 'partial' && event.failureCode) {
+        setErrorMessage(event.deliveryStatus === 'failed' ? 'The stylist couldn’t finish this request.' : 'Part of this recommendation could not be completed.');
+        setFailedRequest(transportRequestMetaRef.current[assistantId]?.originalOptions ?? null);
+      }
       delete tripOutfitsRef.current[assistantId];
       delete transportRequestMetaRef.current[assistantId];
     },
@@ -867,6 +853,10 @@ export function StylistChatView({
     },
     onConversationResolved: (resolvedConversationId) => {
       if (resolvedConversationId !== conversationIdRef.current) {
+        const previousKey = draftKeyRef.current;
+        draftKeyRef.current = `stylist_draft_${resolvedConversationId}`;
+        setInputText(draftTextRef.current);
+        draftWritesRef.current = draftWritesRef.current.then(() => AsyncStorage.removeItem(previousKey)).catch(() => {});
         setActiveConversationId(resolvedConversationId);
       }
     },
@@ -917,10 +907,10 @@ export function StylistChatView({
       setMentionQuery(null);
 
       const assistantId = makeId();
-      transportRequestMetaRef.current[assistantId] = { userMessageId: userMsg.id };
+      transportRequestMetaRef.current[assistantId] = { userMessageId: userMsg.id, originalOptions: opts };
       tripOutfitsRef.current[assistantId] = [];
 
-      const history = buildHistory(messagesRef.current);
+      const history = buildStylistHistory(messagesRef.current);
       const lastAssistant = [...messagesRef.current]
         .reverse()
         .find((message): message is Extract<ChatMessage, { role: 'assistant' }> => message.role === 'assistant');
@@ -951,10 +941,17 @@ export function StylistChatView({
       const selectionContext: StylistEntryContext | undefined = latestAttachment?.type === 'items' && latestAttachment.items?.length
         ? { kind: 'closet_selection', itemIds: latestAttachment.items.map((item) => item.itemId), label: latestAttachment.label }
         : undefined;
-      const requestContext = context ?? entryContext ?? selectionContext;
+      const requestContext = context ?? selectionContext ?? entryContext;
+      // Only a newly selected piece is mandatory. Prior attachments remain evidence,
+      // allowing the model to release them when the user changes topic.
+      const freshIds = attachment?.type === 'items' ? attachment.items?.map(item => item.itemId)
+        : context?.kind === 'item' ? [context.itemId]
+        : context?.kind === 'closet_selection' ? context.itemIds : [];
+      const anchorItemId = freshIds?.length === 1 ? freshIds[0] : undefined;
       const locationSource = activeLocation.source === 'destination' ? 'conversation' : activeLocation.source;
       const request: StylistAskRequest = {
         ...(text ? { text } : {}),
+        ...(anchorItemId ? { anchorItemId } : {}),
         ...(workflow ? { workflow } : {}),
         ...(continuationMode ? { continuationMode } : {}),
         ...(continuationItemIds.length ? { continuationItemIds } : {}),
@@ -974,7 +971,7 @@ export function StylistChatView({
         ...(source ? { source } : {}),
         ...(requestContext ? { context: requestContext } : {}),
         ...(requestMode ? { mode: requestMode } : {}),
-        history,
+        ...(!conversationIdRef.current ? { history } : {}),
       };
 
       void sendTransportMessage({
@@ -984,7 +981,7 @@ export function StylistChatView({
         originalOptions: opts,
       });
     },
-    [activeLocation, entryContext, isLoading, tempUnit, sendTransportMessage, source, weather.data],
+    [activeLocation, entryContext, isLoading, tempUnit, sendTransportMessage, source, weather.data, setInputText],
   );
 
   // ── Thread lifecycle ─────────────────────────────────────────────────────────
@@ -997,6 +994,7 @@ export function StylistChatView({
     transportRequestMetaRef.current = {};
     setMessages([]);
     setActiveConversationId(null);
+    draftKeyRef.current = 'stylist_draft_new';
     setInputText('');
     setMentionQuery(null);
     setComposerAttachment(null);
@@ -1012,6 +1010,7 @@ export function StylistChatView({
     messagesRef.current = msgs;
     setMessages(msgs);
     setActiveConversationId(id);
+    restoreDraft(id);
   }
 
   async function loadThreadFromCache(id: number): Promise<boolean> {
@@ -1023,6 +1022,7 @@ export function StylistChatView({
       messagesRef.current = normalizedMsgs;
       setMessages(normalizedMsgs);
       setActiveConversationId(id);
+      restoreDraft(id);
       return true;
     } catch {
       return false;
@@ -1205,30 +1205,14 @@ export function StylistChatView({
 
   // ── Input handlers ─────────────────────────────────────────────────────────
 
-  async function stagePhoto(source: 'camera' | 'library') {
-    try {
-      if (source === 'camera') {
-        const permission = await ImagePicker.requestCameraPermissionsAsync();
-        if (!permission.granted) {
-          Alert.alert('Camera access needed', 'Allow camera access to show your stylist what you are wearing.');
-          return;
-        }
-      }
-      const result = await (source === 'camera'
-        ? ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 })
-        : ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 1,
-      }));
-      if (result.canceled || !result.assets[0]) return;
-      const compressed = await compressImageToDataUrl(result.assets[0]);
-      setComposerAttachment({ type: 'photo', label: 'Photo', uri: result.assets[0].uri });
-      setComposerPhotoData(compressed.dataUrl);
-      setAttachmentSheetVisible(false);
-    } catch {
-      Alert.alert('Could not load photo', 'Please try again.');
-    }
-  }
+  const photoPicker = useStylistPhotoAttachment({
+    closeSheet: () => setAttachmentSheetVisible(false),
+    onPhoto: ({ uri, dataUrl }) => {
+      setComposerAttachment({ type: 'photo', label: 'Photo', uri });
+      setComposerPhotoData(dataUrl);
+    },
+    onChooseCloset: () => setWardrobePickerVisible(true),
+  });
 
   function handleSendText(question?: string) {
     const trimmed = (question ?? inputText).trim();
@@ -1241,6 +1225,7 @@ export function StylistChatView({
       : trimmed || 'What do you think of this look?';
     sendMessage({
       text: attachmentText,
+      ...(entryContext?.kind === 'shopping_brief_edit' ? guideQuestionMode(attachmentText) : {}),
       ...(composerAttachment?.items?.length ? { context: { kind: 'closet_selection' as const, itemIds: composerAttachment.items.map((item) => item.itemId), label: composerAttachment.label } } : {}),
       displayText: trimmed || (composerAttachment?.type === 'items' ? 'How would you style these pieces?' : composerAttachment?.type === 'photo' ? 'What do you think of this look?' : 'How would you style this?'),
       ...(composerPhotoData ? { photoData: composerPhotoData } : {}),
@@ -1253,6 +1238,14 @@ export function StylistChatView({
   function stopGeneration() {
     abortTransport();
     setMessages((prev) => prev.map((m) => (m.isStreaming ? { ...m, isStreaming: false } : m)));
+    Haptics.selectionAsync().catch(() => {});
+  }
+
+  function stageSuggestion(text: string) {
+    // Never overwrite an unfinished question when exploring suggestions.
+    setInputText((draft) => draft.trim() ? `${draft.trimEnd()}\n${text}`.slice(0, 2000) : text.slice(0, 2000));
+    setMentionQuery(null);
+    composerInputRef.current?.focus();
     Haptics.selectionAsync().catch(() => {});
   }
 
@@ -1420,6 +1413,7 @@ export function StylistChatView({
           scrollRef.current?.scrollTo({ y, animated: false });
           focusedRichMessageIdRef.current = messages[messages.length - 1]?.id ?? null;
         }}
+        keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
         showsVerticalScrollIndicator={false}
       >
@@ -1445,21 +1439,21 @@ export function StylistChatView({
             <Text style={{ ...typography.text.sheetTitle, color: colors.foreground }}>Your pieces, a fresh perspective</Text>
             <Text style={{ ...typography.text.body, color: colors.mutedForeground }}>Ask about pairing, fit, colour, or how to wear them. Your selected pieces are attached below.</Text>
             {['How can I style these pieces together?', 'Which of these pieces work best together?', 'What would complete these looks?'].map((question) => (
-              <TouchableOpacity key={question} onPress={() => handleSendText(question)} accessibilityRole="button" style={{ padding: spacing.md, borderRadius: radii.card, backgroundColor: colors.surfaceSubtle, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+              <TouchableOpacity key={question} onPress={() => stageSuggestion(question)} accessibilityRole="button" style={{ padding: spacing.md, borderRadius: radii.card, backgroundColor: colors.surfaceSubtle, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
                 <Text style={{ ...typography.text.bodySmall, color: colors.foreground, flex: 1 }}>{question}</Text>
-                <Ionicons name="arrow-up-outline" size={16} color={colors.primary} />
+                <Ionicons name="arrow-forward-outline" size={16} color={colors.primary} />
               </TouchableOpacity>
             ))}
           </View>
         ) : isEmpty && entryContext?.kind === 'shopping_brief_edit' ? (
-          <GuideEmptyState context={entryContext} onPrompt={(q) => sendMessage({ text: q, ...guideQuestionMode(q) })} />
+          <GuideEmptyState context={entryContext} onPrompt={stageSuggestion} />
         ) : isEmpty ? (
           <EmptyState
             weather={weather.data?.current}
             tempUnit={tempUnit}
             displayName={profile?.displayName}
             wardrobeCount={allItems.length}
-            onPrompt={(q) => sendMessage({ text: q, mode: 'from_closet' })}
+            onPrompt={stageSuggestion}
             onWorkflow={openStarterWorkflow}
           />
         ) : (
@@ -1570,7 +1564,7 @@ export function StylistChatView({
         {...(Platform.OS === 'android' && { blurMethod: 'dimezisBlurViewSdk31Plus' })}
       >
         {/* Follow-up chips */}
-        {messages.length > 0 && !isLoading && (
+        {messages.length > 0 && !isLoading && contextualChips.length > 0 && (
           <View style={styles.chipsShell}>
             <ScrollView
               horizontal
@@ -1582,9 +1576,9 @@ export function StylistChatView({
                 <TouchableOpacity
                   key={chip.label}
                   style={styles.chip}
-                  onPress={() => sendMessage({ text: chip.prompt })}
+                  onPress={() => stageSuggestion(chip.prompt)}
                   disabled={isLoading}
-                  accessibilityHint={chip.prompt !== chip.label ? chip.prompt : undefined}
+                  accessibilityHint="Adds an editable suggestion to your draft. Review it before sending."
                 >
                   <Text style={styles.chipText}>{chip.label}</Text>
                 </TouchableOpacity>
@@ -1599,8 +1593,9 @@ export function StylistChatView({
         )}
 
         {/* @ Mention menu — sits between chips and input bar */}
-        {mentionQuery !== null && mentionItems.length > 0 && (
+        {mentionQuery !== null && (
           <View style={styles.mentionMenu}>
+            {!mentionItems.length ? <Text style={{ ...typography.text.bodySmall, color: colors.mutedForeground, padding: spacing.md }} accessibilityLiveRegion="polite">{allItems.length ? 'No matching pieces. Try another name or choose from your closet.' : 'Your closet is empty. Add a piece to reference it here.'}</Text> : null}
             {mentionItems.map((item) => {
               const imgUri = itemImageUri(item);
               return (
@@ -1633,6 +1628,9 @@ export function StylistChatView({
 
         {/* Input bar */}
         <StylistComposer
+          onStartDictation={stopCurrentAudio}
+          vocabulary={allItems.flatMap(item => [item.name, item.brand ?? ''])}
+          inputRef={composerInputRef}
           value={inputText}
           onChangeText={handleTextChange}
           onDictatedText={setInputText}
@@ -1645,25 +1643,26 @@ export function StylistChatView({
             return items?.length ? { ...current!, items, label: `${items.length} closet pieces` } : null;
           })}
           onRemoveAttachment={() => { setComposerAttachment(null); setComposerPhotoData(null); }}
-          onOpenAttachmentSheet={() => setAttachmentSheetVisible(true)}
-          placeholder={composerAttachment?.type === 'items' ? 'What would you like to know about these pieces?' : entryContext?.kind === 'shopping_brief_edit' ? guidePlaceholder(entryContext) : undefined}
+          onOpenAttachmentSheet={() => { if (!photoPicker.busy) setAttachmentSheetVisible(true); }}
+          placeholder={composerAttachment?.type === 'items' ? 'How would you like to wear these?' : entryContext?.kind === 'shopping_brief_edit' ? guidePlaceholder(entryContext) : messages.length ? 'Ask a follow-up…' : undefined}
         />
       </BlurView>
 
       <StylistOverlaySheet
         visible={attachmentSheetVisible}
+        onDismiss={photoPicker.afterDismiss}
         bottomInset={insets.bottom}
         onClose={() => setAttachmentSheetVisible(false)}
       >
         <Text style={styles.attachmentSheetTitle}>Add to your question</Text>
         <Text style={styles.attachmentSheetSubtitle}>Give your stylist something visual to work with.</Text>
         <View style={styles.attachmentChoices}>
-          <AttachmentChoice icon="camera-outline" label="Camera" onPress={() => stagePhoto('camera')} />
-          <AttachmentChoice icon="images-outline" label="Photo library" onPress={() => stagePhoto('library')} />
+          <AttachmentChoice icon="camera-outline" label="Camera" onPress={() => photoPicker.choosePhoto('camera')} />
+          <AttachmentChoice icon="images-outline" label="Photo library" onPress={() => photoPicker.choosePhoto('library')} />
           <AttachmentChoice
             icon="shirt-outline"
-            label="Wardrobe piece"
-            onPress={() => { setAttachmentSheetVisible(false); setWardrobePickerVisible(true); }}
+            label="Choose from closet"
+            onPress={photoPicker.chooseCloset}
           />
         </View>
       </StylistOverlaySheet>
@@ -1698,7 +1697,7 @@ export function StylistChatView({
         <Text style={styles.attachmentSheetTitle}>Refine the edit</Text>
         <View style={styles.followUpList}>
           {contextualChips.map((chip) => (
-            <TouchableOpacity key={chip.label} style={styles.followUpRow} onPress={() => { setFollowUpsOpen(false); sendMessage({ text: chip.prompt }); }}>
+            <TouchableOpacity key={chip.label} style={styles.followUpRow} onPress={() => { setFollowUpsOpen(false); stageSuggestion(chip.prompt); }}>
               <Text style={styles.followUpText}>{chip.prompt}</Text>
               <Ionicons name="arrow-forward" size={17} color={colors.primary} />
             </TouchableOpacity>
@@ -1755,29 +1754,41 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
   // (which offers to board it) without widening the card's public contract.
   const [savedWishlistId, setSavedWishlistId] = useStylistCardState<string | null>('wishlist-id', null);
 
+  const { width: responseWidth } = useWindowDimensions();
   const parentCardState = useContext(StylistCardStateContext);
   const fallbackBlockState = useRef<StylistCardState>({});
-  if (!isUser && message.responseVersion === 2 && message.blocks?.length) {
+  if (!isUser && (message.responseVersion === 2 || message.responseVersion === 3) && message.blocks?.length) {
     const states = parentCardState ?? fallbackBlockState.current;
     return (
       <View style={styles.editorialResponse}>
-        {message.blocks.map((block, index) => {
+        {groupResponseBlocks(message.blocks).map(group => {
+          const renderBlock = (block: StylistResponseBlock, offset: number) => {
+            const index = group.start + offset;
           if (!block) return null;
-          const key = `block:${index}`;
-          if (block.type === 'text') return <StylistRichText key={key} text={block.text} />;
+          const key = block.blockId ?? `block:${index}`;
+          if (block.type === 'text' && !block.ownedItemIds?.length) return <StylistRichText key={key} text={block.text} />;
           const state = (states[key] ??= {}) as StylistCardState;
           return (
             <StylistCardStateContext.Provider key={key} value={state}>
+              <StylistEditorialFrame unit={block.editorial} onRefine={message.isStreaming ? undefined : onClarificationSelect}>
               <MessageBubble
                 message={messageForResponseBlock(message, block, index)}
-                allItems={allItems} isPlaying={isPlaying} createOutfit={createOutfit}
+                allItems={mergeWardrobeEvidence(allItems, block.wardrobeItems)} isPlaying={isPlaying} createOutfit={createOutfit}
                 eventContext={eventContext} entryContext={entryContext} onAddToEvent={onAddToEvent}
                 onNavigateToShop={onNavigateToShop} onClarificationSelect={onClarificationSelect}
                 onNavigateToCloset={onNavigateToCloset} onStyleAuditItem={onStyleAuditItem}
                 onSaveToBoard={onSaveToBoard} onViewSaved={onViewSaved}
               />
+              </StylistEditorialFrame>
             </StylistCardStateContext.Provider>
           );
+          };
+          if (group.carousel && group.blocks.length > 1) return (
+            <ScrollView key={`looks:${group.start}`} horizontal showsHorizontalScrollIndicator={false} decelerationRate="fast" snapToInterval={responseWidth - 48} accessibilityLabel="Outfit options">
+              {group.blocks.map((block, offset) => <View key={block.blockId ?? offset} style={{ width: responseWidth - 64, marginRight: 16 }}>{renderBlock(block, offset)}</View>)}
+            </ScrollView>
+          );
+          return <Fragment key={`group:${group.start}`}>{group.blocks.map(renderBlock)}</Fragment>;
         })}
         {onToggleAudio && !message.isStreaming ? (
           <TouchableOpacity style={styles.quietAudioBtn} onPress={onToggleAudio} accessibilityLabel="Read stylist response aloud">
@@ -1788,6 +1799,11 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
       </View>
     );
   }
+
+  if (!isUser && message.checklist) return <StylistChecklist checklist={message.checklist} />;
+
+  if (!isUser && message.insight) return <StylistInsight insight={message.insight} />;
+  if (!isUser && message.tagSuggestions) return <StylistTagSuggestions suggestion={message.tagSuggestions} />;
 
   if (!isUser && message.wardrobeAudit) {
     return (
@@ -1857,9 +1873,9 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
     return (
       <EditorialEntrance>
         <View style={styles.stylistNote}>
-          <View style={styles.sectionEyebrow}>
+          {(message.responseVersion !== 2 && message.responseVersion !== 3) ? <View style={styles.sectionEyebrow}>
             <Text style={styles.sectionEyebrowText}>{message.boardAction === 'theme' ? 'Board direction' : message.boardAction === 'complete' ? 'Board edit' : message.mode === 'knowledge' ? 'Good to know' : 'My take'}</Text>
-          </View>
+          </View> : null}
           <StylistRichText text={message.text} streaming={message.isStreaming} />
           {message.critique ? (
             <CritiqueCard critique={message.critique} allItems={allItems} onItemPress={setDetailItem} />
@@ -1868,7 +1884,7 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
             <View style={styles.responseSection}>
               <Text style={styles.responseSectionTitle}>{entryContext?.kind === 'shopping_brief_edit' ? 'Pairs from your wardrobe' : message.critique ? 'The pieces' : 'Referenced pieces'}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.adviceThumbs}>
-                {message.suggestedItemIds
+                {[...new Set(message.suggestedItemIds)]
                   .map((id) => allItems.find((i) => i.id === id))
                   .filter((i): i is Item => !!i)
                   .map((item) => (
@@ -1880,6 +1896,7 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
                       accessibilityLabel={`View ${item.name} details`}
                     >
                       <GarmentImage item={item} width={ADVICE_THUMB_WIDTH} height={ADVICE_THUMB_HEIGHT} placeholderIconSize={18} />
+                      <Text style={styles.adviceItemName} numberOfLines={2}>{item.name}</Text>
                     </TouchableOpacity>
                   ))}
               </ScrollView>
@@ -1956,6 +1973,7 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
             <Text style={styles.sectionEyebrowText}>Shopping edit</Text>
           </View>
           <ShopOutfitCard
+            compact={(message.responseVersion === 2 || message.responseVersion === 3)}
             outfit={message.shopOutfit}
             saveLabel={eventContext ? `${message.shopOutfit.recommendationType === 'piece' ? 'Add to wishlist' : 'Save list'} for ${eventContext.title}` : undefined}
             onSave={async () => {
@@ -2324,6 +2342,7 @@ function OutfitSuggestionCard({
       const input: CreateOutfitInput = {
         name: currentLookName?.trim() || outfitNameFromItems(matchedItems),
         description: currentMessageText.slice(0, 200) || null,
+        stylistReady: true,
         itemIds: matchedItems.map((i) => ({ id: i.id, category: i.category as string })),
       };
       const outfit = await createOutfit.mutateAsync(input);
@@ -2794,55 +2813,11 @@ function ItemDetailSheet({ item, onClose }: ItemDetailSheetProps) {
 // ── TypingIndicator ───────────────────────────────────────────────────────────
 
 function TypingIndicator() {
-  const dot1 = useRef(new Animated.Value(0)).current;
-  const dot2 = useRef(new Animated.Value(0)).current;
-  const dot3 = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    function pulse(val: Animated.Value, delay: number) {
-      return Animated.loop(
-        Animated.sequence([
-          Animated.delay(delay),
-          Animated.timing(val, { toValue: 1, duration: 380, useNativeDriver: true }),
-          Animated.timing(val, { toValue: 0, duration: 380, useNativeDriver: true }),
-        ]),
-      );
-    }
-    const a1 = pulse(dot1, 0);
-    const a2 = pulse(dot2, 180);
-    const a3 = pulse(dot3, 360);
-    a1.start(); a2.start(); a3.start();
-    return () => { a1.stop(); a2.stop(); a3.stop(); };
-  }, []);
-
-  // Beneath the pulsing label, the reply's own silhouette — eyebrow, a serif
-  // title line, a 4:5 plate — so the layout doesn't jump when the card lands.
   return (
-    <View style={styles.typingRow}>
+    <View style={styles.typingRow} accessibilityRole="progressbar" accessibilityLabel="Your stylist is preparing a reply" accessibilityLiveRegion="polite">
       <View style={styles.typingLabel}>
-        <Ionicons name="sparkles" size={13} color={colors.primary} />
-        <Text style={styles.sectionEyebrowText}>Styling your answer</Text>
-      </View>
-      <View style={styles.typingSkeleton}>
-        <SkeletonBlock width="60%" height={28} borderRadius={radii.sm} />
-        <SkeletonBlock width="36%" height={12} borderRadius={radii.sm} />
-        <SkeletonBlock width="100%" height={TYPING_PLATE_HEIGHT} borderRadius={radii.photo} style={styles.typingPlate} />
-        <SkeletonBlock width="92%" height={12} borderRadius={radii.sm} />
-        <SkeletonBlock width="74%" height={12} borderRadius={radii.sm} />
-      </View>
-      <View style={styles.typingBubble}>
-        {[dot1, dot2, dot3].map((d, i) => (
-          <Animated.View
-            key={i}
-            style={[
-              styles.typingDot,
-              {
-                opacity: d.interpolate({ inputRange: [0, 1], outputRange: [0.2, 0.85] }),
-                transform: [{ scale: d.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1.2] }) }],
-              },
-            ]}
-          />
-        ))}
+        <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
+        <Text style={{ ...typography.text.bodySmall, color: colors.mutedForeground }}>Your stylist is preparing a reply…</Text>
       </View>
     </View>
   );
@@ -3099,6 +3074,7 @@ type StylistOverlaySheetProps = {
   visible: boolean;
   bottomInset: number;
   onClose: () => void;
+  onDismiss?: () => void;
   children: ReactNode;
   sheetStyle?: StyleProp<ViewStyle>;
 };
@@ -3112,6 +3088,7 @@ function StylistOverlaySheet({
   visible,
   bottomInset,
   onClose,
+  onDismiss,
   children,
   sheetStyle,
 }: StylistOverlaySheetProps) {
@@ -3120,8 +3097,20 @@ function StylistOverlaySheet({
   const backdropProgress = useSharedValue(0);
   const dragY = useSharedValue(0);
   const closeNotifyRef = useRef(false);
+  const pendingDismissRef = useRef(false);
+  const reducedMotion = useReducedMotion();
+  const notifyDismiss = useCallback(() => {
+    if (!pendingDismissRef.current) return;
+    pendingDismissRef.current = false;
+    onDismiss?.();
+  }, [onDismiss]);
+
+  useEffect(() => {
+    if (!mounted && Platform.OS !== 'ios') notifyDismiss();
+  }, [mounted, notifyDismiss]);
 
   const finishClose = useCallback(() => {
+    pendingDismissRef.current = true;
     setMounted(false);
     sheetProgress.value = 0;
     backdropProgress.value = 0;
@@ -3134,12 +3123,12 @@ function StylistOverlaySheet({
 
   const animateClose = useCallback((notifyParent: boolean) => {
     closeNotifyRef.current = notifyParent;
-    sheetProgress.value = withTiming(0, { duration: 220 }, (finished) => {
+    sheetProgress.value = withTiming(0, { duration: reducedMotion ? 0 : 220 }, (finished) => {
       if (finished) runOnJS(finishClose)();
     });
     backdropProgress.value = withTiming(0, { duration: 180 });
     dragY.value = withTiming(0, { duration: 180 });
-  }, [backdropProgress, dragY, finishClose, sheetProgress]);
+  }, [backdropProgress, dragY, finishClose, sheetProgress, reducedMotion]);
 
   useEffect(() => {
     if (visible) {
@@ -3187,10 +3176,8 @@ function StylistOverlaySheet({
   }));
   const backdropAnimatedStyle = useAnimatedStyle(() => ({ opacity: backdropProgress.value }));
 
-  if (!mounted) return null;
-
   return (
-    <Modal visible transparent animationType="none" onRequestClose={() => animateClose(true)}>
+    <Modal visible={mounted} transparent animationType="none" onDismiss={notifyDismiss} onRequestClose={() => animateClose(true)}>
       <GestureHandlerRootView style={StyleSheet.absoluteFill}>
         <View style={styles.stylistSheetModal}>
           <Reanimated.View style={[styles.stylistSheetBackdrop, backdropAnimatedStyle]} pointerEvents="box-none">
@@ -4280,7 +4267,9 @@ const styles = StyleSheet.create({
   responseSection: { gap: spacing.sm, marginTop: spacing.sm },
   // Every section heading in a reply is the same tracked eyebrow.
   responseSectionTitle: { ...typography.text.eyebrow, color: colors.primary },
+  adviceItemName: { ...typography.text.bodySmall, color: colors.foreground, paddingTop: spacing.xs },
   adviceThumb: {
+    width: ADVICE_THUMB_WIDTH,
     borderRadius: radii.photo,
     overflow: 'hidden',
   },
@@ -4293,15 +4282,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-  },
-  typingSkeleton: { gap: spacing.sm, paddingVertical: spacing.xs },
-  typingPlate: { marginVertical: spacing.xs },
-  typingBubble: { flexDirection: 'row', gap: spacing.xs },
-  typingDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: colors.primary,
   },
   dayDivider: {
     flexDirection: 'row',

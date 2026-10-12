@@ -10,8 +10,8 @@
  * side-effect-free call and memoizing the result, rather than trusting that
  * the import succeeding means anything.
  *
- * Callers must treat `isAvailable() === false` as "use the server fallback",
- * not as an error to surface — see StylistChatView's playTts.
+ * Callers must handle `isAvailable() === false` locally. Read-aloud never
+ * falls back to a paid server service.
  */
 import * as Speech from 'expo-speech';
 

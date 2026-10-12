@@ -1,4 +1,4 @@
-import { isResponseBlock, messageForResponseBlock } from '../responseBlocks';
+import { groupResponseBlocks, responseBlockItemIds, isResponseBlock, messageForResponseBlock } from '../responseBlocks';
 import type { StylistAssistantMessage, StylistResponseBlock } from '../types';
 
 const parent: StylistAssistantMessage = { id: 'turn', role: 'assistant', kind: 'assistant', renderType: 'text', text: 'Whole reply', recId: 7 };
@@ -34,4 +34,27 @@ test('transport accepts supported blocks and rejects malformed events', () => {
   expect(isResponseBlock({ type: 'unknown', text: '' })).toBe(false);
   expect(isResponseBlock({ type: 'card', text: '' })).toBe(false);
   expect(isResponseBlock(null)).toBe(false);
+});
+
+test('v3 references and stable card identity survive restored history', () => {
+  const block: StylistResponseBlock = { type: 'text', text: 'Wear the canonical shirt.', ownedItemIds: [12], turnId: 't', blockId: 't:0', sequence: 0 };
+  const restored = JSON.parse(JSON.stringify(block));
+  const mapped = messageForResponseBlock({ ...parent, responseVersion: 3 }, restored, 0);
+  expect(mapped.responseVersion).toBe(3);
+  expect(mapped.id).toBe('t:0');
+  expect(mapped.suggestedItemIds).toEqual([12]);
+});
+
+test('only consecutive outfits form a carousel and text references join item hydration', () => {
+  const outfit: StylistResponseBlock = { type: 'card', text: '', payload: { mode: 'from_closet', itemIds: [1, 2, 3] } };
+  const blocks: StylistResponseBlock[] = [{ type: 'text', text: 'First', ownedItemIds: [4] }, outfit, outfit, { type: 'text', text: 'Then' }, outfit];
+  expect(groupResponseBlocks(blocks).map(g => [g.start, g.blocks.length, g.carousel])).toEqual([[0, 1, false], [1, 2, true], [3, 1, false], [4, 1, true]]);
+  expect(responseBlockItemIds(blocks)).toEqual([4, 1, 2, 3]);
+});
+
+test('malformed new entities and owned snapshots do not enter rendering', () => {
+  expect(isResponseBlock({ type: 'card', text: '', payload: { tagSuggestions: { tags: 'minimalist', rationale: '' } } })).toBe(false);
+  expect(isResponseBlock({ type: 'card', text: '', payload: { insight: { label: 'Fit', explanation: '', supportingItemIds: [-1] } } })).toBe(false);
+  expect(isResponseBlock({ type: 'text', text: '', wardrobeItems: [{ id: 1 }] })).toBe(false);
+  expect(isResponseBlock({ type: 'text', text: '', ownedItemIds: [999] })).toBe(true);
 });

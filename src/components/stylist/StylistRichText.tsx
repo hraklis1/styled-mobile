@@ -56,8 +56,7 @@ export function StylistRichText({ text, streaming }: { text: string; streaming?:
   );
 }
 
-// Only the first prose block uses the editorial face. Later prose and lists
-// use the body face; emphasis follows the face of its containing block.
+// Conversation uses the body face throughout; editorial type is reserved for titles.
 const styles = StyleSheet.create({
   container: {
     gap: spacing.lg,
@@ -65,8 +64,8 @@ const styles = StyleSheet.create({
   paragraph: {
     ...typography.text.body, color: colors.foreground,
   },
-  lead: { ...typography.text.stylistLead, color: colors.foreground },
-  leadEmphasis: { fontFamily: typography.family.editorialMedium },
+  lead: { ...typography.text.body, color: colors.foreground },
+  leadEmphasis: { fontWeight: typography.weight.semibold },
   bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
   bulletDot: {
     fontSize: typography.text.body.fontSize,

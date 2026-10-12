@@ -1,0 +1,332 @@
+{
+  "promptVersion": "client-relationship-v4.4",
+  "synthetic": true,
+  "instructions": "Rate each dimension 1\u20135 independently; null means not yet reviewed. Delivery status is not quality. Review alongside the synthetic fixtures in scripts/eval-stylist-client.ts in the backend. Do not open the reviewer key until scoring is complete.",
+  "cases": [
+    {
+      "case": "temporary-exception",
+      "question": "No wool for this trip to Miami, but I love my wool coats at home. What should I pack?",
+      "preferences": null,
+      "answers": {
+        "A": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "card",
+              "text": "Miami Packing\n\nSkip wool entirely and lean into light, breathable layers that handle heat, humidity, and air-conditioning. Pack a small, easy mix rather than a lot of structure.\n\nTops: Bring mostly lightweight tees, tanks, and one slightly dressier short-sleeve top. Natural-feel fabrics or technical blends that dry fast will be the most comfortable.\n\nBottoms: Pack shorts or airy trousers, plus one pair of jeans or a sturdier pant only if you know you\u2019ll want them at night. Keep waistbands comfortable and non-restrictive.\n\nLayer: Instead of a wool coat, pack one very light layer for indoor AC: a cotton overshirt, unlined jacket, or thin cardigan if you run cold.\n\nShoes: Choose your most comfortable warm-weather shoes, and keep it to two pairs max if you can. Miami is better with easy walkable footwear than anything heavy.\n\nEvening piece: Add one polished top or dressier bottom so you can step up for dinner without needing a jacket.\n\nAvoid: Leave wool, heavy knits, and bulky tailoring at home. They\u2019ll read too warm and take up valuable space.",
+              "ownedItemIds": [],
+              "wardrobeItems": [],
+              "payload": {
+                "mode": "advice",
+                "checklist": {
+                  "title": "Miami Packing",
+                  "intro": "Skip wool entirely and lean into light, breathable layers that handle heat, humidity, and air-conditioning. Pack a small, easy mix rather than a lot of structure.",
+                  "entries": [
+                    {
+                      "label": "Tops",
+                      "detail": "Bring mostly lightweight tees, tanks, and one slightly dressier short-sleeve top. Natural-feel fabrics or technical blends that dry fast will be the most comfortable."
+                    },
+                    {
+                      "label": "Bottoms",
+                      "detail": "Pack shorts or airy trousers, plus one pair of jeans or a sturdier pant only if you know you\u2019ll want them at night. Keep waistbands comfortable and non-restrictive."
+                    },
+                    {
+                      "label": "Layer",
+                      "detail": "Instead of a wool coat, pack one very light layer for indoor AC: a cotton overshirt, unlined jacket, or thin cardigan if you run cold."
+                    },
+                    {
+                      "label": "Shoes",
+                      "detail": "Choose your most comfortable warm-weather shoes, and keep it to two pairs max if you can. Miami is better with easy walkable footwear than anything heavy."
+                    },
+                    {
+                      "label": "Evening piece",
+                      "detail": "Add one polished top or dressier bottom so you can step up for dinner without needing a jacket."
+                    },
+                    {
+                      "label": "Avoid",
+                      "detail": "Leave wool, heavy knits, and bulky tailoring at home. They\u2019ll read too warm and take up valuable space."
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "B": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "card",
+              "text": "Pack light, breathable cotton and skip wool entirely. Your best Miami-friendly core is the cream cotton crewneck, the navy oxford shirt, olive straight chinos, dark straight jeans, the cream platform sneakers, and the navy rain shell only if you want a thin layer for air conditioning or a sudden shower. The brown leather loafers can come too if you want one slightly dressier shoe, but the sneakers will do most of the work.",
+              "payload": {
+                "mode": "trip",
+                "tripPlan": {
+                  "intro": "Pack light, breathable cotton and skip wool entirely. Your best Miami-friendly core is the cream cotton crewneck, the navy oxford shirt, olive straight chinos, dark straight jeans, the cream platform sneakers, and the navy rain shell only if you want a thin layer for air conditioning or a sudden shower. The brown leather loafers can come too if you want one slightly dressier shoe, but the sneakers will do most of the work.",
+                  "outfits": [
+                    {
+                      "label": "Daywear core",
+                      "note": "Breathable cotton layers with one light outer layer; no wool needed.",
+                      "itemIds": [
+                        1,
+                        2,
+                        3,
+                        8
+                      ],
+                      "status": "ready",
+                      "foundationItemIds": [],
+                      "missingEssentials": []
+                    },
+                    {
+                      "label": "Second outfit",
+                      "note": "A cleaner alternate with the same easy palette and one smarter shoe option.",
+                      "itemIds": [
+                        4,
+                        5,
+                        6
+                      ],
+                      "status": "ready",
+                      "foundationItemIds": [],
+                      "missingEssentials": []
+                    }
+                  ],
+                  "packingList": [
+                    "2 tops max if you want to stay lean",
+                    "1\u20132 bottoms",
+                    "1 pair of sneakers",
+                    "1 optional dressier shoe",
+                    "1 thin shell instead of a coat"
+                  ]
+                }
+              },
+              "wardrobeItems": [
+                {
+                  "id": 1,
+                  "userId": 1,
+                  "name": "Cream Cotton Crewneck",
+                  "category": "top",
+                  "color": "cream",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 2,
+                  "userId": 1,
+                  "name": "Olive Straight Chinos",
+                  "category": "bottom",
+                  "color": "olive",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 3,
+                  "userId": 1,
+                  "name": "Platform Sneakers",
+                  "category": "shoes",
+                  "color": "cream",
+                  "material": "canvas",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 8,
+                  "userId": 1,
+                  "name": "Rain Shell",
+                  "category": "outerwear",
+                  "color": "navy",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ],
+                  "rainOk": true,
+                  "warmthRating": 2
+                },
+                {
+                  "id": 4,
+                  "userId": 1,
+                  "name": "Navy Oxford Shirt",
+                  "category": "top",
+                  "color": "navy",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 5,
+                  "userId": 1,
+                  "name": "Dark Straight Jeans",
+                  "category": "bottom",
+                  "color": "indigo",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 6,
+                  "userId": 1,
+                  "name": "Brown Leather Loafers",
+                  "category": "shoes",
+                  "color": "brown",
+                  "material": "leather",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "review": {
+        "A": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        },
+        "B": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        }
+      },
+      "winner": null,
+      "ownershipViolations": [],
+      "regressions": [],
+      "notes": ""
+    },
+    {
+      "case": "buy-nothing",
+      "question": "Do I need another navy shirt? Be honest about whether it adds anything to my wardrobe.",
+      "preferences": null,
+      "answers": {
+        "A": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "text",
+              "text": "Honestly: probably not. You already have a navy Oxford shirt in a regular, wearable cut, and with only one other light neutral top showing, another navy shirt is likely to be a duplicate rather than a real addition.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "text",
+              "text": "The only reason to buy another would be if you want a meaningfully different role \u2014 for example, a lighter-weight navy shirt, a more relaxed overshirt, or a sharper dress shirt. If it\u2019s just another navy button-up for casual wear, I\u2019d skip it.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            }
+          ]
+        },
+        "B": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "text",
+              "text": "No \u2014 another navy shirt would be redundant in this wardrobe. You already have a navy Oxford shirt, and your closet is small enough that a second navy top would mostly repeat the same role instead of opening up new outfits. What would add more is a shirt in a lighter neutral or a more contrasting color, because your current tops already cover cream and navy cleanly.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "text",
+              "text": "If you want the most useful next shirt, I\u2019d look for something like light blue, white, or a subtle stripe. That would pair more distinctly with your olive chinos and dark jeans than another navy piece would.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "text",
+              "text": "owned_item",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            }
+          ]
+        }
+      },
+      "review": {
+        "A": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        },
+        "B": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        }
+      },
+      "winner": null,
+      "ownershipViolations": [],
+      "regressions": [],
+      "notes": ""
+    }
+  ]
+}

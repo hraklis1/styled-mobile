@@ -64,3 +64,17 @@ it('keeps a successful save when the contextual chat remounts after visiting Wis
   expect(view).toHaveBeenCalledTimes(1);
   expect(save).toHaveBeenCalledTimes(1);
 });
+
+it('shows three compact picks and reveals existing alternatives without searching', () => {
+  const items = Array.from({ length: 5 }, (_, index) => ({ name: `Pick ${index + 1}`, whyItFitsYou: 'Comfortable with straight trousers.', offers: [{ id: `p${index}`, title: `Pick ${index + 1}`, merchant: 'Fixture merchant', formattedPrice: 'CA$100', url: `https://example.com/${index}` }] }));
+  act(() => { renderer = TestRenderer.create(<ShopOutfitCard compact outfit={{ ...outfit, items } as unknown as ShopOutfit} />); });
+  const visibleLinks = () => renderer.root.findAllByType(Pressable).filter(node => node.props.accessibilityRole === 'link');
+  expect(visibleLinks()).toHaveLength(3);
+  act(() => action('Show 2 more options').props.onPress());
+  expect(visibleLinks()).toHaveLength(5);
+  act(() => action('Show fewer').props.onPress());
+  expect(visibleLinks()).toHaveLength(3);
+  const rationale = renderer.root.findAllByType(Pressable).find(node => node.props.accessibilityLabel === 'Why Pick 1 suits you')!;
+  act(() => rationale.props.onPress());
+  expect(action('Less detail')).toBeDefined();
+});

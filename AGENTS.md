@@ -17,6 +17,14 @@ what make the escape hatch work. This does not extend to `main`, and it never
 authorises `git push`; ask before anything leaves the machine. When the trial
 ends, the user decides between merging the branch into `main` and deleting it.
 
+# Feature activation
+
+New changes should be active by default in the running app and in checked-in
+configuration defaults. Do not leave completed features disabled behind rollout
+flags or restrict them to a test account unless the user explicitly requests it.
+Keep compatibility and rollback controls where useful. This does not change the
+commit and push rules above.
+
 # Expo HAS CHANGED
 
 Read the exact versioned docs at https://docs.expo.dev/versions/v56.0.0/ before writing any code.

@@ -1,0 +1,85 @@
+{
+  "promptVersion": "client-relationship-v4.3",
+  "summary": {
+    "candidate": {
+      "estimatedUsd": 0.0738612,
+      "medianElapsedMs": 4574.0,
+      "statuses": {
+        "complete": 11,
+        "partial": 1,
+        "failed": 0
+      }
+    },
+    "baseline": {
+      "estimatedUsd": 0.04729005,
+      "medianElapsedMs": 3818.0,
+      "statuses": {
+        "complete": 11,
+        "partial": 1,
+        "failed": 0
+      }
+    }
+  },
+  "assignments": [
+    {
+      "case": "thanksgiving-dinner",
+      "A": "candidate",
+      "B": "baseline"
+    },
+    {
+      "case": "thanksgiving-lunch",
+      "A": "baseline",
+      "B": "candidate"
+    },
+    {
+      "case": "sparse-closet",
+      "A": "candidate",
+      "B": "baseline"
+    },
+    {
+      "case": "conceptual",
+      "A": "baseline",
+      "B": "candidate"
+    },
+    {
+      "case": "paired-comfort",
+      "A": "candidate",
+      "B": "baseline"
+    },
+    {
+      "case": "paired-tailoring",
+      "A": "candidate",
+      "B": "baseline"
+    },
+    {
+      "case": "shopping-unavailable",
+      "A": "candidate",
+      "B": "baseline"
+    },
+    {
+      "case": "durable-memory",
+      "A": "candidate",
+      "B": "baseline"
+    },
+    {
+      "case": "temporary-exception",
+      "A": "candidate",
+      "B": "baseline"
+    },
+    {
+      "case": "buy-nothing",
+      "A": "candidate",
+      "B": "baseline"
+    },
+    {
+      "case": "designer-advice",
+      "A": "candidate",
+      "B": "baseline"
+    },
+    {
+      "case": "followup",
+      "A": "candidate",
+      "B": "baseline"
+    }
+  ]
+}

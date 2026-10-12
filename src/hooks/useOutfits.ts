@@ -22,6 +22,8 @@ export type CreateOutfitInput = {
   notes?: string | null;
   tags?: string[];
   isDraft?: boolean;
+  /** Recheck current ownership/availability for a ready stylist selection. */
+  stylistReady?: boolean;
   itemIds?: OutfitItemEntry[];
 };
 

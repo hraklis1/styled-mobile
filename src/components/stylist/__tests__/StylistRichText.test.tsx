@@ -1,7 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { StylistRichText } from '../StylistRichText';
-import { typography } from '../../../theme';
 
 type Element = React.ReactElement<{ children?: React.ReactNode; style?: any }>;
 function children(node: React.ReactNode): Element[] {
@@ -18,18 +17,18 @@ function blocks(text: string, streaming = false) {
 }
 
 describe('Stylist prose hierarchy', () => {
-  it('preserves paragraphs and only gives the first prose block the editorial face', () => {
+  it('preserves paragraphs in a consistent conversational face', () => {
     const result = blocks('\nA considered **first** paragraph.\n\nA second paragraph.');
     expect(result.map(node => content(node))).toEqual(['A considered first paragraph.', 'A second paragraph.']);
-    expect(StyleSheet.flatten(result[0].props.style).fontFamily).toBe(typography.family.editorialRegular);
+    expect(StyleSheet.flatten(result[0].props.style).fontFamily).toBeUndefined();
     expect(StyleSheet.flatten(result[1].props.style).fontFamily).toBeUndefined();
   });
 
-  it('does not consume the lead style for a bullet before the first paragraph', () => {
+  it('keeps paragraphs readable after a leading bullet', () => {
     const result = blocks('- Keep this item\nThe first prose paragraph.\nA follow-up.');
     expect(content(result[0])).toBe('•Keep this item');
     expect(result[1].type).toBe(Text);
-    expect(StyleSheet.flatten(result[1].props.style).fontFamily).toBe(typography.family.editorialRegular);
+    expect(StyleSheet.flatten(result[1].props.style).fontFamily).toBeUndefined();
     expect(StyleSheet.flatten(result[2].props.style).fontFamily).toBeUndefined();
   });
 

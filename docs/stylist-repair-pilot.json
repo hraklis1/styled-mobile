@@ -1,0 +1,4264 @@
+{
+  "capUsd": 5,
+  "priorSpentUsd": 0.18132255,
+  "spentUsd": 0.2308278,
+  "reservedUsd": 0,
+  "model": "gpt-5.4-mini",
+  "pricingSource": "server/pricing.ts; published list estimate, not invoice",
+  "scope": "Production orchestrator, provider adapter, context builder and evidence tools with synthetic wardrobe fixtures. No route persistence, summaries, embeddings, audio or deferred calls execute; their cost here is zero. Product search is empty, not a live retailer test.",
+  "rows": [
+    {
+      "case": "thanksgiving-dinner",
+      "side": "baseline",
+      "question": "What can I wear with these for thanksgiving dinner",
+      "elapsedMs": 5486,
+      "attempts": [
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 2661,
+            "stableUserContext": 221,
+            "requestContext": 1404,
+            "messages": 17,
+            "schema": 1629,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 1,
+            "estimatedTextInputTokens": 7211,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 9711,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "tool_calls",
+          "toolNames": [
+            "check_wardrobe_requirements"
+          ],
+          "costUsd": 0.0020772,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4110,
+            "completionTokens": 103,
+            "reasoningTokens": 0,
+            "totalTokens": 4213,
+            "cachedTokens": 2176
+          },
+          "elapsedMs": 1470
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 2661,
+            "stableUserContext": 221,
+            "requestContext": 1404,
+            "messages": 17,
+            "schema": 1629,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 694,
+            "estimatedTextInputTokens": 7904,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 10404,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "tool_calls",
+          "toolNames": [
+            "item_details"
+          ],
+          "costUsd": 0.0010839,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4618,
+            "completionTokens": 28,
+            "reasoningTokens": 0,
+            "totalTokens": 4646,
+            "cachedTokens": 3712
+          },
+          "elapsedMs": 832
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 2661,
+            "stableUserContext": 221,
+            "requestContext": 1404,
+            "messages": 17,
+            "schema": 1629,
+            "framing": 16,
+            "tools": 1,
+            "toolHistory": 1399,
+            "estimatedTextInputTokens": 7348,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 9848,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "stop",
+          "costUsd": 0.0033400500000000002,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4451,
+            "completionTokens": 346,
+            "reasoningTokens": 0,
+            "totalTokens": 4797,
+            "cachedTokens": 2304
+          },
+          "elapsedMs": 3176
+        }
+      ],
+      "answer": {
+        "responseVersion": 3,
+        "blocks": [
+          {
+            "type": "text",
+            "text": "Wear the Navy Oxford Shirt with the Olive Straight Chinos and the Brown Leather Loafers. It reads polished enough for Thanksgiving dinner without feeling dressed up, and the olive keeps the navy from looking too severe.",
+            "ownedItemIds": [
+              4,
+              2,
+              6
+            ],
+            "wardrobeItems": [
+              {
+                "id": 4,
+                "userId": 1,
+                "name": "Navy Oxford Shirt",
+                "category": "top",
+                "color": "navy",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 2,
+                "userId": 1,
+                "name": "Olive Straight Chinos",
+                "category": "bottom",
+                "color": "olive",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 6,
+                "userId": 1,
+                "name": "Brown Leather Loafers",
+                "category": "shoes",
+                "color": "brown",
+                "material": "leather",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              }
+            ]
+          },
+          {
+            "type": "card",
+            "text": "The navy shirt gives the outfit structure, the olive chinos soften it, and the brown loafers keep the look warm and dinner-appropriate. It works especially well for a seated meal because the regular fit and comfortable waistband-friendly chinos stay easy through the evening.",
+            "payload": {
+              "mode": "from_closet",
+              "lookName": "Thanksgiving dinner outfit",
+              "itemIds": [
+                4,
+                2,
+                6
+              ],
+              "readinessStatus": "ready",
+              "foundationItemIds": [],
+              "missingEssentials": []
+            },
+            "wardrobeItems": [
+              {
+                "id": 4,
+                "userId": 1,
+                "name": "Navy Oxford Shirt",
+                "category": "top",
+                "color": "navy",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 2,
+                "userId": 1,
+                "name": "Olive Straight Chinos",
+                "category": "bottom",
+                "color": "olive",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 6,
+                "userId": 1,
+                "name": "Brown Leather Loafers",
+                "category": "shoes",
+                "color": "brown",
+                "material": "leather",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              }
+            ]
+          },
+          {
+            "type": "card",
+            "text": "Navy and olive is the strongest combination here: it feels intentional, calm, and a little richer than pairing the cream top with jeans. Brown shoes finish it with the right amount of warmth.",
+            "payload": {
+              "mode": "advice",
+              "itemIds": [
+                4,
+                2,
+                6
+              ],
+              "insight": {
+                "label": "Best color move",
+                "explanation": "Navy and olive is the strongest combination here: it feels intentional, calm, and a little richer than pairing the cream top with jeans. Brown shoes finish it with the right amount of warmth.",
+                "supportingItemIds": [
+                  4,
+                  2,
+                  6
+                ]
+              }
+            },
+            "wardrobeItems": [
+              {
+                "id": 4,
+                "userId": 1,
+                "name": "Navy Oxford Shirt",
+                "category": "top",
+                "color": "navy",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 2,
+                "userId": 1,
+                "name": "Olive Straight Chinos",
+                "category": "bottom",
+                "color": "olive",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 6,
+                "userId": 1,
+                "name": "Brown Leather Loafers",
+                "category": "shoes",
+                "color": "brown",
+                "material": "leather",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              }
+            ]
+          }
+        ],
+        "followUps": [
+          {
+            "label": "Dress it up a touch",
+            "prompt": "If you want, I can give you one small change to make this feel a bit sharper for dinner."
+          },
+          {
+            "label": "More casual version",
+            "prompt": "I can also swap in a more relaxed version if the dinner is very low-key."
+          }
+        ],
+        "diagnostics": {
+          "generationCalls": 3,
+          "toolExecutions": 2,
+          "toolRounds": 2,
+          "repairAttempts": 0,
+          "validationFailures": 0,
+          "evidenceFailures": 0
+        }
+      }
+    },
+    {
+      "case": "thanksgiving-lunch",
+      "side": "baseline",
+      "question": "What can i wear with these shoes for a thanksgiving family lunch",
+      "elapsedMs": 5052,
+      "attempts": [
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 2661,
+            "stableUserContext": 221,
+            "requestContext": 1409,
+            "messages": 22,
+            "schema": 1629,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 1,
+            "estimatedTextInputTokens": 7221,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 9721,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "tool_calls",
+          "toolNames": [
+            "check_wardrobe_requirements"
+          ],
+          "costUsd": 0.0021492,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4116,
+            "completionTokens": 118,
+            "reasoningTokens": 0,
+            "totalTokens": 4234,
+            "cachedTokens": 2176
+          },
+          "elapsedMs": 1323
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 2661,
+            "stableUserContext": 221,
+            "requestContext": 1409,
+            "messages": 22,
+            "schema": 1629,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 729,
+            "estimatedTextInputTokens": 7949,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 10449,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "tool_calls",
+          "toolNames": [
+            "item_details"
+          ],
+          "costUsd": 0.0011064,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4648,
+            "completionTokens": 28,
+            "reasoningTokens": 0,
+            "totalTokens": 4676,
+            "cachedTokens": 3712
+          },
+          "elapsedMs": 941
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 2661,
+            "stableUserContext": 221,
+            "requestContext": 1409,
+            "messages": 22,
+            "schema": 1629,
+            "framing": 16,
+            "tools": 1,
+            "toolHistory": 1434,
+            "estimatedTextInputTokens": 7393,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 9893,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "stop",
+          "costUsd": 0.00323205,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4481,
+            "completionTokens": 317,
+            "reasoningTokens": 0,
+            "totalTokens": 4798,
+            "cachedTokens": 2304
+          },
+          "elapsedMs": 2781
+        }
+      ],
+      "answer": {
+        "responseVersion": 3,
+        "blocks": [
+          {
+            "type": "text",
+            "text": "Wear the Platform Sneakers with the Olive Straight Chinos and the Navy Oxford Shirt. It reads polished but relaxed enough for a family lunch: the cream sneakers keep it light, the olive chinos soften the look, and the navy shirt gives it a little Thanksgiving structure without feeling dressed up.",
+            "ownedItemIds": [
+              3,
+              2,
+              4
+            ],
+            "wardrobeItems": [
+              {
+                "id": 3,
+                "userId": 1,
+                "name": "Platform Sneakers",
+                "category": "shoes",
+                "color": "cream",
+                "material": "canvas",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 2,
+                "userId": 1,
+                "name": "Olive Straight Chinos",
+                "category": "bottom",
+                "color": "olive",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 4,
+                "userId": 1,
+                "name": "Navy Oxford Shirt",
+                "category": "top",
+                "color": "navy",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              }
+            ]
+          },
+          {
+            "type": "card",
+            "text": "Cream sneakers work best here with olive chinos and the navy Oxford shirt. The palette is calm and autumnal, and the regular fits keep the outfit easy to sit and eat in. If you want it a touch softer, leave the shirt untucked; if you want it neater, do a clean front tuck.",
+            "payload": {
+              "mode": "from_closet",
+              "lookName": "Thanksgiving family lunch",
+              "itemIds": [
+                3,
+                2,
+                4
+              ],
+              "readinessStatus": "ready",
+              "foundationItemIds": [],
+              "missingEssentials": []
+            },
+            "wardrobeItems": [
+              {
+                "id": 3,
+                "userId": 1,
+                "name": "Platform Sneakers",
+                "category": "shoes",
+                "color": "cream",
+                "material": "canvas",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 2,
+                "userId": 1,
+                "name": "Olive Straight Chinos",
+                "category": "bottom",
+                "color": "olive",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 4,
+                "userId": 1,
+                "name": "Navy Oxford Shirt",
+                "category": "top",
+                "color": "navy",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              }
+            ]
+          }
+        ],
+        "followUps": [
+          {
+            "label": "Make it softer",
+            "prompt": "If you want a more relaxed version, I can swap in the cream crewneck with the same chinos and shoes."
+          },
+          {
+            "label": "Make it a little sharper",
+            "prompt": "If you want a slightly dressier lunch outfit, I can style the loafers instead of the sneakers."
+          }
+        ],
+        "diagnostics": {
+          "generationCalls": 3,
+          "toolExecutions": 2,
+          "toolRounds": 2,
+          "repairAttempts": 0,
+          "validationFailures": 0,
+          "evidenceFailures": 0
+        }
+      }
+    },
+    {
+      "case": "sparse-closet",
+      "side": "baseline",
+      "question": "What can I wear with these shoes for family lunch?",
+      "elapsedMs": 9028,
+      "attempts": [
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 2661,
+            "stableUserContext": 221,
+            "requestContext": 358,
+            "messages": 17,
+            "schema": 1629,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 1,
+            "estimatedTextInputTokens": 6165,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 8665,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "tool_calls",
+          "toolNames": [
+            "check_wardrobe_requirements"
+          ],
+          "costUsd": 0.00158055,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 3287,
+            "completionTokens": 53,
+            "reasoningTokens": 0,
+            "totalTokens": 3340,
+            "cachedTokens": 1664
+          },
+          "elapsedMs": 1056
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 2661,
+            "stableUserContext": 221,
+            "requestContext": 358,
+            "messages": 17,
+            "schema": 1629,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 292,
+            "estimatedTextInputTokens": 6456,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 8956,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "tool_calls",
+          "toolNames": [
+            "wear_statistics"
+          ],
+          "costUsd": 0.000519,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 3488,
+            "completionTokens": 14,
+            "reasoningTokens": 0,
+            "totalTokens": 3502,
+            "cachedTokens": 3200
+          },
+          "elapsedMs": 761
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 2661,
+            "stableUserContext": 221,
+            "requestContext": 358,
+            "messages": 17,
+            "schema": 1629,
+            "framing": 16,
+            "tools": 1,
+            "toolHistory": 512,
+            "estimatedTextInputTokens": 5415,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 7915,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "stop",
+          "costUsd": 0.00239565,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 2965,
+            "completionTokens": 307,
+            "reasoningTokens": 0,
+            "totalTokens": 3272,
+            "cachedTokens": 1792
+          },
+          "elapsedMs": 3506
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 2661,
+            "stableUserContext": 221,
+            "requestContext": 358,
+            "messages": 732,
+            "schema": 1629,
+            "framing": 16,
+            "tools": 1,
+            "toolHistory": 512,
+            "estimatedTextInputTokens": 6130,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 8630,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "stop",
+          "costUsd": 0.0020127,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 3412,
+            "completionTokens": 301,
+            "reasoningTokens": 0,
+            "totalTokens": 3713,
+            "cachedTokens": 2816
+          },
+          "elapsedMs": 3695
+        }
+      ],
+      "answer": {
+        "responseVersion": 3,
+        "blocks": [
+          {
+            "type": "text",
+            "text": "For family lunch, the safest pairing is the Platform Sneakers with dark jeans or navy chinos and a simple cream or navy top. That keeps the outfit casual, tidy, and balanced: the light shoes stay intentional, while the darker base prevents the look from feeling washed out. If you want it slightly more polished, switch the bottom to straight-leg chinos and keep the top structured rather than sporty.",
+            "ownedItemIds": [
+              3
+            ],
+            "wardrobeItems": [
+              {
+                "id": 3,
+                "userId": 1,
+                "name": "Platform Sneakers",
+                "category": "shoes",
+                "color": "cream",
+                "material": "canvas",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              }
+            ]
+          },
+          {
+            "type": "card",
+            "text": "The shoes are casual and cream, so they work best with a darker, clean silhouette and a simple top. This creates contrast at the base and keeps the outfit easy for lunch.\n\nNot confirmed: A simple cream or navy top would complete the look.\n\nNot confirmed: Dark jeans or navy chinos would complete the look.",
+            "payload": {
+              "mode": "from_closet",
+              "lookName": "Cream sneakers with dark jeans or navy chinos",
+              "itemIds": [
+                3
+              ],
+              "readinessStatus": "incomplete",
+              "foundationItemIds": [
+                3
+              ],
+              "missingEssentials": []
+            },
+            "wardrobeItems": [
+              {
+                "id": 3,
+                "userId": 1,
+                "name": "Platform Sneakers",
+                "category": "shoes",
+                "color": "cream",
+                "material": "canvas",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              }
+            ]
+          }
+        ],
+        "followUps": [
+          {
+            "label": "Need a more polished version?",
+            "prompt": "I can turn this into a smarter family-lunch outfit if you want."
+          }
+        ],
+        "diagnostics": {
+          "generationCalls": 4,
+          "toolExecutions": 2,
+          "toolRounds": 2,
+          "repairAttempts": 1,
+          "validationFailures": 1,
+          "evidenceFailures": 0
+        }
+      }
+    },
+    {
+      "case": "conceptual",
+      "side": "baseline",
+      "question": "How can I make casual outfits feel polished without looking overdressed?",
+      "elapsedMs": 5456,
+      "attempts": [
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 2661,
+            "stableUserContext": 221,
+            "requestContext": 1406,
+            "messages": 24,
+            "schema": 1629,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 1,
+            "estimatedTextInputTokens": 7220,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 9720,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "stop",
+          "costUsd": 0.00292215,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4111,
+            "completionTokens": 521,
+            "reasoningTokens": 0,
+            "totalTokens": 4632,
+            "cachedTokens": 3712
+          },
+          "elapsedMs": 5454
+        }
+      ],
+      "answer": {
+        "responseVersion": 3,
+        "blocks": [
+          {
+            "type": "text",
+            "text": "Make the outfit look intentional, not formal: keep the silhouette simple, use one crisp layer, and let the shoes do the finishing. Your wardrobe already points in the right direction with cream and navy as the cleanest anchors. A straight pant or dark jean, a plain knit or Oxford, and a neat shoe will read polished without tipping dressy.",
+            "ownedItemIds": [],
+            "wardrobeItems": []
+          },
+          {
+            "type": "card",
+            "text": "Use a clean top-and-bottom base with one structured layer or sharper shoe. The contrast between soft cotton basics and a more refined shoe or shirt collar creates polish without adding formality.\n\nNot confirmed: A sharper casual layer like an unstructured blazer, chore jacket, or knit cardigan would make this feel more finished.",
+            "payload": {
+              "mode": "from_closet",
+              "lookName": "Best casual-polished formula",
+              "itemIds": [
+                1,
+                2,
+                6
+              ],
+              "readinessStatus": "incomplete",
+              "foundationItemIds": [
+                1,
+                2,
+                6
+              ],
+              "missingEssentials": []
+            },
+            "wardrobeItems": [
+              {
+                "id": 1,
+                "userId": 1,
+                "name": "Cream Cotton Crewneck",
+                "category": "top",
+                "color": "cream",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 2,
+                "userId": 1,
+                "name": "Olive Straight Chinos",
+                "category": "bottom",
+                "color": "olive",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 6,
+                "userId": 1,
+                "name": "Brown Leather Loafers",
+                "category": "shoes",
+                "color": "brown",
+                "material": "leather",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              }
+            ]
+          },
+          {
+            "type": "card",
+            "text": "The dark jeans keep it casual, while the navy shirt and cream sneakers make the palette feel deliberate. Rolling sleeves or doing a half-tuck would keep it easy, not overdressed.\n\nNot confirmed: A light jacket or overshirt would add structure if you want more polish.",
+            "payload": {
+              "mode": "from_closet",
+              "lookName": "More relaxed, still polished",
+              "itemIds": [
+                4,
+                5,
+                3
+              ],
+              "readinessStatus": "incomplete",
+              "foundationItemIds": [
+                4,
+                5,
+                3
+              ],
+              "missingEssentials": []
+            },
+            "wardrobeItems": [
+              {
+                "id": 4,
+                "userId": 1,
+                "name": "Navy Oxford Shirt",
+                "category": "top",
+                "color": "navy",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 5,
+                "userId": 1,
+                "name": "Dark Straight Jeans",
+                "category": "bottom",
+                "color": "indigo",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 3,
+                "userId": 1,
+                "name": "Platform Sneakers",
+                "category": "shoes",
+                "color": "cream",
+                "material": "canvas",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              }
+            ]
+          },
+          {
+            "type": "card",
+            "text": "Cream, navy, and brown already work as a clean, restrained palette. When pieces are simple, better proportion and sharper finishing touch matter more than adding extra items.",
+            "payload": {
+              "mode": "advice",
+              "itemIds": [
+                1,
+                4,
+                6
+              ],
+              "insight": {
+                "label": "Your easiest polish lever is contrast, not complexity",
+                "explanation": "Cream, navy, and brown already work as a clean, restrained palette. When pieces are simple, better proportion and sharper finishing touch matter more than adding extra items.",
+                "supportingItemIds": [
+                  1,
+                  4,
+                  6
+                ]
+              }
+            },
+            "wardrobeItems": [
+              {
+                "id": 1,
+                "userId": 1,
+                "name": "Cream Cotton Crewneck",
+                "category": "top",
+                "color": "cream",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 4,
+                "userId": 1,
+                "name": "Navy Oxford Shirt",
+                "category": "top",
+                "color": "navy",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 6,
+                "userId": 1,
+                "name": "Brown Leather Loafers",
+                "category": "shoes",
+                "color": "brown",
+                "material": "leather",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "If you want the simplest rule: choose one of these three moves \u2014 neat shoes, a collar, or a layer. Two is enough. All three can start to look dressed up.",
+            "ownedItemIds": [],
+            "wardrobeItems": []
+          }
+        ],
+        "followUps": [
+          {
+            "label": "Build me 3 outfits",
+            "prompt": "Use my wardrobe to build three casual-polished outfits for different levels of casualness."
+          },
+          {
+            "label": "Make it office-leaning",
+            "prompt": "Make the advice work for a business-casual setting."
+          }
+        ],
+        "diagnostics": {
+          "generationCalls": 1,
+          "toolExecutions": 0,
+          "toolRounds": 0,
+          "repairAttempts": 0,
+          "validationFailures": 0,
+          "evidenceFailures": 0
+        }
+      }
+    },
+    {
+      "case": "paired-comfort",
+      "side": "baseline",
+      "question": "Pick an outfit for Thanksgiving family lunch with these sneakers.",
+      "preferences": "No wool or tight waistbands. Prefer relaxed silhouettes and earthy neutrals.",
+      "elapsedMs": 3655,
+      "attempts": [
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 2661,
+            "stableUserContext": 247,
+            "requestContext": 1409,
+            "messages": 22,
+            "schema": 1629,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 1,
+            "estimatedTextInputTokens": 7247,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 9747,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "tool_calls",
+          "toolNames": [
+            "check_wardrobe_requirements"
+          ],
+          "costUsd": 0.0023201999999999997,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4128,
+            "completionTokens": 154,
+            "reasoningTokens": 0,
+            "totalTokens": 4282,
+            "cachedTokens": 2176
+          },
+          "elapsedMs": 1365
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 2661,
+            "stableUserContext": 247,
+            "requestContext": 1409,
+            "messages": 22,
+            "schema": 1629,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 995,
+            "estimatedTextInputTokens": 8241,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 10741,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "stop",
+          "costUsd": 0.00149355,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4821,
+            "completionTokens": 162,
+            "reasoningTokens": 0,
+            "totalTokens": 4983,
+            "cachedTokens": 4224
+          },
+          "elapsedMs": 2282
+        }
+      ],
+      "answer": {
+        "responseVersion": 3,
+        "blocks": [
+          {
+            "type": "card",
+            "text": "The cream sneakers keep this relaxed and clean, so pair them with the cream crewneck and olive chinos for a soft, family-lunch appropriate palette. The olive grounds the cream and feels more polished than jeans, while the navy rain shell is there if you need an outer layer without breaking the color story.",
+            "payload": {
+              "mode": "from_closet",
+              "lookName": "Thanksgiving family lunch look",
+              "itemIds": [
+                3,
+                1,
+                2,
+                8
+              ],
+              "readinessStatus": "ready",
+              "foundationItemIds": [],
+              "missingEssentials": []
+            },
+            "wardrobeItems": [
+              {
+                "id": 3,
+                "userId": 1,
+                "name": "Platform Sneakers",
+                "category": "shoes",
+                "color": "cream",
+                "material": "canvas",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 1,
+                "userId": 1,
+                "name": "Cream Cotton Crewneck",
+                "category": "top",
+                "color": "cream",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 2,
+                "userId": 1,
+                "name": "Olive Straight Chinos",
+                "category": "bottom",
+                "color": "olive",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 8,
+                "userId": 1,
+                "name": "Rain Shell",
+                "category": "outerwear",
+                "color": "navy",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ],
+                "rainOk": true,
+                "warmthRating": 2
+              }
+            ]
+          }
+        ],
+        "followUps": [
+          {
+            "label": "Swap bottom",
+            "prompt": "If you want it slightly more casual, I can switch the chinos to jeans."
+          }
+        ],
+        "diagnostics": {
+          "generationCalls": 2,
+          "toolExecutions": 1,
+          "toolRounds": 1,
+          "repairAttempts": 0,
+          "validationFailures": 0,
+          "evidenceFailures": 0
+        }
+      }
+    },
+    {
+      "case": "paired-tailoring",
+      "side": "baseline",
+      "question": "Pick an outfit for Thanksgiving family lunch with these sneakers.",
+      "preferences": "Prefer crisp shirts, tailored silhouettes and navy. Avoid olive green.",
+      "elapsedMs": 4076,
+      "attempts": [
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 2661,
+            "stableUserContext": 239,
+            "requestContext": 1409,
+            "messages": 22,
+            "schema": 1629,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 1,
+            "estimatedTextInputTokens": 7239,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 9739,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "tool_calls",
+          "toolNames": [
+            "check_wardrobe_requirements",
+            "item_details"
+          ],
+          "costUsd": 0.0024064499999999996,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4123,
+            "completionTokens": 174,
+            "reasoningTokens": 0,
+            "totalTokens": 4297,
+            "cachedTokens": 2176
+          },
+          "elapsedMs": 1516
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 2661,
+            "stableUserContext": 239,
+            "requestContext": 1409,
+            "messages": 22,
+            "schema": 1629,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 1729,
+            "estimatedTextInputTokens": 8967,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 11467,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "stop",
+          "costUsd": 0.0025795500000000003,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 5591,
+            "completionTokens": 275,
+            "reasoningTokens": 0,
+            "totalTokens": 5866,
+            "cachedTokens": 4224
+          },
+          "elapsedMs": 2553
+        }
+      ],
+      "answer": {
+        "responseVersion": 3,
+        "blocks": [
+          {
+            "type": "card",
+            "text": "Wear the navy oxford shirt with dark straight jeans and the cream platform sneakers. The shirt gives it enough polish for family lunch, while the dark jeans keep the silhouette clean and relaxed. The cream sneakers lighten the outfit and work well with the navy top, so the look feels intentional rather than sporty. Add the navy rain shell only if you need an extra layer.",
+            "payload": {
+              "mode": "from_closet",
+              "lookName": "Thanksgiving family lunch with the sneakers",
+              "itemIds": [
+                4,
+                5,
+                3,
+                8
+              ],
+              "readinessStatus": "ready",
+              "foundationItemIds": [],
+              "missingEssentials": []
+            },
+            "wardrobeItems": [
+              {
+                "id": 4,
+                "userId": 1,
+                "name": "Navy Oxford Shirt",
+                "category": "top",
+                "color": "navy",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 5,
+                "userId": 1,
+                "name": "Dark Straight Jeans",
+                "category": "bottom",
+                "color": "indigo",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 3,
+                "userId": 1,
+                "name": "Platform Sneakers",
+                "category": "shoes",
+                "color": "cream",
+                "material": "canvas",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 8,
+                "userId": 1,
+                "name": "Rain Shell",
+                "category": "outerwear",
+                "color": "navy",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ],
+                "rainOk": true,
+                "warmthRating": 2
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Best move: Navy Oxford Shirt + Dark Straight Jeans + Platform Sneakers. The navy and indigo stay calm for a family lunch, and the cream sneakers keep it light at the bottom.",
+            "ownedItemIds": [
+              4,
+              5,
+              3
+            ],
+            "wardrobeItems": [
+              {
+                "id": 4,
+                "userId": 1,
+                "name": "Navy Oxford Shirt",
+                "category": "top",
+                "color": "navy",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 5,
+                "userId": 1,
+                "name": "Dark Straight Jeans",
+                "category": "bottom",
+                "color": "indigo",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 3,
+                "userId": 1,
+                "name": "Platform Sneakers",
+                "category": "shoes",
+                "color": "cream",
+                "material": "canvas",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              }
+            ]
+          }
+        ],
+        "followUps": [
+          {
+            "label": "If you want it sharper",
+            "prompt": "I can swap in a more dressed-up version around the same sneakers."
+          }
+        ],
+        "diagnostics": {
+          "generationCalls": 2,
+          "toolExecutions": 2,
+          "toolRounds": 1,
+          "repairAttempts": 0,
+          "validationFailures": 0,
+          "evidenceFailures": 0
+        }
+      }
+    },
+    {
+      "case": "shopping-unavailable",
+      "side": "baseline",
+      "question": "Recommend three new comfortable shoes under CA$150 that fit my style. Find actual products.",
+      "elapsedMs": 8175,
+      "attempts": [
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 2661,
+            "stableUserContext": 221,
+            "requestContext": 1412,
+            "messages": 31,
+            "schema": 1629,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 1,
+            "estimatedTextInputTokens": 7233,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 9733,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "tool_calls",
+          "toolNames": [
+            "search_products"
+          ],
+          "costUsd": 0.0008634,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4120,
+            "completionTokens": 62,
+            "reasoningTokens": 0,
+            "totalTokens": 4182,
+            "cachedTokens": 3712
+          },
+          "elapsedMs": 1033
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 2661,
+            "stableUserContext": 221,
+            "requestContext": 1412,
+            "messages": 31,
+            "schema": 1629,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 169,
+            "estimatedTextInputTokens": 7401,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 9901,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "tool_calls",
+          "toolNames": [
+            "search_products",
+            "search_products",
+            "search_products"
+          ],
+          "costUsd": 0.0013539000000000001,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4216,
+            "completionTokens": 155,
+            "reasoningTokens": 0,
+            "totalTokens": 4371,
+            "cachedTokens": 3712
+          },
+          "elapsedMs": 1374
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 2661,
+            "stableUserContext": 221,
+            "requestContext": 1412,
+            "messages": 31,
+            "schema": 1629,
+            "framing": 16,
+            "tools": 1,
+            "toolHistory": 613,
+            "estimatedTextInputTokens": 6584,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 9084,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "stop",
+          "costUsd": 0.0028331999999999997,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 3804,
+            "completionTokens": 418,
+            "reasoningTokens": 0,
+            "totalTokens": 4222,
+            "cachedTokens": 2816
+          },
+          "elapsedMs": 3557
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 2661,
+            "stableUserContext": 221,
+            "requestContext": 1412,
+            "messages": 874,
+            "schema": 1629,
+            "framing": 16,
+            "tools": 1,
+            "toolHistory": 613,
+            "estimatedTextInputTokens": 7427,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 9927,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "stop",
+          "costUsd": 0.001599,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4346,
+            "completionTokens": 207,
+            "reasoningTokens": 0,
+            "totalTokens": 4553,
+            "cachedTokens": 3840
+          },
+          "elapsedMs": 2196
+        }
+      ],
+      "answer": {
+        "responseVersion": 3,
+        "blocks": [
+          {
+            "type": "text",
+            "text": "I can\u2019t name three verified products from the current search because no product results came back. So the only grounded answer is the shape of the shoe that fits your style: a clean, comfortable low-profile sneaker in cream or navy, or a simple brown loafer if you want something slightly sharper. Those are the best matches for your regular-fit, clean casual wardrobe and they\u2019ll work with your cream tee, navy oxford, olive chinos, and dark jeans.",
+            "ownedItemIds": [],
+            "wardrobeItems": []
+          },
+          {
+            "type": "text",
+            "text": "What is unknown is the actual product list, so I can\u2019t confirm brand, price, or availability from this search. ",
+            "ownedItemIds": [],
+            "wardrobeItems": []
+          }
+        ],
+        "followUps": [
+          {
+            "label": "Search again",
+            "prompt": "If you want, I can try a narrower search next time with specific retailers or brands and return actual product matches under CA$150."
+          }
+        ],
+        "diagnostics": {
+          "generationCalls": 4,
+          "toolExecutions": 4,
+          "toolRounds": 2,
+          "repairAttempts": 1,
+          "validationFailures": 3,
+          "evidenceFailures": 0
+        }
+      }
+    },
+    {
+      "case": "followup",
+      "side": "baseline",
+      "question": "Make that a little dressier, keeping the sneakers.",
+      "elapsedMs": 3499,
+      "attempts": [
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 2661,
+            "stableUserContext": 221,
+            "requestContext": 1404,
+            "messages": 64,
+            "schema": 1629,
+            "framing": 32,
+            "tools": 1262,
+            "toolHistory": 1,
+            "estimatedTextInputTokens": 7274,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 9774,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "tool_calls",
+          "toolNames": [
+            "check_wardrobe_requirements"
+          ],
+          "costUsd": 0.00213795,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4161,
+            "completionTokens": 108,
+            "reasoningTokens": 0,
+            "totalTokens": 4269,
+            "cachedTokens": 2176
+          },
+          "elapsedMs": 1243
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 2661,
+            "stableUserContext": 221,
+            "requestContext": 1404,
+            "messages": 64,
+            "schema": 1629,
+            "framing": 32,
+            "tools": 1262,
+            "toolHistory": 663,
+            "estimatedTextInputTokens": 7936,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 10436,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "stop",
+          "costUsd": 0.00191415,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4645,
+            "completionTokens": 208,
+            "reasoningTokens": 0,
+            "totalTokens": 4853,
+            "cachedTokens": 3712
+          },
+          "elapsedMs": 2247
+        }
+      ],
+      "answer": {
+        "responseVersion": 3,
+        "blocks": [
+          {
+            "type": "card",
+            "text": "Keep the Platform Sneakers and sharpen the rest with the navy shirt and straight olive chinos. The navy and olive read more polished than the cream tee/jeans route, and the straight legs balance the chunkier sneaker so the look stays deliberate rather than casual-sloppy. This also avoids wool while staying comfortable at the waist.",
+            "payload": {
+              "mode": "from_closet",
+              "lookName": "Thanksgiving lunch, dressed up but still sneaker-friendly",
+              "itemIds": [
+                4,
+                2,
+                3
+              ],
+              "readinessStatus": "ready",
+              "foundationItemIds": [],
+              "missingEssentials": []
+            },
+            "wardrobeItems": [
+              {
+                "id": 4,
+                "userId": 1,
+                "name": "Navy Oxford Shirt",
+                "category": "top",
+                "color": "navy",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 2,
+                "userId": 1,
+                "name": "Olive Straight Chinos",
+                "category": "bottom",
+                "color": "olive",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 3,
+                "userId": 1,
+                "name": "Platform Sneakers",
+                "category": "shoes",
+                "color": "cream",
+                "material": "canvas",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "If you want it one step neater, do a clean front tuck on the shirt and keep the pant hem sitting just above the sneaker.",
+            "ownedItemIds": [],
+            "wardrobeItems": []
+          }
+        ],
+        "followUps": [
+          {
+            "label": "Swap to jeans",
+            "prompt": "Want a slightly more casual version with the same sneakers?"
+          }
+        ],
+        "diagnostics": {
+          "generationCalls": 2,
+          "toolExecutions": 1,
+          "toolRounds": 1,
+          "repairAttempts": 0,
+          "validationFailures": 0,
+          "evidenceFailures": 0
+        }
+      }
+    },
+    {
+      "case": "thanksgiving-dinner",
+      "side": "repaired",
+      "question": "What can I wear with these for thanksgiving dinner",
+      "elapsedMs": 3922,
+      "attempts": [
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 3090,
+            "stableUserContext": 326,
+            "requestContext": 1404,
+            "messages": 17,
+            "schema": 1664,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 1,
+            "estimatedTextInputTokens": 7780,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 10280,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "tool_calls",
+          "toolNames": [
+            "check_wardrobe_requirements"
+          ],
+          "costUsd": 0.0038655,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4440,
+            "completionTokens": 119,
+            "reasoningTokens": 0,
+            "totalTokens": 4559,
+            "cachedTokens": 0
+          },
+          "elapsedMs": 1413
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 3090,
+            "stableUserContext": 326,
+            "requestContext": 1404,
+            "messages": 17,
+            "schema": 1664,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 750,
+            "estimatedTextInputTokens": 8529,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 11029,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "stop",
+          "costUsd": 0.00198555,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4979,
+            "completionTokens": 245,
+            "reasoningTokens": 0,
+            "totalTokens": 5224,
+            "cachedTokens": 4224
+          },
+          "elapsedMs": 2504
+        }
+      ],
+      "answer": {
+        "responseVersion": 3,
+        "blocks": [
+          {
+            "type": "card",
+            "text": "This is the cleanest Thanksgiving dinner option: the cream top keeps it soft and polished, the olive chinos add some depth, and the cream sneakers keep it relaxed but intentional. The proportions stay easy and comfortable for sitting through dinner.",
+            "payload": {
+              "mode": "from_closet",
+              "lookName": "Cream crewneck + olive chinos + platform sneakers",
+              "itemIds": [
+                1,
+                2,
+                3
+              ],
+              "readinessStatus": "ready",
+              "foundationItemIds": [],
+              "missingEssentials": []
+            },
+            "wardrobeItems": [
+              {
+                "id": 1,
+                "userId": 1,
+                "name": "Cream Cotton Crewneck",
+                "category": "top",
+                "color": "cream",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 2,
+                "userId": 1,
+                "name": "Olive Straight Chinos",
+                "category": "bottom",
+                "color": "olive",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 3,
+                "userId": 1,
+                "name": "Platform Sneakers",
+                "category": "shoes",
+                "color": "cream",
+                "material": "canvas",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "If you want it a touch sharper, swap in the Navy Oxford Shirt with the same chinos and sneakers. That gives you a more buttoned-up top without losing the comfort of the regular-fit bottoms.",
+            "ownedItemIds": [
+              4
+            ],
+            "wardrobeItems": [
+              {
+                "id": 4,
+                "userId": 1,
+                "name": "Navy Oxford Shirt",
+                "category": "top",
+                "color": "navy",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              }
+            ]
+          }
+        ],
+        "followUps": [
+          {
+            "label": "More polished",
+            "prompt": "Build a slightly dressier Thanksgiving dinner look from my closet."
+          },
+          {
+            "label": "Weather-safe",
+            "prompt": "Add outerwear if it might rain or get cold."
+          }
+        ],
+        "deliveryStatus": "complete",
+        "diagnostics": {
+          "attempts": [
+            {
+              "repair": false,
+              "prompt": {
+                "version": "utf8-third-v1",
+                "staticPrefix": 3090,
+                "stableUserContext": 326,
+                "requestContext": 1404,
+                "messages": 17,
+                "schema": 1664,
+                "framing": 16,
+                "tools": 1262,
+                "toolHistory": 1,
+                "estimatedTextInputTokens": 7780,
+                "reservedOutputTokens": 2500,
+                "estimatedTextAndOutputTokens": 10280,
+                "imageCount": 0,
+                "imageTokensUnknown": false,
+                "totalBudget": null,
+                "guardEnabled": false,
+                "budgetConfigurationInvalid": false,
+                "exceedsBudget": false
+              },
+              "finishReason": "tool_calls",
+              "toolNames": [
+                "check_wardrobe_requirements"
+              ],
+              "elapsedMs": 1414
+            },
+            {
+              "tool": "check_wardrobe_requirements"
+            },
+            {
+              "repair": false,
+              "prompt": {
+                "version": "utf8-third-v1",
+                "staticPrefix": 3090,
+                "stableUserContext": 326,
+                "requestContext": 1404,
+                "messages": 17,
+                "schema": 1664,
+                "framing": 16,
+                "tools": 1262,
+                "toolHistory": 750,
+                "estimatedTextInputTokens": 8529,
+                "reservedOutputTokens": 2500,
+                "estimatedTextAndOutputTokens": 11029,
+                "imageCount": 0,
+                "imageTokensUnknown": false,
+                "totalBudget": null,
+                "guardEnabled": false,
+                "budgetConfigurationInvalid": false,
+                "exceedsBudget": false
+              },
+              "finishReason": "stop",
+              "elapsedMs": 2505
+            }
+          ],
+          "validationErrors": [],
+          "generationCalls": 2,
+          "toolExecutions": 1,
+          "toolRounds": 1,
+          "repairAttempts": 0,
+          "validationFailures": 0,
+          "evidenceFailures": 0
+        }
+      }
+    },
+    {
+      "case": "thanksgiving-lunch",
+      "side": "repaired",
+      "question": "What can i wear with these shoes for a thanksgiving family lunch",
+      "elapsedMs": 3786,
+      "attempts": [
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 3090,
+            "stableUserContext": 326,
+            "requestContext": 1409,
+            "messages": 22,
+            "schema": 1664,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 1,
+            "estimatedTextInputTokens": 7790,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 10290,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "tool_calls",
+          "toolNames": [
+            "check_wardrobe_requirements"
+          ],
+          "costUsd": 0.0021546,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4446,
+            "completionTokens": 141,
+            "reasoningTokens": 0,
+            "totalTokens": 4587,
+            "cachedTokens": 2688
+          },
+          "elapsedMs": 1381
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 3090,
+            "stableUserContext": 326,
+            "requestContext": 1409,
+            "messages": 22,
+            "schema": 1664,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 797,
+            "estimatedTextInputTokens": 8586,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 11086,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "stop",
+          "costUsd": 0.0021093,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 5024,
+            "completionTokens": 265,
+            "reasoningTokens": 0,
+            "totalTokens": 5289,
+            "cachedTokens": 4224
+          },
+          "elapsedMs": 2403
+        }
+      ],
+      "answer": {
+        "responseVersion": 3,
+        "blocks": [
+          {
+            "type": "card",
+            "text": "Best for a family lunch: the cream top keeps the look soft and polite, the olive chinos add a relaxed fall color, and the cream shoes echo the top so the outfit feels intentional rather than busy. It stays clean-casual and comfortable, which suits a long meal.",
+            "payload": {
+              "mode": "from_closet",
+              "lookName": "Cream crewneck, olive chinos, and the cream sneakers",
+              "itemIds": [
+                1,
+                2,
+                3
+              ],
+              "readinessStatus": "ready",
+              "foundationItemIds": [],
+              "missingEssentials": []
+            },
+            "wardrobeItems": [
+              {
+                "id": 1,
+                "userId": 1,
+                "name": "Cream Cotton Crewneck",
+                "category": "top",
+                "color": "cream",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 2,
+                "userId": 1,
+                "name": "Olive Straight Chinos",
+                "category": "bottom",
+                "color": "olive",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 3,
+                "userId": 1,
+                "name": "Platform Sneakers",
+                "category": "shoes",
+                "color": "cream",
+                "material": "canvas",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "If you want it a touch sharper, swap the crewneck for the ",
+            "ownedItemIds": [],
+            "wardrobeItems": []
+          },
+          {
+            "type": "text",
+            "text": "Navy Oxford Shirt with the same chinos and shoes. That gives more structure up top without feeling overdressed for lunch.",
+            "ownedItemIds": [
+              4
+            ],
+            "wardrobeItems": [
+              {
+                "id": 4,
+                "userId": 1,
+                "name": "Navy Oxford Shirt",
+                "category": "top",
+                "color": "navy",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              }
+            ]
+          }
+        ],
+        "followUps": [
+          {
+            "label": "Add a layer",
+            "prompt": "If it\u2019s chilly, I can give you the best layer from your closet to go over this."
+          }
+        ],
+        "deliveryStatus": "complete",
+        "diagnostics": {
+          "attempts": [
+            {
+              "repair": false,
+              "prompt": {
+                "version": "utf8-third-v1",
+                "staticPrefix": 3090,
+                "stableUserContext": 326,
+                "requestContext": 1409,
+                "messages": 22,
+                "schema": 1664,
+                "framing": 16,
+                "tools": 1262,
+                "toolHistory": 1,
+                "estimatedTextInputTokens": 7790,
+                "reservedOutputTokens": 2500,
+                "estimatedTextAndOutputTokens": 10290,
+                "imageCount": 0,
+                "imageTokensUnknown": false,
+                "totalBudget": null,
+                "guardEnabled": false,
+                "budgetConfigurationInvalid": false,
+                "exceedsBudget": false
+              },
+              "finishReason": "tool_calls",
+              "toolNames": [
+                "check_wardrobe_requirements"
+              ],
+              "elapsedMs": 1382
+            },
+            {
+              "tool": "check_wardrobe_requirements"
+            },
+            {
+              "repair": false,
+              "prompt": {
+                "version": "utf8-third-v1",
+                "staticPrefix": 3090,
+                "stableUserContext": 326,
+                "requestContext": 1409,
+                "messages": 22,
+                "schema": 1664,
+                "framing": 16,
+                "tools": 1262,
+                "toolHistory": 797,
+                "estimatedTextInputTokens": 8586,
+                "reservedOutputTokens": 2500,
+                "estimatedTextAndOutputTokens": 11086,
+                "imageCount": 0,
+                "imageTokensUnknown": false,
+                "totalBudget": null,
+                "guardEnabled": false,
+                "budgetConfigurationInvalid": false,
+                "exceedsBudget": false
+              },
+              "finishReason": "stop",
+              "elapsedMs": 2403
+            }
+          ],
+          "validationErrors": [],
+          "generationCalls": 2,
+          "toolExecutions": 1,
+          "toolRounds": 1,
+          "repairAttempts": 0,
+          "validationFailures": 0,
+          "evidenceFailures": 0
+        }
+      }
+    },
+    {
+      "case": "sparse-closet",
+      "side": "repaired",
+      "question": "What can I wear with these shoes for family lunch?",
+      "elapsedMs": 7460,
+      "attempts": [
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 3090,
+            "stableUserContext": 326,
+            "requestContext": 358,
+            "messages": 17,
+            "schema": 1664,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 1,
+            "estimatedTextInputTokens": 6734,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 9234,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "tool_calls",
+          "toolNames": [
+            "check_wardrobe_requirements"
+          ],
+          "costUsd": 0.00202155,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 3617,
+            "completionTokens": 96,
+            "reasoningTokens": 0,
+            "totalTokens": 3713,
+            "cachedTokens": 1664
+          },
+          "elapsedMs": 1484
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 3090,
+            "stableUserContext": 326,
+            "requestContext": 358,
+            "messages": 17,
+            "schema": 1664,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 685,
+            "estimatedTextInputTokens": 7418,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 9918,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "stop",
+          "costUsd": 0.0021675,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4102,
+            "completionTokens": 278,
+            "reasoningTokens": 0,
+            "totalTokens": 4380,
+            "cachedTokens": 3200
+          },
+          "elapsedMs": 2901
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 3090,
+            "stableUserContext": 326,
+            "requestContext": 358,
+            "messages": 285,
+            "schema": 1664,
+            "framing": 16,
+            "tools": 1,
+            "toolHistory": 685,
+            "estimatedTextInputTokens": 6425,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 8925,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "stop",
+          "costUsd": 0.00307515,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 3577,
+            "completionTokens": 356,
+            "reasoningTokens": 0,
+            "totalTokens": 3933,
+            "cachedTokens": 1792
+          },
+          "elapsedMs": 3069
+        }
+      ],
+      "answer": {
+        "responseVersion": 3,
+        "blocks": [
+          {
+            "type": "text",
+            "text": "For family lunch, the shoes you have work best with a clean, relaxed outfit in cream and navy. The reliable move is a navy knit or polo with straight cream or stone trousers; the cream platform sneakers keep it casual but polished enough for lunch.Platform Sneakers Because the shoe is already fairly bold in proportion, keep the rest simple and regular-cut so the look stays balanced.",
+            "ownedItemIds": [
+              3
+            ],
+            "wardrobeItems": [
+              {
+                "id": 3,
+                "userId": 1,
+                "name": "Platform Sneakers",
+                "category": "shoes",
+                "color": "cream",
+                "material": "canvas",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              }
+            ]
+          },
+          {
+            "type": "card",
+            "text": "The cream platform sneakers keep the outfit casual and comfortable, while navy and cream echo your preferred colors and fit the lunch setting. Regular-cut pieces will keep the silhouette easy and not fussy.\n\nNot confirmed: A top with a slightly elevated casual feel, like a navy knit, polo, or tidy button-up. I could not verify a specific owned option for this role from the clothing evidence shown.\n\nNot confirmed: A comfortable trouser or chino in cream, stone, or navy with a regular waistband. I could not verify a specific owned option for this role from the clothing evidence shown.",
+            "payload": {
+              "mode": "from_closet",
+              "lookName": "Family lunch with platform sneakers",
+              "itemIds": [
+                3
+              ],
+              "readinessStatus": "incomplete",
+              "foundationItemIds": [
+                3
+              ],
+              "missingEssentials": []
+            },
+            "wardrobeItems": [
+              {
+                "id": 3,
+                "userId": 1,
+                "name": "Platform Sneakers",
+                "category": "shoes",
+                "color": "cream",
+                "material": "canvas",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              }
+            ]
+          }
+        ],
+        "followUps": [
+          {
+            "label": "If you want, I can turn this into a full outfit once you share your tops and\u88e4\u5b50.",
+            "prompt": "Show me your tops and bottoms."
+          }
+        ],
+        "deliveryStatus": "complete",
+        "diagnostics": {
+          "attempts": [
+            {
+              "repair": false,
+              "prompt": {
+                "version": "utf8-third-v1",
+                "staticPrefix": 3090,
+                "stableUserContext": 326,
+                "requestContext": 358,
+                "messages": 17,
+                "schema": 1664,
+                "framing": 16,
+                "tools": 1262,
+                "toolHistory": 1,
+                "estimatedTextInputTokens": 6734,
+                "reservedOutputTokens": 2500,
+                "estimatedTextAndOutputTokens": 9234,
+                "imageCount": 0,
+                "imageTokensUnknown": false,
+                "totalBudget": null,
+                "guardEnabled": false,
+                "budgetConfigurationInvalid": false,
+                "exceedsBudget": false
+              },
+              "finishReason": "tool_calls",
+              "toolNames": [
+                "check_wardrobe_requirements"
+              ],
+              "elapsedMs": 1485
+            },
+            {
+              "tool": "check_wardrobe_requirements"
+            },
+            {
+              "repair": false,
+              "prompt": {
+                "version": "utf8-third-v1",
+                "staticPrefix": 3090,
+                "stableUserContext": 326,
+                "requestContext": 358,
+                "messages": 17,
+                "schema": 1664,
+                "framing": 16,
+                "tools": 1262,
+                "toolHistory": 685,
+                "estimatedTextInputTokens": 7418,
+                "reservedOutputTokens": 2500,
+                "estimatedTextAndOutputTokens": 9918,
+                "imageCount": 0,
+                "imageTokensUnknown": false,
+                "totalBudget": null,
+                "guardEnabled": false,
+                "budgetConfigurationInvalid": false,
+                "exceedsBudget": false
+              },
+              "finishReason": "stop",
+              "elapsedMs": 2903
+            },
+            {
+              "repair": true,
+              "prompt": {
+                "version": "utf8-third-v1",
+                "staticPrefix": 3090,
+                "stableUserContext": 326,
+                "requestContext": 358,
+                "messages": 285,
+                "schema": 1664,
+                "framing": 16,
+                "tools": 1,
+                "toolHistory": 685,
+                "estimatedTextInputTokens": 6425,
+                "reservedOutputTokens": 2500,
+                "estimatedTextAndOutputTokens": 8925,
+                "imageCount": 0,
+                "imageTokensUnknown": false,
+                "totalBudget": null,
+                "guardEnabled": false,
+                "budgetConfigurationInvalid": false,
+                "exceedsBudget": false
+              },
+              "finishReason": "stop",
+              "elapsedMs": 3070
+            }
+          ],
+          "validationErrors": [],
+          "generationCalls": 3,
+          "toolExecutions": 1,
+          "toolRounds": 1,
+          "repairAttempts": 1,
+          "validationFailures": 1,
+          "evidenceFailures": 0
+        }
+      }
+    },
+    {
+      "case": "conceptual",
+      "side": "repaired",
+      "question": "How can I make casual outfits feel polished without looking overdressed?",
+      "elapsedMs": 5086,
+      "attempts": [
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 3090,
+            "stableUserContext": 326,
+            "requestContext": 1406,
+            "messages": 24,
+            "schema": 1664,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 1,
+            "estimatedTextInputTokens": 7789,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 10289,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "tool_calls",
+          "toolNames": [
+            "wardrobe_overview"
+          ],
+          "costUsd": 0.0015883499999999999,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4441,
+            "completionTokens": 16,
+            "reasoningTokens": 0,
+            "totalTokens": 4457,
+            "cachedTokens": 2688
+          },
+          "elapsedMs": 865
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 3090,
+            "stableUserContext": 326,
+            "requestContext": 1406,
+            "messages": 24,
+            "schema": 1664,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 135,
+            "estimatedTextInputTokens": 7923,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 10423,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "tool_calls",
+          "toolNames": [
+            "check_wardrobe_requirements"
+          ],
+          "costUsd": 0.0010263,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4534,
+            "completionTokens": 106,
+            "reasoningTokens": 0,
+            "totalTokens": 4640,
+            "cachedTokens": 4224
+          },
+          "elapsedMs": 1345
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 3090,
+            "stableUserContext": 326,
+            "requestContext": 1406,
+            "messages": 24,
+            "schema": 1664,
+            "framing": 16,
+            "tools": 1,
+            "toolHistory": 831,
+            "estimatedTextInputTokens": 7358,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 9858,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "stop",
+          "costUsd": 0.0026877,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4378,
+            "completionTokens": 290,
+            "reasoningTokens": 0,
+            "totalTokens": 4668,
+            "cachedTokens": 2816
+          },
+          "elapsedMs": 2870
+        }
+      ],
+      "answer": {
+        "responseVersion": 3,
+        "blocks": [
+          {
+            "type": "text",
+            "text": "Keep the outfit simple and sharpen the details: regular-fit shapes, one clean color anchor, and a slightly structured shoe. That reads intentional without tipping into dressed-up. Your easiest formula is a crisp top, straight leg, and a cleaner shoe rather than anything sporty or oversized. ",
+            "ownedItemIds": [],
+            "wardrobeItems": []
+          },
+          {
+            "type": "card",
+            "text": "The cream cotton crewneck softens the look, the olive straight chinos give it a neater line than denim, and the brown leather loafers add polish without formality. It stays relaxed because the colors are quiet and the fit is regular throughout.",
+            "payload": {
+              "mode": "from_closet",
+              "lookName": "Polished casual without the overdressed feeling",
+              "itemIds": [
+                1,
+                2,
+                6
+              ],
+              "readinessStatus": "ready",
+              "foundationItemIds": [],
+              "missingEssentials": []
+            },
+            "wardrobeItems": [
+              {
+                "id": 1,
+                "userId": 1,
+                "name": "Cream Cotton Crewneck",
+                "category": "top",
+                "color": "cream",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 2,
+                "userId": 1,
+                "name": "Olive Straight Chinos",
+                "category": "bottom",
+                "color": "olive",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 6,
+                "userId": 1,
+                "name": "Brown Leather Loafers",
+                "category": "shoes",
+                "color": "brown",
+                "material": "leather",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "One easy styling move: front-tuck the top or do a very loose half-tuck. That defines the waist and makes the outfit look considered, not stiff.",
+            "ownedItemIds": [],
+            "wardrobeItems": []
+          }
+        ],
+        "followUps": [
+          {
+            "label": "Alternate shoe",
+            "prompt": "Want a version that feels more casual? I can swap the loafers for the platform sneakers."
+          }
+        ],
+        "deliveryStatus": "complete",
+        "diagnostics": {
+          "attempts": [
+            {
+              "repair": false,
+              "prompt": {
+                "version": "utf8-third-v1",
+                "staticPrefix": 3090,
+                "stableUserContext": 326,
+                "requestContext": 1406,
+                "messages": 24,
+                "schema": 1664,
+                "framing": 16,
+                "tools": 1262,
+                "toolHistory": 1,
+                "estimatedTextInputTokens": 7789,
+                "reservedOutputTokens": 2500,
+                "estimatedTextAndOutputTokens": 10289,
+                "imageCount": 0,
+                "imageTokensUnknown": false,
+                "totalBudget": null,
+                "guardEnabled": false,
+                "budgetConfigurationInvalid": false,
+                "exceedsBudget": false
+              },
+              "finishReason": "tool_calls",
+              "toolNames": [
+                "wardrobe_overview"
+              ],
+              "elapsedMs": 866
+            },
+            {
+              "tool": "wardrobe_overview"
+            },
+            {
+              "repair": false,
+              "prompt": {
+                "version": "utf8-third-v1",
+                "staticPrefix": 3090,
+                "stableUserContext": 326,
+                "requestContext": 1406,
+                "messages": 24,
+                "schema": 1664,
+                "framing": 16,
+                "tools": 1262,
+                "toolHistory": 135,
+                "estimatedTextInputTokens": 7923,
+                "reservedOutputTokens": 2500,
+                "estimatedTextAndOutputTokens": 10423,
+                "imageCount": 0,
+                "imageTokensUnknown": false,
+                "totalBudget": null,
+                "guardEnabled": false,
+                "budgetConfigurationInvalid": false,
+                "exceedsBudget": false
+              },
+              "finishReason": "tool_calls",
+              "toolNames": [
+                "check_wardrobe_requirements"
+              ],
+              "elapsedMs": 1346
+            },
+            {
+              "tool": "check_wardrobe_requirements"
+            },
+            {
+              "repair": false,
+              "prompt": {
+                "version": "utf8-third-v1",
+                "staticPrefix": 3090,
+                "stableUserContext": 326,
+                "requestContext": 1406,
+                "messages": 24,
+                "schema": 1664,
+                "framing": 16,
+                "tools": 1,
+                "toolHistory": 831,
+                "estimatedTextInputTokens": 7358,
+                "reservedOutputTokens": 2500,
+                "estimatedTextAndOutputTokens": 9858,
+                "imageCount": 0,
+                "imageTokensUnknown": false,
+                "totalBudget": null,
+                "guardEnabled": false,
+                "budgetConfigurationInvalid": false,
+                "exceedsBudget": false
+              },
+              "finishReason": "stop",
+              "elapsedMs": 2872
+            }
+          ],
+          "validationErrors": [],
+          "generationCalls": 3,
+          "toolExecutions": 2,
+          "toolRounds": 2,
+          "repairAttempts": 0,
+          "validationFailures": 0,
+          "evidenceFailures": 0
+        }
+      }
+    },
+    {
+      "case": "paired-comfort",
+      "side": "repaired",
+      "question": "Pick an outfit for Thanksgiving family lunch with these sneakers.",
+      "preferences": "No wool or tight waistbands. Prefer relaxed silhouettes and earthy neutrals.",
+      "elapsedMs": 4781,
+      "attempts": [
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 3090,
+            "stableUserContext": 351,
+            "requestContext": 1409,
+            "messages": 22,
+            "schema": 1664,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 1,
+            "estimatedTextInputTokens": 7815,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 10315,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "tool_calls",
+          "toolNames": [
+            "check_wardrobe_requirements",
+            "item_details"
+          ],
+          "costUsd": 0.003924,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4458,
+            "completionTokens": 129,
+            "reasoningTokens": 0,
+            "totalTokens": 4587,
+            "cachedTokens": 0
+          },
+          "elapsedMs": 1529
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 3090,
+            "stableUserContext": 351,
+            "requestContext": 1409,
+            "messages": 22,
+            "schema": 1664,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 868,
+            "estimatedTextInputTokens": 8682,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 11182,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "tool_calls",
+          "toolNames": [
+            "search_wardrobe"
+          ],
+          "costUsd": 0.0012033,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 5160,
+            "completionTokens": 41,
+            "reasoningTokens": 0,
+            "totalTokens": 5201,
+            "cachedTokens": 4224
+          },
+          "elapsedMs": 904
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 3090,
+            "stableUserContext": 351,
+            "requestContext": 1409,
+            "messages": 22,
+            "schema": 1664,
+            "framing": 16,
+            "tools": 1,
+            "toolHistory": 1841,
+            "estimatedTextInputTokens": 8394,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 10894,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "stop",
+          "costUsd": 0.00294195,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 5173,
+            "completionTokens": 214,
+            "reasoningTokens": 0,
+            "totalTokens": 5387,
+            "cachedTokens": 2816
+          },
+          "elapsedMs": 2334
+        }
+      ],
+      "answer": {
+        "responseVersion": 3,
+        "blocks": [
+          {
+            "type": "card",
+            "text": "The cream sneakers keep it relaxed, so the best match is a clean, earthy pairing: the navy top sharpens the cream shoes, and the olive chinos add warmth for Thanksgiving without feeling dressy. It reads polished but comfortable, with a straight silhouette that won\u2019t fight the sneaker volume.",
+            "payload": {
+              "mode": "from_closet",
+              "lookName": "Thanksgiving family lunch with cream sneakers",
+              "itemIds": [
+                3,
+                4,
+                2
+              ],
+              "readinessStatus": "ready",
+              "foundationItemIds": [],
+              "missingEssentials": []
+            },
+            "wardrobeItems": [
+              {
+                "id": 3,
+                "userId": 1,
+                "name": "Platform Sneakers",
+                "category": "shoes",
+                "color": "cream",
+                "material": "canvas",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 4,
+                "userId": 1,
+                "name": "Navy Oxford Shirt",
+                "category": "top",
+                "color": "navy",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 2,
+                "userId": 1,
+                "name": "Olive Straight Chinos",
+                "category": "bottom",
+                "color": "olive",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "If you want one small improvement, add the Rain Shell only if you\u2019ll be going in and out\u2014otherwise skip outerwear so the outfit stays light and lunch-appropriate.",
+            "ownedItemIds": [
+              8
+            ],
+            "wardrobeItems": [
+              {
+                "id": 8,
+                "userId": 1,
+                "name": "Rain Shell",
+                "category": "outerwear",
+                "color": "navy",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ],
+                "rainOk": true,
+                "warmthRating": 2
+              }
+            ]
+          }
+        ],
+        "followUps": [],
+        "deliveryStatus": "complete",
+        "diagnostics": {
+          "attempts": [
+            {
+              "repair": false,
+              "prompt": {
+                "version": "utf8-third-v1",
+                "staticPrefix": 3090,
+                "stableUserContext": 351,
+                "requestContext": 1409,
+                "messages": 22,
+                "schema": 1664,
+                "framing": 16,
+                "tools": 1262,
+                "toolHistory": 1,
+                "estimatedTextInputTokens": 7815,
+                "reservedOutputTokens": 2500,
+                "estimatedTextAndOutputTokens": 10315,
+                "imageCount": 0,
+                "imageTokensUnknown": false,
+                "totalBudget": null,
+                "guardEnabled": false,
+                "budgetConfigurationInvalid": false,
+                "exceedsBudget": false
+              },
+              "finishReason": "tool_calls",
+              "toolNames": [
+                "check_wardrobe_requirements",
+                "item_details"
+              ],
+              "elapsedMs": 1532
+            },
+            {
+              "tool": "check_wardrobe_requirements"
+            },
+            {
+              "tool": "item_details",
+              "itemCount": 1,
+              "detailLimitReached": false
+            },
+            {
+              "repair": false,
+              "prompt": {
+                "version": "utf8-third-v1",
+                "staticPrefix": 3090,
+                "stableUserContext": 351,
+                "requestContext": 1409,
+                "messages": 22,
+                "schema": 1664,
+                "framing": 16,
+                "tools": 1262,
+                "toolHistory": 868,
+                "estimatedTextInputTokens": 8682,
+                "reservedOutputTokens": 2500,
+                "estimatedTextAndOutputTokens": 11182,
+                "imageCount": 0,
+                "imageTokensUnknown": false,
+                "totalBudget": null,
+                "guardEnabled": false,
+                "budgetConfigurationInvalid": false,
+                "exceedsBudget": false
+              },
+              "finishReason": "tool_calls",
+              "toolNames": [
+                "search_wardrobe"
+              ],
+              "elapsedMs": 907
+            },
+            {
+              "tool": "search_wardrobe",
+              "itemCount": 8,
+              "detailLimitReached": false
+            },
+            {
+              "repair": false,
+              "prompt": {
+                "version": "utf8-third-v1",
+                "staticPrefix": 3090,
+                "stableUserContext": 351,
+                "requestContext": 1409,
+                "messages": 22,
+                "schema": 1664,
+                "framing": 16,
+                "tools": 1,
+                "toolHistory": 1841,
+                "estimatedTextInputTokens": 8394,
+                "reservedOutputTokens": 2500,
+                "estimatedTextAndOutputTokens": 10894,
+                "imageCount": 0,
+                "imageTokensUnknown": false,
+                "totalBudget": null,
+                "guardEnabled": false,
+                "budgetConfigurationInvalid": false,
+                "exceedsBudget": false
+              },
+              "finishReason": "stop",
+              "elapsedMs": 2337
+            }
+          ],
+          "validationErrors": [],
+          "generationCalls": 3,
+          "toolExecutions": 3,
+          "toolRounds": 2,
+          "repairAttempts": 0,
+          "validationFailures": 0,
+          "evidenceFailures": 0
+        }
+      }
+    },
+    {
+      "case": "paired-tailoring",
+      "side": "repaired",
+      "question": "Pick an outfit for Thanksgiving family lunch with these sneakers.",
+      "preferences": "Prefer crisp shirts, tailored silhouettes and navy. Avoid olive green.",
+      "elapsedMs": 5163,
+      "attempts": [
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 3090,
+            "stableUserContext": 344,
+            "requestContext": 1409,
+            "messages": 22,
+            "schema": 1664,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 1,
+            "estimatedTextInputTokens": 7808,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 10308,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "tool_calls",
+          "toolNames": [
+            "check_wardrobe_requirements",
+            "wear_statistics",
+            "wardrobe_overview"
+          ],
+          "costUsd": 0.00405075,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4453,
+            "completionTokens": 158,
+            "reasoningTokens": 0,
+            "totalTokens": 4611,
+            "cachedTokens": 0
+          },
+          "elapsedMs": 1541
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 3090,
+            "stableUserContext": 344,
+            "requestContext": 1409,
+            "messages": 22,
+            "schema": 1664,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 1096,
+            "estimatedTextInputTokens": 8903,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 11403,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "tool_calls",
+          "toolNames": [
+            "item_details"
+          ],
+          "costUsd": 0.0013578,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 5330,
+            "completionTokens": 47,
+            "reasoningTokens": 0,
+            "totalTokens": 5377,
+            "cachedTokens": 4224
+          },
+          "elapsedMs": 952
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 3090,
+            "stableUserContext": 344,
+            "requestContext": 1409,
+            "messages": 22,
+            "schema": 1664,
+            "framing": 16,
+            "tools": 1,
+            "toolHistory": 1917,
+            "estimatedTextInputTokens": 8463,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 10963,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "stop",
+          "costUsd": 0.0032329499999999996,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 5249,
+            "completionTokens": 266,
+            "reasoningTokens": 0,
+            "totalTokens": 5515,
+            "cachedTokens": 2816
+          },
+          "elapsedMs": 2658
+        }
+      ],
+      "answer": {
+        "responseVersion": 3,
+        "blocks": [
+          {
+            "type": "text",
+            "text": "The best Thanksgiving lunch outfit with the sneakers is Navy Oxford Shirt + Dark Straight Jeans + Platform Sneakers. It stays clean and family-friendly, and the navy shirt lifts the dark jeans so the cream sneakers don\u2019t look like an afterthought.",
+            "ownedItemIds": [
+              4,
+              5,
+              3
+            ],
+            "wardrobeItems": [
+              {
+                "id": 4,
+                "userId": 1,
+                "name": "Navy Oxford Shirt",
+                "category": "top",
+                "color": "navy",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 5,
+                "userId": 1,
+                "name": "Dark Straight Jeans",
+                "category": "bottom",
+                "color": "indigo",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 3,
+                "userId": 1,
+                "name": "Platform Sneakers",
+                "category": "shoes",
+                "color": "cream",
+                "material": "canvas",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              }
+            ]
+          },
+          {
+            "type": "card",
+            "text": "Crisp navy over indigo gives the outfit structure without feeling dressed up, and the cream sneakers keep it relaxed and comfortable for a family lunch. The silhouette is simple and balanced: regular shirt, straight jeans, low-key sneakers.",
+            "payload": {
+              "mode": "from_closet",
+              "lookName": "Thanksgiving family lunch",
+              "itemIds": [
+                4,
+                5,
+                3
+              ],
+              "readinessStatus": "ready",
+              "foundationItemIds": [],
+              "missingEssentials": []
+            },
+            "wardrobeItems": [
+              {
+                "id": 4,
+                "userId": 1,
+                "name": "Navy Oxford Shirt",
+                "category": "top",
+                "color": "navy",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 5,
+                "userId": 1,
+                "name": "Dark Straight Jeans",
+                "category": "bottom",
+                "color": "indigo",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 3,
+                "userId": 1,
+                "name": "Platform Sneakers",
+                "category": "shoes",
+                "color": "cream",
+                "material": "canvas",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              }
+            ]
+          }
+        ],
+        "followUps": [
+          {
+            "label": "If it\u2019s cold",
+            "prompt": "Add the navy rain shell over the shirt for an easy outer layer."
+          }
+        ],
+        "deliveryStatus": "complete",
+        "diagnostics": {
+          "attempts": [
+            {
+              "repair": false,
+              "prompt": {
+                "version": "utf8-third-v1",
+                "staticPrefix": 3090,
+                "stableUserContext": 344,
+                "requestContext": 1409,
+                "messages": 22,
+                "schema": 1664,
+                "framing": 16,
+                "tools": 1262,
+                "toolHistory": 1,
+                "estimatedTextInputTokens": 7808,
+                "reservedOutputTokens": 2500,
+                "estimatedTextAndOutputTokens": 10308,
+                "imageCount": 0,
+                "imageTokensUnknown": false,
+                "totalBudget": null,
+                "guardEnabled": false,
+                "budgetConfigurationInvalid": false,
+                "exceedsBudget": false
+              },
+              "finishReason": "tool_calls",
+              "toolNames": [
+                "check_wardrobe_requirements",
+                "wear_statistics",
+                "wardrobe_overview"
+              ],
+              "elapsedMs": 1544
+            },
+            {
+              "tool": "check_wardrobe_requirements"
+            },
+            {
+              "tool": "wardrobe_overview"
+            },
+            {
+              "tool": "wear_statistics"
+            },
+            {
+              "repair": false,
+              "prompt": {
+                "version": "utf8-third-v1",
+                "staticPrefix": 3090,
+                "stableUserContext": 344,
+                "requestContext": 1409,
+                "messages": 22,
+                "schema": 1664,
+                "framing": 16,
+                "tools": 1262,
+                "toolHistory": 1096,
+                "estimatedTextInputTokens": 8903,
+                "reservedOutputTokens": 2500,
+                "estimatedTextAndOutputTokens": 11403,
+                "imageCount": 0,
+                "imageTokensUnknown": false,
+                "totalBudget": null,
+                "guardEnabled": false,
+                "budgetConfigurationInvalid": false,
+                "exceedsBudget": false
+              },
+              "finishReason": "tool_calls",
+              "toolNames": [
+                "item_details"
+              ],
+              "elapsedMs": 955
+            },
+            {
+              "tool": "item_details",
+              "itemCount": 7,
+              "detailLimitReached": false
+            },
+            {
+              "repair": false,
+              "prompt": {
+                "version": "utf8-third-v1",
+                "staticPrefix": 3090,
+                "stableUserContext": 344,
+                "requestContext": 1409,
+                "messages": 22,
+                "schema": 1664,
+                "framing": 16,
+                "tools": 1,
+                "toolHistory": 1917,
+                "estimatedTextInputTokens": 8463,
+                "reservedOutputTokens": 2500,
+                "estimatedTextAndOutputTokens": 10963,
+                "imageCount": 0,
+                "imageTokensUnknown": false,
+                "totalBudget": null,
+                "guardEnabled": false,
+                "budgetConfigurationInvalid": false,
+                "exceedsBudget": false
+              },
+              "finishReason": "stop",
+              "elapsedMs": 2661
+            }
+          ],
+          "validationErrors": [],
+          "generationCalls": 3,
+          "toolExecutions": 4,
+          "toolRounds": 2,
+          "repairAttempts": 0,
+          "validationFailures": 0,
+          "evidenceFailures": 0
+        }
+      }
+    },
+    {
+      "case": "shopping-unavailable",
+      "side": "repaired",
+      "question": "Recommend three new comfortable shoes under CA$150 that fit my style. Find actual products.",
+      "elapsedMs": 4682,
+      "attempts": [
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 3090,
+            "stableUserContext": 326,
+            "requestContext": 1412,
+            "messages": 31,
+            "schema": 1664,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 1,
+            "estimatedTextInputTokens": 7802,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 10302,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "tool_calls",
+          "toolNames": [
+            "search_products",
+            "search_products",
+            "search_products"
+          ],
+          "costUsd": 0.0023601,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4450,
+            "completionTokens": 186,
+            "reasoningTokens": 0,
+            "totalTokens": 4636,
+            "cachedTokens": 2688
+          },
+          "elapsedMs": 1709
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 3090,
+            "stableUserContext": 326,
+            "requestContext": 1412,
+            "messages": 31,
+            "schema": 1664,
+            "framing": 16,
+            "tools": 1262,
+            "toolHistory": 495,
+            "estimatedTextInputTokens": 8296,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 10796,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "stop",
+          "costUsd": 0.0020560500000000002,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4731,
+            "completionTokens": 302,
+            "reasoningTokens": 0,
+            "totalTokens": 5033,
+            "cachedTokens": 4224
+          },
+          "elapsedMs": 2965
+        }
+      ],
+      "answer": {
+        "responseVersion": 3,
+        "blocks": [
+          {
+            "type": "text",
+            "text": "I couldn\u2019t pull live product matches from search just now, so I can\u2019t honestly give you verified current product IDs. The shoe shape that fits your style best is still clear: low-profile, clean, and comfort-first in cream, navy, or brown. That lines up with your cream platform sneakers, brown loafers, and navy/cream palette without feeling sporty or fussy.",
+            "ownedItemIds": [],
+            "wardrobeItems": []
+          },
+          {
+            "type": "text",
+            "text": "Best targets to shop for: a minimalist white/cream leather sneaker, a simple brown penny loafer or slip-on, and a navy canvas or knit sneaker with a cushioned sole. Those will work with your cream crewneck, olive chinos, dark jeans, and navy oxford shirt.",
+            "ownedItemIds": [],
+            "wardrobeItems": []
+          },
+          {
+            "type": "text",
+            "text": "If you want, I can try again and narrow it to three specific product hits from a retailer you like, or I can give you the exact models to search for.",
+            "ownedItemIds": [],
+            "wardrobeItems": []
+          }
+        ],
+        "followUps": [
+          {
+            "label": "Refine search",
+            "prompt": "Search again using a specific retailer or shoe type (sneaker, loafer, slip-on)."
+          }
+        ],
+        "deliveryStatus": "partial",
+        "failureCode": "evidence_unavailable",
+        "evidenceLimited": true,
+        "diagnostics": {
+          "attempts": [
+            {
+              "repair": false,
+              "prompt": {
+                "version": "utf8-third-v1",
+                "staticPrefix": 3090,
+                "stableUserContext": 326,
+                "requestContext": 1412,
+                "messages": 31,
+                "schema": 1664,
+                "framing": 16,
+                "tools": 1262,
+                "toolHistory": 1,
+                "estimatedTextInputTokens": 7802,
+                "reservedOutputTokens": 2500,
+                "estimatedTextAndOutputTokens": 10302,
+                "imageCount": 0,
+                "imageTokensUnknown": false,
+                "totalBudget": null,
+                "guardEnabled": false,
+                "budgetConfigurationInvalid": false,
+                "exceedsBudget": false
+              },
+              "finishReason": "tool_calls",
+              "toolNames": [
+                "search_products",
+                "search_products",
+                "search_products"
+              ],
+              "elapsedMs": 1713
+            },
+            {
+              "tool": "search_products",
+              "productCount": 0
+            },
+            {
+              "tool": "search_products",
+              "productCount": 0
+            },
+            {
+              "tool": "search_products",
+              "productCount": 0
+            },
+            {
+              "repair": false,
+              "prompt": {
+                "version": "utf8-third-v1",
+                "staticPrefix": 3090,
+                "stableUserContext": 326,
+                "requestContext": 1412,
+                "messages": 31,
+                "schema": 1664,
+                "framing": 16,
+                "tools": 1262,
+                "toolHistory": 495,
+                "estimatedTextInputTokens": 8296,
+                "reservedOutputTokens": 2500,
+                "estimatedTextAndOutputTokens": 10796,
+                "imageCount": 0,
+                "imageTokensUnknown": false,
+                "totalBudget": null,
+                "guardEnabled": false,
+                "budgetConfigurationInvalid": false,
+                "exceedsBudget": false
+              },
+              "finishReason": "stop",
+              "elapsedMs": 2968
+            }
+          ],
+          "validationErrors": [],
+          "generationCalls": 2,
+          "toolExecutions": 3,
+          "toolRounds": 1,
+          "repairAttempts": 0,
+          "validationFailures": 0,
+          "evidenceFailures": 3
+        }
+      }
+    },
+    {
+      "case": "followup",
+      "side": "repaired",
+      "question": "Make that a little dressier, keeping the sneakers.",
+      "elapsedMs": 4254,
+      "attempts": [
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 3090,
+            "stableUserContext": 326,
+            "requestContext": 1404,
+            "messages": 64,
+            "schema": 1664,
+            "framing": 32,
+            "tools": 1262,
+            "toolHistory": 1,
+            "estimatedTextInputTokens": 7843,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 10343,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "tool_calls",
+          "toolNames": [
+            "check_wardrobe_requirements",
+            "wardrobe_overview"
+          ],
+          "costUsd": 0.0020983499999999997,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4491,
+            "completionTokens": 121,
+            "reasoningTokens": 0,
+            "totalTokens": 4612,
+            "cachedTokens": 2688
+          },
+          "elapsedMs": 1328
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 3090,
+            "stableUserContext": 326,
+            "requestContext": 1404,
+            "messages": 64,
+            "schema": 1664,
+            "framing": 32,
+            "tools": 1262,
+            "toolHistory": 792,
+            "estimatedTextInputTokens": 8634,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 11134,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "tool_calls",
+          "toolNames": [
+            "item_details"
+          ],
+          "costUsd": 0.00111105,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 5151,
+            "completionTokens": 22,
+            "reasoningTokens": 0,
+            "totalTokens": 5173,
+            "cachedTokens": 4224
+          },
+          "elapsedMs": 1003
+        },
+        {
+          "prompt": {
+            "version": "utf8-third-v1",
+            "staticPrefix": 3090,
+            "stableUserContext": 326,
+            "requestContext": 1404,
+            "messages": 64,
+            "schema": 1664,
+            "framing": 32,
+            "tools": 1,
+            "toolHistory": 1184,
+            "estimatedTextInputTokens": 7765,
+            "reservedOutputTokens": 2500,
+            "estimatedTextAndOutputTokens": 10265,
+            "imageCount": 0,
+            "imageTokensUnknown": false,
+            "totalBudget": null,
+            "guardEnabled": false,
+            "budgetConfigurationInvalid": false,
+            "exceedsBudget": false
+          },
+          "finishReason": "stop",
+          "costUsd": 0.00248745,
+          "usage": {
+            "usageUnavailable": false,
+            "promptTokens": 4759,
+            "completionTokens": 182,
+            "reasoningTokens": 0,
+            "totalTokens": 4941,
+            "cachedTokens": 2816
+          },
+          "elapsedMs": 1912
+        }
+      ],
+      "answer": {
+        "responseVersion": 3,
+        "blocks": [
+          {
+            "type": "card",
+            "text": "The oxford shirt sharpens the look without going formal, and the olive chinos make it feel more polished than jeans while still staying comfortable for a family lunch. The cream sneakers keep it relaxed and tie back to the lighter top half.",
+            "payload": {
+              "mode": "from_closet",
+              "lookName": "Navy oxford, olive chinos, and your cream platform sneakers",
+              "itemIds": [
+                4,
+                2,
+                3
+              ],
+              "readinessStatus": "ready",
+              "foundationItemIds": [],
+              "missingEssentials": []
+            },
+            "wardrobeItems": [
+              {
+                "id": 4,
+                "userId": 1,
+                "name": "Navy Oxford Shirt",
+                "category": "top",
+                "color": "navy",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 2,
+                "userId": 1,
+                "name": "Olive Straight Chinos",
+                "category": "bottom",
+                "color": "olive",
+                "material": "cotton",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              },
+              {
+                "id": 3,
+                "userId": 1,
+                "name": "Platform Sneakers",
+                "category": "shoes",
+                "color": "cream",
+                "material": "canvas",
+                "fit": "regular",
+                "availability": "available",
+                "condition": "good",
+                "formality": 4,
+                "seasons": [
+                  "fall"
+                ],
+                "occasions": [
+                  "casual"
+                ]
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Keep the shirt neatly tucked or half-tucked, and add a simple belt if you want a cleaner line at the waist.",
+            "ownedItemIds": [],
+            "wardrobeItems": []
+          }
+        ],
+        "followUps": [],
+        "deliveryStatus": "complete",
+        "diagnostics": {
+          "attempts": [
+            {
+              "repair": false,
+              "prompt": {
+                "version": "utf8-third-v1",
+                "staticPrefix": 3090,
+                "stableUserContext": 326,
+                "requestContext": 1404,
+                "messages": 64,
+                "schema": 1664,
+                "framing": 32,
+                "tools": 1262,
+                "toolHistory": 1,
+                "estimatedTextInputTokens": 7843,
+                "reservedOutputTokens": 2500,
+                "estimatedTextAndOutputTokens": 10343,
+                "imageCount": 0,
+                "imageTokensUnknown": false,
+                "totalBudget": null,
+                "guardEnabled": false,
+                "budgetConfigurationInvalid": false,
+                "exceedsBudget": false
+              },
+              "finishReason": "tool_calls",
+              "toolNames": [
+                "check_wardrobe_requirements",
+                "wardrobe_overview"
+              ],
+              "elapsedMs": 1333
+            },
+            {
+              "tool": "check_wardrobe_requirements"
+            },
+            {
+              "tool": "wardrobe_overview"
+            },
+            {
+              "repair": false,
+              "prompt": {
+                "version": "utf8-third-v1",
+                "staticPrefix": 3090,
+                "stableUserContext": 326,
+                "requestContext": 1404,
+                "messages": 64,
+                "schema": 1664,
+                "framing": 32,
+                "tools": 1262,
+                "toolHistory": 792,
+                "estimatedTextInputTokens": 8634,
+                "reservedOutputTokens": 2500,
+                "estimatedTextAndOutputTokens": 11134,
+                "imageCount": 0,
+                "imageTokensUnknown": false,
+                "totalBudget": null,
+                "guardEnabled": false,
+                "budgetConfigurationInvalid": false,
+                "exceedsBudget": false
+              },
+              "finishReason": "tool_calls",
+              "toolNames": [
+                "item_details"
+              ],
+              "elapsedMs": 1005
+            },
+            {
+              "tool": "item_details",
+              "itemCount": 3,
+              "detailLimitReached": false
+            },
+            {
+              "repair": false,
+              "prompt": {
+                "version": "utf8-third-v1",
+                "staticPrefix": 3090,
+                "stableUserContext": 326,
+                "requestContext": 1404,
+                "messages": 64,
+                "schema": 1664,
+                "framing": 32,
+                "tools": 1,
+                "toolHistory": 1184,
+                "estimatedTextInputTokens": 7765,
+                "reservedOutputTokens": 2500,
+                "estimatedTextAndOutputTokens": 10265,
+                "imageCount": 0,
+                "imageTokensUnknown": false,
+                "totalBudget": null,
+                "guardEnabled": false,
+                "budgetConfigurationInvalid": false,
+                "exceedsBudget": false
+              },
+              "finishReason": "stop",
+              "elapsedMs": 1914
+            }
+          ],
+          "validationErrors": [],
+          "generationCalls": 3,
+          "toolExecutions": 3,
+          "toolRounds": 2,
+          "repairAttempts": 0,
+          "validationFailures": 0,
+          "evidenceFailures": 0
+        }
+      }
+    }
+  ]
+}

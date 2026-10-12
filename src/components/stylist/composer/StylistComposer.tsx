@@ -1,15 +1,13 @@
-import { useEffect, useState } from 'react';
-import { Image, ScrollView, Platform, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useWindowDimensions, ActivityIndicator, Image, ScrollView, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
   FadeIn,
   FadeOut,
-  ZoomIn,
-  ZoomOut,
-  interpolate,
   interpolateColor,
   useAnimatedStyle,
   useSharedValue,
+  useReducedMotion,
   withTiming,
 } from 'react-native-reanimated';
 import { DictationLevelBars } from './DictationLevelBars';
@@ -19,6 +17,8 @@ import type { StylistComposerAttachment } from '../../../features/stylist/types'
 
 type Props = {
   value: string;
+  vocabulary?: string[];
+  onStartDictation?: () => void;
   onChangeText: (text: string) => void;
   /** Programmatic text updates from dictation — must bypass @-mention parsing. */
   onDictatedText: (text: string) => void;
@@ -30,12 +30,8 @@ type Props = {
   onRemoveItem?: (itemId: number) => void;
   onOpenAttachmentSheet: () => void;
   placeholder?: string;
+  inputRef?: RefObject<TextInput | null>;
 };
-
-type RightSlotMode = 'stop' | 'done' | 'send' | 'mic';
-
-const slotEnter = ZoomIn.springify().damping(16).stiffness(220);
-const slotExit = ZoomOut.duration(110);
 
 const MIN_INPUT_HEIGHT = 44;
 const MAX_INPUT_HEIGHT = 120;
@@ -56,6 +52,8 @@ function DictationTimer({ startedAt }: { startedAt: number }) {
 
 export function StylistComposer({
   value,
+  vocabulary,
+  onStartDictation,
   onChangeText,
   onDictatedText,
   onSend,
@@ -65,45 +63,29 @@ export function StylistComposer({
   onRemoveAttachment,
   onRemoveItem,
   onOpenAttachmentSheet,
-  placeholder = 'Ask about an outfit or tag @a piece',
+  placeholder = 'What are you dressing for?',
+  inputRef,
 }: Props) {
-  const dictation = useDictation({ onText: onDictatedText });
+  const dictation = useDictation({ onText: onDictatedText, vocabulary });
+  const transcriptRef = useRef<ScrollView>(null);
   const isDictating = dictation.state !== 'idle';
   const isListening = dictation.state === 'listening';
 
+  const { fontScale } = useWindowDimensions();
+  const [contentHeight, setContentHeight] = useState(MIN_INPUT_HEIGHT);
+  const reducedMotion = useReducedMotion();
   const focusProgress = useSharedValue(0);
   const listeningProgress = useSharedValue(0);
 
   useEffect(() => {
-    listeningProgress.value = withTiming(isListening ? 1 : 0, { duration: 200 });
-  }, [isListening, listeningProgress]);
+    listeningProgress.set(withTiming(isListening ? 1 : 0, { duration: reducedMotion ? 0 : 160 }));
+  }, [isListening, listeningProgress, reducedMotion]);
 
-  // A send can start mid-dictation (e.g. a suggestion chip); finish gracefully.
-  const finishDictation = dictation.done;
-  useEffect(() => {
-    if (isLoading && isListening) finishDictation();
-  }, [isLoading, isListening, finishDictation]);
-
-  const cardAnimatedStyle = useAnimatedStyle(() => {
-    const progress = Math.max(focusProgress.value, listeningProgress.value);
-    return {
-      borderColor: interpolateColor(progress, [0, 1], [colors.hairline, `${colors.primary}59`]),
-      ...(Platform.OS === 'ios'
-        ? {
-            shadowOpacity: interpolate(progress, [0, 1], [0.05, 0.07]),
-            shadowRadius: interpolate(progress, [0, 1], [2, 6]),
-          }
-        : {}),
-    };
-  });
-
-  const rightSlotMode: RightSlotMode = isLoading
-    ? 'stop'
-    : isDictating
-      ? 'done'
-      : value.trim() || attachment
-        ? 'send'
-        : 'mic';
+  const cardAnimatedStyle = useAnimatedStyle(() => ({
+    borderColor: interpolateColor(Math.max(focusProgress.get(), listeningProgress.get()), [0, 1], [colors.hairline, colors.controlOutline]),
+  }));
+  const canSend = !!(value.trim() || attachment) && !isLoading && !isDictating;
+  const pressStyle = ({ pressed }: { pressed: boolean }) => [styles.iconBtn, pressed && styles.pressed];
 
   return (
     <View style={styles.inputBar}>
@@ -119,10 +101,10 @@ export function StylistComposer({
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingTop: spacing.xs }}>
               {attachment.items?.map((item) => (
-                <View key={item.itemId} style={{ width: 72, gap: spacing.xs }}>
-                  <View style={{ width: 64, height: 64, borderRadius: radii.lg, backgroundColor: colors.surfaceSubtle, alignItems: 'center', justifyContent: 'center' }}>
-                    {item.uri ? <Image source={{ uri: item.uri }} style={{ width: 64, height: 64, borderRadius: radii.lg }} resizeMode="contain" /> : <Ionicons name="shirt-outline" size={24} color={colors.mutedForeground} />}
-                    <TouchableOpacity onPress={() => onRemoveItem?.(item.itemId)} style={styles.attachmentBadge} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Remove ${item.label}`}>
+                <View key={item.itemId} style={{ width: 56, gap: spacing.xs }}>
+                  <View style={{ width: 48, height: 48, borderRadius: radii.lg, backgroundColor: colors.surfaceSubtle, alignItems: 'center', justifyContent: 'center' }}>
+                    {item.uri ? <Image source={{ uri: item.uri }} style={{ width: 48, height: 48, borderRadius: radii.lg }} resizeMode="contain" /> : <Ionicons name="shirt-outline" size={24} color={colors.mutedForeground} />}
+                    <TouchableOpacity onPress={() => onRemoveItem?.(item.itemId)} style={styles.attachmentBadge} hitSlop={12} accessibilityRole="button" accessibilityLabel={`Remove ${item.label}`}>
                       <Ionicons name="close" size={12} color={colors.white} />
                     </TouchableOpacity>
                   </View>
@@ -134,8 +116,8 @@ export function StylistComposer({
         ) : attachment ? (
           <Animated.View
             style={styles.attachmentRow}
-            entering={FadeIn.duration(160)}
-            exiting={FadeOut.duration(120)}
+            entering={reducedMotion ? undefined : FadeIn.duration(160)}
+            exiting={reducedMotion ? undefined : FadeOut.duration(120)}
           >
             {attachment.uri ? (
               <View style={styles.attachmentThumbWrap}>
@@ -165,83 +147,80 @@ export function StylistComposer({
           </Animated.View>
         ) : null}
 
+        {isDictating ? (
+          <ScrollView style={{ maxHeight: MAX_INPUT_HEIGHT * fontScale }} ref={transcriptRef} onContentSizeChange={() => transcriptRef.current?.scrollToEnd({ animated: false })}>
+            <Text style={styles.textInput} accessibilityLabel="Live dictation">
+              {dictation.preview?.settled}
+              <Text style={{ color: colors.mutedForeground }}>{dictation.preview?.settled && dictation.preview?.interim ? ' ' : ''}{dictation.preview?.interim}</Text>
+              {!value.trim() ? <Text style={{ color: colors.mutedForeground }}>Tell me what you’re dressing for…</Text> : null}
+            </Text>
+          </ScrollView>
+        ) : null}
+        <TextInput
+          ref={inputRef}
+          style={[styles.textInput, isDictating && { display: 'none' }, { height: Math.min(Math.max(MIN_INPUT_HEIGHT, contentHeight), MAX_INPUT_HEIGHT * fontScale), maxHeight: MAX_INPUT_HEIGHT * fontScale }]}
+          onContentSizeChange={(event) => setContentHeight(Math.ceil(event.nativeEvent.contentSize.height))}
+          value={value}
+          onChangeText={onChangeText}
+          onFocus={() => { focusProgress.set(withTiming(1, { duration: reducedMotion ? 0 : 160 })); }}
+          onBlur={() => { focusProgress.set(withTiming(0, { duration: reducedMotion ? 0 : 160 })); }}
+          placeholder={placeholder}
+          placeholderTextColor={colors.mutedForeground}
+          accessibilityLabel="Message your stylist"
+          multiline
+          textAlignVertical="top"
+          maxLength={2000}
+          returnKeyType="default"
+          editable={!isDictating}
+        />
         <View style={styles.composerRow}>
-          <View style={styles.leftSlot}>
-            {isDictating ? (
-              <Animated.View key="cancel" entering={FadeIn.duration(140)} exiting={FadeOut.duration(110)}>
-                <Pressable style={styles.iconBtn} onPress={dictation.cancel} accessibilityLabel="Cancel dictation">
-                  <Ionicons name="close" size={22} color={colors.mutedForeground} />
-                </Pressable>
-              </Animated.View>
-            ) : (
-              <Animated.View key="attach" entering={FadeIn.duration(140)} exiting={FadeOut.duration(110)}>
-                <Pressable
-                  style={styles.iconBtn}
-                  onPress={onOpenAttachmentSheet}
-                  disabled={isLoading}
-                  accessibilityLabel="Add photo or wardrobe piece"
-                >
-                  <Ionicons name="add" size={24} color={colors.inkSubtle} />
-                </Pressable>
-              </Animated.View>
-            )}
-          </View>
-
-          <TextInput
-            style={styles.textInput}
-            value={value}
-            onChangeText={onChangeText}
-            onFocus={() => { focusProgress.value = withTiming(1, { duration: 150 }); }}
-            onBlur={() => { focusProgress.value = withTiming(0, { duration: 150 }); }}
-            placeholder={placeholder}
-            placeholderTextColor={colors.mutedForeground}
-            multiline
-            textAlignVertical="top"
-            maxLength={2000}
-            returnKeyType="default"
-            editable={!isLoading && !isDictating}
-          />
-
-          <View style={styles.rightSlot}>
-            {rightSlotMode === 'stop' ? (
-              <Animated.View key="stop" entering={slotEnter} exiting={slotExit}>
-                <TouchableOpacity style={styles.stopBtn} onPress={onStopGeneration} accessibilityLabel="Stop generating">
-                  <Ionicons name="stop" size={14} color={colors.primaryForeground} />
-                </TouchableOpacity>
-              </Animated.View>
-            ) : rightSlotMode === 'done' ? (
-              <Animated.View key="done" entering={slotEnter} exiting={slotExit}>
-                <TouchableOpacity style={styles.sendBtn} onPress={dictation.done} accessibilityLabel="Finish dictation">
-                  <Ionicons name="checkmark" size={20} color={colors.white} />
-                </TouchableOpacity>
-              </Animated.View>
-            ) : rightSlotMode === 'send' ? (
-              <Animated.View key="send" entering={slotEnter} exiting={slotExit}>
-                <TouchableOpacity style={styles.sendBtn} onPress={onSend} accessibilityLabel="Send message">
-                  <Ionicons name="arrow-up" size={19} color={colors.white} />
-                </TouchableOpacity>
-              </Animated.View>
-            ) : (
-              <Animated.View key="mic" entering={slotEnter} exiting={slotExit}>
-                <Pressable
-                  style={styles.iconBtn}
-                  onPress={() => { void dictation.start(value); }}
-                  accessibilityLabel="Dictate a message"
-                >
-                  <Ionicons name="mic-outline" size={22} color={colors.inkSubtle} />
-                </Pressable>
-              </Animated.View>
-            )}
-          </View>
+          <Pressable style={pressStyle} onPress={onOpenAttachmentSheet} accessibilityRole="button" accessibilityLabel="Add a photo or wardrobe piece">
+            <Ionicons name="add" size={22} color={colors.inkSubtle} />
+          </Pressable>
+          <View style={{ flex: 1 }} />
+          {isDictating ? (
+            <>
+              {isLoading ? <Pressable style={pressStyle} onPress={onStopGeneration} accessibilityRole="button" accessibilityLabel="Stop generating"><Ionicons name="stop" size={16} color={colors.primary} /></Pressable> : null}
+              <Pressable style={pressStyle} onPress={dictation.cancel} accessibilityRole="button" accessibilityLabel="Cancel dictation">
+                <Ionicons name="close" size={21} color={colors.inkSubtle} />
+              </Pressable>
+              <Pressable style={({ pressed }) => [styles.sendBtn, pressed && styles.pressed]} onPress={dictation.done} disabled={!isListening} accessibilityRole="button" accessibilityLabel="Finish dictation" accessibilityState={{ disabled: !isListening }}>
+                {isListening ? <Ionicons name="checkmark" size={20} color={colors.white} /> : <ActivityIndicator color={colors.white} />}
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <Pressable style={pressStyle} onPress={() => { onStartDictation?.(); void dictation.start(value); }} accessibilityRole="button" accessibilityLabel="Dictate a message">
+                <Ionicons name="mic-outline" size={21} color={colors.inkSubtle} />
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.sendBtn, !canSend && !isLoading && styles.disabled, pressed && styles.pressed]}
+                onPress={isLoading ? onStopGeneration : onSend}
+                disabled={!isLoading && !canSend}
+                accessibilityRole="button"
+                accessibilityLabel={isLoading ? 'Stop generating' : 'Send message'}
+                accessibilityState={{ disabled: !isLoading && !canSend }}
+              >
+                <Ionicons name={isLoading ? 'stop' : 'arrow-up'} size={isLoading ? 15 : 20} color={colors.white} />
+              </Pressable>
+            </>
+          )}
         </View>
+        {(isLoading || (isDictating && !isListening)) ? (
+          <Text style={styles.statusText} accessibilityLiveRegion="polite">
+            {dictation.state === 'requesting' ? 'Starting microphone…' : dictation.state === 'stopping' ? 'Finishing dictation…' : 'You can draft your next question while your stylist replies.'}
+          </Text>
+        ) : null}
 
+        {!isDictating && dictation.notice ? <Text style={styles.statusText} accessibilityLiveRegion="polite">{dictation.notice}</Text> : null}
         {isListening ? (
           <Animated.View
             style={styles.dictationStatusRow}
-            entering={FadeIn.duration(160)}
-            exiting={FadeOut.duration(120)}
+            entering={reducedMotion ? undefined : FadeIn.duration(160)}
+            exiting={reducedMotion ? undefined : FadeOut.duration(120)}
           >
             <View style={styles.dictationDot} />
+            <Text style={styles.dictationTimer}>Listening…</Text>
             {dictation.startedAt != null ? <DictationTimer startedAt={dictation.startedAt} /> : null}
             <View style={styles.dictationBars}>
               <DictationLevelBars level={dictation.level} />
@@ -259,12 +238,13 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xs,
   },
   composer: {
-    minHeight: 52, backgroundColor: colors.surfaceElevated, borderRadius: radii.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.controlOutline, padding: spacing.xs,
+    minHeight: 52, backgroundColor: colors.surfaceElevated, borderRadius: 24, borderCurve: 'continuous', boxShadow: '0 2px 10px rgba(36,36,34,0.04)', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.controlOutline, padding: spacing.xs,
   },
   composerRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     gap: spacing.xs,
+    paddingHorizontal: spacing.xs,
   },
   attachmentRow: {
     flexDirection: 'row',
@@ -313,14 +293,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.medium,
     color: colors.foreground,
   },
-  leftSlot: {
-    width: 44,
-    height: 44,
-  },
-  rightSlot: {
-    width: 44,
-    height: 44,
-  },
   iconBtn: {
     width: 44,
     height: 44,
@@ -328,12 +300,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   textInput: {
-    flex: 1,
     minHeight: MIN_INPUT_HEIGHT,
     maxHeight: MAX_INPUT_HEIGHT,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm + 2,
-    fontSize: typography.text.bodySmall.fontSize,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+    fontSize: 17,
+    lineHeight: 24,
     color: colors.foreground,
   },
   sendBtn: {
@@ -344,14 +317,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stopBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.full,
-    backgroundColor: colors.foreground,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  pressed: { opacity: 0.65 },
+  disabled: { backgroundColor: colors.surfaceSelected },
+  statusText: { ...typography.text.caption, color: colors.mutedForeground, paddingHorizontal: 12, paddingVertical: 8 },
   dictationStatusRow: {
     flexDirection: 'row',
     alignItems: 'center',

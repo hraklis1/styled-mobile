@@ -1,0 +1,2293 @@
+{
+  "promptVersion": "client-relationship-v4.3",
+  "synthetic": true,
+  "instructions": "Rate each dimension 1\u20135 independently; null means not yet reviewed. Delivery status is not quality. Review alongside the synthetic fixtures in scripts/eval-stylist-client.ts in the backend. Do not open the reviewer key until scoring is complete.",
+  "cases": [
+    {
+      "case": "thanksgiving-dinner",
+      "question": "What can I wear with these for thanksgiving dinner",
+      "preferences": null,
+      "answers": {
+        "A": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "card",
+              "text": "The navy Oxford shirt with olive chinos is the strongest dinner pairing here: it feels polished without being formal, and the cream sneakers keep it relaxed and coherent. If you want it a touch softer, swap the shirt for the charcoal sweater; both work well with the cream shoes, but the shirt reads more put-together for Thanksgiving dinner.",
+              "payload": {
+                "mode": "from_closet",
+                "lookName": "Thanksgiving Clean",
+                "itemIds": [
+                  4,
+                  2,
+                  3
+                ],
+                "readinessStatus": "ready",
+                "foundationItemIds": [],
+                "missingEssentials": []
+              },
+              "wardrobeItems": [
+                {
+                  "id": 4,
+                  "userId": 1,
+                  "name": "Navy Oxford Shirt",
+                  "category": "top",
+                  "color": "navy",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 2,
+                  "userId": 1,
+                  "name": "Olive Straight Chinos",
+                  "category": "bottom",
+                  "color": "olive",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 3,
+                  "userId": 1,
+                  "name": "Platform Sneakers",
+                  "category": "shoes",
+                  "color": "cream",
+                  "material": "canvas",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "Best move: navy Oxford shirt + olive straight chinos + your cream platform sneakers. It gives you clean contrast, looks intentional at the table, and stays comfortable.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "text",
+              "text": "If it\u2019s chilly, add the navy rain shell over the shirt; it\u2019ll keep the palette tight and still look casual enough.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            }
+          ]
+        },
+        "B": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "card",
+              "text": "This is the cleanest Thanksgiving dinner option: relaxed but still put-together, with the cream top lifting the darker olive trousers and the cream sneakers keeping the outfit cohesive. The regular fits keep it comfortable at the waist and through the leg, and it feels casual enough for dinner without looking sloppy.",
+              "payload": {
+                "mode": "from_closet",
+                "lookName": "Cream crewneck, olive chinos, and platform sneakers",
+                "itemIds": [
+                  1,
+                  2,
+                  3
+                ],
+                "readinessStatus": "ready",
+                "foundationItemIds": [],
+                "missingEssentials": []
+              },
+              "wardrobeItems": [
+                {
+                  "id": 1,
+                  "userId": 1,
+                  "name": "Cream Cotton Crewneck",
+                  "category": "top",
+                  "color": "cream",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 2,
+                  "userId": 1,
+                  "name": "Olive Straight Chinos",
+                  "category": "bottom",
+                  "color": "olive",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 3,
+                  "userId": 1,
+                  "name": "Platform Sneakers",
+                  "category": "shoes",
+                  "color": "cream",
+                  "material": "canvas",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "If you want it a touch sharper, swap the crewneck for the Navy Oxford Shirt with the same chinos and sneakers; the navy adds a more dinner-appropriate contrast without getting formal.",
+              "ownedItemIds": [
+                4
+              ],
+              "wardrobeItems": [
+                {
+                  "id": 4,
+                  "userId": 1,
+                  "name": "Navy Oxford Shirt",
+                  "category": "top",
+                  "color": "navy",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "review": {
+        "A": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        },
+        "B": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        }
+      },
+      "winner": null,
+      "ownershipViolations": [],
+      "regressions": [],
+      "notes": ""
+    },
+    {
+      "case": "thanksgiving-lunch",
+      "question": "What can i wear with these shoes for a thanksgiving family lunch",
+      "preferences": null,
+      "answers": {
+        "A": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "text",
+              "text": "Wear your Platform Sneakers with the cream crewneck and olive straight chinos. The light top keeps the sneakers looking intentional, and the olive trouser grounds the outfit so it feels family-lunch polished instead of gym-adjacent.",
+              "ownedItemIds": [
+                3
+              ],
+              "wardrobeItems": [
+                {
+                  "id": 3,
+                  "userId": 1,
+                  "name": "Platform Sneakers",
+                  "category": "shoes",
+                  "color": "cream",
+                  "material": "canvas",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "card",
+              "text": "The cream-on-cream pairing stays clean and relaxed, while the olive chinos add a fall color that suits Thanksgiving without getting too dressed up. This is the strongest casual option in the closet for a family lunch.",
+              "payload": {
+                "mode": "from_closet",
+                "lookName": "Thanksgiving lunch with cream platform sneakers",
+                "itemIds": [
+                  3,
+                  1,
+                  2
+                ],
+                "readinessStatus": "ready",
+                "foundationItemIds": [],
+                "missingEssentials": []
+              },
+              "wardrobeItems": [
+                {
+                  "id": 3,
+                  "userId": 1,
+                  "name": "Platform Sneakers",
+                  "category": "shoes",
+                  "color": "cream",
+                  "material": "canvas",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 1,
+                  "userId": 1,
+                  "name": "Cream Cotton Crewneck",
+                  "category": "top",
+                  "color": "cream",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 2,
+                  "userId": 1,
+                  "name": "Olive Straight Chinos",
+                  "category": "bottom",
+                  "color": "olive",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "If you want it a touch sharper, swap the crewneck for the navy Oxford shirt; keep the chinos and sneakers, and roll the sleeves once for a more put-together lunch look.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            }
+          ]
+        },
+        "B": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "text",
+              "text": "Go with the navy Oxford shirt, olive chinos, and the cream platform sneakers. It reads polished but relaxed for a family lunch, and the navy/olive/cream palette feels especially good for Thanksgiving without trying too hard.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "card",
+              "text": "The cream sneakers stay clean and intentional with the navy-and-olive pairing, while the regular-fit pieces keep it comfortable for sitting, eating, and moving around. This is the strongest balance of casual and put-together from your wardrobe.",
+              "payload": {
+                "mode": "from_closet",
+                "lookName": "Easy Holiday Casual",
+                "itemIds": [
+                  3,
+                  4,
+                  2
+                ],
+                "readinessStatus": "ready",
+                "foundationItemIds": [],
+                "missingEssentials": []
+              },
+              "wardrobeItems": [
+                {
+                  "id": 3,
+                  "userId": 1,
+                  "name": "Platform Sneakers",
+                  "category": "shoes",
+                  "color": "cream",
+                  "material": "canvas",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 4,
+                  "userId": 1,
+                  "name": "Navy Oxford Shirt",
+                  "category": "top",
+                  "color": "navy",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 2,
+                  "userId": 1,
+                  "name": "Olive Straight Chinos",
+                  "category": "bottom",
+                  "color": "olive",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "If you want it even softer, swap the shirt for the cream crewneck with the same chinos; if the lunch is cooler, add the navy rain shell on top.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "card",
+              "text": "Quick Finish\n\nA few small choices will make the outfit feel deliberate.\n\nSocks: Keep them low or match the trouser tone so the sneakers stay the focus.\n\nFit: Choose the straightest, cleanest silhouette you have here; it will look most at ease with the platform sole.\n\nLayering: Use the rain shell only if needed, since the outfit already works on its own.",
+              "ownedItemIds": [],
+              "wardrobeItems": [],
+              "payload": {
+                "mode": "advice",
+                "checklist": {
+                  "title": "Quick Finish",
+                  "intro": "A few small choices will make the outfit feel deliberate.",
+                  "entries": [
+                    {
+                      "label": "Socks",
+                      "detail": "Keep them low or match the trouser tone so the sneakers stay the focus."
+                    },
+                    {
+                      "label": "Fit",
+                      "detail": "Choose the straightest, cleanest silhouette you have here; it will look most at ease with the platform sole."
+                    },
+                    {
+                      "label": "Layering",
+                      "detail": "Use the rain shell only if needed, since the outfit already works on its own."
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      "review": {
+        "A": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        },
+        "B": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        }
+      },
+      "winner": null,
+      "ownershipViolations": [],
+      "regressions": [],
+      "notes": ""
+    },
+    {
+      "case": "sparse-closet",
+      "question": "What can I wear with these shoes for family lunch?",
+      "preferences": null,
+      "answers": {
+        "A": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "text",
+              "text": "These shoes work best with a clean, relaxed family-lunch outfit: cream or navy on top, straight or regular-fit bottoms, and one polished layer so the platform sole feels intentional rather than sporty.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "card",
+              "text": "The cream canvas sneaker is easy and casual, so it pairs naturally with tonal neutrals and slightly structured basics. For family lunch, aim for neat rather than dressy: a cream knit or navy tee/shirt, regular-fit trousers or jeans, and a simple overshirt or cardigan if you want the look to feel finished.\n\nNot confirmed: A clean casual top in cream, navy, or another soft neutral\n\nNot confirmed: Regular-fit trousers, jeans, or chinos with a comfortable waistband\n\nNot confirmed: A light layer such as a cardigan, overshirt, or jacket to balance the platform sole",
+              "payload": {
+                "mode": "from_closet",
+                "lookName": "Soft Casual Lunch",
+                "itemIds": [
+                  3
+                ],
+                "readinessStatus": "incomplete",
+                "foundationItemIds": [
+                  3
+                ],
+                "missingEssentials": []
+              },
+              "wardrobeItems": [
+                {
+                  "id": 3,
+                  "userId": 1,
+                  "name": "Platform Sneakers",
+                  "category": "shoes",
+                  "color": "cream",
+                  "material": "canvas",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "If you want the safest formula, wear them with straight-leg jeans and a cream top; if you want it a touch sharper, swap the jeans for navy chinos and keep the upper half simple.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            }
+          ]
+        },
+        "B": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "text",
+              "text": "Platform Sneakers are casual and cream, so for family lunch the cleanest move is to keep everything else simple and a touch more polished than the shoes. I couldn\u2019t verify a complete owned outfit from the wardrobe here, so the best pairing is a navy or cream top with regular-fit trousers or straight jeans in a darker neutral, which keeps the sneakers looking intentional rather than sporty.",
+              "ownedItemIds": [
+                3
+              ],
+              "wardrobeItems": [
+                {
+                  "id": 3,
+                  "userId": 1,
+                  "name": "Platform Sneakers",
+                  "category": "shoes",
+                  "color": "cream",
+                  "material": "canvas",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "If you want the easiest formula: navy knit or crisp tee, dark straight-leg jeans or chinos, then these sneakers. The contrast gives the cream shoes some definition and stays relaxed enough for lunch.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "card",
+              "text": "The sneakers read casual, so they work best with a clean navy top and a darker, straight bottom to balance the platform sole and keep the outfit tidy for a family lunch. This is a foundation because no owned top or bottom could be confirmed for selection.\n\nNot confirmed: A casual-to-smart casual top in navy, cream, or another clean neutral.\n\nNot confirmed: Regular-fit trousers or straight-leg jeans/chinos in a darker neutral.",
+              "payload": {
+                "mode": "from_closet",
+                "lookName": "Family lunch foundation with cream platform sneakers",
+                "itemIds": [
+                  3
+                ],
+                "readinessStatus": "incomplete",
+                "foundationItemIds": [
+                  3
+                ],
+                "missingEssentials": []
+              },
+              "wardrobeItems": [
+                {
+                  "id": 3,
+                  "userId": 1,
+                  "name": "Platform Sneakers",
+                  "category": "shoes",
+                  "color": "cream",
+                  "material": "canvas",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "review": {
+        "A": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        },
+        "B": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        }
+      },
+      "winner": null,
+      "ownershipViolations": [],
+      "regressions": [],
+      "notes": ""
+    },
+    {
+      "case": "conceptual",
+      "question": "How can I make casual outfits feel polished without looking overdressed?",
+      "preferences": null,
+      "answers": {
+        "A": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "text",
+              "text": "Aim for clean lines, better fabric contrast, and one intentional detail. The easiest formula is a regular-fit top, straight-leg bottoms, and a shoe that reads finished rather than sporty.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "card",
+              "text": "The cream cotton crewneck keeps the look soft and simple, the olive straight chinos add structure without feeling stiff, and the brown leather loafers make it look considered instead of gym-adjacent. This works because the palette stays calm and the silhouettes stay straight and tidy.",
+              "payload": {
+                "mode": "from_closet",
+                "lookName": "Most polished casual base",
+                "itemIds": [
+                  1,
+                  2,
+                  6
+                ],
+                "readinessStatus": "ready",
+                "foundationItemIds": [],
+                "missingEssentials": []
+              },
+              "wardrobeItems": [
+                {
+                  "id": 1,
+                  "userId": 1,
+                  "name": "Cream Cotton Crewneck",
+                  "category": "top",
+                  "color": "cream",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 2,
+                  "userId": 1,
+                  "name": "Olive Straight Chinos",
+                  "category": "bottom",
+                  "color": "olive",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 6,
+                  "userId": 1,
+                  "name": "Brown Leather Loafers",
+                  "category": "shoes",
+                  "color": "brown",
+                  "material": "leather",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "If you want it even sharper, do a small front tuck and keep the hemline clean. That one move adds shape at the waist without pushing the outfit into dressy territory.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            }
+          ]
+        },
+        "B": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "text",
+              "text": "The safest way is to keep the clothes relaxed, then sharpen just one or two details: cleaner lines, better fit, and a more intentional shoe. A navy or cream base, regular fit, and comfortable waistband will already work in your favor; then add a structured layer, a neat tuck or front tuck, and a minimal sneaker or loafer so the outfit reads finished, not formal.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "card",
+              "text": "Polish the casual\n\nUse these small upgrades to lift everyday outfits without making them stiff.\n\nFit first: Choose pieces that skim rather than cling or drape too much. Regular cuts usually look calmer and more deliberate.\n\nKeep the palette restrained: Two to three colors is enough. Navy, cream, white, grey, and denim wash combinations feel polished quickly.\n\nAdd structure somewhere: A crisp overshirt, chore coat, blazer, or tidy knit can make the whole outfit look more composed.\n\nUse cleaner shoes: Minimal leather sneakers, loafers, or sleek boots tend to read more polished than very sporty trainers.\n\nMind the finish: Steaming, lint-free fabric, and simple accessories do more than extra styling tricks.\n\nBalance softness and sharpness: Pair relaxed bottoms with a neater top, or a casual tee with a refined layer, so the outfit doesn\u2019t tip into overdressed territory.",
+              "ownedItemIds": [],
+              "wardrobeItems": [],
+              "payload": {
+                "mode": "advice",
+                "checklist": {
+                  "title": "Polish the casual",
+                  "intro": "Use these small upgrades to lift everyday outfits without making them stiff.",
+                  "entries": [
+                    {
+                      "label": "Fit first",
+                      "detail": "Choose pieces that skim rather than cling or drape too much. Regular cuts usually look calmer and more deliberate."
+                    },
+                    {
+                      "label": "Keep the palette restrained",
+                      "detail": "Two to three colors is enough. Navy, cream, white, grey, and denim wash combinations feel polished quickly."
+                    },
+                    {
+                      "label": "Add structure somewhere",
+                      "detail": "A crisp overshirt, chore coat, blazer, or tidy knit can make the whole outfit look more composed."
+                    },
+                    {
+                      "label": "Use cleaner shoes",
+                      "detail": "Minimal leather sneakers, loafers, or sleek boots tend to read more polished than very sporty trainers."
+                    },
+                    {
+                      "label": "Mind the finish",
+                      "detail": "Steaming, lint-free fabric, and simple accessories do more than extra styling tricks."
+                    },
+                    {
+                      "label": "Balance softness and sharpness",
+                      "detail": "Pair relaxed bottoms with a neater top, or a casual tee with a refined layer, so the outfit doesn\u2019t tip into overdressed territory."
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      "review": {
+        "A": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        },
+        "B": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        }
+      },
+      "winner": null,
+      "ownershipViolations": [],
+      "regressions": [],
+      "notes": ""
+    },
+    {
+      "case": "paired-comfort",
+      "question": "Pick an outfit for Thanksgiving family lunch with these sneakers.",
+      "preferences": "No wool or tight waistbands. Prefer relaxed silhouettes and earthy neutrals.",
+      "answers": {
+        "A": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "card",
+              "text": "This is the strongest match for Thanksgiving lunch: the cream sneakers repeat the soft cream top, while olive chinos keep it polished but relaxed. The result feels easy, family-appropriate, and quietly put-together without leaning too formal.",
+              "payload": {
+                "mode": "from_closet",
+                "lookName": "Cream and Olive",
+                "itemIds": [
+                  3,
+                  1,
+                  2
+                ],
+                "readinessStatus": "ready",
+                "foundationItemIds": [],
+                "missingEssentials": []
+              },
+              "wardrobeItems": [
+                {
+                  "id": 3,
+                  "userId": 1,
+                  "name": "Platform Sneakers",
+                  "category": "shoes",
+                  "color": "cream",
+                  "material": "canvas",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 1,
+                  "userId": 1,
+                  "name": "Cream Cotton Crewneck",
+                  "category": "top",
+                  "color": "cream",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 2,
+                  "userId": 1,
+                  "name": "Olive Straight Chinos",
+                  "category": "bottom",
+                  "color": "olive",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "If you want a slightly sharper version, swap the cream crewneck for the navy Oxford shirt with the same olive chinos and sneakers. It keeps the outfit calm and neat, but the cream top is the cozier, more effortless choice.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            }
+          ]
+        },
+        "B": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "card",
+              "text": "The cream sneakers keep it relaxed and family-lunch appropriate, while the navy shirt and olive chinos add a cleaner, slightly dressed-up balance. The palette stays calm and autumnal, and the regular cuts avoid anything tight or fussy.",
+              "payload": {
+                "mode": "from_closet",
+                "lookName": "Thanksgiving lunch in the platform sneakers",
+                "itemIds": [
+                  3,
+                  4,
+                  2
+                ],
+                "readinessStatus": "ready",
+                "foundationItemIds": [],
+                "missingEssentials": []
+              },
+              "wardrobeItems": [
+                {
+                  "id": 3,
+                  "userId": 1,
+                  "name": "Platform Sneakers",
+                  "category": "shoes",
+                  "color": "cream",
+                  "material": "canvas",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 4,
+                  "userId": 1,
+                  "name": "Navy Oxford Shirt",
+                  "category": "top",
+                  "color": "navy",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 2,
+                  "userId": 1,
+                  "name": "Olive Straight Chinos",
+                  "category": "bottom",
+                  "color": "olive",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "Keep the sneakers looking intentional by rolling the chino hem just once so the ankle line stays neat and the shoe shape shows.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            }
+          ]
+        }
+      },
+      "review": {
+        "A": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        },
+        "B": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        }
+      },
+      "winner": null,
+      "ownershipViolations": [],
+      "regressions": [],
+      "notes": ""
+    },
+    {
+      "case": "paired-tailoring",
+      "question": "Pick an outfit for Thanksgiving family lunch with these sneakers.",
+      "preferences": "Prefer crisp shirts, tailored silhouettes and navy. Avoid olive green.",
+      "answers": {
+        "A": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "text",
+              "text": "Go with the navy Oxford shirt and dark straight jeans with the cream platform sneakers. It gives you a clean, family-lunch-appropriate balance: the navy sharpens the outfit, the indigo denim keeps it relaxed, and the cream sneakers lighten the whole look so it feels intentional rather than sporty.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "text",
+              "text": "If you want one extra layer, the navy rain shell is the safest topper from what\u2019s available; it keeps the palette cohesive without competing with the sneakers.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "card",
+              "text": "Quick finish\n\nA simple way to make this read polished for lunch:\n\nShirt: Wear the navy Oxford shirt neatly pressed or lightly cuffed.\n\nBottom: Use the dark straight jeans for a clean, easy shape.\n\nShoes: Let the cream platform sneakers stay visually crisp by keeping the rest of the outfit in navy and indigo.\n\nOptional layer: Add the navy rain shell only if you need a practical outer layer.",
+              "ownedItemIds": [],
+              "wardrobeItems": [],
+              "payload": {
+                "mode": "advice",
+                "checklist": {
+                  "title": "Quick finish",
+                  "intro": "A simple way to make this read polished for lunch:",
+                  "entries": [
+                    {
+                      "label": "Shirt",
+                      "detail": "Wear the navy Oxford shirt neatly pressed or lightly cuffed."
+                    },
+                    {
+                      "label": "Bottom",
+                      "detail": "Use the dark straight jeans for a clean, easy shape."
+                    },
+                    {
+                      "label": "Shoes",
+                      "detail": "Let the cream platform sneakers stay visually crisp by keeping the rest of the outfit in navy and indigo."
+                    },
+                    {
+                      "label": "Optional layer",
+                      "detail": "Add the navy rain shell only if you need a practical outer layer."
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "B": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "card",
+              "text": "The cream sneakers keep it relaxed and family-lunch appropriate, while the navy shirt sharpens the look enough for the holiday table. Dark jeans balance the lighter shoes and keep the silhouette clean and easy.",
+              "payload": {
+                "mode": "from_closet",
+                "lookName": "Thanksgiving lunch with the cream sneakers",
+                "itemIds": [
+                  3,
+                  4,
+                  5
+                ],
+                "readinessStatus": "ready",
+                "foundationItemIds": [],
+                "missingEssentials": []
+              },
+              "wardrobeItems": [
+                {
+                  "id": 3,
+                  "userId": 1,
+                  "name": "Platform Sneakers",
+                  "category": "shoes",
+                  "color": "cream",
+                  "material": "canvas",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 4,
+                  "userId": 1,
+                  "name": "Navy Oxford Shirt",
+                  "category": "top",
+                  "color": "navy",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 5,
+                  "userId": 1,
+                  "name": "Dark Straight Jeans",
+                  "category": "bottom",
+                  "color": "indigo",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "If you want it a touch neater, tuck in the shirt and keep the sneakers clean so the cream reads intentional rather than sporty.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            }
+          ]
+        }
+      },
+      "review": {
+        "A": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        },
+        "B": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        }
+      },
+      "winner": null,
+      "ownershipViolations": [],
+      "regressions": [],
+      "notes": ""
+    },
+    {
+      "case": "shopping-unavailable",
+      "question": "Recommend three new comfortable shoes under CA$150 that fit my style. Find actual products.",
+      "preferences": null,
+      "answers": {
+        "A": {
+          "status": "partial",
+          "blocks": [
+            {
+              "type": "text",
+              "text": "I can\u2019t verify three actual products from the available shopping results right now, so I\u2019d rather not invent recommendations. For your clean-casual style, the safest targets are a navy or cream low-profile sneaker, plus one comfortable slip-on or court-style sneaker with a cushioned sole.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "card",
+              "text": "Best product targets\n\nThese are the shoe types most likely to fit your style and comfort brief under CA$150.\n\nNavy court sneaker: Clean upper, light cushioning, regular fit, easy with your navy and cream wardrobe.\n\nCream retro runner: Soft neutral, comfortable for walking, but still polished enough for everyday wear.\n\nMinimal slip-on: Best if you want convenience and a more relaxed feel without looking sporty.",
+              "ownedItemIds": [],
+              "wardrobeItems": [],
+              "payload": {
+                "mode": "advice",
+                "checklist": {
+                  "title": "Best product targets",
+                  "intro": "These are the shoe types most likely to fit your style and comfort brief under CA$150.",
+                  "entries": [
+                    {
+                      "label": "Navy court sneaker",
+                      "detail": "Clean upper, light cushioning, regular fit, easy with your navy and cream wardrobe."
+                    },
+                    {
+                      "label": "Cream retro runner",
+                      "detail": "Soft neutral, comfortable for walking, but still polished enough for everyday wear."
+                    },
+                    {
+                      "label": "Minimal slip-on",
+                      "detail": "Best if you want convenience and a more relaxed feel without looking sporty."
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "B": {
+          "status": "partial",
+          "blocks": [
+            {
+              "type": "text",
+              "text": "I can\u2019t verify any current product listings from the search here, so I can\u2019t give you three actual product picks without making them up. Your style points toward clean, low-profile shoes in navy, cream, white, brown, or other restrained neutrals, with a simple silhouette and a comfortable regular fit. For your wardrobe, the most useful direction is a cream canvas sneaker or a brown leather loafer with a modest sole; both will sit naturally with the cream crewneck, olive chinos, navy Oxford, and dark jeans you already own.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "text",
+              "text": "If you want, I can try again with a different retailer set or give you a short shopping shortlist once product search is working.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            }
+          ]
+        }
+      },
+      "review": {
+        "A": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        },
+        "B": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        }
+      },
+      "winner": null,
+      "ownershipViolations": [],
+      "regressions": [],
+      "notes": ""
+    },
+    {
+      "case": "durable-memory",
+      "question": "Wool always irritates my skin. I prefer cotton and linen. What fabrics should I look for?",
+      "preferences": null,
+      "answers": {
+        "A": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "text",
+              "text": "Look for cotton, linen, and cotton-linen blends first; they\u2019ll be your most reliable skin-friendly options. If you want something a touch smoother or a little more drapey, add Tencel/lyocell, modal, and viscose/rayon, and choose fabrics with a soft hand rather than anything textured or scratchy.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "card",
+              "text": "Best fabrics\n\nPrioritize breathable, low-irritation fabrics and be wary of blends that hide scratchy fibers.\n\nGo-to fabrics: Cotton, linen, cotton-linen blends, Tencel/lyocell, modal, viscose/rayon.\n\nGood in cooler weather: Brushed cotton, heavyweight cotton jersey, soft flannel made from cotton, and lined garments.\n\nUse caution: Wool blends, acrylic, polyester with rough finishes, and anything labeled 'textured' or 'boucl\u00e9' if your skin is sensitive.\n\nWhat to check on tags: Look for a high percentage of cotton or linen, plus words like soft, brushed, pre-washed, or breathable.",
+              "ownedItemIds": [],
+              "wardrobeItems": [],
+              "payload": {
+                "mode": "advice",
+                "checklist": {
+                  "title": "Best fabrics",
+                  "intro": "Prioritize breathable, low-irritation fabrics and be wary of blends that hide scratchy fibers.",
+                  "entries": [
+                    {
+                      "label": "Go-to fabrics",
+                      "detail": "Cotton, linen, cotton-linen blends, Tencel/lyocell, modal, viscose/rayon."
+                    },
+                    {
+                      "label": "Good in cooler weather",
+                      "detail": "Brushed cotton, heavyweight cotton jersey, soft flannel made from cotton, and lined garments."
+                    },
+                    {
+                      "label": "Use caution",
+                      "detail": "Wool blends, acrylic, polyester with rough finishes, and anything labeled 'textured' or 'boucl\u00e9' if your skin is sensitive."
+                    },
+                    {
+                      "label": "What to check on tags",
+                      "detail": "Look for a high percentage of cotton or linen, plus words like soft, brushed, pre-washed, or breathable."
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "B": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "text",
+              "text": "Look for cotton, linen, and cotton-linen blends first. They\u2019re the safest bet for skin comfort and they fit your clean casual preference well: breathable, soft, and easy to wear in regular silhouettes without feeling fussy.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "text",
+              "text": "Best fabrics to scan for:",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "text",
+              "text": "\u2022 100% cotton \u2014 especially combed cotton, jersey, Oxford cloth, and poplin. These are usually smooth against skin and easy to wear all day.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "text",
+              "text": "\u2022 Linen and linen-cotton blends \u2014 linen breathes well and feels great in warm weather; blends reduce the scratchiness and creasing.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "text",
+              "text": "\u2022 Cotton twill, denim, and chino cloth \u2014 good for bottoms when you want structure without itch.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "text",
+              "text": "\u2022 Tencel/Lyocell and modal \u2014 very smooth, soft, and comfortable if you\u2019re open to non-natural fibers.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "text",
+              "text": "\u2022 Viscose/rayon \u2014 lightweight and soft, though quality varies, so check that it isn\u2019t too flimsy.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "text",
+              "text": "If you\u2019re shopping, the safest labels are usually \"100% cotton,\" \"linen-cotton blend,\" \"cotton poplin,\" \"cotton jersey,\" and \"lyocell.\" I\u2019d avoid anything with wool, mohair, alpaca, or high-content acrylic close to the skin.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "text",
+              "text": "One practical move: when a garment isn\u2019t fully cotton or linen, check the lining and inside collar/cuff. A scratchy trim can matter more than the outer fabric.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            }
+          ]
+        }
+      },
+      "review": {
+        "A": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        },
+        "B": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        }
+      },
+      "winner": null,
+      "ownershipViolations": [],
+      "regressions": [],
+      "notes": ""
+    },
+    {
+      "case": "temporary-exception",
+      "question": "No wool for this trip to Miami, but I love my wool coats at home. What should I pack?",
+      "preferences": null,
+      "answers": {
+        "A": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "text",
+              "text": "Skip the wool and pack the breathable, low-fuss pieces you already own: the cream cotton crewneck or navy Oxford shirt, olive straight chinos or dark straight jeans, and either the cream platform sneakers or brown leather loafers. Cream Cotton Crewneck Navy Oxford Shirt Olive Straight Chinos Dark Straight Jeans Platform Sneakers Brown Leather Loafers The navy rain shell is the only outer layer I can verify, and it gives you a useful light layer for air conditioning or a brief shower. Rain Shell I can\u2019t verify a fuller warm-weather capsule from the sample alone, so any missing shorts, tees, or lighter layers are an insufficient_evidence question rather than a confirmed gap.",
+              "ownedItemIds": [
+                1,
+                4,
+                2,
+                5,
+                3,
+                6,
+                8
+              ],
+              "wardrobeItems": [
+                {
+                  "id": 1,
+                  "userId": 1,
+                  "name": "Cream Cotton Crewneck",
+                  "category": "top",
+                  "color": "cream",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 4,
+                  "userId": 1,
+                  "name": "Navy Oxford Shirt",
+                  "category": "top",
+                  "color": "navy",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 2,
+                  "userId": 1,
+                  "name": "Olive Straight Chinos",
+                  "category": "bottom",
+                  "color": "olive",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 5,
+                  "userId": 1,
+                  "name": "Dark Straight Jeans",
+                  "category": "bottom",
+                  "color": "indigo",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 3,
+                  "userId": 1,
+                  "name": "Platform Sneakers",
+                  "category": "shoes",
+                  "color": "cream",
+                  "material": "canvas",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 6,
+                  "userId": 1,
+                  "name": "Brown Leather Loafers",
+                  "category": "shoes",
+                  "color": "brown",
+                  "material": "leather",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 8,
+                  "userId": 1,
+                  "name": "Rain Shell",
+                  "category": "outerwear",
+                  "color": "navy",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ],
+                  "rainOk": true,
+                  "warmthRating": 2
+                }
+              ]
+            }
+          ]
+        },
+        "B": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "card",
+              "text": "Pack light, breathable pieces and leave the wool coats at home. For Miami, your best core is the cream cotton crewneck, olive straight chinos, and platform sneakers; the navy Oxford shirt can swap in when you want something a little sharper, and the rain shell is the only outer layer worth bringing if there\u2019s a chance of downpours. That gives you one easy daytime outfit and a clean backup without any heavy fabric.",
+              "payload": {
+                "mode": "trip",
+                "tripPlan": {
+                  "intro": "Pack light, breathable pieces and leave the wool coats at home. For Miami, your best core is the cream cotton crewneck, olive straight chinos, and platform sneakers; the navy Oxford shirt can swap in when you want something a little sharper, and the rain shell is the only outer layer worth bringing if there\u2019s a chance of downpours. That gives you one easy daytime outfit and a clean backup without any heavy fabric.",
+                  "outfits": [
+                    {
+                      "label": "Daytime base",
+                      "note": "Breathable, simple, and easy in heat.",
+                      "itemIds": [
+                        1,
+                        2,
+                        3
+                      ],
+                      "status": "ready",
+                      "foundationItemIds": [],
+                      "missingEssentials": []
+                    },
+                    {
+                      "label": "Sharper backup",
+                      "note": "A cleaner top option if you want a more polished look.",
+                      "itemIds": [
+                        4,
+                        5,
+                        3
+                      ],
+                      "status": "ready",
+                      "foundationItemIds": [],
+                      "missingEssentials": []
+                    },
+                    {
+                      "label": "Weather layer",
+                      "note": "Only for rain or over-air-conditioned spaces.",
+                      "itemIds": [
+                        8
+                      ],
+                      "status": "incomplete",
+                      "foundationItemIds": [
+                        8
+                      ],
+                      "missingEssentials": [
+                        {
+                          "priority": 1,
+                          "unlocks": [],
+                          "anchorItemIds": [
+                            8
+                          ],
+                          "label": "Shoes",
+                          "category": "shoes",
+                          "reason": "wardrobe_gap",
+                          "context": "to finish the look"
+                        }
+                      ]
+                    }
+                  ],
+                  "packingList": [
+                    "Lightweight tops in cotton or other breathable fabrics",
+                    "One or two bottoms that don\u2019t cling in humidity",
+                    "Your most comfortable shoes",
+                    "One rain layer instead of a wool coat"
+                  ]
+                }
+              },
+              "wardrobeItems": [
+                {
+                  "id": 1,
+                  "userId": 1,
+                  "name": "Cream Cotton Crewneck",
+                  "category": "top",
+                  "color": "cream",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 2,
+                  "userId": 1,
+                  "name": "Olive Straight Chinos",
+                  "category": "bottom",
+                  "color": "olive",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 3,
+                  "userId": 1,
+                  "name": "Platform Sneakers",
+                  "category": "shoes",
+                  "color": "cream",
+                  "material": "canvas",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 4,
+                  "userId": 1,
+                  "name": "Navy Oxford Shirt",
+                  "category": "top",
+                  "color": "navy",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 5,
+                  "userId": 1,
+                  "name": "Dark Straight Jeans",
+                  "category": "bottom",
+                  "color": "indigo",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 8,
+                  "userId": 1,
+                  "name": "Rain Shell",
+                  "category": "outerwear",
+                  "color": "navy",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ],
+                  "rainOk": true,
+                  "warmthRating": 2
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "review": {
+        "A": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        },
+        "B": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        }
+      },
+      "winner": null,
+      "ownershipViolations": [],
+      "regressions": [],
+      "notes": ""
+    },
+    {
+      "case": "buy-nothing",
+      "question": "Do I need another navy shirt? Be honest about whether it adds anything to my wardrobe.",
+      "preferences": null,
+      "answers": {
+        "A": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "text",
+              "text": "Probably not. You already have one navy shirt, and with only three tops total, another navy one would mostly duplicate what\u2019s already doing the job unless it\u2019s meaningfully different in fabric, formality, or collar.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "text",
+              "text": "Your current navy shirt gives you the color anchor; the cream crewneck and charcoal sweater already round out the palette, so a second navy shirt only earns its keep if it solves a specific use case \u2014 for example, a lighter-weight summer version, a more casual overshirt, or a sharper office shirt.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            }
+          ]
+        },
+        "B": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "text",
+              "text": "No \u2014 another navy shirt would be redundant in your wardrobe right now. You already have a navy Oxford shirt, and the rest of your closet is built around easy neutrals: cream, olive, indigo, brown, and navy outerwear. A second navy shirt would probably look too similar to what you already own unless it had a clearly different job, like a much dressier fabric, a looser silhouette, or a completely different texture.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "text",
+              "text": "What would add more value is a shirt that gives you a new lane: crisp white, light blue, or a softer stripe. Those would work harder with your cream crewneck, olive chinos, and dark jeans than a near-duplicate navy shirt would.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "text",
+              "text": "If you want, I can tell you the one shirt color that would most improve your current wardrobe balance.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            }
+          ]
+        }
+      },
+      "review": {
+        "A": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        },
+        "B": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        }
+      },
+      "winner": null,
+      "ownershipViolations": [],
+      "regressions": [],
+      "notes": ""
+    },
+    {
+      "case": "designer-advice",
+      "question": "How do I get a restrained architectural silhouette without buying designer clothes?",
+      "preferences": null,
+      "answers": {
+        "A": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "text",
+              "text": "Go for sharper lines, not louder clothes: a long straight layer over a clean column, with one structured shoe and very little visual interruption. The look should feel spare, weighty, and slightly elongated\u2014more geometry than styling trick.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "card",
+              "text": "Build the shape\n\nUse these moves to make ordinary clothes read more architectural.\n\nChoose a column: Start with one narrow base in a dark, muted, or tonal color so the eye reads one vertical shape instead of separate pieces.\n\nAdd length or boxiness, not both: Pick either a long straight coat/jacket or a cropped boxy layer. Keep the rest clean so the silhouette stays restrained.\n\nPrioritize fabric over detail: Look for matte, fluid, or dense fabrics with some body. Skip obvious distressing, shiny finishes, ruffles, or busy seams.\n\nKeep the waist calm: Use comfortable waistbands and straight or gently tapered bottoms; avoid anything that bunches or competes at the middle.\n\nUse monochrome or near-monochrome: Navy, charcoal, cream, black, stone, and ink read architectural fast, especially when the pieces are close in tone.\n\nChoose one precise shoe: A clean leather sneaker, slim loafer, or simple boot grounds the shape better than a bulky or heavily detailed shoe.\n\nReduce visual noise: Minimal contrast top-to-bottom, little hardware, and tidy necklines make the outfit feel intentional rather than assembled.",
+              "ownedItemIds": [],
+              "wardrobeItems": [],
+              "payload": {
+                "mode": "advice",
+                "checklist": {
+                  "title": "Build the shape",
+                  "intro": "Use these moves to make ordinary clothes read more architectural.",
+                  "entries": [
+                    {
+                      "label": "Choose a column",
+                      "detail": "Start with one narrow base in a dark, muted, or tonal color so the eye reads one vertical shape instead of separate pieces."
+                    },
+                    {
+                      "label": "Add length or boxiness, not both",
+                      "detail": "Pick either a long straight coat/jacket or a cropped boxy layer. Keep the rest clean so the silhouette stays restrained."
+                    },
+                    {
+                      "label": "Prioritize fabric over detail",
+                      "detail": "Look for matte, fluid, or dense fabrics with some body. Skip obvious distressing, shiny finishes, ruffles, or busy seams."
+                    },
+                    {
+                      "label": "Keep the waist calm",
+                      "detail": "Use comfortable waistbands and straight or gently tapered bottoms; avoid anything that bunches or competes at the middle."
+                    },
+                    {
+                      "label": "Use monochrome or near-monochrome",
+                      "detail": "Navy, charcoal, cream, black, stone, and ink read architectural fast, especially when the pieces are close in tone."
+                    },
+                    {
+                      "label": "Choose one precise shoe",
+                      "detail": "A clean leather sneaker, slim loafer, or simple boot grounds the shape better than a bulky or heavily detailed shoe."
+                    },
+                    {
+                      "label": "Reduce visual noise",
+                      "detail": "Minimal contrast top-to-bottom, little hardware, and tidy necklines make the outfit feel intentional rather than assembled."
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "B": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "text",
+              "text": "Go for a simple column: a close-but-not-tight top, a straight bottom, and one clean shoe in the same visual family. The architectural effect comes from long uninterrupted lines, low visual noise, and a slightly boxy or straight shape rather than anything ornate.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "card",
+              "text": "The cream top and olive straight chinos create a calm, solid block of color with clean vertical fall, and the cream sneakers keep the line light and modern. It reads structured because everything is regular-fitting, straight through the leg, and free of decoration.",
+              "payload": {
+                "mode": "from_closet",
+                "lookName": "Restrained architectural casual",
+                "itemIds": [
+                  1,
+                  2,
+                  3
+                ],
+                "readinessStatus": "ready",
+                "foundationItemIds": [],
+                "missingEssentials": []
+              },
+              "wardrobeItems": [
+                {
+                  "id": 1,
+                  "userId": 1,
+                  "name": "Cream Cotton Crewneck",
+                  "category": "top",
+                  "color": "cream",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 2,
+                  "userId": 1,
+                  "name": "Olive Straight Chinos",
+                  "category": "bottom",
+                  "color": "olive",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 3,
+                  "userId": 1,
+                  "name": "Platform Sneakers",
+                  "category": "shoes",
+                  "color": "cream",
+                  "material": "canvas",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "If you want it sharper, use the Navy Oxford Shirt with the Dark Straight Jeans and the Brown Leather Loafers; that gives you a slightly harder, more edited line without needing designer pieces.",
+              "ownedItemIds": [
+                4,
+                5,
+                6
+              ],
+              "wardrobeItems": [
+                {
+                  "id": 4,
+                  "userId": 1,
+                  "name": "Navy Oxford Shirt",
+                  "category": "top",
+                  "color": "navy",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 5,
+                  "userId": 1,
+                  "name": "Dark Straight Jeans",
+                  "category": "bottom",
+                  "color": "indigo",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 6,
+                  "userId": 1,
+                  "name": "Brown Leather Loafers",
+                  "category": "shoes",
+                  "color": "brown",
+                  "material": "leather",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "One practical rule: keep the top either neatly pressed or lightly tucked, and avoid bulky layers at the waist. That\u2019s the fastest way to make ordinary clothes look intentional and architectural.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            }
+          ]
+        }
+      },
+      "review": {
+        "A": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        },
+        "B": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        }
+      },
+      "winner": null,
+      "ownershipViolations": [],
+      "regressions": [],
+      "notes": ""
+    },
+    {
+      "case": "followup",
+      "question": "Make that a little dressier, keeping the sneakers.",
+      "preferences": null,
+      "answers": {
+        "A": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "card",
+              "text": "The navy Oxford shirt is the cleanest way to dress up the cream platform sneakers without fighting them. Pair it with the olive straight chinos for a calmer, more polished Thanksgiving feel; the cream sneakers then read intentional rather than sporty, especially if you keep the shirt neatly tucked or half-tucked.",
+              "payload": {
+                "mode": "from_closet",
+                "lookName": "Sharper Casual",
+                "itemIds": [
+                  4,
+                  2,
+                  3
+                ],
+                "readinessStatus": "ready",
+                "foundationItemIds": [],
+                "missingEssentials": []
+              },
+              "wardrobeItems": [
+                {
+                  "id": 4,
+                  "userId": 1,
+                  "name": "Navy Oxford Shirt",
+                  "category": "top",
+                  "color": "navy",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 2,
+                  "userId": 1,
+                  "name": "Olive Straight Chinos",
+                  "category": "bottom",
+                  "color": "olive",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 3,
+                  "userId": 1,
+                  "name": "Platform Sneakers",
+                  "category": "shoes",
+                  "color": "cream",
+                  "material": "canvas",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "If you want it one step more polished, add a simple belt and keep the shirt crisp. I would skip the wool sweater here because you asked for no wool.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "card",
+              "text": "Finish It Cleanly\n\nSmall adjustments that will make the outfit feel dressier without losing comfort.\n\nShirt: Wear the navy Oxford smooth and neat; tuck it fully for the dressiest read, or do a very tidy half-tuck.\n\nBottom: Choose the olive chinos over jeans for a more family-lunch appropriate finish.\n\nSneakers: Keep the cream platform sneakers clean and minimal so they read more like a deliberate casual shoe than a sporty one.\n\nOptional layer: If you need one, use the navy rain shell only for weather, not as a style layer.",
+              "ownedItemIds": [],
+              "wardrobeItems": [],
+              "payload": {
+                "mode": "advice",
+                "checklist": {
+                  "title": "Finish It Cleanly",
+                  "intro": "Small adjustments that will make the outfit feel dressier without losing comfort.",
+                  "entries": [
+                    {
+                      "label": "Shirt",
+                      "detail": "Wear the navy Oxford smooth and neat; tuck it fully for the dressiest read, or do a very tidy half-tuck."
+                    },
+                    {
+                      "label": "Bottom",
+                      "detail": "Choose the olive chinos over jeans for a more family-lunch appropriate finish."
+                    },
+                    {
+                      "label": "Sneakers",
+                      "detail": "Keep the cream platform sneakers clean and minimal so they read more like a deliberate casual shoe than a sporty one."
+                    },
+                    {
+                      "label": "Optional layer",
+                      "detail": "If you need one, use the navy rain shell only for weather, not as a style layer."
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "B": {
+          "status": "complete",
+          "blocks": [
+            {
+              "type": "text",
+              "text": "Use the navy oxford shirt with the olive straight chinos and keep the platform sneakers. The shirt makes it sharper, and the chinos keep it family-lunch appropriate without fighting the casual sneaker silhouette.",
+              "ownedItemIds": [],
+              "wardrobeItems": []
+            },
+            {
+              "type": "card",
+              "text": "The oxford shirt adds structure at the collar, while the olive chinos read cleaner than denim and balance the cream sneakers well. This keeps the look neat but still comfortable for a long family lunch.",
+              "payload": {
+                "mode": "from_closet",
+                "lookName": "Dressier Thanksgiving lunch with sneakers",
+                "itemIds": [
+                  4,
+                  2,
+                  3
+                ],
+                "readinessStatus": "ready",
+                "foundationItemIds": [],
+                "missingEssentials": []
+              },
+              "wardrobeItems": [
+                {
+                  "id": 4,
+                  "userId": 1,
+                  "name": "Navy Oxford Shirt",
+                  "category": "top",
+                  "color": "navy",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 2,
+                  "userId": 1,
+                  "name": "Olive Straight Chinos",
+                  "category": "bottom",
+                  "color": "olive",
+                  "material": "cotton",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                },
+                {
+                  "id": 3,
+                  "userId": 1,
+                  "name": "Platform Sneakers",
+                  "category": "shoes",
+                  "color": "cream",
+                  "material": "canvas",
+                  "fit": "regular",
+                  "availability": "available",
+                  "condition": "good",
+                  "formality": 4,
+                  "seasons": [
+                    "fall"
+                  ],
+                  "occasions": [
+                    "casual"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "review": {
+        "A": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        },
+        "B": {
+          "personalization": null,
+          "judgment": null,
+          "grounding": null,
+          "completion": null,
+          "voice": null,
+          "clarification": null,
+          "restraint": null
+        }
+      },
+      "winner": null,
+      "ownershipViolations": [],
+      "regressions": [],
+      "notes": ""
+    }
+  ]
+}

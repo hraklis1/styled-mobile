@@ -84,3 +84,25 @@ node --import tsx scripts/eval-stylist-conversation.ts --score --out /private/tm
 The score requires all 60 reviews, zero candidate ownership violations or invalid complete looks, no candidate core-outfit regression, at least 60% candidate wins among non-ties, average known cost no higher than 1.5× baseline, and p95 latency no higher than 1.5× baseline. Unknown usage/cost and failed candidate interactions block a pass. Reconcile any unallocated shared provider-cache storage separately before making rollout decisions. Repeat captures on representative traffic; a small fixed suite alone cannot establish production cost or usefulness.
 
 The paid comparison and blind human review have **not** been run as part of this implementation. No quality improvement or production savings are claimed.
+
+## Conversation quality follow-up (October 10, 2026)
+
+The backend now defaults v2 on for capable clients; the earlier rollout-off description above records the original implementation. Rollout overrides still apply.
+
+Version `conversation-v2.3` removes the keyword-based product-tool gate: the shared prompt asks the model to infer whether new recommendations or product search serve the conversation, respect closet-only requests, and distinguish general model advice from verified listings. Product cards still require retrieved offer IDs. No classifier or extra planning call was added.
+
+Prose validation no longer uses the fuzzy wardrobe retrieval matcher, which could associate generic garment descriptions with unrelated owned pieces. Exact named references still require inspection. Invalid shopping cards preserve valid general advice. Failed repairs log validation reasons and distinguish shopping, outfit, and malformed-response limitations. Outfit completeness claims accompanying failed looks remain withheld. Live diagnostics also identified the legacy inferred smart-casual per-item floor as the dinner failure: v2 now allows model judgment for inferred smart-casual combinations and subjective pattern/texture composition. Explicit event dress codes and formal occasion rules, structural completeness, availability, ownership, dealbreakers, and weather checks remain enforced. Legacy callers retain their original validators.
+
+Optional model-written follow-ups replace static mode-based suggestions for v2, including no suggestions when none are useful. Conversation prose uses body typography; referenced wardrobe thumbnails have labels and more space. Single-offer v2 products use compact image/name/merchant/price rows, retaining wishlist saving and purchase links. Existing composer/dictation edits were preserved.
+
+Regression coverage includes product search without buy keywords, generic garment descriptions, invalid shopping cards, failure messaging, and optional follow-ups. The fixed 60-scenario review manifest now includes the reported shoe requests. Automated checks do not establish live model quality; a paid blind evaluation remains outstanding. Live simulator checks confirmed shopping returns verified listings and compact rows; the dinner replay exposed premature shoe-only foundations, so prompt guidance now explicitly asks for missing-category retrieval and one footwear choice. Mixed owned/purchase outfit saving and the broader product-versus-retailer redesign are not part of this patch.
+
+### Approved initial wardrobe sample
+
+Version `conversation-v2.4` adds up to twelve available, non-archived, owned pieces alongside explicitly referenced items. The user explicitly approved this additional model context. The sample takes at most two additional pieces per category, makes one pass across categories before adding second pieces, and shares the existing sixty-item inspection ceiling. Referenced pieces take priority. The prompt labels the sample nonexhaustive and allows the model to retrieve other pieces; it does not prescribe an outfit or response pathway. Tests cover cross-category evidence, the twelve-item bound, ownership/availability filtering, deduplication, and the shared inspection ceiling.
+
+The approved sample passed 51 backend regression tests and the backend type check. A live replay in the existing conversation used a wardrobe suit jacket alongside the running shoe, but still returned a foundation instead of a complete outfit. The added context is not a claim that the dinner flow's live quality is resolved.
+
+### Editorial v3 candidate (October 11, 2026)
+
+The opt-in editorial successor is documented in [ai-stylist-v3.md](ai-stylist-v3.md). V2 remains the default. The evaluation manifest now has 72 cases and compares v2 against v3; a full capture makes 144 paid fixture requests. Candidate rollout requires the expanded editorial/task-completion rubric as well as the existing grounding, cost and latency gates. No paid comparison or production rollout has been performed.

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Image } from 'expo-image';
 import { useStylistCardState } from '../stylist/StylistCardState';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, curatedProducts, spacing, typography } from '../../theme';
@@ -7,9 +8,11 @@ import { useProductOffers } from '../../hooks/useProductOffers';
 import { CuratedItemRail } from '../shopping/CuratedItemRail';
 import { openShoppingLink } from '../shopping/ShoppingRetailerLinks';
 
-type Props = { outfit: ShopOutfit; onRemove?: () => void; onSave?: () => Promise<void>; onSaved?: () => void; onViewSaved?: () => void; onSaveToBoard?: () => void; saveLabel?: string; wishlistId?: string };
-export function ShopOutfitCard({ outfit, onRemove, onSave, onSaved, onViewSaved, onSaveToBoard, saveLabel, wishlistId }: Props) {
+type Props = { compact?: boolean; outfit: ShopOutfit; onRemove?: () => void; onSave?: () => Promise<void>; onSaved?: () => void; onViewSaved?: () => void; onSaveToBoard?: () => void; saveLabel?: string; wishlistId?: string };
+export function ShopOutfitCard({ compact = false, outfit, onRemove, onSave, onSaved, onViewSaved, onSaveToBoard, saveLabel, wishlistId }: Props) {
   const [saved, setSaved] = useStylistCardState('shopping-saved', false);
+  const [showAll, setShowAll] = useState(false);
+  const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
   const query = useProductOffers({ reference: outfit.commerceReference, conversationId: outfit.commerceConversationId, wishlistId, surface: 'stylist' });
@@ -19,11 +22,27 @@ export function ShopOutfitCard({ outfit, onRemove, onSave, onSaved, onViewSaved,
     try { await onSave(); setSaved(true); onSaved?.(); } catch { setSaveError(true); } finally { setSaving(false); }
   }
   return <View style={styles.root}>
-    <Text style={styles.intro}>{outfit.intro}</Text>
-    {outfit.items.map((item, index) => {
+    {!!outfit.intro && <Text style={styles.intro}>{outfit.intro}</Text>}
+    {(compact && !showAll ? outfit.items.slice(0, 3) : outfit.items).map((item, index) => {
       const key = item.key ?? `stylist-${index}`;
       const state = query.data?.[key] ?? item.offerState;
       const hasReference = !!(outfit.commerceReference || wishlistId);
+      const offers = state?.offers ?? item.offers ?? [];
+      const offer = offers[0];
+      if (compact && offer && offers.length === 1) return (
+        <View key={key}>
+        <Pressable key={key} style={styles.compactProduct} onPress={() => void openShoppingLink(offer.url)} accessibilityRole="link" accessibilityLabel={`${item.name}, ${offer.merchant}, ${offer.formattedPrice}. View product`}>
+          {offer.imageUrl ? <Image source={{ uri: offer.imageUrl }} contentFit="contain" style={styles.compactImage} /> : <View style={styles.compactImage} />}
+          <View style={styles.compactDetails}>
+            <Text style={styles.compactTitle} numberOfLines={2}>{item.name}</Text>
+            <Text style={styles.copy}>{offer.merchant}</Text>
+            <Text style={styles.compactPrice}>{offer.formattedPrice}</Text>
+            {!!item.whyItFitsYou && <Text style={styles.copy} numberOfLines={expandedProduct === key ? undefined : 2}>{item.whyItFitsYou}</Text>}
+          </View>
+        </Pressable>
+        {!!item.whyItFitsYou && <Pressable accessibilityRole="button" accessibilityState={{ expanded: expandedProduct === key }} accessibilityLabel={`Why ${item.name} suits you`} onPress={() => setExpandedProduct(expandedProduct === key ? null : key)} style={styles.detailAction}><Text style={styles.link}>{expandedProduct === key ? 'Less detail' : 'Why this pick'}</Text></Pressable>}
+        </View>
+      );
       return <View key={key} style={styles.direction}>
         <Text style={styles.title}>{item.name}</Text>
         {!!item.whyItFitsYou && <Text style={styles.copy}>{item.whyItFitsYou}</Text>}
@@ -31,6 +50,7 @@ export function ShopOutfitCard({ outfit, onRemove, onSave, onSaved, onViewSaved,
         {hasReference || item.offers?.length ? <CuratedItemRail browserTitle={item.name} reason={item.whyItFitsYou} offers={state?.offers ?? item.offers ?? []} status={query.isError || query.fetchStatus === 'paused' ? 'unavailable' : state?.status ?? 'pending'} context={{ reference: outfit.commerceReference, conversationId: outfit.commerceConversationId, wishlistId, targetKey: key, surface: 'stylist' }} onRetry={() => void query.refetch()} /> : <Pressable onPress={() => void openShoppingLink(item.retailerUrl || `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(`${item.brand} ${item.name}`)}`)} accessibilityRole="link" accessibilityLabel={item.retailerUrl ? `View product: ${item.name}` : `Find similar to ${item.name} on Google Shopping`} style={styles.action}><Text style={styles.link}>{item.retailerUrl ? 'View product ↗' : 'Find similar ↗'}</Text></Pressable>}
       </View>;
     })}
+    {compact && outfit.items.length > 3 && <Pressable accessibilityRole="button" accessibilityState={{ expanded: showAll }} onPress={() => setShowAll(!showAll)} style={styles.action}><Text style={styles.link}>{showAll ? 'Show fewer' : `Show ${outfit.items.length - 3} more options`}</Text></Pressable>}
     {!!outfit.totalBudget && <Text style={styles.copy}>Suggested total budget {outfit.totalBudget}</Text>}
     {onSave ? <Pressable onPress={() => void save()} disabled={saved || saving} accessibilityRole="button" accessibilityState={{ disabled: saved || saving, busy: saving }} style={styles.action}><Text style={styles.link}>{saved ? (outfit.recommendationType === 'piece' ? 'Added to wishlist' : 'List saved') : saving ? 'Saving…' : saveLabel ?? (outfit.recommendationType === 'piece' ? 'Add to wishlist' : 'Save list')}</Text></Pressable> : null}
     {saved && (onViewSaved || onSaveToBoard) ? <View style={styles.savedActions}>
@@ -42,6 +62,12 @@ export function ShopOutfitCard({ outfit, onRemove, onSave, onSaved, onViewSaved,
   </View>;
 }
 const styles = StyleSheet.create({
+  detailAction: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start', marginLeft: 104 },
+  compactProduct: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
+  compactImage: { width: 88, height: 88, borderRadius: 12, backgroundColor: colors.surfaceSubtle },
+  compactDetails: { flex: 1, gap: spacing.xs },
+  compactTitle: { ...typography.text.label, color: colors.foreground },
+  compactPrice: { ...typography.text.label, color: colors.foreground },
   root: { gap: spacing.lg }, intro: { ...typography.text.body, color: colors.inkSubtle },
   direction: { gap: spacing.md, paddingVertical: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline },
   title: { ...typography.text.editorialCompact, color: colors.foreground }, copy: { ...typography.text.bodySmall, color: colors.mutedForeground },

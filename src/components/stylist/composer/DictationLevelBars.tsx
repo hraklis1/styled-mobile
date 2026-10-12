@@ -5,6 +5,7 @@ import Animated, {
   interpolate,
   useAnimatedStyle,
   useSharedValue,
+  useReducedMotion,
   withRepeat,
   withTiming,
   type SharedValue,
@@ -21,17 +22,19 @@ type Props = {
 
 function Bar({ level, maxHeight, phaseDelay }: { level: SharedValue<number>; maxHeight: number; phaseDelay: number }) {
   // Slow breathing offset so the bars stay alive during silence.
+  const reducedMotion = useReducedMotion();
   const breathe = useSharedValue(0);
 
   useEffect(() => {
+    if (reducedMotion) return;
     breathe.value = withRepeat(withTiming(1, { duration: 900 + phaseDelay }), -1, true);
     return () => cancelAnimation(breathe);
-  }, [breathe, phaseDelay]);
+  }, [breathe, phaseDelay, reducedMotion]);
 
   const animatedStyle = useAnimatedStyle(() => {
     const idle = interpolate(breathe.value, [0, 1], [0, 0.14]);
     const height = BAR_MIN_HEIGHT + (maxHeight - BAR_MIN_HEIGHT) * Math.min(1, level.value + idle);
-    return { height };
+    return { height: reducedMotion ? maxHeight * 0.6 : height };
   });
 
   return <Animated.View style={[styles.bar, animatedStyle]} />;

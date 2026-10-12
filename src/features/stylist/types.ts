@@ -1,3 +1,4 @@
+import type { Item } from '../../types/item';
 import type { ShopOutfit } from '../../types/shop';
 import type { ShoppingBriefPriority } from '../../lib/shopDecisionWorkspace';
 import type { ShoppingPriorityTarget } from '../../lib/shoppingPriorityEdit';
@@ -148,7 +149,13 @@ export type StylistUserMessage = StylistBaseMessage & {
 };
 
 export type StylistAssistantMessage = StylistBaseMessage & {
-  responseVersion?: 2;
+  deliveryStatus?: 'complete' | 'partial' | 'failed';
+  failureCode?: 'malformed_output' | 'truncated_output' | 'evidence_unavailable' | 'provider_failure' | 'budget_exhausted' | 'validation_failed';
+  checklist?: { title: string; intro: string; entries: Array<{ label: string; detail: string }> };
+  responseVersion?: 2 | 3;
+  turnId?: string;
+  insight?: { label: string; explanation: string; supportingItemIds: number[] };
+  tagSuggestions?: { tags: string[]; rationale: string };
   blocks?: StylistResponseBlock[];
   role: 'assistant';
   kind: 'assistant';
@@ -255,12 +262,13 @@ export type StylistSwapContext = {
 };
 
 export type StylistAskRequest = {
-  capabilities?: ['stylist_blocks_v2'];
+  capabilities?: Array<'stylist_blocks_v2' | 'stylist_blocks_v3'>;
   text?: string;
   history?: StylistHistoryMessage[];
   mode?: StylistMode;
   continuationMode?: StylistMode;
   continuationItemIds?: number[];
+  anchorItemId?: number;
   workflow?: StylistWorkflow;
   userTimeZone?: string;
   userUtcOffsetMinutes?: number;
@@ -284,7 +292,13 @@ export type StylistAskRequest = {
 };
 
 export type StylistAskDoneEvent = {
-  responseVersion?: 2;
+  deliveryStatus?: 'complete' | 'partial' | 'failed';
+  failureCode?: 'malformed_output' | 'truncated_output' | 'evidence_unavailable' | 'provider_failure' | 'budget_exhausted' | 'validation_failed';
+  checklist?: { title: string; intro: string; entries: Array<{ label: string; detail: string }> };
+  responseVersion?: 2 | 3;
+  turnId?: string;
+  insight?: { label: string; explanation: string; supportingItemIds: number[] };
+  tagSuggestions?: { tags: string[]; rationale: string };
   blocks?: StylistResponseBlock[];
   transcript: string;
   responseText: string;
@@ -404,5 +418,11 @@ export type StylistTransportCallbacks = {
 
 /** Ordered v2 presentation; card payloads reuse the existing response actions. */
 export type StylistResponseBlock =
-  | { type: 'text'; text: string }
-  | { type: 'card'; text: string; payload: Omit<StylistAskDoneEvent, 'transcript' | 'responseText' | 'responseVersion' | 'blocks'> };
+  | ({ type: 'text'; text: string; ownedItemIds?: number[] } & StylistBlockIdentity)
+  | ({ type: 'card'; text: string; payload: Omit<StylistAskDoneEvent, 'transcript' | 'responseText' | 'responseVersion' | 'blocks'> } & StylistBlockIdentity);
+
+export type StylistEditorialUnit = {
+  version: 1; kind: 'prose' | 'look' | 'products' | 'comparison' | 'checklist';
+  origin: 'owned' | 'shopping' | 'conceptual'; actions: Array<{ label: string; prompt: string }>;
+};
+export type StylistBlockIdentity = { editorial?: StylistEditorialUnit; turnId?: string; blockId?: string; sequence?: number; wardrobeItems?: Item[] };

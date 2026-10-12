@@ -93,6 +93,7 @@ export function StylistLookResponseCard({
         notes: gaps.length ? `Foundation needs: ${gaps.map((gap) => gap.label).join(', ')}` : null,
         tags: ['stylist-foundation'],
         isDraft: status === 'incomplete',
+        stylistReady: status === 'ready',
         itemIds: items.map((item) => ({ id: item.id, category: item.category ?? 'other' })),
       });
       setSavedOutfitId(outfit.id);

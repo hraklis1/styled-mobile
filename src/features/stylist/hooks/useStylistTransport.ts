@@ -15,6 +15,7 @@ const STYLIST_ERROR_MESSAGE = 'Could not reach the stylist. Please try again.';
 const TOKEN_FLUSH_MS = 32;
 
 function errorMessageFromUnknown(error: unknown): string {
+  if (error instanceof TypeError && /network|fetch|connection/i.test(error.message)) return 'Connection interrupted. Check your connection and try again.';
   if (error instanceof Error && error.message) return error.message;
   if (typeof error === 'object' && error && 'message' in error) {
     const message = (error as { message?: unknown }).message;
@@ -86,6 +87,8 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
     let flushTimer: ReturnType<typeof setTimeout> | null = null;
     let assistantStarted = false;
     let receivedDone = false;
+    const seenBlocks = new Set<string>();
+    let streamTurnId: string | undefined;
 
     const isCurrentRequest = () => requestIdRef.current === requestId;
 
@@ -121,6 +124,9 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
 
     const handleDone = (event: StylistAskDoneEvent) => {
       if (receivedDone) return;
+      if (event.responseVersion === 3) {
+        if (typeof event.turnId !== 'string' || (streamTurnId && streamTurnId !== event.turnId) || !Array.isArray(event.blocks) || !event.blocks.length || event.blocks.length > 16 || !event.blocks.every((block, index) => isResponseBlock(block) && block.turnId === event.turnId && block.sequence === index && block.blockId === `${event.turnId}:${index}`)) throw new Error('Invalid stylist response. Please retry.');
+      }
       receivedDone = true;
       clearFlushTimer();
       flushPending();
@@ -154,7 +160,15 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
 
       if (currentEventRef.current === 'done') {
         handleDone(parsed as StylistAskDoneEvent);
-      } else if (currentEventRef.current === 'block' && parsed.responseVersion === 2 && Number.isInteger(parsed.index) && Number(parsed.index) >= 0 && Number(parsed.index) < 16 && isResponseBlock(parsed.block)) {
+      } else if (currentEventRef.current === 'block' && (parsed.responseVersion === 2 || parsed.responseVersion === 3) && !receivedDone && Number.isInteger(parsed.index) && Number(parsed.index) >= 0 && Number(parsed.index) < 16 && isResponseBlock(parsed.block)) {
+        const blockKey = parsed.responseVersion === 3 ? parsed.blockId : String(parsed.index);
+        if (parsed.responseVersion === 3) {
+          if (typeof parsed.turnId !== 'string' || typeof blockKey !== 'string' || blockKey !== `${parsed.turnId}:${parsed.index}` || parsed.sequence !== parsed.index || parsed.block.turnId !== parsed.turnId || parsed.block.blockId !== blockKey || parsed.block.sequence !== parsed.index) throw new Error('Invalid stylist response identity. Please retry.');
+          if (streamTurnId && streamTurnId !== parsed.turnId) throw new Error('Stylist response changed unexpectedly. Please retry.');
+          streamTurnId = parsed.turnId;
+        }
+        if (typeof blockKey !== 'string' || seenBlocks.has(blockKey)) return;
+        seenBlocks.add(blockKey);
         if (!assistantStarted) {
           assistantStarted = true;
           callbacksRef.current.onAssistantStart?.(input.assistantMessageId);
@@ -180,7 +194,7 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ ...input.request, capabilities: ['stylist_blocks_v2'], _stream: true }),
+        body: JSON.stringify({ ...input.request, capabilities: ['stylist_blocks_v2', 'stylist_blocks_v3', 'stylist_client_v4'], _stream: true }),
         signal: controller.signal,
       });
 

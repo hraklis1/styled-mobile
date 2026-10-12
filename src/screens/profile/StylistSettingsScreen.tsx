@@ -1,6 +1,9 @@
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { ProfileStackParamList } from './types';
 import React, { useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
-import { SettingsScaffold, Group, GroupBlock, SegmentRow, ToggleRow } from '../../components/profile/SettingsUI';
+import { SettingsScaffold, Group, GroupBlock, NavRow, SegmentRow, ToggleRow } from '../../components/profile/SettingsUI';
 import { LocationAutocompleteInput } from '../../components/primitives/LocationAutocompleteInput';
 import { styles as fieldStyles } from '../../components/profile/fields';
 import { useAppPreferences } from '../../hooks/useAppPreferences';
@@ -38,6 +41,7 @@ const RANGE_DETAIL: Record<StylistAdventurousness, string> = {
  * currency change what Today's Look, the stylist and shopping show.
  */
 export function StylistSettingsScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<ProfileStackParamList>>();
   const { prefs, setPrefs } = useAppPreferences();
   const { data: profile } = useProfile();
   const update = useUpdateProfile();
@@ -71,6 +75,7 @@ export function StylistSettingsScreen() {
           onChange={(value) => setPrefs({ shoppingLinksInAnswers: value })} />
       </Group>
 
+      <Group><NavRow label="What your stylist knows" detail="Review, correct or forget your stylist’s impressions" onPress={() => navigation.navigate('SettingsLearned')} /></Group>
       <Group title="Home" footer="Used when location is off, for local weather and for nearby stores.">
         <GroupBlock>
           <LocationAutocompleteInput
