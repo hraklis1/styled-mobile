@@ -4,7 +4,7 @@ import { StylistInsight, StylistTagSuggestions } from "./StylistEditorialEntitie
 import { appendStylistAttachment } from '../../features/stylist/attachments';
 import { useStylistPhotoAttachment } from './composer/useStylistPhotoAttachment';
 import { confirmSheet } from '../primitives/ConfirmSheet';
-import { Fragment, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode, MutableRefObject } from 'react';
 import { StylistCardStateContext, useStylistCardState, type StylistCardState } from './StylistCardState';
 import {
@@ -80,6 +80,10 @@ import { BoardPickerModal } from '../boards/BoardPickerModal';
 import type { BoardEntryRef } from '../../hooks/useBoards';
 import { ResolvedOutfitCollage } from '../outfits/ResolvedOutfitCollage';
 import { StylistRichText } from './StylistRichText';
+import { OpenItemContext } from './stylistItemContext';
+import { OCCASION_LABELS, normalizeOccasion } from '../../lib/attributes';
+import { StylistRanking } from './response/StylistRanking';
+import { StylistSuggestionTiles } from './response/StylistSuggestionTiles';
 import { GapCard } from './GapCard';
 import { CritiqueCard } from './CritiqueCard';
 import { StylingMovesStrip } from './StylingMovesStrip';
@@ -493,7 +497,6 @@ type Props = {
 
 // Lets every ItemDetailSheet in the thread reach the full item screen without
 // threading a callback through each card.
-const OpenItemContext = createContext<((itemId: number) => void) | undefined>(undefined);
 
 export function StylistChatView({
   sessionRef,
@@ -1825,6 +1828,8 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
   }
 
   if (!isUser && message.checklist) return <StylistChecklist checklist={message.checklist} />;
+  if (!isUser && message.ranking) return <StylistRanking ranking={message.ranking} allItems={allItems} />;
+  if (!isUser && message.suggestions) return <StylistSuggestionTiles suggestions={message.suggestions} />;
 
   if (!isUser && message.insight) return <StylistInsight insight={message.insight} />;
   if (!isUser && message.tagSuggestions) return <StylistTagSuggestions suggestion={message.tagSuggestions} />;
@@ -1900,7 +1905,12 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
           {(message.responseVersion !== 2 && message.responseVersion !== 3) ? <View style={styles.sectionEyebrow}>
             <Text style={styles.sectionEyebrowText}>{message.boardAction === 'theme' ? 'Board direction' : message.boardAction === 'complete' ? 'Board edit' : message.mode === 'knowledge' ? 'Good to know' : 'My take'}</Text>
           </View> : null}
-          <StylistRichText text={message.text} streaming={message.isStreaming} />
+          <StylistRichText
+            text={message.text}
+            segments={message.isStreaming ? undefined : message.textSegments}
+            streaming={message.isStreaming}
+            onMentionPress={itemId => { const item = allItems.find(candidate => candidate.id === itemId); if (item) setDetailItem(item); }}
+          />
           {message.critique ? (
             <CritiqueCard critique={message.critique} allItems={allItems} onItemPress={setDetailItem} />
           ) : null}
@@ -2752,6 +2762,12 @@ type ItemDetailSheetProps = {
   onClose: () => void;
 };
 
+/** Stored occasions are slugs ("smart_casual"); show the shared display label. */
+function occasionLabel(raw: string): string {
+  const occasion = normalizeOccasion(raw);
+  return occasion ? OCCASION_LABELS[occasion] : raw.replace(/_/g, ' ');
+}
+
 function ItemDetailSheet({ item, onClose }: ItemDetailSheetProps) {
   const insets = useSafeAreaInsets();
   const openItem = useContext(OpenItemContext);
@@ -2764,7 +2780,7 @@ function ItemDetailSheet({ item, onClose }: ItemDetailSheetProps) {
         item.brand    && { label: 'Brand',    value: item.brand },
         item.color    && { label: 'Color',    value: item.color },
         item.style    && { label: 'Style',    value: item.style },
-        item.occasions?.[0] && { label: 'Occasion', value: item.occasions[0] },
+        item.occasions?.[0] && { label: 'Occasion', value: occasionLabel(item.occasions[0]) },
       ].filter(Boolean) as { label: string; value: string }[])
     : [];
 

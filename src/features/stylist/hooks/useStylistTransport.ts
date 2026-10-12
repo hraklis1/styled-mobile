@@ -194,7 +194,7 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ ...input.request, capabilities: ['stylist_blocks_v2', 'stylist_blocks_v3', 'stylist_client_v4'], _stream: true }),
+        body: JSON.stringify({ ...input.request, capabilities: ['stylist_blocks_v2', 'stylist_blocks_v3', 'stylist_client_v4', 'stylist_blocks_v5'], _stream: true }),
         signal: controller.signal,
       });
 

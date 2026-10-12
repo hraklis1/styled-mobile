@@ -33,7 +33,7 @@ test('negotiates v2/v3 and delivers split SSE blocks in order before done', asyn
   ]));
   await act(async () => { await transport.sendMessage({ assistantMessageId: 'a', request: { text: 'hello' } }); });
   expect(events).toEqual(['start', 'block:0', 'block:1', 'done']);
-  expect(JSON.parse((fetch as jest.Mock).mock.calls[0][1].body).capabilities).toEqual(['stylist_blocks_v2', 'stylist_blocks_v3', 'stylist_client_v4']);
+  expect(JSON.parse((fetch as jest.Mock).mock.calls[0][1].body).capabilities).toEqual(['stylist_blocks_v2', 'stylist_blocks_v3', 'stylist_client_v4', 'stylist_blocks_v5']);
   expect(callbacks.onError).not.toHaveBeenCalled();
   await act(async () => renderer.unmount());
 });

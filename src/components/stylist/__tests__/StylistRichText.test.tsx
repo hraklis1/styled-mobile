@@ -45,4 +45,24 @@ describe('Stylist prose hierarchy', () => {
     expect(blocks('')).toHaveLength(0);
     expect(blocks('', true).map(content)).toEqual(['▍']);
   });
+
+  it('renders numbered steps, section labels and italics', () => {
+    const result = blocks('Lead.\n### The edit\n1. Roll the sleeves\n2) Add a *quiet* belt');
+    expect(content(result[1])).toBe('The edit');
+    expect((result[1].props as { accessibilityRole?: string }).accessibilityRole).toBe('header');
+    expect(content(result[2])).toBe('1Roll the sleeves');
+    const step = children(result[3].props.children)[1];
+    const italic = children(step.props.children).find(node => content(node) === 'quiet')!;
+    expect(StyleSheet.flatten(italic.props.style)).toEqual({ fontStyle: 'italic' });
+  });
+
+  it('keeps owned mentions inline with the server spacing rule', () => {
+    const tree = StylistRichText({ text: 'Start with Olive jacket today.', segments: [{ text: 'Start with' }, { itemId: 7, name: 'Olive jacket' }, { text: 'today.' }] });
+    const [paragraph] = children(tree.props.children);
+    const parts = children(paragraph.props.children);
+    const mention = parts.find(node => (node.props as { mention?: { itemId: number } }).mention)!;
+    expect((mention.props as unknown as { mention: { itemId: number } }).mention.itemId).toBe(7);
+    expect(parts.map(node => (node.props as { mention?: { name: string } }).mention?.name ?? content(node)).join('')).toBe('Start with Olive jacket today.');
+  });
 });
+

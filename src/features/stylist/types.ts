@@ -150,9 +150,13 @@ export type StylistUserMessage = StylistBaseMessage & {
 };
 
 export type StylistAssistantMessage = StylistBaseMessage & {
+  /** Prose with owned mentions as identities (client v4 text blocks). */
+  textSegments?: StylistTextSegment[];
   deliveryStatus?: 'complete' | 'partial' | 'failed';
   failureCode?: 'malformed_output' | 'truncated_output' | 'evidence_unavailable' | 'provider_failure' | 'budget_exhausted' | 'validation_failed';
   checklist?: { title: string; intro: string; entries: Array<{ label: string; detail: string }> };
+  ranking?: StylistRanking;
+  suggestions?: StylistSuggestions;
   responseVersion?: 2 | 3;
   turnId?: string;
   insight?: { label: string; explanation: string; supportingItemIds: number[] };
@@ -296,6 +300,8 @@ export type StylistAskDoneEvent = {
   deliveryStatus?: 'complete' | 'partial' | 'failed';
   failureCode?: 'malformed_output' | 'truncated_output' | 'evidence_unavailable' | 'provider_failure' | 'budget_exhausted' | 'validation_failed';
   checklist?: { title: string; intro: string; entries: Array<{ label: string; detail: string }> };
+  ranking?: StylistRanking;
+  suggestions?: StylistSuggestions;
   responseVersion?: 2 | 3;
   turnId?: string;
   insight?: { label: string; explanation: string; supportingItemIds: number[] };
@@ -419,11 +425,23 @@ export type StylistTransportCallbacks = {
 
 /** Ordered v2 presentation; card payloads reuse the existing response actions. */
 export type StylistResponseBlock =
-  | ({ type: 'text'; text: string; ownedItemIds?: number[] } & StylistBlockIdentity)
+  | ({ type: 'text'; text: string; ownedItemIds?: number[]; segments?: StylistTextSegment[] } & StylistBlockIdentity)
   | ({ type: 'card'; text: string; payload: Omit<StylistAskDoneEvent, 'transcript' | 'responseText' | 'responseVersion' | 'blocks'> } & StylistBlockIdentity);
 
 export type StylistEditorialUnit = {
-  version: 1; kind: 'prose' | 'look' | 'products' | 'comparison' | 'checklist';
+  version: 1; kind: 'prose' | 'look' | 'products' | 'comparison' | 'checklist' | 'plan' | 'audit' | 'suggestion';
   origin: 'owned' | 'shopping' | 'conceptual'; actions: Array<{ label: string; prompt: string }>;
 };
 export type StylistBlockIdentity = { editorial?: StylistEditorialUnit; turnId?: string; blockId?: string; sequence?: number; wardrobeItems?: Item[] };
+
+/** Prose with owned mentions kept as identities, so names can open the piece. */
+export type StylistTextSegment = { text: string } | { itemId: number; name: string };
+export type StylistRanking = {
+  title: string; criterion: string; intro: string;
+  entries: Array<{ itemId: number | null; label: string; verdict: string; pros: string[]; cons: string[] }>;
+  pick: number | null;
+};
+export type StylistSuggestions = {
+  title: string;
+  items: Array<{ category: 'top' | 'bottom' | 'full_body' | 'shoes' | 'outerwear' | 'accessory'; color: string | null; label: string; why: string }>;
+};
