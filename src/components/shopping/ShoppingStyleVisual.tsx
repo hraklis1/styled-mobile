@@ -40,15 +40,15 @@ function silhouette(category: string) {
  */
 export function ShoppingStyleVisual({ target, plain = false, fill = false }: { target: ShoppingPriorityTarget; plain?: boolean; fill?: boolean }) {
   const uri = target.offers?.find((offer) => offer.imageUrl)?.imageUrl ?? target.imageUrl;
-  const [failed, setFailed] = useState(false);
+  const [failedUri, setFailedUri] = useState<string>();
+  const [loadedUri, setLoadedUri] = useState<string>();
+  const failed = !!uri && failedUri === uri;
+  const loaded = !!uri && loadedUri === uri;
   const reduceMotion = useReducedMotion();
-  useEffect(() => setFailed(false), [uri]);
   const path = silhouette(target.category ?? '');
   const color = getSwatchColor(target.color ?? '').primary;
-  // While the server is still looking for products, the illustration is a
-  // stand-in: dimmed and breathing so it never reads as the final image. Once
-  // the search settles without a photo it holds at full strength.
-  const pending = target.offerState?.status === 'pending' && !uri;
+  // Keep the skeleton through both product search and the actual image download.
+  const pending = uri && !failed ? !loaded : target.offerState?.status === 'pending';
   const pulse = useSharedValue(1);
   useEffect(() => {
     if (pending && !reduceMotion) {
@@ -67,16 +67,20 @@ export function ShoppingStyleVisual({ target, plain = false, fill = false }: { t
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
+      {pending ? <Animated.View testID="shopping-image-skeleton" style={[StyleSheet.absoluteFill, styles.skeleton, pulseStyle]} /> : null}
       {uri && !failed ? (
         <Image
+          key={uri}
+          recyclingKey={uri}
           source={{ uri }}
           style={StyleSheet.absoluteFill}
           contentFit={fill ? 'cover' : 'contain'}
           cachePolicy="memory"
           transition={reduceMotion ? 0 : 150}
-          onError={() => setFailed(true)}
+          onLoad={() => setLoadedUri(uri)}
+          onError={() => setFailedUri(uri)}
         />
-      ) : path ? (
+      ) : pending ? null : path ? (
         <Animated.View style={[styles.illustration, pulseStyle]}>
           <Svg width="82%" height="86%" viewBox="0 0 100 120">
             <Path d={path} fill={color} stroke={colors.controlOutline} strokeWidth={1} />
@@ -101,9 +105,22 @@ const styles = StyleSheet.create({
     borderRadius: radii.photo,
     overflow: 'hidden',
   },
+  skeleton: { backgroundColor: colors.controlOutline },
   plain: { backgroundColor: colors.surfaceElevated },
   illustration: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center' },
   plate: { padding: 8, alignItems: 'center', gap: 8 },
   swatch: { width: 28, height: 36, borderRadius: 2 },
   caption: { ...typography.text.caption, color: colors.inkSubtle, textAlign: 'center' },
 });
+
+/** Quiet context for a search that takes long enough to notice. */
+export function ShoppingImageSearchStatus({ pending }: { pending: boolean }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    setVisible(false);
+    if (!pending) return;
+    const timer = setTimeout(() => setVisible(true), 3000);
+    return () => clearTimeout(timer);
+  }, [pending]);
+  return pending && visible ? <Text accessibilityLiveRegion="polite" style={styles.caption}>Finding pieces for you…</Text> : null;
+}

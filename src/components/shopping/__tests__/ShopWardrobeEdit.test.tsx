@@ -7,7 +7,7 @@ import type { ShoppingBrief, ShoppingBriefPriority } from '../../../lib/shopDeci
 jest.mock('react-native/Libraries/Components/Pressable/Pressable', () => { const React = jest.requireActual('react'); return { __esModule: true, default: function MockPressable({ children, ...props }: any) { return React.createElement('Pressable', props, children); } }; });
 jest.mock('react-native/Libraries/Components/View/View', () => { const React = jest.requireActual('react'); return { __esModule: true, default: React.forwardRef(function MockView(props: any, ref: any) { return React.createElement('View', { ...props, ref }, props.children); }) }; });
 jest.mock('../WardrobeThumbnail', () => ({ WardrobeThumbnail: 'WardrobeThumbnail' }));
-jest.mock('../ShoppingStyleVisual', () => ({ ShoppingStyleVisual: 'ShoppingStyleVisual' }));
+jest.mock('../ShoppingStyleVisual', () => ({ ShoppingStyleVisual: 'ShoppingStyleVisual', ShoppingImageSearchStatus: 'ShoppingImageSearchStatus' }));
 jest.mock('../../../lib/analytics', () => ({ track: jest.fn() }));
 const mockDismiss = jest.fn();
 const mockUndo = jest.fn();
@@ -61,4 +61,15 @@ test('hiding a row offers undo and stops fetching it', () => {
   expect(mockEdit.mock.calls.every(call => call[0] === second)).toBe(true);
   press('Undo hiding Leather shoes');
   expect(mockUndo).toHaveBeenCalledWith('hidden');
+});
+
+ test('reserves thumbnails while previews load and propagates search completion without a photo', () => {
+  render();
+  expect(renderer.root.findAllByType('ShoppingStyleVisual' as any)).toHaveLength(2);
+  expect(renderer.root.findAllByType('ShoppingStyleVisual' as any)[0].props.target.offerState.status).toBe('pending');
+  mockEdit.mockReturnValue({ data: { targets: [{ key: 'black', offerState: { status: 'pending' } }] } });
+  update(brief);
+  mockEdit.mockReturnValue({ data: { targets: [{ key: 'black', offerState: { status: 'unavailable' } }] } });
+  update(brief);
+  expect(renderer.root.findAllByType('ShoppingStyleVisual' as any)[0].props.target.offerState.status).toBe('unavailable');
 });

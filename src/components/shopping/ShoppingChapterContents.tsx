@@ -41,16 +41,12 @@ export function ShoppingChapterContents({ entries, onSelect }: {
   entries: { key: string; title: string; detail?: string; target?: ShoppingPriorityTarget; onDismiss?: () => void }[];
   onSelect: (key: string) => void;
 }) {
-  // Once any row has a picture, every row keeps the same picture column.
-  const visual = entries.some(entry => entry.target);
-  return <View style={styles.list}>{entries.map((entry, index) => <View key={entry.key} style={styles.entry}>
+  return <View style={styles.list}>{entries.map((entry) => <View key={entry.key} style={styles.entry}>
     <Pressable
       accessibilityRole="button" accessibilityLabel={`${entry.title}${entry.detail ? `. ${entry.detail}` : ''}`}
       accessibilityHint="Opens the full guide" onPress={() => onSelect(entry.key)}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
-      {entry.target ? <View style={styles.thumb}><ShoppingStyleVisual plain target={entry.target} /></View>
-        : visual ? <View style={[styles.thumb, styles.placeholder]}><Text style={styles.number}>{String(index + 1).padStart(2, '0')}</Text></View>
-        : <Text style={styles.number}>{String(index + 1).padStart(2, '0')}</Text>}
+      <View style={styles.thumb}><ShoppingStyleVisual plain target={entry.target ?? { key: entry.key, title: entry.title, category: '', color: '', material: '', silhouette: '', priceRange: '', retailerExamples: [], rationale: '', unlocks: [], outfitIdeas: [], offerState: { status: 'pending', offers: [], retrievedAt: null, expiresAt: null } } as ShoppingPriorityTarget} /></View>
       <View style={styles.copy}><Text style={styles.title}>{entry.title}</Text>{entry.detail ? <Text style={styles.detail}>{entry.detail}</Text> : null}</View>
       <Text style={styles.arrow} accessibilityElementsHidden>→</Text>
     </Pressable>

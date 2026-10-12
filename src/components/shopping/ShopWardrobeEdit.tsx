@@ -12,6 +12,7 @@ import { toLocalDateKey } from '../../lib/dailyStylistPick';
 import { useShoppingPriorityEdit } from '../../hooks/useShoppingPriorityEdit';
 import { useShoppingFeedback } from '../../hooks/useShoppingFeedback';
 import type { ShoppingPriorityTarget } from '../../lib/shoppingPriorityEdit';
+import { ShoppingImageSearchStatus } from './ShoppingStyleVisual';
 import { ShoppingChapterContents } from './ShoppingChapterContents';
 
 // The Shop page in two parts: the stylist's brief, then today's additions.
@@ -38,7 +39,7 @@ export function ShopWardrobeEdit({ brief, onGuide, onShopAll }: {
   // shows rather than object identity — otherwise this loops.
   const reportTarget = useCallback((key: string, target: ShoppingPriorityTarget) => setPreviews(old => {
     const current = old[key];
-    if (current && current.key === target.key && previewImage(current) === previewImage(target)) return old;
+    if (current && current.key === target.key && previewImage(current) === previewImage(target) && current.offerState?.status === target.offerState?.status) return old;
     return { ...old, [key]: target };
   }), []);
   const stage = (index: number) => index === 0 ? 'Start here' : index === 1 ? 'Next priority' : 'Also consider';
@@ -52,6 +53,7 @@ export function ShopWardrobeEdit({ brief, onGuide, onShopAll }: {
       <Text style={styles.issue}>{briefIssueLabel(brief)}</Text>
       <Text accessibilityRole="header" style={styles.note}>{priorities.length === 0 ? 'Your wardrobe is covered for now' : `${['', 'One', 'Two', 'Three', 'Four', 'Five'][priorities.length] ?? priorities.length} ${priorities.length === 1 ? 'addition' : 'additions'} to consider`}</Text>
     </View>
+    <ShoppingImageSearchStatus pending={priorities.some(priority => !previews[priorityIdentity(priority)] || previews[priorityIdentity(priority)].offerState?.status === 'pending')} />
     <ShoppingChapterContents
       entries={priorities.map((priority, index) => ({
         key: priorityIdentity(priority), title: shoppingGarmentTitle(priority.label), detail: stage(index), target: previews[priorityIdentity(priority)],
@@ -88,7 +90,10 @@ function PreviewProbe({ priority, briefGeneratedAt, onTarget }: {
   const edit = useShoppingPriorityEdit(priority, { origin: 'shopping_brief', briefGeneratedAt, purpose: 'preview', enabled: true });
   const target = previewTarget(edit.data?.targets ?? []);
   const identity = priorityIdentity(priority);
-  useEffect(() => { if (target) onTarget(identity, target); }, [identity, onTarget, target?.key, target && previewImage(target)]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (target) onTarget(identity, target);
+    else if (edit.isError || edit.fetchStatus === 'paused' || edit.data) onTarget(identity, { key: identity, title: priority.label, category: priority.category, color: '', material: '', silhouette: '', priceRange: '', retailerExamples: [], rationale: '', unlocks: [], outfitIdeas: [], offerState: { status: 'unavailable', offers: [], retrievedAt: null, expiresAt: null } } as ShoppingPriorityTarget);
+  }, [identity, onTarget, target?.key, target && previewImage(target), target?.offerState?.status, edit.isError, edit.fetchStatus, !!edit.data]); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
 }
 

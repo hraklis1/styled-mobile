@@ -19,7 +19,7 @@ import { CommonActions, usePreventRemove } from '@react-navigation/native';
 import { useShoppingChapters } from '../../components/shopping/ShoppingChapterContents';
 import { SectionKicker, SpecList, StylistAsk } from '../../components/shopping/ShoppingEditorialParts';
 import { ShoppingStyleSwatches } from '../../components/shopping/ShoppingStyleSwatches';
-import { ShoppingStyleVisual } from '../../components/shopping/ShoppingStyleVisual';
+import { ShoppingStyleVisual, ShoppingImageSearchStatus } from '../../components/shopping/ShoppingStyleVisual';
 import { PressableScale } from '../../components/primitives/PressableScale';
 import { ShopSubpageHeader } from '../../components/shopping/ShopSubpageHeader';
 import { ShoppingPriorityTargetCard } from '../../components/shopping/ShoppingPriorityTargetCard';
@@ -384,6 +384,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
         {edit.isError ? <Text style={styles.body}>You’re reading your saved guide. We couldn’t refresh it just now.</Text> : null}
         {directionCount > 1 ? <View style={styles.contents} onLayout={event => { const { y, height } = event.nativeEvent.layout; comparisonBottom.current = y + height; }}>
           <SectionKicker title={`${directionCount} styles to compare`} />
+          <ShoppingImageSearchStatus pending={data.targets.some(target => target.offerState?.status === 'pending')} />
           <ShoppingStyleSwatches targets={data.targets} wardrobe={wearable} onSelect={jumpTo}
             budgets={sharedBudget ? undefined : Object.fromEntries(data.targets.map((target, index) => [target.key, budgets[index] || undefined]))} />
         </View> : null}
