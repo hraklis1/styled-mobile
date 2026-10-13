@@ -49,7 +49,7 @@ function StylistPremiumGate({ openingPaywall, onOpenPaywall }: { openingPaywall:
   return (
     <View style={styles.root}>
       <View style={styles.mark}>
-        <Ionicons name="sparkles" size={28} color={colors.primary} />
+        <AppText variant="editorialTitle" style={styles.markText}>S</AppText>
       </View>
       <AppText variant="eyebrowLarge" tone="brand" style={styles.eyebrow}>PRIVATE STYLING</AppText>
       <AppText variant="editorialHero" tone="primary" style={styles.title}>A stylist who already knows your wardrobe.</AppText>
@@ -58,7 +58,7 @@ function StylistPremiumGate({ openingPaywall, onOpenPaywall }: { openingPaywall:
       </AppText>
       <ActionButton
         label={openingPaywall ? 'Opening...' : 'Meet your stylist'}
-        icon="sparkles"
+        icon="arrow-forward"
         style={styles.button}
         disabled={openingPaywall}
         onPress={() => void onOpenPaywall()}
@@ -84,8 +84,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surfaceSelected,
+    backgroundColor: colors.foreground,
   },
+  markText: { color: colors.background },
   eyebrow: { marginTop: spacing.sm },
   title: {
     textAlign: 'center',
