@@ -30,8 +30,6 @@ type Props = {
   disabled?: boolean;
 };
 
-const COUNT_WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven'];
-
 function longDay(date: Date): string {
   return date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 }
@@ -51,11 +49,10 @@ export function WearWeekStrip({ logs, items, onLogToday, onLogDay, onOpenEntry, 
   const tileWidth = Math.floor((width - spacing.page * 2 - COLUMN_GAP * 6) / 7);
   const tileHeight = Math.round(tileWidth / editorial.garmentAspectRatio);
 
-  const summary = week.loggedCount > 0
-    ? `${COUNT_WORDS[week.loggedCount] ?? week.loggedCount} of the last seven days logged`
-    : week.lastLog
-      ? 'Tap today to log what you’re wearing'
-      : 'Start your wear diary — tap today';
+  const todayLogged = !!week.days.find((day) => day.isToday)?.log;
+  const summary = todayLogged
+    ? 'Today’s look is in your diary'
+    : 'Log today’s look';
 
   const renderDay = (day: WearWeekDay) => {
     const firstItem = day.log
@@ -83,7 +80,7 @@ export function WearWeekStrip({ logs, items, onLogToday, onLogDay, onOpenEntry, 
     ) : day.isToday ? (
       <TodaySlot width={tileWidth} height={tileHeight} />
     ) : (
-      // An empty day is a stitched outline waiting to be filled, not a grey block.
+      // Quiet neutral slots keep the emphasis on the clothes and today.
       <View style={[styles.slot, { width: tileWidth, height: tileHeight }]} />
     );
 
@@ -114,7 +111,14 @@ export function WearWeekStrip({ logs, items, onLogToday, onLogDay, onOpenEntry, 
   return (
     <View style={styles.root}>
       <View style={styles.row}>{week.days.map(renderDay)}</View>
-      <Text style={styles.summary} numberOfLines={1}>{summary}</Text>
+      {todayLogged ? (
+        <Text style={styles.summary}>{summary}</Text>
+      ) : (
+        <PressableScale onPress={onLogToday} disabled={disabled} accessibilityRole="button" accessibilityLabel="Log today’s look" contentStyle={styles.logAction}>
+          <Text style={styles.logActionText}>{summary}</Text>
+          <Ionicons name="arrow-forward" size={14} color={colors.foreground} />
+        </PressableScale>
+      )}
     </View>
   );
 }
@@ -142,7 +146,7 @@ function TodaySlot({ width, height }: { width: number; height: number }) {
 }
 
 const styles = StyleSheet.create({
-  root: { gap: spacing.md },
+  root: { gap: spacing.xs },
   row: { flexDirection: 'row', justifyContent: 'space-between' },
   column: { alignItems: 'center', gap: spacing.xs },
   weekday: {
@@ -160,19 +164,18 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: surfaces.plate,
   },
-  // Dashed at 1pt, not hairline: dashed hairlines render broken on iOS.
   slot: {
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radii.photo,
     borderWidth: stroke.fine,
-    borderStyle: 'dashed',
-    borderColor: colors.stitch,
+    borderColor: 'transparent',
+    backgroundColor: colors.surfaceSubtle,
   },
   slotPressed: { backgroundColor: colors.surfaceSubtle },
   todaySlot: {
-    borderStyle: 'solid',
     borderColor: colors.accentInk,
+    backgroundColor: colors.accent,
   },
   dayNumber: {
     ...typography.text.caption,
@@ -190,10 +193,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accentInk,
   },
   hidden: { opacity: 0 },
+  logAction: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'flex-start' },
+  logActionText: { ...typography.text.label, color: colors.foreground },
   summary: {
-    fontFamily: typography.family.editorialItalic,
-    fontSize: 15,
-    lineHeight: 20,
+    ...typography.text.meta,
     color: colors.inkSubtle,
   },
 });

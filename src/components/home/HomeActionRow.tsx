@@ -2,7 +2,7 @@ import { forwardRef, useImperativeHandle, useRef } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { PressableScale } from '../primitives/PressableScale';
-import { colors, radii, spacing, stroke, typography } from '../../theme';
+import { colors, spacing, typography } from '../../theme';
 
 export type HomeActionKey = 'stylist' | 'closet' | 'shop' | 'wear';
 
@@ -19,13 +19,13 @@ type Props = {
   style?: StyleProp<ViewStyle>;
 };
 
-const DISC = 56;
-const GLYPH = 25;
+const DISC = 36;
+const GLYPH = 22;
 
 /**
- * Home's everyday actions as one quiet row of four equal discs. Log wear
+ * Home's everyday actions as one quiet row of four compact icon controls. Log wear
  * uses a calendar-with-check (Ionicons has none, so it borrows Material
- * Community's) to read as an action rather than the Calendar tab. No badges:
+ * Community's) to read as an action rather than the Calendar tab. No enclosing chrome:
  * the captions carry it.
  */
 export const HomeActionRow = forwardRef<HomeActionRowHandle, Props>(function HomeActionRow(
@@ -51,7 +51,7 @@ export const HomeActionRow = forwardRef<HomeActionRowHandle, Props>(function Hom
       a11y: 'Ask your stylist', hint: 'Opens your stylist',
     },
     {
-      key: 'closet', label: 'Add', icon: 'camera-outline', onPress: onAddToCloset,
+      key: 'closet', label: 'Add piece', icon: 'camera-outline', onPress: onAddToCloset,
       a11y: 'Add to my closet', hint: 'Take a photo, choose from your library, or import several pieces',
     },
     {
@@ -89,7 +89,7 @@ export const HomeActionRow = forwardRef<HomeActionRowHandle, Props>(function Hom
               <MaterialCommunityIcons name={action.icon.mci} size={GLYPH + 1} color={colors.foreground} accessible={false} />
             )}
           </View>
-          <Text style={styles.label} numberOfLines={1} maxFontSizeMultiplier={1.3}>{action.label}</Text>
+          <Text style={styles.label} >{action.label}</Text>
         </PressableScale>
       ))}
     </View>
@@ -99,11 +99,10 @@ export const HomeActionRow = forwardRef<HomeActionRowHandle, Props>(function Hom
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: spacing.sm },
   cell: { flex: 1, alignItems: 'center' },
-  cellContent: { alignItems: 'center', gap: spacing.sm, minWidth: 72 },
+  cellContent: { alignItems: 'center', gap: spacing.xs, minHeight: 64, paddingVertical: spacing.xs },
   disc: {
-    width: DISC, height: DISC, borderRadius: radii.full,
+    width: DISC, height: DISC,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.surfaceSubtle, borderWidth: stroke.fine, borderColor: colors.ghostStroke,
   },
   label: { ...typography.text.caption, color: colors.inkSubtle, letterSpacing: 0.2 },
 });

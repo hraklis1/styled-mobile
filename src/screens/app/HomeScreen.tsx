@@ -46,6 +46,7 @@ import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import { ShortlistDecisionCard } from '../../components/shopping/ShortlistDecisionCard';
 import { buildShoppingEditItems, mergeShoppingSnaps } from '../../lib/shoppingGallery';
 import { buildShortlistSpotlight } from '../../lib/shortlistSpotlight';
+import { GarmentImage } from '../../components/wardrobe/garment-image';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
 import { useGlobalOutfitLogger } from '../../contexts/GlobalOutfitLoggerContext';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
@@ -455,10 +456,12 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     () => upcomingEvents.find((event) => !event.outfitId && (event.itemIds?.length ?? 0) === 0) ?? upcomingEvents[0],
     [upcomingEvents],
   );
-  // The standalone "Next up" card only ever shows when the shortlist is
-  // empty (see render below) — when it does, it's always drawn from this
-  // same list, so the carousel underneath must not repeat it.
-  const showNextUpCard = shortlist.awaitingDecision.length === 0 && !!nextUpEvent;
+  // A single occasion uses the full page; several occasions form a rail.
+  const showNextUpCard = upcomingEvents.length === 1;
+  const nextUpOutfit = nextUpEvent?.outfitId
+    ? outfits.find((outfit) => outfit.id === nextUpEvent.outfitId)
+    : undefined;
+  const nextUpPiece = items.find((item) => nextUpEvent?.itemIds?.includes(item.id));
   const nextUpPresentation = nextUpEvent ? presentCalendarEvent(nextUpEvent) : null;
   const carouselEvents = useMemo(
     () => (showNextUpCard ? upcomingEvents.filter((event) => event.id !== nextUpEvent!.id) : upcomingEvents),
@@ -630,6 +633,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const featuredExplanation = featuredRankedPick
     ? buildDailyLookExplanation({
       pick: featuredRankedPick,
+      items,
       weather: weather.data,
       event: featuredEvent,
       tempUnit,
@@ -1060,7 +1064,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       {/* ── On the Calendar ───────────────────────────────────────── */}
       <EditorialSection
         variant="ruled"
-        headingStyle="chapter"
+        headingStyle="supporting"
         dividerPlacement="above-heading"
         title="On the Calendar"
         actionLabel="View all"
@@ -1103,11 +1107,14 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                   />
                 </View>
                 <View style={styles.nextUpCopy}>
-                  <Text style={styles.nextUpTitle} numberOfLines={1}>{nextUpEvent!.title}</Text>
+                  <Text style={styles.nextUpTitle}>{nextUpEvent!.title}</Text>
                   <Text style={styles.nextUpSubtitle}>
-                    {nextUpEvent!.outfitId || (nextUpEvent!.itemIds?.length ?? 0) > 0 ? 'Your look is planned' : 'Plan a look for your next occasion'} · {formatEventDate(nextUpEvent!.date)}
+                    {occasionLabel(nextUpEvent!.occasion)} · {nextUpEvent!.outfitId || (nextUpEvent!.itemIds?.length ?? 0) > 0 ? 'Look planned' : 'Plan a look'}
                   </Text>
                 </View>
+                {!largeText && (nextUpOutfit
+                  ? <OutfitCollage outfit={nextUpOutfit} size={48} height={60} borderRadius={radii.photo} />
+                  : nextUpPiece ? <GarmentImage item={nextUpPiece} width={48} height={60} placeholderIconSize={18} /> : null)}
                 <Ionicons name="chevron-forward" size={15} color={colors.mutedForeground} />
               </PressableScale>
             ) : null}
@@ -1125,6 +1132,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                   const dateLabel = formatEventDate(event.date);
                   const when = formatCountdown(new Date(event.date)) ?? dateLabel;
                   const planned = !!event.outfitId || presentation.hasOutfit;
+                  const plannedOutfit = event.outfitId ? outfits.find((entry) => entry.id === event.outfitId) : undefined;
+                  const plannedPiece = items.find((item) => event.itemIds?.includes(item.id));
                   return (
                     <PressableScale
                       key={event.id}
@@ -1138,7 +1147,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                       accessibilityLabel={`${event.title}, ${dateLabel}, ${occasionLabel(event.occasion)}. ${planned ? 'Look planned' : 'No look planned yet'}`}
                     >
                       <Dateline date={event.date} month={presentation.monthLabel} day={presentation.dayLabel} />
-                      <Text style={[styles.eventTitle, !largeText && styles.eventTitleTwoLine]} numberOfLines={2}>{event.title.trim()}</Text>
+                      {plannedOutfit
+                        ? <OutfitCollage outfit={plannedOutfit} size={64} height={80} borderRadius={radii.photo} />
+                        : plannedPiece ? <GarmentImage item={plannedPiece} width={64} height={80} placeholderIconSize={18} /> : null}
+                      <Text style={[styles.eventTitle, !largeText && styles.eventTitleTwoLine]} numberOfLines={largeText ? undefined : 2}>{event.title.trim()}</Text>
                       <Text style={styles.eventMeta} numberOfLines={largeText ? 2 : 1}>
                         {occasionLabel(event.occasion)} · <Text style={styles.eventWhen}>{when}</Text>
                       </Text>
@@ -1194,9 +1206,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       */}
       <EditorialSection
         variant="ruled"
-        headingStyle="chapter"
+        headingStyle="supporting"
         dividerPlacement="above-heading"
         title="Your Week in Wear"
+        style={{ paddingBottom: 0 }}
       >
         <WearWeekStrip
           logs={logs}
@@ -1212,7 +1225,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       {!itemsLoading && items.length > 0 ? (
         <EditorialSection
           variant="ruled"
-          headingStyle="chapter"
+          headingStyle="supporting"
           dividerPlacement="above-heading"
           title="Closet Insights"
           actionLabel={closetInsights.ready ? 'See all' : undefined}
@@ -1374,21 +1387,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: SIDE_PAD,
     paddingBottom: spacing.xxxl * 2,
   },
-  // An itinerary line between two hairlines, not a floating card.
+  // The section boundary provides the rule; the event needs no extra frame.
   nextUpCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.lg,
     paddingVertical: spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
   },
   nextUpDate: {
     minWidth: 44,
   },
   nextUpCopy: { flex: 1, gap: 2 },
-  nextUpTitle: { ...typography.text.editorialCard, color: colors.foreground },
+  nextUpTitle: { ...typography.text.label, color: colors.foreground },
   nextUpSubtitle: { ...typography.text.meta, color: colors.mutedForeground },
   calendarStack: { gap: spacing.md },
 
@@ -1483,7 +1493,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   calendarEmptyTitle: {
-    ...typography.text.editorialItalic,
+    ...typography.text.bodySmall,
     color: colors.inkSubtle,
   },
   inlineLink: {
@@ -1540,13 +1550,13 @@ const styles = StyleSheet.create({
     lineHeight: 30,
   },
   eventTitle: {
-    ...typography.text.editorialCard,
+    ...typography.text.label,
     color: colors.foreground,
   },
   // Titles always take their two lines, so the occasion and status rows sit
   // on shared baselines across columns whether or not a title wraps.
   eventTitleTwoLine: {
-    minHeight: typography.text.editorialCard.lineHeight * 2,
+    minHeight: typography.text.label.lineHeight * 2,
   },
   eventMeta: {
     ...typography.text.caption,

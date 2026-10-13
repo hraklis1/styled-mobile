@@ -394,12 +394,40 @@ export function buildDailyLookExplanation({
   weather,
   event,
   tempUnit,
+  items = [],
 }: {
   pick: DailyStylistPick;
   weather?: TodayWeather;
   event?: Event;
   tempUnit?: string | null;
+  items?: Item[];
 }): string {
+  // Describe only the selected outfit's resolved pieces, never the full closet.
+  // A compact category description avoids turning long catalog names into prose.
+  const selectedIds = new Set(pick.outfit.itemIds.map((entry) => entry.id));
+  const selected = items.filter((item) => selectedIds.has(item.id));
+  const categoryOrder = ['outerwear', 'full_body', 'top', 'bottom', 'shoes'];
+  const namedPieces = categoryOrder.flatMap((category) => {
+    const item = selected.find((piece) => piece.category === category);
+    if (!item) return [];
+    const label = item.subcategory?.trim() || item.name?.trim();
+    if (!label) return [];
+    // Preserve user capitalization in names; taxonomy labels are already descriptive.
+    const descriptor = item.subcategory
+      ? [item.color?.trim(), label.replace(/_/g, ' ')].filter(Boolean).join(' ')
+      : label;
+    return descriptor.length <= 55 ? [descriptor] : [];
+  }).slice(0, 2);
+  if (namedPieces.length > 0) {
+    const pairing = namedPieces.join(' with ');
+    const context = pick.scoreDetails.occasion > 0 && event?.occasion?.trim()
+      ? ` for your ${formatOccasion(event.occasion)} plans`
+      : pick.scoreDetails.weather > 0 && weather
+        ? ` for ${formatTemp(weather.current, tempUnit)}`
+        : '';
+    return `Your ${pairing}${context}.`;
+  }
+
   const reasons: string[] = [];
   const { scoreDetails } = pick;
 

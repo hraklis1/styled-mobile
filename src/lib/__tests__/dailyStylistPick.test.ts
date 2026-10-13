@@ -411,3 +411,29 @@ describe('ranked daily look fallbacks', () => {
     expect(ranked.map((entry) => entry.outfit.id)).toEqual([assigned.id, other.id]);
   });
 });
+
+describe('garment-grounded Home captions', () => {
+  it('names selected pieces without including unrelated wardrobe items or changing the outfit name', () => {
+    const saved = outfit(1, { name: 'My own title' });
+    const pick = select([saved])!;
+    const caption = buildDailyLookExplanation({ pick, items: [
+      item(11, { name: 'Cream linen shirt', category: 'top' }),
+      item(12, { name: 'Navy trousers', category: 'bottom' }),
+      item(99, { name: 'Unrelated blazer', category: 'outerwear' }),
+    ] });
+    expect(caption).toBe('Your Cream linen shirt with Navy trousers.');
+    expect(saved.name).toBe('My own title');
+  });
+
+  it('uses compact taxonomy labels with temperature units and tolerates missing pieces', () => {
+    const pick = select([outfit(1)])!;
+    pick.scoreDetails.weather = 1;
+    const caption = buildDailyLookExplanation({ pick,
+      items: [item(11, { name: 'A very long catalog name', category: 'top', subcategory: 'linen_shirt', color: 'cream' })],
+      weather: { current: { condition: 'sunny', temperatureC: 25, temperatureF: 77, summary: 'Sunny' }, forecast: { condition: 'sunny', tempMaxC: 25, tempMinC: 20, tempMaxF: 77, tempMinF: 68 } },
+      tempUnit: 'F',
+    });
+    expect(caption).toBe('Your cream linen shirt for 77°F.');
+    expect(buildDailyLookExplanation({ pick, items: [] })).not.toContain('undefined');
+  });
+});

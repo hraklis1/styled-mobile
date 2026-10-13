@@ -143,7 +143,8 @@ export function EditorialSection({
    * sections run together. Opt-in per screen (Home) so `editorial` stays as
    * it is everywhere else.
    */
-  headingStyle?: 'default' | 'editorial' | 'chapter';
+  /** `supporting` keeps Home's secondary sections compact and sans serif. */
+  headingStyle?: 'default' | 'editorial' | 'chapter' | 'supporting';
   /** Place the editorial hairline at the section boundary, as on Home. */
   dividerPlacement?: 'below-heading' | 'above-heading';
   /** Rendered in the header row in place of an action, e.g. a status badge. */
@@ -155,7 +156,8 @@ export function EditorialSection({
   const stacked = width < 360 || fontScale > 1.3;
   const ruled = variant === 'ruled';
   const chapter = headingStyle === 'chapter';
-  const editorialHeading = headingStyle === 'editorial' || chapter;
+  const supporting = headingStyle === 'supporting';
+  const editorialHeading = headingStyle === 'editorial' || chapter || supporting;
 
   return (
     <View style={[
@@ -172,7 +174,7 @@ export function EditorialSection({
         stacked && styles.sectionHeaderStacked,
       ]}>
         <AppText
-          variant={chapter ? 'editorialChapter' : editorialHeading ? 'eyebrowLarge' : ruled ? 'eyebrow' : 'sectionTitle'}
+          variant={supporting ? 'sectionTitle' : chapter ? 'editorialChapter' : editorialHeading ? 'eyebrowLarge' : ruled ? 'eyebrow' : 'sectionTitle'}
           tone={ruled && !editorialHeading ? 'muted' : 'primary'}
           style={editorialHeading ? styles.editorialSectionTitle : ruled ? styles.ruledSectionTitle : undefined}
         >
@@ -196,7 +198,7 @@ export function EditorialSection({
             {/* Quieter than the label it serves: the heading names the
                 section, the link is a way out of it. */}
             <AppText
-              variant={chapter ? 'meta' : editorialHeading ? 'bodySmall' : 'label'}
+              variant={chapter || supporting ? 'meta' : editorialHeading ? 'bodySmall' : 'label'}
               tone={editorialHeading ? 'secondary' : 'action'}
               style={styles.sectionActionText}
             >

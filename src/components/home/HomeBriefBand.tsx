@@ -6,7 +6,7 @@ import { EditorialSection } from '../primitives/Editorial';
 import { PressableScale } from '../primitives/PressableScale';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useShoppingBrief } from '../../hooks/useShoppingBrief';
-import { colors, radii, shadows, spacing, stroke } from '../../theme';
+import { colors, radii, spacing, stroke } from '../../theme';
 import { AppText } from '../primitives/AppText';
 import { withoutOutfitCount } from '../../lib/shopClarity';
 
@@ -67,18 +67,18 @@ function WardrobeEditKicker({ icon, label, purpose }: {
 export function HomeWardrobeEdit({ onBriefPress, shortlist, style }: Props) {
   const { isPremium } = useEntitlement();
   const { data: brief } = useShoppingBrief(isPremium);
-  // The same text Shop's "Your shopping brief" panel shows, nothing more.
-  const summary = brief && brief.status !== 'insufficient_data'
-    ? brief.priorities.reduce((text, priority) => withoutOutfitCount(text, priority.impactScore), brief.summary)
-    : '';
-  const hasBrief = !!summary;
+  const priority = brief?.status !== 'insufficient_data' ? brief?.priorities[0] : undefined;
+  const summary = priority
+    ? withoutOutfitCount(priority.context, priority.impactScore)
+    : brief && brief.status !== 'insufficient_data' ? brief.summary : '';
+  const hasBrief = !!summary || !!priority;
 
   if (!hasBrief && !shortlist) return null;
 
   return (
     <EditorialSection
       variant="ruled"
-      headingStyle="chapter"
+      headingStyle="supporting"
       dividerPlacement="above-heading"
       title="Wardrobe Edit"
       style={style}
@@ -91,14 +91,17 @@ export function HomeWardrobeEdit({ onBriefPress, shortlist, style }: Props) {
             contentStyle={[styles.card, styles.briefCard]}
             onPress={onBriefPress}
             accessibilityRole="button"
-            accessibilityLabel={`Your shopping brief: ${summary}. Opens Shop`}
+            accessibilityLabel={`Your shopping brief: ${priority?.label ?? brief?.headline ?? ""}. ${summary}. Explore the edit in Shop`}
           >
-            <WardrobeEditKicker
-              icon="sparkles-outline"
-              label="Your shopping brief"
-              purpose="What your wardrobe needs next"
-            />
-            <AppText variant="body" tone="primary">{summary}</AppText>
+            <AppText variant="meta" tone="muted">Your shopping brief</AppText>
+            <View style={styles.priorityCopy}>
+              <AppText variant="actionTitle" tone="primary">{priority?.label ?? brief?.headline}</AppText>
+              {summary ? <AppText variant="bodySmall" tone="secondary" numberOfLines={2}>{summary}</AppText> : null}
+            </View>
+            <View style={styles.explore}>
+              <AppText variant="label" tone="primary">Explore the edit</AppText>
+              <Ionicons name="arrow-forward" size={14} color={colors.foreground} />
+            </View>
           </PressableScale>
         ) : null}
         {shortlist?.({
@@ -118,13 +121,15 @@ export function HomeWardrobeEdit({ onBriefPress, shortlist, style }: Props) {
 
 const styles = StyleSheet.create({
   cards: { gap: spacing.md },
+  priorityCopy: { gap: spacing.xs },
+  explore: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 28 },
   card: {
     backgroundColor: colors.card,
-    borderRadius: radii.panel,
+    borderRadius: radii.md,
     borderCurve: 'continuous',
     borderWidth: stroke.hairline,
     borderColor: colors.border,
-    ...shadows.ambient,
+    boxShadow: '0 1px 3px rgba(36,36,34,0.03)',
   },
   briefCard: {
     gap: spacing.md,
@@ -145,7 +150,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.accent,
   },
   kickerCopy: { flex: 1 },
 });

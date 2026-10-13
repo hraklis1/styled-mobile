@@ -1,23 +1,15 @@
 import { StyleSheet, View } from 'react-native';
 import { AppText } from '../primitives/AppText';
 import { PressableScale } from '../primitives/PressableScale';
-import { ColorBar } from './InsightCharts';
+import { Ionicons } from '@expo/vector-icons';
+import { GarmentImage } from '../wardrobe/garment-image';
 import { colors, spacing, stroke } from '../../theme';
 import { INSIGHTS_MIN_ITEMS, type ClosetInsights } from '../../lib/closetInsights';
 import { formatShoppingPrice } from '../../lib/shoppingPresentation';
 
-function Stat({ value, label }: { value: string; label: string }) {
-  return (
-    <View style={styles.stat}>
-      <AppText variant="editorialSection" tone="primary" style={styles.figure}>{value}</AppText>
-      <AppText variant="eyebrow" tone="muted" numberOfLines={2}>{label}</AppText>
-    </View>
-  );
-}
-
 /**
- * Home's at-a-glance read on the closet: three numbers worth acting on over
- * the palette strip. Tapping anywhere opens the full Closet Insights screen.
+ * Home leads with a reason to revisit the wardrobe and a few real pieces.
+ * Detailed percentages stay in Closet Insights; the palette reads as swatches.
  */
 export function ClosetInsightsCard({
   insights,
@@ -32,7 +24,7 @@ export function ClosetInsightsCard({
     const remaining = INSIGHTS_MIN_ITEMS - insights.totalItems;
     return (
       <View style={styles.unlock}>
-        <AppText variant="editorialItalic" tone="secondary">
+        <AppText variant="bodySmall" tone="secondary">
           Add {remaining} more {remaining === 1 ? 'piece' : 'pieces'} to see how your closet works for you.
         </AppText>
         <View style={styles.unlockTrack}>
@@ -50,25 +42,42 @@ export function ClosetInsightsCard({
       onPress={onPress}
       scaleTo={0.98}
       accessibilityRole="button"
-      accessibilityLabel="Open closet insights"
+      accessibilityLabel={insights.sleeping.length > 0 ? `Rediscover ${insights.sleeping.length} pieces. Open closet insights` : 'Open closet insights'}
       contentStyle={styles.card}
     >
-      <View style={styles.stats}>
-        <Stat value={`${Math.round(insights.activeShare * 100)}%`} label="Worn in 90 days" />
-        <View style={styles.divider} />
-        {cpw ? (
-          <>
-            <Stat value={cpw} label="Avg cost per wear" />
-            <View style={styles.divider} />
-          </>
-        ) : null}
-        <Stat value={String(insights.sleeping.length)} label="Sleeping pieces" />
+      <View style={styles.leadRow}>
+        <View style={styles.leadCopy}>
+          <AppText variant="actionTitle" tone="primary">
+            {insights.sleeping.length > 0
+              ? `Rediscover ${insights.sleeping.length} ${insights.sleeping.length === 1 ? 'piece' : 'pieces'}`
+              : 'Keep your favourites in rotation'}
+          </AppText>
+          <AppText variant="meta" tone="secondary">
+            {insights.sleeping.length > 0
+              ? 'Give something you haven’t worn lately a fresh look.'
+              : 'Explore the pieces that work hardest for you.'}
+          </AppText>
+        </View>
+        <Ionicons name="arrow-forward" size={16} color={colors.foreground} />
       </View>
+      {insights.sleeping.length > 0 ? (
+        <View style={styles.pieces}>
+          {insights.sleeping.slice(0, 3).map((item) => (
+            <GarmentImage key={item.id} item={item} width={64} height={80} borderRadius={2} />
+          ))}
+        </View>
+      ) : null}
+      {cpw ? <AppText variant="meta" tone="secondary">{cpw} average cost per wear</AppText> : null}
       {leadColor ? (
         <View style={styles.palette}>
-          <ColorBar colors={insights.colors} height={8} />
+          <AppText variant="meta" tone="secondary">Your wardrobe palette</AppText>
+          <View style={styles.swatches} accessibilityRole="image" accessibilityLabel={`Your palette: ${insights.colors.filter((color) => color.key !== 'other').map((color) => color.label).join(', ')}`}>
+            {insights.colors.filter((color) => color.key !== 'other').map((color) => (
+              <View key={color.key} style={[styles.swatch, { backgroundColor: color.hex }]} />
+            ))}
+          </View>
           <AppText variant="meta" tone="muted">
-            {leadColor.label} leads your palette at {Math.round(leadColor.share * 100)}%
+            Led by {leadColor.label.toLowerCase()}
           </AppText>
         </View>
       ) : null}
@@ -78,15 +87,12 @@ export function ClosetInsightsCard({
 
 const styles = StyleSheet.create({
   card: { gap: spacing.xl, paddingVertical: spacing.sm },
-  stats: { flexDirection: 'row', alignItems: 'stretch' },
-  stat: { flex: 1, gap: spacing.xs },
-  figure: { fontVariant: ['tabular-nums'] },
-  divider: {
-    width: stroke.hairline,
-    backgroundColor: colors.hairline,
-    marginHorizontal: spacing.md,
-  },
-  palette: { gap: spacing.sm },
+  leadRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  leadCopy: { flex: 1, gap: spacing.xs },
+  pieces: { flexDirection: 'row', gap: spacing.sm },
+  swatches: { flexDirection: 'row', gap: spacing.sm },
+  swatch: { width: 32, height: 40, borderRadius: 2, borderWidth: stroke.hairline, borderColor: colors.ghostStroke },
+  palette: { gap: spacing.sm, paddingTop: spacing.lg, borderTopWidth: stroke.hairline, borderTopColor: colors.border },
   unlock: { gap: spacing.md },
   unlockTrack: { height: 2, backgroundColor: colors.hairline, borderRadius: 1, overflow: 'hidden' },
   unlockFill: { height: 2, backgroundColor: colors.accentInk },
