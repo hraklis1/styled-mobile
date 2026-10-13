@@ -5,18 +5,14 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { PressableScale } from '../primitives/PressableScale';
 import { SkeletonBlock } from '../primitives/SkeletonLoader';
-import { colors, editorial, motion, radii, spacing, stroke, surfaces, typography } from '../../theme';
+import { colors, editorial, motion, radii, spacing, stroke, typography } from '../../theme';
 
 /** The caption and empty state sit back on the page gutter, like the copy around them. */
 const GUTTER = spacing.page;
 
-/**
- * Plate size for Today's Look: the full screen width, at the app's portrait
- * outfit ratio. The photograph runs edge to edge; only the caption beneath it
- * returns to the page gutter.
- */
+/** Portrait artboard inset to the screen’s shared editorial gutters. */
 export function lookPlateSize(screenWidth: number): { width: number; height: number } {
-  const width = Math.round(screenWidth);
+  const width = Math.max(1, Math.round(screenWidth - GUTTER * 2));
   return { width, height: Math.round(width / editorial.outfitAspectRatio) };
 }
 
@@ -53,21 +49,9 @@ type LookMatProps = {
   largeText?: boolean;
 };
 
-/**
- * Today's Look as a full-bleed plate: the photograph runs to the screen's
- * edges with no card chrome, and the caption is docked beneath it on the
- * canvas rather than laid over the image, so type never lands on a hem or a
- * shoe and the flat lay reads whole.
- *
- * The caption is set like a magazine spread's credit: a serif title and one
- * italic line in the stylist's voice. Nothing restates the section heading,
- * and there is no "Open" link — the plate itself is the way in.
- *
- * It bleeds out of the page's gutter itself, so callers place it like any
- * other section content.
- */
+/** A cohesive linen artboard; captions stay clear of garment imagery. */
 export function LookMat({
-  plate, eyebrow, title, note, onOpen, accessibilityLabel, captionAccessibilityLabel, action, largeText, interactivePlate, collageCaption, editorialCollage,
+  plate, eyebrow = "Today’s selection", title, note, onOpen, accessibilityLabel, captionAccessibilityLabel, action, largeText, interactivePlate, collageCaption, editorialCollage,
 }: LookMatProps) {
   const caption = (
     <>
@@ -81,9 +65,13 @@ export function LookMat({
     if (editorialCollage) {
       return (
         <Animated.View layout={matLayout} entering={FadeIn.duration(260)} exiting={FadeOut.duration(200)} style={styles.mat}>
-          {note ? <Text style={[styles.note, styles.collageIntroduction]}>{note}</Text> : null}
           <View style={styles.plate}>{plate}</View>
-          {action ? <View style={styles.editorialFooter}>{action}</View> : null}
+          <View style={styles.collageCaption}>
+            <PressableScale onPress={onOpen} accessibilityRole="button" accessibilityLabel={captionAccessibilityLabel ?? accessibilityLabel}>
+              {caption}
+            </PressableScale>
+            {action ? <View style={styles.editorialFooter}>{action}</View> : null}
+          </View>
         </Animated.View>
       );
     }
@@ -245,7 +233,7 @@ type LookMatEmptyProps = {
 export function LookMatEmpty({ width, height, title, subtitle, cta }: LookMatEmptyProps) {
   return (
     <Animated.View layout={matLayout} entering={FadeIn.duration(260)} style={styles.mat}>
-      <View style={[styles.emptyPlate, { width: width - GUTTER * 2, minHeight: height }]}>
+      <View style={[styles.emptyPlate, { width: width, minHeight: height }]}>
         <Ionicons name="layers-outline" size={22} color={colors.mutedForeground} />
         <Text style={styles.emptyTitle}>{title}</Text>
         <Text style={styles.emptySubtitle}>{subtitle}</Text>
@@ -269,15 +257,19 @@ export function LookMatEmpty({ width, height, title, subtitle, cta }: LookMatEmp
 }
 
 const styles = StyleSheet.create({
-  // Bleeds out of the section's page gutter to the screen edges.
+  // The same frame holds photography, collage, loading and empty states.
   mat: {
-    marginHorizontal: -GUTTER,
+    borderRadius: radii.mat,
+    borderCurve: 'continuous',
+    overflow: 'hidden',
+    backgroundColor: colors.imageMat,
+    paddingBottom: spacing.lg,
   },
   plate: {
     overflow: 'hidden',
-    backgroundColor: surfaces.plate,
+    backgroundColor: colors.imageMat,
   },
-  suggestionBar: { marginHorizontal: GUTTER, paddingHorizontal: 0, marginTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  suggestionBar: { paddingHorizontal: GUTTER, marginTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   captionBar: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -288,7 +280,7 @@ const styles = StyleSheet.create({
   captionCopy: { flex: 1, minWidth: 0 },
   collageCaption: { paddingHorizontal: GUTTER, paddingTop: spacing.lg, gap: spacing.sm },
   collageIntroduction: { marginHorizontal: GUTTER, marginBottom: spacing.lg },
-  editorialFooter: { marginHorizontal: GUTTER, marginTop: spacing.lg, paddingTop: spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, alignItems: 'flex-end' },
+  editorialFooter: { marginTop: spacing.lg, paddingTop: spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, alignItems: 'flex-end' },
   textAction: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   collageActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.md },
   detailsLink: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
@@ -362,7 +354,6 @@ const styles = StyleSheet.create({
     borderWidth: stroke.fine,
     borderStyle: 'dashed',
     borderColor: colors.stitch,
-    marginHorizontal: GUTTER,
   },
   emptyTitle: {
     ...typography.text.editorialCard,

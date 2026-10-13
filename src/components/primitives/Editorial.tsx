@@ -174,9 +174,9 @@ export function EditorialSection({
         stacked && styles.sectionHeaderStacked,
       ]}>
         <AppText
-          variant={supporting ? 'sectionTitle' : chapter ? 'editorialChapter' : editorialHeading ? 'eyebrowLarge' : ruled ? 'eyebrow' : 'sectionTitle'}
+          variant={supporting ? 'editorialSection' : chapter ? 'editorialChapter' : editorialHeading ? 'eyebrowLarge' : ruled ? 'eyebrow' : 'sectionTitle'}
           tone={ruled && !editorialHeading ? 'muted' : 'primary'}
-          style={[editorialHeading ? styles.editorialSectionTitle : ruled ? styles.ruledSectionTitle : undefined, supporting && { fontWeight: typography.weight.medium }]}
+          style={[editorialHeading ? styles.editorialSectionTitle : ruled ? styles.ruledSectionTitle : undefined]}
         >
           {title}
         </AppText>
@@ -200,7 +200,7 @@ export function EditorialSection({
             <AppText
               variant={chapter || supporting ? 'meta' : editorialHeading ? 'bodySmall' : 'label'}
               tone={editorialHeading ? 'secondary' : 'action'}
-              style={styles.sectionActionText}
+              style={[styles.sectionActionText, editorialHeading && typography.text.utility]}
             >
               {actionLabel}{editorialHeading ? ' →' : ''}
             </AppText>

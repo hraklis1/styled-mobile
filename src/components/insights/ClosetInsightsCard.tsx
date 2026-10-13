@@ -1,9 +1,9 @@
-import { StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { AppText } from '../primitives/AppText';
 import { PressableScale } from '../primitives/PressableScale';
 import { Ionicons } from '@expo/vector-icons';
 import { GarmentImage } from '../wardrobe/garment-image';
-import { colors, spacing, stroke } from '../../theme';
+import { colors, radii, spacing, stroke } from '../../theme';
 import { INSIGHTS_MIN_ITEMS, type ClosetInsights } from '../../lib/closetInsights';
 import { formatShoppingPrice } from '../../lib/shoppingPresentation';
 
@@ -38,12 +38,13 @@ export function ClosetInsightsCard({
   const cpw = insights.avgCostPerWear != null ? formatShoppingPrice(Number(insights.avgCostPerWear.toFixed(2)), currencyCode) : null;
 
   return (
+    <View style={styles.card}>
     <PressableScale
       onPress={onPress}
       scaleTo={0.98}
       accessibilityRole="button"
       accessibilityLabel={`${insights.sleeping.length > 0 ? `Rediscover ${insights.sleeping.length} pieces.` : ''} Open closet insights.${leadColor ? ` Wardrobe palette: ${insights.colors.filter((color) => color.key !== 'other').map((color) => color.label).join(', ')}. ${leadColor.label} makes up ${Math.round(leadColor.share * 100)} percent of your wardrobe.` : ''}`}
-      contentStyle={styles.card}
+      contentStyle={{ minHeight: 44 }}
     >
       <View style={styles.leadRow}>
         <View style={styles.leadCopy}>
@@ -60,28 +61,34 @@ export function ClosetInsightsCard({
         </View>
         <Ionicons name="arrow-forward" size={16} color={colors.foreground} />
       </View>
+    </PressableScale>
       {insights.sleeping.length > 0 ? (
-        <View style={styles.pieces}>
-          {insights.sleeping.slice(0, 3).map((item) => (
-            <GarmentImage key={item.id} item={item} width={64} height={80} borderRadius={2} />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pieces} snapToInterval={108 + spacing.sm} decelerationRate="fast">
+          {insights.sleeping.map((item) => (
+            <PressableScale key={item.id} onPress={onPress} accessibilityRole="button" accessibilityLabel={`Rediscover ${item.name}. Open closet insights`} contentStyle={styles.piece}>
+              <GarmentImage item={item} width={108} height={144} borderRadius={radii.md} />
+              <AppText variant="eyebrow" tone="muted" style={styles.contextChip}>
+                {item.lastWornAt ? `Last worn ${Math.max(0, Math.floor((Date.now() - Date.parse(item.lastWornAt)) / 86400000))}d ago` : 'Not yet worn'}
+              </AppText>
+            </PressableScale>
           ))}
-        </View>
+        </ScrollView>
       ) : null}
       {cpw ? <AppText variant="meta" tone="secondary">{cpw} average cost per wear</AppText> : null}
       {leadColor ? (
         <View style={styles.palette}>
           <AppText variant="meta" tone="secondary">Your wardrobe palette</AppText>
           <View style={styles.swatches}>
-            {insights.colors.filter((color) => color.key !== 'other').map((color) => (
-              <View key={color.key} accessible accessibilityLabel={color.label} style={[styles.swatch, { backgroundColor: color.hex }]} />
+            {insights.colors.map((color) => (
+              <View key={color.key} accessible accessibilityLabel={`${color.label} ${Math.round(color.share * 100)}%`} style={[styles.swatch, { backgroundColor: color.hex, flex: color.share }]} />
             ))}
           </View>
           <AppText variant="meta" tone="muted">
-            {leadColor.label} · {Math.round(leadColor.share * 100)}% of your wardrobe
+            {insights.colors.slice(0, 3).map((color) => `${color.label} ${Math.round(color.share * 100)}%`).join(' · ')}
           </AppText>
         </View>
       ) : null}
-    </PressableScale>
+    </View>
   );
 }
 
@@ -90,8 +97,10 @@ const styles = StyleSheet.create({
   leadRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   leadCopy: { flex: 1, gap: spacing.xs },
   pieces: { flexDirection: 'row', gap: spacing.sm },
-  swatches: { flexDirection: 'row', gap: spacing.sm },
-  swatch: { width: 32, height: 40, borderRadius: 2, borderWidth: stroke.hairline, borderColor: colors.ghostStroke },
+  piece: { width: 108, gap: spacing.sm },
+  contextChip: { fontSize: 10, letterSpacing: 1, paddingHorizontal: spacing.xs, paddingVertical: spacing.xs, backgroundColor: colors.linen, borderRadius: radii.sm },
+  swatches: { flexDirection: 'row', height: 12, borderRadius: radii.sm, overflow: 'hidden' },
+  swatch: { height: 12, borderWidth: stroke.hairline, borderColor: colors.ghostStroke },
   palette: { gap: spacing.sm, paddingTop: spacing.lg, borderTopWidth: stroke.hairline, borderTopColor: colors.border },
   unlock: { gap: spacing.md },
   unlockTrack: { height: 2, backgroundColor: colors.hairline, borderRadius: 1, overflow: 'hidden' },

@@ -6,7 +6,7 @@ import { EditorialSection } from '../primitives/Editorial';
 import { PressableScale } from '../primitives/PressableScale';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useShoppingBrief } from '../../hooks/useShoppingBrief';
-import { colors, radii, spacing, stroke } from '../../theme';
+import { colors, spacing } from '../../theme';
 import { AppText } from '../primitives/AppText';
 import { homeShoppingExplanation, homePriorityTitle } from '../../lib/homePresentationCopy';
 import { useItems } from '../../hooks/useItems';
@@ -97,7 +97,7 @@ export function HomeWardrobeEdit({ onBriefPress, shortlist, style }: Props) {
           >
             <AppText variant="meta" tone="muted">Your shopping brief</AppText>
             <View style={styles.priorityCopy}>
-              <AppText variant="actionTitle" tone="primary">{homePriorityTitle(priority?.label ?? brief?.headline ?? "")}</AppText>
+              <AppText variant="editorialSection" tone="primary">{homePriorityTitle(priority?.label ?? brief?.headline ?? "")}</AppText>
               {summary ? <AppText variant="bodySmall" tone="secondary">{summary}</AppText> : null}
             </View>
             <View style={styles.explore}>
@@ -125,22 +125,17 @@ const styles = StyleSheet.create({
   priorityCopy: { gap: spacing.xs },
   explore: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 28 },
   card: {
-    backgroundColor: colors.card,
-    borderRadius: radii.md,
-    borderCurve: 'continuous',
-    borderWidth: stroke.hairline,
-    borderColor: colors.border,
-    boxShadow: '0 1px 3px rgba(36,36,34,0.03)',
+    backgroundColor: 'transparent',
   },
   briefCard: {
     gap: spacing.md,
-    paddingHorizontal: spacing.control,
+    paddingHorizontal: 0,
     paddingTop: spacing.control,
     paddingBottom: spacing.lg,
   },
   // The row below the kicker brings its own vertical padding.
   shortlistCard: {
-    paddingHorizontal: spacing.control,
+    paddingHorizontal: 0,
     paddingTop: spacing.control,
     paddingBottom: spacing.xs,
   },

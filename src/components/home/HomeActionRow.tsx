@@ -1,8 +1,9 @@
 import { forwardRef, useImperativeHandle, useRef } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { EditorialIcon } from '../primitives/EditorialIcon';
 import { PressableScale } from '../primitives/PressableScale';
-import { colors, spacing, typography } from '../../theme';
+import { colors, radii, spacing, typography } from '../../theme';
 
 export type HomeActionKey = 'stylist' | 'closet' | 'shop' | 'wear';
 
@@ -22,12 +23,7 @@ type Props = {
 const DISC = 36;
 const GLYPH = 22;
 
-/**
- * Home's everyday actions as one quiet row of four compact icon controls. Log wear
- * uses a calendar-with-check (Ionicons has none, so it borrows Material
- * Community's) to read as an action rather than the Calendar tab. No enclosing chrome:
- * the captions carry it.
- */
+/** Four everyday actions; tour measurement and action order stay stable. */
 export const HomeActionRow = forwardRef<HomeActionRowHandle, Props>(function HomeActionRow(
   { onAskStylist, onAddToCloset, onSaveFind, onLogWear, style },
   ref,
@@ -83,11 +79,7 @@ export const HomeActionRow = forwardRef<HomeActionRowHandle, Props>(function Hom
             collapsable={false}
             style={styles.disc}
           >
-            {typeof action.icon === 'string' ? (
-              <Ionicons name={action.icon} size={GLYPH} color={colors.foreground} accessible={false} />
-            ) : (
-              <MaterialCommunityIcons name={action.icon.mci} size={GLYPH + 1} color={colors.foreground} accessible={false} />
-            )}
+            <EditorialIcon name={action.key} size={GLYPH} />
           </View>
           <Text style={styles.label} >{action.label}</Text>
         </PressableScale>
@@ -97,12 +89,12 @@ export const HomeActionRow = forwardRef<HomeActionRowHandle, Props>(function Hom
 });
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: spacing.sm },
+  row: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
   cell: { flex: 1, alignItems: 'center' },
-  cellContent: { alignItems: 'center', gap: spacing.xs, minHeight: 64, paddingVertical: spacing.xs },
+  cellContent: { alignItems: 'center', gap: spacing.xs, minHeight: 64, paddingVertical: spacing.xs, borderRadius: radii.quickAction, backgroundColor: colors.linen },
   disc: {
     width: DISC, height: DISC,
     alignItems: 'center', justifyContent: 'center',
   },
-  label: { ...typography.text.caption, color: colors.inkSubtle, letterSpacing: 0.2 },
+  label: { ...typography.text.utility, color: colors.inkSubtle },
 });

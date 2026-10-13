@@ -2,6 +2,9 @@ import { Platform, StyleSheet, type TextStyle } from 'react-native';
 
 // Shared light palette: warm stone canvas, white surfaces, obsidian actions.
 export const colors = {
+  linen:               '#F5F3EF',
+  imageMat:            '#F2EFEB',
+  imageEdge:           'rgba(0,0,0,0.08)',
   background:          '#F6F5F2', // Warm stone
   foreground:          '#242422', // Soft fashion black
   card:                '#FFFFFF',
@@ -52,6 +55,7 @@ export const colors = {
 export const stroke = {
   hairline: StyleSheet.hairlineWidth,
   fine: 1,
+  icon: 1.35,
 } as const;
 
 /** Motion durations (ms). Consumers build their own easing. */
@@ -242,6 +246,7 @@ export const typography = {
      * Sits between the serif chapter title and content labels; tracked wide
      * so it reads as structure, never as content.
      */
+    utility: { fontSize: 10, lineHeight: 15, fontWeight: weight.medium, letterSpacing: 1, textTransform: 'uppercase' as const },
     sectionKicker: {
       fontSize: 11, lineHeight: 14, fontWeight: weight.medium, letterSpacing: 1.6, textTransform: 'uppercase' as const,
     },
@@ -348,9 +353,10 @@ export const radii = {
    * buttons, pills — so a garment image and the chip beside it never share a
    * corner treatment. Just enough to take the hard pixel off the corner.
    */
-  photo: 2,
+  photo: 8,
   /** The passe-partout around a featured photograph: square like its plate. */
-  mat: 2,
+  mat: 24,
+  quickAction: 14,
   action: 9999,
   field: 12,
   bubble: 8,

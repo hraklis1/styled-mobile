@@ -461,7 +461,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const nextUpOutfit = nextUpEvent?.outfitId
     ? outfits.find((outfit) => outfit.id === nextUpEvent.outfitId)
     : undefined;
-  const nextUpPiece = items.find((item) => nextUpEvent?.itemIds?.includes(item.id));
+  const nextUpPiece = items.find((item) => (nextUpOutfit?.itemIds.map((entry) => entry.id) ?? nextUpEvent?.itemIds ?? []).includes(item.id));
   const nextUpPresentation = nextUpEvent ? presentCalendarEvent(nextUpEvent) : null;
   const carouselEvents = useMemo(
     () => (showNextUpCard ? upcomingEvents.filter((event) => event.id !== nextUpEvent!.id) : upcomingEvents),
@@ -967,8 +967,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             plate={generatedCandidate.readinessStatus === 'ready' && generatedCandidate.aiGeneratedImageUrl ? (
               <OutfitCollage outfit={generatedPreviewOutfit(generatedCandidate)} size={plate.width} height={plate.height} borderRadius={0} />
             ) : (
-              <View style={{ paddingHorizontal: spacing.page, backgroundColor: colors.background }}>
-                <EditorialOutfitBoard pieces={resolveBoardPieces(candidateGap ? generatedCandidate.foundationItemIds : generatedCandidate.itemIds, items)} width={plate.width - spacing.page * 2}
+              <View style={{ paddingHorizontal: spacing.lg, backgroundColor: colors.imageMat }}>
+                <EditorialOutfitBoard pieces={resolveBoardPieces(candidateGap ? generatedCandidate.foundationItemIds : generatedCandidate.itemIds, items)} width={plate.width - spacing.lg * 2}
                   onPressItem={openDailyLookItem}
                   suggestion={candidateGap ? { label: sentenceCase(candidateGap.label), category: candidateGap.category, offer: suggestionOffer } : undefined}
                   onPressSuggestion={handleDailyLookFindPiece} />
@@ -1014,8 +1014,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             editorialCollage={!featuredOutfit.aiGeneratedImageUrl}
             plate={(
               featuredOutfit.aiGeneratedImageUrl ? <OutfitCollage outfit={featuredOutfit} size={plate.width} height={plate.height} borderRadius={0} /> :
-              <View style={{ paddingHorizontal: spacing.page, backgroundColor: colors.background }}>
-                <EditorialOutfitBoard pieces={resolveBoardPieces(featuredOutfit.itemIds, items)} width={plate.width - spacing.page * 2} onPressItem={openDailyLookItem} />
+              <View style={{ paddingHorizontal: spacing.lg, backgroundColor: colors.imageMat }}>
+                <EditorialOutfitBoard pieces={resolveBoardPieces(featuredOutfit.itemIds, items)} width={plate.width - spacing.lg * 2} onPressItem={openDailyLookItem} />
               </View>
             )}
             title={featuredOutfit.name}
@@ -1112,9 +1112,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                     {occasionLabel(nextUpEvent!.occasion)} · {nextUpEvent!.outfitId || (nextUpEvent!.itemIds?.length ?? 0) > 0 ? 'Look planned' : 'Plan a look'}
                   </Text>
                 </View>
-                {!largeText && (nextUpOutfit
-                  ? <OutfitCollage outfit={nextUpOutfit} size={48} height={60} borderRadius={radii.photo} />
-                  : nextUpPiece ? <GarmentImage item={nextUpPiece} width={48} height={60} placeholderIconSize={18} /> : null)}
+                {!largeText && (nextUpPiece ? <GarmentImage item={nextUpPiece} width={48} height={60} placeholderIconSize={18} /> : null)}
                 <Ionicons name="chevron-forward" size={15} color={colors.mutedForeground} />
               </PressableScale>
             ) : null}
@@ -1133,7 +1131,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                   const when = formatCountdown(new Date(event.date)) ?? dateLabel;
                   const planned = !!event.outfitId || presentation.hasOutfit;
                   const plannedOutfit = event.outfitId ? outfits.find((entry) => entry.id === event.outfitId) : undefined;
-                  const plannedPiece = items.find((item) => event.itemIds?.includes(item.id));
+                  const plannedPiece = items.find((item) => (plannedOutfit?.itemIds.map((entry) => entry.id) ?? event.itemIds ?? []).includes(item.id));
                   return (
                     <PressableScale
                       key={event.id}
@@ -1147,9 +1145,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                       accessibilityLabel={`${event.title}, ${dateLabel}, ${occasionLabel(event.occasion)}. ${planned ? 'Look planned' : 'No look planned yet'}`}
                     >
                       <Dateline date={event.date} month={presentation.monthLabel} day={presentation.dayLabel} />
-                      {plannedOutfit
-                        ? <OutfitCollage outfit={plannedOutfit} size={64} height={80} borderRadius={radii.photo} />
-                        : plannedPiece ? <GarmentImage item={plannedPiece} width={64} height={80} placeholderIconSize={18} /> : null}
+                      {plannedPiece ? <GarmentImage item={plannedPiece} width={64} height={80} placeholderIconSize={18} /> : null}
                       <Text style={[styles.eventTitle, !largeText && styles.eventTitleTwoLine]} numberOfLines={largeText ? undefined : 2}>{event.title.trim()}</Text>
                       <Text style={styles.eventMeta} numberOfLines={largeText ? 2 : 1}>
                         {occasionLabel(event.occasion)} · <Text style={styles.eventWhen}>{when}</Text>
@@ -1431,7 +1427,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-    backgroundColor: `${colors.primary}10`,
+    backgroundColor: colors.linen,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',

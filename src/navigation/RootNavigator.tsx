@@ -18,6 +18,7 @@ import {
   type BottomTabNavigationOptions,
 } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import { EditorialIcon } from '../components/primitives/EditorialIcon';
 import * as Haptics from '../lib/haptics';
 
 import { useAuth } from '../contexts/AuthContext';
@@ -126,13 +127,7 @@ const ClosetStack = createNativeStackNavigator<ClosetStackParamList>();
 const StylistStack = createNativeStackNavigator<StylistStackParamList>();
 const ShopStack = createNativeStackNavigator<ShopStackParamList>();
 
-const TAB_ICONS: Record<string, { default: keyof typeof Ionicons.glyphMap; selected: keyof typeof Ionicons.glyphMap }> = {
-  Home: { default: 'home-outline', selected: 'home-outline' },
-  Closet: { default: 'file-tray-full-outline', selected: 'file-tray-full-outline' },
-  Stylist: { default: 'chatbubble-ellipses-outline', selected: 'chatbubble-ellipses-outline' },
-  Shop: { default: 'bag-outline', selected: 'bag-outline' },
-  Calendar: { default: 'calendar-outline', selected: 'calendar-outline' },
-};
+
 
 const STYLIST_SHEET_TRANSITION: NonNullable<BottomTabNavigationOptions['transitionSpec']> = {
   animation: 'timing',
@@ -355,11 +350,10 @@ function AppTabNavigator() {
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.mutedForeground,
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? TAB_ICONS[route.name].selected : TAB_ICONS[route.name].default}
-              size={22}
-              color={color}
-            />
+            <View style={{ alignItems: 'center', gap: 3 }}>
+              <EditorialIcon name={route.name as 'Home' | 'Closet' | 'Stylist' | 'Shop' | 'Calendar'} color={color} />
+              <View style={{ width: 3, height: 3, borderRadius: 2, backgroundColor: focused ? colors.accentInk : 'transparent' }} />
+            </View>
           ),
           tabBarLabel: ({ children, color }) => (
             <Text

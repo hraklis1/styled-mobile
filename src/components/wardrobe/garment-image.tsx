@@ -3,7 +3,7 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { useReducedMotion } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, cutoutScaleFor, radii, surfaces } from '../../theme';
+import { colors, cutoutScaleFor, radii } from '../../theme';
 import { itemCoverPresentation } from '../../lib/itemImage';
 import type { Item } from '../../types/item';
 
@@ -64,12 +64,14 @@ const styles = StyleSheet.create({
   // enough rounding to take the hard pixel off the corner.
   frame: {
     overflow: 'hidden',
-    backgroundColor: surfaces.plate,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.imageEdge,
+    backgroundColor: colors.imageMat,
   },
   placeholder: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: surfaces.plate,
+    backgroundColor: colors.imageMat,
   },
 });
