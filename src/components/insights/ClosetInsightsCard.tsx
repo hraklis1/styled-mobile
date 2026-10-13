@@ -52,7 +52,7 @@ export function ClosetInsightsCard({
     >
       <View style={styles.leadRow}>
         <View style={styles.leadCopy}>
-          <AppText variant="actionTitle" tone="primary">
+          <AppText variant="editorialCard" tone="primary">
             {insights.sleeping.length > 0
               ? `Rediscover ${insights.sleeping.length} ${insights.sleeping.length === 1 ? 'piece' : 'pieces'}`
               : 'Keep your favourites in rotation'}
@@ -79,9 +79,8 @@ export function ClosetInsightsCard({
             <PressableScale key={item.id} onPress={onPress} accessibilityRole="button" accessibilityLabel={`Rediscover ${item.name}. Open closet insights`} contentStyle={styles.piece}>
               <View style={styles.pieceCanvas}>
                 <GarmentImage normalized item={item} width={CARD_WIDTH} height={CARD_HEIGHT} borderRadius={radii.md} />
-                <View pointerEvents="none" style={styles.pieceOutline} />
               </View>
-              <AppText variant="eyebrow" tone="muted" style={styles.contextChip} numberOfLines={2}>
+              <AppText variant="meta" tone="secondary" style={styles.pieceCaption} numberOfLines={2}>
                 {item.lastWornAt ? `Last worn ${Math.max(0, Math.floor((Date.now() - Date.parse(item.lastWornAt)) / 86400000))}d ago` : item.name}
               </AppText>
             </PressableScale>
@@ -97,9 +96,15 @@ export function ClosetInsightsCard({
               <View key={color.key} accessible accessibilityLabel={`${color.label} ${Math.round(color.share * 100)}%`} style={[styles.swatch, { backgroundColor: color.hex, flex: color.share }]} />
             ))}
           </View>
-          <AppText variant="meta" tone="muted">
-            {insights.colors.slice(0, 3).map((color) => `${color.label} ${Math.round(color.share * 100)}%`).join(' · ')}
-          </AppText>
+          <View style={styles.legend}>
+            {insights.colors.slice(0, 3).map((color) => (
+              <View key={color.key} style={styles.legendEntry}>
+                <View style={[styles.legendDot, { backgroundColor: color.hex }]} />
+                <AppText variant="meta" tone="secondary">{color.label}</AppText>
+                <AppText variant="meta" tone="muted">{Math.round(color.share * 100)}%</AppText>
+              </View>
+            ))}
+          </View>
         </View>
       ) : null}
     </View>
@@ -113,11 +118,14 @@ const styles = StyleSheet.create({
   pieces: { flexDirection: 'row', gap: CARD_GAP, paddingRight: spacing.page },
   piece: { width: CARD_WIDTH, gap: spacing.sm },
   pieceCanvas: { width: '100%', aspectRatio: 3 / 4, overflow: 'hidden', borderRadius: radii.md, backgroundColor: colors.imageMat },
-  pieceOutline: { ...StyleSheet.absoluteFill, borderRadius: radii.md, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(0,0,0,0.06)' },
-  contextChip: { fontSize: 10, letterSpacing: 1, paddingHorizontal: spacing.xs, paddingVertical: spacing.xs, backgroundColor: colors.linen, borderRadius: radii.sm },
-  swatches: { flexDirection: 'row', height: 12, borderRadius: radii.sm, overflow: 'hidden' },
-  swatch: { height: 12, borderWidth: stroke.hairline, borderColor: colors.ghostStroke },
-  palette: { gap: spacing.sm, paddingTop: spacing.lg, borderTopWidth: stroke.hairline, borderTopColor: colors.border },
+  pieceCaption: { paddingHorizontal: 2 },
+  // Separate swatches rather than one striped bar: each colour reads as a chip.
+  swatches: { flexDirection: 'row', gap: 2, height: 10 },
+  swatch: { height: 10, borderRadius: 5, borderWidth: stroke.hairline, borderColor: colors.ghostStroke },
+  palette: { gap: spacing.md, padding: 20, backgroundColor: colors.linen, borderRadius: 16 },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.lg, rowGap: spacing.xs },
+  legendEntry: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
   unlock: { gap: spacing.md },
   unlockTrack: { height: 2, backgroundColor: colors.hairline, borderRadius: 1, overflow: 'hidden' },
   unlockFill: { height: 2, backgroundColor: colors.accentInk },

@@ -39,7 +39,7 @@ function longDay(date: Date): string {
  * column per day. A filled tile is a logged day; every empty tile can be
  * tapped to log it, today's marked as the obvious one. It reads as a week even
  * when the user hasn't logged in a while, which a rail of past entries never
- * could, and the summary invites rather than reports how long it's been.
+ * could.
  */
 export function WearWeekStrip({ logs, items, onLogToday, onLogDay, onOpenEntry, disabled }: Props) {
   const { width } = useWindowDimensions();
@@ -49,10 +49,6 @@ export function WearWeekStrip({ logs, items, onLogToday, onLogDay, onOpenEntry, 
   const tileWidth = Math.floor((width - spacing.page * 2 - COLUMN_GAP * 6) / 7);
   const tileHeight = Math.round(tileWidth / editorial.garmentAspectRatio);
 
-  const todayLogged = !!week.days.find((day) => day.isToday)?.log;
-  const summary = todayLogged
-    ? 'Today’s look is in your diary'
-    : 'No look logged today · Tap to add';
 
   const renderDay = (day: WearWeekDay) => {
     const firstItem = day.log
@@ -86,9 +82,6 @@ export function WearWeekStrip({ logs, items, onLogToday, onLogDay, onOpenEntry, 
 
     return (
       <View key={day.dateKey} style={[styles.column, { width: tileWidth }]}>
-        <Text style={[styles.weekday, day.isToday && styles.todayText]}>
-          {day.date.toLocaleDateString('en-US', { weekday: 'narrow' })}
-        </Text>
         <PressableScale
           contentStyle={styles.tilePressable}
           pressedContentStyle={!day.log ? styles.slotPressed : undefined}
@@ -102,8 +95,14 @@ export function WearWeekStrip({ logs, items, onLogToday, onLogDay, onOpenEntry, 
         >
           {tile}
         </PressableScale>
-        <Text style={[styles.dayNumber, day.isToday && styles.todayText]}>{day.date.getDate()}</Text>
-        <View style={[styles.todayDot, !day.isToday && styles.hidden]} />
+        {/* One stacked dateline under each tile — weekday over a serif
+            numeral — rather than letters above and digits below. */}
+        <View style={styles.dateline}>
+          <Text style={[styles.weekday, day.isToday && styles.todayInk]}>
+            {day.isToday ? 'Today' : day.date.toLocaleDateString('en-US', { weekday: 'short' })}
+          </Text>
+          <Text style={[styles.dayNumber, day.isToday && styles.todayInk]}>{day.date.getDate()}</Text>
+        </View>
       </View>
     );
   };
@@ -111,7 +110,6 @@ export function WearWeekStrip({ logs, items, onLogToday, onLogDay, onOpenEntry, 
   return (
     <View style={styles.root}>
       <View style={styles.row}>{week.days.map(renderDay)}</View>
-      <Text style={styles.summary} accessibilityLiveRegion="polite">{summary}</Text>
     </View>
   );
 }
@@ -132,9 +130,11 @@ function TodaySlot({ width, height }: { width: number; height: number }) {
   }, [opacity, reduceMotion]);
   const breath = useAnimatedStyle(() => ({ opacity: opacity.value }));
   return (
-    <Animated.View style={[styles.slot, styles.todaySlot, { width, height }, breath]}>
-      <Ionicons name="add" size={18} color={colors.accentInk} />
-    </Animated.View>
+    <View style={[styles.slot, { width, height }]}>
+      <Animated.View style={[styles.todayDisc, breath]}>
+        <Ionicons name="add" size={16} color={colors.primaryForeground} />
+      </Animated.View>
+    </View>
   );
 }
 
@@ -142,9 +142,12 @@ const styles = StyleSheet.create({
   root: { gap: spacing.xs },
   row: { flexDirection: 'row', justifyContent: 'space-between' },
   column: { alignItems: 'center', gap: spacing.xs },
+  dateline: { alignItems: 'center', gap: 1, marginTop: 2 },
   weekday: {
     ...typography.text.masthead,
-    letterSpacing: 1.6,
+    fontSize: 9,
+    lineHeight: 12,
+    letterSpacing: 1.2,
     color: colors.mutedForeground,
   },
   tilePressable: { borderRadius: radii.photo },
@@ -153,43 +156,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radii.photo,
-    borderWidth: stroke.hairline,
-    borderColor: colors.border,
     backgroundColor: surfaces.plate,
   },
   slot: {
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radii.photo,
-    borderWidth: stroke.fine,
-    borderColor: colors.stitch,
-    borderStyle: 'dashed',
     backgroundColor: colors.linen,
   },
   slotPressed: { backgroundColor: colors.surfaceSubtle },
-  todaySlot: {
-    borderStyle: 'solid',
-    borderColor: colors.accentInk,
-    backgroundColor: colors.accent,
+  // A solid ink disc on the open tile: the one control-like mark in the row.
+  todayDisc: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.foreground,
   },
   dayNumber: {
-    ...typography.text.caption,
+    ...typography.text.editorialCard,
     fontVariant: ['tabular-nums'],
-    color: colors.mutedForeground,
-  },
-  todayText: {
-    color: colors.accentInk,
-    fontWeight: typography.weight.semibold,
-  },
-  todayDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.accentInk,
-  },
-  hidden: { opacity: 0 },
-  summary: {
-    ...typography.text.meta,
     color: colors.inkSubtle,
   },
+  todayInk: { color: colors.foreground },
 });

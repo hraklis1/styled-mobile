@@ -113,10 +113,13 @@ export function EditorialSection({
   headingStyle = 'default',
   dividerPlacement = 'below-heading',
   trailing,
+  kicker,
   children,
   style,
 }: {
   title: string;
+  /** A tracked-caps index line above the title, e.g. Home's "01 · Today". */
+  kicker?: string;
   /** One line on what the section holds, for sections whose contents aren't self-evident. */
   description?: string;
   actionLabel?: string;
@@ -145,8 +148,11 @@ export function EditorialSection({
    */
   /** `supporting` keeps Home's secondary sections compact and sans serif. */
   headingStyle?: 'default' | 'editorial' | 'chapter' | 'supporting';
-  /** Place the editorial hairline at the section boundary, as on Home. */
-  dividerPlacement?: 'below-heading' | 'above-heading';
+  /**
+   * Place the editorial hairline at the section boundary, as on Home.
+   * `none` separates sections by space alone.
+   */
+  dividerPlacement?: 'below-heading' | 'above-heading' | 'none';
   /** Rendered in the header row in place of an action, e.g. a status badge. */
   trailing?: ReactNode;
   children: ReactNode;
@@ -163,23 +169,30 @@ export function EditorialSection({
     <View style={[
       chapter ? styles.chapterSection : editorialHeading ? styles.editorialSection : ruled ? styles.ruledSection : styles.section,
       editorialHeading && dividerPlacement === 'above-heading' && styles.sectionBoundaryRule,
+      editorialHeading && dividerPlacement === 'none' && styles.sectionBoundarySpace,
       style,
     ]}>
+      {kicker ? <SectionKicker text={kicker} /> : null}
       <View style={[
         styles.sectionHeader,
         editorialHeading ? styles.editorialSectionHeader : null,
         chapter ? styles.chapterSectionHeader : null,
-        editorialHeading && dividerPlacement === 'above-heading' && styles.headerWithoutRule,
+        // The link shares the serif title's baseline, not the foot of its box.
+        supporting && !stacked ? styles.baselineHeader : null,
+        editorialHeading && dividerPlacement !== 'below-heading' && styles.headerWithoutRule,
         description ? styles.sectionHeaderTight : null,
         stacked && styles.sectionHeaderStacked,
       ]}>
-        <AppText
-          variant={supporting ? 'editorialSection' : chapter ? 'editorialChapter' : editorialHeading ? 'eyebrowLarge' : ruled ? 'eyebrow' : 'sectionTitle'}
-          tone={ruled && !editorialHeading ? 'muted' : 'primary'}
-          style={[editorialHeading ? styles.editorialSectionTitle : ruled ? styles.ruledSectionTitle : undefined]}
-        >
-          {title}
-        </AppText>
+        <View style={!stacked && styles.titleFill}>
+          <AppText
+            variant={supporting ? 'editorialSection' : chapter ? 'editorialChapter' : editorialHeading ? 'eyebrowLarge' : ruled ? 'eyebrow' : 'sectionTitle'}
+            tone={ruled && !editorialHeading ? 'muted' : 'primary'}
+            style={[editorialHeading ? styles.editorialSectionTitle : ruled ? styles.ruledSectionTitle : undefined]}
+            accessibilityRole="header"
+          >
+            {title}
+          </AppText>
+        </View>
         {trailing}
         {actionLabel && onAction ? (
           <PressableScale
@@ -209,6 +222,23 @@ export function EditorialSection({
       </View>
       {description ? <AppText variant={editorialHeading ? 'meta' : 'bodySmall'} tone={editorialHeading ? 'muted' : 'secondary'} style={styles.sectionDescription}>{description}</AppText> : null}
       {children}
+    </View>
+  );
+}
+
+/**
+ * A magazine running rule: "05" in serif, the department in tracked caps,
+ * then a hairline to the margin. It gives each section a horizontal anchor
+ * on a page of stacked serif titles without a filled band, which read as a
+ * settings-list header. "05 · Wardrobe" splits on the middle dot.
+ */
+function SectionKicker({ text }: { text: string }) {
+  const [index, label] = text.includes(' · ') ? text.split(' · ') : [undefined, text];
+  return (
+    <View style={styles.kickerRow} accessible accessibilityLabel={label}>
+      {index ? <AppText variant="editorialCard" tone="primary" style={styles.kickerIndex}>{index}</AppText> : null}
+      <AppText variant="masthead" tone="primary" style={styles.sectionKickerText} numberOfLines={1}>{label}</AppText>
+      <View style={styles.kickerRule} />
     </View>
   );
 }
@@ -477,7 +507,18 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
+  // Space-only boundary: the page's sections breathe apart instead of
+  // stacking hairlines, which read as a settings list.
+  // The next section's top padding is the whole gap; a bottom pad here too
+  // made gaps depend on which section came before.
+  sectionBoundarySpace: { paddingBottom: 0 },
   headerWithoutRule: { borderBottomWidth: 0, paddingBottom: 0 },
+  titleFill: { flex: 1 },
+  baselineHeader: { alignItems: 'baseline' },
+  kickerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  kickerIndex: { fontSize: 15, lineHeight: 18, fontVariant: ['tabular-nums'] },
+  sectionKickerText: { fontSize: 10, letterSpacing: 2 },
+  kickerRule: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.foreground, opacity: 0.35, marginLeft: spacing.xs },
   sectionHeader: {
     minHeight: 28,
     flexDirection: 'row',
@@ -488,12 +529,8 @@ const styles = StyleSheet.create({
   sectionHeaderStacked: { flexDirection: 'column', alignItems: 'flex-start', gap: spacing.sm },
   // A description carries its own gap to the content below it.
   sectionHeaderTight: { marginBottom: spacing.xs },
-  ruledSectionTitle: {
-    flex: 1,
-  },
-  editorialSectionTitle: {
-    flex: 1,
-  },
+  ruledSectionTitle: {},
+  editorialSectionTitle: {},
   sectionDescription: {
     maxWidth: 330,
     marginBottom: spacing.md,

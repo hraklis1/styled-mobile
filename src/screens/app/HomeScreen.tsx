@@ -44,7 +44,6 @@ import { formatCountdown } from '../../components/calendar/calendarUtils';
 import { OCCASIONS } from '../../lib/occasions';
 import { useShoppingSnaps } from '../../hooks/useShoppingSnaps';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
-import { ShortlistDecisionCard } from '../../components/shopping/ShortlistDecisionCard';
 import { buildShoppingEditItems, mergeShoppingSnaps } from '../../lib/shoppingGallery';
 import { buildShortlistSpotlight } from '../../lib/shortlistSpotlight';
 import { GarmentImage } from '../../components/wardrobe/garment-image';
@@ -74,6 +73,7 @@ import {
 } from '../../components/home/TodaysLookPlate';
 import { StylingLocationSheet } from '../../components/home/StylingLocationSheet';
 import { HomeWardrobeEdit } from '../../components/home/HomeBriefBand';
+import { shoppingPriorityRoute } from '../../lib/shopClarity';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { track } from '../../lib/analytics';
 import { hasSeenAiActionCoach, markAiActionCoachSeen } from '../../lib/aiActionCoach';
@@ -938,7 +938,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       <EditorialSection
         variant="ruled"
         headingStyle="chapter"
-        dividerPlacement="above-heading"
+        dividerPlacement="none"
+        kicker="01 · Today"
+        style={{ paddingBottom: 0 }}
         title={dailyLookPresentation.kind === 'priority' ? 'Today’s Priority' : 'Today’s Look'}
         trailing={hasHomeCollage ? (
           <PressableScale onPress={() => generatedCandidate ? openDailyLookSheet('look') : featuredOutfit && navigation.navigate('Closet', {
@@ -1061,11 +1063,34 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         )}
       </EditorialSection>
 
+      {/* ── Your Week in Wear ─────────────────────────────────────── */}
+      {/*
+        Keep the diary visible even when empty. The upper Today's wear row is
+        the quick entry point; these tiles provide history and past-day logging.
+      */}
+      <EditorialSection
+        variant="ruled"
+        headingStyle="supporting"
+        dividerPlacement="none"
+        kicker="02 · Your Week"
+        title="Your Week in Wear"
+      >
+        <WearWeekStrip
+          logs={logs}
+          items={items}
+          onLogToday={handleRecordWear}
+          onLogDay={handleLogPastDay}
+          onOpenEntry={setWearLogMenuEntry}
+          disabled={deleteLog.isPending}
+        />
+      </EditorialSection>
+
       {/* ── On the Calendar ───────────────────────────────────────── */}
       <EditorialSection
         variant="ruled"
         headingStyle="supporting"
-        dividerPlacement="above-heading"
+        dividerPlacement="none"
+        kicker="03 · Ahead"
         title="On the Calendar"
         actionLabel="View all"
         onAction={() => navigation.navigate('Calendar')}
@@ -1112,7 +1137,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                     {occasionLabel(nextUpEvent!.occasion)} · {nextUpEvent!.outfitId || (nextUpEvent!.itemIds?.length ?? 0) > 0 ? 'Look planned' : 'Plan a look'}
                   </Text>
                 </View>
-                {!largeText && (nextUpPiece ? <GarmentImage item={nextUpPiece} width={48} height={60} placeholderIconSize={18} /> : null)}
+                {!largeText && (nextUpPiece ? <GarmentImage item={nextUpPiece} width={56} height={72} borderRadius={8} placeholderIconSize={18} /> : null)}
                 <Ionicons name="chevron-forward" size={15} color={colors.mutedForeground} />
               </PressableScale>
             ) : null}
@@ -1171,58 +1196,44 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         )}
       </EditorialSection>
 
-      {/* ── Wardrobe intelligence ─────────────────────────────────── */}
+      {/* ── The Edit ──────────────────────────────────────────────── */}
       <HomeWardrobeEdit
+        kicker="04 · Shopping"
         onBriefPress={() => {
           track('shop_section_opened', { section: 'home_brief' });
           navigation.navigate('Shop', { screen: 'ShopMain', params: { view: 'for-you' } });
         }}
-        shortlist={shortlist.awaitingDecision.length > 0 ? ({ header, cardStyle }) => (
-          <ShortlistDecisionCard
-            variant="row"
-            header={header}
-            contentStyle={cardStyle}
-            items={shortlist.awaitingDecision}
-            storeNames={shortlist.decisionStores}
-            onPress={() => {
-              track('shop_section_opened', { section: 'home_shortlist' });
-              navigation.navigate('Shop', {
-                screen: 'ShoppingGallery',
-                params: { catalogFilter: 'active', returnTo: 'Home' },
-              });
-            }}
-          />
-        ) : undefined}
+        onPriorityPress={(priority, briefGeneratedAt) => {
+          track('shop_section_opened', { section: 'home_brief' });
+          navigation.navigate('Shop', {
+            screen: 'ShoppingPriorityEdit',
+            params: shoppingPriorityRoute(priority, briefGeneratedAt),
+            initial: false,
+          });
+        }}
+        onShopPress={() => {
+          track('shop_section_opened', { section: 'home_edit' });
+          navigation.navigate('Shop', { screen: 'ShopMain' });
+        }}
+        shortlist={shortlist.awaitingDecision.length > 0 ? {
+          items: shortlist.awaitingDecision,
+          onPress: () => {
+            track('shop_section_opened', { section: 'home_shortlist' });
+            navigation.navigate('Shop', {
+              screen: 'ShoppingGallery',
+              params: { catalogFilter: 'active', returnTo: 'Home' },
+            });
+          },
+        } : undefined}
       />
-
-      {/* ── Your Week in Wear ─────────────────────────────────────── */}
-      {/*
-        Keep the diary visible even when empty. The upper Today's wear row is
-        the quick entry point; these tiles provide history and past-day logging.
-      */}
-      <EditorialSection
-        variant="ruled"
-        headingStyle="supporting"
-        dividerPlacement="above-heading"
-        title="Your Week in Wear"
-        style={{ paddingBottom: 0 }}
-      >
-        <WearWeekStrip
-          logs={logs}
-          items={items}
-          onLogToday={handleRecordWear}
-          onLogDay={handleLogPastDay}
-          onOpenEntry={setWearLogMenuEntry}
-          disabled={deleteLog.isPending}
-        />
-      </EditorialSection>
 
       {/* ── Closet Insights ───────────────────────────────────────── */}
       {!itemsLoading && items.length > 0 ? (
         <EditorialSection
           variant="ruled"
           headingStyle="supporting"
-          dividerPlacement="above-heading"
+          dividerPlacement="none"
+          kicker="05 · Wardrobe"
           title="Closet Insights"
           actionLabel={closetInsights.ready ? 'See all' : undefined}
           onAction={closetInsights.ready ? openClosetInsights : undefined}
@@ -1383,19 +1394,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: SIDE_PAD,
     paddingBottom: spacing.xxxl * 2,
   },
-  // The section boundary provides the rule; the event needs no extra frame.
+  // Home's card material: a linen sheet, no outline, shared with The Edit.
   nextUpCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.lg,
-    paddingVertical: spacing.md,
+    padding: 20,
+    backgroundColor: colors.linen,
+    borderRadius: 16,
   },
   nextUpDate: {
     minWidth: 44,
   },
-  nextUpCopy: { flex: 1, gap: 2 },
-  nextUpTitle: { ...typography.text.label, color: colors.foreground },
-  nextUpSubtitle: { ...typography.text.meta, color: colors.mutedForeground },
+  nextUpCopy: { flex: 1, gap: 4 },
+  nextUpTitle: { ...typography.text.editorialCard, color: colors.foreground },
+  nextUpSubtitle: { ...typography.text.editorialItalic, fontSize: 14, lineHeight: 19, color: colors.inkSubtle },
   calendarStack: { gap: spacing.md },
 
   // Greeting
@@ -1483,10 +1496,9 @@ const styles = StyleSheet.create({
   // No events: a ruled line of copy with a way forward, not a grey box.
   calendarEmpty: {
     gap: spacing.xs,
-    paddingVertical: spacing.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    padding: 20,
+    backgroundColor: colors.linen,
+    borderRadius: 16,
   },
   calendarEmptyTitle: {
     ...typography.text.bodySmall,
