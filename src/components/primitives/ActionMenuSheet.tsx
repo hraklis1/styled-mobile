@@ -3,6 +3,7 @@ import {
   Animated,
   Easing,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   ScrollView,
@@ -32,10 +33,13 @@ type Props = {
   /** Optional content shown above the options, inside the scroll area. */
   children?: ReactNode;
   onClose: () => void;
+  /** Wait for iOS native dismissal before presenting another modal. */
+  deferSelectionUntilDismissed?: boolean;
 };
 
-export function ActionMenuSheet({ visible, title, subtitle, options, children, onClose }: Props) {
+export function ActionMenuSheet({ visible, title, subtitle, options, children, onClose, deferSelectionUntilDismissed = false }: Props) {
   const insets = useSafeAreaInsets();
+  const pendingSelection = useRef<(() => void) | null>(null);
   const animation = useRef(new Animated.Value(0)).current;
   const [mounted, setMounted] = useState(visible);
 
@@ -53,9 +57,14 @@ export function ActionMenuSheet({ visible, title, subtitle, options, children, o
 
   const select = useCallback((option: ActionMenuOption) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onClose();
-    setTimeout(option.onPress, 220);
-  }, [onClose]);
+    if (deferSelectionUntilDismissed && Platform.OS === 'ios') {
+      pendingSelection.current = option.onPress;
+      onClose();
+    } else {
+      onClose();
+      setTimeout(option.onPress, 220);
+    }
+  }, [onClose, deferSelectionUntilDismissed]);
 
   const translateY = animation.interpolate({
     inputRange: [0, 1],
@@ -69,6 +78,11 @@ export function ActionMenuSheet({ visible, title, subtitle, options, children, o
       animationType="none"
       statusBarTranslucent
       onRequestClose={onClose}
+      onDismiss={() => {
+        const action = pendingSelection.current;
+        pendingSelection.current = null;
+        action?.();
+      }}
     >
       <View style={styles.root}>
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: animation }]}>

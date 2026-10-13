@@ -585,7 +585,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
           >
             <Text style={styles.eventTitle} numberOfLines={2}>{event.title}</Text>
             <View style={styles.eventMeta}>
-              <Text style={styles.eventTime}>{formatTime(new Date(event.date))}</Text>
+              <Text style={styles.eventTime}>{event.calendarMetadata?.allDay ? 'All day' : formatTime(new Date(event.date))}</Text>
               <Text style={styles.dot}>·</Text>
               <Text style={styles.eventOccasion}>{occasion}</Text>
             </View>
@@ -802,7 +802,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
               </View>
               <View style={styles.pastBody}>
                 <Text style={styles.pastTitle} numberOfLines={1}>{item.event.title}</Text>
-                <Text style={styles.pastDate} numberOfLines={1}>{formatTime(new Date(item.event.date))}</Text>
+                <Text style={styles.pastDate} numberOfLines={1}>{item.event.calendarMetadata?.allDay ? 'All day' : formatTime(new Date(item.event.date))}</Text>
               </View>
               {!pastPresentation.hasOutfit ? (
                 <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />
@@ -909,6 +909,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
       />
       <ActionMenuSheet
         visible={calendarMenuVisible}
+        deferSelectionUntilDismissed
         title="Calendar tools"
         subtitle="Keep your wardrobe plan up to date."
         options={[

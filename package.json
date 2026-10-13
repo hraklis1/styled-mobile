@@ -24,6 +24,7 @@
     "expo-audio": "~56.0.12",
     "expo-auth-session": "~56.0.14",
     "expo-blur": "~56.0.3",
+    "expo-calendar": "~56.0.10",
     "expo-camera": "~56.0.8",
     "expo-constants": "~56.0.16",
     "expo-contacts": "~56.0.14",
@@ -103,7 +104,9 @@
     "autolinking": {
       "ios": {
         "buildFromSource": [
-          "expo-contacts"
+          "expo-contacts",
+          "expo-modules-core",
+          "expo-modules-worklets"
         ]
       }
     }

@@ -14,7 +14,7 @@ function invalidateEventQueries(qc: ReturnType<typeof useQueryClient>): void {
 export function useEvents() {
   return useQuery({
     queryKey: EVENTS_QUERY_KEY,
-    queryFn: () => api.get<Event[]>('/api/events').then((r) => r.data),
+    queryFn: () => api.get<Event[]>('/api/events').then((r) => r.data.filter(event => !event.calendarMetadata?.cancelled).map(event => event.calendarMetadata?.allDayDate ? { ...event, date: new Date(`${event.calendarMetadata.allDayDate}T12:00:00`).toISOString() } : event)),
   });
 }
 

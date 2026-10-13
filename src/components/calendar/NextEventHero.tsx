@@ -119,7 +119,7 @@ export function NextEventHero({
           </>
         )}
         <Text style={s.meta}>
-          {d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · {formatTime(d)}
+          {d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · {event.calendarMetadata?.allDay ? 'All day' : formatTime(d)}
         </Text>
         {event.location ? <Text style={s.location} numberOfLines={2}>{event.location}</Text> : null}
         {contextParts.length > 0 && (

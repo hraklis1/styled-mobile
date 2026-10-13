@@ -15,4 +15,7 @@ export type Event = {
    * column, in which case the field is simply absent from the response.
    */
   boardId?: number | null;
+  externalSource?: string | null;
+  externalId?: string | null;
+  calendarMetadata?: { calendarId: string; calendarName: string; allDay: boolean; allDayDate?: string; sourceNotes?: string | null; endDate?: string; timeZone?: string; url?: string; cancelled: boolean; syncedAt: string } | null;
 };

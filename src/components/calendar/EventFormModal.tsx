@@ -215,10 +215,12 @@ export function EventFormModal({
             keyboardDismissMode="interactive"
             showsVerticalScrollIndicator={false}
           >
+            {event?.calendarMetadata && <Text style={{ ...typography.text.caption, color: colors.mutedForeground }}>Calendar details follow the source calendar. Your occasion and styling details stay in Styled.</Text>}
             <View style={s.field}>
               <Text style={s.label}>Event Name</Text>
               <TextInput
                 style={[s.input, formError && s.inputError]}
+                editable={!event?.calendarMetadata}
                 value={title}
                 onChangeText={(value) => {
                   setTitle(value);
@@ -227,7 +229,7 @@ export function EventFormModal({
                 placeholder="e.g. Sarah's Wedding, Team Standup"
                 placeholderTextColor={colors.mutedForeground}
                 returnKeyType="next"
-                autoFocus
+                autoFocus={!event?.calendarMetadata}
                 accessibilityLabel="Event name"
               />
               {formError ? <Text style={s.errorText}>{formError}</Text> : null}
@@ -236,7 +238,7 @@ export function EventFormModal({
             <View style={s.row}>
               <View style={[s.field, { flex: 1 }]}>
                 <Text style={s.label}>Date</Text>
-                {process.env.EXPO_OS === 'ios' ? (
+                {event?.calendarMetadata ? <Text style={s.selectText}>{formDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</Text> : process.env.EXPO_OS === 'ios' ? (
                   <View style={s.nativePickerRow}>
                     <DateTimePicker
                       value={formDate}
@@ -259,7 +261,7 @@ export function EventFormModal({
               <View style={{ width: spacing.md }} />
               <View style={[s.field, { flex: 1 }]}>
                 <Text style={s.label}>Time</Text>
-                {process.env.EXPO_OS === 'ios' ? (
+                {event?.calendarMetadata ? <Text style={s.selectText}>{event.calendarMetadata.allDay ? 'All day' : formatTime(formDate)}</Text> : process.env.EXPO_OS === 'ios' ? (
                   <View style={s.nativePickerRow}>
                     <DateTimePicker
                       value={formDate}
@@ -307,13 +309,13 @@ export function EventFormModal({
 
             <View style={[s.field, { zIndex: 10 }]}>
               <Text style={s.label}>Location (Optional)</Text>
-              <LocationAutocompleteInput
+              {event?.calendarMetadata ? <Text style={s.selectText}>{location || 'No location'}</Text> : <LocationAutocompleteInput
                 value={location}
                 onChangeText={setLocation}
                 onSelect={setLocation}
                 placeholder="e.g. Downtown Seattle"
                 dropdownPlacement="inline"
-              />
+              />}
             </View>
 
             <TouchableOpacity

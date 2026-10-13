@@ -88,7 +88,7 @@ export function EventDetailModal({
   const occasionMeta = OCCASIONS.find((o) => o.id === event.occasion);
   const iconName = (OCCASION_ICONS[event.occasion] ?? 'calendar-outline') as keyof typeof Ionicons.glyphMap;
   const presentation = presentCalendarEvent(event);
-  const notesPresentation = presentEventNotes(event.notes);
+  const notesPresentation = presentEventNotes([...new Set([event.calendarMetadata?.sourceNotes, event.notes].filter(Boolean))].join('\n\n'));
   const hasOutfit = presentation.hasOutfit;
   const pieceCount = event.itemIds?.length ?? 0;
   const lookWidth = Math.max(240, Math.min(width - spacing.lg * 4, 480));
@@ -132,10 +132,16 @@ export function EventDetailModal({
             </View>
           </View>
 
+          {event.calendarMetadata && (
+            <View style={s.infoRow}>
+              <Ionicons name="sync-outline" size={15} color={colors.mutedForeground} />
+              <Text style={s.metaText}>Synced from {event.calendarMetadata.calendarName}. Edit event details in your source calendar.</Text>
+            </View>
+          )}
           <View style={s.infoCard}>
             <View style={s.infoRow}>
               <Ionicons name="calendar-outline" size={15} color={colors.mutedForeground} />
-              <Text selectable style={s.metaText}>{formatDayLabel(d)} · {formatTime(d)}</Text>
+              <Text selectable style={s.metaText}>{formatDayLabel(d)} · {event.calendarMetadata?.allDay ? 'All day' : formatTime(d)}</Text>
               {countdown ? (
                 <View style={s.countdownBadge}>
                   <Text style={s.countdownText}>{countdown}</Text>
@@ -283,7 +289,8 @@ export function EventDetailModal({
           title="Event options"
           subtitle={event.title}
           options={[
-            { label: 'Edit event', icon: 'pencil-outline', onPress: () => onEdit(event) },
+            { label: event.calendarMetadata ? 'Edit styling details' : 'Edit event', icon: 'pencil-outline', onPress: () => onEdit(event) },
+            ...(event.calendarMetadata?.url && /^https:\/\//i.test(event.calendarMetadata.url) ? [{ label: 'Open source calendar', icon: 'open-outline' as const, onPress: () => { void Linking.openURL(event.calendarMetadata!.url!); } }] : []),
             ...(chooseBoard ? [{ label: boardLabel, icon: 'albums-outline' as const, onPress: chooseBoard }] : []),
             { label: 'Delete event', icon: 'trash-outline', destructive: true, onPress: () => onDelete(event) },
           ]}

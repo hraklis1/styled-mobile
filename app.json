@@ -25,6 +25,11 @@
             "CFBundleURLSchemes": [
               "com.googleusercontent.apps.68027085249-ihvksfh38gm9j1e8qcmbc4vd846q45m9"
             ]
+          },
+          {
+            "CFBundleURLSchemes": [
+              "styled"
+            ]
           }
         ]
       },
@@ -200,6 +205,13 @@
           "url": "https://sentry.io/",
           "organization": "pixelcraft-apps",
           "project": "react-native"
+        }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Styled reads the calendars you choose to keep your plans and outfit suggestions up to date. It never changes your source calendars.",
+          "remindersPermission": false
         }
       ]
     ],

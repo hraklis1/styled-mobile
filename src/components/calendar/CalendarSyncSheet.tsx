@@ -1,456 +1,116 @@
+import { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  Modal,
-  ScrollView,
-  SectionList,
-  TouchableOpacity,
-  TextInput,
   ActivityIndicator,
-  StyleSheet,
   Alert,
   KeyboardAvoidingView,
+  Linking,
+  Modal,
   Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import { Host, Switch } from '@expo/ui';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
-import { useEffect, useMemo, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  useCalendarConnections,
-  useGoogleCalendarPreview,
-  useAppleCalendarPreview,
-  useImportGoogleCalendarEvents,
-  useImportAppleCalendarEvents,
-  useDisconnectGoogleCalendar,
-  useConnectAppleCalendar,
-  useDisconnectAppleCalendar,
-  CALENDAR_CONNECTIONS_KEY,
-  type CalendarPreviewEvent,
-} from '../../hooks/useCalendarSync';
-import { api, API_BASE_URL, isNetworkError } from '../../lib/api';
-import { track } from '../../lib/analytics';
+  useAvailableCalendars,
+  useCalendarActions,
+  useConnectedCalendars,
+  connectOutlookCalendar,
+  type CalendarConnection,
+} from '../../hooks/useCalendarConnections';
+import { api, API_BASE_URL } from '../../lib/api';
 import {
   connectGoogleCalendar,
   GOOGLE_CALENDAR_ERROR_MESSAGES,
 } from '../../lib/googleCalendarAuth';
-import { colors, spacing, typography, radii } from '../../theme';
 import {
-  createDefaultSelection,
-  filterPreviewEvents,
-  groupPreviewEventsByDate,
-  partitionPreviewEvents,
-  updateVisibleSelection,
-  type CalendarDateRange,
-} from './calendarSyncUtils';
+  deviceCalendarProvider,
+  listDeviceCalendars,
+  type ConnectedCalendar,
+} from '../../lib/device-calendar';
+import { colors, typography, spacing } from '../../theme';
 
-const GREEN = '#22c55e';
-type Provider = 'google' | 'apple';
-const DATE_FILTERS: { value: CalendarDateRange; label: string }[] = [
-  { value: 7, label: 'Next 7 days' },
-  { value: 30, label: 'Next 30 days' },
-  { value: 'all', label: 'All upcoming' },
-];
-
-function formatOccasionLabel(occasion: string) {
-  return occasion.replaceAll('_', ' ').replace(/\b\w/g, (character) => character.toUpperCase());
+type Icon = keyof typeof Ionicons.glyphMap;
+function providerInfo(provider: string): {
+  name: string;
+  icon: Icon;
+  detail: string;
+} {
+  if (provider === 'google')
+    return {
+      name: 'Google Calendar',
+      icon: 'logo-google',
+      detail: 'Personal, work & shared calendars',
+    };
+  if (provider === 'outlook')
+    return {
+      name: 'Outlook',
+      icon: 'mail-outline',
+      detail: 'Microsoft 365 & Outlook.com',
+    };
+  if (provider === 'apple')
+    return {
+      name: 'Calendar feed',
+      icon: 'link-outline',
+      detail: 'A secure iCal or webcal subscription',
+    };
+  return {
+    name:
+      Platform.OS === 'ios' ? 'Apple & device calendars' : 'Device calendars',
+    icon: 'calendar-outline',
+    detail: 'iCloud, Outlook & accounts on this device',
+  };
 }
-
-function SheetHeader({
-  title,
-  onBack,
-  onClose,
-}: {
-  title: string;
-  onBack?: () => void;
-  onClose: () => void;
-}) {
-  return (
-    <View style={s.header}>
-      <View style={s.headerSide}>
-        {onBack && (
-          <TouchableOpacity onPress={onBack} style={s.headerAction} accessibilityLabel="Back">
-            <Ionicons name="chevron-back" size={20} color={colors.primary} />
-            <Text style={s.headerActionText}>Back</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-      <Text style={s.headerTitle}>{title}</Text>
-      <TouchableOpacity onPress={onClose} style={[s.headerSide, s.headerSideRight]}>
-        <Text style={s.doneText}>Done</Text>
-      </TouchableOpacity>
-    </View>
+function lastSynced(value: string | null) {
+  if (!value) return 'Waiting for first sync';
+  const minutes = Math.max(
+    0,
+    Math.floor((Date.now() - +new Date(value)) / 60000),
   );
+  if (minutes < 1) return 'Updated just now';
+  if (minutes < 60) return `Updated ${minutes} min ago`;
+  return `Updated ${new Date(value).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
 }
-
-function ProviderIcon({ provider }: { provider: Provider }) {
-  return (
-    <View
-      style={[
-        s.providerIcon,
-        { backgroundColor: provider === 'google' ? '#EEF2FF' : colors.muted },
-      ]}
-    >
-      <Ionicons
-        name={provider === 'google' ? 'logo-google' : 'logo-apple'}
-        size={20}
-        color={provider === 'google' ? '#4285F4' : colors.foreground}
-      />
-    </View>
-  );
-}
-
-function EventRow({
-  event,
-  selected,
-  disabled,
-  onToggle,
+function Action({
+  label,
+  onPress,
+  busy = false,
+  secondary = false,
+  disabled = false,
 }: {
-  event: CalendarPreviewEvent;
-  selected: boolean;
+  label: string;
+  onPress: () => void;
+  busy?: boolean;
+  secondary?: boolean;
   disabled?: boolean;
-  onToggle?: () => void;
 }) {
-  const date = new Date(event.date);
   return (
     <TouchableOpacity
-      style={[s.eventRow, disabled && s.eventRowDisabled]}
-      onPress={onToggle}
-      disabled={disabled}
-      activeOpacity={0.7}
-      accessibilityRole={disabled ? undefined : 'checkbox'}
-      accessibilityState={disabled ? undefined : { checked: selected }}
+      accessibilityRole="button"
+      disabled={busy || disabled}
+      onPress={onPress}
+      style={[
+        s.action,
+        secondary && s.secondary,
+        (busy || disabled) && s.disabled,
+      ]}
     >
-      <View style={[s.eventCheck, selected && s.eventCheckSelected, disabled && s.eventCheckSynced]}>
-        {selected && <Ionicons name="checkmark" size={13} color={colors.white} />}
-        {disabled && <Ionicons name="checkmark" size={13} color={colors.mutedForeground} />}
-      </View>
-      <View style={s.eventBody}>
-        <Text style={s.eventTitle} numberOfLines={1}>{event.title}</Text>
-        <Text style={s.eventMeta}>
-          {date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-          {event.location ? ` · ${event.location}` : ''}
-        </Text>
-      </View>
+      {busy && (
+        <ActivityIndicator
+          size="small"
+          color={secondary ? colors.foreground : colors.white}
+        />
+      )}
+      <Text style={[s.actionText, secondary && s.secondaryText]}>{label}</Text>
     </TouchableOpacity>
   );
 }
-
-function CalendarEventReview({
-  provider,
-  events,
-  isLoading,
-  isError,
-  errorMessage,
-  selected,
-  isImporting,
-  onToggle,
-  onUpdateVisibleSelection,
-  onRetry,
-  onImport,
-  onBack,
-  onClose,
-}: {
-  provider: Provider;
-  events?: CalendarPreviewEvent[];
-  isLoading: boolean;
-  isError: boolean;
-  errorMessage?: string;
-  selected: Set<string>;
-  isImporting: boolean;
-  onToggle: (id: string) => void;
-  onUpdateVisibleSelection: (
-    events: CalendarPreviewEvent[],
-    action: 'select' | 'clear',
-  ) => void;
-  onRetry: () => void;
-  onImport: () => void;
-  onBack: () => void;
-  onClose: () => void;
-}) {
-  const [syncedExpanded, setSyncedExpanded] = useState(false);
-  const [search, setSearch] = useState('');
-  const [dateRange, setDateRange] = useState<CalendarDateRange>(30);
-  const [selectedOccasions, setSelectedOccasions] = useState<string[]>([]);
-  const { newEvents, syncedEvents } = useMemo(
-    () => partitionPreviewEvents(events ?? []),
-    [events],
-  );
-  const availableOccasions = useMemo(
-    () => [...new Set(newEvents.map((event) => event.occasion).filter(Boolean))].sort(),
-    [newEvents],
-  );
-  const filteredNewEvents = useMemo(
-    () => filterPreviewEvents(newEvents, {
-      search,
-      dateRange,
-      occasions: selectedOccasions,
-    }),
-    [newEvents, search, dateRange, selectedOccasions],
-  );
-  const sections = useMemo(
-    () => [
-      ...groupPreviewEventsByDate(filteredNewEvents).map((section) => ({ ...section, kind: 'new' as const })),
-      ...(syncedExpanded
-        ? [{ title: 'Previously synced', data: syncedEvents, kind: 'synced' as const }]
-        : []),
-    ],
-    [filteredNewEvents, syncedEvents, syncedExpanded],
-  );
-  const providerName = provider === 'google' ? 'Google Calendar' : 'Apple Calendar';
-
-  useEffect(() => {
-    setSyncedExpanded(false);
-    setSearch('');
-    setDateRange(30);
-    setSelectedOccasions([]);
-  }, [provider]);
-
-  const toggleOccasion = (occasion: string) => {
-    setSelectedOccasions((current) => (
-      current.includes(occasion)
-        ? current.filter((value) => value !== occasion)
-        : [...current, occasion]
-    ));
-  };
-
-  const clearFilters = () => {
-    setSearch('');
-    setDateRange('all');
-    setSelectedOccasions([]);
-  };
-
-  return (
-    <View style={s.root}>
-      <SheetHeader title="Review Events" onBack={onBack} onClose={onClose} />
-      {isLoading ? (
-        <View style={s.centerState}>
-          <ActivityIndicator color={colors.primary} size="large" />
-          <Text style={s.stateTitle}>Checking {providerName}</Text>
-          <Text style={s.stateText}>Finding events that are ready to import.</Text>
-        </View>
-      ) : isError ? (
-        <View style={s.centerState}>
-          <Ionicons name="cloud-offline-outline" size={30} color={colors.mutedForeground} />
-          <Text style={s.stateTitle}>Could not load events</Text>
-          <Text style={s.stateText}>{errorMessage ?? 'Please try again.'}</Text>
-          <TouchableOpacity style={s.primaryBtn} onPress={onRetry}>
-            <Text style={s.primaryBtnText}>Try Again</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <>
-          <SectionList
-            sections={sections}
-            keyExtractor={(item) => item.externalId}
-            stickySectionHeadersEnabled
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={s.reviewContent}
-            ListHeaderComponent={
-              <View style={s.reviewIntro}>
-                <View style={s.reviewProviderRow}>
-                  <ProviderIcon provider={provider} />
-                  <View style={s.providerText}>
-                    <Text style={s.providerName}>{providerName}</Text>
-                    <Text style={s.providerDesc}>
-                      {selected.size} selected · {filteredNewEvents.length} shown of {newEvents.length}
-                    </Text>
-                  </View>
-                </View>
-                {newEvents.length > 0 && (
-                  <View style={s.filterArea}>
-                    <View style={s.searchBox}>
-                      <Ionicons name="search-outline" size={16} color={colors.mutedForeground} />
-                      <TextInput
-                        style={s.searchInput}
-                        value={search}
-                        onChangeText={setSearch}
-                        placeholder="Search events or locations"
-                        placeholderTextColor={colors.mutedForeground}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        returnKeyType="search"
-                        clearButtonMode="while-editing"
-                      />
-                    </View>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={s.filterChipRow}
-                    >
-                      {DATE_FILTERS.map((filter) => {
-                        const active = dateRange === filter.value;
-                        return (
-                          <TouchableOpacity
-                            key={String(filter.value)}
-                            style={[s.filterChip, active && s.filterChipActive]}
-                            onPress={() => setDateRange(filter.value)}
-                            activeOpacity={0.75}
-                          >
-                            <Text style={[s.filterChipText, active && s.filterChipTextActive]}>
-                              {filter.label}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </ScrollView>
-                    {availableOccasions.length > 0 && (
-                      <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={s.filterChipRow}
-                      >
-                        {availableOccasions.map((occasion) => {
-                          const active = selectedOccasions.includes(occasion);
-                          return (
-                            <TouchableOpacity
-                              key={occasion}
-                              style={[s.filterChip, active && s.filterChipActive]}
-                              onPress={() => toggleOccasion(occasion)}
-                              activeOpacity={0.75}
-                            >
-                              <Text style={[s.filterChipText, active && s.filterChipTextActive]}>
-                                {formatOccasionLabel(occasion)}
-                              </Text>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </ScrollView>
-                    )}
-                    <View style={s.selectionBar}>
-                      <Text style={s.selectionTitle}>New events</Text>
-                      <View style={s.selectionActions}>
-                        <TouchableOpacity
-                          onPress={() => onUpdateVisibleSelection(filteredNewEvents, 'select')}
-                          disabled={filteredNewEvents.length === 0}
-                        >
-                          <Text style={[
-                            s.selectionActionText,
-                            filteredNewEvents.length === 0 && s.selectionActionDisabled,
-                          ]}>
-                            Select shown
-                          </Text>
-                        </TouchableOpacity>
-                        <View style={s.actionDivider} />
-                        <TouchableOpacity
-                          onPress={() => onUpdateVisibleSelection(filteredNewEvents, 'clear')}
-                          disabled={filteredNewEvents.length === 0}
-                        >
-                          <Text style={[
-                            s.selectionActionText,
-                            filteredNewEvents.length === 0 && s.selectionActionDisabled,
-                          ]}>
-                            Clear shown
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </View>
-                )}
-              </View>
-            }
-            ListEmptyComponent={
-              <View style={s.emptyState}>
-                <Ionicons
-                  name={newEvents.length === 0 ? 'checkmark-circle-outline' : 'search-outline'}
-                  size={32}
-                  color={newEvents.length === 0 ? GREEN : colors.mutedForeground}
-                />
-                <Text style={s.stateTitle}>
-                  {newEvents.length === 0 ? 'You’re all caught up' : 'No events match'}
-                </Text>
-                <Text style={s.stateText}>
-                  {newEvents.length === 0
-                    ? 'There are no new events to import.'
-                    : 'Try changing or clearing your filters.'}
-                </Text>
-                {newEvents.length > 0 && (
-                  <TouchableOpacity style={s.clearFiltersBtn} onPress={clearFilters}>
-                    <Text style={s.clearFiltersText}>Clear filters</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            }
-            renderSectionHeader={({ section }) => section.kind === 'synced' ? (
-              <TouchableOpacity
-                style={s.syncedListHeader}
-                onPress={() => setSyncedExpanded(false)}
-                activeOpacity={0.7}
-              >
-                <View>
-                  <Text style={s.syncedTitle}>Previously synced</Text>
-                  <Text style={s.syncedSubtitle}>
-                    {syncedEvents.length} event{syncedEvents.length === 1 ? '' : 's'}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-up" size={18} color={colors.mutedForeground} />
-              </TouchableOpacity>
-            ) : (
-              <View style={s.sectionHeader}>
-                <Text style={s.sectionTitle}>{section.title}</Text>
-              </View>
-            )}
-            renderItem={({ item, section }) => (
-              <EventRow
-                event={item}
-                selected={selected.has(item.externalId)}
-                disabled={section.kind === 'synced'}
-                onToggle={section.kind === 'new' ? () => onToggle(item.externalId) : undefined}
-              />
-            )}
-            ListFooterComponent={
-              syncedEvents.length > 0 && !syncedExpanded ? (
-                <View style={s.syncedSection}>
-                  <TouchableOpacity
-                    style={s.syncedHeader}
-                    onPress={() => setSyncedExpanded((current) => !current)}
-                    activeOpacity={0.7}
-                  >
-                    <View>
-                      <Text style={s.syncedTitle}>Previously synced</Text>
-                      <Text style={s.syncedSubtitle}>
-                        {syncedEvents.length} event{syncedEvents.length === 1 ? '' : 's'}
-                      </Text>
-                    </View>
-                    <Ionicons
-                      name={syncedExpanded ? 'chevron-up' : 'chevron-down'}
-                      size={18}
-                      color={colors.mutedForeground}
-                    />
-                  </TouchableOpacity>
-                </View>
-              ) : null
-            }
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-          />
-          {newEvents.length > 0 && (
-            <View style={s.stickyFooter}>
-              <TouchableOpacity
-                style={[s.importBtn, (selected.size === 0 || isImporting) && s.buttonDisabled]}
-                onPress={onImport}
-                disabled={selected.size === 0 || isImporting}
-                activeOpacity={0.85}
-              >
-                {isImporting ? (
-                  <ActivityIndicator size="small" color={colors.white} />
-                ) : (
-                  <Ionicons name="download-outline" size={16} color={colors.white} />
-                )}
-                <Text style={s.importBtnText}>
-                  {isImporting
-                    ? 'Importing…'
-                    : `Import ${selected.size} event${selected.size === 1 ? '' : 's'}`}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </>
-      )}
-    </View>
-  );
-}
-
 export function CalendarSyncSheet({
   visible,
   onClose,
@@ -458,603 +118,807 @@ export function CalendarSyncSheet({
   visible: boolean;
   onClose: () => void;
 }) {
-  const qc = useQueryClient();
-  const [reviewProvider, setReviewProvider] = useState<Provider | null>(null);
-  const [googleSelected, setGoogleSelected] = useState(new Set<string>());
-  const [appleSelected, setAppleSelected] = useState(new Set<string>());
-  const [appleUrlInput, setAppleUrlInput] = useState('');
-  const [connectingGoogle, setConnectingGoogle] = useState(false);
-
-  const connections = useCalendarConnections();
-  const googleConnected = connections.data?.google.connected ?? false;
-  const appleConnected = connections.data?.apple.connected ?? false;
-  const googlePreview = useGoogleCalendarPreview(reviewProvider === 'google' && googleConnected);
-  const applePreview = useAppleCalendarPreview(reviewProvider === 'apple' && appleConnected);
-  const importGoogle = useImportGoogleCalendarEvents();
-  const importApple = useImportAppleCalendarEvents();
-  const disconnectGoogle = useDisconnectGoogleCalendar();
-  const connectApple = useConnectAppleCalendar();
-  const disconnectApple = useDisconnectAppleCalendar();
-
-  useEffect(() => {
-    if (googlePreview.data) setGoogleSelected(createDefaultSelection(googlePreview.data));
-  }, [googlePreview.data]);
-
-  useEffect(() => {
-    if (applePreview.data) setAppleSelected(createDefaultSelection(applePreview.data));
-  }, [applePreview.data]);
+  const insets = useSafeAreaInsets();
+  const query = useConnectedCalendars(visible);
+  const actions = useCalendarActions();
+  const [device, setDevice] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [deviceCalendars, setDeviceCalendars] = useState<ConnectedCalendar[]>(
+    [],
+  );
+  const [selected, setSelected] = useState<string[]>([]);
+  const [automatic, setAutomatic] = useState(true);
+  const [connecting, setConnecting] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [feedOpen, setFeedOpen] = useState(false);
+  const [feedUrl, setFeedUrl] = useState('');
+  const available = useAvailableCalendars(editing);
+  const connections = query.data?.connections ?? [];
+  const busy =
+    actions.save.isPending ||
+    actions.sync.isPending ||
+    actions.disconnect.isPending ||
+    actions.feed.isPending ||
+    !!connecting;
 
   useEffect(() => {
-    const errorData = (googlePreview.error as any)?.response?.data;
-    if (!errorData?.reconnect) return;
-    setReviewProvider(null);
-    qc.invalidateQueries({ queryKey: CALENDAR_CONNECTIONS_KEY });
-    Alert.alert(
-      'Reconnect Google Calendar',
-      errorData.message ?? 'Google Calendar access expired. Disconnect and reconnect your account.',
-    );
-  }, [googlePreview.error, qc]);
-
+    void deviceCalendarProvider().then(setDevice);
+  }, []);
   useEffect(() => {
     if (!visible) {
-      setReviewProvider(null);
-      setGoogleSelected(new Set());
-      setAppleSelected(new Set());
-      setAppleUrlInput('');
-      setConnectingGoogle(false);
+      setEditing(null);
+      setError(null);
+      setFeedOpen(false);
+      setFeedUrl('');
     }
   }, [visible]);
-
-  const closeAfterImport = (created: number, updated: number) => {
-    onClose();
-    Alert.alert(
-      'Calendar updated',
-      `${created} new event${created === 1 ? '' : 's'} added${updated ? `, ${updated} updated` : ''}.`,
+  const fail = (cause: unknown) => {
+    const e = cause as {
+      response?: { data?: { message?: string } };
+      message?: string;
+    };
+    setError(
+      e.response?.data?.message ??
+        e.message ??
+        'Something went wrong. Please try again.',
     );
   };
-
-  const handleConnectGoogle = async () => {
-    setConnectingGoogle(true);
-    track('calendar_google_connection_started');
-    const result = await connectGoogleCalendar({
-      apiBaseUrl: API_BASE_URL,
-      getMobileToken: () =>
-        api.get<{ token: string }>('/api/calendar/google/mobile-token').then(({ data }) => data.token),
-      openAuthSession: WebBrowser.openAuthSessionAsync,
-      verifyConnection: async () => {
-        const refreshed = await connections.refetch();
-        return refreshed.data?.google.connected === true;
-      },
-    });
-
-    if (result.status === 'connected') {
-      track('calendar_google_connection_succeeded');
-      Alert.alert('Connected', 'Google Calendar is ready to sync.');
-    } else if (result.status === 'cancelled') {
-      track('calendar_google_connection_cancelled', { reason: result.reason });
-    } else {
-      track('calendar_google_connection_failed', { error_code: result.code });
-      Alert.alert(
-        'Connection Failed',
-        GOOGLE_CALENDAR_ERROR_MESSAGES[result.code] ?? GOOGLE_CALENDAR_ERROR_MESSAGES.unknown,
-      );
-      if (result.code === 'session_expired') {
-        await qc.invalidateQueries({ queryKey: CALENDAR_CONNECTIONS_KEY });
+  const openCalendars = async (provider: string) => {
+    setError(null);
+    const existing = connections.find((c) => c.provider === provider);
+    setSelected(existing?.settings.calendarIds ?? []);
+    setAutomatic(existing?.settings.automatic ?? true);
+    if (provider.startsWith('device:')) {
+      setConnecting(provider);
+      try {
+        setDeviceCalendars(await listDeviceCalendars(true));
+      } catch (e) {
+        fail(e);
+        setConnecting(null);
+        return;
       }
+      setConnecting(null);
     }
-    setConnectingGoogle(false);
+    setEditing(provider);
   };
-
-  const disconnectProvider = (provider: Provider) => {
-    const name = provider === 'google' ? 'Google Calendar' : 'Apple Calendar';
-    const mutation = provider === 'google' ? disconnectGoogle : disconnectApple;
+  const connect = async (provider: 'google' | 'outlook') => {
+    if (busy) return;
+    setError(null);
+    setConnecting(provider);
+    try {
+      if (provider === 'google') {
+        const result = await connectGoogleCalendar({
+          apiBaseUrl: API_BASE_URL,
+          getMobileToken: () =>
+            api
+              .get<{ token: string }>('/api/calendar/google/mobile-token')
+              .then((r) => r.data.token),
+          openAuthSession: WebBrowser.openAuthSessionAsync,
+          verifyConnection: () =>
+            api
+              .get<{ google: { connected: boolean } }>(
+                '/api/calendar/connections',
+              )
+              .then((r) => r.data.google.connected),
+        });
+        if (result.status === 'cancelled') return;
+        if (result.status === 'failed')
+          throw new Error(
+            GOOGLE_CALENDAR_ERROR_MESSAGES[result.code] ??
+              GOOGLE_CALENDAR_ERROR_MESSAGES.unknown,
+          );
+      } else if ((await connectOutlookCalendar()) === 'cancelled') return;
+      await query.refetch();
+      setSelected([]);
+      setAutomatic(true);
+      setEditing(provider);
+    } catch (e) {
+      fail(e);
+    } finally {
+      setConnecting(null);
+    }
+  };
+  const saveCalendars = async () => {
+    if (!editing || busy) return;
+    setError(null);
+    try {
+      const settings = {
+        calendarIds: selected,
+        automatic,
+        ...(editing.startsWith('device:')
+          ? { calendars: deviceCalendars }
+          : {}),
+      };
+      await actions.save.mutateAsync({ provider: editing, ...settings });
+      if (selected.length)
+        await actions.sync.mutateAsync({
+          provider: editing,
+          settings,
+          last_synced_at: null,
+          last_error: null,
+        });
+      setEditing(null);
+    } catch (e) {
+      fail(e);
+    }
+  };
+  const syncNow = async (connection: CalendarConnection) => {
+    setError(null);
+    try {
+      await actions.sync.mutateAsync(connection);
+    } catch (e) {
+      fail(e);
+    }
+  };
+  const disconnect = (connection: CalendarConnection) =>
     Alert.alert(
-      `Disconnect ${name}`,
-      'This removes the connection. Imported events will not be deleted.',
+      'Disconnect calendar?',
+      'Your imported events and outfit plans stay in Styled. The source calendar will not change.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Disconnect',
           style: 'destructive',
-          onPress: () => mutation.mutate(undefined, {
-            onSuccess: () => setReviewProvider(null),
-            onError: () => Alert.alert('Error', 'Could not disconnect. Please try again.'),
-          }),
+          onPress: () => {
+            setError(null);
+            actions.disconnect.mutate(connection.provider, { onError: fail });
+          },
         },
       ],
     );
-  };
-
-  const handleConnectApple = () => {
-    const url = appleUrlInput.trim();
-    if (!url) {
-      Alert.alert('URL Required', 'Please enter your iCal or webcal URL.');
+  const addFeed = async () => {
+    if (!feedUrl.trim() || busy) return;
+    setError(null);
+    try {
+      const url = new URL(feedUrl.trim().replace(/^webcal:\/\//i, 'https://'));
+      if (url.protocol !== 'https:') throw new Error('invalid-feed-url');
+    } catch {
+      setError('Enter a complete https:// or webcal:// calendar link.');
       return;
     }
-    connectApple.mutate(url, {
-      onSuccess: () => setAppleUrlInput(''),
-      onError: (error: any) => Alert.alert(
-        'Connection Failed',
-        error?.response?.data?.message
-          ?? 'Could not connect. Make sure the URL is a valid iCal / webcal link.',
-      ),
-    });
+    try {
+      await actions.feed.mutateAsync(feedUrl.trim());
+      await actions.sync.mutateAsync({
+        provider: 'apple',
+        settings: { calendarIds: ['feed'], automatic: true },
+        last_synced_at: null,
+        last_error: null,
+      });
+      setFeedOpen(false);
+      setFeedUrl('');
+    } catch (e) {
+      fail(e);
+    }
   };
-
-  const toggleSelection = (provider: Provider, id: string) => {
-    const setter = provider === 'google' ? setGoogleSelected : setAppleSelected;
-    setter((current) => {
-      const next = new Set(current);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
-
-  const handleImport = (provider: Provider) => {
-    const selected = provider === 'google' ? googleSelected : appleSelected;
-    const mutation = provider === 'google' ? importGoogle : importApple;
-    mutation.mutate(Array.from(selected), {
-      onSuccess: (result) => closeAfterImport(result.created, result.updated),
-      onError: (error: any) => {
-        const errorData = error?.response?.data;
-        if (provider === 'google' && errorData?.reconnect) {
-          setReviewProvider(null);
-          qc.invalidateQueries({ queryKey: CALENDAR_CONNECTIONS_KEY });
-          Alert.alert(
-            'Reconnect Google Calendar',
-            errorData.message ?? 'Google Calendar access expired. Disconnect and reconnect your account.',
-          );
-          return;
-        }
-        Alert.alert('Import Failed', errorData?.message ?? 'Could not import events. Please try again.');
-      },
-    });
-  };
-
-  const reviewQuery = reviewProvider === 'google' ? googlePreview : applePreview;
-  const reviewSelected = reviewProvider === 'google' ? googleSelected : appleSelected;
-  const reviewErrorMessage = isNetworkError(reviewQuery.error)
-    ? (__DEV__
-      ? `Could not reach ${API_BASE_URL}. Make sure the local API server is running.`
-      : 'Could not reach Styled. Check your internet connection and try again.')
-    : (reviewQuery.error as any)?.response?.data?.message;
+  const calendars = editing?.startsWith('device:')
+    ? deviceCalendars
+    : (available.data ?? []);
+  const toggle = (id: string) =>
+    setSelected((current) =>
+      current.includes(id) ? current.filter((v) => v !== id) : [...current, id],
+    );
+  // The Google primary alias is used by legacy imports. Resolve it to the
+  // visible primary row while maintaining its identity during upgrade.
+  const calendarId = (c: ConnectedCalendar) =>
+    editing === 'google' && c.primary ? 'primary' : c.id;
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.flex}>
-        {reviewProvider ? (
-          <CalendarEventReview
-            provider={reviewProvider}
-            events={reviewQuery.data}
-            isLoading={reviewQuery.isLoading}
-            isError={reviewQuery.isError}
-            errorMessage={reviewErrorMessage}
-            selected={reviewSelected}
-            isImporting={reviewProvider === 'google' ? importGoogle.isPending : importApple.isPending}
-            onToggle={(id) => toggleSelection(reviewProvider, id)}
-            onUpdateVisibleSelection={(visibleEvents, action) => {
-              const setter = reviewProvider === 'google' ? setGoogleSelected : setAppleSelected;
-              setter((current) => updateVisibleSelection(current, visibleEvents, action));
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={() => {
+        if (!busy) onClose();
+      }}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={s.root}
+      >
+        <View style={s.header}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={
+              editing || feedOpen ? 'Back' : 'Close calendar sync'
+            }
+            disabled={busy}
+            onPress={() => {
+              setError(null);
+              if (editing) setEditing(null);
+              else if (feedOpen) setFeedOpen(false);
+              else onClose();
             }}
-            onRetry={() => reviewQuery.refetch()}
-            onImport={() => handleImport(reviewProvider)}
-            onBack={() => setReviewProvider(null)}
-            onClose={onClose}
-          />
-        ) : (
-          <View style={s.root}>
-            <SheetHeader title="Calendar Sync" onClose={onClose} />
-            <ScrollView
-              style={s.flex}
-              contentContainerStyle={s.scrollContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={s.intro}>
-                <Text style={s.introTitle}>Bring your plans into Styled</Text>
-                <Text style={s.introText}>
-                  Connect a calendar, then review only the new events you want to add.
+            style={s.headerButton}
+          >
+            <Ionicons
+              name={editing || feedOpen ? 'chevron-back' : 'close'}
+              size={22}
+              color={colors.foreground}
+            />
+          </TouchableOpacity>
+          <Text style={s.headerTitle}>
+            {editing
+              ? 'Choose calendars'
+              : feedOpen
+                ? 'Add a calendar feed'
+                : 'Calendars & sync'}
+          </Text>
+          <View style={s.headerButton} />
+        </View>
+        <ScrollView
+          contentContainerStyle={[
+            s.content,
+            { paddingBottom: Math.max(insets.bottom, 24) + 24 },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          contentInsetAdjustmentBehavior="automatic"
+        >
+          {error && (
+            <View accessibilityRole="alert" style={s.error}>
+              <Text selectable style={s.errorText}>
+                {error}
+              </Text>
+              {error.includes('device settings') && (
+                <Action
+                  secondary
+                  label="Open settings"
+                  onPress={() => {
+                    void Linking.openSettings();
+                  }}
+                />
+              )}
+            </View>
+          )}
+          {editing ? (
+            <>
+              <Text style={s.eyebrow}>{providerInfo(editing).name}</Text>
+              <Text style={s.title}>Make room for your plans.</Text>
+              <Text style={s.body}>
+                Choose the calendars Styled follows. Events from the past 30
+                days and the next year stay up to date, with your outfit plans
+                kept intact.
+              </Text>
+              {!editing.startsWith('device:') && available.isPending ? (
+                <ActivityIndicator color={colors.primary} style={s.loader} />
+              ) : available.isError && !available.data ? (
+                <View style={s.card}>
+                  <Text style={s.body}>Could not load your calendars.</Text>
+                  <Action
+                    label="Try again"
+                    onPress={() => {
+                      void available.refetch();
+                    }}
+                  />
+                </View>
+              ) : (
+                <View style={s.card}>
+                  {calendars.length === 0 ? (
+                    <Text style={s.body}>
+                      No calendars found. Add an account in your device calendar
+                      settings, then try again.
+                    </Text>
+                  ) : (
+                    calendars.map((c) => {
+                      const id = calendarId(c),
+                        checked = selected.includes(id);
+                      return (
+                        <TouchableOpacity
+                          key={c.id}
+                          accessibilityRole="checkbox"
+                          accessibilityState={{ checked }}
+                          onPress={() => toggle(id)}
+                          disabled={busy}
+                          style={s.calendarRow}
+                        >
+                          <View
+                            style={[
+                              s.dot,
+                              { backgroundColor: c.color || colors.accentInk },
+                            ]}
+                          />
+                          <Text
+                            style={[s.calendarName, checked && s.selectedName]}
+                          >
+                            {c.name}
+                          </Text>
+                          <Ionicons
+                            name={
+                              checked ? 'checkmark-circle' : 'ellipse-outline'
+                            }
+                            size={24}
+                            color={
+                              checked ? colors.primary : colors.controlOutline
+                            }
+                          />
+                        </TouchableOpacity>
+                      );
+                    })
+                  )}
+                </View>
+              )}
+              <View style={s.card}>
+                <Host matchContents>
+                  <Switch
+                    label="Keep calendars up to date"
+                    value={automatic}
+                    onValueChange={setAutomatic}
+                    disabled={busy}
+                  />
+                </Host>
+                <Text style={s.caption}>
+                  Cloud calendars update periodically. Device calendars refresh
+                  while Styled is open and when you return.
                 </Text>
               </View>
-
-              <View style={s.card}>
-                <View style={s.providerRow}>
-                  <ProviderIcon provider="google" />
-                  <View style={s.providerText}>
-                    <Text style={s.providerName}>Google Calendar</Text>
-                    <Text style={s.providerDesc}>
-                      {googleConnected ? 'Connected and ready to review' : 'Import events from Google Calendar'}
-                    </Text>
-                  </View>
-                  {googleConnected && <Ionicons name="checkmark-circle" size={20} color={GREEN} />}
-                </View>
-                {connections.isLoading ? (
-                  <ActivityIndicator color={colors.primary} style={s.loader} />
-                ) : googleConnected ? (
-                  <View style={s.providerActions}>
-                    <TouchableOpacity style={s.reviewBtn} onPress={() => setReviewProvider('google')}>
-                      <Text style={s.reviewBtnText}>Review events</Text>
-                      <Ionicons name="chevron-forward" size={16} color={colors.white} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => disconnectProvider('google')}
-                      disabled={disconnectGoogle.isPending}
-                    >
-                      <Text style={s.quietDisconnect}>Disconnect</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={[s.primaryBtn, connectingGoogle && s.buttonDisabled]}
-                    onPress={handleConnectGoogle}
-                    disabled={connectingGoogle}
-                  >
-                    {connectingGoogle && <ActivityIndicator size="small" color={colors.white} />}
-                    <Text style={s.primaryBtnText}>
-                      {connectingGoogle ? 'Connecting…' : 'Connect Google Calendar'}
-                    </Text>
-                  </TouchableOpacity>
-                )}
+              <Text style={s.caption}>
+                Choose each calendar once. If you connect Google or Outlook
+                directly, leave the same calendars off in device calendars to
+                avoid duplicates.
+              </Text>
+              <Action
+                label={
+                  selected.length
+                    ? `Sync ${selected.length} calendar${selected.length === 1 ? '' : 's'}`
+                    : 'Save without syncing'
+                }
+                onPress={() => {
+                  void saveCalendars();
+                }}
+                busy={actions.save.isPending || actions.sync.isPending}
+                disabled={!editing.startsWith('device:') && !available.data}
+              />
+            </>
+          ) : feedOpen ? (
+            <>
+              <Text style={s.eyebrow}>Calendar subscription</Text>
+              <Text style={s.title}>A link to what’s next.</Text>
+              <Text style={s.body}>
+                Paste a secure iCal or webcal feed. For private Apple calendars,
+                connect device calendars instead.
+              </Text>
+              <TextInput
+                accessibilityLabel="Calendar feed URL"
+                value={feedUrl}
+                onChangeText={setFeedUrl}
+                style={s.input}
+                placeholder="webcal:// or https://"
+                placeholderTextColor={colors.mutedForeground}
+                keyboardType="url"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!busy}
+              />
+              <Text style={s.caption}>
+                The feed must be accessible to Styled without a sign-in. Treat
+                its link as private.
+              </Text>
+              <Action
+                label="Connect & sync feed"
+                onPress={() => {
+                  void addFeed();
+                }}
+                busy={actions.feed.isPending || actions.sync.isPending}
+                disabled={!feedUrl.trim()}
+              />
+            </>
+          ) : (
+            <>
+              <Text style={s.eyebrow}>Your life, beautifully in sync</Text>
+              <Text style={s.title}>
+                {'Plans change.\nYour style keeps up.'}
+              </Text>
+              <Text style={s.body}>
+                Bring your calendars together and give every occasion a little
+                forethought.
+              </Text>
+              <View style={s.promise}>
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={17}
+                  color={colors.accentInk}
+                />
+                <Text style={s.promiseText}>
+                  Styled only reads. Your source calendars stay yours.
+                </Text>
               </View>
-
-              <View style={s.card}>
-                <View style={s.providerRow}>
-                  <ProviderIcon provider="apple" />
-                  <View style={s.providerText}>
-                    <Text style={s.providerName}>Apple Calendar</Text>
-                    <Text style={s.providerDesc}>
-                      {appleConnected ? 'Connected via iCal feed' : 'Connect with an iCal or webcal URL'}
-                    </Text>
-                  </View>
-                  {appleConnected && <Ionicons name="checkmark-circle" size={20} color={GREEN} />}
+              {query.isPending ? (
+                <ActivityIndicator color={colors.primary} style={s.loader} />
+              ) : query.isError && !query.data ? (
+                <View style={s.card}>
+                  <Text style={s.body}>
+                    Could not load your calendar connections.
+                  </Text>
+                  <Action
+                    label="Try again"
+                    onPress={() => {
+                      void query.refetch();
+                    }}
+                  />
                 </View>
-                {connections.isLoading ? (
-                  <ActivityIndicator color={colors.primary} style={s.loader} />
-                ) : appleConnected ? (
-                  <View style={s.providerActions}>
-                    <TouchableOpacity style={s.reviewBtn} onPress={() => setReviewProvider('apple')}>
-                      <Text style={s.reviewBtnText}>Review events</Text>
-                      <Ionicons name="chevron-forward" size={16} color={colors.white} />
-                    </TouchableOpacity>
+              ) : (
+                <>
+                  {connections.length > 0 && (
+                    <Text style={s.sectionLabel}>CONNECTED CALENDARS</Text>
+                  )}
+                  {connections.map((connection) => {
+                    const info = providerInfo(connection.provider),
+                      otherDevice =
+                        connection.provider.startsWith('device:') &&
+                        connection.provider !== device;
+                    const syncing =
+                      actions.sync.isPending &&
+                      actions.sync.variables?.provider === connection.provider;
+                    return (
+                      <View key={connection.provider} style={s.card}>
+                        <View style={s.providerRow}>
+                          <View style={s.providerIcon}>
+                            <Ionicons
+                              name={info.icon}
+                              size={22}
+                              color={colors.foreground}
+                            />
+                          </View>
+                          <View style={s.grow}>
+                            <Text style={s.providerName}>
+                              {otherDevice ? 'Another device' : info.name}
+                            </Text>
+                            <Text style={s.caption}>
+                              {connection.settings.calendarIds.length} calendar
+                              {connection.settings.calendarIds.length === 1
+                                ? ''
+                                : 's'}{' '}
+                              ·{' '}
+                              {connection.settings.automatic
+                                ? 'Automatic'
+                                : 'Manual'}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={s.status}>
+                          <View
+                            style={[
+                              s.statusDot,
+                              {
+                                backgroundColor: connection.last_error
+                                  ? colors.error
+                                  : colors.success,
+                              },
+                            ]}
+                          />
+                          <Text
+                            style={[
+                              s.caption,
+                              connection.last_error && s.errorText,
+                            ]}
+                          >
+                            {syncing
+                              ? 'Updating your plans…'
+                              : (connection.last_error ??
+                                (connection.settings.calendarIds.length ? lastSynced(connection.last_synced_at) : 'Choose calendars to begin'))}
+                          </Text>
+                        </View>
+                        {otherDevice ? (
+                          <Text style={s.caption}>
+                            Manage and sync this connection on the device where
+                            you added it.
+                          </Text>
+                        ) : (
+                          <View style={s.actions}>
+                            <View style={s.grow}>
+                              <Action
+                                secondary
+                                label="Calendars"
+                                onPress={() => {
+                                  void openCalendars(connection.provider);
+                                }}
+                                disabled={busy}
+                              />
+                            </View>
+                            <View style={s.grow}>
+                              <Action
+                                label="Sync now"
+                                onPress={() => {
+                                  void syncNow(connection);
+                                }}
+                                busy={syncing}
+                                disabled={
+                                  busy ||
+                                  !connection.settings.calendarIds.length
+                                }
+                              />
+                            </View>
+                          </View>
+                        )}
+                        {!!connection.last_error &&
+                          (connection.provider === 'google' ||
+                            connection.provider === 'outlook') && (
+                            <Action
+                              secondary
+                              label="Reconnect account"
+                              onPress={() => {
+                                void connect(
+                                  connection.provider as 'google' | 'outlook',
+                                );
+                              }}
+                              disabled={busy}
+                            />
+                          )}
+                        <TouchableOpacity
+                          accessibilityRole="button"
+                          onPress={() => disconnect(connection)}
+                          disabled={busy}
+                          style={s.disconnect}
+                        >
+                          <Text style={s.disconnectText}>Disconnect</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                  <Text style={s.sectionLabel}>ADD A CALENDAR</Text>
+                  {(['device', 'google', 'outlook'] as const)
+                    .filter((p) =>
+                      p === 'device'
+                        ? Platform.OS !== 'web' &&
+                          !!device &&
+                          !connections.some((c) => c.provider === device)
+                        : !connections.some((c) => c.provider === p),
+                    )
+                    .map((provider) => {
+                      const info = providerInfo(provider),
+                        unavailable =
+                          provider === 'outlook' &&
+                          !query.data?.outlookAvailable;
+                      return (
+                        <TouchableOpacity
+                          key={provider}
+                          accessibilityRole="button"
+                          disabled={busy}
+                          onPress={() => {
+                            if (provider === 'device') {
+                              if (device) void openCalendars(device);
+                            } else if (unavailable) {
+                              if (device && Platform.OS !== 'web')
+                                void openCalendars(device);
+                              else
+                                setError(
+                                  'Outlook sign-in is not configured yet. You can connect a published calendar feed below.',
+                                );
+                            } else void connect(provider);
+                          }}
+                          style={s.addRow}
+                        >
+                          <View style={s.providerIcon}>
+                            <Ionicons
+                              name={info.icon}
+                              size={22}
+                              color={colors.foreground}
+                            />
+                          </View>
+                          <View style={s.grow}>
+                            <Text style={s.providerName}>{info.name}</Text>
+                            <Text style={s.caption}>
+                              {unavailable
+                                ? 'Connect through calendars on your device'
+                                : info.detail}
+                            </Text>
+                          </View>
+                          {connecting === provider ? (
+                            <ActivityIndicator color={colors.primary} />
+                          ) : (
+                            <Ionicons
+                              name="add"
+                              size={22}
+                              color={colors.foreground}
+                            />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  {!connections.some((c) => c.provider === 'apple') && (
                     <TouchableOpacity
-                      onPress={() => disconnectProvider('apple')}
-                      disabled={disconnectApple.isPending}
+                      accessibilityRole="button"
+                      onPress={() => setFeedOpen(true)}
+                      disabled={busy}
+                      style={s.feedLink}
                     >
-                      <Text style={s.quietDisconnect}>Disconnect</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <View style={s.appleForm}>
-                    <TextInput
-                      style={s.urlInput}
-                      value={appleUrlInput}
-                      onChangeText={setAppleUrlInput}
-                      placeholder="webcal:// or https:// iCal URL"
-                      placeholderTextColor={colors.mutedForeground}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      keyboardType="url"
-                      returnKeyType="done"
-                      onSubmitEditing={handleConnectApple}
-                    />
-                    <TouchableOpacity
-                      style={[s.primaryBtn, connectApple.isPending && s.buttonDisabled]}
-                      onPress={handleConnectApple}
-                      disabled={connectApple.isPending}
-                    >
-                      {connectApple.isPending && <ActivityIndicator size="small" color={colors.white} />}
-                      <Text style={s.primaryBtnText}>
-                        {connectApple.isPending ? 'Connecting…' : 'Connect Apple Calendar'}
+                      <Ionicons
+                        name="link-outline"
+                        size={17}
+                        color={colors.mutedForeground}
+                      />
+                      <Text style={s.disconnectText}>
+                        Add an iCal / webcal feed
                       </Text>
+                      <Ionicons
+                        name="chevron-forward"
+                        size={15}
+                        color={colors.mutedForeground}
+                      />
                     </TouchableOpacity>
-                    <Text style={s.hint}>
-                      In Calendar.app, share a calendar and copy its link.
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </ScrollView>
-          </View>
-        )}
+                  )}
+                  <Text style={s.footnote}>
+                    Changes and cancellations follow the source calendar. Outfit
+                    selections stay in Styled. Disconnecting keeps your imported
+                    plans.
+                  </Text>
+                </>
+              )}
+            </>
+          )}
+        </ScrollView>
       </KeyboardAvoidingView>
     </Modal>
   );
 }
-
 const s = StyleSheet.create({
-  flex: { flex: 1 },
   root: { flex: 1, backgroundColor: colors.background },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  headerSide: { minWidth: 72 },
-  headerSideRight: { alignItems: 'flex-end' },
-  headerAction: { flexDirection: 'row', alignItems: 'center' },
-  headerActionText: { fontSize: typography.text.body.fontSize, color: colors.primary },
-  headerTitle: {
-    fontSize: typography.text.body.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  doneText: {
-    fontSize: typography.text.body.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.primary,
-  },
-  scrollContent: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxxl },
-  intro: { gap: spacing.xs, paddingHorizontal: spacing.xs },
-  introTitle: {
-    fontSize: typography.text.sheetTitle.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  introText: { fontSize: typography.text.bodySmall.fontSize, lineHeight: 20, color: colors.mutedForeground },
-  card: {
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    gap: spacing.lg,
-  },
-  providerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  reviewProviderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-  },
-  providerIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radii.md,
+  headerButton: {
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  providerText: { flex: 1, gap: 2 },
-  providerName: {
-    fontSize: typography.text.body.fontSize,
-    fontWeight: typography.weight.semibold,
+  headerTitle: { ...typography.text.body, fontWeight: '600' },
+  content: { padding: spacing.lg, gap: spacing.lg },
+  eyebrow: { ...typography.text.meta, color: colors.accentInk },
+  title: {
+    ...typography.text.editorialTitle,
+    fontSize: 38,
+    lineHeight: 43,
     color: colors.foreground,
   },
-  providerDesc: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
-  loader: { marginVertical: spacing.md },
-  providerActions: { gap: spacing.md, alignItems: 'center' },
-  reviewBtn: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.md,
-    borderRadius: radii.md,
-    backgroundColor: colors.primary,
-  },
-  reviewBtnText: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.white,
-  },
-  quietDisconnect: { fontSize: typography.text.bodySmall.fontSize, color: colors.mutedForeground },
-  primaryBtn: {
-    minWidth: 140,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: radii.md,
-    backgroundColor: colors.primary,
-  },
-  primaryBtnText: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.white,
-  },
-  buttonDisabled: { opacity: 0.55 },
-  appleForm: { gap: spacing.sm },
-  urlInput: {
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    fontSize: typography.text.bodySmall.fontSize,
-    color: colors.foreground,
-  },
-  hint: { fontSize: typography.text.caption.fontSize, lineHeight: 17, color: colors.mutedForeground },
-  centerState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    padding: spacing.xl,
-  },
-  emptyState: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xxxl },
-  stateTitle: {
-    fontSize: typography.text.sectionTitle.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-    textAlign: 'center',
-  },
-  stateText: {
-    fontSize: typography.text.bodySmall.fontSize,
+  body: {
+    ...typography.text.body,
     color: colors.mutedForeground,
-    textAlign: 'center',
+    lineHeight: 23,
+  },
+  caption: {
+    ...typography.text.caption,
+    color: colors.mutedForeground,
+    lineHeight: 19,
+  },
+  promise: {
+    flexDirection: 'row',
+    gap: 9,
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  promiseText: {
+    ...typography.text.caption,
+    color: colors.accentInk,
+    flex: 1,
+    lineHeight: 19,
+  },
+  sectionLabel: {
+    ...typography.text.meta,
+    color: colors.mutedForeground,
+    letterSpacing: 1.5,
+    marginTop: 8,
+  },
+  card: {
+    backgroundColor: colors.card,
+    borderRadius: 18,
+    borderCurve: 'continuous',
+    padding: spacing.lg,
+    gap: spacing.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  providerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  providerIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: colors.surfaceSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  providerName: {
+    ...typography.text.body,
+    fontWeight: '600',
+    color: colors.foreground,
+  },
+  grow: { flex: 1, gap: 4 },
+  status: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 2,
+  },
+  statusDot: { width: 6, height: 6, borderRadius: 3 },
+  actions: { flexDirection: 'row', gap: 10 },
+  action: {
+    minHeight: 46,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  actionText: {
+    ...typography.text.body,
+    fontSize: 14,
+    color: colors.primaryForeground,
+    fontWeight: '600',
+  },
+  secondary: { backgroundColor: colors.surfaceSubtle },
+  secondaryText: { color: colors.foreground },
+  disabled: { opacity: 0.45 },
+  addRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minHeight: 78,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    paddingVertical: 12,
+  },
+  disconnect: { alignSelf: 'flex-start', paddingVertical: 8, minHeight: 36 },
+  disconnectText: { ...typography.text.caption, color: colors.mutedForeground },
+  feedLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    minHeight: 44,
+  },
+  footnote: {
+    ...typography.text.caption,
+    color: colors.mutedForeground,
     lineHeight: 20,
   },
-  reviewContent: { paddingBottom: spacing.xxl },
-  reviewIntro: { gap: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.sm },
-  filterArea: { gap: spacing.sm },
-  searchBox: {
-    minHeight: 42,
+  calendarRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    marginHorizontal: spacing.lg,
-    paddingHorizontal: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    backgroundColor: colors.surfaceElevated,
-  },
-  searchInput: {
-    flex: 1,
-    height: 40,
-    paddingVertical: 0,
-    fontSize: typography.text.bodySmall.fontSize,
-    lineHeight: typography.inputLineHeight(typography.text.bodySmall.fontSize),
-    color: colors.foreground,
-  },
-  filterChipRow: { gap: spacing.sm, paddingHorizontal: spacing.lg },
-  filterChip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.full,
-    backgroundColor: colors.surfaceElevated,
-  },
-  filterChipActive: { borderColor: colors.primary, backgroundColor: colors.surfaceSelected },
-  filterChipText: {
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.medium,
-    color: colors.mutedForeground,
-  },
-  filterChipTextActive: { color: colors.primary },
-  selectionBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xs,
-  },
-  selectionTitle: {
-    fontSize: typography.text.body.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  selectionActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  selectionActionText: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.medium,
-    color: colors.primary,
-  },
-  selectionActionDisabled: { color: colors.mutedForeground, opacity: 0.6 },
-  actionDivider: { width: 1, height: 14, backgroundColor: colors.border },
-  clearFiltersBtn: {
-    marginTop: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    backgroundColor: colors.surfaceElevated,
-  },
-  clearFiltersText: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.primary,
-  },
-  sectionHeader: {
-    backgroundColor: colors.background,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
-  },
-  sectionTitle: {
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.mutedForeground,
-    textTransform: 'uppercase',
-    letterSpacing: typography.tracking.relaxed,
-  },
-  eventRow: {
-    minHeight: 66,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    gap: 12,
+    minHeight: 52,
+    paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  eventRowDisabled: { opacity: 0.72 },
-  eventCheck: {
-    width: 24,
-    height: 24,
-    borderRadius: radii.full,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+  dot: { width: 10, height: 10, borderRadius: 5 },
+  calendarName: {
+    ...typography.text.body,
+    flex: 1,
+    color: colors.mutedForeground,
   },
-  eventCheckSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
-  eventCheckSynced: { backgroundColor: colors.surfaceSubtle, borderColor: colors.border },
-  eventBody: { flex: 1, gap: 3 },
-  eventTitle: { fontSize: typography.text.body.fontSize, color: colors.foreground },
-  eventMeta: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
-  syncedSection: {
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.lg,
-    overflow: 'hidden',
-    backgroundColor: colors.surfaceElevated,
+  selectedName: { color: colors.foreground },
+  error: {
+    backgroundColor: colors.surfaceSelected,
+    padding: 16,
+    borderRadius: 12,
+    gap: 12,
   },
-  syncedHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: spacing.lg,
+  errorText: {
+    ...typography.text.caption,
+    color: colors.error,
+    lineHeight: 20,
+    flexShrink: 1,
   },
-  syncedListHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.xl,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surfaceElevated,
-  },
-  syncedTitle: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.semibold,
+  loader: { padding: 24 },
+  input: {
+    ...typography.text.body,
     color: colors.foreground,
-  },
-  syncedSubtitle: { marginTop: 2, fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
-  stickyFooter: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: Platform.OS === 'ios' ? spacing.xl : spacing.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  importBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.md,
-    borderRadius: radii.md,
-    backgroundColor: colors.primary,
-  },
-  importBtnText: {
-    fontSize: typography.text.body.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.white,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    minHeight: 54,
   },
 });

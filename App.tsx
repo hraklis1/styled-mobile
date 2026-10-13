@@ -17,6 +17,7 @@ import { posthog } from './src/lib/analytics';
 import { initPurchases } from './src/lib/purchases';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { GlobalAddSheetProvider } from './src/contexts/GlobalAddSheetContext';
+import { CalendarSyncCoordinator } from './src/components/calendar/CalendarSyncCoordinator';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { ErrorBoundary } from './src/components/primitives/ErrorBoundary';
 import { OfflineBanner } from './src/components/primitives/OfflineBanner';
@@ -59,6 +60,7 @@ function App() {
                 <BottomSheetModalProvider>
                   <GlobalAddSheetProvider>
                     <StatusBar style="dark" />
+                    <CalendarSyncCoordinator />
                     <RootNavigator />
                     <OfflineBanner />
                     <ConfirmSheetHost />
