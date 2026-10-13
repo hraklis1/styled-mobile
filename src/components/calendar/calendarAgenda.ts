@@ -58,3 +58,93 @@ export function agendaDayHeading(date: string, today = new Date()): string {
     ...(day.getFullYear() !== today.getFullYear() ? { year: 'numeric' } : {}),
   });
 }
+
+export type DayPlanningStatus = 'needs' | 'planned';
+
+/**
+ * One signal per day for the strip and month grid: hollow when a timed event
+ * that day still needs a look, filled once every timed event has one. Days
+ * with no events, or only unplanned all-day ones, are absent: no dot at all.
+ */
+export function buildPlanningStatusMap(events: Event[]): Map<string, DayPlanningStatus> {
+  const map = new Map<string, DayPlanningStatus>();
+  for (const event of events) {
+    const day = eventDayKey(event);
+    const planned = (event.itemIds ?? []).length > 0;
+    // All-day entries are mostly shifts, trips and reminders. They only count
+    // once a look is planned for them, never as a day that needs one.
+    if (!planned && event.calendarMetadata?.allDay) continue;
+    if (!planned) map.set(day, 'needs');
+    else if (!map.has(day)) map.set(day, 'planned');
+  }
+  return map;
+}
+
+export type AgendaDay = { date: string; allDay: Event[]; timed: Event[] };
+
+export type AgendaWindow = {
+  days: AgendaDay[];
+  /** Past days with events that are not loaded yet. */
+  earlierCount: number;
+  /** Future days with events that are not loaded yet. */
+  laterCount: number;
+};
+
+/**
+ * The unified timeline: day sections from `pastDayCount` event days before
+ * today through `futureDayCount` event days from today. `pinnedDate` keeps an
+ * empty, explicitly chosen day in the timeline so it has somewhere to land.
+ */
+export function buildAgendaWindow(
+  events: Event[],
+  { todayStr, pastDayCount, futureDayCount, pinnedDate }: {
+    todayStr: string;
+    pastDayCount: number;
+    futureDayCount: number;
+    pinnedDate?: string | null;
+  },
+): AgendaWindow {
+  const byDay = new Map<string, Event[]>();
+  for (const event of sortCalendarEvents(events)) {
+    const day = eventDayKey(event);
+    const group = byDay.get(day);
+    if (group) group.push(event);
+    else byDay.set(day, [event]);
+  }
+  const dates = [...byDay.keys()];
+  const past = dates.filter((date) => date < todayStr);
+  const future = dates.filter((date) => date >= todayStr);
+  const visiblePast = pastDayCount > 0 ? past.slice(-pastDayCount) : [];
+  const visibleFuture = future.slice(0, futureDayCount);
+  const visible = new Set([...visiblePast, ...visibleFuture]);
+  if (pinnedDate) visible.add(pinnedDate);
+
+  const days = [...visible].sort().map((date) => {
+    const group = byDay.get(date) ?? [];
+    return {
+      date,
+      allDay: group.filter((event) => event.calendarMetadata?.allDay),
+      timed: group.filter((event) => !event.calendarMetadata?.allDay),
+    };
+  });
+  return {
+    days,
+    earlierCount: past.length - visiblePast.length,
+    laterCount: future.length - visibleFuture.length,
+  };
+}
+
+/**
+ * How many event days each side of today must be loaded for `date` to sit
+ * inside the window. Used when the strip jumps beyond what is loaded.
+ */
+export function windowCountsForDate(events: Event[], date: string, todayStr: string): { past: number; future: number } {
+  const dates = new Set(events.map(eventDayKey));
+  let past = 0;
+  let future = 0;
+  for (const day of dates) {
+    if (day < todayStr && day >= date) past += 1;
+    if (day >= todayStr && day <= date) future += 1;
+  }
+  return { past, future };
+}

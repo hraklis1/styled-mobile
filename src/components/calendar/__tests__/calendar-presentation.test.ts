@@ -147,3 +147,70 @@ describe('occasion display labels', () => {
     expect(occasionDisplayLabel('')).toBe('Occasion unspecified');
   });
 });
+
+describe('hero presentation', () => {
+  const { heroCountdown, heroPrompt, isLookWornOn } = require('../calendar-presentation');
+  const base = { id: 1, userId: 1, title: 'T', occasion: 'business', location: null, notes: null, environment: null, itemIds: null, outfitId: null };
+  const now = new Date('2026-10-13T12:00:00');
+
+  it('counts down in words', () => {
+    expect(heroCountdown({ ...base, date: '2026-10-13T12:30:00' }, now)).toBe('In 30 min');
+    expect(heroCountdown({ ...base, date: '2026-10-13T14:00:00' }, now)).toBe('In 2 hrs');
+    expect(heroCountdown({ ...base, date: '2026-10-13T11:00:00' }, now)).toBe('Now');
+    expect(heroCountdown({ ...base, date: '2026-10-14T09:00:00' }, now)).toBe('Tomorrow');
+    expect(heroCountdown({ ...base, date: '2026-10-16T09:00:00' }, now)).toBe('In 3 days');
+    const allDay = { calendarId: 'w', calendarName: 'W', allDay: true, allDayDate: '2026-10-13', cancelled: false, syncedAt: '' };
+    expect(heroCountdown({ ...base, date: '2026-10-13T04:00:00Z', calendarMetadata: allDay }, now)).toBe('All day today');
+  });
+
+  it('leads with weather that changes the outfit, otherwise the occasion', () => {
+    const forecast = (condition: string, max: number) => ({ condition, tempMaxC: max, tempMinC: max - 5, tempMaxF: Math.round(max * 1.8 + 32), tempMinF: 0 });
+    expect(heroPrompt('business', forecast('rainy', 12))).toBe('12° and wet. Shoes and a layer that can take it.');
+    expect(heroPrompt('business', forecast('mild', 5))).toBe('5° at best. Layer up, coat on top.');
+    expect(heroPrompt('casual', forecast('sunny', 27), 'F')).toBe('81° and warm. Keep it light and breathable.');
+    expect(heroPrompt('formal', forecast('mild', 15))).toBe('15°. Sharpen every detail.');
+    expect(heroPrompt('business', null)).toBe('Polished, not stiff.');
+    expect(heroPrompt('unknown_occasion', null)).toBe('Dressed for the occasion.');
+  });
+
+  it('matches a wear log to the same pieces on the same day in any order', () => {
+    const logs = [{ date: '2026-10-13', itemIds: [3, 1, 2] }];
+    expect(isLookWornOn(logs, [1, 2, 3], '2026-10-13')).toBe(true);
+    expect(isLookWornOn(logs, [1, 2], '2026-10-13')).toBe(false);
+    expect(isLookWornOn(logs, [1, 2, 3], '2026-10-14')).toBe(false);
+    expect(isLookWornOn(logs, null, '2026-10-13')).toBe(false);
+  });
+});
+
+describe('month lookbook and wear journal', () => {
+  const { buildDayThumbs, groupWearLogsByDay } = require('../calendar-presentation');
+  const item = (id: number, category: string, imageUrl: string) => ({ id, category, imageUrl });
+  const ev = (id: number, date: string, itemIds: number[] | null) => ({ id, date, itemIds });
+  const day = (event: { date: string }) => event.date.slice(0, 10);
+
+  it('uses the lead piece of the first planned event of each day', () => {
+    const items = new Map([
+      [1, item(1, 'shoes', 'https://img/shoes.jpg')],
+      [2, item(2, 'top', 'https://img/top.jpg')],
+      [3, item(3, 'bottom', 'https://img/bottom.jpg')],
+    ]);
+    const thumbs = buildDayThumbs([
+      ev(1, '2026-10-13T09:00:00', null),
+      ev(2, '2026-10-13T12:00:00', [1, 2]),
+      ev(3, '2026-10-13T18:00:00', [3]),
+      ev(4, '2026-10-14T09:00:00', [99]),
+    ], items, day);
+    expect(thumbs.get('2026-10-13')).toBe('https://img/top.jpg');
+    expect(thumbs.has('2026-10-14')).toBe(false);
+  });
+
+  it('groups plain dates and timestamps by local day', () => {
+    const groups = groupWearLogsByDay([
+      { date: '2026-10-13', itemIds: [1] },
+      { date: '2026-10-13T15:00:00', itemIds: [2] },
+      { date: '2026-10-12T09:00:00', itemIds: [3] },
+    ]);
+    expect(groups.get('2026-10-13')).toHaveLength(2);
+    expect(groups.get('2026-10-12')).toHaveLength(1);
+  });
+});

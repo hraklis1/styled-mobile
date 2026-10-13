@@ -1,22 +1,59 @@
 import { View, Text, StyleSheet, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useEventWeatherForecast } from '../../hooks/useWeather';
 import type { StylingLocationContext } from '../../lib/stylingLocation';
 import { useTempUnit } from '../../hooks/useTempUnit';
 import { formatTempRange } from '../../lib/temperature';
 import { EventLookCollage } from './EventLookCollage';
-import {
-  formatTime,
-} from './calendarUtils';
-import { colors, spacing, typography, radii, editorial } from '../../theme';
+import { formatTime, toDateStr, OCCASION_ICONS } from './calendarUtils';
+import { colors, spacing, typography, radii } from '../../theme';
 import type { Item } from '../../types/item';
 import type { Event } from '../../types/event';
 import type { Outfit } from '../../types/outfit';
 import { eventDayKey } from './calendarAgenda';
 import { getEventPlanActionLabel } from './calendarPlanning';
-import { presentCalendarEvent, occasionDisplayLabel } from './calendar-presentation';
+import { presentCalendarEvent, occasionDisplayLabel, heroCountdown, heroPrompt, WEATHER_ICONS } from './calendar-presentation';
 import { PressableScale } from '../primitives/PressableScale';
+
+const CARD_PADDING = spacing.lg;
+
+function HeroButton({
+  label,
+  icon,
+  onPress,
+  variant,
+  disabled,
+  busy,
+  accessibilityLabel,
+}: {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+  variant: 'primary' | 'ghost';
+  disabled?: boolean;
+  busy?: boolean;
+  accessibilityLabel: string;
+}) {
+  const primary = variant === 'primary';
+  return (
+    <PressableScale
+      style={s.buttonOuter}
+      contentStyle={[s.button, primary ? s.buttonPrimary : s.buttonGhost, disabled && s.buttonDisabled]}
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled: !!disabled, busy: !!busy }}
+    >
+      {busy ? (
+        <ActivityIndicator size="small" color={primary ? colors.primaryForeground : colors.foreground} />
+      ) : (
+        <Ionicons name={icon} size={15} color={primary ? colors.primaryForeground : colors.foreground} />
+      )}
+      <Text style={[s.buttonText, primary && s.buttonTextPrimary]}>{label}</Text>
+    </PressableScale>
+  );
+}
 
 export function NextEventHero({
   event,
@@ -25,9 +62,11 @@ export function NextEventHero({
   onPress,
   onPlanOutfit,
   onOpenOutfit,
+  onWear,
+  worn = false,
+  isWearing = false,
   isPlanning,
   outfit,
-  highlighted = false,
 }: {
   event: Event;
   allItems: Item[];
@@ -36,195 +75,166 @@ export function NextEventHero({
   onPress: () => void;
   onPlanOutfit: () => void;
   onOpenOutfit: () => void;
+  /** Logs the planned look as worn. Offered only on the event's own day. */
+  onWear?: () => void;
+  worn?: boolean;
+  isWearing?: boolean;
   isPlanning: boolean;
   highlighted?: boolean;
 }) {
-  const { width: heroWidth } = useWindowDimensions();
-  const heroHeight = Math.round(heroWidth / editorial.lifestyleAspectRatio * 0.75);
+  const { width } = useWindowDimensions();
+  const collageWidth = width - spacing.page * 2 - CARD_PADDING * 2;
+  const collageHeight = Math.round(collageWidth * 0.75);
 
-  const forecast = useEventWeatherForecast(
-    event.location,
-    weatherFallback,
-    eventDayKey(event),
-  );
+  const day = eventDayKey(event);
+  const forecast = useEventWeatherForecast(event.location, weatherFallback, day);
   const tempUnit = useTempUnit();
 
-  const d = event.calendarMetadata?.allDay
-    ? new Date(`${eventDayKey(event)}T12:00:00`)
-    : new Date(event.date);
-  const eyebrowLine = 'Up next';
+  const allDay = !!event.calendarMetadata?.allDay;
   const presentation = presentCalendarEvent(event);
   const hasOutfit = presentation.hasOutfit;
   const pieceCount = event.itemIds?.length ?? 0;
-  // Only scrim a real photo — a flat mosaic has no
-  // depth for a dark-to-transparent ramp to sit against and it bands. Same
-  // rule Home's "Today's Look" hero uses.
-  const scrimmed = hasOutfit && !!outfit?.aiGeneratedImageUrl;
+  const isToday = day === toDateStr(new Date());
+  const countdown = heroCountdown(event);
+  const prompt = heroPrompt(event.occasion, forecast.data, tempUnit);
 
-  const contextParts = [
-    occasionDisplayLabel(event.occasion),
-    forecast.data ? formatTempRange(forecast.data, tempUnit) : null,
-  ].filter((part): part is string => !!part);
-
-  const openOutfitLabel = `${event.outfitId == null ? 'View details' : 'View outfit'} for ${event.title}, ${presentation.readinessLabel}, ${pieceCount} ${pieceCount === 1 ? 'piece' : 'pieces'}`;
-  const openDetailLabel = `Next event: ${event.title}, ${presentation.readinessLabel}`;
+  const chips: { key: string; icon: keyof typeof Ionicons.glyphMap; label: string }[] = [
+    // The overline already says "All day"; a chip would repeat it.
+    ...(allDay ? [] : [{ key: 'time', icon: 'time-outline' as const, label: formatTime(new Date(event.date)) }]),
+    { key: 'occasion', icon: (OCCASION_ICONS[event.occasion] ?? 'pricetag-outline') as keyof typeof Ionicons.glyphMap, label: occasionDisplayLabel(event.occasion) },
+    ...(forecast.data ? [{ key: 'weather', icon: WEATHER_ICONS[forecast.data.condition], label: formatTempRange(forecast.data, tempUnit) }] : []),
+  ];
 
   return (
     <View style={s.card}>
-      {/* Planned imagery opens the outfit; its caption opens event details. */}
       {hasOutfit && (
         <PressableScale
-          contentStyle={s.imageBand}
+          contentStyle={[s.collage, { height: collageHeight }]}
           onPress={onOpenOutfit}
+          scaleTo={0.985}
           accessibilityRole="button"
-          accessibilityLabel={openOutfitLabel}
+          accessibilityLabel={`${event.outfitId == null ? 'View details' : 'View outfit'} for ${event.title}, ${pieceCount} ${pieceCount === 1 ? 'piece' : 'pieces'}`}
         >
-          <View style={{ width: heroWidth, height: heroHeight }}>
-            <EventLookCollage
-              itemIds={event.itemIds ?? []}
-              allItems={allItems}
-              outfit={outfit}
-              size={heroWidth}
-              height={heroHeight}
-              borderRadius={0}
-            />
-            {scrimmed && (
-              <>
-                <LinearGradient
-                  pointerEvents="none"
-                  colors={['transparent', 'rgba(29,27,24,0.64)']}
-                  style={s.heroScrim}
-                />
-                <View style={s.heroCaptionOverlay}>
-                  <Text style={s.upNextOverlay} numberOfLines={1}>{eyebrowLine}</Text>
-                  <Text style={s.titleOverlay} numberOfLines={2}>{event.title}</Text>
-                </View>
-              </>
-            )}
-          </View>
+          <EventLookCollage
+            itemIds={event.itemIds ?? []}
+            allItems={allItems}
+            outfit={outfit}
+            size={collageWidth}
+            height={collageHeight}
+            borderRadius={radii.lg}
+          />
         </PressableScale>
       )}
 
       <PressableScale
-        contentStyle={[s.captionBlock, highlighted && s.captionHighlight]}
+        contentStyle={s.caption}
         onPress={onPress}
+        scaleTo={0.99}
         accessibilityRole="button"
-        accessibilityLabel={openDetailLabel}
+        accessibilityLabel={`Up next, ${countdown}: ${event.title}, ${presentation.readinessLabel}`}
       >
-        {!scrimmed && (
-          <>
-            <Text style={s.upNext} numberOfLines={1}>{eyebrowLine}</Text>
-            <Text style={s.title} numberOfLines={2}>{event.title}</Text>
-          </>
-        )}
-        <Text style={s.meta}>
-          {d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · {event.calendarMetadata?.allDay ? 'All day' : formatTime(d)}
-        </Text>
-        {event.location ? <Text style={s.location} numberOfLines={2}>{event.location}</Text> : null}
-        {contextParts.length > 0 && (
-          <Text style={s.context} numberOfLines={2}>{contextParts.join(' · ')}</Text>
-        )}
+        <Text style={s.overline} numberOfLines={1}>{countdown}</Text>
+        <Text style={s.title} numberOfLines={2}>{event.title}</Text>
+        <View style={s.chips}>
+          {chips.map((chip) => (
+            <View key={chip.key} style={s.chip}>
+              <Ionicons name={chip.icon} size={13} color={colors.mutedForeground} />
+              <Text style={s.chipText}>{chip.label}</Text>
+            </View>
+          ))}
+        </View>
+        {event.location ? <Text style={s.location} numberOfLines={1}>{event.location}</Text> : null}
+        <Text style={s.prompt}>{prompt}</Text>
       </PressableScale>
 
-      {!hasOutfit && (
-        <View style={s.planRow}>
-          <Text style={s.planHint}>A look from your wardrobe, ready for this occasion.</Text>
-          <PressableScale
-            contentStyle={[s.planBtn, isPlanning && s.planBtnDisabled]}
+      <View style={s.actions}>
+        {!hasOutfit ? (
+          <HeroButton
+            variant="primary"
+            icon="sparkles-outline"
+            label={isPlanning ? 'Styling…' : 'Plan my look'}
             onPress={onPlanOutfit}
             disabled={isPlanning}
-            accessibilityRole="button"
-            accessibilityLabel={isPlanning
-              ? `Styling an outfit for ${event.title}`
-              : `${getEventPlanActionLabel(false)} for ${event.title}`}
-            accessibilityState={{ disabled: isPlanning, busy: isPlanning }}
-          >
-            {isPlanning ? (
-              <ActivityIndicator size="small" color={colors.white} />
-            ) : (
-              <Ionicons name="sparkles-outline" size={14} color={colors.white} />
-            )}
-            <Text style={s.planBtnText}>{isPlanning ? 'Styling…' : 'Plan my look'}</Text>
-          </PressableScale>
-        </View>
-      )}
+            busy={isPlanning}
+            accessibilityLabel={isPlanning ? `Styling an outfit for ${event.title}` : `${getEventPlanActionLabel(false)} for ${event.title}`}
+          />
+        ) : isToday && onWear ? (
+          <>
+            <HeroButton
+              variant="primary"
+              icon={worn ? 'checkmark' : 'shirt-outline'}
+              label={worn ? 'Worn today' : 'Wear this'}
+              onPress={onWear}
+              disabled={worn || isWearing}
+              busy={isWearing}
+              accessibilityLabel={worn ? `${event.title} look logged as worn` : `Wear this look for ${event.title}`}
+            />
+            <HeroButton
+              variant="ghost"
+              icon="swap-horizontal"
+              label="Swap"
+              onPress={onPlanOutfit}
+              accessibilityLabel={`Swap the look for ${event.title}`}
+            />
+          </>
+        ) : (
+          <>
+            <HeroButton
+              variant="primary"
+              icon="arrow-forward"
+              label="View outfit"
+              onPress={onOpenOutfit}
+              accessibilityLabel={`View outfit for ${event.title}`}
+            />
+            <HeroButton
+              variant="ghost"
+              icon="sparkles-outline"
+              label="Refine"
+              onPress={onPlanOutfit}
+              accessibilityLabel={`${getEventPlanActionLabel(true)} for ${event.title}`}
+            />
+          </>
+        )}
+      </View>
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  card: { marginBottom: spacing.xl },
-
-  // Full-bleed against the screen's own side padding, at the app's landscape
-  // lifestyle ratio. No card chrome: it's meant to read as a photograph, not
-  // a container — the same treatment Home gives "Today's Look".
-  imageBand: { marginHorizontal: -spacing.page },
-
-  heroScrim: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 120,
+  card: {
+    marginBottom: spacing.lg,
+    padding: CARD_PADDING,
+    gap: spacing.md,
+    borderRadius: 20,
+    borderCurve: 'continuous',
+    backgroundColor: colors.accent,
   },
-  heroCaptionOverlay: {
-    position: 'absolute',
-    left: spacing.lg,
-    right: spacing.lg,
-    bottom: spacing.lg,
-    gap: 2,
+  collage: { overflow: 'hidden', borderRadius: radii.lg, borderCurve: 'continuous' },
+  caption: { gap: spacing.xs },
+  overline: { ...typography.text.eyebrowLarge, color: colors.accentInk },
+  title: { ...typography.text.editorialTitle, color: colors.foreground },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs },
+  chip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    minHeight: 28, paddingHorizontal: spacing.sm,
+    borderRadius: radii.full,
+    backgroundColor: 'rgba(255,255,255,0.55)',
   },
-  upNextOverlay: {
-    ...typography.text.eyebrowLarge,
-    color: colors.white,
+  chipText: { ...typography.text.caption, color: colors.foreground, fontWeight: typography.weight.medium },
+  location: { ...typography.text.caption, color: colors.mutedForeground, marginTop: 2 },
+  prompt: { ...typography.text.bodySmall, color: colors.inkSubtle, marginTop: spacing.xs },
+  actions: { flexDirection: 'row', gap: spacing.sm },
+  buttonOuter: { flex: 1 },
+  button: {
+    minHeight: 48,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.action,
+    borderCurve: 'continuous',
   },
-  titleOverlay: {
-    ...typography.text.editorialCompact,
-    color: colors.white,
-  },
-
-  captionBlock: {
-    paddingTop: spacing.md,
-    gap: 3,
-  },
-  captionHighlight: {
-    marginHorizontal: -spacing.page,
-    paddingHorizontal: spacing.page,
-    paddingBottom: spacing.sm,
-    backgroundColor: colors.surfaceSelected,
-  },
-  upNext: {
-    ...typography.text.eyebrowLarge,
-    color: colors.primary,
-  },
-  title: {
-    ...typography.text.editorialCompact,
-    color: colors.foreground,
-  },
-  meta: {
-    ...typography.text.meta, color: colors.foreground,
-  },
-  location: { ...typography.text.caption, color: colors.mutedForeground },
-  context: {
-    ...typography.text.caption,
-    color: colors.mutedForeground,
-    fontWeight: typography.weight.medium,
-  },
-
-  planRow: {
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-  },
-  planHint: {
-    ...typography.text.caption,
-    color: colors.mutedForeground,
-  },
-  planBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, backgroundColor: colors.primary, borderRadius: radii.action, minHeight: 52, paddingHorizontal: spacing.page, paddingVertical: 14,
-  },
-  planBtnDisabled: { opacity: 0.72 },
-  planBtnText: {
-    ...typography.text.label, color: colors.primaryForeground,
-  },
+  buttonPrimary: { backgroundColor: colors.primary },
+  buttonGhost: { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.ghostStroke, backgroundColor: 'rgba(255,255,255,0.4)' },
+  buttonDisabled: { opacity: 0.72 },
+  buttonText: { ...typography.text.label, color: colors.foreground },
+  buttonTextPrimary: { color: colors.primaryForeground },
 });

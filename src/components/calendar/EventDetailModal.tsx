@@ -18,8 +18,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EventLookCollage } from './EventLookCollage';
 import type { Board } from '../../types/board';
 import { EventBoardPickerModal } from './EventBoardPickerModal';
-import { OCCASION_ICONS, formatTime, formatCountdown } from './calendarUtils';
-import { colors, spacing, typography, radii } from '../../theme';
+import { OCCASION_ICONS, formatTime, formatCountdown, toDateStr } from './calendarUtils';
+import { colors, spacing, typography, radii, stroke } from '../../theme';
 import type { Item } from '../../types/item';
 import type { Event } from '../../types/event';
 import type { Outfit } from '../../types/outfit';
@@ -45,6 +45,9 @@ export function EventDetailModal({
   onSelectBoard,
   board,
   onOpenBoard,
+  onWear,
+  worn = false,
+  isWearing = false,
 }: {
   event: Event | null;
   visible: boolean;
@@ -63,6 +66,10 @@ export function EventDetailModal({
   /** The linked board, resolved by the parent, for the summary row. */
   board?: Board | null;
   onOpenBoard?: (boardId: number) => void;
+  /** Logs the planned look as worn. Offered only on the event's own day. */
+  onWear?: (event: Event) => void;
+  worn?: boolean;
+  isWearing?: boolean;
 }) {
   const eventDateStr = event ? eventDayKey(event) : null;
   const forecast = useEventWeatherForecast(
@@ -79,6 +86,7 @@ export function EventDetailModal({
   const [notesExpanded, setNotesExpanded] = useState(false);
   const [boardPickerVisible, setBoardPickerVisible] = useState(false);
   const [eventMenuVisible, setEventMenuVisible] = useState(false);
+  const [weatherNoteVisible, setWeatherNoteVisible] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -88,6 +96,7 @@ export function EventDetailModal({
     setBoardPickerVisible(false);
     setManualExpanded(false);
     setNotesExpanded(false);
+    setWeatherNoteVisible(false);
   }, [event?.id, visible]);
 
   if (!event) return null;
@@ -98,7 +107,27 @@ export function EventDetailModal({
   const notesPresentation = presentEventNotes([...new Set([event.calendarMetadata?.sourceNotes, event.notes].filter(Boolean))].join('\n\n'));
   const hasOutfit = presentation.hasOutfit;
   const pieceCount = event.itemIds?.length ?? 0;
-  const lookWidth = Math.max(240, Math.min(width - spacing.lg * 4, 480));
+  const lookWidth = Math.min(width - spacing.lg * 2, 560);
+  const lookHeight = Math.round(Math.min(lookWidth * 0.8, 380));
+  const isToday = eventDayKey(event) === toDateStr(new Date());
+  const canWear = hasOutfit && isToday && !!onWear;
+  const sourceUrl = event.calendarMetadata?.url && /^https:\/\//i.test(event.calendarMetadata.url) ? event.calendarMetadata.url : null;
+  const weatherIsFallback = !!forecast.data && forecast.data.locationSource !== 'destination';
+  const chips: { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; accent?: boolean; onPress?: () => void; info?: boolean }[] = [
+    { key: 'when', icon: 'calendar-outline', label: `${agendaDayHeading(eventDayKey(event))} · ${event.calendarMetadata?.allDay ? 'All day' : formatTime(d)}` },
+    ...(countdown ? [{ key: 'countdown', icon: 'hourglass-outline' as const, label: countdown, accent: true }] : []),
+    { key: 'occasion', icon: iconName, label: [occasionDisplayLabel(event.occasion), event.environment].filter(Boolean).join(' · ') },
+    ...(event.location ? [{ key: 'location', icon: 'location-outline' as const, label: event.location }] : []),
+    ...(forecast.data
+      ? [{
+        key: 'weather',
+        icon: WEATHER_ICONS[forecast.data.condition],
+        label: formatTempRange(forecast.data, tempUnit),
+        info: weatherIsFallback,
+        onPress: weatherIsFallback ? () => setWeatherNoteVisible((value) => !value) : undefined,
+      }]
+      : forecast.isFetching ? [{ key: 'weather', icon: 'cloud-outline' as const, label: 'Checking forecast…' }] : []),
+  ];
 
   // Delayed so the action sheet finishes dismissing first — iOS drops a modal
   // presented while another is still on its way out.
@@ -132,110 +161,107 @@ export function EventDetailModal({
         <ScrollView contentContainerStyle={s.content} contentInsetAdjustmentBehavior="automatic" showsVerticalScrollIndicator={false}>
           <View style={s.titleBlock}>
             <Text selectable style={s.title}>{event.title}</Text>
-            <View style={s.readinessBadge}>
+            <View style={[s.statusPill, !hasOutfit && s.statusPillNeeds]}>
               <Ionicons
-                name={hasOutfit ? 'checkmark' : 'sparkles-outline'}
-                size={11}
-                color={hasOutfit ? colors.success : colors.primary}
+                name={worn ? 'checkmark-done' : hasOutfit ? 'checkmark' : 'sparkles-outline'}
+                size={12}
+                color={hasOutfit ? colors.foreground : colors.accentInk}
               />
-              <Text style={[s.readinessBadgeText, hasOutfit && s.readinessBadgeTextReady]}>
-                {presentation.readinessLabel}
+              <Text style={[s.statusText, !hasOutfit && s.statusTextNeeds]}>
+                {worn ? 'Worn today' : hasOutfit ? 'Look planned' : 'Needs a look'}
               </Text>
             </View>
-          </View>
-
-          <View style={s.infoCard}>
-            <View style={s.infoRow}>
-              <Ionicons name="calendar-outline" size={15} color={colors.mutedForeground} />
-              <Text selectable style={s.metaText}>{agendaDayHeading(eventDayKey(event))} · {event.calendarMetadata?.allDay ? 'All day' : formatTime(d)}</Text>
-              {countdown ? (
-                <View style={s.countdownBadge}>
-                  <Text style={s.countdownText}>{countdown}</Text>
-                </View>
-              ) : null}
-            </View>
-
-            <View style={s.infoRow}>
-              <Ionicons name={iconName} size={15} color={colors.mutedForeground} />
-              <Text selectable style={s.metaText}>
-                {[occasionDisplayLabel(event.occasion), event.environment].filter(Boolean).join(' · ')}
-              </Text>
-            </View>
-
-            {event.location ? (
-              <View style={s.infoRow}>
-                <Ionicons name="location-outline" size={15} color={colors.mutedForeground} />
-                <Text selectable style={s.metaText} numberOfLines={2}>{event.location}</Text>
-              </View>
-            ) : null}
-
-            {forecast.data ? (
-              <View style={s.infoRow}>
-                <Ionicons name={WEATHER_ICONS[forecast.data.condition]} size={15} color={colors.mutedForeground} />
-                <Text style={s.metaText}>
-                  {formatTempRange(forecast.data, tempUnit)} · {forecast.data.locationSource === 'destination' ? 'Forecast for' : 'Weather near'} {forecast.data.locationLabel}
-                </Text>
-              </View>
-            ) : null}
-            {!forecast.data ? <Text style={s.outfitSubtext}>{forecast.isFetching ? 'Checking the forecast…' : 'Forecast unavailable for this event.'}</Text> : null}
-            {forecast.data && forecast.data.locationSource !== 'destination' ? <Text style={s.outfitSubtext}>The event location was unavailable, so this forecast uses your nearby area.</Text> : null}
           </View>
 
           {hasOutfit ? (
-            <View style={[s.outfitCard, s.outfitCardReady]}>
-              <View style={s.outfitHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.outfitLabel}>Planned look</Text>
-                  <Text style={s.outfitSubtext}>Your pieces are ready for this event</Text>
-                </View>
-                <View style={s.readyMark}>
-                  <Ionicons name="checkmark" size={14} color={colors.success} />
-                </View>
-              </View>
+            <View style={s.lookBlock}>
               <PressableScale
-                contentStyle={s.lookPreviewButton}
+                contentStyle={[s.lookCanvas, { height: lookHeight }]}
                 onPress={() => onOpenOutfit(event)}
                 disabled={event.outfitId == null}
+                scaleTo={0.985}
                 accessibilityRole={event.outfitId == null ? undefined : 'button'}
                 accessibilityLabel={event.outfitId == null
                   ? `Custom look for ${event.title}, ${pieceCount} ${pieceCount === 1 ? 'piece' : 'pieces'}`
                   : `View outfit for ${event.title}, ${pieceCount} ${pieceCount === 1 ? 'piece' : 'pieces'}`}
               >
-                <View style={s.lookPreviewCollage}>
-                  <EventLookCollage
-                    itemIds={event.itemIds ?? []}
-                    allItems={allItems}
-                    size={lookWidth}
-                    height={Math.min(lookWidth * 0.62, 240)}
-                    borderRadius={radii.lg}
-                    outfit={outfit}
-                  />
-                </View>
-                <View style={s.lookPreviewFooter}>
-                  <View>
-                    <Text style={s.lookPreviewTitle}>{event.outfitId == null ? 'Custom look' : 'Your look'}</Text>
-                    <Text style={s.lookPreviewMeta}>{pieceCount} {pieceCount === 1 ? 'piece' : 'pieces'}</Text>
-                  </View>
-                  {event.outfitId != null ? (
-                    <View style={s.viewLookPill}>
-                      <Text style={s.viewLookText}>View outfit</Text>
-                      <Ionicons name="arrow-forward" size={14} color={colors.primary} />
-                    </View>
-                  ) : null}
-                </View>
+                <EventLookCollage
+                  itemIds={event.itemIds ?? []}
+                  allItems={allItems}
+                  size={lookWidth}
+                  height={lookHeight}
+                  borderRadius={radii.xl}
+                  outfit={outfit}
+                />
               </PressableScale>
+              <View style={s.lookFooter}>
+                <Text style={s.lookMeta}>
+                  {event.outfitId == null ? 'Custom look' : 'Your look'} · {pieceCount} {pieceCount === 1 ? 'piece' : 'pieces'}
+                </Text>
+                {event.outfitId != null ? (
+                  <TouchableOpacity style={s.lookLink} onPress={() => onOpenOutfit(event)} accessibilityRole="button" accessibilityLabel="View outfit">
+                    <Text style={s.lookLinkText}>View outfit</Text>
+                    <Ionicons name="arrow-forward" size={14} color={colors.foreground} />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
             </View>
           ) : (
-            <View style={[s.outfitCard, s.outfitCardEmpty]}>
-              <View style={s.emptyOutfitIcon}>
-                <Ionicons name="sparkles-outline" size={19} color={colors.primary} />
+            <PressableScale
+              contentStyle={s.emptyCanvas}
+              onPress={() => handoff(onOpenStylist)}
+              disabled={handoffPending}
+              scaleTo={0.985}
+              accessibilityRole="button"
+              accessibilityLabel={`Style a look for ${event.title}`}
+              accessibilityHint="Styled considers your closet, the occasion, and the forecast"
+            >
+              <View style={s.emptySlots}>
+                {(['Top', 'Bottom', 'Shoes'] as const).map((slot) => (
+                  <View key={slot} style={s.emptySlot}>
+                    <Text style={s.emptySlotText}>{slot}</Text>
+                  </View>
+                ))}
               </View>
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text style={s.emptyOutfitTitle}>Ready to style</Text>
-                <Text style={s.outfitSubtext}>Styled will consider your closet, the occasion, and the forecast.</Text>
+              <View style={s.emptyCanvasCaption}>
+                <Ionicons name="sparkles-outline" size={14} color={colors.accentInk} />
+                <Text style={s.emptyCanvasText}>Tap to style this look from your closet</Text>
               </View>
-            </View>
+            </PressableScale>
           )}
+
+          <View>
+            <View style={s.chips}>
+              {chips.map((chip) => {
+                const content = (
+                  <>
+                    <Ionicons name={chip.icon} size={13} color={chip.accent ? colors.accentInk : colors.mutedForeground} />
+                    <Text style={[s.chipText, chip.accent && s.chipTextAccent]} numberOfLines={1}>{chip.label}</Text>
+                    {chip.info ? <Ionicons name="information-circle-outline" size={13} color={colors.mutedForeground} /> : null}
+                  </>
+                );
+                return chip.onPress ? (
+                  <TouchableOpacity
+                    key={chip.key}
+                    style={s.chip}
+                    onPress={chip.onPress}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${chip.label}, about this forecast`}
+                    accessibilityState={{ expanded: weatherNoteVisible }}
+                  >
+                    {content}
+                  </TouchableOpacity>
+                ) : (
+                  <View key={chip.key} style={s.chip}>{content}</View>
+                );
+              })}
+            </View>
+            {weatherNoteVisible && forecast.data ? (
+              <Text style={s.weatherNote}>
+                Weather near {forecast.data.locationLabel}. The event location couldn’t be placed, so this uses your area.
+              </Text>
+            ) : null}
+          </View>
 
           {board && (
             <TouchableOpacity
@@ -256,22 +282,23 @@ export function EventDetailModal({
           )}
           {notesPresentation.summary || notesPresentation.links.length > 0 ? (
             <View style={s.notesCard}>
-              <View style={s.notesHeader}>
-                <Ionicons name="document-text-outline" size={15} color={colors.primary} />
+              <TouchableOpacity
+                style={s.notesHeader}
+                onPress={() => setNotesExpanded((current) => !current)}
+                accessibilityRole="button"
+                accessibilityLabel="Event details"
+                accessibilityState={{ expanded: notesExpanded }}
+              >
                 <Text style={s.notesLabel}>Event details</Text>
-              </View>
-              {notesPresentation.summary ? (
-                <Text selectable style={s.notesText} numberOfLines={notesExpanded ? undefined : 3}>
-                  {notesPresentation.summary}
-                </Text>
+                {!notesExpanded && notesPresentation.summary ? (
+                  <Text style={s.notesPreview} numberOfLines={1}>{notesPresentation.summary.replace(/\s+/g, ' ')}</Text>
+                ) : <View style={{ flex: 1 }} />}
+                <Ionicons name={notesExpanded ? 'chevron-up' : 'chevron-down'} size={14} color={colors.mutedForeground} />
+              </TouchableOpacity>
+              {notesExpanded && notesPresentation.summary ? (
+                <Text selectable style={s.notesText}>{notesPresentation.summary}</Text>
               ) : null}
-              {notesPresentation.summary && notesPresentation.summary.length > 150 ? (
-                <TouchableOpacity onPress={() => setNotesExpanded((current) => !current)} style={s.notesMoreBtn} accessibilityRole="button" accessibilityState={{ expanded: notesExpanded }}>
-                  <Text style={s.notesMoreText}>{notesExpanded ? 'Show less' : 'More details'}</Text>
-                  <Ionicons name={notesExpanded ? 'chevron-up' : 'chevron-down'} size={13} color={colors.primary} />
-                </TouchableOpacity>
-              ) : null}
-              {notesPresentation.links.length > 0 ? (
+              {notesExpanded && notesPresentation.links.length > 0 ? (
                 <View style={s.sourceLinks}>
                   {notesPresentation.links.map((link) => (
                     <TouchableOpacity
@@ -291,16 +318,25 @@ export function EventDetailModal({
           ) : null}
 
           {event.calendarMetadata ? (
-            <View style={s.sourceSection}>
-              <Text style={s.metaText}>From {event.calendarMetadata.calendarName}</Text>
-              <Text style={s.outfitSubtext}>Edit calendar details in your source calendar. Styling stays in Styled.</Text>
-              {event.calendarMetadata.url && /^https:\/\//i.test(event.calendarMetadata.url) ? (
-                <TouchableOpacity style={s.sourceLink} accessibilityRole="link" onPress={() => { void Linking.openURL(event.calendarMetadata!.url!).catch(() => {}); }}>
-                  <Ionicons name="open-outline" size={14} color={colors.primary} />
-                  <Text style={s.sourceLinkText}>Open calendar</Text>
-                </TouchableOpacity>
+            <TouchableOpacity
+              style={s.sourceFooter}
+              disabled={!sourceUrl}
+              onPress={() => { if (sourceUrl) void Linking.openURL(sourceUrl).catch(() => {}); }}
+              accessibilityRole={sourceUrl ? 'link' : 'text'}
+              accessibilityLabel={`Synced from ${event.calendarMetadata.calendarName}${sourceUrl ? ', open calendar' : ''}`}
+              accessibilityHint="Calendar details are edited in the source calendar"
+            >
+              <Ionicons name="sync-outline" size={13} color={colors.mutedForeground} />
+              <Text style={s.sourceFooterText} numberOfLines={1}>
+                Synced from {event.calendarMetadata.calendarName}
+              </Text>
+              {sourceUrl ? (
+                <>
+                  <Text style={s.sourceFooterLink}>Open</Text>
+                  <Ionicons name="arrow-up-outline" size={12} color={colors.foreground} style={s.openGlyph} />
+                </>
               ) : null}
-            </View>
+            </TouchableOpacity>
           ) : null}
         </ScrollView>
 
@@ -311,6 +347,7 @@ export function EventDetailModal({
           title="Event options"
           subtitle={event.title}
           options={[
+            ...(hasOutfit ? [{ label: 'Choose a different look', icon: 'albums-outline' as const, onPress: () => setManualExpanded(true) }] : []),
             { label: event.calendarMetadata ? 'Edit styling details' : 'Edit event', icon: 'pencil-outline', onPress: () => onEdit(event) },
             ...(event.calendarMetadata?.url && /^https:\/\//i.test(event.calendarMetadata.url) ? [{ label: 'Open calendar', icon: 'open-outline' as const, onPress: () => { void Linking.openURL(event.calendarMetadata!.url!); } }] : []),
             { label: event.calendarMetadata ? 'Remove from Styled' : 'Delete event', icon: 'trash-outline', destructive: true, onPress: () => onDelete(event) },
@@ -319,22 +356,47 @@ export function EventDetailModal({
         />
 
         <View style={[s.actions, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
-          <PressableScale
-            contentStyle={s.stylistBtn}
-            disabled={handoffPending}
-            accessibilityState={{ disabled: handoffPending, busy: handoffPending }}
-            onPress={() => handoff(onOpenStylist)}
-            accessibilityRole="button"
-            accessibilityLabel={`${getEventPlanActionLabel(hasOutfit)} for ${event.title}`}
-          >
-            <Ionicons name="sparkles-outline" size={18} color={colors.white} />
-            <Text style={s.stylistBtnText}>{getEventPlanActionLabel(hasOutfit)}</Text>
-          </PressableScale>
+          <View style={s.actionRow}>
+            {canWear ? (
+              <PressableScale
+                style={s.actionOuter}
+                contentStyle={[s.stylistBtn, (worn || isWearing) && s.btnDisabled]}
+                disabled={worn || isWearing}
+                accessibilityState={{ disabled: worn || isWearing, busy: isWearing }}
+                onPress={() => onWear!(event)}
+                accessibilityRole="button"
+                accessibilityLabel={worn ? `${event.title} look logged as worn` : `Wear this look for ${event.title}`}
+              >
+                <Ionicons name={worn ? 'checkmark' : 'shirt-outline'} size={17} color={colors.white} />
+                <Text style={s.stylistBtnText}>{worn ? 'Worn today' : isWearing ? 'Logging…' : 'Wear this'}</Text>
+              </PressableScale>
+            ) : null}
+            <PressableScale
+              style={s.actionOuter}
+              contentStyle={canWear ? s.ghostBtn : s.stylistBtn}
+              disabled={handoffPending}
+              accessibilityState={{ disabled: handoffPending, busy: handoffPending }}
+              onPress={() => handoff(onOpenStylist)}
+              accessibilityRole="button"
+              accessibilityLabel={`${getEventPlanActionLabel(hasOutfit)} for ${event.title}`}
+            >
+              <Ionicons name="sparkles-outline" size={17} color={canWear ? colors.foreground : colors.white} />
+              <Text style={canWear ? s.ghostBtnText : s.stylistBtnText}>
+                {canWear ? 'Refine' : getEventPlanActionLabel(hasOutfit)}
+              </Text>
+            </PressableScale>
+          </View>
 
-          <PressableScale contentStyle={s.manualToggle} onPress={() => setManualExpanded(true)} accessibilityRole="button" accessibilityLabel={`Choose a look for ${event.title}`}>
-            <Text style={s.manualToggleText}>Choose a look</Text>
-            <Ionicons name="chevron-down" size={14} color={colors.mutedForeground} />
-          </PressableScale>
+          {!hasOutfit ? (
+            <TouchableOpacity
+              style={s.manualLink}
+              onPress={() => setManualExpanded(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`Choose a look for ${event.title}`}
+            >
+              <Text style={s.manualLinkText}>or choose from your closet</Text>
+            </TouchableOpacity>
+          ) : null}
           <ActionMenuSheet
             compact
             deferSelectionUntilDismissed
@@ -383,54 +445,83 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxxl },
-  titleBlock: { gap: spacing.sm, marginBottom: spacing.xs },
-  title: {
-    ...typography.text.editorialSheet,
-    color: colors.foreground,
-  },
-  readinessBadge: {
+  titleBlock: { gap: spacing.sm },
+  title: { ...typography.text.editorialSheet, color: colors.foreground },
+  statusPill: {
     alignSelf: 'flex-start',
-    minHeight: 26,
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-  },
-  readinessBadgeText: { ...typography.text.label, color: colors.primary },
-  readinessBadgeTextReady: { color: colors.success },
-  infoCard: {
-    gap: spacing.md,
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radii.xl,
-    padding: spacing.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    borderCurve: 'continuous',
-  },
-  infoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  metaText: { fontSize: typography.text.bodySmall.fontSize, color: colors.mutedForeground, flex: 1 },
-  countdownBadge: {
-    backgroundColor: colors.surfaceSelected,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    minHeight: 28,
+    paddingHorizontal: spacing.sm + 2,
     borderRadius: radii.full,
-    paddingHorizontal: spacing.sm,
-    minHeight: 24,
-    justifyContent: 'center',
+    backgroundColor: colors.surfaceSelected,
   },
-  countdownText: { ...typography.text.label, color: colors.primary },
-  notesCard: {
-    gap: spacing.md,
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radii.lg,
-    padding: spacing.md,
-    marginTop: 0,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+  statusPillNeeds: { backgroundColor: 'transparent', borderWidth: stroke.fine, borderColor: colors.stitch },
+  statusText: { ...typography.text.caption, fontWeight: typography.weight.semibold, color: colors.foreground },
+  statusTextNeeds: { color: colors.accentInk },
+
+  lookBlock: { gap: spacing.sm },
+  lookCanvas: {
+    overflow: 'hidden',
+    borderRadius: radii.xl,
     borderCurve: 'continuous',
+    backgroundColor: colors.imageMat,
   },
-  notesHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  notesLabel: { fontSize: typography.text.caption.fontSize, color: colors.primary, fontWeight: typography.weight.semibold, textTransform: 'uppercase', letterSpacing: typography.tracking.meta },
-  notesText: { fontSize: typography.text.bodySmall.fontSize, color: colors.inkSubtle, lineHeight: typography.text.bodySmall.fontSize * 1.5 },
-  notesMoreBtn: { minHeight: 44, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4 },
-  notesMoreText: { fontSize: typography.text.caption.fontSize, color: colors.primary, fontWeight: typography.weight.semibold },
-  sourceSection: { gap: spacing.sm },
-  sourceLinks: { gap: spacing.xs },
+  lookFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 },
+  lookMeta: { ...typography.text.bodySmall, color: colors.mutedForeground },
+  lookLink: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44 },
+  lookLinkText: { ...typography.text.label, color: colors.foreground, textDecorationLine: 'underline' },
+
+  emptyCanvas: {
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.xl,
+    borderCurve: 'continuous',
+    borderWidth: stroke.fine,
+    borderStyle: 'dashed',
+    borderColor: colors.stitch,
+  },
+  emptySlots: { flexDirection: 'row', gap: spacing.sm, height: 150 },
+  emptySlot: {
+    flex: 1,
+    alignItems: 'center', justifyContent: 'flex-end',
+    paddingBottom: spacing.sm,
+    borderRadius: radii.lg,
+    borderCurve: 'continuous',
+    backgroundColor: colors.surfaceSubtle,
+  },
+  emptySlotText: { ...typography.text.caption, color: colors.mutedForeground, fontWeight: typography.weight.medium },
+  emptyCanvasCaption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs },
+  emptyCanvasText: { ...typography.text.bodySmall, color: colors.accentInk, fontWeight: typography.weight.medium },
+
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  chip: {
+    maxWidth: '100%',
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    minHeight: 32,
+    paddingHorizontal: spacing.sm + 2,
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  chipText: { ...typography.text.caption, color: colors.foreground, fontWeight: typography.weight.medium, flexShrink: 1 },
+  chipTextAccent: { color: colors.accentInk },
+  weatherNote: { ...typography.text.caption, color: colors.mutedForeground, marginTop: spacing.sm },
+
+  notesCard: {
+    paddingVertical: spacing.xs,
+    borderTopWidth: stroke.hairline,
+    borderBottomWidth: stroke.hairline,
+    borderColor: colors.hairline,
+  },
+  notesHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44 },
+  notesLabel: { ...typography.text.label, color: colors.foreground },
+  notesPreview: { ...typography.text.bodySmall, color: colors.mutedForeground, flex: 1 },
+  notesText: {
+    fontSize: typography.text.bodySmall.fontSize,
+    color: colors.inkSubtle,
+    lineHeight: typography.text.bodySmall.fontSize * 1.5,
+    paddingBottom: spacing.sm,
+  },
+  sourceLinks: { gap: spacing.xs, paddingBottom: spacing.sm },
   sourceLink: {
     minHeight: 44,
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
@@ -441,100 +532,11 @@ const s = StyleSheet.create({
     borderColor: colors.border,
   },
   sourceLinkText: { flex: 1, fontSize: typography.text.caption.fontSize, color: colors.primary, fontWeight: typography.weight.semibold },
-  actions: {
-    gap: spacing.sm,
-    padding: spacing.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  stylistBtn: {
-    minHeight: 46,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    borderRadius: radii.full,
-    backgroundColor: colors.primary,
-  },
-  stylistBtnText: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.white,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  manualToggle: {
-    backgroundColor: colors.surfaceSubtle, borderRadius: radii.full,
-    minHeight: 44,
-    alignSelf: 'center',
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-  },
-  manualToggleText: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground, fontWeight: typography.weight.medium },
-  assignBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
-    justifyContent: 'center',
-    minHeight: 46,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radii.lg, borderWidth: 1, borderColor: colors.border,
-    backgroundColor: colors.surfaceElevated,
-    borderCurve: 'continuous',
-  },
-  assignBtnOuter: { flex: 1 },
-  assignBtnText: { fontSize: typography.text.bodySmall.fontSize, color: colors.foreground, fontWeight: typography.weight.medium },
-  outfitCard: {
-    backgroundColor: colors.surfaceSubtle,
-    borderRadius: radii.xl,
-    padding: spacing.lg,
-    marginTop: 0,
-    gap: spacing.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    borderCurve: 'continuous',
-  },
-  outfitCardReady: { backgroundColor: colors.card },
-  outfitCardEmpty: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 0,
-    paddingVertical: spacing.sm,
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-    borderRadius: 0,
-  },
-  outfitHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
-  outfitLabel: {
-    fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold,
-    color: colors.primary, textTransform: 'uppercase', letterSpacing: typography.tracking.label,
-  },
-  outfitSubtext: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground, lineHeight: 17, marginTop: 2 },
-  readyMark: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#E8F0EA', alignItems: 'center', justifyContent: 'center' },
-  lookPreviewButton: {
-    overflow: 'hidden',
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceSubtle,
-    borderCurve: 'continuous',
-  },
-  lookPreviewCollage: { overflow: 'hidden' },
-  lookPreviewFooter: {
-    minHeight: 64,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-    padding: spacing.md,
-  },
-  lookPreviewTitle: {
-    fontSize: typography.text.bodySmall.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
-  lookPreviewMeta: { marginTop: 2, fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
+  sourceFooter: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44 },
+  sourceFooterText: { ...typography.text.caption, color: colors.mutedForeground, flexShrink: 1 },
+  sourceFooterLink: { ...typography.text.caption, color: colors.foreground, fontWeight: typography.weight.semibold, marginLeft: spacing.xs },
+  openGlyph: { transform: [{ rotate: '45deg' }] },
+
   boardRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -546,31 +548,35 @@ const s = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
-  boardEyebrow: {
-    ...typography.text.eyebrow,
-    color: colors.primary,
-  },
+  boardEyebrow: { ...typography.text.eyebrow, color: colors.primary },
   boardName: { fontSize: typography.text.body.fontSize, fontWeight: typography.weight.medium, color: colors.foreground },
-  viewLookPill: {
-    minHeight: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
+
+  actions: {
     gap: spacing.xs,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  actionRow: { flexDirection: 'row', gap: spacing.sm },
+  actionOuter: { flex: 1 },
+  stylistBtn: {
+    minHeight: 50,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
     borderRadius: radii.full,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: colors.primary,
   },
-  viewLookText: {
-    fontSize: typography.text.caption.fontSize,
-    color: colors.primary,
-    fontWeight: typography.weight.semibold,
+  stylistBtnText: { ...typography.text.label, color: colors.white },
+  ghostBtn: {
+    minHeight: 50,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
+    borderRadius: radii.full,
+    borderWidth: stroke.fine,
+    borderColor: colors.ghostStroke,
   },
-  emptyOutfitIcon: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: colors.surfaceSelected,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  emptyOutfitTitle: { fontSize: typography.text.bodySmall.fontSize, color: colors.foreground, fontWeight: typography.weight.semibold },
+  ghostBtnText: { ...typography.text.label, color: colors.foreground },
+  btnDisabled: { opacity: 0.72 },
+  manualLink: { alignSelf: 'center', minHeight: 40, justifyContent: 'center', paddingHorizontal: spacing.md },
+  manualLinkText: { ...typography.text.bodySmall, color: colors.mutedForeground, textDecorationLine: 'underline' },
 });

@@ -47,7 +47,8 @@ function chooser() {
   return renderer.root.findAllByType(ActionMenuSheet).find(node => node.props.title === 'Choose a look')!;
 }
 async function select(label: string) {
-  await act(async () => pressable(`Choose a look for ${fixture.title}`).props.onPress());
+  const link = renderer.root.findAllByType(TouchableOpacity).find(node => node.props.accessibilityLabel === `Choose a look for ${fixture.title}`)!;
+  await act(async () => link.props.onPress());
   const sheet = chooser();
   expect(sheet.props.visible).toBe(true);
   const row = sheet.findAllByType(TouchableOpacity).find(node => node.findAllByType(Text).some(text => text.props.children === label))!;
@@ -85,12 +86,15 @@ it('keeps board planning in the consolidated chooser and opens its nested picker
   expect(props.onOpenStylist).not.toHaveBeenCalled();
 });
 
-it('presents the planned look before notes and source management and preserves viewing', async () => {
+it('puts the look under the title, ahead of logistics, notes and the source footer', async () => {
   const planned = { ...fixture, itemIds: [11, 12], outfitId: 4 };
   await render(planned);
   const labels = renderer.root.findAllByType(Text).map(node => React.Children.toArray(node.props.children).join(''));
-  expect(labels.indexOf('Planned look')).toBeLessThan(labels.indexOf('Event details'));
-  expect(labels.indexOf('Event details')).toBeLessThan(labels.indexOf('From Personal'));
+  expect(labels.indexOf('Look planned')).toBeLessThan(labels.indexOf('Your look · 2 pieces'));
+  expect(labels.indexOf('Your look · 2 pieces')).toBeLessThan(labels.indexOf('Casual'));
+  expect(labels.indexOf('Casual')).toBeLessThan(labels.indexOf('Event details'));
+  expect(labels.indexOf('Event details')).toBeLessThan(labels.indexOf('Synced from Personal'));
+  expect(labels).not.toContain('Edit calendar details in your source calendar. Styling stays in Styled.');
   await act(async () => pressable(`View outfit for ${fixture.title}, 2 pieces`).props.onPress());
   expect(props.onOpenOutfit).toHaveBeenCalledWith(planned);
   expect(props.onAssign).not.toHaveBeenCalled();
@@ -107,4 +111,55 @@ it('guards a rapid double tap and resets the handoff when the detail is reopened
   await act(async () => renderer.update(<EventDetailModal {...props} visible />));
   act(() => pressable(`Plan my look for ${fixture.title}`).props.onPress());
   expect(props.onOpenStylist).toHaveBeenCalledTimes(2);
+});
+
+it('collapses event notes to a one-line preview until expanded', async () => {
+  await render();
+  const texts = () => renderer.root.findAllByType(Text).map(node => node.props.children);
+  expect(texts()).toContain('Arrive at the side entrance.');
+  const toggle = renderer.root.findAllByType(TouchableOpacity).find(node => node.props.accessibilityLabel === 'Event details')!;
+  expect(toggle.props.accessibilityState).toEqual({ expanded: false });
+  await act(async () => toggle.props.onPress());
+  expect(toggle.props.accessibilityState).toEqual({ expanded: true });
+  expect(renderer.root.findAllByType(Text).filter(node => node.props.selectable && node.props.children === 'Arrive at the side entrance.')).toHaveLength(1);
+});
+
+it('styles an unplanned look from the empty canvas', async () => {
+  await render();
+  expect(renderer.root.findAllByType(Text).map(node => node.props.children)).toEqual(expect.arrayContaining(['Needs a look', 'Top', 'Bottom', 'Shoes']));
+  await act(async () => pressable(`Style a look for ${fixture.title}`).props.onPress());
+  expect(props.onOpenStylist).toHaveBeenCalledWith(fixture);
+});
+
+it('offers Wear this beside Refine only on the event day', async () => {
+  jest.setSystemTime(new Date('2026-10-14T09:00:00'));
+  const planned = { ...fixture, itemIds: [11, 12], outfitId: 4 };
+  const onWear = jest.fn();
+  props = undefined as never;
+  await act(async () => {
+    renderer = TestRenderer.create(<EventDetailModal
+      event={planned} visible onClose={jest.fn()} onEdit={jest.fn()} onDelete={jest.fn()}
+      onAssign={jest.fn()} onChooseOutfit={jest.fn()} onOpenOutfit={jest.fn()} onOpenStylist={jest.fn()}
+      allItems={[]} outfit={null} weatherFallback={null} onWear={onWear}
+    />);
+  });
+  await act(async () => pressable(`Wear this look for ${fixture.title}`).props.onPress());
+  expect(onWear).toHaveBeenCalledWith(planned);
+  expect(pressable(`Refine my look for ${fixture.title}`)).toBeDefined();
+  expect(renderer.root.findAllByType(TouchableOpacity).some(node => node.props.accessibilityLabel === `Choose a look for ${fixture.title}`)).toBe(false);
+
+  await act(async () => renderer.update(<EventDetailModal
+    event={planned} visible onClose={jest.fn()} onEdit={jest.fn()} onDelete={jest.fn()}
+    onAssign={jest.fn()} onChooseOutfit={jest.fn()} onOpenOutfit={jest.fn()} onOpenStylist={jest.fn()}
+    allItems={[]} outfit={null} weatherFallback={null} onWear={onWear} worn
+  />));
+  expect(pressable(`${fixture.title} look logged as worn`).props.disabled).toBe(true);
+
+  jest.setSystemTime(new Date('2026-10-12T09:00:00'));
+  await act(async () => renderer.update(<EventDetailModal
+    event={{ ...planned, id: 8 }} visible onClose={jest.fn()} onEdit={jest.fn()} onDelete={jest.fn()}
+    onAssign={jest.fn()} onChooseOutfit={jest.fn()} onOpenOutfit={jest.fn()} onOpenStylist={jest.fn()}
+    allItems={[]} outfit={null} weatherFallback={null} onWear={onWear}
+  />));
+  expect(pressable(`Wear this look for ${fixture.title}`)).toBeUndefined();
 });

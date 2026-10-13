@@ -23,21 +23,20 @@ import {
   useOutfits,
 } from '../../hooks/useOutfits';
 import { useItems } from '../../hooks/useItems';
+import { useOutfitLogs, useCreateOutfitLog } from '../../hooks/useOutfitLogs';
+import * as Haptics from '../../lib/haptics';
+import { isLookWornOn, buildDayThumbs, groupWearLogsByDay } from '../../components/calendar/calendar-presentation';
 import { CalendarSyncSheet } from '../../components/calendar/CalendarSyncSheet';
 import { WeekStrip } from '../../components/calendar/WeekStrip';
 import { EventFormModal } from '../../components/calendar/EventFormModal';
 import { EventDetailModal } from '../../components/calendar/EventDetailModal';
 import { EventItemPickerModal } from '../../components/calendar/EventItemPickerModal';
 import { EventOutfitPickerModal } from '../../components/calendar/EventOutfitPickerModal';
-import { ItemThumbStack } from '../../components/calendar/ItemThumbStack';
+import { AgendaEventRow, AllDayBanner } from '../../components/calendar/AgendaEventRow';
 import { NextEventHero } from '../../components/calendar/NextEventHero';
-import {
-  toDateStr,
-  formatTime,
-} from '../../components/calendar/calendarUtils';
+import { toDateStr } from '../../components/calendar/calendarUtils';
 import { colors, spacing, typography, radii } from '../../theme';
 import { ErrorState } from '../../components/primitives/ErrorState';
-import { ScreenHeader } from '../../components/primitives/Editorial';
 import { ActionMenuSheet } from '../../components/primitives/ActionMenuSheet';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
@@ -49,8 +48,14 @@ import { track } from '../../lib/analytics';
 import type { CalendarScreenProps } from '../../navigation/types';
 import type { Event } from '../../types/event';
 import type { StylistMissingEssential } from '../../features/stylist/types';
-import { presentCalendarEvent, occasionDisplayLabel } from '../../components/calendar/calendar-presentation';
-import { eventDayKey, sortCalendarEvents, eventsForCalendarDay, agendaDayHeading } from '../../components/calendar/calendarAgenda';
+import {
+  eventDayKey,
+  sortCalendarEvents,
+  agendaDayHeading,
+  buildAgendaWindow,
+  buildPlanningStatusMap,
+  windowCountsForDate,
+} from '../../components/calendar/calendarAgenda';
 
 const FREE_EVENT_LIMIT = 5;
 
@@ -68,21 +73,24 @@ function weekOffsetFor(date: Date): number {
   return Math.round((mondayOf(date).getTime() - mondayOf(new Date()).getTime()) / msPerWeek);
 }
 
+/** Event days loaded each time the agenda reaches either end. */
+const FUTURE_PAGE = 30;
+const PAST_PAGE = 14;
+
 type CalendarTimelineItem =
-  | { kind: 'masthead'; key: string }
-  | { kind: 'week-strip'; key: string }
-  | { kind: 'upcoming-heading'; key: string }
-  | { kind: 'day-heading'; key: string; dateStr: string }
+  | { kind: 'earlier'; key: string }
+  | { kind: 'day-heading'; key: string; date: string }
   | { kind: 'loading'; key: string }
   | { kind: 'error'; key: string }
   | { kind: 'empty'; key: string }
   | { kind: 'no-upcoming'; key: string }
-  | { kind: 'hero'; key: string; event: Event; highlighted: boolean }
-  // An empty Day keeps its date-specific add-event and wear-log actions.
+  | { kind: 'hero'; key: string; date: string; event: Event }
+  // An empty day the user chose keeps its date-specific add-event and wear-log actions.
   | { kind: 'day-placeholder'; key: string; date: string; isPast: boolean }
-  | { kind: 'event'; key: string; event: Event; highlighted: boolean }
-  | { kind: 'show-upcoming'; key: string; expanded: boolean; count: number }
-  | { kind: 'past-toggle'; key: string; expanded: boolean; count: number };
+  | { kind: 'all-day'; key: string; date: string; event: Event }
+  | { kind: 'event'; key: string; date: string; event: Event };
+
+const itemDate = (item: CalendarTimelineItem): string | null => ('date' in item ? item.date : null);
 
 function CalendarLoadingSkeleton() {
   return (
@@ -123,13 +131,17 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   const { data: allItems = [] } = useItems();
   const { data: outfits = [] } = useOutfits();
   const deleteEventMutation = useDeleteEvent();
+  const { data: outfitLogs = [] } = useOutfitLogs();
+  const createOutfitLog = useCreateOutfitLog();
+  const [wearingEventId, setWearingEventId] = useState<number | null>(null);
   const outfitReturnEventId = useRef<number | null>(null);
   const stylistHandoffAt = useRef(0);
   const eventsRef = useRef(events);
   eventsRef.current = events;
 
-  // null means Upcoming; a selected date filters the Day agenda.
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  // The strip's selection. It follows the agenda as it scrolls and drives it
+  // when a date is tapped.
+  const [selectedDate, setSelectedDate] = useState(() => toDateStr(new Date()));
   const [weekOffset, setWeekOffset] = useState(0);
   const [calendarExpanded, setCalendarExpanded] = useState(false);
   const [monthOffset, setMonthOffset] = useState(0);
@@ -139,12 +151,13 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   const { data: boards = [] } = useBoards();
   const { mutateAsync: setEventBoard } = useSetEventBoard();
   const boardsById = useMemo(() => new Map(boards.map((b) => [b.id, b])), [boards]);
-  const itemsById = useMemo(() => new Map(allItems.map((item) => [item.id, item])), [allItems]);
   const [pickerEvent, setPickerEvent] = useState<Event | null>(null);
   const [outfitPickerEvent, setOutfitPickerEvent] = useState<Event | null>(null);
   const [returnToDetailEventId, setReturnToDetailEventId] = useState<number | null>(null);
-  const [showAllUpcoming, setShowAllUpcoming] = useState(false);
-  const [pastExpanded, setPastExpanded] = useState(false);
+  const [pastDayCount, setPastDayCount] = useState(0);
+  const [futureDayCount, setFutureDayCount] = useState(FUTURE_PAGE);
+  // A tapped day without events is kept in the timeline so it can be shown.
+  const [pinnedDate, setPinnedDate] = useState<string | null>(null);
   const [syncVisible, setSyncVisible] = useState(false);
   const [calendarMenuVisible, setCalendarMenuVisible] = useState(false);
 
@@ -165,17 +178,15 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
     return () => { clearInterval(timer); subscription.remove(); };
   }, []);
 
-  // Keep the masthead in the data so the sticky calendar has a real item
-  // offset. FlashList can pin item zero early when using ListHeaderComponent.
   const flashListRef = useRef<FlashListRef<CalendarTimelineItem>>(null);
   // Re-tapping the Calendar tab scrolls back to the top.
   useScrollToTop(flashListRef);
-  const [listHeaderHeight, setListHeaderHeight] = useState(0);
-  const [weekStripHeight, setWeekStripHeight] = useState(0);
-  const [isStripStuck, setIsStripStuck] = useState(false);
-  const scrollOffsetRef = useRef(0);
-
-  const UPCOMING_LIMIT = 4;
+  // A date the agenda should scroll to once the timeline includes it. An
+  // object, so tapping the same date twice still scrolls.
+  const [scrollRequest, setScrollRequest] = useState<{ date: string } | null>(null);
+  // While the list moves on its own, its scroll must not feed back into the
+  // strip. Cleared as soon as the user touches the list again.
+  const programmaticScroll = useRef(false);
 
   const upcoming = useMemo(
     () => sortCalendarEvents(events.filter((event) => eventDayKey(event) >= todayStr)),
@@ -185,11 +196,6 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   const outfitsById = useMemo(
     () => new Map(outfits.map((outfit) => [outfit.id, outfit])),
     [outfits],
-  );
-
-  const past = useMemo(
-    () => sortCalendarEvents(events.filter((event) => eventDayKey(event) < todayStr)),
-    [events, todayStr],
   );
 
   const weekDays = useMemo(() => {
@@ -204,67 +210,76 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
     });
   }, [weekOffset, todayStr]);
 
-  const eventDateSet = useMemo(
-    () => new Set(events.map(eventDayKey)),
-    [events],
+  const planningStatus = useMemo(() => buildPlanningStatusMap(events), [events]);
+  const itemsById = useMemo(() => new Map(allItems.map((item) => [item.id, item])), [allItems]);
+  const dayThumbs = useMemo(
+    () => buildDayThumbs(sortCalendarEvents(events), itemsById, eventDayKey),
+    [events, itemsById],
   );
+  const logsByDay = useMemo(() => groupWearLogsByDay(outfitLogs), [outfitLogs]);
 
   const formInitialDate = useMemo(
-    () => (selectedDate ? new Date(selectedDate + 'T09:00:00') : null),
-    [selectedDate],
+    () => (pinnedDate ? new Date(pinnedDate + 'T09:00:00') : null),
+    [pinnedDate],
   );
 
   const nextEvent = upcoming[0] ?? null;
-  const upcomingRest = upcoming.slice(1);
-  const visibleUpcoming = showAllUpcoming ? upcomingRest : upcomingRest.slice(0, UPCOMING_LIMIT);
+  const agenda = useMemo(
+    () => buildAgendaWindow(events, { todayStr, pastDayCount, futureDayCount, pinnedDate }),
+    [events, todayStr, pastDayCount, futureDayCount, pinnedDate],
+  );
   const timelineItems = useMemo<CalendarTimelineItem[]>(() => {
-    const items: CalendarTimelineItem[] = [
-      { kind: 'masthead', key: 'masthead' },
-      { kind: 'week-strip', key: 'week-strip' },
-      { kind: 'upcoming-heading', key: 'view-controls' },
-    ];
-    if (isLoading) return [...items, { kind: 'loading', key: 'loading' }];
-    if (isError) return [...items, { kind: 'error', key: 'error' }];
-    if (selectedDate) {
-      const selected = eventsForCalendarDay(events, selectedDate);
-      items.push({ kind: 'day-heading', key: `day-${selectedDate}`, dateStr: selectedDate });
-      if (!selected.length) items.push({ kind: 'day-placeholder', key: `empty-${selectedDate}`, date: selectedDate, isPast: selectedDate < todayStr });
-      selected.forEach((event) => items.push({ kind: 'event', key: `event-${event.id}`, event, highlighted: false }));
-      return items;
-    }
-    if (!events.length) return [...items, { kind: 'empty', key: 'empty' }];
-    if (!nextEvent) items.push({ kind: 'no-upcoming', key: 'no-upcoming' });
-    let lastDay: string | null = null;
-    for (const event of nextEvent ? [nextEvent, ...visibleUpcoming] : []) {
-      const day = eventDayKey(event);
-      if (day !== lastDay) items.push({ kind: 'day-heading', key: `day-${day}`, dateStr: day });
-      lastDay = day;
-      items.push({ kind: event.id === nextEvent?.id ? 'hero' : 'event', key: `event-${event.id}`, event, highlighted: false });
-    }
-    if (upcomingRest.length > UPCOMING_LIMIT) items.push({ kind: 'show-upcoming', key: 'show-upcoming', expanded: showAllUpcoming, count: upcomingRest.length });
-    if (past.length) {
-      items.push({ kind: 'past-toggle', key: 'past-toggle', expanded: pastExpanded, count: past.length });
-      if (pastExpanded) {
-        const groups = new Map<string, Event[]>();
-        for (const event of past) {
-          const day = eventDayKey(event);
-          groups.set(day, [...(groups.get(day) ?? []), event]);
-        }
-        for (const [day, group] of [...groups].reverse()) {
-          items.push({ kind: 'day-heading', key: `past-day-${day}`, dateStr: day });
-          group.forEach((event) => items.push({ kind: 'event', key: `past-${event.id}`, event, highlighted: false }));
-        }
+    if (isLoading) return [{ kind: 'loading', key: 'loading' }];
+    if (isError) return [{ kind: 'error', key: 'error' }];
+    if (!events.length && !pinnedDate) return [{ kind: 'empty', key: 'empty' }];
+    const items: CalendarTimelineItem[] = [];
+    if (agenda.earlierCount > 0) items.push({ kind: 'earlier', key: 'earlier' });
+    let shownNoUpcoming = false;
+    for (const day of agenda.days) {
+      if (!nextEvent && !shownNoUpcoming && day.date >= todayStr) {
+        items.push({ kind: 'no-upcoming', key: 'no-upcoming' });
+        shownNoUpcoming = true;
+      }
+      const { date } = day;
+      items.push({ kind: 'day-heading', key: `day-${date}`, date });
+      if (!day.allDay.length && !day.timed.length) {
+        items.push({ kind: 'day-placeholder', key: `empty-${date}`, date, isPast: date < todayStr });
+        continue;
+      }
+      for (const event of [...day.allDay, ...day.timed]) {
+        if (event.id === nextEvent?.id) items.push({ kind: 'hero', key: `event-${event.id}`, date, event });
+        else if (event.calendarMetadata?.allDay) items.push({ kind: 'all-day', key: `event-${event.id}`, date, event });
+        else items.push({ kind: 'event', key: `event-${event.id}`, date, event });
       }
     }
+    if (!nextEvent && !shownNoUpcoming) items.push({ kind: 'no-upcoming', key: 'no-upcoming' });
     return items;
-  }, [events, isLoading, isError, selectedDate, todayStr, nextEvent, visibleUpcoming, upcomingRest.length, showAllUpcoming, past, pastExpanded]);
+  }, [events.length, isLoading, isError, agenda, nextEvent, todayStr, pinnedDate]);
 
-  // Keep visible masthead space when switching days. Only return to the agenda
-  // start if the user has already scrolled beyond the pinned calendar.
-  const revealAgenda = useCallback(() => {
-    const offset = Math.min(Math.max(0, scrollOffsetRef.current), listHeaderHeight);
-    requestAnimationFrame(() => flashListRef.current?.scrollToOffset({ offset, animated: !reducedMotion }));
-  }, [listHeaderHeight, reducedMotion]);
+  // Land on a requested date once the timeline contains it.
+  useEffect(() => {
+    if (!scrollRequest) return;
+    const index = timelineItems.findIndex((item) => item.kind === 'day-heading' && item.date >= scrollRequest.date);
+    if (index < 0) return;
+    setScrollRequest(null);
+    programmaticScroll.current = true;
+    requestAnimationFrame(() => {
+      void flashListRef.current?.scrollToIndex({ index, animated: !reducedMotion, viewPosition: 0 });
+    });
+  }, [scrollRequest, timelineItems, reducedMotion]);
+
+  const showWeekOf = useCallback((date: string) => {
+    setWeekOffset(weekOffsetFor(new Date(`${date}T00:00:00`)));
+  }, []);
+
+  // Agenda scroll moves the strip; the strip's own taps are excluded above.
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: { item: CalendarTimelineItem }[] }) => {
+    if (programmaticScroll.current) return;
+    const date = viewableItems.map(({ item }) => itemDate(item)).find(Boolean);
+    if (!date) return;
+    setSelectedDate((current) => (current === date ? current : date));
+    showWeekOf(date);
+  }).current;
 
   const handleAddEvent = async () => {
     if (!isPremium && events.length >= FREE_EVENT_LIMIT) {
@@ -417,17 +432,22 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
     }, delay);
   };
 
-  const handleSelectDate = (s: string) => {
-    if (calendarExpanded) setWeekStripHeight(0);
+  const handleSelectDate = useCallback((date: string) => {
     setCalendarExpanded(false);
     setMonthOffset(0);
-    setWeekOffset(weekOffsetFor(new Date(`${s}T00:00:00`)));
-    setSelectedDate(s);
-    revealAgenda();
-  };
+    showWeekOf(date);
+    setSelectedDate(date);
+    const hasEvents = planningStatus.has(date);
+    setPinnedDate(hasEvents ? null : date);
+    // Grow the window so a jump beyond what is loaded still has a landing.
+    const needed = windowCountsForDate(events, date, todayStr);
+    setPastDayCount((count) => Math.max(count, needed.past));
+    setFutureDayCount((count) => Math.max(count, needed.future + 1));
+    setScrollRequest({ date });
+  }, [events, planningStatus, showWeekOf, todayStr]);
 
   // Arriving from a deep link or a child screen: focus that event's day, scroll
-  // the week strip to it, and optionally reopen its detail sheet.
+  // the agenda to it, and optionally reopen its detail sheet.
   const paramEventId = route.params?.eventId;
   const paramDate = route.params?.date;
   const paramOpenDetail = route.params?.openDetail;
@@ -445,29 +465,19 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
         return;
       }
       if (outfitReturnEventId.current === target.id) {
+        // Returning from the outfit keeps the agenda where the user left it.
         outfitReturnEventId.current = null;
         if (paramOpenDetail !== false) setDetailEvent(target);
         clearParams();
         return;
       }
-      const eventDate = new Date(`${eventDayKey(target)}T12:00:00`);
-      if (calendarExpanded) setWeekStripHeight(0);
-      setCalendarExpanded(false);
-      setMonthOffset(0);
-      setSelectedDate(eventDayKey(target));
-      setWeekOffset(weekOffsetFor(eventDate));
-      revealAgenda();
+      handleSelectDate(eventDayKey(target));
       if (paramOpenDetail !== false) setDetailEvent(target);
     } else if (paramDate) {
-      if (calendarExpanded) setWeekStripHeight(0);
-      setCalendarExpanded(false);
-      setMonthOffset(0);
-      setSelectedDate(paramDate);
-      revealAgenda();
-      setWeekOffset(weekOffsetFor(new Date(`${paramDate}T00:00:00`)));
+      handleSelectDate(paramDate);
     }
     clearParams();
-  }, [paramEventId, paramDate, paramOpenDetail, events, isLoading, navigation, calendarExpanded, revealAgenda]);
+  }, [paramEventId, paramDate, paramOpenDetail, events, isLoading, navigation, handleSelectDate]);
 
   // A wear log is a date-stamped record, so the calendar is its natural home.
   // Logging from a selected day pre-fills that date; the header logs today.
@@ -476,134 +486,91 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
     openLogger(date ? { date, quickStart: true } : { quickStart: true });
   }, [openLogger]);
 
+  const isWorn = (event: Event) => isLookWornOn(logsByDay.get(eventDayKey(event)) ?? [], event.itemIds, eventDayKey(event));
+
+  // What a past event's day actually saw: the planned look if it was logged,
+  // otherwise the day's first wear log.
+  const wornItemIdsFor = (event: Event): number[] | null => {
+    const logs = logsByDay.get(eventDayKey(event));
+    if (!logs?.length) return null;
+    if (isWorn(event)) return event.itemIds!;
+    return logs[0].itemIds.length ? logs[0].itemIds : null;
+  };
+
+  // An open day is a styling opportunity, not a blank: weekends get a
+  // weekend look, weekdays a look for that day.
+  const openStylistForFreeDay = (date: string) => {
+    const day = new Date(`${date}T12:00:00`);
+    const weekday = day.toLocaleDateString('en-US', { weekday: 'long' });
+    const weekend = day.getDay() === 0 || day.getDay() === 6;
+    track('calendar_free_day_styled', { weekend });
+    openStylist({
+      initialQuery: weekend
+        ? `Put together a relaxed weekend look for ${weekday}, ${day.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.`
+        : `What should I wear on ${weekday}, ${day.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}?`,
+      source: 'calendar_card',
+    });
+  };
+
+  // A planned look becomes a wear log in one tap on the event's own day.
+  const handleWear = (event: Event) => {
+    if (!event.itemIds?.length || wearingEventId !== null || isWorn(event)) return;
+    setWearingEventId(event.id);
+    createOutfitLog.mutate(
+      { itemIds: event.itemIds, date: eventDayKey(event), location: event.location ?? undefined },
+      {
+        onSuccess: () => {
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          track('calendar_look_worn', { source: detailEvent ? 'event_detail' : 'calendar_hero' });
+        },
+        onSettled: () => setWearingEventId(null),
+      },
+    );
+  };
+
   const openCalendarUtilities = useCallback(() => {
     setCalendarMenuVisible(true);
   }, []);
 
-  const renderEventCard = (event: Event, highlighted: boolean) => {
-    const occasion = occasionDisplayLabel(event.occasion);
-    const presentation = presentCalendarEvent(event);
-    return (
-      <View style={[styles.eventCard, highlighted && styles.eventCardHighlighted]}>
-        <View style={styles.eventBody}>
-          <TouchableOpacity
-            style={styles.eventMain}
-            onPress={() => setDetailEvent(event)}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel={`${event.title}, ${presentation.readinessLabel}`}
-          >
-            <View style={styles.eventMeta}>
-              <Text style={styles.eventTime}>{event.calendarMetadata?.allDay ? 'All day' : formatTime(new Date(event.date))}</Text>
-              <Text style={styles.dot}>·</Text>
-              <Text style={styles.eventOccasion}>{occasion}</Text>
-            </View>
-            <Text style={styles.eventTitle} numberOfLines={2}>{event.title}</Text>
-            {event.location ? <Text style={styles.eventLoc} numberOfLines={2}>{event.location}</Text> : null}
-          </TouchableOpacity>
-          {presentation.hasOutfit ? (
-            <TouchableOpacity
-              style={styles.eventLookButton}
-              onPress={() => openAssignedOutfit(event)}
-              activeOpacity={0.75}
-              accessibilityRole="button"
-              accessibilityLabel={`${event.outfitId == null ? 'View details' : 'View outfit'} for ${event.title}, ${event.itemIds!.length} pieces`}
-            >
-              <ItemThumbStack itemIds={event.itemIds!} itemsById={itemsById} />
-              <Text style={styles.readinessText}>Outfit planned</Text>
-              <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.eventReadiness}>
-              <Ionicons name="sparkles-outline" size={13} color={colors.mutedForeground} />
-              <Text style={styles.readinessText}>Needs outfit</Text>
-            </View>
-          )}
-        </View>
-      </View>
-    );
-  };
+  const outfitFor = (event: Event) => (event.outfitId == null ? null : outfitsById.get(event.outfitId) ?? null);
 
   const renderTimelineItem = ({ item, target }: { item: CalendarTimelineItem; target?: string }) => {
     switch (item.kind) {
-      case 'masthead':
+      case 'earlier':
         return (
-          <View onLayout={(e) => setListHeaderHeight(Math.round(e.nativeEvent.layout.height))}>
-            <ScreenHeader
-              title="Calendar"
-              titleVariant="display"
-              subtitle="Plan ahead"
-              safeTop={false}
-              style={styles.screenHeader}
-              primaryAction={{ label: 'Add event', icon: 'add', onPress: handleAddEvent }}
-              secondaryActions={[
-                {
-                  label: 'More',
-                  accessibilityLabel: 'More calendar tools',
-                  icon: 'ellipsis-horizontal',
-                  variant: 'secondary',
-                  onPress: openCalendarUtilities,
-                },
-              ]}
-            />
-          </View>
-        );
-      case 'week-strip':
-        const stripIsAccessible = target === 'StickyHeader' ? isStripStuck : target === 'Measurement' ? false : !isStripStuck;
-        return (
-          <View
-            style={[styles.weekStripWrap, target === 'StickyHeader' && styles.stickyWeekStripWrap]}
-            onLayout={target === 'StickyHeader' ? undefined : (e) => setWeekStripHeight(Math.round(e.nativeEvent.layout.height))}
-            accessibilityElementsHidden={!stripIsAccessible}
-            importantForAccessibility={stripIsAccessible ? 'auto' : 'no-hide-descendants'}
+          <TouchableOpacity
+            style={styles.earlier}
+            onPress={() => setPastDayCount((count) => count + PAST_PAGE)}
+            accessibilityRole="button"
+            accessibilityLabel="Show earlier days"
           >
-            <WeekStrip
-              weekDays={weekDays}
-              selectedDate={selectedDate}
-              onSelectDate={handleSelectDate}
-              onPrevWeek={() => setWeekOffset((offset) => offset - 1)}
-              onNextWeek={() => setWeekOffset((offset) => offset + 1)}
-              onToday={() => {
-                handleSelectDate(toDateStr(new Date()));
-              }}
-              eventDateSet={eventDateSet}
-              weekOffset={weekOffset}
-              expanded={calendarExpanded}
-              monthOffset={monthOffset}
-              onToggleExpanded={() => {
-                setCalendarExpanded((value) => !value);
-                if (calendarExpanded) setMonthOffset(0);
-              }}
-              onChangeMonthOffset={(delta) => setMonthOffset((value) => value + delta)}
-            />
-          </View>
+            <Ionicons name="chevron-up" size={14} color={colors.mutedForeground} />
+            <Text style={styles.earlierText}>Earlier</Text>
+          </TouchableOpacity>
         );
-      case 'upcoming-heading':
+      case 'day-heading': {
+        const heading = agendaDayHeading(item.date);
+        const [prefix, rest] = heading.includes(' · ') ? heading.split(' · ') : [null, heading];
         return (
-          <View style={styles.viewControls} accessibilityRole="tablist">
-            {(['Upcoming', 'Day'] as const).map((label) => {
-              const active = label === 'Day' ? selectedDate !== null : selectedDate === null;
-              return <TouchableOpacity key={label} accessibilityRole="tab" accessibilityState={{ selected: active }}
-                style={[styles.viewButton, active && styles.viewButtonActive]}
-                onPress={() => { if (label === 'Day') handleSelectDate(selectedDate ?? toDateStr(new Date())); else { setSelectedDate(null); revealAgenda(); } }}>
-                <Text style={[styles.viewButtonText, active && styles.viewButtonTextActive]}>{label}</Text>
-              </TouchableOpacity>;
-            })}
-          </View>
+          <Text accessibilityRole="header" style={styles.dayHeading}>
+            {prefix ? <Text style={item.date === todayStr ? styles.dayHeadingToday : undefined}>{prefix} · </Text> : null}
+            {rest}
+          </Text>
         );
-      case 'day-heading':
-        return <Text accessibilityRole="header" style={styles.monthHeading}>{agendaDayHeading(item.dateStr)}</Text>;
+      }
       case 'loading':
         return <CalendarLoadingSkeleton />;
       case 'error':
         return <ErrorState message="Couldn't load events" onRetry={refetch} />;
       case 'no-upcoming':
-        return <View style={styles.dayEmpty}>
-          <Text style={styles.emptyTitle}>Your calendar is clear</Text>
-          <Text style={styles.emptySubtitle}>Add an occasion to plan your next look.</Text>
-          <TouchableOpacity style={styles.dayEmptyBtn} accessibilityRole="button" onPress={handleAddEvent}>
-            <Ionicons name="add" size={14} color={colors.primary} /><Text style={styles.dayEmptyBtnText}>Add event</Text>
-          </TouchableOpacity>
+        return <View style={[styles.freeDay, styles.noUpcoming]}>
+          <Text style={styles.freeDayTitle}>Your calendar is clear</Text>
+          <Text style={styles.freeDayText}>Add an occasion to plan your next look.</Text>
+          <View style={styles.dayEmptyActions}>
+            <TouchableOpacity style={styles.dayEmptyBtn} accessibilityRole="button" onPress={handleAddEvent}>
+              <Ionicons name="add" size={14} color={colors.primary} /><Text style={styles.dayEmptyBtnText}>Add event</Text>
+            </TouchableOpacity>
+          </View>
         </View>;
       case 'empty':
         return (
@@ -613,7 +580,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
             </View>
             <Text style={styles.emptyTitle}>Your style calendar starts here</Text>
             <Text style={styles.emptySubtitle}>
-              Add an occasion and Styled will help you prepare the look.
+              Connect your calendar or add an occasion, and Styled will help you prepare the look.
             </Text>
             <TouchableOpacity
               style={styles.emptyBtn}
@@ -625,24 +592,55 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
               <Ionicons name="add" size={16} color={colors.white} />
               <Text style={styles.emptyBtnText}>Add your first event</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.emptyLink}
+              onPress={() => setSyncVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Connect a calendar"
+            >
+              <Ionicons name="sync-outline" size={14} color={colors.foreground} />
+              <Text style={styles.emptyLinkText}>Connect a calendar</Text>
+            </TouchableOpacity>
           </View>
         );
-      case 'day-placeholder':
+      case 'day-placeholder': {
+        const day = new Date(`${item.date}T12:00:00`);
+        const weekday = day.toLocaleDateString('en-US', { weekday: 'long' });
+        const weekend = day.getDay() === 0 || day.getDay() === 6;
         return (
-          <View style={styles.dayEmpty}>
-            <View style={styles.dayEmptyIcon}>
-              <Ionicons name="sunny-outline" size={19} color={colors.primary} />
-            </View>
-            <Text style={styles.dayEmptyDate}>
-              {new Date(`${item.date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-            </Text>
-            <Text style={styles.dayEmptyTitle}>Nothing planned</Text>
-            <Text style={styles.dayEmptyText}>
+          <View style={styles.freeDay}>
+            <Text style={styles.freeDayTitle}>{item.isPast ? 'No occasions.' : 'Free day.'}</Text>
+            <Text style={styles.freeDayText}>
               {item.isPast
-                ? 'What did you wear, or add the occasion.'
-                : 'Keep the day open or add an occasion.'}
+                ? 'Log what you wore so your stylist learns from it.'
+                : weekend ? 'Nothing on the calendar. Want a weekend look?' : `Nothing on the calendar for ${weekday}.`}
             </Text>
             <View style={styles.dayEmptyActions}>
+              {item.isPast ? (
+                <TouchableOpacity
+                  style={[styles.dayEmptyBtn, styles.dayEmptyBtnPrimary]}
+                  onPress={() => handleLogWear(item.date)}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel="What did you wear on this day"
+                >
+                  <Ionicons name="shirt-outline" size={14} color={colors.primaryForeground} />
+                  <Text style={[styles.dayEmptyBtnText, styles.dayEmptyBtnTextPrimary]}>What did you wear?</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.dayEmptyBtn, styles.dayEmptyBtnPrimary]}
+                  onPress={() => openStylistForFreeDay(item.date)}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={weekend ? 'Style a weekend look' : `Plan a look for ${weekday}`}
+                >
+                  <Ionicons name="sparkles-outline" size={14} color={colors.primaryForeground} />
+                  <Text style={[styles.dayEmptyBtnText, styles.dayEmptyBtnTextPrimary]}>
+                    {weekend ? 'Style a weekend look' : `Plan ${weekday}'s look`}
+                  </Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={styles.dayEmptyBtn}
                 onPress={handleAddEvent}
@@ -653,78 +651,90 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
                 <Ionicons name="add" size={14} color={colors.primary} />
                 <Text style={styles.dayEmptyBtnText}>Add event</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.dayEmptyBtn}
-                onPress={() => handleLogWear(item.date)}
-                activeOpacity={0.8}
-                accessibilityRole="button"
-                accessibilityLabel="What did you wear on this day"
-              >
-                <Ionicons name="checkmark-done-outline" size={14} color={colors.primary} />
-                <Text style={styles.dayEmptyBtnText}>Log wear</Text>
-              </TouchableOpacity>
+              {!item.isPast && item.date === todayStr ? (
+                <TouchableOpacity
+                  style={styles.dayEmptyBtn}
+                  onPress={() => handleLogWear(item.date)}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel="What did you wear on this day"
+                >
+                  <Ionicons name="checkmark-done-outline" size={14} color={colors.primary} />
+                  <Text style={styles.dayEmptyBtnText}>Log wear</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           </View>
         );
+      }
       case 'hero':
         return (
           <NextEventHero
             event={item.event}
             allItems={allItems}
-            outfit={item.event.outfitId == null ? null : outfitsById.get(item.event.outfitId) ?? null}
+            outfit={outfitFor(item.event)}
             weatherFallback={activeLocation}
             onPress={() => setDetailEvent(item.event)}
             onPlanOutfit={() => openStylistForEvent(item.event, 'calendar_hero')}
             onOpenOutfit={() => openAssignedOutfit(item.event)}
+            onWear={() => handleWear(item.event)}
+            worn={isWorn(item.event)}
+            isWearing={wearingEventId === item.event.id}
             isPlanning={false}
-            highlighted={item.highlighted}
           />
         );
-      case 'event':
-        return renderEventCard(item.event, item.highlighted);
-      case 'show-upcoming':
+      case 'all-day':
+      case 'event': {
+        const Row = item.kind === 'all-day' ? AllDayBanner : AgendaEventRow;
         return (
-          <TouchableOpacity
-            style={styles.showMore}
-            onPress={() => setShowAllUpcoming(!item.expanded)}
-            accessibilityRole="button"
-            accessibilityState={{ expanded: item.expanded }}
-          >
-            <Text style={styles.showMoreText}>
-              {item.expanded ? 'Show fewer events' : `View all ${item.count} upcoming events`}
-            </Text>
-            <Ionicons name={item.expanded ? 'chevron-up' : 'chevron-down'} size={15} color={colors.mutedForeground} />
-          </TouchableOpacity>
+          <Row
+            event={item.event}
+            allItems={allItems}
+            outfit={outfitFor(item.event)}
+            onPress={() => setDetailEvent(item.event)}
+            onOpenOutfit={() => openAssignedOutfit(item.event)}
+            onPlan={() => openStylistForEvent(item.event, 'calendar_card')}
+            past={item.date < todayStr}
+            wornItemIds={item.date <= todayStr ? wornItemIdsFor(item.event) : null}
+          />
         );
-      case 'past-toggle':
-        return (
-          <TouchableOpacity
-            style={[styles.pastToggle, visibleUpcoming.length === 0 && styles.pastToggleWithDivider]}
-            onPress={() => setPastExpanded(!item.expanded)}
-            accessibilityRole="button"
-            accessibilityState={{ expanded: item.expanded }}
-            accessibilityLabel={`${item.expanded ? 'Collapse' : 'Expand'} ${item.count} past events`}
-          >
-            <Text style={styles.pastToggleTitle}>Past events · {item.count}</Text>
-            <Ionicons name={item.expanded ? 'chevron-up' : 'chevron-down'} size={17} color={colors.mutedForeground} />
-          </TouchableOpacity>
-        );
-
+      }
     }
   };
 
   return (
     <View style={styles.root}>
-      <View style={[styles.listArea, { paddingTop: insets.top }]}>
+      <View style={[styles.stripArea, { paddingTop: insets.top }]}>
+        <WeekStrip
+          weekDays={weekDays}
+          selectedDate={selectedDate}
+          onSelectDate={handleSelectDate}
+          onPrevWeek={() => setWeekOffset((offset) => offset - 1)}
+          onNextWeek={() => setWeekOffset((offset) => offset + 1)}
+          onToday={() => handleSelectDate(toDateStr(new Date()))}
+          planningStatus={planningStatus}
+          weekOffset={weekOffset}
+          expanded={calendarExpanded}
+          monthOffset={monthOffset}
+          onToggleExpanded={() => {
+            setCalendarExpanded((value) => !value);
+            if (calendarExpanded) setMonthOffset(0);
+          }}
+          onChangeMonthOffset={(delta) => setMonthOffset((value) => value + delta)}
+          onAddEvent={handleAddEvent}
+          onMore={openCalendarUtilities}
+          dayThumbs={dayThumbs}
+        />
+      </View>
+      <View style={styles.listArea}>
         <FlashList
           ref={flashListRef}
           data={timelineItems}
           renderItem={renderTimelineItem}
           keyExtractor={(item) => item.key}
           getItemType={(item) => item.kind}
-          stickyHeaderIndices={[1]}
-          // Calendar expansion and explicit date jumps own the scroll position.
-          // Automatic anchoring can counteract them as row heights change.
+          // Explicit date jumps own the scroll position; automatic anchoring
+          // can counteract them as rows load.
           maintainVisibleContentPosition={{ disabled: true }}
           style={styles.flex}
           contentContainerStyle={[
@@ -733,17 +743,18 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
           ]}
           showsVerticalScrollIndicator={false}
           contentInsetAdjustmentBehavior="never"
-          onScroll={(e) => {
-            scrollOffsetRef.current = e.nativeEvent.contentOffset.y;
-            setIsStripStuck(e.nativeEvent.contentOffset.y >= listHeaderHeight);
+          onScrollBeginDrag={() => { programmaticScroll.current = false; }}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
+          onEndReached={() => {
+            if (agenda.laterCount > 0) setFutureDayCount((count) => count + FUTURE_PAGE);
           }}
-          scrollEventThrottle={16}
+          onEndReachedThreshold={1}
           refreshControl={
             <RefreshControl
               refreshing={isRefetching}
               onRefresh={refetch}
               tintColor={colors.primary}
-              progressViewOffset={weekStripHeight}
             />
           }
         />
@@ -762,6 +773,9 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
         allItems={allItems}
         onOpenStylist={(event) => openStylistForEvent(event, 'event_detail')}
         weatherFallback={activeLocation}
+        onWear={handleWear}
+        worn={detailEvent ? isWorn(detailEvent) : false}
+        isWearing={detailEvent != null && wearingEventId === detailEvent.id}
         outfit={detailEvent?.outfitId == null ? null : outfitsById.get(detailEvent.outfitId) ?? null}
         board={detailEvent?.boardId == null ? null : boardsById.get(detailEvent.boardId) ?? null}
         onSelectBoard={async (boardId) => {
@@ -804,7 +818,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
         title="Calendar tools"
         subtitle="Keep your wardrobe plan up to date."
         options={[
-          { label: 'Log wear', icon: 'shirt-outline', onPress: () => handleLogWear(selectedDate ?? undefined) },
+          { label: 'Log wear', icon: 'shirt-outline', onPress: () => handleLogWear(selectedDate) },
           { label: 'Calendars & sync', icon: 'calendar-outline', onPress: () => setSyncVisible(true) },
         ]}
         onClose={() => setCalendarMenuVisible(false)}
@@ -818,46 +832,40 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   scrollContent: { paddingHorizontal: spacing.page },
 
-  listArea: { flex: 1, overflow: 'hidden' },
-  screenHeader: { marginHorizontal: -spacing.page, paddingTop: spacing.md },
-  weekStripWrap: {
-    marginHorizontal: -spacing.page,
+  stripArea: {
     paddingHorizontal: spacing.page,
     backgroundColor: colors.background,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.hairline,
+    zIndex: 1,
   },
-  // FlashList renders sticky copies outside the padded content container.
-  // Cancel the page gutter only for the in-list copy, never the pinned copy.
-  stickyWeekStripWrap: { marginHorizontal: 0 },
-  viewControls: { flexDirection: 'row', gap: spacing.xs, paddingVertical: spacing.sm },
-  viewButton: { minHeight: 44, paddingHorizontal: spacing.lg, justifyContent: 'center', borderRadius: radii.action },
-  viewButtonActive: { backgroundColor: colors.surfaceSelected },
-  viewButtonText: { ...typography.text.label, color: colors.mutedForeground },
-  viewButtonTextActive: { color: colors.primary },
-  monthHeading: {
+  listArea: { flex: 1, overflow: 'hidden' },
+  dayHeading: {
     ...typography.text.label,
     color: colors.mutedForeground,
-    marginTop: spacing.lg,
-    marginBottom: spacing.md,
+    marginTop: spacing.xl,
+    marginBottom: spacing.sm,
   },
+  dayHeadingToday: { color: colors.accentInk },
+  earlier: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
+    minHeight: 44, marginTop: spacing.sm,
+  },
+  earlierText: { ...typography.text.caption, color: colors.mutedForeground, fontWeight: typography.weight.medium },
 
-  dayEmpty: {
-    alignItems: 'center', gap: spacing.sm,
-    paddingVertical: spacing.xxl,
-    paddingHorizontal: spacing.xl,
-    borderWidth: StyleSheet.hairlineWidth, borderColor: colors.hairline,
-    borderRadius: radii.xl,
+  freeDay: {
+    gap: spacing.xs,
+    padding: spacing.lg,
+    borderRadius: 20,
+    borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
   },
-  dayEmptyHighlighted: { backgroundColor: colors.surfaceSelected, borderColor: colors.border },
-  dayEmptyIcon: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: colors.surfaceSelected,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  dayEmptyTitle: { fontSize: typography.text.body.fontSize, color: colors.foreground, fontWeight: typography.weight.semibold },
-  dayEmptyDate: { ...typography.text.meta, color: colors.mutedForeground, textAlign: 'center' },
-  dayEmptyText: { fontSize: typography.text.bodySmall.fontSize, color: colors.mutedForeground, textAlign: 'center' },
+  noUpcoming: { marginTop: spacing.lg },
+  freeDayTitle: { ...typography.text.editorialSection, color: colors.foreground },
+  freeDayText: { ...typography.text.bodySmall, color: colors.mutedForeground, marginBottom: spacing.sm },
   dayEmptyActions: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    flexDirection: 'row', alignItems: 'center',
     flexWrap: 'wrap', gap: spacing.sm,
   },
   dayEmptyBtn: {
@@ -867,60 +875,10 @@ const styles = StyleSheet.create({
     borderRadius: radii.full, backgroundColor: colors.surfaceSelected,
   },
   dayEmptyBtnText: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold, color: colors.primary },
-
-  eventCard: {
-    flexDirection: 'row', alignItems: 'stretch',
-    gap: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border,
-    paddingVertical: spacing.md,
-  },
-  eventCardHighlighted: { backgroundColor: colors.surfaceSelected },
-  eventMain: {
-    minHeight: 44,
-    gap: 3,
-  },
-  eventBody: { flex: 1, minWidth: 0, gap: spacing.xs },
-  eventTitle: {
-    ...typography.text.editorialCard, color: colors.foreground,
-  },
-  eventMeta: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 3 },
-  eventTime: {
-    ...typography.text.meta, color: colors.mutedForeground,
-  },
-  dot: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
-  eventOccasion: { fontSize: typography.text.caption.fontSize, color: colors.primary, fontWeight: typography.weight.medium },
-  eventLoc: { ...typography.text.caption, color: colors.mutedForeground },
-  eventReadiness: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  eventLookButton: {
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: spacing.xs,
-  },
-  readinessText: { ...typography.text.caption, color: colors.mutedForeground, fontWeight: typography.weight.medium },
-
-  pastToggle: {
-    minHeight: 52,
-    marginTop: spacing.xl,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderColor: colors.border,
-  },
-  pastToggleWithDivider: { borderTopWidth: StyleSheet.hairlineWidth },
-  pastToggleTitle: { fontSize: typography.text.body.fontSize, fontWeight: typography.weight.semibold, color: colors.mutedForeground },
-
-  showMore: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
-    minHeight: 44, borderRadius: radii.md,
-    marginTop: spacing.sm,
-  },
-  showMoreText: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground, fontWeight: typography.weight.medium },
+  dayEmptyBtnPrimary: { backgroundColor: colors.primary },
+  dayEmptyBtnTextPrimary: { color: colors.primaryForeground },
+  emptyLink: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: 44 },
+  emptyLinkText: { ...typography.text.label, color: colors.foreground, textDecorationLine: 'underline' },
 
   empty: { alignItems: 'center', paddingTop: spacing.xxxl, paddingHorizontal: spacing.xl, gap: spacing.md },
   emptyIconBox: {

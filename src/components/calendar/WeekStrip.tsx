@@ -5,8 +5,21 @@ import { Ionicons } from '@expo/vector-icons';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { scheduleOnRN } from 'react-native-worklets';
 import { toDateStr } from './calendarUtils';
-import { colors, spacing, typography, radii } from '../../theme';
+import Animated, { FadeIn, FadeOut, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import { colors, spacing, typography, radii, motion } from '../../theme';
 import { PressableScale } from '../primitives/PressableScale';
+import { Image } from 'expo-image';
+import { IconButton } from '../primitives/Editorial';
+import * as Haptics from '../../lib/haptics';
+import type { DayPlanningStatus } from './calendarAgenda';
+
+const MONTH_ROW_HEIGHT = 48;
+const THUMB = 36;
+// Walnut at reduced strength: a grid full of open days should read as quiet.
+const NEEDS_RING = 'rgba(111,89,72,0.42)';
+
+const WEEKDAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+const PILL_SPRING = { damping: 20, stiffness: 220 };
 
 export function WeekStrip({
   weekDays,
@@ -15,11 +28,14 @@ export function WeekStrip({
   onPrevWeek,
   onNextWeek,
   onToday,
-  eventDateSet,
+  planningStatus,
   expanded,
   monthOffset,
   onToggleExpanded,
   onChangeMonthOffset,
+  onAddEvent,
+  onMore,
+  dayThumbs,
 }: {
   weekDays: Date[];
   selectedDate: string | null;
@@ -27,30 +43,64 @@ export function WeekStrip({
   onPrevWeek: () => void;
   onNextWeek: () => void;
   onToday: () => void;
-  eventDateSet: Set<string>;
+  planningStatus: Map<string, DayPlanningStatus>;
   weekOffset: number;
   expanded: boolean;
   monthOffset: number;
   onToggleExpanded: () => void;
   onChangeMonthOffset: (delta: number) => void;
+  onAddEvent: () => void;
+  onMore: () => void;
+  /** Lead-piece image for days with a planned look (month grid only). */
+  dayThumbs?: Map<string, string>;
 }) {
   const [containerWidth, setContainerWidth] = useState(0);
+  const [daysWidth, setDaysWidth] = useState(0);
   const scrollRef = useRef<ScrollViewType>(null);
+  const reducedMotion = useReducedMotion();
   const todayStr = toDateStr(new Date());
 
   const first = weekDays[0];
   const last = weekDays[6];
-  const weekLabel =
-    first.getMonth() === last.getMonth()
-      ? first.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-      : `${first.toLocaleDateString('en-US', { month: 'short' })} – ${last.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
+  // The month is the page title. A week spanning two months names both.
+  const weekMonth = first.getMonth() === last.getMonth()
+    ? first.toLocaleDateString('en-US', { month: 'long' })
+    : `${first.toLocaleDateString('en-US', { month: 'short' })} – ${last.toLocaleDateString('en-US', { month: 'short' })}`;
+  const weekYear = String(last.getFullYear());
+
+  // The selection pill slides between days instead of jumping.
+  const selectedIndex = weekDays.findIndex((d) => toDateStr(d) === selectedDate);
+  const cellWidth = daysWidth / 7;
+  const pillX = useSharedValue(0);
+  const pillOpacity = useSharedValue(0);
+  const weekKey = toDateStr(first);
+  const pillWeek = useRef(weekKey);
+  useEffect(() => {
+    if (cellWidth === 0) return;
+    const visible = selectedIndex >= 0;
+    // Arriving from another week, place it rather than sweeping across.
+    const sameWeek = pillWeek.current === weekKey;
+    pillWeek.current = weekKey;
+    if (visible) {
+      const x = selectedIndex * cellWidth;
+      pillX.value = reducedMotion || !sameWeek || pillOpacity.value === 0 ? x : withSpring(x, PILL_SPRING);
+    }
+    pillOpacity.value = reducedMotion ? (visible ? 1 : 0) : withTiming(visible ? 1 : 0, { duration: motion.quick });
+  }, [selectedIndex, weekKey, cellWidth, reducedMotion, pillX, pillOpacity]);
+  const pillStyle = useAnimatedStyle(() => ({
+    opacity: pillOpacity.value,
+    transform: [{ translateX: pillX.value }],
+  }));
 
   const baseYear = first.getFullYear();
   const baseMonth = first.getMonth();
   const displayRef = new Date(baseYear, baseMonth + monthOffset, 1);
   const displayYear = displayRef.getFullYear();
   const displayMonth = displayRef.getMonth();
-  const displayMonthLabel = displayRef.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const displayMonthName = displayRef.toLocaleDateString('en-US', { month: 'long' });
+  const titleMonth = expanded ? displayMonthName : weekMonth;
+  const titleYear = expanded ? String(displayYear) : weekYear;
+  const todayVisible = selectedDate === todayStr && (expanded ? monthOffset === 0 && displayMonth === new Date().getMonth() : selectedIndex >= 0);
 
   const buildRows = (year: number, month: number): (Date | null)[][] => {
     const firstOfMonth = new Date(year, month, 1);
@@ -84,8 +134,9 @@ export function WeekStrip({
   const handleScrollEnd = (e: { nativeEvent: { contentOffset: { x: number } } }) => {
     if (containerWidth === 0) return;
     const page = Math.round(e.nativeEvent.contentOffset.x / containerWidth);
-    if (page === 0) onChangeMonthOffset(-1);
-    else if (page === 2) onChangeMonthOffset(1);
+    if (page === 1) return;
+    void Haptics.selectionAsync();
+    onChangeMonthOffset(page === 0 ? -1 : 1);
   };
 
   const weekGesture = useMemo(
@@ -101,36 +152,98 @@ export function WeekStrip({
     [onNextWeek, onPrevWeek],
   );
 
-  const renderDay = (d: Date, compact: boolean) => {
+  const selectDay = (str: string) => {
+    if (str !== selectedDate) void Haptics.selectionAsync();
+    onSelectDate(str);
+  };
+
+  const dayLabel = (d: Date, str: string) => {
+    const status = planningStatus.get(str);
+    const statusLabel = status === 'needs' ? ', needs a look' : status === 'planned' ? ', looks planned' : ', no events';
+    return `${str === todayStr ? 'Today, ' : ''}${d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}${statusLabel}`;
+  };
+
+  const renderDay = (d: Date) => {
     const str = toDateStr(d);
     const isSel = str === selectedDate;
     const isToday = str === todayStr;
-    const hasEvent = eventDateSet.has(str);
+    const status = planningStatus.get(str);
     return (
       <PressableScale
         key={str}
-        style={compact ? s.compactOuter : s.dayOuter}
-        contentStyle={[
-          compact ? s.compactBtn : s.dayBtn,
-          isSel && s.dayBtnSel,
-          !isSel && isToday && s.dayBtnToday,
-        ]}
-        onPress={() => onSelectDate(str)}
+        style={s.dayOuter}
+        contentStyle={s.dayBtn}
+        onPress={() => selectDay(str)}
         scaleTo={0.94}
+        haptic={false}
         accessibilityRole="button"
-        accessibilityLabel={`${isToday ? 'Today, ' : ''}${d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}${hasEvent ? ', has events' : ', no events'}`}
+        accessibilityLabel={dayLabel(d, str)}
         accessibilityHint="Show this date in the agenda"
         accessibilityState={{ selected: isSel }}
       >
-        {!compact && (
-          <Text style={[s.dayAbbrev, isSel && s.dayTextSel, !isSel && isToday && s.dayTextToday]}>
-            {d.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 3)}
-          </Text>
-        )}
-        <Text style={[compact ? s.compactNum : s.dayNum, isSel && s.dayTextSel, !isSel && isToday && s.dayTextToday]}>
-          {d.getDate()}
+        <Text style={[s.dayAbbrev, isSel && s.dayTextSel, !isSel && isToday && s.dayTextToday]}>
+          {WEEKDAY_LETTERS[(d.getDay() + 6) % 7]}
         </Text>
-        <View style={[s.dot, hasEvent ? (isSel ? s.dotSel : s.dotVis) : s.dotHidden]} />
+        <View>
+          <Text style={[s.dayNum, isSel && s.dayTextSel, !isSel && isToday && s.dayTextToday]}>
+            {d.getDate()}
+          </Text>
+          <View style={[s.todayRule, (!isToday || isSel) && s.hidden]} />
+        </View>
+        <View
+          style={[
+            s.dot,
+            status === 'planned' && (isSel ? s.dotFilledSel : s.dotFilled),
+            status === 'needs' && (isSel ? s.dotHollowSel : s.dotHollow),
+            !status && s.hidden,
+          ]}
+        />
+      </PressableScale>
+    );
+  };
+
+  // The month grid reads as a lookbook: planned days show their look, days
+  // that still need one carry a walnut ring, everything else is a number.
+  const renderMonthDay = (d: Date) => {
+    const str = toDateStr(d);
+    const isSel = str === selectedDate;
+    const isToday = str === todayStr;
+    const status = planningStatus.get(str);
+    const thumb = dayThumbs?.get(str);
+    return (
+      <PressableScale
+        key={str}
+        style={s.compactOuter}
+        contentStyle={s.compactBtn}
+        onPress={() => selectDay(str)}
+        scaleTo={0.94}
+        haptic={false}
+        accessibilityRole="button"
+        accessibilityLabel={dayLabel(d, str)}
+        accessibilityHint="Show this date in the agenda"
+        accessibilityState={{ selected: isSel }}
+      >
+        {thumb ? (
+          <View style={[s.thumbWrap, status === 'needs' && s.thumbWrapNeeds, isSel && s.thumbWrapSel]}>
+            <Image source={{ uri: thumb }} style={s.thumb} contentFit="cover" recyclingKey={str} transition={120} />
+            <View style={[s.thumbBadge, isToday && s.thumbBadgeToday]}>
+              <Text style={[s.thumbBadgeText, isToday && s.thumbBadgeTextToday]}>{d.getDate()}</Text>
+            </View>
+          </View>
+        ) : (
+          <View
+            style={[
+              s.monthCircle,
+              status === 'needs' && s.monthCircleNeeds,
+              status === 'planned' && s.monthCirclePlanned,
+              isSel && s.monthCircleSel,
+            ]}
+          >
+            <Text style={[s.compactNum, isSel && s.dayTextSel, !isSel && isToday && s.dayTextToday]}>
+              {d.getDate()}
+            </Text>
+          </View>
+        )}
       </PressableScale>
     );
   };
@@ -145,7 +258,7 @@ export function WeekStrip({
         <View key={ri} style={s.monthRow}>
           {row.map((d, ci) => (
             <View key={ci} style={s.monthCell}>
-              {d ? renderDay(d, true) : null}
+              {d ? renderMonthDay(d) : null}
             </View>
           ))}
         </View>
@@ -162,45 +275,33 @@ export function WeekStrip({
           onPress={onToggleExpanded}
           scaleTo={0.98}
           accessibilityRole="button"
-          accessibilityLabel={`${expanded ? 'Collapse' : 'Expand'} month calendar, ${expanded ? displayMonthLabel : weekLabel}`}
+          accessibilityLabel={`${expanded ? 'Collapse' : 'Expand'} month calendar, ${titleMonth} ${titleYear}`}
           accessibilityState={{ expanded }}
         >
-          <Text style={s.monthLabel} numberOfLines={1}>{expanded ? displayMonthLabel : weekLabel}</Text>
-          <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={13} color={colors.mutedForeground} />
+          <Text style={s.monthTitle} numberOfLines={1}>{titleMonth}</Text>
+          <Text style={s.yearLabel}>{titleYear}</Text>
+          <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={14} color={colors.mutedForeground} />
         </PressableScale>
         <View style={s.navRow}>
-          <TouchableOpacity onPress={onToday} style={s.todayBtn} accessibilityRole="button" accessibilityLabel="Show today’s events">
-            <Text style={s.todayText}>Today</Text>
-          </TouchableOpacity>
-          {!expanded && (
-            <>
-              <TouchableOpacity onPress={onPrevWeek} style={s.navBtn} accessibilityRole="button" accessibilityLabel="Previous week">
-                <Ionicons name="chevron-back" size={16} color={colors.mutedForeground} />
+          {!todayVisible && (
+            <Animated.View entering={reducedMotion ? undefined : FadeIn.duration(motion.quick)} exiting={reducedMotion ? undefined : FadeOut.duration(motion.quick)}>
+              <TouchableOpacity onPress={onToday} style={s.todayBtn} accessibilityRole="button" accessibilityLabel="Show today’s events">
+                <Text style={s.todayText}>Today</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={onNextWeek} style={s.navBtn} accessibilityRole="button" accessibilityLabel="Next week">
-                <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
-              </TouchableOpacity>
-            </>
+            </Animated.View>
           )}
-          {expanded && (
-            <>
-              <TouchableOpacity onPress={() => onChangeMonthOffset(-1)} style={s.navBtn} accessibilityRole="button" accessibilityLabel="Previous month">
-                <Ionicons name="chevron-back" size={16} color={colors.mutedForeground} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => onChangeMonthOffset(1)} style={s.navBtn} accessibilityRole="button" accessibilityLabel="Next month">
-                <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
-              </TouchableOpacity>
-            </>
-          )}
+          <IconButton label="Add event" icon="add" onPress={onAddEvent} />
+          <IconButton label="More" accessibilityLabel="More calendar tools" icon="ellipsis-horizontal" onPress={onMore} />
         </View>
       </View>
 
       {!expanded && (
         <GestureDetector gesture={weekGesture}>
-          <View
-            style={s.days}
-          >
-            {weekDays.map((d) => renderDay(d, false))}
+          <View style={s.days} onLayout={(e) => setDaysWidth(e.nativeEvent.layout.width)}>
+            {cellWidth > 0 && (
+              <Animated.View pointerEvents="none" style={[s.pill, { width: cellWidth }, pillStyle]} />
+            )}
+            {weekDays.map((d) => renderDay(d))}
           </View>
         </GestureDetector>
       )}
@@ -210,8 +311,8 @@ export function WeekStrip({
           onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
         >
           <View style={s.colHeaders}>
-            {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map((h) => (
-              <Text key={h} style={s.colHeader}>{h}</Text>
+            {WEEKDAY_LETTERS.map((h, index) => (
+              <Text key={index} style={s.colHeader}>{h}</Text>
             ))}
           </View>
           {containerWidth > 0 && (
@@ -223,6 +324,8 @@ export function WeekStrip({
               scrollEventThrottle={16}
               onMomentumScrollEnd={handleScrollEnd}
               directionalLockEnabled
+              // Sized to this month's rows so a five-week month leaves no gap.
+              style={{ height: currRows.length * MONTH_ROW_HEIGHT }}
             >
               {renderGrid(prevRows, false)}
               {renderGrid(currRows, true)}
@@ -236,70 +339,88 @@ export function WeekStrip({
 }
 
 const s = StyleSheet.create({
-  root: { marginBottom: spacing.sm },
+  root: { paddingTop: spacing.sm, paddingBottom: spacing.sm },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    minHeight: 44,
-    marginBottom: spacing.xs,
+    minHeight: 48,
+    marginBottom: spacing.sm,
   },
   monthButtonOuter: { flex: 1, minWidth: 0 },
-  monthButton: { minHeight: 44, minWidth: 0, flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  monthLabel: {
-    fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold,
-    color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: typography.tracking.meta, flexShrink: 1,
-  },
-  navRow: { flexDirection: 'row', alignItems: 'center' },
+  monthButton: { minHeight: 44, minWidth: 0, flexShrink: 1, flexDirection: 'row', alignItems: 'baseline', gap: spacing.xs },
+  monthTitle: { ...typography.text.editorialTitle, color: colors.foreground, flexShrink: 1 },
+  yearLabel: { ...typography.text.caption, color: colors.mutedForeground, fontWeight: typography.weight.medium },
+  navRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   todayBtn: {
-    minHeight: 44, justifyContent: 'center',
-    paddingHorizontal: spacing.sm,
+    minHeight: 36, justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.full,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.ghostStroke,
   },
-  todayText: { ...typography.text.label, color: colors.primary },
-  navBtn: {
-    width: 44, height: 44,
-    alignItems: 'center', justifyContent: 'center',
+  todayText: { ...typography.text.label, color: colors.accentInk },
+  days: { flexDirection: 'row', justifyContent: 'space-between' },
+  pill: {
+    position: 'absolute', top: 0, bottom: 0, left: 0,
+    borderRadius: radii.action,
+    borderCurve: 'continuous',
+    backgroundColor: colors.primary,
   },
-  days: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 0 },
   dayOuter: { flex: 1 },
   dayBtn: {
-    minHeight: 58,
+    minHeight: 62,
     alignItems: 'center', justifyContent: 'center',
-    borderRadius: radii.action, gap: 2,
+    borderRadius: radii.action, gap: 3,
     borderCurve: 'continuous',
   },
-  dayBtnSel: {
-    borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.primary,
+  dayAbbrev: {
+    ...typography.text.caption, fontWeight: typography.weight.semibold,
+    color: colors.mutedForeground, letterSpacing: typography.tracking.meta,
   },
-  dayBtnToday: { borderWidth: 1, borderColor: colors.primary },
-  dayAbbrev: { ...typography.text.caption, fontWeight: typography.weight.semibold, color: colors.mutedForeground, textTransform: 'uppercase' },
-  dayNum: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.bold, color: colors.mutedForeground },
-  dayTextSel: {
-    color: colors.primaryForeground,
-  },
-  dayTextToday: { color: colors.primary },
-  dot: {
-    width: 4, height: 4, borderRadius: 2, backgroundColor: 'transparent',
-  },
-  dotVis: { backgroundColor: colors.primary },
-  dotSel: {
-    backgroundColor: colors.primaryForeground,
-  },
-  dotHidden: { opacity: 0 },
+  dayNum: { fontSize: 15, fontWeight: typography.weight.semibold, color: colors.foreground, textAlign: 'center' },
+  dayTextSel: { color: colors.primaryForeground },
+  dayTextToday: { color: colors.accentInk },
+  todayRule: { height: 2, borderRadius: 1, marginTop: 1, backgroundColor: colors.accentInk },
+  hidden: { opacity: 0 },
+  dot: { width: 5, height: 5, borderRadius: 2.5 },
+  dotFilled: { backgroundColor: colors.primary },
+  dotFilledSel: { backgroundColor: colors.primaryForeground },
+  dotHollow: { borderWidth: 1, borderColor: colors.accentInk },
+  dotHollowSel: { borderWidth: 1, borderColor: colors.primaryForeground },
   colHeaders: { flexDirection: 'row', marginBottom: 4 },
   colHeader: {
     flex: 1, textAlign: 'center',
     ...typography.text.caption, fontWeight: typography.weight.semibold,
     color: colors.mutedForeground,
-    textTransform: 'uppercase', letterSpacing: typography.tracking.subtle,
+    letterSpacing: typography.tracking.meta,
     paddingVertical: spacing.xs,
   },
-  monthRow: { flexDirection: 'row', marginBottom: 2 },
+  monthRow: { flexDirection: 'row', height: MONTH_ROW_HEIGHT, alignItems: 'center' },
   monthCell: { flex: 1, alignItems: 'center' },
   compactOuter: { width: '100%' },
-  compactBtn: {
-    width: '100%', minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radii.action, gap: 1, borderCurve: 'continuous',
+  compactBtn: { width: '100%', minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  monthCircle: {
+    width: THUMB, height: THUMB, borderRadius: THUMB / 2,
+    alignItems: 'center', justifyContent: 'center',
   },
+  monthCircleNeeds: { borderWidth: 1, borderColor: NEEDS_RING },
+  monthCirclePlanned: { backgroundColor: colors.surfaceSelected },
+  monthCircleSel: { backgroundColor: colors.primary, borderColor: colors.primary },
+  thumbWrap: { width: THUMB, height: THUMB },
+  thumbWrapNeeds: { borderRadius: THUMB / 2, outlineWidth: 1, outlineColor: NEEDS_RING, outlineOffset: 2 },
+  thumbWrapSel: { borderRadius: THUMB / 2, outlineWidth: 2, outlineColor: colors.primary, outlineOffset: 2 },
+  thumb: { width: THUMB, height: THUMB, borderRadius: THUMB / 2, backgroundColor: colors.imageMat },
+  thumbBadge: {
+    position: 'absolute', right: -5, bottom: -3,
+    minWidth: 18, height: 16, paddingHorizontal: 3, borderRadius: 8,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.card,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: colors.hairline,
+  },
+  thumbBadgeToday: { backgroundColor: colors.accentInk, borderColor: colors.accentInk },
+  thumbBadgeText: { fontSize: 10, lineHeight: 12, fontWeight: typography.weight.semibold, color: colors.foreground },
+  thumbBadgeTextToday: { color: colors.primaryForeground },
   compactNum: {
     fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold,
-    color: colors.mutedForeground,
+    color: colors.foreground, textAlign: 'center',
   },
 });
