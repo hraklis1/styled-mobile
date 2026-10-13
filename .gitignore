@@ -46,3 +46,6 @@ yarn-error.*
 
 # Supabase CLI link state
 supabase/.temp/
+
+# Local image-model benchmark output (not source)
+polish-bench/
