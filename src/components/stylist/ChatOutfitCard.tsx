@@ -250,7 +250,15 @@ export function OutfitSuggestionCard({
     setEditedIds((ids) => ids.map((x) => (x === oldId ? newItem.id : x)));
     setSaved(false);
     setAdded(false);
-  }, []);
+    if (oldId === newItem.id) return;
+    // The piece taken out becomes a taste signal the stylist sees on later turns.
+    api.post('/api/stylist/feedback', {
+      itemIds: [newItem.id],
+      source: 'outfit_card_swap',
+      swap: { outItemId: oldId, inItemId: newItem.id },
+      ...(recId ? { recId } : {}),
+    }).catch(() => {});
+  }, [recId]);
   const addItem = useCallback((newItem: Item) => {
     setEditedIds((ids) => (ids.includes(newItem.id) ? ids : [...ids, newItem.id]));
     setSaved(false);
