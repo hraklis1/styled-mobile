@@ -342,11 +342,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
       subscription.remove();
     };
   }, []);
-  const { width, fontScale } = useWindowDimensions();
+  const { width, height, fontScale } = useWindowDimensions();
   const largeText = fontScale > 1.3;
-  // Today's Look runs full-bleed, edge to edge, at the same portrait ratio
-  // outfit photography uses everywhere else in the app.
-  const plate = lookPlateSize(width);
+  // Keep the complete artwork within the first viewport; let large text scroll.
+  const plate = lookPlateSize(width, largeText ? undefined : height - insets.top - insets.bottom);
 
   // ── First-run action tour ────────────────────────────────────────────────
   // The three Home actions are icon discs, so what each does is taught once,
@@ -828,7 +827,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   if ((itemsLoading || outfitsLoading) && items.length === 0 && outfits.length === 0) {
     const pillWidth = width - SIDE_PAD * 2;
     return (
-      <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top + spacing.lg }}>
+      <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top + spacing.sm }}>
         <View style={{ paddingHorizontal: SIDE_PAD, gap: spacing.sm, marginBottom: spacing.xl }}>
           <SkeletonBlock width={140} height={12} borderRadius={2} />
           <SkeletonBlock width={220} height={32} borderRadius={6} />
@@ -849,7 +848,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     <Animated.ScrollView
       ref={scrollRef}
       style={styles.root}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.sm }]}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
       onScroll={handleHomeScroll}
@@ -965,10 +964,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             collageCaption={!candidateHasFlatLay}
             editorialCollage={!candidateHasFlatLay}
             plate={generatedCandidate.readinessStatus === 'ready' && generatedCandidate.aiGeneratedImageUrl ? (
-              <OutfitCollage outfit={generatedPreviewOutfit(generatedCandidate)} size={plate.width} height={plate.height} borderRadius={0} />
+              <OutfitCollage outfit={generatedPreviewOutfit(generatedCandidate)} size={plate.width} height={plate.height} borderRadius={0} imageFit="contain" />
             ) : (
-              <View style={{ paddingHorizontal: spacing.lg, backgroundColor: colors.imageMat }}>
-                <EditorialOutfitBoard pieces={resolveBoardPieces(candidateGap ? generatedCandidate.foundationItemIds : generatedCandidate.itemIds, items)} width={plate.width - spacing.lg * 2}
+              <View style={{ paddingHorizontal: spacing.lg, alignItems: 'center', backgroundColor: colors.imageMat }}>
+                <EditorialOutfitBoard pieces={resolveBoardPieces(candidateGap ? generatedCandidate.foundationItemIds : generatedCandidate.itemIds, items)} width={plate.width - spacing.lg * 2} maxHeight={largeText ? undefined : plate.height}
                   onPressItem={openDailyLookItem}
                   suggestion={candidateGap ? { label: sentenceCase(candidateGap.label), category: candidateGap.category, offer: suggestionOffer } : undefined}
                   onPressSuggestion={handleDailyLookFindPiece} />
@@ -1013,9 +1012,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             collageCaption={!featuredOutfit.aiGeneratedImageUrl}
             editorialCollage={!featuredOutfit.aiGeneratedImageUrl}
             plate={(
-              featuredOutfit.aiGeneratedImageUrl ? <OutfitCollage outfit={featuredOutfit} size={plate.width} height={plate.height} borderRadius={0} /> :
-              <View style={{ paddingHorizontal: spacing.lg, backgroundColor: colors.imageMat }}>
-                <EditorialOutfitBoard pieces={resolveBoardPieces(featuredOutfit.itemIds, items)} width={plate.width - spacing.lg * 2} onPressItem={openDailyLookItem} />
+              featuredOutfit.aiGeneratedImageUrl ? <OutfitCollage outfit={featuredOutfit} size={plate.width} height={plate.height} borderRadius={0} imageFit="contain" /> :
+              <View style={{ paddingHorizontal: spacing.lg, alignItems: 'center', backgroundColor: colors.imageMat }}>
+                <EditorialOutfitBoard pieces={resolveBoardPieces(featuredOutfit.itemIds, items)} width={plate.width - spacing.lg * 2} maxHeight={largeText ? undefined : plate.height} onPressItem={openDailyLookItem} />
               </View>
             )}
             title={featuredOutfit.name}
@@ -1403,7 +1402,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing.md,
-    marginBottom: spacing.md,
+    marginBottom: spacing.xs,
   },
   headerRowLarge: { flexDirection: 'column-reverse', alignItems: 'stretch' },
   greetingHeaderLarge: { flex: 0 },
@@ -1446,7 +1445,7 @@ const styles = StyleSheet.create({
   },
 
   // The two launchers read as a pair, then hand off to the first section.
-  actionRow: { marginTop: spacing.md, marginBottom: spacing.sm },
+  actionRow: { marginTop: spacing.sm, marginBottom: spacing.sm },
 
 
   // Empty wardrobe nudge

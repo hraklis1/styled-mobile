@@ -54,9 +54,9 @@ export function ShortlistDecisionCard({ items, storeNames, onPress, style, varia
     >
       {header}
       <View style={[styles.row, variant === 'row' && styles.rowBare]}>
-        <View style={[styles.stack, { width: 46 + (thumbs.length - 1) * 24 }]}>
+        <View style={[styles.stack, { width: 50 + (thumbs.length - 1) * 26 }]}>
           {thumbs.map((item, index) => (
-            <View key={item.id} style={[styles.thumb, { left: index * 24, zIndex: THUMB_LIMIT - index }]}>
+            <View key={item.id} style={[styles.thumb, { left: 2 + index * 26, top: 4, zIndex: index + 1, transform: [{ rotate: `${(index - (thumbs.length - 1) / 2) * 9}deg` }] }]}>
               <Image
                 source={{ uri: item.primarySnap.imageUri }}
                 style={StyleSheet.absoluteFill}
@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   rowBare: { minHeight: 0, paddingHorizontal: 0, paddingVertical: spacing.lg },
-  stack: { height: 58 },
+  stack: { height: 70, marginLeft: 2 },
   thumb: {
     position: 'absolute',
     top: 0,

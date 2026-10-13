@@ -11,9 +11,10 @@ import { colors, editorial, motion, radii, spacing, stroke, typography } from '.
 const GUTTER = spacing.page;
 
 /** Portrait artboard inset to the screen’s shared editorial gutters. */
-export function lookPlateSize(screenWidth: number): { width: number; height: number } {
+export function lookPlateSize(screenWidth: number, viewportHeight?: number): { width: number; height: number } {
   const width = Math.max(1, Math.round(screenWidth - GUTTER * 2));
-  return { width, height: Math.round(width / editorial.outfitAspectRatio) };
+  const portraitHeight = Math.round(width / editorial.outfitAspectRatio);
+  return { width, height: viewportHeight == null ? portraitHeight : Math.min(portraitHeight, Math.round(viewportHeight * 0.46)) };
 }
 
 const matLayout = LinearTransition.duration(motion.base).reduceMotion(ReduceMotion.System);
@@ -269,16 +270,16 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: colors.imageMat,
   },
-  suggestionBar: { paddingHorizontal: GUTTER, marginTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  suggestionBar: { paddingHorizontal: GUTTER },
   captionBar: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing.md,
     paddingHorizontal: GUTTER,
-    paddingTop: spacing.lg,
+    paddingTop: spacing.md,
   },
   captionCopy: { flex: 1, minWidth: 0 },
-  collageCaption: { paddingHorizontal: GUTTER, paddingTop: spacing.lg, gap: spacing.sm },
+  collageCaption: { paddingHorizontal: GUTTER, paddingTop: spacing.md, gap: spacing.sm },
   collageIntroduction: { marginHorizontal: GUTTER, marginBottom: spacing.lg },
   editorialFooter: { marginTop: spacing.lg, paddingTop: spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, alignItems: 'flex-end' },
   textAction: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
@@ -341,7 +342,7 @@ const styles = StyleSheet.create({
   captionSkeleton: {
     gap: 8,
     paddingHorizontal: GUTTER,
-    paddingTop: spacing.lg,
+    paddingTop: spacing.md,
     paddingBottom: 6,
   },
   emptyPlate: {

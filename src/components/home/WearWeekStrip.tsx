@@ -52,7 +52,7 @@ export function WearWeekStrip({ logs, items, onLogToday, onLogDay, onOpenEntry, 
   const todayLogged = !!week.days.find((day) => day.isToday)?.log;
   const summary = todayLogged
     ? 'Today’s look is in your diary'
-    : 'Log today’s look';
+    : 'No look logged today · Tap to add';
 
   const renderDay = (day: WearWeekDay) => {
     const firstItem = day.log
@@ -111,14 +111,7 @@ export function WearWeekStrip({ logs, items, onLogToday, onLogDay, onOpenEntry, 
   return (
     <View style={styles.root}>
       <View style={styles.row}>{week.days.map(renderDay)}</View>
-      {todayLogged ? (
-        <Text style={styles.summary}>{summary}</Text>
-      ) : (
-        <PressableScale onPress={onLogToday} disabled={disabled} accessibilityRole="button" accessibilityLabel="Log today’s look" contentStyle={styles.logAction}>
-          <Text style={styles.logActionText}>{summary}</Text>
-          <Ionicons name="arrow-forward" size={14} color={colors.foreground} />
-        </PressableScale>
-      )}
+      <Text style={styles.summary} accessibilityLiveRegion="polite">{summary}</Text>
     </View>
   );
 }
@@ -195,8 +188,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accentInk,
   },
   hidden: { opacity: 0 },
-  logAction: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'flex-start' },
-  logActionText: { ...typography.text.label, color: colors.foreground },
   summary: {
     ...typography.text.meta,
     color: colors.inkSubtle,

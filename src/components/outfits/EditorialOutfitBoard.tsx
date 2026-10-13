@@ -41,14 +41,22 @@ function SuggestionTile({ suggestion, width, onPress }: { suggestion: BoardSugge
 type Props = {
   pieces: BoardPiece[];
   width: number;
+  maxHeight?: number;
   onPressItem?: (id: number) => void;
   suggestion?: BoardSuggestion;
   onPressSuggestion?: () => void;
 };
 
-export function EditorialOutfitBoard({ pieces, width, onPressItem, suggestion, onPressSuggestion }: Props) {
+export function EditorialOutfitBoard({ pieces, width: availableWidth, maxHeight, onPressItem, suggestion, onPressSuggestion }: Props) {
   const rows = editorialBoardDisplayRows(pieces, suggestion);
   if (!rows.length) return null;
+  // Account for captions and row gaps before sizing the artwork, never crop rows.
+  const heightFactor = rows.reduce((total, row) => {
+    const fraction = row.pieces.length === 1 ? (row.foundation ? 0.72 : 0.4) : 1 / row.pieces.length;
+    return total + fraction * (row.foundation ? 1.25 : 1);
+  }, 0);
+  const copyAllowance = rows.reduce((total, row) => total + (row.pieces.some(tile => tile.kind === 'suggestion') ? 100 : 32), 0);
+  const width = maxHeight == null ? availableWidth : Math.min(availableWidth, Math.max(88, (maxHeight - copyAllowance - spacing.md * (rows.length - 1)) / heightFactor));
   return <View style={{ width, gap: spacing.md }}>
     {rows.map((row, index) => <View key={index} style={styles.row}>
       {row.pieces.map(tile => {

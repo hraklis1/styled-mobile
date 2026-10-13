@@ -7,6 +7,10 @@ import { colors, radii, spacing, stroke } from '../../theme';
 import { INSIGHTS_MIN_ITEMS, type ClosetInsights } from '../../lib/closetInsights';
 import { formatShoppingPrice } from '../../lib/shoppingPresentation';
 
+const CARD_WIDTH = 108;
+const CARD_GAP = spacing.sm;
+const CARD_HEIGHT = CARD_WIDTH * 4 / 3;
+
 /**
  * Home leads with a reason to revisit the wardrobe and a few real pieces.
  * Detailed percentages stay in Closet Insights; the palette reads as swatches.
@@ -55,7 +59,7 @@ export function ClosetInsightsCard({
           </AppText>
           <AppText variant="meta" tone="secondary">
             {insights.sleeping.length > 0
-              ? 'Give something you haven’t worn lately a fresh look.'
+              ? insights.sleeping.every(item => !item.lastWornAt) ? 'Pieces waiting for their debut' : 'Pieces ready for a fresh rotation'
               : 'Explore the pieces that work hardest for you.'}
           </AppText>
         </View>
@@ -63,12 +67,22 @@ export function ClosetInsightsCard({
       </View>
     </PressableScale>
       {insights.sleeping.length > 0 ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pieces} snapToInterval={108 + spacing.sm} decelerationRate="fast">
+        <ScrollView
+          horizontal
+          decelerationRate="fast"
+          snapToInterval={CARD_WIDTH + CARD_GAP}
+          snapToAlignment="start"
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.pieces}
+        >
           {insights.sleeping.map((item) => (
             <PressableScale key={item.id} onPress={onPress} accessibilityRole="button" accessibilityLabel={`Rediscover ${item.name}. Open closet insights`} contentStyle={styles.piece}>
-              <GarmentImage item={item} width={108} height={144} borderRadius={radii.md} />
-              <AppText variant="eyebrow" tone="muted" style={styles.contextChip}>
-                {item.lastWornAt ? `Last worn ${Math.max(0, Math.floor((Date.now() - Date.parse(item.lastWornAt)) / 86400000))}d ago` : 'Not yet worn'}
+              <View style={styles.pieceCanvas}>
+                <GarmentImage item={item} width={CARD_WIDTH} height={CARD_HEIGHT} borderRadius={radii.md} />
+                <View pointerEvents="none" style={styles.pieceOutline} />
+              </View>
+              <AppText variant="eyebrow" tone="muted" style={styles.contextChip} numberOfLines={2}>
+                {item.lastWornAt ? `Last worn ${Math.max(0, Math.floor((Date.now() - Date.parse(item.lastWornAt)) / 86400000))}d ago` : item.name}
               </AppText>
             </PressableScale>
           ))}
@@ -96,8 +110,10 @@ const styles = StyleSheet.create({
   card: { gap: spacing.xl, paddingVertical: spacing.sm },
   leadRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   leadCopy: { flex: 1, gap: spacing.xs },
-  pieces: { flexDirection: 'row', gap: spacing.sm },
-  piece: { width: 108, gap: spacing.sm },
+  pieces: { flexDirection: 'row', gap: CARD_GAP, paddingRight: spacing.page },
+  piece: { width: CARD_WIDTH, gap: spacing.sm },
+  pieceCanvas: { width: '100%', aspectRatio: 3 / 4, overflow: 'hidden', borderRadius: radii.md, backgroundColor: colors.imageMat },
+  pieceOutline: { ...StyleSheet.absoluteFill, borderRadius: radii.md, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(0,0,0,0.06)' },
   contextChip: { fontSize: 10, letterSpacing: 1, paddingHorizontal: spacing.xs, paddingVertical: spacing.xs, backgroundColor: colors.linen, borderRadius: radii.sm },
   swatches: { flexDirection: 'row', height: 12, borderRadius: radii.sm, overflow: 'hidden' },
   swatch: { height: 12, borderWidth: stroke.hairline, borderColor: colors.ghostStroke },

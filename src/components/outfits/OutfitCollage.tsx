@@ -15,9 +15,10 @@ type Props = {
   size: number;
   height?: number;
   borderRadius?: number;
+  imageFit?: 'cover' | 'contain';
 };
 
-export function OutfitCollage({ outfit, size, height = size, borderRadius = radii.md }: Props) {
+export function OutfitCollage({ outfit, size, height = size, borderRadius = radii.md, imageFit = 'cover' }: Props) {
   const { data: items = [] } = useItems();
 
   const itemMap = useMemo(
@@ -50,7 +51,7 @@ export function OutfitCollage({ outfit, size, height = size, borderRadius = radi
     const uri = resolveImageUri(outfit.aiGeneratedImageUrl);
     return (
       <View style={[styles.container, { width: size, height, borderRadius }]}>
-        <Image source={{ uri }} style={styles.fill} contentFit="cover" cachePolicy="memory-disk" recyclingKey={String(outfit.id)} />
+        <Image source={{ uri }} style={styles.fill} contentFit={imageFit} cachePolicy="memory-disk" recyclingKey={String(outfit.id)} />
       </View>
     );
   }
@@ -61,7 +62,7 @@ export function OutfitCollage({ outfit, size, height = size, borderRadius = radi
 const styles = StyleSheet.create({
   container: {
     overflow: 'hidden',
-    backgroundColor: colors.muted,
+    backgroundColor: colors.imageMat,
   },
   fill: {
     width: '100%',

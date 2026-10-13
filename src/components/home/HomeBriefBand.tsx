@@ -125,17 +125,20 @@ const styles = StyleSheet.create({
   priorityCopy: { gap: spacing.xs },
   explore: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 28 },
   card: {
-    backgroundColor: 'transparent',
+    backgroundColor: colors.linen,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
   },
   briefCard: {
     gap: spacing.md,
-    paddingHorizontal: 0,
+    paddingHorizontal: spacing.md,
     paddingTop: spacing.control,
     paddingBottom: spacing.lg,
   },
   // The row below the kicker brings its own vertical padding.
   shortlistCard: {
-    paddingHorizontal: 0,
+    paddingHorizontal: spacing.md,
     paddingTop: spacing.control,
     paddingBottom: spacing.xs,
   },

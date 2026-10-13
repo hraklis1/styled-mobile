@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-na
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { EditorialIcon } from '../primitives/EditorialIcon';
 import { PressableScale } from '../primitives/PressableScale';
-import { colors, radii, spacing, typography } from '../../theme';
+import { colors, spacing, typography } from '../../theme';
 
 export type HomeActionKey = 'stylist' | 'closet' | 'shop' | 'wear';
 
@@ -90,11 +90,11 @@ export const HomeActionRow = forwardRef<HomeActionRowHandle, Props>(function Hom
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
-  cell: { flex: 1, alignItems: 'center' },
-  cellContent: { alignItems: 'center', gap: spacing.xs, minHeight: 64, paddingVertical: spacing.xs, borderRadius: radii.quickAction, backgroundColor: colors.linen },
+  cell: { flex: 1, minWidth: 0 },
+  cellContent: { width: '100%', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, minHeight: 64, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 12, backgroundColor: colors.linen },
   disc: {
     width: DISC, height: DISC,
     alignItems: 'center', justifyContent: 'center',
   },
-  label: { ...typography.text.utility, color: colors.inkSubtle },
+  label: { ...typography.text.utility, color: colors.inkSubtle, textAlign: 'center' },
 });
