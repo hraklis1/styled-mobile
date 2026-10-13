@@ -148,3 +148,29 @@ export function windowCountsForDate(events: Event[], date: string, todayStr: str
   }
   return { past, future };
 }
+
+export type UpcomingDay = {
+  date: string;
+  /** All the day's events, all-day first, then by time. */
+  events: Event[];
+  /** The first event with a planned look; its collage stands for the day. */
+  lookEvent: Event | null;
+};
+
+/** The next `limit` days that have events, from today, for Home's rail. */
+export function buildUpcomingDays(events: Event[], todayStr: string, limit: number): UpcomingDay[] {
+  const days: UpcomingDay[] = [];
+  for (const event of sortCalendarEvents(events)) {
+    const date = eventDayKey(event);
+    if (date < todayStr) continue;
+    let day = days[days.length - 1];
+    if (!day || day.date !== date) {
+      if (days.length === limit) break;
+      day = { date, events: [], lookEvent: null };
+      days.push(day);
+    }
+    day.events.push(event);
+    if (!day.lookEvent && (event.itemIds ?? []).length > 0) day.lookEvent = event;
+  }
+  return days;
+}

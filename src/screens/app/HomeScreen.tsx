@@ -39,14 +39,12 @@ import { useEvents } from '../../hooks/useEvents';
 import { useOutfitLogs, useDeleteOutfitLog, type OutfitLog } from '../../hooks/useOutfitLogs';
 import { WearWeekStrip } from '../../components/home/WearWeekStrip';
 import { WearEntryDetails } from '../../components/home/WearEntryDetails';
-import { presentCalendarEvent } from '../../components/calendar/calendar-presentation';
-import { formatCountdown } from '../../components/calendar/calendarUtils';
-import { OCCASIONS } from '../../lib/occasions';
+import { HomeCalendarRail } from '../../components/home/HomeCalendarRail';
+import { useEventStylistHandoff } from '../../components/calendar/useEventStylistHandoff';
 import { useShoppingSnaps } from '../../hooks/useShoppingSnaps';
 import { useShoppingSessionStore } from '../../stores/useShoppingSessionStore';
 import { buildShoppingEditItems, mergeShoppingSnaps } from '../../lib/shoppingGallery';
 import { buildShortlistSpotlight } from '../../lib/shortlistSpotlight';
-import { GarmentImage } from '../../components/wardrobe/garment-image';
 import { OutfitCollage } from '../../components/outfits/OutfitCollage';
 import { useGlobalOutfitLogger } from '../../contexts/GlobalOutfitLoggerContext';
 import { useGlobalAIStylist } from '../../contexts/GlobalAIStylistContext';
@@ -114,9 +112,6 @@ import type { Outfit } from '../../types/outfit';
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const SIDE_PAD = spacing.page;
-const COL_GAP  = spacing.md;
-/** Width of one event column in the calendar rail (before its rule inset). */
-const EVENT_COL_W = 148;
 
 const WEATHER_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
   sunny: 'sunny-outline',
@@ -147,16 +142,6 @@ function getGreeting(name?: string | null): string {
 
 function compactLocationLabel(label?: string): string | undefined {
   return label?.split(',')[0]?.trim() || undefined;
-}
-
-function formatEventDate(isoDate: string): string {
-  const d   = new Date(isoDate);
-  const today    = new Date(); today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
-  const day      = new Date(d); day.setHours(0, 0, 0, 0);
-  if (day.getTime() === today.getTime())    return 'Today';
-  if (day.getTime() === tomorrow.getTime()) return 'Tomorrow';
-  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 function generatedPreviewOutfit(candidate: DailyLookCandidate): Outfit {
@@ -191,34 +176,9 @@ function formatLogDate(dateStr: string): string {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
-function occasionLabel(occasion: string): string {
-  return OCCASIONS.find((entry) => entry.id === occasion)?.label ?? occasion.replaceAll('_', ' ');
-}
-
 function monogram(name?: string | null): string | undefined {
   const initial = name?.trim().charAt(0);
   return initial ? initial.toUpperCase() : undefined;
-}
-
-/**
- * A newspaper dateline: weekday and month as a tracked masthead over a serif
- * numeral. Today swaps the weekday for a walnut "Today" and a small dot, the
- * one warm signal in the rail.
- */
-function Dateline({ date, month, day, compact = false }: { date: string; month: string; day: string; compact?: boolean }) {
-  const isToday = formatEventDate(date) === 'Today';
-  const weekday = new Date(date).toLocaleDateString('en-US', { weekday: 'short' });
-  return (
-    <View style={[styles.dateline, compact && styles.datelineCompact]}>
-      <View style={styles.datelineMastRow}>
-        {isToday ? <View style={styles.todayDot} /> : null}
-        <Text style={[styles.datelineMast, isToday && styles.datelineMastToday]} numberOfLines={1}>
-          {isToday ? 'Today' : compact ? month : `${weekday} · ${month}`}
-        </Text>
-      </View>
-      <Text style={[styles.datelineDay, compact && styles.datelineDayCompact]}>{day}</Text>
-    </View>
-  );
 }
 
 export function HomeScreen({ navigation }: HomeScreenProps) {
@@ -239,6 +199,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
   const { openLogger } = useGlobalOutfitLogger();
   const { openStylist } = useGlobalAIStylist();
+  const handOffToStylist = useEventStylistHandoff(navigation);
   const { openAddSheet } = useGlobalAddSheet();
   const { openScanItem, openFromPhotos } = useGlobalScan();
   const { fabCollapsed } = useFabScroll();
@@ -448,34 +409,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     return events
       .filter((e) => { const d = new Date(e.date); d.setHours(0, 0, 0, 0); return d >= today; })
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .slice(0, 10);
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [events]);
-
-  const nextUpEvent = useMemo(
-    () => upcomingEvents.find((event) => !event.outfitId && (event.itemIds?.length ?? 0) === 0) ?? upcomingEvents[0],
-    [upcomingEvents],
-  );
-  // A single occasion uses the full page; several occasions form a rail.
-  const showNextUpCard = upcomingEvents.length === 1;
-  const nextUpOutfit = nextUpEvent?.outfitId
-    ? outfits.find((outfit) => outfit.id === nextUpEvent.outfitId)
-    : undefined;
-  const nextUpPiece = items.find((item) => (nextUpOutfit?.itemIds.map((entry) => entry.id) ?? nextUpEvent?.itemIds ?? []).includes(item.id));
-  const nextUpPresentation = nextUpEvent ? presentCalendarEvent(nextUpEvent) : null;
-  const carouselEvents = useMemo(
-    () => (showNextUpCard ? upcomingEvents.filter((event) => event.id !== nextUpEvent!.id) : upcomingEvents),
-    [showNextUpCard, upcomingEvents, nextUpEvent],
-  );
-
-  // Snap each column's rule to the page gutter. The first column has no rule
-  // inset; every later one carries COL_GAP of left padding before its rule.
-  const carouselSnapOffsets = useMemo(
-    () => carouselEvents.map((_, index) => (
-      index === 0 ? 0 : EVENT_COL_W + COL_GAP + (index - 1) * (EVENT_COL_W + COL_GAP * 2)
-    )),
-    [carouselEvents],
-  );
 
   const recentOutfits = useMemo(
     () => outfits
@@ -1112,87 +1047,15 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             </View>
           </PressableScale>
         ) : (
-          <View style={styles.calendarStack}>
-            {showNextUpCard ? (
-              <PressableScale
-                contentStyle={styles.nextUpCard}
-                scaleTo={0.99}
-                motion="crisp"
-                haptic={false}
-                onPress={() => navigation.navigate('Calendar', { eventId: nextUpEvent!.id })}
-                accessibilityRole="button"
-                accessibilityLabel={`${nextUpEvent!.title}, ${formatEventDate(nextUpEvent!.date)}. Open in Calendar`}
-              >
-                <View style={styles.nextUpDate}>
-                  <Dateline
-                    date={nextUpEvent!.date}
-                    month={nextUpPresentation!.monthLabel}
-                    day={nextUpPresentation!.dayLabel}
-                    compact
-                  />
-                </View>
-                <View style={styles.nextUpCopy}>
-                  <Text style={styles.nextUpTitle}>{nextUpEvent!.title}</Text>
-                  <Text style={styles.nextUpSubtitle}>
-                    {occasionLabel(nextUpEvent!.occasion)} · {nextUpEvent!.outfitId || (nextUpEvent!.itemIds?.length ?? 0) > 0 ? 'Look planned' : 'Plan a look'}
-                  </Text>
-                </View>
-                {!largeText && (nextUpPiece ? <GarmentImage item={nextUpPiece} width={56} height={72} borderRadius={8} placeholderIconSize={18} /> : null)}
-                <Ionicons name="chevron-forward" size={15} color={colors.mutedForeground} />
-              </PressableScale>
-            ) : null}
-            {carouselEvents.length > 0 ? (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.carousel}
-                contentContainerStyle={styles.carouselContent}
-                snapToOffsets={carouselSnapOffsets}
-                decelerationRate="fast"
-              >
-                {carouselEvents.map((event, index) => {
-                  const presentation = presentCalendarEvent(event);
-                  const dateLabel = formatEventDate(event.date);
-                  const when = formatCountdown(new Date(event.date)) ?? dateLabel;
-                  const planned = !!event.outfitId || presentation.hasOutfit;
-                  const plannedOutfit = event.outfitId ? outfits.find((entry) => entry.id === event.outfitId) : undefined;
-                  const plannedPiece = items.find((item) => (plannedOutfit?.itemIds.map((entry) => entry.id) ?? event.itemIds ?? []).includes(item.id));
-                  return (
-                    <PressableScale
-                      key={event.id}
-                      style={index > 0 && styles.eventColumnRule}
-                      contentStyle={styles.eventCard}
-                      scaleTo={0.98}
-                      motion="crisp"
-                      haptic={false}
-                      onPress={() => navigation.navigate('Calendar', { eventId: event.id })}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${event.title}, ${dateLabel}, ${occasionLabel(event.occasion)}. ${planned ? 'Look planned' : 'No look planned yet'}`}
-                    >
-                      <Dateline date={event.date} month={presentation.monthLabel} day={presentation.dayLabel} />
-                      {plannedPiece ? <GarmentImage item={plannedPiece} width={64} height={80} placeholderIconSize={18} /> : null}
-                      <Text style={[styles.eventTitle, !largeText && styles.eventTitleTwoLine]} numberOfLines={largeText ? undefined : 2}>{event.title.trim()}</Text>
-                      <Text style={styles.eventMeta} numberOfLines={largeText ? 2 : 1}>
-                        {occasionLabel(event.occasion)} · <Text style={styles.eventWhen}>{when}</Text>
-                      </Text>
-                      {planned ? (
-                        <View style={styles.plannedChip}>
-                          <Ionicons name="checkmark" size={11} color={colors.inkSubtle} />
-                          <Text style={styles.plannedChipText}>Planned</Text>
-                        </View>
-                      ) : (
-                        <View style={styles.inlineLink}>
-                          <Text style={styles.inlineLinkText}>Plan the look</Text>
-                          <Ionicons name="arrow-forward" size={12} color={colors.action} />
-                        </View>
-                      )}
-                    </PressableScale>
-                  );
-                })}
-                <View style={{ width: SIDE_PAD }} />
-              </ScrollView>
-            ) : null}
-          </View>
+          <HomeCalendarRail
+            events={upcomingEvents}
+            allItems={items}
+            outfits={outfits}
+            weatherFallback={stylingLocation.activeLocation}
+            onOpenDay={(date) => navigation.navigate('Calendar', { date })}
+            onOpenEvent={(eventId) => navigation.navigate('Calendar', { eventId })}
+            onPlanEvent={(event) => handOffToStylist(event, 'calendar_card')}
+          />
         )}
       </EditorialSection>
 
@@ -1395,21 +1258,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxxl * 2,
   },
   // Home's card material: a linen sheet, no outline, shared with The Edit.
-  nextUpCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.lg,
-    padding: 20,
-    backgroundColor: colors.linen,
-    borderRadius: 16,
-  },
-  nextUpDate: {
-    minWidth: 44,
-  },
-  nextUpCopy: { flex: 1, gap: 4 },
-  nextUpTitle: { ...typography.text.editorialCard, color: colors.foreground },
-  nextUpSubtitle: { ...typography.text.editorialItalic, fontSize: 14, lineHeight: 19, color: colors.inkSubtle },
-  calendarStack: { gap: spacing.md },
 
   // Greeting
   headerRow: {
@@ -1518,76 +1366,10 @@ const styles = StyleSheet.create({
   },
 
   // Events carousel
-  carousel: { marginHorizontal: -SIDE_PAD },
-  carouselContent: { paddingHorizontal: SIDE_PAD, gap: COL_GAP },
-  eventCard: {
-    width: EVENT_COL_W, paddingBottom: spacing.xs, gap: spacing.xs,
-  },
   // A magazine column rule between events — typography, not a container.
-  eventColumnRule: {
-    paddingLeft: COL_GAP,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: colors.border,
-  },
   // A dateline, not an icon: the serif numeral is what makes the rail
   // scannable at a glance, the masthead above it says which day.
-  dateline: { gap: 0, marginBottom: 2 },
-  datelineCompact: { alignItems: 'flex-start' },
-  datelineMastRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  datelineMast: {
-    ...typography.text.masthead,
-    letterSpacing: 1.6,
-    color: colors.mutedForeground,
-  },
-  datelineMastToday: { color: colors.accentInk },
-  todayDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.accentInk,
-  },
-  datelineDay: {
-    fontFamily: typography.family.editorialRegular,
-    fontSize: 30,
-    lineHeight: 36,
-    color: colors.foreground,
-    fontVariant: ['tabular-nums'],
-  },
-  datelineDayCompact: {
-    fontSize: 26,
-    lineHeight: 30,
-  },
-  eventTitle: {
-    ...typography.text.label,
-    color: colors.foreground,
-  },
   // Titles always take their two lines, so the occasion and status rows sit
   // on shared baselines across columns whether or not a title wraps.
-  eventTitleTwoLine: {
-    minHeight: typography.text.label.lineHeight * 2,
-  },
-  eventMeta: {
-    ...typography.text.caption,
-    color: colors.mutedForeground,
-  },
-  eventWhen: {
-    color: colors.accentInk,
-  },
-  plannedChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 3,
-    marginTop: 2,
-    paddingHorizontal: spacing.sm,
-    height: 22,
-    borderRadius: radii.full,
-    borderWidth: 1,
-    borderColor: colors.ghostStroke,
-  },
-  plannedChipText: {
-    ...typography.text.caption,
-    color: colors.inkSubtle,
-  },
 
 });

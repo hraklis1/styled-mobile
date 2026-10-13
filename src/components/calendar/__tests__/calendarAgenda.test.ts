@@ -108,3 +108,26 @@ describe('all-day planning rule', () => {
     expect(status.get('2026-10-15')).toBe('needs');
   });
 });
+
+describe('Home upcoming days', () => {
+  const { buildUpcomingDays } = require('../calendarAgenda');
+  const ev = (id: number, date: string, extra: Record<string, unknown> = {}) => ({
+    id, userId: 1, title: `E${id}`, date, occasion: 'casual', location: null,
+    notes: null, environment: null, itemIds: null, outfitId: null, ...extra,
+  });
+
+  it('groups by day from today, keeps all-day events, and picks the planned look', () => {
+    const days = buildUpcomingDays([
+      ev(1, '2026-10-12T09:00:00'),
+      ev(2, '2026-10-14T16:00:00'),
+      ev(3, '2026-10-14T04:00:00', { itemIds: [5] }),
+      ev(4, '2026-10-14T00:00:00Z', { calendarMetadata: { calendarId: 'w', calendarName: 'W', allDay: true, allDayDate: '2026-10-14', cancelled: false, syncedAt: '' } }),
+      ev(5, '2026-10-13T10:00:00'),
+      ev(6, '2026-10-20T10:00:00'),
+    ], '2026-10-13', 2);
+    expect(days.map((d: any) => d.date)).toEqual(['2026-10-13', '2026-10-14']);
+    expect(days[1].events.map((e: any) => e.id)).toEqual([4, 3, 2]);
+    expect(days[1].lookEvent.id).toBe(3);
+    expect(days[0].lookEvent).toBeNull();
+  });
+});

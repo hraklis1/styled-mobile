@@ -33,6 +33,7 @@ import { EventDetailModal } from '../../components/calendar/EventDetailModal';
 import { EventItemPickerModal } from '../../components/calendar/EventItemPickerModal';
 import { EventOutfitPickerModal } from '../../components/calendar/EventOutfitPickerModal';
 import { AgendaEventRow, AllDayBanner } from '../../components/calendar/AgendaEventRow';
+import { useEventStylistHandoff } from '../../components/calendar/useEventStylistHandoff';
 import { NextEventHero } from '../../components/calendar/NextEventHero';
 import { toDateStr } from '../../components/calendar/calendarUtils';
 import { colors, spacing, typography, radii } from '../../theme';
@@ -40,14 +41,12 @@ import { ErrorState } from '../../components/primitives/ErrorState';
 import { ActionMenuSheet } from '../../components/primitives/ActionMenuSheet';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useActiveStylingLocation } from '../../hooks/useActiveStylingLocation';
-import { shoppingPriorityFromDailyLookGap } from '../../lib/dailyLookPresentation';
 import { ensureEntitled } from '../../lib/entitlementGate';
 import { useGlobalAIStylist, type StylistOpenSource } from '../../contexts/GlobalAIStylistContext';
 import { useGlobalOutfitLogger } from '../../contexts/GlobalOutfitLoggerContext';
 import { track } from '../../lib/analytics';
 import type { CalendarScreenProps } from '../../navigation/types';
 import type { Event } from '../../types/event';
-import type { StylistMissingEssential } from '../../features/stylist/types';
 import {
   eventDayKey,
   sortCalendarEvents,
@@ -135,7 +134,6 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   const createOutfitLog = useCreateOutfitLog();
   const [wearingEventId, setWearingEventId] = useState<number | null>(null);
   const outfitReturnEventId = useRef<number | null>(null);
-  const stylistHandoffAt = useRef(0);
   const eventsRef = useRef(events);
   eventsRef.current = events;
 
@@ -382,54 +380,12 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
     });
   };
 
+  const handOffToStylist = useEventStylistHandoff(navigation);
   const openStylistForEvent = (event: Event, source: StylistOpenSource) => {
-    const now = Date.now();
-    if (now - stylistHandoffAt.current < 600) return;
-    stylistHandoffAt.current = now;
-    const details = [
-      `Dress me for "${event.title}"`,
-      `on ${new Date(`${eventDayKey(event)}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`,
-      event.occasion ? `for a ${event.occasion.replaceAll('_', ' ')} occasion` : null,
-      event.location ? `at ${event.location}` : null,
-      event.environment ? `in a ${event.environment} setting` : null,
-    ].filter(Boolean).join(' ');
     // Let the detail modal finish dismissing before presenting the stylist sheet
     const delay = detailEvent ? 300 : 0;
     setDetailEvent(null);
-    setTimeout(() => {
-      openStylist({
-        initialQuery: `${details}.`,
-        destination: event.location ?? undefined,
-        initialMode: 'event_plan',
-        source,
-        eventContext: { id: event.id, title: event.title },
-        onNavigateToCloset: (outfitId) => navigation.navigate('Closet', {
-          screen: 'OutfitDetail',
-          params: {
-            outfitId,
-            returnTo: 'Calendar',
-            returnToEventId: event.id,
-            returnToEventDetail: true,
-          },
-        }),
-        onNavigateToShop: (gap?: StylistMissingEssential) => {
-          if (!gap?.label) return;
-          navigation.navigate('Shop', { screen: 'ShoppingPriorityEdit', params: {
-            priority: shoppingPriorityFromDailyLookGap(gap),
-          }});
-        },
-        context: {
-          kind: 'event',
-          eventId: event.id,
-          title: event.title,
-          date: event.date,
-          location: event.location,
-          occasion: event.occasion,
-          environment: event.environment,
-          itemIds: event.itemIds ?? undefined,
-        },
-      });
-    }, delay);
+    handOffToStylist(event, source, delay);
   };
 
   const handleSelectDate = useCallback((date: string) => {
