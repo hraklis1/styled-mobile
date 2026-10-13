@@ -34,7 +34,13 @@ type Props = {
 export function ShortlistDecisionCard({ items, storeNames, onPress, style, variant = 'card', header, contentStyle }: Props) {
   if (items.length === 0) return null;
 
-  const thumbs = items.slice(0, THUMB_LIMIT);
+  const seenImages = new Set<string>();
+  const thumbs = items.filter((item) => {
+    const uri = item.primarySnap.imageUri;
+    if (seenImages.has(uri)) return false;
+    seenImages.add(uri);
+    return true;
+  }).slice(0, THUMB_LIMIT);
   const subtitle = storeNames.length > 0 ? storeNames.join(' · ') : 'From your shopping trips';
 
   return (
@@ -65,11 +71,11 @@ export function ShortlistDecisionCard({ items, storeNames, onPress, style, varia
         </View>
         <View style={styles.copy}>
           <Text style={styles.title} numberOfLines={1}>
-            {items.length} {items.length === 1 ? 'piece' : 'pieces'} to decide on
+            {items.length} {variant === 'row' ? (items.length === 1 ? 'saved find' : 'saved finds') : (items.length === 1 ? 'piece to decide on' : 'pieces to decide on')}
           </Text>
-          <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>
+          {variant !== 'row' ? <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text> : null}
         </View>
-        <Ionicons name="chevron-forward" size={15} color={colors.mutedForeground} />
+        <Ionicons name={variant === 'row' ? 'arrow-forward' : 'chevron-forward'} size={15} color={colors.mutedForeground} />
       </View>
     </PressableScale>
   );

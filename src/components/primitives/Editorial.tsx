@@ -176,7 +176,7 @@ export function EditorialSection({
         <AppText
           variant={supporting ? 'sectionTitle' : chapter ? 'editorialChapter' : editorialHeading ? 'eyebrowLarge' : ruled ? 'eyebrow' : 'sectionTitle'}
           tone={ruled && !editorialHeading ? 'muted' : 'primary'}
-          style={editorialHeading ? styles.editorialSectionTitle : ruled ? styles.ruledSectionTitle : undefined}
+          style={[editorialHeading ? styles.editorialSectionTitle : ruled ? styles.ruledSectionTitle : undefined, supporting && { fontWeight: typography.weight.medium }]}
         >
           {title}
         </AppText>

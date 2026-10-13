@@ -1,3 +1,4 @@
+import { homeGarmentDescription, homeGarmentWithArticle } from './homePresentationCopy';
 import type { TodayWeather } from '../hooks/useWeather';
 import type { OutfitLog } from '../hooks/useOutfitLogs';
 import type { Event } from '../types/event';
@@ -410,22 +411,18 @@ export function buildDailyLookExplanation({
   const namedPieces = categoryOrder.flatMap((category) => {
     const item = selected.find((piece) => piece.category === category);
     if (!item) return [];
-    const label = item.subcategory?.trim() || item.name?.trim();
-    if (!label) return [];
-    // Preserve user capitalization in names; taxonomy labels are already descriptive.
-    const descriptor = item.subcategory
-      ? [item.color?.trim(), label.replace(/_/g, ' ')].filter(Boolean).join(' ')
-      : label;
-    return descriptor.length <= 55 ? [descriptor] : [];
+    return [homeGarmentDescription(item)];
   }).slice(0, 2);
   if (namedPieces.length > 0) {
-    const pairing = namedPieces.join(' with ');
+    const connector = selected.some((item) => item.category === 'outerwear') ? ' over ' : ' with ';
+    const phrase = namedPieces.map(homeGarmentWithArticle).join(connector);
+    const pairing = phrase[0].toUpperCase() + phrase.slice(1);
     const context = pick.scoreDetails.occasion > 0 && event?.occasion?.trim()
       ? ` for your ${formatOccasion(event.occasion)} plans`
       : pick.scoreDetails.weather > 0 && weather
         ? ` for ${formatTemp(weather.current, tempUnit)}`
         : '';
-    return `Your ${pairing}${context}.`;
+    return `${pairing}${context ? `, chosen${context}` : ''}.`;
   }
 
   const reasons: string[] = [];

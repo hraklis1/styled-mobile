@@ -42,7 +42,7 @@ export function ClosetInsightsCard({
       onPress={onPress}
       scaleTo={0.98}
       accessibilityRole="button"
-      accessibilityLabel={insights.sleeping.length > 0 ? `Rediscover ${insights.sleeping.length} pieces. Open closet insights` : 'Open closet insights'}
+      accessibilityLabel={`${insights.sleeping.length > 0 ? `Rediscover ${insights.sleeping.length} pieces.` : ''} Open closet insights.${leadColor ? ` Wardrobe palette: ${insights.colors.filter((color) => color.key !== 'other').map((color) => color.label).join(', ')}. ${leadColor.label} makes up ${Math.round(leadColor.share * 100)} percent of your wardrobe.` : ''}`}
       contentStyle={styles.card}
     >
       <View style={styles.leadRow}>
@@ -71,13 +71,13 @@ export function ClosetInsightsCard({
       {leadColor ? (
         <View style={styles.palette}>
           <AppText variant="meta" tone="secondary">Your wardrobe palette</AppText>
-          <View style={styles.swatches} accessibilityRole="image" accessibilityLabel={`Your palette: ${insights.colors.filter((color) => color.key !== 'other').map((color) => color.label).join(', ')}`}>
+          <View style={styles.swatches}>
             {insights.colors.filter((color) => color.key !== 'other').map((color) => (
-              <View key={color.key} style={[styles.swatch, { backgroundColor: color.hex }]} />
+              <View key={color.key} accessible accessibilityLabel={color.label} style={[styles.swatch, { backgroundColor: color.hex }]} />
             ))}
           </View>
           <AppText variant="meta" tone="muted">
-            Led by {leadColor.label.toLowerCase()}
+            {leadColor.label} · {Math.round(leadColor.share * 100)}% of your wardrobe
           </AppText>
         </View>
       ) : null}

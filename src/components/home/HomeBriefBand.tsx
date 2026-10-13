@@ -8,7 +8,8 @@ import { useEntitlement } from '../../hooks/useEntitlement';
 import { useShoppingBrief } from '../../hooks/useShoppingBrief';
 import { colors, radii, spacing, stroke } from '../../theme';
 import { AppText } from '../primitives/AppText';
-import { withoutOutfitCount } from '../../lib/shopClarity';
+import { homeShoppingExplanation, homePriorityTitle } from '../../lib/homePresentationCopy';
+import { useItems } from '../../hooks/useItems';
 
 type Props = {
   onBriefPress: () => void;
@@ -30,7 +31,7 @@ type Props = {
 function WardrobeEditKicker({ icon, label, purpose }: {
   icon: ComponentProps<typeof Ionicons>['name'];
   label: string;
-  purpose: string;
+  purpose?: string;
 }) {
   return (
     <View style={styles.kicker}>
@@ -39,7 +40,7 @@ function WardrobeEditKicker({ icon, label, purpose }: {
       </View>
       <View style={styles.kickerCopy}>
         <AppText variant="label" tone="primary" numberOfLines={1}>{label}</AppText>
-        <AppText variant="meta" tone="muted" numberOfLines={1}>{purpose}</AppText>
+        {purpose ? <AppText variant="meta" tone="muted" numberOfLines={1}>{purpose}</AppText> : null}
       </View>
     </View>
   );
@@ -65,11 +66,12 @@ function WardrobeEditKicker({ icon, label, purpose }: {
  * can still render when the brief has nothing to say.
  */
 export function HomeWardrobeEdit({ onBriefPress, shortlist, style }: Props) {
+  const { data: items = [] } = useItems();
   const { isPremium } = useEntitlement();
   const { data: brief } = useShoppingBrief(isPremium);
   const priority = brief?.status !== 'insufficient_data' ? brief?.priorities[0] : undefined;
   const summary = priority
-    ? withoutOutfitCount(priority.context, priority.impactScore)
+    ? homeShoppingExplanation(priority, items)
     : brief && brief.status !== 'insufficient_data' ? brief.summary : '';
   const hasBrief = !!summary || !!priority;
 
@@ -95,8 +97,8 @@ export function HomeWardrobeEdit({ onBriefPress, shortlist, style }: Props) {
           >
             <AppText variant="meta" tone="muted">Your shopping brief</AppText>
             <View style={styles.priorityCopy}>
-              <AppText variant="actionTitle" tone="primary">{priority?.label ?? brief?.headline}</AppText>
-              {summary ? <AppText variant="bodySmall" tone="secondary" numberOfLines={2}>{summary}</AppText> : null}
+              <AppText variant="actionTitle" tone="primary">{homePriorityTitle(priority?.label ?? brief?.headline ?? "")}</AppText>
+              {summary ? <AppText variant="bodySmall" tone="secondary">{summary}</AppText> : null}
             </View>
             <View style={styles.explore}>
               <AppText variant="label" tone="primary">Explore the edit</AppText>
@@ -109,7 +111,6 @@ export function HomeWardrobeEdit({ onBriefPress, shortlist, style }: Props) {
             <WardrobeEditKicker
               icon="bookmark-outline"
               label="Your shortlist"
-              purpose="Finds you saved while shopping"
             />
           ),
           cardStyle: [styles.card, styles.shortlistCard],
