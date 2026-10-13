@@ -7,10 +7,11 @@ import type { Item } from '../../types/item';
 // Verdict for a pairing check ("does X go with Y"): a clear yes / almost / no,
 // the principle behind it, and the owned pieces that would fix it.
 
-const VERDICT: Record<StylistCritiqueVerdict, { label: string; icon: keyof typeof Ionicons.glyphMap; tint: string }> = {
-  works: { label: 'Works', icon: 'checkmark-circle', tint: colors.success },
-  works_if: { label: 'Works with a tweak', icon: 'construct-outline', tint: colors.accentInk },
-  clash: { label: 'Doesn’t work', icon: 'close-circle', tint: colors.error },
+// The headline is the stylist's call in a word or two; the colour is only a quiet dot beside it.
+const VERDICT: Record<StylistCritiqueVerdict, { label: string; headline: string; tint: string }> = {
+  works: { label: 'Works', headline: 'Wear it.', tint: colors.success },
+  works_if: { label: 'Works with a tweak', headline: 'Almost — one change.', tint: colors.accentInk },
+  clash: { label: 'Doesn’t work', headline: 'Choose something else.', tint: colors.error },
 };
 
 const PRINCIPLE: Record<StylistCritique['reasons'][number]['principle'], string> = {
@@ -37,10 +38,11 @@ export function CritiqueCard({ critique, allItems, onItemPress }: Props) {
 
   return (
     <View style={styles.card} accessibilityRole="summary" accessibilityLabel={`Verdict: ${v.label}`}>
-      <View style={[styles.pill, { borderColor: v.tint }]}>
-        <Ionicons name={v.icon} size={14} color={v.tint} />
-        <Text style={[styles.pillText, { color: v.tint }]}>{v.label}</Text>
+      <View style={styles.header}>
+        <View style={[styles.dot, { backgroundColor: v.tint }]} />
+        <Text style={styles.label}>{v.label}</Text>
       </View>
+      <Text style={styles.headline}>{v.headline}</Text>
 
       {critique.reasons.map((reason, index) => (
         <View key={`${reason.principle}-${index}`} style={styles.reason}>
@@ -74,60 +76,31 @@ export function CritiqueCard({ critique, allItems, onItemPress }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    gap: spacing.sm,
-    padding: spacing.md,
-    backgroundColor: '#FFFFFFB8',
-    borderRadius: radii.lg,
+    gap: spacing.md,
+    padding: spacing.lg,
+    backgroundColor: colors.card,
+    borderRadius: radii.card,
     borderCurve: 'continuous',
   },
-  pill: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: radii.full,
-    borderWidth: 1,
-  },
-  pillText: {
-    fontSize: typography.text.caption.fontSize,
-    fontWeight: typography.weight.semibold,
-  },
-  reason: { gap: 2 },
-  principle: {
-    fontSize: typography.text.caption.fontSize,
-    color: colors.mutedForeground,
-    fontWeight: typography.weight.semibold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  detail: {
-    fontSize: typography.text.bodySmall.fontSize,
-    lineHeight: typography.text.bodySmall.fontSize * 1.35,
-    color: colors.foreground,
-  },
-  fixes: { gap: spacing.xs, marginTop: spacing.xs },
-  fixLabel: {
-    fontSize: typography.text.caption.fontSize,
-    color: colors.mutedForeground,
-    fontWeight: typography.weight.semibold,
-  },
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  label: { ...typography.text.eyebrow, color: colors.mutedForeground },
+  headline: { ...typography.text.editorialTitle, color: colors.foreground },
+  reason: { gap: spacing.xs, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
+  principle: { ...typography.text.eyebrow, color: colors.mutedForeground },
+  detail: { ...typography.text.body, color: colors.foreground },
+  fixes: { gap: spacing.sm, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
+  fixLabel: { ...typography.text.eyebrow, color: colors.mutedForeground },
   fixRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   fixPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     maxWidth: '100%',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
+    minHeight: 36,
+    paddingHorizontal: spacing.md,
     borderRadius: radii.full,
     backgroundColor: colors.surfaceSubtle,
   },
-  fixText: {
-    flexShrink: 1,
-    fontSize: typography.text.caption.fontSize,
-    color: colors.foreground,
-    textTransform: 'capitalize',
-  },
+  fixText: { ...typography.text.bodySmall, flexShrink: 1, color: colors.foreground },
 });
