@@ -230,19 +230,14 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
         : [...items, { kind: 'empty', key: 'empty' }];
     }
 
-    // A selected day without events needs a real agenda destination. ISO
-    // strings keep that placeholder in date order without extra parsing.
     const todayStr = toDateStr(new Date());
     const heroDateStr = nextEvent ? toDateStr(new Date(nextEvent.date)) : null;
-    // Checked against the *full* upcoming list, not the possibly-truncated
-    // `groupedUpcoming` — a day whose events are only hidden behind "View
-    // all upcoming events" is not an empty day, and must not get a
-    // placeholder in their place.
-    const selectedIsEmptyUpcomingDay =
-      !!selectedDate && selectedDate >= todayStr && selectedDate !== heroDateStr &&
-      !upcomingRest.some((e) => toDateStr(new Date(e.date)) === selectedDate);
-    const selectedIsEmptyPastDay =
-      !!selectedDate && selectedDate < todayStr && !past.some((e) => toDateStr(new Date(e.date)) === selectedDate);
+    // An empty selection is feedback about the tapped day, separate from the
+    // agenda. Keep it beside the calendar instead of beneath unrelated events.
+    const selectedIsEmpty = !!selectedDate && !eventDateSet.has(selectedDate);
+    if (selectedIsEmpty) {
+      items.push({ kind: 'day-placeholder', key: `placeholder-${selectedDate}`, date: selectedDate!, isPast: selectedDate! < todayStr });
+    }
 
     let lastUpcomingMonth: string | null = null;
     const addMonthHeading = (dateStr: string) => {
@@ -251,34 +246,20 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
       items.push({ kind: 'month-heading', key: `month-${key}`, dateStr });
       lastUpcomingMonth = key;
     };
-    const emptyDayPrecedesHero = selectedIsEmptyUpcomingDay && !!heroDateStr && selectedDate! < heroDateStr;
-    if (emptyDayPrecedesHero) {
-      items.push({ kind: 'upcoming-heading', key: 'upcoming-heading' });
-      addMonthHeading(selectedDate!);
-      items.push({ kind: 'day-placeholder', key: `placeholder-${selectedDate}`, date: selectedDate!, isPast: false });
-    }
     if (nextEvent) {
-      if (!emptyDayPrecedesHero) items.push({ kind: 'upcoming-heading', key: 'upcoming-heading' });
+      items.push({ kind: 'upcoming-heading', key: 'upcoming-heading' });
       addMonthHeading(heroDateStr!);
       items.push({ kind: 'hero', key: `hero-${nextEvent.id}`, event: nextEvent, highlighted: heroDateStr === highlightDate });
     }
 
     const dayGroups: { dateStr: string; group: Event[] }[] = groupedUpcoming.map(([dateStr, group]) => ({ dateStr, group }));
-    if (selectedIsEmptyUpcomingDay && !emptyDayPrecedesHero) {
-      dayGroups.push({ dateStr: selectedDate!, group: [] });
-      dayGroups.sort((a, b) => a.dateStr.localeCompare(b.dateStr));
-    }
     if (dayGroups.length > 0) {
       dayGroups.forEach(({ dateStr, group }) => {
-        if (!nextEvent && items.length === 1) items.push({ kind: 'upcoming-heading', key: 'upcoming-heading' });
+        if (!nextEvent && !items.some((item) => item.kind === 'upcoming-heading')) items.push({ kind: 'upcoming-heading', key: 'upcoming-heading' });
         addMonthHeading(dateStr);
-        if (group.length === 0) {
-          items.push({ kind: 'day-placeholder', key: `placeholder-${dateStr}`, date: dateStr, isPast: false });
-        } else {
-          group.forEach((event) => items.push({
-            kind: 'event', key: `event-${event.id}`, event, highlighted: dateStr === highlightDate,
-          }));
-        }
+        group.forEach((event) => items.push({
+          kind: 'event', key: `event-${event.id}`, event, highlighted: dateStr === highlightDate,
+        }));
       });
       if (upcomingRest.length > UPCOMING_LIMIT) {
         items.push({
@@ -290,7 +271,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
       }
     }
 
-    if (past.length > 0 || selectedIsEmptyPastDay) {
+    if (past.length > 0) {
       items.push({
         kind: 'past-toggle',
         key: 'past-toggle',
@@ -299,21 +280,11 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
       });
       if (pastExpanded) {
         const pastDateStrs = past.map((e) => toDateStr(new Date(e.date)));
-        let placed = false;
         past.forEach((event, i) => {
-          // Past is sorted newest-first; splice the placeholder in just
-          // before the first row that's older than the selected date.
-          if (!placed && selectedIsEmptyPastDay && selectedDate! > pastDateStrs[i]) {
-            items.push({ kind: 'day-placeholder', key: `placeholder-${selectedDate}`, date: selectedDate!, isPast: true });
-            placed = true;
-          }
           items.push({
             kind: 'past-event', key: `past-${event.id}`, event, highlighted: pastDateStrs[i] === highlightDate,
           });
         });
-        if (!placed && selectedIsEmptyPastDay) {
-          items.push({ kind: 'day-placeholder', key: `placeholder-${selectedDate}`, date: selectedDate!, isPast: true });
-        }
       }
     }
 
@@ -321,6 +292,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   }, [
     UPCOMING_LIMIT,
     events.length,
+    eventDateSet,
     groupedUpcoming,
     highlightDate,
     isError,
@@ -341,6 +313,16 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
     if (!selectedDate) { scrolledForDateRef.current = null; return; }
     if (scrolledForDateRef.current === selectedDate) return;
     if (isLoading || isError || calendarExpanded || listHeaderHeight === 0 || weekStripHeight === 0) return;
+    if (!eventDateSet.has(selectedDate)) {
+      scrolledForDateRef.current = selectedDate;
+      jumpRequestRef.current += 1;
+      // Keep the masthead visible when selecting from the top of the page.
+      // If the calendar is already pinned, reveal the card beneath it.
+      if (isStripStuck) {
+        flashListRef.current?.scrollToOffset({ offset: listHeaderHeight, animated: !reducedMotion });
+      }
+      return;
+    }
     const isPastSelection = selectedDate < toDateStr(new Date());
 
     if (isPastSelection && !pastExpanded) { setPastExpanded(true); return; }
@@ -362,20 +344,24 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
 
     scrolledForDateRef.current = selectedDate;
     const request = ++jumpRequestRef.current;
-    void flashListRef.current?.scrollToIndex({ index: targetIndex, animated: false, viewPosition: 0 })
-      .then(() => {
-        if (request !== jumpRequestRef.current) return;
-        const layout = flashListRef.current?.getLayout(targetIndex);
-        if (!layout) return;
-        flashListRef.current?.scrollToOffset({
-          offset: Math.max(0, layout.y - weekStripHeight - spacing.sm),
-          animated: !reducedMotion,
+    // Date selection should only navigate the agenda after the user has
+    // scrolled past the masthead; otherwise keep their position and highlight.
+    if (isStripStuck) {
+      void flashListRef.current?.scrollToIndex({ index: targetIndex, animated: false, viewPosition: 0 })
+        .then(() => {
+          if (request !== jumpRequestRef.current) return;
+          const layout = flashListRef.current?.getLayout(targetIndex);
+          if (!layout) return;
+          flashListRef.current?.scrollToOffset({
+            offset: Math.max(0, layout.y - weekStripHeight - spacing.sm),
+            animated: !reducedMotion,
+          });
         });
-      });
+    }
     setHighlightDate(selectedDate);
     if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
     highlightTimeoutRef.current = setTimeout(() => setHighlightDate(null), 1600);
-  }, [selectedDate, timelineItems, pastExpanded, showAllUpcoming, isLoading, isError, calendarExpanded, listHeaderHeight, weekStripHeight, visibleUpcoming, nextEvent, upcomingRest.length, reducedMotion]);
+  }, [selectedDate, eventDateSet, timelineItems, pastExpanded, showAllUpcoming, isLoading, isError, calendarExpanded, listHeaderHeight, weekStripHeight, isStripStuck, visibleUpcoming, nextEvent, upcomingRest.length, reducedMotion]);
 
   const handleAddEvent = async () => {
     if (!isPremium && events.length >= FREE_EVENT_LIMIT) {
