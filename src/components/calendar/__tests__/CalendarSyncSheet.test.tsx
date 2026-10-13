@@ -86,7 +86,7 @@ afterEach(() => {
 });
 it('keeps the calendar selection open with its draft when a save fails', async () => {
   await render();
-  await act(async () => button('Calendars').props.onPress());
+  await act(async () => button('Choose calendars').props.onPress());
   save.mockRejectedValueOnce(new Error('Please try again.'));
   await act(async () => button('Sync 1 calendar').props.onPress());
   expect(save).toHaveBeenCalledWith({
@@ -103,11 +103,11 @@ it('keeps the calendar selection open with its draft when a save fails', async (
   ).toBe(true);
   await act(async () => button('Sync 1 calendar').props.onPress());
   expect(sync).toHaveBeenCalledTimes(1);
-  expect(button('Calendars')).toBeDefined();
+  expect(button('Choose calendars')).toBeDefined();
 });
 it('an empty selection saves without importing or clearing prior events', async () => {
   await render();
-  await act(async () => button('Calendars').props.onPress());
+  await act(async () => button('Choose calendars').props.onPress());
   const primary = renderer.root
     .findAllByType(TouchableOpacity)
     .find(
@@ -141,9 +141,60 @@ it('shows permission failures inside the device chooser and allows retrying', as
     .mockRejectedValueOnce(new Error('Calendar access is off. Allow access in your device settings, then try again.'))
     .mockResolvedValueOnce([{ id: 'work', name: 'Device work' }]);
   await render();
-  await act(async () => button('Outlook').props.onPress());
+  await act(async () => button('Apple & device calendars').props.onPress());
   expect(button('Open settings')).toBeDefined();
   expect(button('Try again')).toBeDefined();
   await act(async () => button('Try again').props.onPress());
   expect(renderer.root.findAllByType(Text).some((t) => t.props.children === 'Device work')).toBe(true);
+});
+
+function hasText(text: string) {
+  return renderer.root.findAllByType(Text).some((node) => node.props.children === text);
+}
+it('leads with management for existing connections without an onboarding introduction', async () => {
+  await render();
+  expect(hasText('CONNECTED CALENDARS')).toBe(true);
+  expect(hasText('Your plans, beautifully in sync.')).toBe(false);
+  expect(button('Choose calendars')).toBeDefined();
+  expect(button('Outlook')).toBeUndefined();
+});
+it('does not flash onboarding while loading connections', async () => {
+  jest.mocked(useConnectedCalendars).mockReturnValue({ isPending: true } as any);
+  await render();
+  expect(hasText('Your plans, beautifully in sync.')).toBe(false);
+  expect(hasText('ADD A CALENDAR')).toBe(false);
+});
+it('offers a short introduction only after loading an empty connection list', async () => {
+  jest.mocked(useConnectedCalendars).mockReturnValue({ data: { connections: [], outlookAvailable: true } } as any);
+  await render();
+  expect(hasText('Your plans, beautifully in sync.')).toBe(true);
+  expect(button('Google Calendar')).toBeDefined();
+  expect(button('Outlook')).toBeDefined();
+});
+it('keeps zero-selected connections in management and guides setup', async () => {
+  const query = jest.mocked(useConnectedCalendars).getMockImplementation()!();
+  jest.mocked(useConnectedCalendars).mockReturnValue({ ...query, data: { ...query.data, connections: [{ ...query.data!.connections[0], settings: { calendarIds: [], automatic: true } }] } } as any);
+  await render();
+  expect(hasText('Your plans, beautifully in sync.')).toBe(false);
+  expect(hasText('Choose calendars to begin')).toBe(true);
+  expect(button('Sync now').props.disabled).toBe(true);
+  expect(button('Choose calendars').props.disabled).toBe(false);
+});
+it('offers retry instead of introduction when connections fail to load', async () => {
+  const refetch = jest.fn();
+  jest.mocked(useConnectedCalendars).mockReturnValue({ isError: true, refetch } as any);
+  await render();
+  expect(hasText('Your plans, beautifully in sync.')).toBe(false);
+  expect(hasText('Could not load your calendar connections.')).toBe(true);
+  await act(async () => button('Try again').props.onPress());
+  expect(refetch).toHaveBeenCalledTimes(1);
+});
+it('lets an empty device calendar list refresh without leaving the chooser', async () => {
+  jest.mocked(listDeviceCalendars).mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 'work', name: 'Device work' }]);
+  jest.mocked(useAvailableCalendars).mockReturnValue({ isPending: true } as any);
+  await render();
+  await act(async () => button('Apple & device calendars').props.onPress());
+  await act(async () => button('Refresh calendars').props.onPress());
+  expect(hasText('Device work')).toBe(true);
+  expect(listDeviceCalendars).toHaveBeenCalledTimes(2);
 });

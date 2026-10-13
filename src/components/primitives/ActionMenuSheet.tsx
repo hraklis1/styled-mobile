@@ -27,6 +27,8 @@ export type ActionMenuOption = {
 
 type Props = {
   visible: boolean;
+  /** Compact calendar rows; existing callers retain card styling. */
+  compact?: boolean;
   title: string;
   subtitle?: string;
   options: ActionMenuOption[];
@@ -37,7 +39,7 @@ type Props = {
   deferSelectionUntilDismissed?: boolean;
 };
 
-export function ActionMenuSheet({ visible, title, subtitle, options, children, onClose, deferSelectionUntilDismissed = false }: Props) {
+export function ActionMenuSheet({ visible, title, subtitle, options, children, onClose, deferSelectionUntilDismissed = false, compact = false }: Props) {
   const insets = useSafeAreaInsets();
   const pendingSelection = useRef<(() => void) | null>(null);
   const animation = useRef(new Animated.Value(0)).current;
@@ -105,14 +107,14 @@ export function ActionMenuSheet({ visible, title, subtitle, options, children, o
             {options.map((option) => (
               <TouchableOpacity
                 key={option.label}
-                style={styles.option}
+                style={[styles.option, compact && styles.compactOption, compact && option.destructive && styles.compactDestructive]}
                 onPress={() => select(option)}
                 activeOpacity={0.75}
                 accessibilityRole="button"
                 accessibilityLabel={option.label}
               >
                 {option.icon ? (
-                  <View style={[styles.iconBox, option.destructive && styles.iconBoxDestructive]}>
+                  <View style={[styles.iconBox, compact && styles.compactIcon, option.destructive && styles.iconBoxDestructive]}>
                     <Ionicons
                       name={option.icon}
                       size={21}
@@ -194,6 +196,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderCurve: 'continuous',
   },
+  compactOption: { minHeight: 48, borderRadius: 0, borderWidth: 0, borderBottomWidth: StyleSheet.hairlineWidth, backgroundColor: 'transparent', paddingHorizontal: 0 },
+  compactDestructive: { marginTop: spacing.sm },
+  compactIcon: { width: 28, height: 28, backgroundColor: 'transparent' },
   iconBox: {
     width: 42,
     height: 42,

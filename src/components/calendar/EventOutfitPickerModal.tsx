@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -26,6 +26,9 @@ export function EventOutfitPickerModal({
 }) {
   const { data: outfits = [], isLoading } = useOutfits();
   const assignItems = useAssignEventItems();
+  const savingRef = useRef(false);
+  const initializedEvent = useRef<number | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [selectedOutfitId, setSelectedOutfitId] = useState<number | null>(null);
 
@@ -35,13 +38,16 @@ export function EventOutfitPickerModal({
   );
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) { initializedEvent.current = null; return; }
+    if (!event || isLoading || initializedEvent.current === event.id) return;
+    initializedEvent.current = event.id;
+    setSaveError(null);
 
     const matchingOutfit = availableOutfits.find((outfit) => outfit.id === event?.outfitId);
 
     setQuery('');
     setSelectedOutfitId(matchingOutfit?.id ?? null);
-  }, [availableOutfits, event, visible]);
+  }, [availableOutfits, event, visible, isLoading]);
 
   const filteredOutfits = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -55,13 +61,16 @@ export function EventOutfitPickerModal({
   }, [availableOutfits, query]);
 
   const handleConfirm = () => {
+    if (savingRef.current || assignItems.isPending) return;
     if (!event || selectedOutfitId === null) return;
     const outfit = availableOutfits.find((candidate) => candidate.id === selectedOutfitId);
     if (!outfit) return;
 
+    savingRef.current = true;
+    setSaveError(null);
     assignItems.mutate(
       { id: event.id, itemIds: outfit.itemIds.map((entry) => entry.id), outfitId: outfit.id },
-      { onSuccess: onClose },
+      { onSuccess: onClose, onError: () => setSaveError("Couldn’t save your look. Your selection is still here; try again."), onSettled: () => { savingRef.current = false; } },
     );
   };
 
@@ -72,19 +81,22 @@ export function EventOutfitPickerModal({
           <TouchableOpacity onPress={onClose} style={s.headerSide}>
             <Text style={s.cancelText} numberOfLines={1}>Cancel</Text>
           </TouchableOpacity>
-          <Text style={s.headerTitle}>Choose outfit</Text>
+          <Text style={s.headerTitle}>Saved outfits</Text>
           <TouchableOpacity
             onPress={handleConfirm}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: selectedOutfitId === null || assignItems.isPending, busy: assignItems.isPending }}
             disabled={selectedOutfitId === null || assignItems.isPending}
             style={[s.headerSide, s.headerSideRight]}
           >
             {assignItems.isPending
               ? <ActivityIndicator color={colors.primary} />
-              : <Text style={[s.saveText, selectedOutfitId === null && s.saveTextDisabled]}>Assign</Text>
+              : <Text style={[s.saveText, selectedOutfitId === null && s.saveTextDisabled]}>Use outfit</Text>
             }
           </TouchableOpacity>
         </View>
 
+        {saveError ? <Text accessibilityRole="alert" style={{ padding: spacing.lg, color: colors.destructive }}>{saveError}</Text> : null}
         <View style={s.searchRow}>
           <TextInput
             style={s.searchInput}
@@ -103,7 +115,7 @@ export function EventOutfitPickerModal({
           <View style={s.empty}>
             <Text style={s.emptyTitle}>{query ? 'No outfits match your search.' : 'No saved outfits yet.'}</Text>
             <Text style={s.emptyText}>
-              {query ? 'Try a different search.' : 'Create an outfit in your closet, then assign it to an event.'}
+              {query ? 'Try a different search.' : 'Create an outfit in your closet, or go back and choose individual items for this event.'}
             </Text>
           </View>
         ) : (
@@ -139,7 +151,7 @@ const s = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  headerSide: { minWidth: 70 },
+  headerSide: { minWidth: 70, minHeight: 44, justifyContent: 'center', flexShrink: 1 },
   headerSideRight: { alignItems: 'flex-end' },
   headerTitle: {
     fontSize: typography.text.body.fontSize,
@@ -155,7 +167,7 @@ const s = StyleSheet.create({
   saveTextDisabled: { color: colors.border },
   searchRow: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   searchInput: {
-    height: 40,
+    minHeight: 44,
     backgroundColor: colors.muted,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,

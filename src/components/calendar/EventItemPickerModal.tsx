@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Modal,
   View,
@@ -33,6 +33,9 @@ export function EventItemPickerModal({
 }) {
   const { data: allItems = [], isLoading } = useItems();
   const assignItems = useAssignEventItems();
+  const savingRef = useRef(false);
+  const initializedEvent = useRef<number | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [query, setQuery] = useState('');
@@ -40,7 +43,10 @@ export function EventItemPickerModal({
   const [subcatFilter, setSubcatFilter] = useState<string | null>(null);
 
   useEffect(() => {
-    if (visible && event) {
+    if (!visible) { initializedEvent.current = null; return; }
+    if (event && initializedEvent.current !== event.id) {
+      initializedEvent.current = event.id;
+      setSaveError(null);
       setSelected(new Set(event.itemIds ?? []));
       setQuery('');
       setCatFilter(null);
@@ -79,9 +85,12 @@ export function EventItemPickerModal({
   };
 
   const handleConfirm = () => {
+    if (savingRef.current || assignItems.isPending) return;
     if (!event) return;
     const itemIds = selected.size > 0 ? Array.from(selected) : null;
-    assignItems.mutate({ id: event.id, itemIds, outfitId: null }, { onSuccess: onClose });
+    savingRef.current = true;
+    setSaveError(null);
+    assignItems.mutate({ id: event.id, itemIds, outfitId: null }, { onSuccess: onClose, onError: () => setSaveError("Couldn’t save your look. Your selection is still here; try again."), onSettled: () => { savingRef.current = false; } });
   };
 
   const handleCategoryPress = (category: ItemCategory | null) => {
@@ -98,15 +107,16 @@ export function EventItemPickerModal({
               <Text style={s.cancelText} numberOfLines={1}>Cancel</Text>
             </TouchableOpacity>
             <Text style={s.headerTitle}>{getEventItemsActionLabel((event?.itemIds ?? []).length > 0)}</Text>
-            <TouchableOpacity onPress={handleConfirm} disabled={assignItems.isPending} style={[s.headerSide, { alignItems: 'flex-end' }]}>
+            <TouchableOpacity onPress={handleConfirm} accessibilityRole="button" accessibilityState={{ disabled: assignItems.isPending, busy: assignItems.isPending }} disabled={assignItems.isPending} style={[s.headerSide, { alignItems: 'flex-end' }]}>
               {assignItems.isPending
                 ? <ActivityIndicator color={colors.primary} />
-                : <Text style={s.saveText}>Save{selected.size > 0 ? ` (${selected.size})` : ''}</Text>
+                : <Text style={s.saveText}>Save look ({selected.size})</Text>
               }
             </TouchableOpacity>
           </View>
 
-          <View style={s.searchRow}>
+          {saveError ? <Text accessibilityRole="alert" style={{ padding: spacing.lg, color: colors.destructive }}>{saveError}</Text> : null}
+        <View style={s.searchRow}>
             <TextInput
               style={s.searchInput}
               value={query}
@@ -180,7 +190,7 @@ export function EventItemPickerModal({
             <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xxxl }} />
           ) : filtered.length === 0 ? (
             <View style={s.empty}>
-              <Text style={s.emptyText}>{query ? 'No items match your search.' : 'No items in this category.'}</Text>
+              <Text style={s.emptyText}>{query ? 'No items match your search. Try another name or brand.' : allItems.length === 0 ? 'Your closet is empty. Add pieces in Closet, or go back to plan another way.' : 'No items in this category. Try All or another category.'}</Text>
             </View>
           ) : (
             <FlatList
@@ -194,6 +204,9 @@ export function EventItemPickerModal({
                 return (
                   <TouchableOpacity
                     style={[s.itemRow, isSelected && s.itemRowSelected]}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: isSelected }}
+                    accessibilityLabel={item.name}
                     onPress={() => toggle(item.id)}
                     activeOpacity={0.7}
                   >
@@ -236,13 +249,13 @@ const s = StyleSheet.create({
     paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  headerSide: { minWidth: 70 },
+  headerSide: { minWidth: 70, minHeight: 44, justifyContent: 'center', flexShrink: 1 },
   headerTitle: { fontSize: typography.text.body.fontSize, fontWeight: typography.weight.semibold, color: colors.foreground },
   cancelText: { fontSize: typography.text.body.fontSize, color: colors.mutedForeground },
   saveText: { fontSize: typography.text.body.fontSize, fontWeight: typography.weight.semibold, color: colors.primary, textAlign: 'right' },
   searchRow: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   searchInput: {
-    height: 40, backgroundColor: colors.muted, borderRadius: radii.md,
+    minHeight: 44, backgroundColor: colors.muted, borderRadius: radii.md,
     paddingHorizontal: spacing.md, fontSize: typography.text.bodySmall.fontSize,
     lineHeight: typography.inputLineHeight(typography.text.bodySmall.fontSize), color: colors.foreground,
   },
@@ -250,7 +263,7 @@ const s = StyleSheet.create({
   catRow: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, gap: spacing.sm },
   subcatRow: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.sm },
   catChip: {
-    paddingHorizontal: spacing.md, paddingVertical: 6,
+    minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: 6,
     borderRadius: radii.full, borderWidth: 1, borderColor: colors.border,
     backgroundColor: colors.card,
   },

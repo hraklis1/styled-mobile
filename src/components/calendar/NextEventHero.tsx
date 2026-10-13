@@ -7,15 +7,15 @@ import { useTempUnit } from '../../hooks/useTempUnit';
 import { formatTempRange } from '../../lib/temperature';
 import { EventLookCollage } from './EventLookCollage';
 import {
-  OCCASIONS,
   formatTime,
 } from './calendarUtils';
 import { colors, spacing, typography, radii, editorial } from '../../theme';
 import type { Item } from '../../types/item';
 import type { Event } from '../../types/event';
 import type { Outfit } from '../../types/outfit';
+import { eventDayKey } from './calendarAgenda';
 import { getEventPlanActionLabel } from './calendarPlanning';
-import { presentCalendarEvent } from './calendar-presentation';
+import { presentCalendarEvent, occasionDisplayLabel } from './calendar-presentation';
 import { PressableScale } from '../primitives/PressableScale';
 
 export function NextEventHero({
@@ -45,23 +45,24 @@ export function NextEventHero({
   const forecast = useEventWeatherForecast(
     event.location,
     weatherFallback,
-    event.date.slice(0, 10),
+    eventDayKey(event),
   );
   const tempUnit = useTempUnit();
 
-  const d = new Date(event.date);
+  const d = event.calendarMetadata?.allDay
+    ? new Date(`${eventDayKey(event)}T12:00:00`)
+    : new Date(event.date);
   const eyebrowLine = 'Up next';
-  const occasionMeta = OCCASIONS.find((o) => o.id === event.occasion);
   const presentation = presentCalendarEvent(event);
   const hasOutfit = presentation.hasOutfit;
   const pieceCount = event.itemIds?.length ?? 0;
-  // Only scrim a real photo — a flat mosaic (or the empty placeholder) has no
+  // Only scrim a real photo — a flat mosaic has no
   // depth for a dark-to-transparent ramp to sit against and it bands. Same
   // rule Home's "Today's Look" hero uses.
-  const scrimmed = !!outfit?.aiGeneratedImageUrl;
+  const scrimmed = hasOutfit && !!outfit?.aiGeneratedImageUrl;
 
   const contextParts = [
-    occasionMeta?.label,
+    occasionDisplayLabel(event.occasion),
     forecast.data ? formatTempRange(forecast.data, tempUnit) : null,
   ].filter((part): part is string => !!part);
 
@@ -70,41 +71,39 @@ export function NextEventHero({
 
   return (
     <View style={s.card}>
-      {/*
-        Two independent tap targets, unlike Home's single-pressable hero:
-        the image opens the outfit (or the event, if none is planned yet)
-        while the caption below always opens the event's own detail sheet.
-      */}
-      <PressableScale
-        contentStyle={s.imageBand}
-        onPress={hasOutfit ? onOpenOutfit : onPress}
-        accessibilityRole="button"
-        accessibilityLabel={hasOutfit ? openOutfitLabel : openDetailLabel}
-      >
-        <View style={{ width: heroWidth, height: heroHeight }}>
-          <EventLookCollage
-            itemIds={event.itemIds ?? []}
-            allItems={allItems}
-            outfit={outfit}
-            size={heroWidth}
-            height={heroHeight}
-            borderRadius={0}
-          />
-          {scrimmed && (
-            <>
-              <LinearGradient
-                pointerEvents="none"
-                colors={['transparent', 'rgba(29,27,24,0.64)']}
-                style={s.heroScrim}
-              />
-              <View style={s.heroCaptionOverlay}>
-                <Text style={s.upNextOverlay} numberOfLines={1}>{eyebrowLine}</Text>
-                <Text style={s.titleOverlay} numberOfLines={2}>{event.title}</Text>
-              </View>
-            </>
-          )}
-        </View>
-      </PressableScale>
+      {/* Planned imagery opens the outfit; its caption opens event details. */}
+      {hasOutfit && (
+        <PressableScale
+          contentStyle={s.imageBand}
+          onPress={onOpenOutfit}
+          accessibilityRole="button"
+          accessibilityLabel={openOutfitLabel}
+        >
+          <View style={{ width: heroWidth, height: heroHeight }}>
+            <EventLookCollage
+              itemIds={event.itemIds ?? []}
+              allItems={allItems}
+              outfit={outfit}
+              size={heroWidth}
+              height={heroHeight}
+              borderRadius={0}
+            />
+            {scrimmed && (
+              <>
+                <LinearGradient
+                  pointerEvents="none"
+                  colors={['transparent', 'rgba(29,27,24,0.64)']}
+                  style={s.heroScrim}
+                />
+                <View style={s.heroCaptionOverlay}>
+                  <Text style={s.upNextOverlay} numberOfLines={1}>{eyebrowLine}</Text>
+                  <Text style={s.titleOverlay} numberOfLines={2}>{event.title}</Text>
+                </View>
+              </>
+            )}
+          </View>
+        </PressableScale>
+      )}
 
       <PressableScale
         contentStyle={[s.captionBlock, highlighted && s.captionHighlight]}
@@ -129,7 +128,7 @@ export function NextEventHero({
 
       {!hasOutfit && (
         <View style={s.planRow}>
-          <Text style={s.planHint} numberOfLines={2}>Styled will build a look from your wardrobe</Text>
+          <Text style={s.planHint}>A look from your wardrobe, ready for this occasion.</Text>
           <PressableScale
             contentStyle={[s.planBtn, isPlanning && s.planBtnDisabled]}
             onPress={onPlanOutfit}
@@ -145,7 +144,7 @@ export function NextEventHero({
             ) : (
               <Ionicons name="sparkles-outline" size={14} color={colors.white} />
             )}
-            <Text style={s.planBtnText}>{isPlanning ? 'Styling…' : 'Ask Styled'}</Text>
+            <Text style={s.planBtnText}>{isPlanning ? 'Styling…' : 'Plan my look'}</Text>
           </PressableScale>
         </View>
       )}
@@ -213,14 +212,11 @@ const s = StyleSheet.create({
   },
 
   planRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-    marginTop: spacing.md,
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
   },
   planHint: {
-    flex: 1,
     ...typography.text.caption,
     color: colors.mutedForeground,
   },

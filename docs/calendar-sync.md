@@ -11,6 +11,14 @@ Calendar access is read-only. Styled does not create, change, or delete source-c
 
 The OS may grant broader calendar permission than Styled uses. The implementation only calls read APIs.
 
+## Calendar management UI
+
+Calendars & sync waits for the loaded connection state before showing introductory content. New users see a short introduction and read-only reassurance; users with any existing connection go straight to connection cards, even when no calendars are selected. Zero-selection cards say “Choose calendars to begin” and leave Sync now disabled until selection.
+
+Choose calendars opens the existing selection and automatic-sync controls. Direct Google and configured Outlook sign-in are labelled separately from Apple/device calendars, which access accounts already configured on the device. When direct Outlook is unavailable it is explained as supporting text, not a second button that silently opens device selection. Calendar feeds remain a separate link. Deduplication guidance is shown both at connection choice and calendar selection.
+
+Selection failures retain the draft for retry. Device permission errors offer Open settings and Try again; empty calendar lists offer Refresh calendars. Connection loading failures offer retry, and cloud connection errors retain Reconnect account. Sync progress, last-updated status, automatic/manual state, and Disconnect remain on each connection card. Disconnect retains imported plans and does not change the source calendar.
+
 ## Sync behavior
 
 Selecting calendars and saving performs the first sync. Automatic syncing is enabled by default; users can choose manual syncing instead. An empty selection imports nothing and does not delete existing imports.
@@ -38,3 +46,12 @@ Validation:
 - Live Google/Microsoft consent and physical Android calendar behavior require device/account verification before release. OAuth state and mobile tokens are stored as hashed, expiring, single-use PostgreSQL records, so sign-in can complete across backend instances and restarts.
 
 Simulator walkthrough: the rebuilt iOS app launches; Calendar → tools → Calendars & sync opens after native menu dismissal; the overview and feed form were inspected; invalid feed submission retained its draft; denying calendar permission displayed recovery guidance. The iOS `styled` URL scheme is explicitly registered alongside Google sign-in so calendar callbacks return to the app. Live source-account consent was not granted during this walkthrough.
+
+
+## Calendar presentation update (2026-10-13)
+
+Calendar opens in Upcoming, grouped by date. Tapping a date opens a filtered Day agenda; month selection collapses to the selected week. Today always opens today’s events. Add event and Log wear use the active day, and returning from outfit viewing preserves the calendar context.
+
+Unplanned events use a compact summary without an empty image. Details prioritise the planned look before notes and source information. Plan my look / Refine my look is the main action; Choose a look groups saved outfits, individual pieces, and board inspiration. Imported event removal explicitly affects Styled only; imports with source identity are ignored by later syncs, while legacy imports without identity may return.
+
+Returning users see their connections first. New users retain a shorter introduction once connection loading finishes. Choose calendars manages selection; direct connections are distinguished from device accounts, and unavailable Outlook sign-in points to device calendars or feeds. Existing automatic sync, disconnect, and recovery semantics remain in place.

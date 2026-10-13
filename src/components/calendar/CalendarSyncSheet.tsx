@@ -46,13 +46,13 @@ function providerInfo(provider: string): {
     return {
       name: 'Google Calendar',
       icon: 'logo-google',
-      detail: 'Personal, work & shared calendars',
+      detail: 'Connect directly · Personal, work & shared calendars',
     };
   if (provider === 'outlook')
     return {
       name: 'Outlook',
       icon: 'mail-outline',
-      detail: 'Microsoft 365 & Outlook.com',
+      detail: 'Connect directly · Microsoft 365 & Outlook.com',
     };
   if (provider === 'apple')
     return {
@@ -93,6 +93,7 @@ function Action({
   return (
     <TouchableOpacity
       accessibilityRole="button"
+      accessibilityState={{ disabled: busy || disabled, busy }}
       disabled={busy || disabled}
       onPress={onPress}
       style={[
@@ -400,8 +401,9 @@ export function CalendarSyncSheet({
                 <View style={s.card}>
                   {calendars.length === 0 ? (
                     <Text style={s.body}>
-                      No calendars found. Add an account in your device calendar
-                      settings, then try again.
+                      {editing.startsWith('device:')
+                        ? 'No calendars found. Add an account in your device calendar settings, then try again.'
+                        : 'No calendars found in this account. Check your account or reconnect from Calendars & sync.'}
                     </Text>
                   ) : (
                     calendars.map((c) => {
@@ -441,6 +443,12 @@ export function CalendarSyncSheet({
                     })
                   )}
                 </View>
+              )}
+              {calendars.length === 0 && !error && connecting !== editing && (editing.startsWith('device:') || !available.isPending) && (
+                <Action secondary label="Refresh calendars" onPress={() => {
+                  if (editing.startsWith('device:')) void openCalendars(editing);
+                  else void available.refetch();
+                }} disabled={busy} />
               )}
               <View style={s.card}>
                 <Host matchContents>
@@ -509,24 +517,6 @@ export function CalendarSyncSheet({
             </>
           ) : (
             <>
-              <Text style={s.eyebrow}>Your life, beautifully in sync</Text>
-              <Text style={s.title}>
-                {'Plans change.\nYour style keeps up.'}
-              </Text>
-              <Text style={s.body}>
-                Bring your calendars together and give every occasion a little
-                forethought.
-              </Text>
-              <View style={s.promise}>
-                <Ionicons
-                  name="lock-closed-outline"
-                  size={17}
-                  color={colors.accentInk}
-                />
-                <Text style={s.promiseText}>
-                  Styled only reads. Your source calendars stay yours.
-                </Text>
-              </View>
               {query.isPending ? (
                 <ActivityIndicator color={colors.primary} style={s.loader} />
               ) : query.isError && !query.data ? (
@@ -543,8 +533,19 @@ export function CalendarSyncSheet({
                 </View>
               ) : (
                 <>
-                  {connections.length > 0 && (
-                    <Text style={s.sectionLabel}>CONNECTED CALENDARS</Text>
+                  {connections.length === 0 ? (
+                    <>
+                      <Text style={s.title}>Your plans, beautifully in sync.</Text>
+                      <Text style={s.body}>
+                        Connect a calendar to plan a look for what’s next.
+                      </Text>
+                      <View style={s.promise}>
+                        <Ionicons name="lock-closed-outline" size={17} color={colors.accentInk} />
+                        <Text style={s.promiseText}>Styled only reads. Your source calendars stay yours.</Text>
+                      </View>
+                    </>
+                  ) : (
+                    <Text accessibilityRole="header" style={s.sectionLabel}>CONNECTED CALENDARS</Text>
                   )}
                   {connections.map((connection) => {
                     const info = providerInfo(connection.provider),
@@ -613,7 +614,7 @@ export function CalendarSyncSheet({
                             <View style={s.grow}>
                               <Action
                                 secondary
-                                label="Calendars"
+                                label="Choose calendars"
                                 onPress={() => {
                                   void openCalendars(connection.provider);
                                 }}
@@ -660,20 +661,24 @@ export function CalendarSyncSheet({
                       </View>
                     );
                   })}
-                  <Text style={s.sectionLabel}>ADD A CALENDAR</Text>
+                  {connections.length > 0 && (
+                    <Text style={s.caption}>Read-only connections. Your source calendars stay unchanged.</Text>
+                  )}
+                  <Text accessibilityRole="header" style={s.sectionLabel}>ADD A CALENDAR</Text>
+                  <Text style={s.caption}>
+                    Connect Google or Outlook directly, or use accounts already on your device. Choose each calendar once to avoid duplicates.
+                  </Text>
                   {(['device', 'google', 'outlook'] as const)
                     .filter((p) =>
                       p === 'device'
                         ? Platform.OS !== 'web' &&
                           !!device &&
                           !connections.some((c) => c.provider === device)
-                        : !connections.some((c) => c.provider === p),
+                        : (p !== 'outlook' || !!query.data?.outlookAvailable) &&
+                          !connections.some((c) => c.provider === p),
                     )
                     .map((provider) => {
-                      const info = providerInfo(provider),
-                        unavailable =
-                          provider === 'outlook' &&
-                          !query.data?.outlookAvailable;
+                      const info = providerInfo(provider);
                       return (
                         <TouchableOpacity
                           key={provider}
@@ -682,13 +687,6 @@ export function CalendarSyncSheet({
                           onPress={() => {
                             if (provider === 'device') {
                               if (device) void openCalendars(device);
-                            } else if (unavailable) {
-                              if (device && Platform.OS !== 'web')
-                                void openCalendars(device);
-                              else
-                                setError(
-                                  'Outlook sign-in is not configured yet. You can connect a published calendar feed below.',
-                                );
                             } else void connect(provider);
                           }}
                           style={s.addRow}
@@ -703,12 +701,10 @@ export function CalendarSyncSheet({
                           <View style={s.grow}>
                             <Text style={s.providerName}>{info.name}</Text>
                             <Text style={s.caption}>
-                              {unavailable
-                                ? 'Connect through calendars on your device'
-                                : info.detail}
+                              {info.detail}
                             </Text>
                           </View>
-                          {connecting === (provider === 'device' || unavailable ? device : provider) ? (
+                          {connecting === (provider === 'device' ? device : provider) ? (
                             <ActivityIndicator color={colors.primary} />
                           ) : (
                             <Ionicons
@@ -720,6 +716,11 @@ export function CalendarSyncSheet({
                         </TouchableOpacity>
                       );
                     })}
+                  {!query.data?.outlookAvailable && !connections.some((c) => c.provider === 'outlook') && (
+                    <Text style={s.caption}>
+                      Outlook direct sign-in is unavailable. Use an Outlook account in your device calendars, or add a published feed.
+                    </Text>
+                  )}
                   {!connections.some((c) => c.provider === 'apple') && (
                     <TouchableOpacity
                       accessibilityRole="button"
@@ -874,7 +875,7 @@ const s = StyleSheet.create({
     borderColor: colors.border,
     paddingVertical: 12,
   },
-  disconnect: { alignSelf: 'flex-start', paddingVertical: 8, minHeight: 36 },
+  disconnect: { alignSelf: 'flex-start', paddingVertical: 12, minHeight: 44 },
   disconnectText: { ...typography.text.caption, color: colors.mutedForeground },
   feedLink: {
     flexDirection: 'row',

@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
+  AppState,
 } from 'react-native';
 import { useScrollToTop } from '@react-navigation/native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
@@ -33,8 +34,6 @@ import { NextEventHero } from '../../components/calendar/NextEventHero';
 import {
   toDateStr,
   formatTime,
-  groupByDate,
-  OCCASIONS,
 } from '../../components/calendar/calendarUtils';
 import { colors, spacing, typography, radii } from '../../theme';
 import { ErrorState } from '../../components/primitives/ErrorState';
@@ -50,8 +49,8 @@ import { track } from '../../lib/analytics';
 import type { CalendarScreenProps } from '../../navigation/types';
 import type { Event } from '../../types/event';
 import type { StylistMissingEssential } from '../../features/stylist/types';
-import { presentCalendarEvent } from '../../components/calendar/calendar-presentation';
-import { findAgendaDateIndex, monthHeading, monthKey } from '../../components/calendar/calendarAgenda';
+import { presentCalendarEvent, occasionDisplayLabel } from '../../components/calendar/calendar-presentation';
+import { eventDayKey, sortCalendarEvents, eventsForCalendarDay, agendaDayHeading } from '../../components/calendar/calendarAgenda';
 
 const FREE_EVENT_LIMIT = 5;
 
@@ -73,18 +72,17 @@ type CalendarTimelineItem =
   | { kind: 'masthead'; key: string }
   | { kind: 'week-strip'; key: string }
   | { kind: 'upcoming-heading'; key: string }
-  | { kind: 'month-heading'; key: string; dateStr: string }
+  | { kind: 'day-heading'; key: string; dateStr: string }
   | { kind: 'loading'; key: string }
   | { kind: 'error'; key: string }
   | { kind: 'empty'; key: string }
+  | { kind: 'no-upcoming'; key: string }
   | { kind: 'hero'; key: string; event: Event; highlighted: boolean }
-  // A selected date with no events still needs a scroll destination and
-  // the same add-event and wear-log actions as other dates.
+  // An empty Day keeps its date-specific add-event and wear-log actions.
   | { kind: 'day-placeholder'; key: string; date: string; isPast: boolean }
   | { kind: 'event'; key: string; event: Event; highlighted: boolean }
   | { kind: 'show-upcoming'; key: string; expanded: boolean; count: number }
-  | { kind: 'past-toggle'; key: string; expanded: boolean; count: number }
-  | { kind: 'past-event'; key: string; event: Event; highlighted: boolean };
+  | { kind: 'past-toggle'; key: string; expanded: boolean; count: number };
 
 function CalendarLoadingSkeleton() {
   return (
@@ -125,10 +123,12 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   const { data: allItems = [] } = useItems();
   const { data: outfits = [] } = useOutfits();
   const deleteEventMutation = useDeleteEvent();
+  const outfitReturnEventId = useRef<number | null>(null);
+  const stylistHandoffAt = useRef(0);
   const eventsRef = useRef(events);
   eventsRef.current = events;
 
-  // null = no day selected; a date navigates to that day in the full agenda.
+  // null means Upcoming; a selected date filters the Day agenda.
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [calendarExpanded, setCalendarExpanded] = useState(false);
@@ -137,7 +137,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [detailEvent, setDetailEvent] = useState<Event | null>(null);
   const { data: boards = [] } = useBoards();
-  const { mutate: setEventBoard } = useSetEventBoard();
+  const { mutateAsync: setEventBoard } = useSetEventBoard();
   const boardsById = useMemo(() => new Map(boards.map((b) => [b.id, b])), [boards]);
   const itemsById = useMemo(() => new Map(allItems.map((item) => [item.id, item])), [allItems]);
   const [pickerEvent, setPickerEvent] = useState<Event | null>(null);
@@ -148,11 +148,22 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   const [syncVisible, setSyncVisible] = useState(false);
   const [calendarMenuVisible, setCalendarMenuVisible] = useState(false);
 
-  // Transient tint applied to the row(s) a week-strip tap scrolled to, so the
-  // jump reads as "here it is" rather than an unexplained scroll.
-  const [highlightDate, setHighlightDate] = useState<string | null>(null);
-  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current); }, []);
+  const [todayStr, setTodayStr] = useState(() => toDateStr(new Date()));
+  useEffect(() => {
+    let previousToday = toDateStr(new Date());
+    const refresh = () => {
+      const nextToday = toDateStr(new Date());
+      if (nextToday === previousToday) return;
+      // Keep the browsed week anchored when a new week begins overnight.
+      const weekShift = weekOffsetFor(new Date(`${previousToday}T12:00:00`));
+      setWeekOffset((offset) => offset + weekShift);
+      previousToday = nextToday;
+      setTodayStr(nextToday);
+    };
+    const timer = setInterval(refresh, 30_000);
+    const subscription = AppState.addEventListener('change', (state) => { if (state === 'active') refresh(); });
+    return () => { clearInterval(timer); subscription.remove(); };
+  }, []);
 
   // Keep the masthead in the data so the sticky calendar has a real item
   // offset. FlashList can pin item zero early when using ListHeaderComponent.
@@ -162,20 +173,13 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   const [listHeaderHeight, setListHeaderHeight] = useState(0);
   const [weekStripHeight, setWeekStripHeight] = useState(0);
   const [isStripStuck, setIsStripStuck] = useState(false);
-  const jumpRequestRef = useRef(0);
+  const scrollOffsetRef = useRef(0);
 
   const UPCOMING_LIMIT = 4;
 
-  // Events stay in "Upcoming" until their day ends, not the minute they start
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const dayStartMs = startOfToday.getTime();
-
   const upcoming = useMemo(
-    () => events
-      .filter((e) => new Date(e.date).getTime() >= dayStartMs)
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
-    [events],
+    () => sortCalendarEvents(events.filter((event) => eventDayKey(event) >= todayStr)),
+    [events, todayStr],
   );
 
   const outfitsById = useMemo(
@@ -184,10 +188,8 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   );
 
   const past = useMemo(
-    () => events
-      .filter((e) => new Date(e.date).getTime() < dayStartMs)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-    [events],
+    () => sortCalendarEvents(events.filter((event) => eventDayKey(event) < todayStr)),
+    [events, todayStr],
   );
 
   const weekDays = useMemo(() => {
@@ -200,10 +202,10 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
       d.setDate(monday.getDate() + i);
       return d;
     });
-  }, [weekOffset]);
+  }, [weekOffset, todayStr]);
 
   const eventDateSet = useMemo(
-    () => new Set(events.map((e) => toDateStr(new Date(e.date)))),
+    () => new Set(events.map(eventDayKey)),
     [events],
   );
 
@@ -215,153 +217,54 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   const nextEvent = upcoming[0] ?? null;
   const upcomingRest = upcoming.slice(1);
   const visibleUpcoming = showAllUpcoming ? upcomingRest : upcomingRest.slice(0, UPCOMING_LIMIT);
-  const groupedUpcoming = useMemo(() => groupByDate(visibleUpcoming), [visibleUpcoming]);
-
   const timelineItems = useMemo<CalendarTimelineItem[]>(() => {
     const items: CalendarTimelineItem[] = [
       { kind: 'masthead', key: 'masthead' },
       { kind: 'week-strip', key: 'week-strip' },
+      { kind: 'upcoming-heading', key: 'view-controls' },
     ];
     if (isLoading) return [...items, { kind: 'loading', key: 'loading' }];
     if (isError) return [...items, { kind: 'error', key: 'error' }];
-    if (events.length === 0) {
-      return selectedDate
-        ? [...items, { kind: 'day-placeholder', key: `placeholder-${selectedDate}`, date: selectedDate, isPast: selectedDate < toDateStr(new Date()) }]
-        : [...items, { kind: 'empty', key: 'empty' }];
+    if (selectedDate) {
+      const selected = eventsForCalendarDay(events, selectedDate);
+      items.push({ kind: 'day-heading', key: `day-${selectedDate}`, dateStr: selectedDate });
+      if (!selected.length) items.push({ kind: 'day-placeholder', key: `empty-${selectedDate}`, date: selectedDate, isPast: selectedDate < todayStr });
+      selected.forEach((event) => items.push({ kind: 'event', key: `event-${event.id}`, event, highlighted: false }));
+      return items;
     }
-
-    const todayStr = toDateStr(new Date());
-    const heroDateStr = nextEvent ? toDateStr(new Date(nextEvent.date)) : null;
-    // An empty selection is feedback about the tapped day, separate from the
-    // agenda. Keep it beside the calendar instead of beneath unrelated events.
-    const selectedIsEmpty = !!selectedDate && !eventDateSet.has(selectedDate);
-    if (selectedIsEmpty) {
-      items.push({ kind: 'day-placeholder', key: `placeholder-${selectedDate}`, date: selectedDate!, isPast: selectedDate! < todayStr });
+    if (!events.length) return [...items, { kind: 'empty', key: 'empty' }];
+    if (!nextEvent) items.push({ kind: 'no-upcoming', key: 'no-upcoming' });
+    let lastDay: string | null = null;
+    for (const event of nextEvent ? [nextEvent, ...visibleUpcoming] : []) {
+      const day = eventDayKey(event);
+      if (day !== lastDay) items.push({ kind: 'day-heading', key: `day-${day}`, dateStr: day });
+      lastDay = day;
+      items.push({ kind: event.id === nextEvent?.id ? 'hero' : 'event', key: `event-${event.id}`, event, highlighted: false });
     }
-
-    let lastUpcomingMonth: string | null = null;
-    const addMonthHeading = (dateStr: string) => {
-      const key = monthKey(dateStr);
-      if (lastUpcomingMonth === key) return;
-      items.push({ kind: 'month-heading', key: `month-${key}`, dateStr });
-      lastUpcomingMonth = key;
-    };
-    if (nextEvent) {
-      items.push({ kind: 'upcoming-heading', key: 'upcoming-heading' });
-      addMonthHeading(heroDateStr!);
-      items.push({ kind: 'hero', key: `hero-${nextEvent.id}`, event: nextEvent, highlighted: heroDateStr === highlightDate });
-    }
-
-    const dayGroups: { dateStr: string; group: Event[] }[] = groupedUpcoming.map(([dateStr, group]) => ({ dateStr, group }));
-    if (dayGroups.length > 0) {
-      dayGroups.forEach(({ dateStr, group }) => {
-        if (!nextEvent && !items.some((item) => item.kind === 'upcoming-heading')) items.push({ kind: 'upcoming-heading', key: 'upcoming-heading' });
-        addMonthHeading(dateStr);
-        group.forEach((event) => items.push({
-          kind: 'event', key: `event-${event.id}`, event, highlighted: dateStr === highlightDate,
-        }));
-      });
-      if (upcomingRest.length > UPCOMING_LIMIT) {
-        items.push({
-          kind: 'show-upcoming',
-          key: 'show-upcoming',
-          expanded: showAllUpcoming,
-          count: upcomingRest.length,
-        });
-      }
-    }
-
-    if (past.length > 0) {
-      items.push({
-        kind: 'past-toggle',
-        key: 'past-toggle',
-        expanded: pastExpanded,
-        count: past.length,
-      });
+    if (upcomingRest.length > UPCOMING_LIMIT) items.push({ kind: 'show-upcoming', key: 'show-upcoming', expanded: showAllUpcoming, count: upcomingRest.length });
+    if (past.length) {
+      items.push({ kind: 'past-toggle', key: 'past-toggle', expanded: pastExpanded, count: past.length });
       if (pastExpanded) {
-        const pastDateStrs = past.map((e) => toDateStr(new Date(e.date)));
-        past.forEach((event, i) => {
-          items.push({
-            kind: 'past-event', key: `past-${event.id}`, event, highlighted: pastDateStrs[i] === highlightDate,
-          });
-        });
+        const groups = new Map<string, Event[]>();
+        for (const event of past) {
+          const day = eventDayKey(event);
+          groups.set(day, [...(groups.get(day) ?? []), event]);
+        }
+        for (const [day, group] of [...groups].reverse()) {
+          items.push({ kind: 'day-heading', key: `past-day-${day}`, dateStr: day });
+          group.forEach((event) => items.push({ kind: 'event', key: `past-${event.id}`, event, highlighted: false }));
+        }
       }
     }
-
     return items;
-  }, [
-    UPCOMING_LIMIT,
-    events.length,
-    eventDateSet,
-    groupedUpcoming,
-    highlightDate,
-    isError,
-    isLoading,
-    nextEvent,
-    past,
-    pastExpanded,
-    selectedDate,
-    showAllUpcoming,
-    upcomingRest,
-  ]);
+  }, [events, isLoading, isError, selectedDate, todayStr, nextEvent, visibleUpcoming, upcomingRest.length, showAllUpcoming, past, pastExpanded]);
 
-  // Expand hidden sections before locating a date. FlashList's viewOffset is
-  // inaccurate on distant jumps in this version, so first materialize the
-  // target by index, then use its measured layout for the final offset.
-  const scrolledForDateRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!selectedDate) { scrolledForDateRef.current = null; return; }
-    if (scrolledForDateRef.current === selectedDate) return;
-    if (isLoading || isError || calendarExpanded || listHeaderHeight === 0 || weekStripHeight === 0) return;
-    if (!eventDateSet.has(selectedDate)) {
-      scrolledForDateRef.current = selectedDate;
-      jumpRequestRef.current += 1;
-      // Keep the masthead visible when selecting from the top of the page.
-      // If the calendar is already pinned, reveal the card beneath it.
-      if (isStripStuck) {
-        flashListRef.current?.scrollToOffset({ offset: listHeaderHeight, animated: !reducedMotion });
-      }
-      return;
-    }
-    const isPastSelection = selectedDate < toDateStr(new Date());
-
-    if (isPastSelection && !pastExpanded) { setPastExpanded(true); return; }
-    const lastVisibleDate = visibleUpcoming.length > 0
-      ? toDateStr(new Date(visibleUpcoming[visibleUpcoming.length - 1].date))
-      : nextEvent ? toDateStr(new Date(nextEvent.date)) : null;
-    if (!isPastSelection && !showAllUpcoming && upcomingRest.length > UPCOMING_LIMIT &&
-      lastVisibleDate && selectedDate > lastVisibleDate) {
-      setShowAllUpcoming(true);
-      return;
-    }
-
-    const targetIndex = findAgendaDateIndex(timelineItems, selectedDate);
-
-    if (targetIndex === -1) {
-      if (!isPastSelection && !showAllUpcoming) { setShowAllUpcoming(true); return; }
-      return;
-    }
-
-    scrolledForDateRef.current = selectedDate;
-    const request = ++jumpRequestRef.current;
-    // Date selection should only navigate the agenda after the user has
-    // scrolled past the masthead; otherwise keep their position and highlight.
-    if (isStripStuck) {
-      void flashListRef.current?.scrollToIndex({ index: targetIndex, animated: false, viewPosition: 0 })
-        .then(() => {
-          if (request !== jumpRequestRef.current) return;
-          const layout = flashListRef.current?.getLayout(targetIndex);
-          if (!layout) return;
-          flashListRef.current?.scrollToOffset({
-            offset: Math.max(0, layout.y - weekStripHeight - spacing.sm),
-            animated: !reducedMotion,
-          });
-        });
-    }
-    setHighlightDate(selectedDate);
-    if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
-    highlightTimeoutRef.current = setTimeout(() => setHighlightDate(null), 1600);
-  }, [selectedDate, eventDateSet, timelineItems, pastExpanded, showAllUpcoming, isLoading, isError, calendarExpanded, listHeaderHeight, weekStripHeight, isStripStuck, visibleUpcoming, nextEvent, upcomingRest.length, reducedMotion]);
+  // Keep visible masthead space when switching days. Only return to the agenda
+  // start if the user has already scrolled beyond the pinned calendar.
+  const revealAgenda = useCallback(() => {
+    const offset = Math.min(Math.max(0, scrollOffsetRef.current), listHeaderHeight);
+    requestAnimationFrame(() => flashListRef.current?.scrollToOffset({ offset, animated: !reducedMotion }));
+  }, [listHeaderHeight, reducedMotion]);
 
   const handleAddEvent = async () => {
     if (!isPremium && events.length >= FREE_EVENT_LIMIT) {
@@ -397,6 +300,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
       return;
     }
 
+    outfitReturnEventId.current = event.id;
     const showOutfit = () => navigation.navigate('Closet', {
       screen: 'OutfitDetail',
       params: {
@@ -453,19 +357,23 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   };
 
   const handleDelete = (ev: Event) => {
+    if (deleteEventMutation.isPending) return;
     confirmSheet({
-      title: `Delete “${ev.title}”?`,
-      message: 'This event will be removed from your calendar. This can’t be undone.',
-      confirmLabel: 'Delete event',
+      title: `${ev.calendarMetadata ? 'Remove' : 'Delete'} “${ev.title}”?`,
+      message: ev.calendarMetadata ? 'This removes the event and its outfit plan from Styled. Your source calendar stays unchanged. ' + (ev.externalSource && ev.externalId ? 'This event will stay removed when its connected calendar syncs again.' : 'It may return when your calendar syncs again.') : 'This event and its outfit plan will be deleted from Styled. This can’t be undone.',
+      confirmLabel: ev.calendarMetadata ? 'Remove from Styled' : 'Delete event',
       destructive: true,
       onConfirm: () => { deleteEventMutation.mutate(ev.id); setDetailEvent(null); },
     });
   };
 
   const openStylistForEvent = (event: Event, source: StylistOpenSource) => {
+    const now = Date.now();
+    if (now - stylistHandoffAt.current < 600) return;
+    stylistHandoffAt.current = now;
     const details = [
       `Dress me for "${event.title}"`,
-      `on ${new Date(event.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`,
+      `on ${new Date(`${eventDayKey(event)}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`,
       event.occasion ? `for a ${event.occasion.replaceAll('_', ' ')} occasion` : null,
       event.location ? `at ${event.location}` : null,
       event.environment ? `in a ${event.environment} setting` : null,
@@ -514,10 +422,8 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
     setCalendarExpanded(false);
     setMonthOffset(0);
     setWeekOffset(weekOffsetFor(new Date(`${s}T00:00:00`)));
-    setSelectedDate((prev) => {
-      if (prev === s) { setHighlightDate(null); return null; }
-      return s;
-    });
+    setSelectedDate(s);
+    revealAgenda();
   };
 
   // Arriving from a deep link or a child screen: focus that event's day, scroll
@@ -538,22 +444,30 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
         clearParams();
         return;
       }
-      const eventDate = new Date(target.date);
+      if (outfitReturnEventId.current === target.id) {
+        outfitReturnEventId.current = null;
+        if (paramOpenDetail !== false) setDetailEvent(target);
+        clearParams();
+        return;
+      }
+      const eventDate = new Date(`${eventDayKey(target)}T12:00:00`);
       if (calendarExpanded) setWeekStripHeight(0);
       setCalendarExpanded(false);
       setMonthOffset(0);
-      setSelectedDate(toDateStr(eventDate));
+      setSelectedDate(eventDayKey(target));
       setWeekOffset(weekOffsetFor(eventDate));
+      revealAgenda();
       if (paramOpenDetail !== false) setDetailEvent(target);
     } else if (paramDate) {
       if (calendarExpanded) setWeekStripHeight(0);
       setCalendarExpanded(false);
       setMonthOffset(0);
       setSelectedDate(paramDate);
+      revealAgenda();
       setWeekOffset(weekOffsetFor(new Date(`${paramDate}T00:00:00`)));
     }
     clearParams();
-  }, [paramEventId, paramDate, paramOpenDetail, events, isLoading, navigation, calendarExpanded]);
+  }, [paramEventId, paramDate, paramOpenDetail, events, isLoading, navigation, calendarExpanded, revealAgenda]);
 
   // A wear log is a date-stamped record, so the calendar is its natural home.
   // Logging from a selected day pre-fills that date; the header logs today.
@@ -567,14 +481,10 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   }, []);
 
   const renderEventCard = (event: Event, highlighted: boolean) => {
-    const occasion = OCCASIONS.find((option) => option.id === event.occasion)?.label ?? event.occasion;
+    const occasion = occasionDisplayLabel(event.occasion);
     const presentation = presentCalendarEvent(event);
     return (
       <View style={[styles.eventCard, highlighted && styles.eventCardHighlighted]}>
-        <View style={styles.eventDateBlock}>
-          <Text style={styles.eventDateMonth}>{new Date(event.date).toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()}</Text>
-          <Text style={styles.eventDateDay}>{presentation.dayLabel}</Text>
-        </View>
         <View style={styles.eventBody}>
           <TouchableOpacity
             style={styles.eventMain}
@@ -583,12 +493,12 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
             accessibilityRole="button"
             accessibilityLabel={`${event.title}, ${presentation.readinessLabel}`}
           >
-            <Text style={styles.eventTitle} numberOfLines={2}>{event.title}</Text>
             <View style={styles.eventMeta}>
               <Text style={styles.eventTime}>{event.calendarMetadata?.allDay ? 'All day' : formatTime(new Date(event.date))}</Text>
               <Text style={styles.dot}>·</Text>
               <Text style={styles.eventOccasion}>{occasion}</Text>
             </View>
+            <Text style={styles.eventTitle} numberOfLines={2}>{event.title}</Text>
             {event.location ? <Text style={styles.eventLoc} numberOfLines={2}>{event.location}</Text> : null}
           </TouchableOpacity>
           {presentation.hasOutfit ? (
@@ -654,12 +564,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
               onPrevWeek={() => setWeekOffset((offset) => offset - 1)}
               onNextWeek={() => setWeekOffset((offset) => offset + 1)}
               onToday={() => {
-                jumpRequestRef.current += 1;
-                setWeekOffset(0);
-                setSelectedDate(null);
-                setCalendarExpanded(false);
-                setMonthOffset(0);
-                flashListRef.current?.scrollToOffset({ offset: 0, animated: !reducedMotion });
+                handleSelectDate(toDateStr(new Date()));
               }}
               eventDateSet={eventDateSet}
               weekOffset={weekOffset}
@@ -674,13 +579,32 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
           </View>
         );
       case 'upcoming-heading':
-        return <Text style={styles.upcomingHeading}>Upcoming events</Text>;
-      case 'month-heading':
-        return <Text style={styles.monthHeading}>{monthHeading(item.dateStr, new Date().getFullYear())}</Text>;
+        return (
+          <View style={styles.viewControls} accessibilityRole="tablist">
+            {(['Upcoming', 'Day'] as const).map((label) => {
+              const active = label === 'Day' ? selectedDate !== null : selectedDate === null;
+              return <TouchableOpacity key={label} accessibilityRole="tab" accessibilityState={{ selected: active }}
+                style={[styles.viewButton, active && styles.viewButtonActive]}
+                onPress={() => { if (label === 'Day') handleSelectDate(selectedDate ?? toDateStr(new Date())); else { setSelectedDate(null); revealAgenda(); } }}>
+                <Text style={[styles.viewButtonText, active && styles.viewButtonTextActive]}>{label}</Text>
+              </TouchableOpacity>;
+            })}
+          </View>
+        );
+      case 'day-heading':
+        return <Text accessibilityRole="header" style={styles.monthHeading}>{agendaDayHeading(item.dateStr)}</Text>;
       case 'loading':
         return <CalendarLoadingSkeleton />;
       case 'error':
         return <ErrorState message="Couldn't load events" onRetry={refetch} />;
+      case 'no-upcoming':
+        return <View style={styles.dayEmpty}>
+          <Text style={styles.emptyTitle}>Your calendar is clear</Text>
+          <Text style={styles.emptySubtitle}>Add an occasion to plan your next look.</Text>
+          <TouchableOpacity style={styles.dayEmptyBtn} accessibilityRole="button" onPress={handleAddEvent}>
+            <Ionicons name="add" size={14} color={colors.primary} /><Text style={styles.dayEmptyBtnText}>Add event</Text>
+          </TouchableOpacity>
+        </View>;
       case 'empty':
         return (
           <View style={styles.empty}>
@@ -705,7 +629,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
         );
       case 'day-placeholder':
         return (
-          <View style={[styles.dayEmpty, item.date === highlightDate && styles.dayEmptyHighlighted]}>
+          <View style={styles.dayEmpty}>
             <View style={styles.dayEmptyIcon}>
               <Ionicons name="sunny-outline" size={19} color={colors.primary} />
             </View>
@@ -785,44 +709,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
             <Ionicons name={item.expanded ? 'chevron-up' : 'chevron-down'} size={17} color={colors.mutedForeground} />
           </TouchableOpacity>
         );
-      case 'past-event': {
-        const pastPresentation = presentCalendarEvent(item.event);
-        return (
-          <View style={[styles.pastCard, item.highlighted && styles.pastCardHighlighted]}>
-            <TouchableOpacity
-              style={styles.pastMain}
-              onPress={() => setDetailEvent(item.event)}
-              activeOpacity={0.8}
-              accessibilityRole="button"
-              accessibilityLabel={item.event.title}
-            >
-              <View style={styles.pastDateBlock}>
-                <Text style={styles.pastMonth}>{pastPresentation.monthLabel}</Text>
-                <Text style={styles.pastDay}>{pastPresentation.dayLabel}</Text>
-              </View>
-              <View style={styles.pastBody}>
-                <Text style={styles.pastTitle} numberOfLines={1}>{item.event.title}</Text>
-                <Text style={styles.pastDate} numberOfLines={1}>{item.event.calendarMetadata?.allDay ? 'All day' : formatTime(new Date(item.event.date))}</Text>
-              </View>
-              {!pastPresentation.hasOutfit ? (
-                <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />
-              ) : null}
-            </TouchableOpacity>
-            {pastPresentation.hasOutfit ? (
-              <TouchableOpacity
-                style={styles.pastLookButton}
-                onPress={() => openAssignedOutfit(item.event)}
-                activeOpacity={0.75}
-                accessibilityRole="button"
-                accessibilityLabel={`${item.event.outfitId == null ? 'View details' : 'View outfit'} for ${item.event.title}, ${item.event.itemIds!.length} pieces`}
-              >
-                <ItemThumbStack itemIds={item.event.itemIds!} itemsById={itemsById} />
-                <Text style={styles.pastLookText}>{item.event.outfitId == null ? 'Details' : 'Outfit'}</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
-        );
-      }
+
     }
   };
 
@@ -846,7 +733,10 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
           ]}
           showsVerticalScrollIndicator={false}
           contentInsetAdjustmentBehavior="never"
-          onScroll={(e) => setIsStripStuck(e.nativeEvent.contentOffset.y >= listHeaderHeight)}
+          onScroll={(e) => {
+            scrollOffsetRef.current = e.nativeEvent.contentOffset.y;
+            setIsStripStuck(e.nativeEvent.contentOffset.y >= listHeaderHeight);
+          }}
           scrollEventThrottle={16}
           refreshControl={
             <RefreshControl
@@ -874,10 +764,10 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
         weatherFallback={activeLocation}
         outfit={detailEvent?.outfitId == null ? null : outfitsById.get(detailEvent.outfitId) ?? null}
         board={detailEvent?.boardId == null ? null : boardsById.get(detailEvent.boardId) ?? null}
-        onSelectBoard={(boardId) => {
+        onSelectBoard={async (boardId) => {
           if (!detailEvent) return;
-          setEventBoard({ id: detailEvent.id, boardId });
-          setDetailEvent({ ...detailEvent, boardId });
+          const updatedEvent = await setEventBoard({ id: detailEvent.id, boardId });
+          setDetailEvent((current) => current?.id === updatedEvent.id ? updatedEvent : current);
         }}
         onOpenBoard={(boardId) => {
           setDetailEvent(null);
@@ -910,6 +800,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
       <ActionMenuSheet
         visible={calendarMenuVisible}
         deferSelectionUntilDismissed
+        compact
         title="Calendar tools"
         subtitle="Keep your wardrobe plan up to date."
         options={[
@@ -937,12 +828,11 @@ const styles = StyleSheet.create({
   // FlashList renders sticky copies outside the padded content container.
   // Cancel the page gutter only for the in-list copy, never the pinned copy.
   stickyWeekStripWrap: { marginHorizontal: 0 },
-  upcomingHeading: {
-    ...typography.text.eyebrowLarge,
-    color: colors.mutedForeground,
-    marginTop: spacing.lg,
-    marginBottom: spacing.xs,
-  },
+  viewControls: { flexDirection: 'row', gap: spacing.xs, paddingVertical: spacing.sm },
+  viewButton: { minHeight: 44, paddingHorizontal: spacing.lg, justifyContent: 'center', borderRadius: radii.action },
+  viewButtonActive: { backgroundColor: colors.surfaceSelected },
+  viewButtonText: { ...typography.text.label, color: colors.mutedForeground },
+  viewButtonTextActive: { color: colors.primary },
   monthHeading: {
     ...typography.text.label,
     color: colors.mutedForeground,
@@ -989,24 +879,9 @@ const styles = StyleSheet.create({
     minHeight: 44,
     gap: 3,
   },
-  eventDateBlock: {
-    width: 44,
-    alignItems: 'center',
-    paddingTop: 3,
-  },
-  eventDateMonth: {
-    ...typography.text.eyebrow,
-    color: colors.mutedForeground,
-  },
-  eventDateDay: {
-    fontSize: typography.text.sheetTitle.fontSize,
-    color: colors.foreground,
-    fontWeight: typography.weight.semibold,
-    fontVariant: ['tabular-nums'],
-  },
   eventBody: { flex: 1, minWidth: 0, gap: spacing.xs },
   eventTitle: {
-    ...typography.text.editorialSection, lineHeight: 27, color: colors.foreground,
+    ...typography.text.editorialCard, color: colors.foreground,
   },
   eventMeta: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 3 },
   eventTime: {
@@ -1039,48 +914,6 @@ const styles = StyleSheet.create({
   },
   pastToggleWithDivider: { borderTopWidth: StyleSheet.hairlineWidth },
   pastToggleTitle: { fontSize: typography.text.body.fontSize, fontWeight: typography.weight.semibold, color: colors.mutedForeground },
-
-  pastCard: {
-    flexDirection: 'row', alignItems: 'stretch',
-    minHeight: 68,
-    paddingHorizontal: spacing.xs,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  pastCardHighlighted: { backgroundColor: colors.surfaceSelected },
-  pastMain: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  pastDateBlock: {
-    width: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pastMonth: { ...typography.text.eyebrow, color: colors.mutedForeground },
-  pastDay: { fontSize: typography.text.sectionTitle.fontSize, color: colors.mutedForeground, fontWeight: typography.weight.semibold, fontVariant: ['tabular-nums'] },
-  pastBody: { flex: 1, gap: 2 },
-  // Past rows lean on muted type rather than row-level opacity — dimming the
-  // whole row would wash out the garment photography along with the text.
-  pastTitle: { fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.medium, color: colors.mutedForeground },
-  pastDate: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
-  pastLookButton: {
-    minWidth: 76,
-    minHeight: 56,
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    gap: 2,
-    paddingLeft: spacing.sm,
-  },
-  pastLookText: {
-    ...typography.text.caption,
-    color: colors.primary,
-    fontWeight: typography.weight.semibold,
-  },
 
   showMore: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,

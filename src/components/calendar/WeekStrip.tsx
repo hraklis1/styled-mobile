@@ -16,7 +16,6 @@ export function WeekStrip({
   onNextWeek,
   onToday,
   eventDateSet,
-  weekOffset,
   expanded,
   monthOffset,
   onToggleExpanded,
@@ -119,7 +118,7 @@ export function WeekStrip({
         onPress={() => onSelectDate(str)}
         scaleTo={0.94}
         accessibilityRole="button"
-        accessibilityLabel={`${isToday ? 'Today, ' : ''}${d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}${hasEvent ? ', event planned' : ''}`}
+        accessibilityLabel={`${isToday ? 'Today, ' : ''}${d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}${hasEvent ? ', has events' : ', no events'}`}
         accessibilityHint="Show this date in the agenda"
         accessibilityState={{ selected: isSel }}
       >
@@ -158,6 +157,7 @@ export function WeekStrip({
     <View style={s.root}>
       <View style={s.header}>
         <PressableScale
+          style={s.monthButtonOuter}
           contentStyle={s.monthButton}
           onPress={onToggleExpanded}
           scaleTo={0.98}
@@ -169,11 +169,9 @@ export function WeekStrip({
           <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={13} color={colors.mutedForeground} />
         </PressableScale>
         <View style={s.navRow}>
-          {(weekOffset !== 0 || (selectedDate !== null && selectedDate !== todayStr)) && (
-            <TouchableOpacity onPress={onToday} style={s.todayBtn} accessibilityRole="button" accessibilityLabel="Return to today">
-              <Text style={s.todayText}>Today</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity onPress={onToday} style={s.todayBtn} accessibilityRole="button" accessibilityLabel="Show today’s events">
+            <Text style={s.todayText}>Today</Text>
+          </TouchableOpacity>
           {!expanded && (
             <>
               <TouchableOpacity onPress={onPrevWeek} style={s.navBtn} accessibilityRole="button" accessibilityLabel="Previous week">
@@ -238,12 +236,13 @@ export function WeekStrip({
 }
 
 const s = StyleSheet.create({
-  root: { marginBottom: spacing.lg },
+  root: { marginBottom: spacing.sm },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     minHeight: 44,
     marginBottom: spacing.xs,
   },
+  monthButtonOuter: { flex: 1, minWidth: 0 },
   monthButton: { minHeight: 44, minWidth: 0, flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   monthLabel: {
     fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold,
@@ -259,7 +258,7 @@ const s = StyleSheet.create({
     width: 44, height: 44,
     alignItems: 'center', justifyContent: 'center',
   },
-  days: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
+  days: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 0 },
   dayOuter: { flex: 1 },
   dayBtn: {
     minHeight: 58,
@@ -289,7 +288,7 @@ const s = StyleSheet.create({
   colHeader: {
     flex: 1, textAlign: 'center',
     ...typography.text.caption, fontWeight: typography.weight.semibold,
-    color: colors.mutedForeground, opacity: 0.5,
+    color: colors.mutedForeground,
     textTransform: 'uppercase', letterSpacing: typography.tracking.subtle,
     paddingVertical: spacing.xs,
   },

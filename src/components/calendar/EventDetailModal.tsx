@@ -8,23 +8,24 @@ import {
   Linking,
   useWindowDimensions,
 } from 'react-native';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useEventWeatherForecast } from '../../hooks/useWeather';
 import type { StylingLocationContext } from '../../lib/stylingLocation';
 import { useTempUnit } from '../../hooks/useTempUnit';
 import { formatTempRange } from '../../lib/temperature';
-import Animated, { FadeInDown, FadeOutUp } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EventLookCollage } from './EventLookCollage';
 import type { Board } from '../../types/board';
 import { EventBoardPickerModal } from './EventBoardPickerModal';
-import { OCCASIONS, OCCASION_ICONS, formatDayLabel, formatTime, formatCountdown } from './calendarUtils';
+import { OCCASION_ICONS, formatTime, formatCountdown } from './calendarUtils';
 import { colors, spacing, typography, radii } from '../../theme';
 import type { Item } from '../../types/item';
 import type { Event } from '../../types/event';
 import type { Outfit } from '../../types/outfit';
+import { eventDayKey, agendaDayHeading } from './calendarAgenda';
 import { getEventItemsActionLabel, getEventPlanActionLabel } from './calendarPlanning';
-import { presentCalendarEvent, presentEventNotes, WEATHER_ICONS } from './calendar-presentation';
+import { presentCalendarEvent, presentEventNotes, WEATHER_ICONS, occasionDisplayLabel } from './calendar-presentation';
 import { PressableScale } from '../primitives/PressableScale';
 import { ActionMenuSheet } from '../primitives/ActionMenuSheet';
 
@@ -58,19 +59,22 @@ export function EventDetailModal({
   onOpenStylist: (event: Event) => void;
   weatherFallback: StylingLocationContext | null;
   /** Attach/detach the board. Omitted hides the menu entry entirely. */
-  onSelectBoard?: (boardId: number | null) => void;
+  onSelectBoard?: (boardId: number | null) => Promise<void>;
   /** The linked board, resolved by the parent, for the summary row. */
   board?: Board | null;
   onOpenBoard?: (boardId: number) => void;
 }) {
-  const eventDateStr = event ? event.date.slice(0, 10) : null;
+  const eventDateStr = event ? eventDayKey(event) : null;
   const forecast = useEventWeatherForecast(
     event?.location,
     weatherFallback,
     eventDateStr,
   );
   const tempUnit = useTempUnit();
+  const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const handoffRef = useRef(false);
+  const [handoffPending, setHandoffPending] = useState(false);
   const [manualExpanded, setManualExpanded] = useState(false);
   const [notesExpanded, setNotesExpanded] = useState(false);
   const [boardPickerVisible, setBoardPickerVisible] = useState(false);
@@ -78,6 +82,10 @@ export function EventDetailModal({
 
   useEffect(() => {
     if (!visible) return;
+    handoffRef.current = false;
+    setHandoffPending(false);
+    setEventMenuVisible(false);
+    setBoardPickerVisible(false);
     setManualExpanded(false);
     setNotesExpanded(false);
   }, [event?.id, visible]);
@@ -85,7 +93,6 @@ export function EventDetailModal({
   if (!event) return null;
   const d = new Date(event.date);
   const countdown = formatCountdown(d);
-  const occasionMeta = OCCASIONS.find((o) => o.id === event.occasion);
   const iconName = (OCCASION_ICONS[event.occasion] ?? 'calendar-outline') as keyof typeof Ionicons.glyphMap;
   const presentation = presentCalendarEvent(event);
   const notesPresentation = presentEventNotes([...new Set([event.calendarMetadata?.sourceNotes, event.notes].filter(Boolean))].join('\n\n'));
@@ -93,13 +100,18 @@ export function EventDetailModal({
   const pieceCount = event.itemIds?.length ?? 0;
   const lookWidth = Math.max(240, Math.min(width - spacing.lg * 4, 480));
 
-  const boardLabel = event.boardId != null ? 'Change board' : 'Plan from a board';
-
   // Delayed so the action sheet finishes dismissing first — iOS drops a modal
   // presented while another is still on its way out.
   const chooseBoard = onSelectBoard
-    ? () => setTimeout(() => setBoardPickerVisible(true), 300)
+    ? () => setBoardPickerVisible(true)
     : undefined;
+
+  const handoff = (action: (event: Event) => void) => {
+    if (handoffRef.current) return;
+    handoffRef.current = true;
+    setHandoffPending(true);
+    action(event);
+  };
 
   const openEventMenu = () => {
     setEventMenuVisible(true);
@@ -132,16 +144,10 @@ export function EventDetailModal({
             </View>
           </View>
 
-          {event.calendarMetadata && (
-            <View style={s.infoRow}>
-              <Ionicons name="sync-outline" size={15} color={colors.mutedForeground} />
-              <Text style={s.metaText}>Synced from {event.calendarMetadata.calendarName}. Edit event details in your source calendar.</Text>
-            </View>
-          )}
           <View style={s.infoCard}>
             <View style={s.infoRow}>
               <Ionicons name="calendar-outline" size={15} color={colors.mutedForeground} />
-              <Text selectable style={s.metaText}>{formatDayLabel(d)} · {event.calendarMetadata?.allDay ? 'All day' : formatTime(d)}</Text>
+              <Text selectable style={s.metaText}>{agendaDayHeading(eventDayKey(event))} · {event.calendarMetadata?.allDay ? 'All day' : formatTime(d)}</Text>
               {countdown ? (
                 <View style={s.countdownBadge}>
                   <Text style={s.countdownText}>{countdown}</Text>
@@ -152,7 +158,7 @@ export function EventDetailModal({
             <View style={s.infoRow}>
               <Ionicons name={iconName} size={15} color={colors.mutedForeground} />
               <Text selectable style={s.metaText}>
-                {[occasionMeta?.label ?? event.occasion, event.environment].filter(Boolean).join(' · ')}
+                {[occasionDisplayLabel(event.occasion), event.environment].filter(Boolean).join(' · ')}
               </Text>
             </View>
 
@@ -167,52 +173,18 @@ export function EventDetailModal({
               <View style={s.infoRow}>
                 <Ionicons name={WEATHER_ICONS[forecast.data.condition]} size={15} color={colors.mutedForeground} />
                 <Text style={s.metaText}>
-                  {formatTempRange(forecast.data, tempUnit)} · {forecast.data.locationSource === 'destination' ? 'Forecast for' : 'Forecast fallback'} {forecast.data.locationLabel}
+                  {formatTempRange(forecast.data, tempUnit)} · {forecast.data.locationSource === 'destination' ? 'Forecast for' : 'Weather near'} {forecast.data.locationLabel}
                 </Text>
               </View>
             ) : null}
+            {!forecast.data ? <Text style={s.outfitSubtext}>{forecast.isFetching ? 'Checking the forecast…' : 'Forecast unavailable for this event.'}</Text> : null}
+            {forecast.data && forecast.data.locationSource !== 'destination' ? <Text style={s.outfitSubtext}>The event location was unavailable, so this forecast uses your nearby area.</Text> : null}
           </View>
-
-          {notesPresentation.summary || notesPresentation.links.length > 0 ? (
-            <View style={s.notesCard}>
-              <View style={s.notesHeader}>
-                <Ionicons name="document-text-outline" size={15} color={colors.primary} />
-                <Text style={s.notesLabel}>Event details</Text>
-              </View>
-              {notesPresentation.summary ? (
-                <Text selectable style={s.notesText} numberOfLines={notesExpanded ? undefined : 3}>
-                  {notesPresentation.summary}
-                </Text>
-              ) : null}
-              {notesPresentation.summary && notesPresentation.summary.length > 150 ? (
-                <TouchableOpacity onPress={() => setNotesExpanded((current) => !current)} style={s.notesMoreBtn}>
-                  <Text style={s.notesMoreText}>{notesExpanded ? 'Show less' : 'More details'}</Text>
-                  <Ionicons name={notesExpanded ? 'chevron-up' : 'chevron-down'} size={13} color={colors.primary} />
-                </TouchableOpacity>
-              ) : null}
-              {notesPresentation.links.length > 0 ? (
-                <View style={s.sourceLinks}>
-                  {notesPresentation.links.map((link) => (
-                    <TouchableOpacity
-                      key={link.url}
-                      style={s.sourceLink}
-                      onPress={() => Linking.openURL(link.url).catch(() => {})}
-                      accessibilityRole="link"
-                      accessibilityLabel={link.label}
-                    >
-                      <Ionicons name="open-outline" size={14} color={colors.primary} />
-                      <Text style={s.sourceLinkText}>{link.label}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              ) : null}
-            </View>
-          ) : null}
 
           {hasOutfit ? (
             <View style={[s.outfitCard, s.outfitCardReady]}>
               <View style={s.outfitHeader}>
-                <View>
+                <View style={{ flex: 1 }}>
                   <Text style={s.outfitLabel}>Planned look</Text>
                   <Text style={s.outfitSubtext}>Your pieces are ready for this event</Text>
                 </View>
@@ -282,56 +254,99 @@ export function EventDetailModal({
               <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
             </TouchableOpacity>
           )}
+          {notesPresentation.summary || notesPresentation.links.length > 0 ? (
+            <View style={s.notesCard}>
+              <View style={s.notesHeader}>
+                <Ionicons name="document-text-outline" size={15} color={colors.primary} />
+                <Text style={s.notesLabel}>Event details</Text>
+              </View>
+              {notesPresentation.summary ? (
+                <Text selectable style={s.notesText} numberOfLines={notesExpanded ? undefined : 3}>
+                  {notesPresentation.summary}
+                </Text>
+              ) : null}
+              {notesPresentation.summary && notesPresentation.summary.length > 150 ? (
+                <TouchableOpacity onPress={() => setNotesExpanded((current) => !current)} style={s.notesMoreBtn} accessibilityRole="button" accessibilityState={{ expanded: notesExpanded }}>
+                  <Text style={s.notesMoreText}>{notesExpanded ? 'Show less' : 'More details'}</Text>
+                  <Ionicons name={notesExpanded ? 'chevron-up' : 'chevron-down'} size={13} color={colors.primary} />
+                </TouchableOpacity>
+              ) : null}
+              {notesPresentation.links.length > 0 ? (
+                <View style={s.sourceLinks}>
+                  {notesPresentation.links.map((link) => (
+                    <TouchableOpacity
+                      key={link.url}
+                      style={s.sourceLink}
+                      onPress={() => Linking.openURL(link.url).catch(() => {})}
+                      accessibilityRole="link"
+                      accessibilityLabel={link.label}
+                    >
+                      <Ionicons name="open-outline" size={14} color={colors.primary} />
+                      <Text style={s.sourceLinkText}>{link.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+
+          {event.calendarMetadata ? (
+            <View style={s.sourceSection}>
+              <Text style={s.metaText}>From {event.calendarMetadata.calendarName}</Text>
+              <Text style={s.outfitSubtext}>Edit calendar details in your source calendar. Styling stays in Styled.</Text>
+              {event.calendarMetadata.url && /^https:\/\//i.test(event.calendarMetadata.url) ? (
+                <TouchableOpacity style={s.sourceLink} accessibilityRole="link" onPress={() => { void Linking.openURL(event.calendarMetadata!.url!).catch(() => {}); }}>
+                  <Ionicons name="open-outline" size={14} color={colors.primary} />
+                  <Text style={s.sourceLinkText}>Open calendar</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : null}
         </ScrollView>
 
         <ActionMenuSheet
+          compact
+          deferSelectionUntilDismissed
           visible={eventMenuVisible}
           title="Event options"
           subtitle={event.title}
           options={[
             { label: event.calendarMetadata ? 'Edit styling details' : 'Edit event', icon: 'pencil-outline', onPress: () => onEdit(event) },
-            ...(event.calendarMetadata?.url && /^https:\/\//i.test(event.calendarMetadata.url) ? [{ label: 'Open source calendar', icon: 'open-outline' as const, onPress: () => { void Linking.openURL(event.calendarMetadata!.url!); } }] : []),
-            ...(chooseBoard ? [{ label: boardLabel, icon: 'albums-outline' as const, onPress: chooseBoard }] : []),
-            { label: 'Delete event', icon: 'trash-outline', destructive: true, onPress: () => onDelete(event) },
+            ...(event.calendarMetadata?.url && /^https:\/\//i.test(event.calendarMetadata.url) ? [{ label: 'Open calendar', icon: 'open-outline' as const, onPress: () => { void Linking.openURL(event.calendarMetadata!.url!); } }] : []),
+            { label: event.calendarMetadata ? 'Remove from Styled' : 'Delete event', icon: 'trash-outline', destructive: true, onPress: () => onDelete(event) },
           ]}
           onClose={() => setEventMenuVisible(false)}
         />
 
-        <View style={s.actions}>
+        <View style={[s.actions, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
           <PressableScale
             contentStyle={s.stylistBtn}
-            onPress={() => onOpenStylist(event)}
+            disabled={handoffPending}
+            accessibilityState={{ disabled: handoffPending, busy: handoffPending }}
+            onPress={() => handoff(onOpenStylist)}
             accessibilityRole="button"
-            accessibilityLabel={getEventPlanActionLabel(hasOutfit)}
+            accessibilityLabel={`${getEventPlanActionLabel(hasOutfit)} for ${event.title}`}
           >
             <Ionicons name="sparkles-outline" size={18} color={colors.white} />
             <Text style={s.stylistBtnText}>{getEventPlanActionLabel(hasOutfit)}</Text>
           </PressableScale>
 
-          <>
-            <PressableScale
-              contentStyle={s.manualToggle}
-              onPress={() => setManualExpanded((current) => !current)}
-              haptic={false}
-              accessibilityRole="button"
-              accessibilityState={{ expanded: manualExpanded }}
-            >
-              <Text style={s.manualToggleText}>Choose manually</Text>
-              <Ionicons name={manualExpanded ? 'chevron-up' : 'chevron-down'} size={14} color={colors.mutedForeground} />
-            </PressableScale>
-            {manualExpanded ? (
-              <Animated.View style={s.actionRow} entering={FadeInDown.duration(180)} exiting={FadeOutUp.duration(140)}>
-                <PressableScale style={s.assignBtnOuter} contentStyle={s.assignBtn} onPress={() => onChooseOutfit(event)}>
-                  <Ionicons name="albums-outline" size={18} color={colors.foreground} />
-                  <Text style={s.assignBtnText}>Choose outfit</Text>
-                </PressableScale>
-                <PressableScale style={s.assignBtnOuter} contentStyle={s.assignBtn} onPress={() => onAssign(event)}>
-                  <Ionicons name="shirt-outline" size={18} color={colors.foreground} />
-                  <Text style={s.assignBtnText}>{getEventItemsActionLabel(hasOutfit)}</Text>
-                </PressableScale>
-              </Animated.View>
-            ) : null}
-          </>
+          <PressableScale contentStyle={s.manualToggle} onPress={() => setManualExpanded(true)} accessibilityRole="button" accessibilityLabel={`Choose a look for ${event.title}`}>
+            <Text style={s.manualToggleText}>Choose a look</Text>
+            <Ionicons name="chevron-down" size={14} color={colors.mutedForeground} />
+          </PressableScale>
+          <ActionMenuSheet
+            compact
+            deferSelectionUntilDismissed
+            visible={manualExpanded}
+            title="Choose a look"
+            options={[
+              { label: 'Saved outfits', icon: 'albums-outline', onPress: () => handoff(onChooseOutfit) },
+              { label: getEventItemsActionLabel(hasOutfit), icon: 'shirt-outline', onPress: () => handoff(onAssign) },
+              ...(chooseBoard ? [{ label: 'Plan from a board', icon: 'albums-outline' as const, onPress: chooseBoard }] : []),
+            ]}
+            onClose={() => setManualExpanded(false)}
+          />
         </View>
       </View>
 
@@ -344,10 +359,7 @@ export function EventDetailModal({
           visible={boardPickerVisible}
           selectedBoardId={event.boardId ?? null}
           onClose={() => setBoardPickerVisible(false)}
-          onSelect={(boardId) => {
-            onSelectBoard(boardId);
-            setBoardPickerVisible(false);
-          }}
+          onSelect={onSelectBoard}
         />
       )}
     </Modal>
@@ -373,10 +385,8 @@ const s = StyleSheet.create({
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxxl },
   titleBlock: { gap: spacing.sm, marginBottom: spacing.xs },
   title: {
-    fontSize: typography.text.pageTitle.fontSize,
-    fontWeight: typography.weight.bold,
+    ...typography.text.editorialSheet,
     color: colors.foreground,
-    lineHeight: 34,
   },
   readinessBadge: {
     alignSelf: 'flex-start',
@@ -419,6 +429,7 @@ const s = StyleSheet.create({
   notesText: { fontSize: typography.text.bodySmall.fontSize, color: colors.inkSubtle, lineHeight: typography.text.bodySmall.fontSize * 1.5 },
   notesMoreBtn: { minHeight: 44, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4 },
   notesMoreText: { fontSize: typography.text.caption.fontSize, color: colors.primary, fontWeight: typography.weight.semibold },
+  sourceSection: { gap: spacing.sm },
   sourceLinks: { gap: spacing.xs },
   sourceLink: {
     minHeight: 44,

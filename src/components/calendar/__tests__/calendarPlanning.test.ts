@@ -2,8 +2,8 @@ import { getEventItemsActionLabel, getEventPlanActionLabel } from '../calendarPl
 
 describe('calendar planning action labels', () => {
   it('uses one consistent AI action vocabulary', () => {
-    expect(getEventPlanActionLabel(false)).toBe('Ask Styled to plan this event');
-    expect(getEventPlanActionLabel(true)).toBe('Refine this look');
+    expect(getEventPlanActionLabel(false)).toBe('Plan my look');
+    expect(getEventPlanActionLabel(true)).toBe('Refine my look');
   });
 
   it('distinguishes manual item selection from AI planning', () => {

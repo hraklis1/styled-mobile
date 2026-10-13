@@ -2,7 +2,7 @@ jest.mock('../../../lib/api', () => ({
   API_BASE_URL: 'https://api.styled.test',
 }));
 
-import { presentCalendarEvent, presentEventLook, presentEventNotes, WEATHER_ICONS } from '../calendar-presentation';
+import { occasionDisplayLabel, presentCalendarEvent, presentEventLook, presentEventNotes, WEATHER_ICONS } from '../calendar-presentation';
 import type { Event } from '../../../types/event';
 import type { Item } from '../../../types/item';
 
@@ -137,5 +137,13 @@ describe('calendar presentation', () => {
       uri: undefined,
       ghost: true,
     }));
+  });
+});
+
+describe('occasion display labels', () => {
+  it('uses canonical labels and readable legacy values without changing stored identifiers', () => {
+    expect(occasionDisplayLabel('professional')).toBe('Professional');
+    expect(occasionDisplayLabel('garden_party')).toBe('Garden party');
+    expect(occasionDisplayLabel('')).toBe('Occasion unspecified');
   });
 });

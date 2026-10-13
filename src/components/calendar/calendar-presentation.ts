@@ -2,6 +2,7 @@ import type { Ionicons } from '@expo/vector-icons';
 import type { Event } from '../../types/event';
 import type { Item } from '../../types/item';
 import type { WeatherCondition } from '../../hooks/useWeather';
+import { OCCASIONS } from './calendarUtils';
 import { itemCoverPresentation } from '../../lib/itemImage';
 import { getOutfitCategoryPriority } from '../outfits/outfitMosaic';
 
@@ -127,4 +128,12 @@ export function presentEventLook(
     })
     .sort((a, b) => a.priority - b.priority || a.originalIndex - b.originalIndex)
     .map(({ priority: _priority, originalIndex: _originalIndex, ...piece }) => piece);
+}
+
+/** Display-only normalisation; stored occasion identifiers remain unchanged. */
+export function occasionDisplayLabel(occasion: string): string {
+  const label = OCCASIONS.find((entry) => entry.id === occasion)?.label;
+  if (label) return label;
+  const readable = occasion.replace(/[_-]+/g, ' ').trim();
+  return readable ? readable.charAt(0).toUpperCase() + readable.slice(1) : 'Occasion unspecified';
 }

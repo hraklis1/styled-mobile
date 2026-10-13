@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -48,6 +49,8 @@ export function EventFormModal({
   const [showStylingDetails, setShowStylingDetails] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const initialValueRef = useRef('');
+  const initializedRef = useRef<string | null>(null);
+  const savingRef = useRef(false);
 
   const serializeForm = (
     nextTitle = title,
@@ -66,7 +69,10 @@ export function EventFormModal({
   });
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) { initializedRef.current = null; return; }
+    const key = event ? `event:${event.id}` : 'new';
+    if (initializedRef.current === key) return;
+    initializedRef.current = key;
     if (event) {
       const nextDate = new Date(event.date);
       const nextEnvironment = event.environment ?? '';
@@ -123,10 +129,12 @@ export function EventFormModal({
   };
 
   const handleSave = () => {
+    if (isPending || savingRef.current) return;
     if (!title.trim()) {
       setFormError('Add an event name to continue.');
       return;
     }
+    savingRef.current = true;
     setFormError(null);
     const input: EventInput = {
       title: title.trim(),
@@ -144,6 +152,7 @@ export function EventFormModal({
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
             onClose();
           },
+          onSettled: () => { savingRef.current = false; },
           onError: () => setFormError("We couldn't save these changes. Please try again."),
         },
       );
@@ -154,6 +163,7 @@ export function EventFormModal({
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
           onClose();
         },
+        onSettled: () => { savingRef.current = false; },
         onError: () => setFormError("We couldn't create this event. Please try again."),
       });
     }
@@ -193,7 +203,7 @@ export function EventFormModal({
             <TouchableOpacity onPress={requestClose} style={s.headerSide} accessibilityRole="button" accessibilityLabel="Cancel event editing">
               <Text style={s.cancelText} numberOfLines={1}>Cancel</Text>
             </TouchableOpacity>
-            <Text style={s.headerTitle}>{event ? 'Edit Event' : 'New Event'}</Text>
+            <Text style={s.headerTitle}>{event ? event.calendarMetadata ? 'Edit styling details' : 'Edit event' : 'New event'}</Text>
             <TouchableOpacity
               onPress={handleSave}
               disabled={isPending || !isValid}
@@ -215,12 +225,15 @@ export function EventFormModal({
             keyboardDismissMode="interactive"
             showsVerticalScrollIndicator={false}
           >
-            {event?.calendarMetadata && <Text style={{ ...typography.text.caption, color: colors.mutedForeground }}>Calendar details follow the source calendar. Your occasion and styling details stay in Styled.</Text>}
+            {event?.calendarMetadata ? <View style={{ gap: spacing.sm }}>
+              <Text style={{ ...typography.text.caption, color: colors.mutedForeground }}>Calendar details follow the source calendar. Your occasion and styling details stay in Styled.</Text>
+              {event.calendarMetadata.url && /^https:\/\//i.test(event.calendarMetadata.url) ? <TouchableOpacity style={{ minHeight: 44, justifyContent: 'center' }} accessibilityRole="link" onPress={() => { void Linking.openURL(event.calendarMetadata!.url!).catch(() => {}); }}><Text style={s.saveText}>Open calendar</Text></TouchableOpacity> : null}
+            </View> : null}
             <View style={s.field}>
-              <Text style={s.label}>Event Name</Text>
+              <Text style={s.label}>Event name</Text>
+              {event?.calendarMetadata ? <Text selectable style={s.selectText}>{title}</Text> : (
               <TextInput
                 style={[s.input, formError && s.inputError]}
-                editable={!event?.calendarMetadata}
                 value={title}
                 onChangeText={(value) => {
                   setTitle(value);
@@ -232,6 +245,7 @@ export function EventFormModal({
                 autoFocus={!event?.calendarMetadata}
                 accessibilityLabel="Event name"
               />
+              )}
               {formError ? <Text style={s.errorText}>{formError}</Text> : null}
             </View>
 
@@ -308,7 +322,7 @@ export function EventFormModal({
             </View>
 
             <View style={[s.field, { zIndex: 10 }]}>
-              <Text style={s.label}>Location (Optional)</Text>
+              <Text style={s.label}>Location (optional)</Text>
               {event?.calendarMetadata ? <Text style={s.selectText}>{location || 'No location'}</Text> : <LocationAutocompleteInput
                 value={location}
                 onChangeText={setLocation}
@@ -342,7 +356,7 @@ export function EventFormModal({
                 exiting={FadeOutUp.duration(140)}
               >
                 <View style={s.field}>
-                  <Text style={s.label}>Venue Type</Text>
+                  <Text style={s.label}>Venue type</Text>
                   <View style={s.envRow}>
                     {ENVS.map((opt) => (
                       <TouchableOpacity
