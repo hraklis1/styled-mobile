@@ -97,7 +97,7 @@ import { GarmentImage } from '../wardrobe/garment-image';
 import { useStylistTransport } from '../../features/stylist/hooks/useStylistTransport';
 import { buildInitialStylistSendOptions } from '../../features/stylist/initialPrompt';
 import { attachmentItemIds, additionalReferenceIds, mergeWardrobeEvidence, groupResponseBlocks, messageForResponseBlock, responseBlockItemIds } from '../../features/stylist/responseBlocks';
-import type { StylistResponseBlock } from '../../features/stylist/types';
+import type { StylistProgressStage, StylistResponseBlock } from '../../features/stylist/types';
 import { dayDividers } from '../../features/stylist/dayDivider';
 import {
   STYLIST_NEGATIVE_REASON_CHIPS,
@@ -708,12 +708,15 @@ export function StylistChatView({
     });
   }
 
+  const [progressStage, setProgressStage] = useState<StylistProgressStage | null>(null);
   const {
     isLoading,
     sendMessage: sendTransportMessage,
     abortCurrent: abortTransport,
   } = useStylistTransport({
+    onProgress: setProgressStage,
     onAssistantStart: (assistantId) => {
+      setProgressStage(null);
       streamingAssistantTextRef.current[assistantId] = '';
       setMessages((prev) => {
         if (prev.some((m) => m.id === assistantId)) return prev;
@@ -979,6 +982,7 @@ export function StylistChatView({
         ...(!conversationIdRef.current ? { history } : {}),
       };
 
+      setProgressStage(null);
       void sendTransportMessage({
         request,
         assistantMessageId: assistantId,
@@ -1523,7 +1527,7 @@ export function StylistChatView({
                 </View>
               </Fragment>
             ))}
-            {isLoading && !messages.some((m) => m.isStreaming) && <TypingIndicator />}
+            {isLoading && !messages.some((m) => m.isStreaming) && <TypingIndicator stage={progressStage} />}
             {errorMessage ? (
               <View style={styles.inlineError} accessibilityRole="alert">
                 <View style={styles.inlineErrorCopy}>
@@ -1811,9 +1815,9 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
           );
           };
           if (group.carousel && group.blocks.length > 1) return (
-            <ScrollView key={`looks:${group.start}`} horizontal showsHorizontalScrollIndicator={false} decelerationRate="fast" snapToInterval={responseWidth - 48} accessibilityLabel="Outfit options">
+            <LookCarousel key={`looks:${group.start}`} width={responseWidth} count={group.blocks.length}>
               {group.blocks.map((block, offset) => <View key={block.blockId ?? offset} style={{ width: responseWidth - 64, marginRight: 16 }}>{renderBlock(block, offset)}</View>)}
-            </ScrollView>
+            </LookCarousel>
           );
           return <Fragment key={`group:${group.start}`}>{group.blocks.map(renderBlock)}</Fragment>;
         })}
@@ -1916,7 +1920,7 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
           ) : null}
           {!!message.suggestedItemIds?.length && (
             <View style={styles.responseSection}>
-              <Text style={styles.responseSectionTitle}>{entryContext?.kind === 'shopping_brief_edit' ? 'Pairs from your wardrobe' : message.critique ? 'The pieces' : 'Referenced pieces'}</Text>
+              <Text style={styles.responseSectionTitle}>{entryContext?.kind === 'shopping_brief_edit' ? 'Pairs from your wardrobe' : message.critique ? 'The pieces' : 'From your wardrobe'}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.adviceThumbs}>
                 {[...new Set(message.suggestedItemIds)]
                   .map((id) => allItems.find((i) => i.id === id))
@@ -2047,7 +2051,7 @@ function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContex
       <EditorialEntrance>
         <View style={styles.stylistNote}>
           <View style={styles.sectionEyebrow}>
-            <Text style={styles.sectionEyebrowText}>Stylist note</Text>
+            <Text style={styles.sectionEyebrowText}>A note</Text>
           </View>
           <StylistRichText text={message.text} streaming={message.isStreaming} />
           {onToggleAudio && (
@@ -2498,7 +2502,7 @@ function OutfitSuggestionCard({
       <View style={styles.lookHeader}>
         <View style={styles.lookHeaderTop}>
           <View style={styles.sectionEyebrow}>
-            <Text style={styles.sectionEyebrowText}>Styled for you</Text>
+            <Text style={styles.sectionEyebrowText}>The look</Text>
           </View>
           <View style={styles.headerCardActions}>
             {onToggleAudio ? (
@@ -2563,7 +2567,7 @@ function OutfitSuggestionCard({
       )}
 
       <View style={styles.stylistNoteBlock}>
-        <Text style={styles.rationaleLabel}>Stylist's note</Text>
+        <Text style={styles.rationaleLabel}>Why it works</Text>
         <StylistRichText text={currentMessageText} />
       </View>
 
@@ -2850,14 +2854,43 @@ function ItemDetailSheet({ item, onClose }: ItemDetailSheetProps) {
   );
 }
 
+// ── LookCarousel ─────────────────────────────────────────────────────────────
+// Alternate looks side by side; the dots make it obvious there is more than one.
+
+function LookCarousel({ width, count, children }: { width: number; count: number; children: React.ReactNode }) {
+  const [page, setPage] = useState(0);
+  const step = width - 48;
+  return (
+    <View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} decelerationRate="fast" snapToInterval={step} accessibilityLabel={`Outfit options, ${page + 1} of ${count}`}
+        scrollEventThrottle={64} onScroll={(e) => setPage(Math.max(0, Math.min(count - 1, Math.round(e.nativeEvent.contentOffset.x / step))))}>
+        {children}
+      </ScrollView>
+      <View style={styles.carouselDots} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        {Array.from({ length: count }, (_, i) => <View key={i} style={[styles.carouselDot, i === page && styles.carouselDotActive]} />)}
+      </View>
+    </View>
+  );
+}
+
 // ── TypingIndicator ───────────────────────────────────────────────────────────
 
-function TypingIndicator() {
+const PROGRESS_COPY: Record<StylistProgressStage, string> = {
+  wardrobe: 'Going through your wardrobe…',
+  outfits: 'Looking at what you’ve worn and saved…',
+  weather: 'Checking the forecast…',
+  products: 'Finding pieces worth buying…',
+  memory: 'Recalling what you’ve told me…',
+};
+
+// Says what the stylist is actually doing, from server progress events, instead of a generic wait.
+function TypingIndicator({ stage }: { stage: StylistProgressStage | null }) {
+  const label = stage ? PROGRESS_COPY[stage] : 'Thinking it through…';
   return (
-    <View style={styles.typingRow} accessibilityRole="progressbar" accessibilityLabel="Your stylist is preparing a reply" accessibilityLiveRegion="polite">
+    <View style={styles.typingRow} accessibilityRole="progressbar" accessibilityLabel={label} accessibilityLiveRegion="polite">
       <View style={styles.typingLabel}>
-        <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
-        <Text style={{ ...typography.text.bodySmall, color: colors.mutedForeground }}>Your stylist is preparing a reply…</Text>
+        <ActivityIndicator size="small" color={colors.mutedForeground} />
+        <Text style={styles.typingText}>{label}</Text>
       </View>
     </View>
   );
@@ -4317,6 +4350,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingHorizontal: spacing.xs,
   },
+  carouselDots: { flexDirection: 'row', justifyContent: 'center', gap: 6, paddingTop: spacing.md },
+  carouselDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.hairline },
+  carouselDotActive: { width: 16, backgroundColor: colors.foreground },
+  typingText: { ...typography.text.bodySmall, color: colors.mutedForeground },
   typingLabel: {
     flexDirection: 'row',
     alignItems: 'center',

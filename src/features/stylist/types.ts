@@ -413,7 +413,10 @@ export type StylistTransportError = {
   error: unknown;
 };
 
+export type StylistProgressStage = 'wardrobe' | 'outfits' | 'weather' | 'products' | 'memory';
 export type StylistTransportCallbacks = {
+  /** Coarse stage the stylist is working on before any content arrives. */
+  onProgress?: (stage: StylistProgressStage) => void;
   onBlock?: (assistantMessageId: string, index: number, block: StylistResponseBlock) => void;
   onAssistantStart?: (assistantMessageId: string) => void;
   onAssistantToken?: (assistantMessageId: string, token: string) => void;

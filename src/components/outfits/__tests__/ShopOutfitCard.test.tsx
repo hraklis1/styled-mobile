@@ -10,6 +10,8 @@ jest.mock('react-native/Libraries/Components/Pressable/Pressable', () => { const
 jest.mock('../../../hooks/useProductOffers', () => ({ useProductOffers: () => ({ data: {}, refetch: jest.fn() }) }));
 jest.mock('../../shopping/CuratedItemRail', () => ({ CuratedItemRail: 'CuratedItemRail' }));
 jest.mock('../../shopping/ShoppingRetailerLinks', () => ({ openShoppingLink: jest.fn() }));
+jest.mock('../../shopping/CuratedItemCard', () => ({ ProductImage: 'ProductImage' }));
+jest.mock('../../../lib/analytics', () => ({ track: jest.fn() }));
 const outfit = { intro: 'A useful jacket', recommendationType: 'piece', items: [], totalBudget: '' } as unknown as ShopOutfit;
 let renderer: TestRenderer.ReactTestRenderer;
 function action(label: string) {

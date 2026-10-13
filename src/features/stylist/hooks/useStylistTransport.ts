@@ -5,6 +5,7 @@ import { isResponseBlock } from '../responseBlocks';
 import { API_BASE_URL, getAccessToken } from '../../../lib/api';
 import type {
   StylistAskDoneEvent,
+  StylistProgressStage,
   StylistTransportCallbacks,
   StylistTransportSendInput,
   StylistTripOutfit,
@@ -174,6 +175,8 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
           callbacksRef.current.onAssistantStart?.(input.assistantMessageId);
         }
         callbacksRef.current.onBlock?.(input.assistantMessageId, Number(parsed.index), parsed.block);
+      } else if (currentEventRef.current === 'progress' && typeof parsed.stage === 'string' && !assistantStarted) {
+        callbacksRef.current.onProgress?.(parsed.stage as StylistProgressStage);
       } else if (currentEventRef.current === 'trip_outfit') {
         callbacksRef.current.onTripOutfit?.(
           input.assistantMessageId,
