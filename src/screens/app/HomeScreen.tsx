@@ -70,7 +70,7 @@ import {
   lookPlateSize,
 } from '../../components/home/TodaysLookPlate';
 import { StylingLocationSheet } from '../../components/home/StylingLocationSheet';
-import { HomeWardrobeEdit } from '../../components/home/HomeBriefBand';
+import { HomeShortlist, HomeWardrobeEdit } from '../../components/home/HomeBriefBand';
 import { shoppingPriorityRoute } from '../../lib/shopClarity';
 import { resolveImageUri } from '../../lib/resolveImageUri';
 import { track } from '../../lib/analytics';
@@ -1078,16 +1078,19 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           track('shop_section_opened', { section: 'home_edit' });
           navigation.navigate('Shop', { screen: 'ShopMain' });
         }}
-        shortlist={shortlist.awaitingDecision.length > 0 ? {
-          items: shortlist.awaitingDecision,
-          onPress: () => {
-            track('shop_section_opened', { section: 'home_shortlist' });
-            navigation.navigate('Shop', {
-              screen: 'ShoppingGallery',
-              params: { catalogFilter: 'active', returnTo: 'Home' },
-            });
-          },
-        } : undefined}
+      />
+
+      {/* ── Your Shortlist ────────────────────────────────────────── */}
+      <HomeShortlist
+        kicker="05 · Saved"
+        items={shortlist.awaitingDecision}
+        onPress={() => {
+          track('shop_section_opened', { section: 'home_shortlist' });
+          navigation.navigate('Shop', {
+            screen: 'ShoppingGallery',
+            params: { catalogFilter: 'active', returnTo: 'Home' },
+          });
+        }}
       />
 
       {/* ── Closet Insights ───────────────────────────────────────── */}
@@ -1096,7 +1099,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           variant="ruled"
           headingStyle="supporting"
           dividerPlacement="none"
-          kicker="05 · Wardrobe"
+          kicker="06 · Wardrobe"
           title="Closet Insights"
           actionLabel={closetInsights.ready ? 'See all' : undefined}
           onAction={closetInsights.ready ? openClosetInsights : undefined}
