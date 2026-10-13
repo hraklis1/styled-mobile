@@ -35,7 +35,7 @@ import { colors, spacing, typography } from '../../theme';
 import { useStylistTransport } from '../../features/stylist/hooks/useStylistTransport';
 import { buildInitialStylistSendOptions } from '../../features/stylist/initialPrompt';
 import { attachmentItemIds, responseBlockItemIds } from '../../features/stylist/responseBlocks';
-import type { StylistProgressStage, StylistAskRequest, StylistEntryContext, StylistEventPlanData, StylistMissingEssential, StylistMode, StylistTripPlanData, StylistWorkflow } from '../../features/stylist/types';
+import type { StylistProgressStage, StylistAskRequest, StylistEntryContext, StylistEventPlanData, StylistMissingEssential, StylistMode, StylistWorkflow } from '../../features/stylist/types';
 import { dayDividers } from '../../features/stylist/dayDivider';
 import { deviceTimeContext, summarizeStylistWorkflow } from '../../features/stylist/workflows';
 import { BUDGET_OPTIONS, OCCASION_OPTIONS, STYLE_OPTIONS } from '../../lib/profileOptions';
@@ -224,7 +224,6 @@ export function StylistChatView({
   const messageLayoutsRef = useRef<Record<string, number>>({});
   const pendingFocusMessageIdRef = useRef<string | null>(null);
   const focusedRichMessageIdRef = useRef<string | null>(null);
-  const streamingAssistantTextRef = useRef<Record<string, string>>({});
   const speechRequestRef = useRef(0);
   const lastPromptRequestIdRef = useRef(restored?.promptRequestId ?? 0);
   const lastOpenRequestIdRef = useRef(restored?.openRequestId ?? 0);
@@ -235,7 +234,6 @@ export function StylistChatView({
   // the thread and immediately fires the initial query, so the send must see the
   // cleared id rather than the previous render's value.
   const conversationIdRef = useRef<number | null>(restored?.conversationId ?? null);
-  const tripOutfitsRef = useRef<Record<string, StylistTripPlanData['outfits']>>({});
   const transportRequestMetaRef = useRef<Record<string, { userMessageId: string; originalOptions: SendOptions }>>({});
 
   const setActiveConversationId = useCallback((id: number | null) => {
@@ -316,7 +314,6 @@ export function StylistChatView({
     onProgress: setProgressStage,
     onAssistantStart: (assistantId) => {
       setProgressStage(null);
-      streamingAssistantTextRef.current[assistantId] = '';
       setMessages((prev) => {
         if (prev.some((m) => m.id === assistantId)) return prev;
         return [
@@ -332,19 +329,12 @@ export function StylistChatView({
         ];
       });
     },
-    onAssistantToken: (assistantId, token) => {
-      const rawText = (streamingAssistantTextRef.current[assistantId] ?? '') + token;
-      streamingAssistantTextRef.current[assistantId] = rawText;
-      setMessages((prev) =>
-        prev.map((m) => (m.id === assistantId ? { ...m, text: sanitizeStylistResponseText(rawText) } : m)),
-      );
-    },
     onBlock: (assistantId, index, block) => {
       setMessages(prev => prev.map(message => {
         if (message.id !== assistantId || message.role !== 'assistant') return message;
         const blocks = [...(message.blocks ?? [])];
         blocks[index] = block;
-        return { ...message, responseVersion: block.turnId ? 3 : 2, blocks, text: blocks.map(part => part?.text ?? '').filter(Boolean).join('\n\n') };
+        return { ...message, responseVersion: 3, blocks, text: blocks.map(part => part?.text ?? '').filter(Boolean).join('\n\n') };
       }));
     },
     onAssistantDone: (assistantId, event) => {
@@ -416,7 +406,6 @@ export function StylistChatView({
         ...(boardAction ? { boardAction } : {}),
         ...responseExtras({ critique: event.critique ?? undefined, pieceNotes: event.pieceNotes, stylingMoves: event.stylingMoves, followUps: event.followUps }),
       };
-      delete streamingAssistantTextRef.current[assistantId];
 
       setMessages((prev) => {
         const withTranscript = prev.map((m) =>
@@ -437,25 +426,7 @@ export function StylistChatView({
         setErrorMessage(event.deliveryStatus === 'failed' ? 'The stylist couldn’t finish this request.' : 'Part of this recommendation could not be completed.');
         setFailedRequest(transportRequestMetaRef.current[assistantId]?.originalOptions ?? null);
       }
-      delete tripOutfitsRef.current[assistantId];
       delete transportRequestMetaRef.current[assistantId];
-    },
-    onTripOutfit: (assistantId, outfit) => {
-      const snapshot = [...(tripOutfitsRef.current[assistantId] ?? []), outfit];
-      tripOutfitsRef.current[assistantId] = snapshot;
-      setMessages((prev) =>
-        prev.map((m): ChatMessage =>
-          m.id === assistantId && m.role === 'assistant'
-            ? {
-                ...m,
-                kind: 'assistant',
-                renderType: 'trip_plan',
-                mode: 'trip',
-                tripPlan: { intro: m.text, outfits: snapshot, packingList: [], pending: true },
-              }
-            : m,
-        ),
-      );
     },
     onConversationResolved: (resolvedConversationId) => {
       if (resolvedConversationId !== conversationIdRef.current) {
@@ -467,7 +438,6 @@ export function StylistChatView({
       }
     },
     onError: ({ message, request }) => {
-      delete streamingAssistantTextRef.current[request.assistantMessageId];
       setErrorMessage(message);
       setFailedRequest(request.originalOptions ?? null);
       setMessages((prev) => {
@@ -477,7 +447,6 @@ export function StylistChatView({
         }
         return prev.filter(m => m.id !== request.userMessageId && m.id !== request.assistantMessageId);
       });
-      delete tripOutfitsRef.current[request.assistantMessageId];
       delete transportRequestMetaRef.current[request.assistantMessageId];
     },
   });
@@ -514,7 +483,6 @@ export function StylistChatView({
 
       const assistantId = makeId();
       transportRequestMetaRef.current[assistantId] = { userMessageId: userMsg.id, originalOptions: opts };
-      tripOutfitsRef.current[assistantId] = [];
 
       const history = buildStylistHistory(messagesRef.current);
       const lastAssistant = [...messagesRef.current]
@@ -598,7 +566,6 @@ export function StylistChatView({
     stopCurrentAudio();
     abortTransport();
     messagesRef.current = [];
-    tripOutfitsRef.current = {};
     transportRequestMetaRef.current = {};
     setMessages([]);
     setActiveConversationId(null);

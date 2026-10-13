@@ -419,9 +419,7 @@ export type StylistTransportCallbacks = {
   onProgress?: (stage: StylistProgressStage) => void;
   onBlock?: (assistantMessageId: string, index: number, block: StylistResponseBlock) => void;
   onAssistantStart?: (assistantMessageId: string) => void;
-  onAssistantToken?: (assistantMessageId: string, token: string) => void;
   onAssistantDone?: (assistantMessageId: string, event: StylistAskDoneEvent) => void;
-  onTripOutfit?: (assistantMessageId: string, outfit: StylistTripOutfit) => void;
   onConversationResolved?: (conversationId: number) => void;
   onError?: (error: StylistTransportError) => void;
 };

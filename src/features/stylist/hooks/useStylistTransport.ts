@@ -8,12 +8,10 @@ import type {
   StylistProgressStage,
   StylistTransportCallbacks,
   StylistTransportSendInput,
-  StylistTripOutfit,
 } from '../types';
 import { recordPromptSignal } from '../../profilePrompts/signals';
 
 const STYLIST_ERROR_MESSAGE = 'Could not reach the stylist. Please try again.';
-const TOKEN_FLUSH_MS = 32;
 
 function errorMessageFromUnknown(error: unknown): string {
   if (error instanceof TypeError && /network|fetch|connection/i.test(error.message)) return 'Connection interrupted. Check your connection and try again.';
@@ -84,8 +82,6 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
     abortControllerRef.current = controller;
     setIsLoading(true);
 
-    let pendingText = '';
-    let flushTimer: ReturnType<typeof setTimeout> | null = null;
     let assistantStarted = false;
     let receivedDone = false;
     const seenBlocks = new Set<string>();
@@ -93,44 +89,12 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
 
     const isCurrentRequest = () => requestIdRef.current === requestId;
 
-    const clearFlushTimer = () => {
-      if (flushTimer) {
-        clearTimeout(flushTimer);
-        flushTimer = null;
-      }
-    };
-
-    const flushPending = () => {
-      const token = pendingText;
-      pendingText = '';
-      flushTimer = null;
-      if (!token || !isCurrentRequest()) return;
-      callbacksRef.current.onAssistantToken?.(input.assistantMessageId, token);
-    };
-
-    const scheduleFlush = () => {
-      if (!flushTimer) {
-        flushTimer = setTimeout(flushPending, TOKEN_FLUSH_MS);
-      }
-    };
-
-    const handleToken = (token: string) => {
-      if (!assistantStarted) {
-        assistantStarted = true;
-        callbacksRef.current.onAssistantStart?.(input.assistantMessageId);
-      }
-      pendingText += token;
-      scheduleFlush();
-    };
-
     const handleDone = (event: StylistAskDoneEvent) => {
       if (receivedDone) return;
       if (event.responseVersion === 3) {
         if (typeof event.turnId !== 'string' || (streamTurnId && streamTurnId !== event.turnId) || !Array.isArray(event.blocks) || !event.blocks.length || event.blocks.length > 16 || !event.blocks.every((block, index) => isResponseBlock(block) && block.turnId === event.turnId && block.sequence === index && block.blockId === `${event.turnId}:${index}`)) throw new Error('Invalid stylist response. Please retry.');
       }
       receivedDone = true;
-      clearFlushTimer();
-      flushPending();
       const conversationId = event.conversationId;
       if (typeof conversationId === 'number') {
         callbacksRef.current.onConversationResolved?.(conversationId);
@@ -161,9 +125,9 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
 
       if (currentEventRef.current === 'done') {
         handleDone(parsed as StylistAskDoneEvent);
-      } else if (currentEventRef.current === 'block' && (parsed.responseVersion === 2 || parsed.responseVersion === 3) && !receivedDone && Number.isInteger(parsed.index) && Number(parsed.index) >= 0 && Number(parsed.index) < 16 && isResponseBlock(parsed.block)) {
-        const blockKey = parsed.responseVersion === 3 ? parsed.blockId : String(parsed.index);
-        if (parsed.responseVersion === 3) {
+      } else if (currentEventRef.current === 'block' && parsed.responseVersion === 3 && !receivedDone && Number.isInteger(parsed.index) && Number(parsed.index) >= 0 && Number(parsed.index) < 16 && isResponseBlock(parsed.block)) {
+        const blockKey = parsed.blockId;
+        {
           if (typeof parsed.turnId !== 'string' || typeof blockKey !== 'string' || blockKey !== `${parsed.turnId}:${parsed.index}` || parsed.sequence !== parsed.index || parsed.block.turnId !== parsed.turnId || parsed.block.blockId !== blockKey || parsed.block.sequence !== parsed.index) throw new Error('Invalid stylist response identity. Please retry.');
           if (streamTurnId && streamTurnId !== parsed.turnId) throw new Error('Stylist response changed unexpectedly. Please retry.');
           streamTurnId = parsed.turnId;
@@ -177,13 +141,6 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
         callbacksRef.current.onBlock?.(input.assistantMessageId, Number(parsed.index), parsed.block);
       } else if (currentEventRef.current === 'progress' && typeof parsed.stage === 'string' && !assistantStarted) {
         callbacksRef.current.onProgress?.(parsed.stage as StylistProgressStage);
-      } else if (currentEventRef.current === 'trip_outfit') {
-        callbacksRef.current.onTripOutfit?.(
-          input.assistantMessageId,
-          parsed as unknown as StylistTripOutfit,
-        );
-      } else if (typeof parsed.t === 'string') {
-        handleToken(parsed.t);
       }
 
       currentEventRef.current = '';
@@ -197,7 +154,7 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ ...input.request, capabilities: ['stylist_blocks_v2', 'stylist_blocks_v3', 'stylist_client_v4', 'stylist_blocks_v5'], _stream: true }),
+        body: JSON.stringify({ ...input.request, capabilities: ['stylist_blocks_v3', 'stylist_client_v4', 'stylist_blocks_v5'], _stream: true }),
         signal: controller.signal,
       });
 
@@ -238,7 +195,6 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
       }
       if (isCurrentRequest() && !receivedDone) throw new Error('The stylist response was interrupted. Please try again.');
     } catch (error) {
-      clearFlushTimer();
       if (!isCurrentRequest() || isAbortError(error)) return;
       callbacksRef.current.onError?.({
         message: errorMessageFromUnknown(error),
@@ -246,7 +202,6 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
         error,
       });
     } finally {
-      clearFlushTimer();
       if (isCurrentRequest()) {
         setIsLoading(false);
         abortControllerRef.current = null;
