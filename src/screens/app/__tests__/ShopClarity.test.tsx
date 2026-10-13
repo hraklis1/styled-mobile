@@ -13,6 +13,9 @@ jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }));
 jest.mock('react-native-reanimated', () => ({
   __esModule: true, default: { View: 'AnimatedView' }, FadeIn: { duration: () => ({}) }, FadeOut: { duration: () => ({}) }, useReducedMotion: () => true,
   useSharedValue: () => ({ value: 1 }), useAnimatedStyle: () => ({}),
+  cancelAnimation: jest.fn(), withTiming: (value: number) => value,
+  withRepeat: (value: number) => value,
+  Easing: { inOut: (easing: unknown) => easing, quad: jest.fn() },
 }));
 jest.mock('../../../components/primitives/PressableScale', () => ({ PressableScale: 'PressableScale' }));
 jest.mock('../../../components/primitives/Editorial', () => ({ ActionButton: 'ActionButton', FilterControl: 'FilterControl', IconButton: 'IconButton', SegmentedControl: 'SegmentedControl', EditorialSection: 'EditorialSection', ScreenHeader: 'ScreenHeader' }));
