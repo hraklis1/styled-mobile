@@ -2,6 +2,7 @@ import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { TouchableOpacity, Text } from 'react-native';
 import { CalendarSyncSheet } from '../CalendarSyncSheet';
+import { listDeviceCalendars } from '../../../lib/device-calendar';
 import {
   useCalendarActions,
   useConnectedCalendars,
@@ -122,4 +123,27 @@ it('an empty selection saves without importing or clearing prior events', async 
     automatic: true,
   });
   expect(sync).not.toHaveBeenCalled();
+});
+
+it('opens the device chooser immediately while calendar access is pending', async () => {
+  let finish!: (calendars: any[]) => void;
+  jest.mocked(listDeviceCalendars).mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+  await render();
+  await act(async () => button('Apple & device calendars').props.onPress());
+  expect(listDeviceCalendars).toHaveBeenCalledWith(true);
+  expect(renderer.root.findAllByType(Text).some((t) => t.props.children === 'Choose calendars')).toBe(true);
+  expect(button('Save without syncing').props.disabled).toBe(true);
+  await act(async () => finish([{ id: 'device-work', name: 'Device work' }]));
+  expect(renderer.root.findAllByType(Text).some((t) => t.props.children === 'Device work')).toBe(true);
+});
+it('shows permission failures inside the device chooser and allows retrying', async () => {
+  jest.mocked(listDeviceCalendars)
+    .mockRejectedValueOnce(new Error('Calendar access is off. Allow access in your device settings, then try again.'))
+    .mockResolvedValueOnce([{ id: 'work', name: 'Device work' }]);
+  await render();
+  await act(async () => button('Outlook').props.onPress());
+  expect(button('Open settings')).toBeDefined();
+  expect(button('Try again')).toBeDefined();
+  await act(async () => button('Try again').props.onPress());
+  expect(renderer.root.findAllByType(Text).some((t) => t.props.children === 'Device work')).toBe(true);
 });

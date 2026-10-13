@@ -168,18 +168,18 @@ export function CalendarSyncSheet({
     const existing = connections.find((c) => c.provider === provider);
     setSelected(existing?.settings.calendarIds ?? []);
     setAutomatic(existing?.settings.automatic ?? true);
+    setEditing(provider);
     if (provider.startsWith('device:')) {
+      setDeviceCalendars([]);
       setConnecting(provider);
       try {
         setDeviceCalendars(await listDeviceCalendars(true));
       } catch (e) {
         fail(e);
+      } finally {
         setConnecting(null);
-        return;
       }
-      setConnecting(null);
     }
-    setEditing(provider);
   };
   const connect = async (provider: 'google' | 'outlook') => {
     if (busy) return;
@@ -351,6 +351,7 @@ export function CalendarSyncSheet({
             { paddingBottom: Math.max(insets.bottom, 24) + 24 },
           ]}
           keyboardShouldPersistTaps="handled"
+          key={editing ?? (feedOpen ? 'feed' : 'connections')}
           contentInsetAdjustmentBehavior="automatic"
         >
           {error && (
@@ -378,9 +379,14 @@ export function CalendarSyncSheet({
                 days and the next year stay up to date, with your outfit plans
                 kept intact.
               </Text>
-              {!editing.startsWith('device:') && available.isPending ? (
+              {connecting === editing || (!editing.startsWith('device:') && available.isPending) ? (
                 <ActivityIndicator color={colors.primary} style={s.loader} />
-              ) : available.isError && !available.data ? (
+              ) : editing.startsWith('device:') && error ? (
+                <Action
+                  label="Try again"
+                  onPress={() => { void openCalendars(editing); }}
+                />
+              ) : !editing.startsWith('device:') && available.isError && !available.data ? (
                 <View style={s.card}>
                   <Text style={s.body}>Could not load your calendars.</Text>
                   <Action
@@ -465,7 +471,7 @@ export function CalendarSyncSheet({
                   void saveCalendars();
                 }}
                 busy={actions.save.isPending || actions.sync.isPending}
-                disabled={!editing.startsWith('device:') && !available.data}
+                disabled={busy || (editing.startsWith('device:') ? !!error : !available.data)}
               />
             </>
           ) : feedOpen ? (
@@ -702,7 +708,7 @@ export function CalendarSyncSheet({
                                 : info.detail}
                             </Text>
                           </View>
-                          {connecting === provider ? (
+                          {connecting === (provider === 'device' || unavailable ? device : provider) ? (
                             <ActivityIndicator color={colors.primary} />
                           ) : (
                             <Ionicons
