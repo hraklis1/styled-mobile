@@ -14,7 +14,7 @@ const GUTTER = spacing.page;
 export function lookPlateSize(screenWidth: number, viewportHeight?: number): { width: number; height: number } {
   const width = Math.max(1, Math.round(screenWidth - GUTTER * 2));
   const portraitHeight = Math.round(width / editorial.outfitAspectRatio);
-  return { width, height: viewportHeight == null ? portraitHeight : Math.min(portraitHeight, Math.round(viewportHeight * 0.46)) };
+  return { width, height: viewportHeight == null ? Math.min(320, portraitHeight) : Math.min(320, portraitHeight, Math.round(viewportHeight * 0.43)) };
 }
 
 const matLayout = LinearTransition.duration(motion.base).reduceMotion(ReduceMotion.System);
@@ -260,26 +260,32 @@ export function LookMatEmpty({ width, height, title, subtitle, cta }: LookMatEmp
 const styles = StyleSheet.create({
   // The same frame holds photography, collage, loading and empty states.
   mat: {
-    borderRadius: radii.mat,
+    backgroundColor: '#F5F2EB',
+    borderRadius: 16,
     borderCurve: 'continuous',
     overflow: 'hidden',
-    backgroundColor: colors.imageMat,
-    paddingBottom: spacing.lg,
   },
   plate: {
+    borderRadius: 16,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.06)',
     overflow: 'hidden',
-    backgroundColor: colors.imageMat,
+    backgroundColor: '#F5F2EB',
   },
-  suggestionBar: { paddingHorizontal: GUTTER },
+  suggestionBar: { paddingHorizontal: spacing.lg },
   captionBar: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing.md,
-    paddingHorizontal: GUTTER,
+    paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
   },
   captionCopy: { flex: 1, minWidth: 0 },
-  collageCaption: { paddingHorizontal: GUTTER, paddingTop: spacing.md, gap: spacing.sm },
+  collageCaption: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.lg, gap: spacing.sm },
   collageIntroduction: { marginHorizontal: GUTTER, marginBottom: spacing.lg },
   editorialFooter: { marginTop: spacing.lg, paddingTop: spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, alignItems: 'flex-end' },
   textAction: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
@@ -289,11 +295,13 @@ const styles = StyleSheet.create({
   captionCopyInner: { gap: 6 },
   eyebrow: {
     ...typography.text.masthead,
+    fontSize: 10, letterSpacing: 1.2, textTransform: 'uppercase',
     color: colors.accentInk,
     marginBottom: 2,
   },
   title: {
     ...typography.text.editorialSection,
+    fontSize: 22, lineHeight: 26, letterSpacing: -0.3,
     color: colors.foreground,
   },
   note: {
@@ -341,9 +349,9 @@ const styles = StyleSheet.create({
   },
   captionSkeleton: {
     gap: 8,
-    paddingHorizontal: GUTTER,
+    paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
-    paddingBottom: 6,
+    paddingBottom: spacing.lg,
   },
   emptyPlate: {
     alignItems: 'center',

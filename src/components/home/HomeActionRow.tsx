@@ -81,7 +81,7 @@ export const HomeActionRow = forwardRef<HomeActionRowHandle, Props>(function Hom
           >
             <EditorialIcon name={action.key} size={GLYPH} />
           </View>
-          <Text style={styles.label} >{action.label}</Text>
+          <Text style={styles.label} >{action.label.toUpperCase()}</Text>
         </PressableScale>
       ))}
     </View>
@@ -91,10 +91,10 @@ export const HomeActionRow = forwardRef<HomeActionRowHandle, Props>(function Hom
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
   cell: { flex: 1, minWidth: 0 },
-  cellContent: { width: '100%', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, minHeight: 64, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 12, backgroundColor: colors.linen },
+  cellContent: { width: '100%', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, minHeight: 64, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 12, backgroundColor: '#F5F3EF' },
   disc: {
     width: DISC, height: DISC,
     alignItems: 'center', justifyContent: 'center',
   },
-  label: { ...typography.text.utility, color: colors.inkSubtle, textAlign: 'center' },
+  label: { ...typography.text.utility, fontSize: 10, letterSpacing: 1, fontWeight: '500', color: colors.inkSubtle, textAlign: 'center' },
 });

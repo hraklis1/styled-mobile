@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { useReducedMotion } from 'react-native-reanimated';
@@ -8,6 +8,7 @@ import { itemCoverPresentation } from '../../lib/itemImage';
 import type { Item } from '../../types/item';
 
 type Props = {
+  normalized?: boolean;
   item: Item;
   width: number;
   height: number;
@@ -19,6 +20,7 @@ type Props = {
 
 export function GarmentImage({
   item,
+  normalized = false,
   width,
   height,
   borderRadius = radii.photo,
@@ -26,6 +28,7 @@ export function GarmentImage({
   children,
   style,
 }: Props) {
+  const [failedUri, setFailedUri] = useState<string>();
   const reduceMotion = useReducedMotion();
   const cover = itemCoverPresentation(item, { preferThumb: true });
   const cutoutMargin = cover.variant === 'cutout'
@@ -34,15 +37,16 @@ export function GarmentImage({
 
   return (
     <View
-      style={[styles.frame, { width, height, borderRadius }, style]}
+      style={[styles.frame, { width, height, borderRadius }, normalized && { backgroundColor: '#F6F3EE' }, style]}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
-      {cover.uri ? (
+      {cover.uri && failedUri !== cover.uri ? (
         <Image
           source={{ uri: cover.uri }}
-          style={[StyleSheet.absoluteFill, cover.variant === 'cutout' && { margin: cutoutMargin }]}
-          contentFit={cover.contentFit}
+          style={[StyleSheet.absoluteFill, normalized ? { margin: 8 } : cover.variant === 'cutout' && { margin: cutoutMargin }]}
+          contentFit={normalized ? 'contain' : cover.contentFit}
+          onError={() => setFailedUri(cover.uri)}
           contentPosition="center"
           transition={reduceMotion ? 0 : 200}
           cachePolicy="memory-disk"

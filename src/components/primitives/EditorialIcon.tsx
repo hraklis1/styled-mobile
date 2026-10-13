@@ -2,6 +2,7 @@ import Svg, { Path } from 'react-native-svg';
 import { colors, stroke } from '../../theme';
 
 const paths = {
+  sun: 'M12 3V1 M12 23v-2 M3 12H1 M23 12h-2 M4.2 4.2l1.4 1.4 M18.4 18.4l1.4 1.4 M4.2 19.8l1.4-1.4 M18.4 5.6l1.4-1.4 M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z',
   stylist: 'M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6 4V6a2 2 0 0 1 2-2Z M8 10h8 M8 14h5',
   closet: 'M3 8h4l2-3h6l2 3h4v12H3Z M16 13a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z',
   wear: 'M4 5h16v16H4Z M4 9h16 M8 3v4 M16 3v4 M8 15l3 3 5-6',
@@ -14,10 +15,10 @@ const paths = {
 };
 
 /** One optical size and stroke for Home actions and persistent navigation. */
-export function EditorialIcon({ name, size = 22, color = colors.foreground }: {
-  name: keyof typeof paths; size?: number; color?: string;
+export function EditorialIcon({ name, size = 22, color = colors.foreground, strokeWidth = stroke.icon }: {
+  name: keyof typeof paths; size?: number; color?: string; strokeWidth?: number;
 }) {
   return <Svg width={size} height={size} viewBox="0 0 24 24" accessible={false}>
-    <Path d={paths[name]} fill="none" stroke={color} strokeWidth={stroke.icon} strokeLinecap="round" strokeLinejoin="round" />
+    <Path d={paths[name]} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
   </Svg>;
 }

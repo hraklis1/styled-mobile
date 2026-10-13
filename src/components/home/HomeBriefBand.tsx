@@ -82,7 +82,7 @@ export function HomeWardrobeEdit({ onBriefPress, shortlist, style }: Props) {
       variant="ruled"
       headingStyle="supporting"
       dividerPlacement="above-heading"
-      title="Wardrobe Edit"
+      title="Curations & Finds"
       style={style}
     >
       <View style={styles.cards}>

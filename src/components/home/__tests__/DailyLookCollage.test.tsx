@@ -185,3 +185,15 @@ test('a failed garment image falls back to the clothing outline while retaining 
   act(() => renderer.root.findByType(Pressable).props.onPress());
   expect(onPressItem).toHaveBeenCalledWith(1);
 });
+
+test('home grid keeps a fixed artboard and routes owned piece taps', () => {
+  const onPressItem = jest.fn();
+  const renderer = render(<EditorialOutfitBoard grid width={300} maxHeight={320}
+    pieces={[{ id: 1, category: 'top', item: items[0] }, { id: 99, category: 'shoes' }]}
+    onPressItem={onPressItem} />);
+  const buttons = renderer.root.findAllByType(Pressable);
+  act(() => buttons[0].props.onPress());
+  expect(onPressItem).toHaveBeenCalledWith(1);
+  expect(buttons[1].props.disabled).toBe(true);
+  expect(renderer.root.findAllByType(Text).some(node => Array.isArray(node.props.children) && node.props.children.join('') === '2 PIECES')).toBe(true);
+});

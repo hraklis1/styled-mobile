@@ -14,11 +14,11 @@ function Photo({ piece, width, foundation }: { piece: BoardPiece; width: number;
   </View>;
 }
 
-function SuggestionTile({ suggestion, width, onPress }: { suggestion: BoardSuggestion; width: number; onPress?: () => void }) {
+function SuggestionTile({ suggestion, width, onPress, compact }: { suggestion: BoardSuggestion; width: number; onPress?: () => void; compact?: boolean }) {
   const offer = suggestion.offer;
   const [failedUri, setFailedUri] = useState<string>();
   const showOffer = !!offer && failedUri !== offer.imageUrl;
-  const art = Math.round(width * 0.62);
+  const art = Math.round(width * (compact ? 0.35 : 0.62));
   const meta = showOffer ? [offer.brand, offer.formattedPrice].filter(Boolean).join(' · ') : '';
   return <Pressable disabled={!onPress} onPress={onPress}
     style={({ pressed }) => [{ width, minHeight: Math.max(44, width) }, styles.suggestion, pressed && styles.pressed]}
@@ -39,6 +39,7 @@ function SuggestionTile({ suggestion, width, onPress }: { suggestion: BoardSugge
 }
 
 type Props = {
+  grid?: boolean;
   pieces: BoardPiece[];
   width: number;
   maxHeight?: number;
@@ -47,9 +48,36 @@ type Props = {
   onPressSuggestion?: () => void;
 };
 
-export function EditorialOutfitBoard({ pieces, width: availableWidth, maxHeight, onPressItem, suggestion, onPressSuggestion }: Props) {
+export function EditorialOutfitBoard({ pieces, width: availableWidth, maxHeight, onPressItem, suggestion, onPressSuggestion, grid }: Props) {
   const rows = editorialBoardDisplayRows(pieces, suggestion);
   if (!rows.length) return null;
+  if (grid) {
+    const height = maxHeight ?? Math.min(320, availableWidth * 1.25);
+    const tileWidth = (availableWidth - 24) / 2;
+    const tileHeight = (height - 24) / 2;
+    // Keep the main outfit categories first; all pieces remain in look details.
+    const ordered = [...pieces].sort((a, b) => {
+      const order = ['full_body', 'dress', 'top', 'bottom', 'outerwear', 'shoes'];
+      const rank = (category: string) => { const index = order.indexOf(category); return index < 0 ? 99 : index; };
+      return rank(a.category) - rank(b.category);
+    });
+    const tiles = ordered.slice(0, suggestion ? 3 : 4);
+    return <View style={{ width: availableWidth, height, padding: 8, gap: 8, flexDirection: 'row', flexWrap: 'wrap' }}>
+      {tiles.map(piece => <Pressable key={piece.id} disabled={!onPressItem || !piece.item}
+        onPress={() => onPressItem?.(piece.id)} accessibilityRole={onPressItem && piece.item ? 'button' : undefined}
+        accessibilityLabel={`View ${piece.item?.name ?? piece.category}`}
+        style={({ pressed }) => [{ width: tileWidth, height: tileHeight, backgroundColor: '#F6F3EE', borderRadius: 8, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }, pressed && styles.pressed]}>
+        <Photo piece={piece} width={Math.min(tileWidth - 12, tileHeight - 12) / 1.25} foundation />
+      </Pressable>)}
+      {suggestion ? <View style={{ width: tileWidth, height: tileHeight, overflow: 'hidden', borderRadius: 8 }}>
+        <SuggestionTile suggestion={suggestion} width={tileWidth} onPress={onPressSuggestion} compact />
+      </View> : null}
+      {Array.from({ length: Math.max(0, 4 - tiles.length - (suggestion ? 1 : 0)) }, (_, index) => <View key={`empty-${index}`} accessible={false} style={{ width: tileWidth, height: tileHeight, borderRadius: 8, backgroundColor: '#F6F3EE' }} />)}
+      <View pointerEvents="none" style={{ position: 'absolute', top: 12, right: 12, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 20, backgroundColor: 'rgba(246,243,238,0.94)' }}>
+        <Text style={{ ...typography.text.masthead, fontSize: 9, letterSpacing: 1 }}>{pieces.length} PIECES</Text>
+      </View>
+    </View>;
+  }
   // Account for captions and row gaps before sizing the artwork, never crop rows.
   const heightFactor = rows.reduce((total, row) => {
     const fraction = row.pieces.length === 1 ? (row.foundation ? 0.72 : 0.4) : 1 / row.pieces.length;
@@ -61,7 +89,7 @@ export function EditorialOutfitBoard({ pieces, width: availableWidth, maxHeight,
     {rows.map((row, index) => <View key={index} style={styles.row}>
       {row.pieces.map(tile => {
         const tileWidth = row.foundation && row.pieces.length === 1 ? width * 0.72 : !row.foundation && row.pieces.length === 1 ? width * 0.4 : (width - 8 * (row.pieces.length - 1)) / row.pieces.length;
-        if (tile.kind === 'suggestion') return <SuggestionTile key="suggestion" suggestion={tile.suggestion} width={tileWidth} onPress={onPressSuggestion} />;
+        if (tile.kind === 'suggestion') return <SuggestionTile key="suggestion" suggestion={tile.suggestion} width={tileWidth} onPress={onPressSuggestion} compact />;
         const piece = tile.piece;
         const content = <><Photo piece={piece} width={tileWidth} foundation={row.foundation} /><Text style={styles.caption}>{piece.category === 'full_body' ? 'Dress / one-piece' : piece.category.replaceAll('_', ' ')}</Text></>;
         return onPressItem && piece.item ? <Pressable key={piece.id} style={({ pressed }) => [{ width: tileWidth, minHeight: 44 }, pressed && styles.pressed]} onPress={() => onPressItem(piece.id)} accessibilityRole="button" accessibilityLabel={`View ${piece.item.name}, ${piece.category}`} >{content}</Pressable> : <View key={piece.id} style={{ width: tileWidth }}>{content}</View>;

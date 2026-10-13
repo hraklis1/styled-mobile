@@ -78,7 +78,7 @@ export function ClosetInsightsCard({
           {insights.sleeping.map((item) => (
             <PressableScale key={item.id} onPress={onPress} accessibilityRole="button" accessibilityLabel={`Rediscover ${item.name}. Open closet insights`} contentStyle={styles.piece}>
               <View style={styles.pieceCanvas}>
-                <GarmentImage item={item} width={CARD_WIDTH} height={CARD_HEIGHT} borderRadius={radii.md} />
+                <GarmentImage normalized item={item} width={CARD_WIDTH} height={CARD_HEIGHT} borderRadius={radii.md} />
                 <View pointerEvents="none" style={styles.pieceOutline} />
               </View>
               <AppText variant="eyebrow" tone="muted" style={styles.contextChip} numberOfLines={2}>

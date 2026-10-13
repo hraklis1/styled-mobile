@@ -1,3 +1,4 @@
+import { EditorialIcon } from '../../components/primitives/EditorialIcon';
 import { HomeActionRow, type HomeActionKey, type HomeActionRowHandle } from '../../components/home/HomeActionRow';
 import { buildClosetInsights } from '../../lib/closetInsights';
 import { ClosetInsightsCard } from '../../components/insights/ClosetInsightsCard';
@@ -871,7 +872,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               accessibilityLabel={locationAccessibilityLabel}
             >
               {weatherLocationIcon ? (
-                <Ionicons name={weatherLocationIcon} size={13} color={colors.inkSubtle} />
+                weatherLocationIcon === 'sunny-outline' ? <EditorialIcon name="sun" size={13} strokeWidth={1.5} color={colors.inkSubtle} /> : <Ionicons name={weatherLocationIcon} size={13} color={colors.inkSubtle} />
               ) : null}
               {/* One chevron marks the whole line as the thing that changes. */}
               <AppText variant="meta" tone="secondary" style={styles.weatherLocationText} numberOfLines={1}>
@@ -964,10 +965,10 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             collageCaption={!candidateHasFlatLay}
             editorialCollage={!candidateHasFlatLay}
             plate={generatedCandidate.readinessStatus === 'ready' && generatedCandidate.aiGeneratedImageUrl ? (
-              <OutfitCollage outfit={generatedPreviewOutfit(generatedCandidate)} size={plate.width} height={plate.height} borderRadius={0} imageFit="contain" />
+              <OutfitCollage outfit={generatedPreviewOutfit(generatedCandidate)} size={plate.width} height={plate.height} borderRadius={0} imageFit="cover" />
             ) : (
-              <View style={{ paddingHorizontal: spacing.lg, alignItems: 'center', backgroundColor: colors.imageMat }}>
-                <EditorialOutfitBoard pieces={resolveBoardPieces(candidateGap ? generatedCandidate.foundationItemIds : generatedCandidate.itemIds, items)} width={plate.width - spacing.lg * 2} maxHeight={largeText ? undefined : plate.height}
+              <View style={{ width: plate.width, height: plate.height, backgroundColor: '#F5F2EB' }}>
+                <EditorialOutfitBoard pieces={resolveBoardPieces(candidateGap ? generatedCandidate.foundationItemIds : generatedCandidate.itemIds, items)} width={plate.width} maxHeight={plate.height} grid
                   onPressItem={openDailyLookItem}
                   suggestion={candidateGap ? { label: sentenceCase(candidateGap.label), category: candidateGap.category, offer: suggestionOffer } : undefined}
                   onPressSuggestion={handleDailyLookFindPiece} />
@@ -979,7 +980,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                 ? 'Suggested addition'
                 : undefined}
             title={candidateTitle(generatedCandidate, candidateGap)}
-            note={capitalizeFirst(featuredExplanation ?? generatedCandidate.reason)}
+            note={`${generatedCandidate.itemIds.length} pieces${weather.data ? ` · Chosen for ${formatTemp(weather.data.current, tempUnit)}` : ''}`}
             onOpen={() => openDailyLookSheet('look')}
             accessibilityLabel={`${generatedCandidate.name}. ${generatedCandidate.reason}. Open details`}
             captionAccessibilityLabel={candidateHasFlatLay ? `Open ${candidateTitle(generatedCandidate, candidateGap)}` : `Look details: ${candidateTitle(generatedCandidate, candidateGap)}`}
@@ -1012,13 +1013,13 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
             collageCaption={!featuredOutfit.aiGeneratedImageUrl}
             editorialCollage={!featuredOutfit.aiGeneratedImageUrl}
             plate={(
-              featuredOutfit.aiGeneratedImageUrl ? <OutfitCollage outfit={featuredOutfit} size={plate.width} height={plate.height} borderRadius={0} imageFit="contain" /> :
-              <View style={{ paddingHorizontal: spacing.lg, alignItems: 'center', backgroundColor: colors.imageMat }}>
-                <EditorialOutfitBoard pieces={resolveBoardPieces(featuredOutfit.itemIds, items)} width={plate.width - spacing.lg * 2} maxHeight={largeText ? undefined : plate.height} onPressItem={openDailyLookItem} />
+              featuredOutfit.aiGeneratedImageUrl ? <OutfitCollage outfit={featuredOutfit} size={plate.width} height={plate.height} borderRadius={0} imageFit="cover" /> :
+              <View style={{ width: plate.width, height: plate.height, backgroundColor: '#F5F2EB' }}>
+                <EditorialOutfitBoard pieces={resolveBoardPieces(featuredOutfit.itemIds, items)} width={plate.width} maxHeight={plate.height} grid onPressItem={openDailyLookItem} />
               </View>
             )}
             title={featuredOutfit.name}
-            note={featuredExplanation ?? featuredReason}
+            note={`${featuredOutfit.itemIds.length} pieces${weather.data ? ` · Chosen for ${formatTemp(weather.data.current, tempUnit)}` : ''}`}
             onOpen={() => navigation.navigate('Closet', {
               screen: 'OutfitDetail',
               params: { outfitId: featuredOutfit.id, returnTo: 'Home' },
@@ -1424,9 +1425,9 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: radii.full,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.linen,
+    borderWidth: 0.5,
+    borderColor: '#D8D3CA',
+    backgroundColor: '#EFECE6',
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
