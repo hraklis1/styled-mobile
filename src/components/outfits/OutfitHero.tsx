@@ -25,7 +25,7 @@ const LOADING_PHRASES = [
   'Styling your look...',
 ];
 
-function FlatLayLoadingOverlay({ width }: { width: number }) {
+function FlatLayLoadingOverlay() {
   const pulseAnim = useRef(new Animated.Value(0.3)).current;
   const textOpacity = useRef(new Animated.Value(1)).current;
   const [phraseIndex, setPhraseIndex] = useState(0);
@@ -53,7 +53,7 @@ function FlatLayLoadingOverlay({ width }: { width: number }) {
 
   return (
     <View
-      style={[overlayStyles.container, { width, height: width }]}
+      style={overlayStyles.container}
       pointerEvents="none"
       accessibilityRole="progressbar"
       accessibilityLiveRegion="polite"
@@ -138,7 +138,7 @@ export function OutfitHero({
         </>
       )}
 
-      {isGenerating && <FlatLayLoadingOverlay width={width} />}
+      {isGenerating && <FlatLayLoadingOverlay />}
 
       <PressableScale
         style={[styles.backButton, { top: insets.top + spacing.sm }]}
