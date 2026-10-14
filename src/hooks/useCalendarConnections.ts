@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, API_BASE_URL } from '../lib/api';
-import * as WebBrowser from 'expo-web-browser';
+import { api } from '../lib/api';
 import {
   deviceCalendarSnapshot,
   type ConnectedCalendar,
@@ -20,7 +19,6 @@ export type CalendarConnection = {
 };
 export type CalendarConnectionData = {
   connections: CalendarConnection[];
-  outlookAvailable: boolean;
 };
 export const CONNECTIONS_KEY = ['calendar-connections-v2'] as const;
 export function useConnectedCalendars(enabled = true) {
@@ -108,37 +106,4 @@ export function useCalendarActions() {
     onSuccess: refresh,
   });
   return { sync, save, disconnect, feed, refresh };
-}
-export async function connectOutlookCalendar(): Promise<
-  'connected' | 'cancelled'
-> {
-  const { data } = await api.get<{ token: string }>(
-    '/api/calendar/outlook/mobile-token',
-  );
-  const url = new URL('/api/calendar/outlook/mobile-connect', API_BASE_URL);
-  url.searchParams.set('token', data.token);
-  const result = await WebBrowser.openAuthSessionAsync(
-    url.toString(),
-    'styled://calendar',
-  );
-  if (result.type !== 'success') return 'cancelled';
-  const callback = new URL(result.url);
-  if (callback.protocol !== 'styled:' || callback.hostname !== 'calendar')
-    throw new Error('The calendar connection returned an invalid response.');
-  if (callback.searchParams.get('cal_connected') !== 'outlook') {
-    const code = callback.searchParams.get('cal_error');
-    throw new Error(
-      code === 'not_configured'
-        ? 'Outlook connection is not configured yet.'
-        : code === 'access_denied'
-          ? 'Calendar access was declined. You can try again anytime.'
-          : 'Could not connect Outlook. Please try again.',
-    );
-  }
-  const verified = await api.get<CalendarConnectionData>(
-    '/api/calendar/v2/connections',
-  );
-  if (!verified.data.connections.some((c) => c.provider === 'outlook'))
-    throw new Error('Could not verify the Outlook connection. Try again.');
-  return 'connected';
 }

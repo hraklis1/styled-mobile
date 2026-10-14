@@ -27,7 +27,6 @@ jest.mock('../../../hooks/useCalendarConnections', () => ({
   useCalendarActions: jest.fn(),
   useConnectedCalendars: jest.fn(),
   useAvailableCalendars: jest.fn(),
-  connectOutlookCalendar: jest.fn(),
 }));
 const save = jest.fn(),
   sync = jest.fn();
@@ -62,7 +61,6 @@ beforeEach(() => {
             last_error: null,
           },
         ],
-        outlookAvailable: false,
       },
       refetch: jest.fn(),
     } as any);
@@ -165,11 +163,12 @@ it('does not flash onboarding while loading connections', async () => {
   expect(hasText('ADD A CALENDAR')).toBe(false);
 });
 it('offers a short introduction only after loading an empty connection list', async () => {
-  jest.mocked(useConnectedCalendars).mockReturnValue({ data: { connections: [], outlookAvailable: true } } as any);
+  jest.mocked(useConnectedCalendars).mockReturnValue({ data: { connections: [] } } as any);
   await render();
   expect(hasText('Your plans, beautifully in sync.')).toBe(true);
   expect(button('Google Calendar')).toBeDefined();
-  expect(button('Outlook')).toBeDefined();
+  // Outlook connects through device calendars only, never directly.
+  expect(button('Outlook')).toBeUndefined();
 });
 it('keeps zero-selected connections in management and guides setup', async () => {
   const query = jest.mocked(useConnectedCalendars).getMockImplementation()!();

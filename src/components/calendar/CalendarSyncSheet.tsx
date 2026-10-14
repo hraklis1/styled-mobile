@@ -21,7 +21,6 @@ import {
   useAvailableCalendars,
   useCalendarActions,
   useConnectedCalendars,
-  connectOutlookCalendar,
   type CalendarConnection,
 } from '../../hooks/useCalendarConnections';
 import { api, API_BASE_URL } from '../../lib/api';
@@ -47,12 +46,6 @@ function providerInfo(provider: string): {
       name: 'Google Calendar',
       icon: 'logo-google',
       detail: 'Connect directly · Personal, work & shared calendars',
-    };
-  if (provider === 'outlook')
-    return {
-      name: 'Outlook',
-      icon: 'mail-outline',
-      detail: 'Connect directly · Microsoft 365 & Outlook.com',
     };
   if (provider === 'apple')
     return {
@@ -182,33 +175,31 @@ export function CalendarSyncSheet({
       }
     }
   };
-  const connect = async (provider: 'google' | 'outlook') => {
+  const connect = async (provider: 'google') => {
     if (busy) return;
     setError(null);
     setConnecting(provider);
     try {
-      if (provider === 'google') {
-        const result = await connectGoogleCalendar({
-          apiBaseUrl: API_BASE_URL,
-          getMobileToken: () =>
-            api
-              .get<{ token: string }>('/api/calendar/google/mobile-token')
-              .then((r) => r.data.token),
-          openAuthSession: WebBrowser.openAuthSessionAsync,
-          verifyConnection: () =>
-            api
-              .get<{ google: { connected: boolean } }>(
-                '/api/calendar/connections',
-              )
-              .then((r) => r.data.google.connected),
-        });
-        if (result.status === 'cancelled') return;
-        if (result.status === 'failed')
-          throw new Error(
-            GOOGLE_CALENDAR_ERROR_MESSAGES[result.code] ??
-              GOOGLE_CALENDAR_ERROR_MESSAGES.unknown,
-          );
-      } else if ((await connectOutlookCalendar()) === 'cancelled') return;
+      const result = await connectGoogleCalendar({
+        apiBaseUrl: API_BASE_URL,
+        getMobileToken: () =>
+          api
+            .get<{ token: string }>('/api/calendar/google/mobile-token')
+            .then((r) => r.data.token),
+        openAuthSession: WebBrowser.openAuthSessionAsync,
+        verifyConnection: () =>
+          api
+            .get<{ google: { connected: boolean } }>(
+              '/api/calendar/connections',
+            )
+            .then((r) => r.data.google.connected),
+      });
+      if (result.status === 'cancelled') return;
+      if (result.status === 'failed')
+        throw new Error(
+          GOOGLE_CALENDAR_ERROR_MESSAGES[result.code] ??
+            GOOGLE_CALENDAR_ERROR_MESSAGES.unknown,
+        );
       await query.refetch();
       setSelected([]);
       setAutomatic(true);
@@ -465,9 +456,9 @@ export function CalendarSyncSheet({
                 </Text>
               </View>
               <Text style={s.caption}>
-                Choose each calendar once. If you connect Google or Outlook
-                directly, leave the same calendars off in device calendars to
-                avoid duplicates.
+                Choose each calendar once. If you connect Google directly,
+                leave the same calendars off in device calendars to avoid
+                duplicates.
               </Text>
               <Action
                 label={
@@ -637,15 +628,12 @@ export function CalendarSyncSheet({
                           </View>
                         )}
                         {!!connection.last_error &&
-                          (connection.provider === 'google' ||
-                            connection.provider === 'outlook') && (
+                          connection.provider === 'google' && (
                             <Action
                               secondary
                               label="Reconnect account"
                               onPress={() => {
-                                void connect(
-                                  connection.provider as 'google' | 'outlook',
-                                );
+                                void connect('google');
                               }}
                               disabled={busy}
                             />
@@ -666,16 +654,15 @@ export function CalendarSyncSheet({
                   )}
                   <Text accessibilityRole="header" style={s.sectionLabel}>ADD A CALENDAR</Text>
                   <Text style={s.caption}>
-                    Connect Google or Outlook directly, or use accounts already on your device. Choose each calendar once to avoid duplicates.
+                    Connect Google directly, or use accounts already on your device, including Outlook. Choose each calendar once to avoid duplicates.
                   </Text>
-                  {(['device', 'google', 'outlook'] as const)
+                  {(['device', 'google'] as const)
                     .filter((p) =>
                       p === 'device'
                         ? Platform.OS !== 'web' &&
                           !!device &&
                           !connections.some((c) => c.provider === device)
-                        : (p !== 'outlook' || !!query.data?.outlookAvailable) &&
-                          !connections.some((c) => c.provider === p),
+                        : !connections.some((c) => c.provider === p),
                     )
                     .map((provider) => {
                       const info = providerInfo(provider);
@@ -716,11 +703,6 @@ export function CalendarSyncSheet({
                         </TouchableOpacity>
                       );
                     })}
-                  {!query.data?.outlookAvailable && !connections.some((c) => c.provider === 'outlook') && (
-                    <Text style={s.caption}>
-                      Outlook direct sign-in is unavailable. Use an Outlook account in your device calendars, or add a published feed.
-                    </Text>
-                  )}
                   {!connections.some((c) => c.provider === 'apple') && (
                     <TouchableOpacity
                       accessibilityRole="button"
