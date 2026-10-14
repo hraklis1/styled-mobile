@@ -23,10 +23,10 @@ export function openSavedRecommendations(selectedId?: string, tab: SavedShopping
 
 export function openClosetItem(itemId: number, resumeStylist = false) {
   if (!navigationRef.isReady()) return;
-  navigationRef.navigate('App', { screen: 'Closet', params: { screen: 'ItemDetail', params: { itemId, resumeStylist } } });
+  navigationRef.navigate('App', { screen: 'Closet', params: { screen: 'ItemDetail', params: { itemId, resumeStylist }, initial: false } });
 }
 
 export function openClosetOutfit(outfitId: number, resumeStylist = false) {
   if (!navigationRef.isReady()) return;
-  navigationRef.navigate('App', { screen: 'Closet', params: { screen: 'OutfitDetail', params: { outfitId, resumeStylist } } });
+  navigationRef.navigate('App', { screen: 'Closet', params: { screen: 'OutfitDetail', params: { outfitId, resumeStylist }, initial: false } });
 }
