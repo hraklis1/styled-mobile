@@ -9,7 +9,7 @@ import { Alert } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { api } from '../../lib/api';
-import { LOANS_QUERY_KEY, useReopenLoans, useReturnItems } from '../useLendContacts';
+import { LEND_CONTACTS_QUERY_KEY, LOANS_QUERY_KEY, useLendItem, useReopenLoans, useReturnItems } from '../useLendContacts';
 import { ITEMS_QUERY_KEY } from '../useItems';
 import type { ItemLoan } from '../../lib/lending';
 import type { Item } from '../../types/item';
@@ -17,7 +17,7 @@ import type { Item } from '../../types/item';
 const mockPost = jest.mocked(api.post);
 
 const loan = (id: number, itemId: number, returnedAt: string | null): ItemLoan => ({
-  id, itemId, contactId: 1, lentAt: '2026-10-01', dueBack: null, returnedAt, itemName: 'Coat',
+  id, itemId, contactId: 1, contactName: 'Maya', lentAt: '2026-10-01', dueBack: null, returnedAt, itemName: 'Coat',
   imageUrl: null, thumbUrl: null, cutoutUrl: null, polishedUrl: null, coverImageVariant: 'original',
 });
 
@@ -33,10 +33,11 @@ function setup() {
     { id: 2, name: 'Scarf', availability: 'lent' } as Item,
   ]);
   qc.setQueryData<ItemLoan[]>(LOANS_QUERY_KEY, [loan(11, 1, null), loan(12, 2, null), loan(5, 1, '2026-09-01')]);
-  const hooks: { ret?: ReturnType<typeof useReturnItems>; reopen?: ReturnType<typeof useReopenLoans> } = {};
+  const hooks: { ret?: ReturnType<typeof useReturnItems>; reopen?: ReturnType<typeof useReopenLoans>; lend?: ReturnType<typeof useLendItem> } = {};
   function Probe() {
     hooks.ret = useReturnItems();
     hooks.reopen = useReopenLoans();
+    hooks.lend = useLendItem();
     return null;
   }
   let renderer!: TestRenderer.ReactTestRenderer;
@@ -96,5 +97,33 @@ describe('return / undo hooks', () => {
     expect(qc.getQueryData<Item[]>(ITEMS_QUERY_KEY)![0].availability).toBe('available');
     expect(qc.getQueryData<ItemLoan[]>(LOANS_QUERY_KEY)![0].returnedAt).toBe('2026-10-13');
     expect(alert).toHaveBeenCalled();
+  });
+
+  it('lending fills the item\'s open-loan summary from the saved person', async () => {
+    mockPost.mockReturnValue(new Promise(() => {}) as never);
+    const { qc, hooks } = setup();
+    qc.setQueryData(LEND_CONTACTS_QUERY_KEY, [{ id: 7, name: 'Maya', relationship: 'friend', createdAt: '' }]);
+    qc.setQueryData<Item[]>(ITEMS_QUERY_KEY, [{ id: 3, name: 'Blazer', availability: 'available', openLoan: null } as Item]);
+
+    await act(async () => { hooks.lend!.mutate({ itemId: 3, contactId: 7, dueBack: '2026-10-20' }); });
+
+    const item = qc.getQueryData<Item[]>(ITEMS_QUERY_KEY)![0];
+    expect(item.availability).toBe('lent');
+    expect(item.openLoan).toEqual(expect.objectContaining({ contactName: 'Maya', contactRelationship: 'friend', dueBack: '2026-10-20' }));
+  });
+
+  it('returning clears the summary and updates filtered loan lists too', async () => {
+    mockPost.mockReturnValue(new Promise(() => {}) as never);
+    const { qc, hooks } = setup();
+    qc.setQueryData<ItemLoan[]>([...LOANS_QUERY_KEY, { itemId: 1 }], [loan(11, 1, null)]);
+    qc.setQueryData<Item[]>(ITEMS_QUERY_KEY, [{
+      id: 1, name: 'Coat', availability: 'lent',
+      openLoan: { id: 11, contactId: 1, contactName: 'Maya', contactRelationship: 'friend', lentAt: '2026-10-01', dueBack: null },
+    } as Item]);
+
+    await act(async () => { hooks.ret!.mutate([1]); });
+
+    expect(qc.getQueryData<Item[]>(ITEMS_QUERY_KEY)![0].openLoan).toBeNull();
+    expect(qc.getQueryData<ItemLoan[]>([...LOANS_QUERY_KEY, { itemId: 1 }])![0].returnedAt).not.toBeNull();
   });
 });

@@ -232,8 +232,11 @@ export function useUpdateItem() {
     onMutate: async ({ id, ...patch }) => {
       await qc.cancelQueries({ queryKey: ITEMS_QUERY_KEY });
       const previous = qc.getQueryData<Item[]>(ITEMS_QUERY_KEY);
+      // Leaving 'lent' ends the open loan server-side; entering it opens one
+      // the refetch brings back.
+      const loanPatch = patch.availability !== undefined && patch.availability !== 'lent' ? { openLoan: null } : {};
       qc.setQueryData<Item[]>(ITEMS_QUERY_KEY, (old) =>
-        old?.map((i) => (i.id === id ? { ...i, ...patch } : i)) ?? []
+        old?.map((i) => (i.id === id ? { ...i, ...patch, ...loanPatch } : i)) ?? []
       );
       return { previous };
     },

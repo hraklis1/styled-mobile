@@ -1,18 +1,23 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { Alert } from 'react-native';
 
 import { api } from '../lib/api';
 import { localYmd, type ItemLoan, type LendContact, type LendRelationship } from '../lib/lending';
-import type { Item } from '../types/item';
+import type { Item, OpenLoanSummary } from '../types/item';
 import { ITEMS_QUERY_KEY } from './useItems';
 
 export const LEND_CONTACTS_QUERY_KEY = ['lend-contacts'] as const;
+
+// People and loans change only through this app's own mutations, which
+// update or invalidate the caches; no need to refetch on every mount.
+const LENDING_STALE_MS = 5 * 60_000;
 
 export function useLendContacts(enabled = true) {
   return useQuery({
     queryKey: LEND_CONTACTS_QUERY_KEY,
     queryFn: () => api.get<LendContact[]>('/api/lend-contacts').then((r) => (Array.isArray(r.data) ? r.data : [])),
     enabled,
+    staleTime: LENDING_STALE_MS,
   });
 }
 
@@ -37,6 +42,9 @@ export function useUpdateLendContact() {
       api.patch<LendContact>(`/api/lend-contacts/${id}`, patch).then((r) => r.data),
     onSuccess: (contact) => {
       qc.setQueryData<LendContact[]>(LEND_CONTACTS_QUERY_KEY, (old = []) => old.map((c) => (c.id === contact.id ? contact : c)));
+      // Items and loans carry the person's name.
+      qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
     },
     onError: () => Alert.alert('Error', "Couldn't update that person. The name may already be in use."),
   });
@@ -49,6 +57,7 @@ export function useDeleteLendContact() {
     onSuccess: (_res, id) => {
       qc.setQueryData<LendContact[]>(LEND_CONTACTS_QUERY_KEY, (old = []) => old.filter((c) => c.id !== id));
       // Their loans stay, just without a name (FK is ON DELETE SET NULL).
+      qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
       qc.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
     },
     onError: () => Alert.alert('Error', "Couldn't remove that person. Please try again."),
@@ -57,20 +66,49 @@ export function useDeleteLendContact() {
 
 // ── Loans ────────────────────────────────────────────────────────────────────
 
+/** Prefix of every loan query; each filter gets its own key beneath it. */
 export const LOANS_QUERY_KEY = ['loans'] as const;
 
-/** Every loan, newest first: open ones (returnedAt null) and the history. */
-export function useLoans(enabled = true) {
+export type LoansFilter = { itemId?: number; contactId?: number; status?: 'open' | 'returned' };
+
+/**
+ * Loans newest first. Pass a filter to fetch only what a screen draws: one
+ * item's history, or the returned loans. What is out right now is on each
+ * item (`item.openLoan`), so most screens never need this.
+ */
+export function useLoans(filter: LoansFilter = {}, enabled = true) {
   return useQuery({
-    queryKey: LOANS_QUERY_KEY,
-    queryFn: () => api.get<ItemLoan[]>('/api/loans').then((r) => (Array.isArray(r.data) ? r.data : [])),
+    queryKey: [...LOANS_QUERY_KEY, filter],
+    queryFn: () => api.get<ItemLoan[]>('/api/loans', { params: filter }).then((r) => (Array.isArray(r.data) ? r.data : [])),
     enabled,
+    staleTime: LENDING_STALE_MS,
   });
 }
 
-function setItemAvailability(qc: ReturnType<typeof useQueryClient>, itemId: number, availability: Item['availability']) {
+type Snapshot = { items: Item[] | undefined; loans: [QueryKey, ItemLoan[] | undefined][] };
+
+/** Stops in-flight fetches and keeps the current caches for a rollback. */
+async function snapshot(qc: QueryClient): Promise<Snapshot> {
+  await qc.cancelQueries({ queryKey: ITEMS_QUERY_KEY });
+  await qc.cancelQueries({ queryKey: LOANS_QUERY_KEY });
+  return { items: qc.getQueryData<Item[]>(ITEMS_QUERY_KEY), loans: qc.getQueriesData<ItemLoan[]>({ queryKey: LOANS_QUERY_KEY }) };
+}
+
+function restore(qc: QueryClient, snap: Snapshot | undefined) {
+  if (!snap) return;
+  if (snap.items) qc.setQueryData(ITEMS_QUERY_KEY, snap.items);
+  for (const [key, data] of snap.loans) qc.setQueryData(key, data);
+}
+
+function settle(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
+  qc.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+}
+
+function patchItems(qc: QueryClient, itemIds: Iterable<number>, patch: (item: Item) => Partial<Item>) {
+  const ids = new Set(itemIds);
   qc.setQueryData<Item[]>(ITEMS_QUERY_KEY, (old) =>
-    old?.map((i) => (i.id === itemId ? { ...i, availability, availabilityUntil: null } : i)));
+    old?.map((i) => (ids.has(i.id) ? { ...i, ...patch(i) } : i)));
 }
 
 /** Lend an item, or edit its open loan (who has it, back-by date). */
@@ -79,20 +117,28 @@ export function useLendItem() {
   return useMutation({
     mutationFn: ({ itemId, ...body }: { itemId: number; contactId: number | null; dueBack: string | null }) =>
       api.post<ItemLoan>(`/api/items/${itemId}/lend`, { ...body, today: localYmd() }).then((r) => r.data),
-    onMutate: async ({ itemId }) => {
-      await qc.cancelQueries({ queryKey: ITEMS_QUERY_KEY });
-      const previous = qc.getQueryData<Item[]>(ITEMS_QUERY_KEY);
-      setItemAvailability(qc, itemId, 'lent');
-      return { previous };
+    onMutate: async ({ itemId, contactId, dueBack }) => {
+      const snap = await snapshot(qc);
+      const contact = contactId == null ? null
+        : qc.getQueryData<LendContact[]>(LEND_CONTACTS_QUERY_KEY)?.find((c) => c.id === contactId) ?? null;
+      patchItems(qc, [itemId], (item) => {
+        const openLoan: OpenLoanSummary = {
+          id: item.openLoan?.id ?? -1,
+          contactId,
+          contactName: contact?.name ?? null,
+          contactRelationship: contact?.relationship ?? null,
+          lentAt: item.openLoan?.lentAt ?? localYmd(),
+          dueBack,
+        };
+        return { availability: 'lent', availabilityUntil: null, openLoan };
+      });
+      return snap;
     },
-    onError: (_err, _vars, ctx) => {
-      if (ctx?.previous) qc.setQueryData(ITEMS_QUERY_KEY, ctx.previous);
+    onError: (_err, _vars, snap) => {
+      restore(qc, snap);
       Alert.alert('Error', "Couldn't mark that as lent. Please try again.");
     },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
-      qc.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
-    },
+    onSettled: () => settle(qc),
   });
 }
 
@@ -106,26 +152,19 @@ export function useReturnItems() {
     mutationFn: (itemIds: number[]) =>
       api.post<{ returned: number[] }>('/api/loans/return', { itemIds, today: localYmd() }).then((r) => r.data),
     onMutate: async (itemIds) => {
-      await qc.cancelQueries({ queryKey: ITEMS_QUERY_KEY });
-      await qc.cancelQueries({ queryKey: LOANS_QUERY_KEY });
-      const previous = qc.getQueryData<Item[]>(ITEMS_QUERY_KEY);
-      const previousLoans = qc.getQueryData<ItemLoan[]>(LOANS_QUERY_KEY);
+      const snap = await snapshot(qc);
       const ids = new Set(itemIds);
       const today = localYmd();
-      for (const id of itemIds) setItemAvailability(qc, id, 'available');
-      qc.setQueryData<ItemLoan[]>(LOANS_QUERY_KEY, (old) =>
+      patchItems(qc, itemIds, () => ({ availability: 'available', availabilityUntil: null, openLoan: null }));
+      qc.setQueriesData<ItemLoan[]>({ queryKey: LOANS_QUERY_KEY }, (old) =>
         old?.map((l) => (ids.has(l.itemId) && !l.returnedAt ? { ...l, returnedAt: today } : l)));
-      return { previous, previousLoans };
+      return snap;
     },
-    onError: (_err, itemIds, ctx) => {
-      if (ctx?.previous) qc.setQueryData(ITEMS_QUERY_KEY, ctx.previous);
-      if (ctx?.previousLoans) qc.setQueryData(LOANS_QUERY_KEY, ctx.previousLoans);
+    onError: (_err, itemIds, snap) => {
+      restore(qc, snap);
       Alert.alert('Error', `Couldn't mark ${itemIds.length === 1 ? 'that' : 'those'} as returned. Please try again.`);
     },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
-      qc.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
-    },
+    onSettled: () => settle(qc),
   });
 }
 
@@ -136,28 +175,24 @@ export function useReopenLoans() {
     mutationFn: (itemIds: number[]) =>
       api.post<{ reopened: number[]; conflicts: number[] }>('/api/loans/reopen', { itemIds, today: localYmd() }).then((r) => r.data),
     onMutate: async (itemIds) => {
-      await qc.cancelQueries({ queryKey: ITEMS_QUERY_KEY });
-      await qc.cancelQueries({ queryKey: LOANS_QUERY_KEY });
-      const previous = qc.getQueryData<Item[]>(ITEMS_QUERY_KEY);
-      const previousLoans = qc.getQueryData<ItemLoan[]>(LOANS_QUERY_KEY);
-      for (const id of itemIds) setItemAvailability(qc, id, 'lent');
-      // The latest loan of each item (the list is newest first) is the one coming back.
-      const seen = new Set<number>();
-      qc.setQueryData<ItemLoan[]>(LOANS_QUERY_KEY, (old) => old?.map((l) => {
-        if (!itemIds.includes(l.itemId) || seen.has(l.itemId)) return l;
-        seen.add(l.itemId);
-        return { ...l, returnedAt: null };
-      }));
-      return { previous, previousLoans };
+      const snap = await snapshot(qc);
+      // The item's openLoan comes back with the refetch; until then 'lent' is enough to draw it as out.
+      patchItems(qc, itemIds, () => ({ availability: 'lent', availabilityUntil: null }));
+      // The latest loan of each item (every list is newest first) is the one coming back.
+      qc.setQueriesData<ItemLoan[]>({ queryKey: LOANS_QUERY_KEY }, (old) => {
+        const seen = new Set<number>();
+        return old?.map((l) => {
+          if (!itemIds.includes(l.itemId) || seen.has(l.itemId)) return l;
+          seen.add(l.itemId);
+          return { ...l, returnedAt: null };
+        });
+      });
+      return snap;
     },
-    onError: (_err, _ids, ctx) => {
-      if (ctx?.previous) qc.setQueryData(ITEMS_QUERY_KEY, ctx.previous);
-      if (ctx?.previousLoans) qc.setQueryData(LOANS_QUERY_KEY, ctx.previousLoans);
+    onError: (_err, _ids, snap) => {
+      restore(qc, snap);
       Alert.alert("Couldn't undo", 'It may have been lent again already.');
     },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
-      qc.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
-    },
+    onSettled: () => settle(qc),
   });
 }

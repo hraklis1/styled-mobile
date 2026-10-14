@@ -8,7 +8,7 @@ import { resolveAppPreferences } from '../../lib/appPreferences';
 import { setHapticsEnabled } from '../../lib/haptics';
 import { posthog } from '../../lib/analytics';
 import { syncLoanReminders, syncReminders } from '../../lib/notifications';
-import { useLendContacts, useLoans } from '../../hooks/useLendContacts';
+import { useLoans } from '../../hooks/useLendContacts';
 
 /**
  * Applies Settings to the running app. Render it once, inside the signed-in
@@ -46,21 +46,12 @@ export function AppPreferencesEffects() {
   // Lent-item reminders: only loans with a back-by date, and only while the
   // setting is on, so the queries stay idle for everyone else.
   const loansOn = loaded && prefs.notifications.loans;
-  const { data: loans } = useLoans(loansOn);
-  const { data: contacts } = useLendContacts(loansOn);
-  const loanKey = (loans ?? [])
-    .filter((l) => !l.returnedAt && l.dueBack)
-    .map((l) => `${l.id}:${l.dueBack}:${l.contactId ?? ''}:${contacts?.find((c) => c.id === l.contactId)?.name ?? ''}`)
-    .join('|');
+  const { data: loans } = useLoans({ status: 'open' }, loansOn);
+  const dueLoans = (loans ?? []).filter((l) => l.dueBack);
+  const loanKey = dueLoans.map((l) => `${l.id}:${l.dueBack}:${l.contactName ?? ''}`).join('|');
   useEffect(() => {
     if (!loaded) return;
-    const due = (loans ?? [])
-      .filter((l) => !l.returnedAt && l.dueBack)
-      .map((l) => ({
-        itemName: l.itemName,
-        contactName: contacts?.find((c) => c.id === l.contactId)?.name ?? null,
-        dueBack: l.dueBack!,
-      }));
+    const due = dueLoans.map((l) => ({ itemName: l.itemName, contactName: l.contactName, dueBack: l.dueBack! }));
     syncLoanReminders(loansOn, due).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded, loansOn, loanKey]);

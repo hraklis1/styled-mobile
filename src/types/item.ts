@@ -158,6 +158,8 @@ export type Item = {
   availability?: 'available' | 'laundry' | 'lent' | 'stored';
   /** YYYY-MM-DD; the state lapses back to available after this date. */
   availabilityUntil?: string | null;
+  /** The open loan while lent (GET /api/items only); null otherwise. Absent from older servers. */
+  openLoan?: OpenLoanSummary | null;
   warmthRating: number | null;
   purchasePrice: number | null;
   purchaseDate: string | null;
@@ -167,4 +169,14 @@ export type Item = {
   isFavorite: boolean;
   isArchived: boolean;
   createdAt: string;
+};
+
+/** Who has a lent item, since when, and until when. Dates are local YYYY-MM-DD. */
+export type OpenLoanSummary = {
+  id: number;
+  contactId: number | null;
+  contactName: string | null;
+  contactRelationship: string | null;
+  lentAt: string;
+  dueBack: string | null;
 };

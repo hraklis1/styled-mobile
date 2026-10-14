@@ -40,7 +40,6 @@ import { FilterPanel } from '../../components/wardrobe/FilterPanel';
 import { OutfitFilterPanel } from '../../components/outfits/OutfitFilterPanel';
 import { ClosetGrid } from '../../components/wardrobe/ClosetGrid';
 import { ClosetRails, type ClosetRail } from '../../components/wardrobe/ClosetRails';
-import { useLendContacts, useLoans } from '../../hooks/useLendContacts';
 import { isLentNow } from '../../lib/lending';
 import { ListScrubber } from '../../components/wardrobe/ListScrubber';
 import { buildScrubberEntries } from '../../lib/closet-scrubber';
@@ -235,18 +234,14 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
 
   const { data: items = [], isLoading: itemsLoading, isError: itemsError, refetch: refetchItems } = useItems();
   const lentItems = useMemo(() => items.filter(isLentNow), [items]);
-  const { data: lendContacts = [] } = useLendContacts(lentItems.length > 0);
-  const { data: loans = [] } = useLoans(lentItems.length > 0);
   const lentSummary = useMemo(() => {
     if (!lentItems.length) return null;
-    const lentIds = new Set(lentItems.map((i) => i.id));
-    const names = [...new Set(loans
-      .filter((l) => !l.returnedAt && lentIds.has(l.itemId))
-      .map((l) => lendContacts.find((c) => c.id === l.contactId)?.name)
+    const names = [...new Set(lentItems
+      .map((i) => i.openLoan?.contactName)
       .filter((n): n is string => !!n))];
     const who = names.length > 2 ? `${names.slice(0, 2).join(', ')} +${names.length - 2}` : names.join(', ');
     return `${lentItems.length} ${lentItems.length === 1 ? 'piece' : 'pieces'} lent out${who ? ` · ${who}` : ''}`;
-  }, [lentItems, loans, lendContacts]);
+  }, [lentItems]);
   const { data: outfits = [] } = useOutfits();
   const { data: events = [] } = useEvents();
   const { data: boards = [], isLoading: boardsLoading } = useBoards();

@@ -1,4 +1,6 @@
-import type { CoverImageVariant, Item } from '../types/item';
+import type { CoverImageVariant, Item, OpenLoanSummary } from '../types/item';
+
+export type { OpenLoanSummary };
 import { isAvailableNow } from './availability';
 
 export type LendRelationship = 'friend' | 'family' | 'partner' | 'colleague' | 'other';
@@ -15,6 +17,8 @@ export type ItemLoan = {
   id: number;
   itemId: number;
   contactId: number | null;
+  /** The person's current name; null when unnamed or the person was removed. */
+  contactName: string | null;
   lentAt: string;
   dueBack: string | null;
   returnedAt: string | null;
@@ -34,12 +38,17 @@ export const LEND_RELATIONSHIPS: { id: LendRelationship; label: string }[] = [
   { id: 'other', label: 'Other' },
 ];
 
-export function relationshipLabel(relationship: LendRelationship): string {
+export function relationshipLabel(relationship: LendRelationship | string | null | undefined): string {
   return LEND_RELATIONSHIPS.find((r) => r.id === relationship)?.label ?? 'Other';
 }
 
 export function isLentNow(item: Item): boolean {
   return item.availability === 'lent' && !isAvailableNow(item);
+}
+
+/** The item's open loan while it is out; null when it isn't (or the server predates the field). */
+export function openLoanOf(item: Item): OpenLoanSummary | null {
+  return isLentNow(item) ? item.openLoan ?? null : null;
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');

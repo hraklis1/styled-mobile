@@ -63,6 +63,19 @@ Mobile: unit tests for the hooks' optimistic updates and rollback.
 
 ## Phase 2 — Leaner data fetching (backend + mobile)
 
+**Status (Oct 13 2026):** implemented, uncommitted. Differences from the plan:
+- The open-loan summary is on `GET /api/items` only. There is no single-item
+  GET route.
+- `openLoan` also carries `contactRelationship`.
+- `/api/loans` rows now include `contactName`.
+- The next-page cursor is sent in an `X-Next-Cursor` header, so the response
+  body stays the array older builds expect.
+- Item Detail fetches `?itemId=` as soon as it opens. It's one small query, so
+  it isn't held back until the history section is visible.
+- Lent Out fetches `?status=returned` once. There's no paging UI yet; the
+  cursor is ready for when the history outgrows one page.
+- The reminder sync uses `?status=open`.
+
 **2.1 Open-loan summary on items.** Add `openLoan: { id, contactId,
 contactName, lentAt, dueBack } | null` to the item list and detail payloads
 (left join on the partial index; cheap). Then:

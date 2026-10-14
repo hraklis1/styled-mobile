@@ -49,9 +49,9 @@ import { useTagScanner } from '../../hooks/useTagScanner';
 import { EditItemModal } from '../../components/item/EditItemModal';
 import { BrandSheet } from '../../components/item/BrandSheet';
 import { LendSheet } from '../../components/lending/LendSheet';
-import { useLendContacts, useLendItem, useLoans } from '../../hooks/useLendContacts';
+import { useLendItem, useLoans } from '../../hooks/useLendContacts';
 import { useReturnWithUndo } from '../../components/lending/useReturnWithUndo';
-import { openLoanStatus, pastLoanRange, relationshipLabel } from '../../lib/lending';
+import { openLoanOf, openLoanStatus, pastLoanRange, relationshipLabel } from '../../lib/lending';
 import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
 import { SLEEVE_LENGTH_LABELS } from '../../types/item';
 import { ErrorState } from '../../components/primitives/ErrorState';
@@ -153,8 +153,8 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
 
   const qc = useQueryClient();
   const updateItem = useUpdateItem();
-  const { data: lendContacts = [] } = useLendContacts();
-  const { data: loans = [] } = useLoans(!!itemId);
+  // Just this item's loans, for the history section; who has it now is on the item.
+  const { data: itemLoans = [] } = useLoans({ itemId: itemId ?? undefined }, !!itemId);
   const lendItem = useLendItem();
   const { markReturned, toast: returnToast } = useReturnWithUndo();
   const deleteItem = useDeleteItem();
@@ -303,10 +303,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
       ? `\n\nThis item appears in ${affectedCount} outfit${affectedCount === 1 ? '' : 's'}. A deleted placeholder will replace it until you clear it.`
       : '';
     // Deleting the item deletes its loans too (FK cascade), so say so while it's out.
-    const holderId = item.availability === 'lent'
-      ? loans.find((l) => l.itemId === item.id && !l.returnedAt)?.contactId ?? null
-      : null;
-    const holder = holderId == null ? null : lendContacts.find((c) => c.id === holderId)?.name ?? null;
+    const holder = item.availability === 'lent' ? item.openLoan?.contactName ?? null : null;
     const lentWarning = item.availability === 'lent'
       ? `\n\n${holder ? `${holder} still has it` : "It's lent out right now"}. Its lending history will be deleted too.`
       : '';
@@ -596,15 +593,12 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     ? AVAILABILITY_LABELS[viewItem.availability]
     : null;
   const isLent = !available && viewItem.availability === 'lent';
-  const contactName = (id: number | null) => (id == null ? null : lendContacts.find((c) => c.id === id) ?? null);
-  const itemLoans = itemId ? loans.filter((l) => l.itemId === itemId) : [];
-  const openLoan = isLent ? itemLoans.find((l) => !l.returnedAt) ?? null : null;
-  const borrower = contactName(openLoan?.contactId ?? null);
+  const openLoan = isLent ? openLoanOf(viewItem) : null;
   const loanStatus = openLoan ? openLoanStatus(openLoan) : null;
   // Already newest first from the server.
   const lendingHistoryRows: EditorialDetailRow[] = itemLoans
     .filter((l) => l.returnedAt)
-    .map((l) => ({ key: String(l.id), label: contactName(l.contactId)?.name ?? 'Someone', value: pastLoanRange(l) }));
+    .map((l) => ({ key: String(l.id), label: l.contactName ?? 'Someone', value: pastLoanRange(l) }));
   const hasStyleProfile = styleProfileRows.length > 0;
 
   const wearSentence = viewItem.wearCount === 0
@@ -991,7 +985,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           <Text style={styles.wearSentence}>{wearSentence}</Text>
           {isLent ? (
             <Text style={[styles.wearSentence, loanStatus?.overdue && { color: colors.destructive }]}>
-              {borrower ? `Lent to ${borrower.name} (${relationshipLabel(borrower.relationship).toLowerCase()})` : 'Lent out'}
+              {openLoan?.contactName ? `Lent to ${openLoan.contactName} (${relationshipLabel(openLoan.contactRelationship).toLowerCase()})` : 'Lent out'}
               {loanStatus ? `. ${loanStatus.text}` : ''}. The stylist will leave it out until it's back.
             </Text>
           ) : unavailableLabel ? (

@@ -13,14 +13,14 @@ import {
 } from '../../hooks/useLendContacts';
 import { itemThumbUri } from '../../lib/itemImage';
 import {
-  isLentNow, loanImageFields, localYmd, openLoanStatus, pastLoanRange, relationshipLabel,
-  type ItemLoan, type LendContact,
+  isLentNow, loanImageFields, localYmd, openLoanOf, openLoanStatus, pastLoanRange, relationshipLabel,
+  type ItemLoan, type LendContact, type OpenLoanSummary,
 } from '../../lib/lending';
 import type { LentOutScreenProps } from '../../navigation/types';
 import { colors, radii, spacing, typography } from '../../theme';
 
 /** A piece that is out right now, whether or not it has a loan row (older lends don't). */
-type OutRow = { itemId: number; name: string; uri?: string; loan: ItemLoan | null };
+type OutRow = { itemId: number; name: string; uri?: string; loan: OpenLoanSummary | null };
 
 /**
  * Who has what, and who has had what. Pieces that are out now are grouped by
@@ -30,7 +30,8 @@ type OutRow = { itemId: number; name: string; uri?: string; loan: ItemLoan | nul
 export function LentOutScreen({ navigation }: LentOutScreenProps) {
   const { data: items = [] } = useItems();
   const { data: contacts = [] } = useLendContacts();
-  const { data: loans = [], isLoading } = useLoans();
+  // What is out comes with the items; only the returned loans are fetched here.
+  const { data: pastLoans = [], isLoading } = useLoans({ status: 'returned' });
   const { markReturned, toast } = useReturnWithUndo();
   const updateContact = useUpdateLendContact();
   const deleteContact = useDeleteLendContact();
@@ -42,13 +43,11 @@ export function LentOutScreen({ navigation }: LentOutScreenProps) {
 
   const { outGroups, pastByContact, idle } = useMemo(() => {
     const lentItems = items.filter(isLentNow);
-    const lentIds = new Set(lentItems.map((i) => i.id));
-    const openByItem = new Map(loans.filter((l) => !l.returnedAt && lentIds.has(l.itemId)).map((l) => [l.itemId, l]));
     const known = (id: number | null) => (id != null && contacts.some((c) => c.id === id) ? id : null);
 
     const out = new Map<number | null, OutRow[]>();
     for (const item of lentItems) {
-      const loan = openByItem.get(item.id) ?? null;
+      const loan = openLoanOf(item);
       const key = known(loan?.contactId ?? null);
       out.set(key, [...(out.get(key) ?? []), { itemId: item.id, name: item.name, uri: itemThumbUri(item), loan }]);
     }
@@ -65,14 +64,13 @@ export function LentOutScreen({ navigation }: LentOutScreenProps) {
       .sort((a, b) => (a.contact ? 0 : 1) - (b.contact ? 0 : 1) || urgency(a.rows[0]).localeCompare(urgency(b.rows[0])));
 
     const pastByContact = new Map<number | null, ItemLoan[]>();
-    for (const loan of loans) {
-      if (!loan.returnedAt) continue;
+    for (const loan of pastLoans) {
       const key = known(loan.contactId);
       pastByContact.set(key, [...(pastByContact.get(key) ?? []), loan]);
     }
     const idle = contacts.filter((c) => !out.has(c.id));
     return { outGroups, pastByContact, idle };
-  }, [items, loans, contacts, today]);
+  }, [items, pastLoans, contacts, today]);
 
   const toggle = (key: string) => setExpanded((prev) => {
     const next = new Set(prev);
