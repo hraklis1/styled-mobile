@@ -116,7 +116,7 @@ test.each([1, 2, 3, 5])('outfit recipes always show the suggested addition inlin
   render(<OutfitRecipeCard look={{ label: 'Weekend walk', itemIds: ids }} target={target}
     wardrobe={new Map(ids.map(id => [id, { id, name: `Owned piece ${id}` } as Item]))} />);
   const json = JSON.stringify(renderer.toJSON());
-  expect(json).toContain(`✓ ${count} in your closet · 1 new`);
+  expect(json).not.toContain("in your closet");
   expect(json).toContain('NEW');
   expect(json).not.toContain('with this piece');
   expect(renderer.root.findAllByType('WardrobeThumbnail' as any)).toHaveLength(count);
@@ -140,7 +140,7 @@ test('editorial guide teaches selection criteria before outfits and shopping', (
   expect(json.indexOf('What to look for')).toBeLessThan(json.indexOf('Ways to wear it'));
   expect(json.indexOf('Ways to wear it')).toBeLessThan(json.indexOf('Shop this style'));
   expect(json).toContain('Smooth wool');
-  expect(json).toContain('✓ 2 in your closet · 1 new');
+  expect(json).not.toContain("in your closet");
 });
 
 test('editorial guide omits absent budgets, criteria, outfits and shopping', () => {

@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { Item } from '../../types/item';
 import type { ShoppingPriorityOutfitIdea, ShoppingPriorityTarget } from '../../lib/shoppingPriorityEdit';
 import { colors, radii, shoppingSurfaces, spacing, typography } from '../../theme';
+import { recipeSlots } from '../../lib/outfitRecipeOrder';
 import { WardrobeThumbnail } from './WardrobeThumbnail';
 import { ShoppingStyleVisual } from './ShoppingStyleVisual';
 import { ItemDetailSheet } from '../stylist/ChatItemDetailSheet';
@@ -18,10 +19,6 @@ const TILE_WIDTH = 92;
 /** The owned pieces of a look that still exist in the wardrobe, deduped. */
 export function recipePieces(look: ShoppingPriorityOutfitIdea, wardrobe: ReadonlyMap<number, Item>): Item[] {
   return [...new Set(look.itemIds)].map(id => wardrobe.get(id)).filter((item): item is Item => !!item);
-}
-
-export function recipeSynergy(ownedCount: number): string {
-  return `✓ ${ownedCount} in your closet · 1 new`;
 }
 
 /**
@@ -49,19 +46,16 @@ export function OutfitRecipeCard({
 
   return (
     <View style={styles.card}>
-      <View style={styles.header} accessible accessibilityRole="header"
-        accessibilityLabel={`${title}. ${pieces.length} in your closet, 1 new: ${target.title}.`}>
-        <Text style={styles.title} numberOfLines={2}>{title}</Text>
-        <Text style={styles.pill}>{recipeSynergy(pieces.length)}</Text>
-      </View>
+      <Text style={styles.title} numberOfLines={2} accessibilityRole="header">{title}</Text>
       {/* Bleeds to the card's edges so pieces scroll under its rounded clip. */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.strip} contentContainerStyle={styles.row}>
-        <PieceTile anchor label={target.title} accessibilityLabel={`${target.title}. Recommended piece to add.`}>
-          <ShoppingStyleVisual plain fill target={target} />
-        </PieceTile>
-        {pieces.map(item => (
-          <PieceTile key={item.id} label={item.name} accessibilityLabel={`${item.name}. In your wardrobe.`} onPress={() => setDetail(item)}>
-            <WardrobeThumbnail item={item} style={styles.fill} />
+        {recipeSlots(target, pieces).map(slot => slot.kind === 'new' ? (
+          <PieceTile key="new" anchor label={target.title} accessibilityLabel={`${target.title}. Recommended piece to add.`}>
+            <ShoppingStyleVisual plain fill target={target} />
+          </PieceTile>
+        ) : (
+          <PieceTile key={slot.item.id} label={slot.item.name} accessibilityLabel={`${slot.item.name}. In your wardrobe.`} onPress={() => setDetail(slot.item)}>
+            <WardrobeThumbnail item={slot.item} style={styles.fill} />
           </PieceTile>
         ))}
       </ScrollView>
@@ -92,9 +86,11 @@ function PieceTile({
 }) {
   const body = (
     <>
-      <View style={[styles.frame, anchor && styles.anchorFrame]}>
-        {children}
-        {anchor ? <Text style={styles.newTag}>NEW</Text> : null}
+      <View style={anchor && styles.anchorGlow}>
+        <View style={[styles.frame, anchor && styles.anchorFrame]}>
+          {children}
+          {anchor ? <Text style={styles.newTag}>NEW</Text> : null}
+        </View>
       </View>
       <Text style={[styles.label, anchor && styles.anchorLabel]} numberOfLines={2} ellipsizeMode="tail">{label}</Text>
     </>
@@ -125,20 +121,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     overflow: 'hidden',
   },
-  header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.sm },
-  title: { ...typography.text.label, color: colors.foreground, flexShrink: 1 },
-  pill: {
-    flexShrink: 0,
-    ...typography.text.caption,
-    color: shoppingSurfaces.olive.accent,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: radii.full,
-    overflow: 'hidden',
-    backgroundColor: colors.surfaceSubtle,
-  },
+  title: { ...typography.text.label, color: colors.foreground },
   strip: { marginHorizontal: -spacing.lg },
-  row: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingHorizontal: spacing.lg },
+  // Top inset leaves room for the new piece's glow, which the strip would clip.
+  row: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.xs },
   tile: { width: TILE_WIDTH, gap: spacing.xs },
   pressed: { opacity: 0.7 },
   frame: { width: TILE_WIDTH, aspectRatio: 0.8, borderRadius: radii.photo, overflow: 'hidden' },
@@ -148,6 +134,15 @@ const styles = StyleSheet.create({
     borderColor: shoppingSurfaces.olive.accent,
     backgroundColor: shoppingSurfaces.olive.wash,
   },
+  // Wrapper carries the glow: the frame itself clips, which would cut a shadow off.
+  anchorGlow: {
+    borderRadius: radii.photo,
+    shadowColor: shoppingSurfaces.olive.accent,
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  },
   newTag: {
     position: 'absolute',
     top: spacing.xs,
@@ -156,12 +151,12 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 14,
     letterSpacing: 0.6,
-    paddingHorizontal: 4,
-    borderRadius: radii.sm,
+    paddingHorizontal: 6,
+    borderRadius: radii.full,
     overflow: 'hidden',
     color: colors.primaryForeground,
     backgroundColor: shoppingSurfaces.olive.accent,
   },
   label: { ...typography.text.caption, color: colors.inkSubtle, minHeight: LABEL_MIN_HEIGHT },
-  anchorLabel: { ...typography.text.caption, color: shoppingSurfaces.olive.accent },
+  anchorLabel: { ...typography.text.caption, fontWeight: '600', color: shoppingSurfaces.olive.accent },
 });
