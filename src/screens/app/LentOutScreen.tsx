@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SettingsScaffold, Group, GroupBlock } from '../../components/profile/SettingsUI';
@@ -120,8 +121,18 @@ export function LentOutScreen({ navigation }: LentOutScreenProps) {
       title="Lent out"
       lede={totalOut
         ? `${totalOut} ${totalOut === 1 ? 'piece is' : 'pieces are'} with other people. The stylist leaves them out until they're back.`
-        : 'Nothing is lent out right now. Lend a piece from its options menu.'}
+        : 'Nothing is lent out right now. When a friend borrows something, note it here and we\'ll remember who has it.'}
     >
+      <Pressable
+        onPress={() => navigation.navigate('ClosetMain', { lend: true })}
+        style={s.lendButton}
+        accessibilityRole="button"
+        accessibilityHint="Opens your closet to choose pieces"
+      >
+        <Ionicons name="add" size={18} color={colors.primaryForeground} />
+        <Text style={s.lendButtonLabel}>Lend something</Text>
+      </Pressable>
+
       {isLoading ? <ActivityIndicator color={colors.primary} /> : null}
 
       {outGroups.map(({ contact, rows }) => {
@@ -233,4 +244,9 @@ const s = StyleSheet.create({
   action: { minHeight: 44, minWidth: 44, justifyContent: 'center' },
   link: { ...typography.text.bodySmall, color: colors.foreground, textDecorationLine: 'underline' },
   muted: { ...typography.text.bodySmall, color: colors.mutedForeground },
+  lendButton: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, alignSelf: 'flex-start',
+    minHeight: 44, paddingHorizontal: spacing.lg, borderRadius: radii.full, backgroundColor: colors.primary,
+  },
+  lendButtonLabel: { ...typography.text.bodySmall, color: colors.primaryForeground, fontWeight: '600' },
 });

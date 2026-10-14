@@ -105,6 +105,23 @@ when no query parameters are sent.
 
 ## Phase 3 — Discoverability & bulk lending (mobile)
 
+**Status (Oct 13 2026):** implemented, uncommitted.
+- `POST /api/loans` (`{ itemIds, contactId, dueBack, today }`) and the
+  single-item lend route share `lendItems()`. A back-by date before any
+  loan's start rejects the whole batch.
+- The "Lent" filter reuses the closet's existing but unused `selectedStatuses`
+  state, as a full Availability section: Available, Lent out, In the wash,
+  Stored.
+- In the Closet, "Lend…" sits in the selection overflow menu. "Lend N pieces"
+  becomes the primary action only when the Closet was opened from Lent Out
+  (`ClosetMain` `lend` param).
+- The Profile hub row and the settings-search entry close the Profile modal
+  and open Lent Out in the Closet tab.
+- Sim-verified: Lent Out button, selection → lend 2 pieces → toast, Item
+  Detail Lend/Lent button + Returned/Edit loan pills + undo bar.
+- Not sim-verified: Outfit Detail "Lend this outfit", Profile row, settings
+  search, Availability chips (unit-tested).
+
 **3.1 Permanent entry point.**
 - Add a "Lent" filter chip in the Closet pieces filters. It shows lent items
   and has a header link to Lent Out.

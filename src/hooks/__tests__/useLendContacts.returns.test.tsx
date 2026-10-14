@@ -9,7 +9,7 @@ import { Alert } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { api } from '../../lib/api';
-import { LEND_CONTACTS_QUERY_KEY, LOANS_QUERY_KEY, useLendItem, useReopenLoans, useReturnItems } from '../useLendContacts';
+import { LEND_CONTACTS_QUERY_KEY, LOANS_QUERY_KEY, useLendItems, useReopenLoans, useReturnItems } from '../useLendContacts';
 import { ITEMS_QUERY_KEY } from '../useItems';
 import type { ItemLoan } from '../../lib/lending';
 import type { Item } from '../../types/item';
@@ -33,11 +33,11 @@ function setup() {
     { id: 2, name: 'Scarf', availability: 'lent' } as Item,
   ]);
   qc.setQueryData<ItemLoan[]>(LOANS_QUERY_KEY, [loan(11, 1, null), loan(12, 2, null), loan(5, 1, '2026-09-01')]);
-  const hooks: { ret?: ReturnType<typeof useReturnItems>; reopen?: ReturnType<typeof useReopenLoans>; lend?: ReturnType<typeof useLendItem> } = {};
+  const hooks: { ret?: ReturnType<typeof useReturnItems>; reopen?: ReturnType<typeof useReopenLoans>; lend?: ReturnType<typeof useLendItems> } = {};
   function Probe() {
     hooks.ret = useReturnItems();
     hooks.reopen = useReopenLoans();
-    hooks.lend = useLendItem();
+    hooks.lend = useLendItems();
     return null;
   }
   let renderer!: TestRenderer.ReactTestRenderer;
@@ -105,7 +105,7 @@ describe('return / undo hooks', () => {
     qc.setQueryData(LEND_CONTACTS_QUERY_KEY, [{ id: 7, name: 'Maya', relationship: 'friend', createdAt: '' }]);
     qc.setQueryData<Item[]>(ITEMS_QUERY_KEY, [{ id: 3, name: 'Blazer', availability: 'available', openLoan: null } as Item]);
 
-    await act(async () => { hooks.lend!.mutate({ itemId: 3, contactId: 7, dueBack: '2026-10-20' }); });
+    await act(async () => { hooks.lend!.mutate({ itemIds: [3], contactId: 7, dueBack: '2026-10-20' }); });
 
     const item = qc.getQueryData<Item[]>(ITEMS_QUERY_KEY)![0];
     expect(item.availability).toBe('lent');

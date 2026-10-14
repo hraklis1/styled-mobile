@@ -9,9 +9,12 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useProfile, useUpdateProfile } from '../../hooks/useProfile';
 import { useProfileForm } from '../../hooks/useProfileForm';
 import { useEntitlement } from '../../hooks/useEntitlement';
+import { useItems } from '../../hooks/useItems';
+import { isLentNow } from '../../lib/lending';
 import { ErrorState } from '../../components/primitives/ErrorState';
 import { SearchField } from '../../components/primitives/SearchField';
 import { searchSettings, SETTINGS_INDEX, type SettingsSearchEntry } from './settingsSearch';
+import { openLentOut } from './openLentOut';
 import { Group, NavRow } from '../../components/profile/SettingsUI';
 import { SharpenStylistCard } from '../../components/profile/SharpenStylistCard';
 import {
@@ -34,7 +37,7 @@ const PROFILE_SEARCH_INDEX: SettingsSearchEntry[] = [
   { id: 'fit', title: 'Fit & Sizes', path: 'Style DNA', icon: 'resize-outline', keywords: ['measurements', 'shoe', 'top', 'waist', 'body'], target: { route: 'EditFit' } },
   { id: 'shopping', title: 'Shopping', path: 'Style DNA', icon: 'bag-handle-outline', keywords: ['budget', 'retailers', 'brands'], target: { route: 'EditShopping' } },
   { id: 'life', title: 'Your Life', path: 'Style DNA', icon: 'calendar-outline', keywords: ['occasions', 'work', 'lifestyle'], target: { route: 'EditOccasions' } },
-  ...SETTINGS_INDEX.filter(entry => 'route' in entry.target),
+  ...SETTINGS_INDEX.filter(entry => 'route' in entry.target || (entry.target.action === 'lentOut')),
 ];
 
 function summary(values: string[], empty = 'Add'): string {
@@ -57,6 +60,8 @@ export function ProfileHomeScreen({ navigation }: ProfileStackScreenProps<'Profi
   };
   const searching = query.trim().length > 0;
   const results = searchSettings(query, PROFILE_SEARCH_INDEX);
+  const { data: items = [] } = useItems();
+  const lentCount = items.filter(isLentNow).length;
   const insets = useSafeAreaInsets();
   const parent = useNavigation();
   const { user } = useAuth();
@@ -120,7 +125,11 @@ export function ProfileHomeScreen({ navigation }: ProfileStackScreenProps<'Profi
         {searching ? (results.length ? (
           <Group title={`${results.length} ${results.length === 1 ? 'result' : 'results'}`}>
             {results.map(entry => <NavRow key={entry.id} icon={entry.icon} label={entry.title} detail={entry.path}
-              onPress={() => { if ('route' in entry.target) { closeSearch(); navigation.navigate(entry.target.route); } }} />)}
+              onPress={() => {
+                closeSearch();
+                if ('route' in entry.target) navigation.navigate(entry.target.route);
+                else if (entry.target.action === 'lentOut') openLentOut(navigation);
+              }} />)}
           </Group>
         ) : (
           <View style={s.empty} accessibilityLiveRegion="polite">
@@ -188,6 +197,10 @@ export function ProfileHomeScreen({ navigation }: ProfileStackScreenProps<'Profi
           <NavRow icon="bulb-outline" label="What Styled has learned"
             detail="Tastes picked up from your conversations"
             onPress={() => navigation.navigate('SettingsLearned')} />
+          <NavRow icon="people-outline" label="Lending"
+            value={lentCount ? `${lentCount} out` : undefined}
+            detail="Who has what, and who has had what"
+            onPress={() => openLentOut(navigation)} />
         </Group>
         </>)}
       </ScrollView>

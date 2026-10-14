@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { track } from '../../lib/analytics';
 import { useOutfits, useDeleteOutfit, useMarkOutfitWorn, useVisualizeOutfit, useUpdateOutfit } from '../../hooks/useOutfits';
 import { useItems } from '../../hooks/useItems';
@@ -34,6 +35,9 @@ import { useAssignOutfitEvents } from '../../hooks/useOutfits';
 import { getUpcomingOutfitEvents, parseEventDate } from '../../lib/outfitAssignments';
 import { OutfitEventAssignmentModal } from '../../components/outfits/OutfitEventAssignmentModal';
 import { TabQuickMenuSheet, type TabQuickMenuOption } from '../../components/navigation/TabQuickMenuSheet';
+import { LendItemsSheet } from '../../components/lending/LendItemsSheet';
+import { UndoToast } from '../../components/primitives/UndoToast';
+import type { Item } from '../../types/item';
 import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
 import { useEntitlement } from '../../hooks/useEntitlement';
 import { useAuth } from '../../contexts/AuthContext';
@@ -70,6 +74,14 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   const [notesExpanded, setNotesExpanded] = useState(false);
   const [eventPickerVisible, setEventPickerVisible] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [lendTargets, setLendTargets] = useState<Item[] | null>(null);
+  const [lentMessage, setLentMessage] = useState<string | null>(null);
+  const insets = useSafeAreaInsets();
+  useEffect(() => {
+    if (!lentMessage) return;
+    const timeout = setTimeout(() => setLentMessage(null), 2600);
+    return () => clearTimeout(timeout);
+  }, [lentMessage]);
   const [saveSheetOpen, setSaveSheetOpen] = useState(false);
   const [returningToTab, setReturningToTab] = useState(false);
   const [flatlayCoachVisible, setFlatlayCoachVisible] = useState(false);
@@ -289,9 +301,11 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
   };
 
   const hasAiImage = !!outfit.aiGeneratedImageUrl;
+  const livePieces = pieces.flatMap((p) => (p.item ? [p.item] : []));
 
   // Favourite and Save-to-board live in the utility row now, so this is down to
-  // renaming, regenerating the flat-lay (once one exists), and deleting.
+  // renaming, lending the pieces, regenerating the flat-lay (once one exists),
+  // and deleting.
   const outfitMenuOptions: TabQuickMenuOption[] = [
     {
       key: 'rename',
@@ -299,6 +313,12 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
       icon: 'pencil-outline',
       onPress: beginRename,
     },
+    ...(livePieces.length ? [{
+      key: 'lend',
+      label: 'Lend this outfit',
+      icon: 'people-outline' as const,
+      onPress: () => setLendTargets(livePieces),
+    }] : []),
     ...(hasAiImage ? [{
       key: 'regenerate',
       label: 'Regenerate flat-lay',
@@ -760,6 +780,10 @@ export function OutfitDetailScreen({ route, navigation }: OutfitDetailScreenProp
           </TouchableOpacity>
         )}
       </ScrollView>
+      <LendItemsSheet items={lendTargets} onClose={() => setLendTargets(null)} onLent={setLentMessage} />
+      {lentMessage ? (
+        <UndoToast message={lentMessage} actionLabel="OK" onUndo={() => setLentMessage(null)} bottom={insets.bottom + spacing.lg} />
+      ) : null}
       <TabQuickMenuSheet
         visible={menuOpen}
         title="Outfit options"

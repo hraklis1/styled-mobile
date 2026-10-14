@@ -7,6 +7,7 @@ import type { Item } from '../types/item';
 import type { Outfit } from '../types/outfit';
 import type { Event } from '../types/event';
 import { getUpcomingAssignmentSummaries } from '../lib/outfitAssignments';
+import { isAvailableNow } from '../lib/availability';
 import {
   categoryForSubcategories,
   countActivePieceFilters,
@@ -160,10 +161,13 @@ export function useClosetFilters({ items, outfits, events, piecesSearch, outfits
       );
     if (selectedSleeveLengths.length)
       result = result.filter(i => i.sleeveLength && selectedSleeveLengths.includes(i.sleeveLength));
+    // Availability as it stands today: a lapsed "in the wash" counts as available.
+    if (selectedStatuses.length)
+      result = result.filter(i => selectedStatuses.includes(isAvailableNow(i) ? 'available' : i.availability ?? 'available'));
 
     return result;
   }, [items, selectedColors, selectedBrands, selectedSeasons, selectedConditions, selectedWarmth,
-    selectedOccasions, selectedMaterials, selectedSleeveLengths]);
+    selectedOccasions, selectedMaterials, selectedSleeveLengths, selectedStatuses]);
   const piecesBeforeSearch = useMemo(() => piecesWithoutCategories.filter(i =>
     itemMatchesSelectedCategories(i.category, selectedCategories) && (!activeSubcategory || i.subcategory === activeSubcategory)
   ), [piecesWithoutCategories, selectedCategories, activeSubcategory]);

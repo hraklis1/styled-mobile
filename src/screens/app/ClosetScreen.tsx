@@ -41,6 +41,7 @@ import { OutfitFilterPanel } from '../../components/outfits/OutfitFilterPanel';
 import { ClosetGrid } from '../../components/wardrobe/ClosetGrid';
 import { ClosetRails, type ClosetRail } from '../../components/wardrobe/ClosetRails';
 import { isLentNow } from '../../lib/lending';
+import { LendItemsSheet } from '../../components/lending/LendItemsSheet';
 import { ListScrubber } from '../../components/wardrobe/ListScrubber';
 import { buildScrubberEntries } from '../../lib/closet-scrubber';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -333,13 +334,17 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     scrollToTop: () => getActiveListRef.current()?.scrollToOffset({ offset: 0, animated: true }),
   });
   useScrollToTop(scrollToTopTarget);
+  // Lending a selection. `lendIntent` is set when the user came here to lend
+  // (Lent Out → Lend something): selection opens with Lend as the main action.
+  const [lendTargets, setLendTargets] = useState<Item[] | null>(null);
+  const [lendIntent, setLendIntent] = useState(false);
   const pieceSelection = useSelection(filteredItems);
   const outfitSelection = useSelection(filteredOutfits);
   const { active: selectionMode, ids: selectedIds, toggle: toggleSelect, exit: exitSelectionMode, enter: enterPieceSelection } = pieceSelection;
   const { active: outfitSelectionMode, ids: selectedOutfitIds, toggle: toggleOutfitSelect, exit: exitOutfitSelectionMode, enter: enterOutfitSelection } = outfitSelection;
   useHideTabBar(selectionMode || outfitSelectionMode, navigation);
   const listPaddingBottom = selectionMode || outfitSelectionMode
-    ? Math.max(spacing.xxxl * 2, selectionBarClearance(insets.bottom, false))
+    ? Math.max(spacing.xxxl * 2, selectionBarClearance(insets.bottom, lendIntent))
     : spacing.xxxl * 2;
   const [selectionToast, setSelectionToast] = useState<string | null>(null);
   useEffect(() => {
@@ -351,6 +356,8 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setSelectionToast(message);
   }, []);
+
+  useEffect(() => { if (!selectionMode) setLendIntent(false); }, [selectionMode]);
 
   const activeItems = segment === 'pieces' ? filteredItems : segment === 'outfits' ? filteredOutfits : sortedBoards;
   // Rails hold shelves, not pieces: item anchors don't apply, so they keep a plain scroll
@@ -533,6 +540,14 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     navigation.setParams({ segment: undefined });
   }, [handleSegmentChange, navigation, route.params?.segment, segment]);
 
+  useEffect(() => {
+    if (!route.params?.lend) return;
+    if (segment !== 'pieces') handleSegmentChange('pieces');
+    enterPieceSelection();
+    setLendIntent(true);
+    navigation.setParams({ lend: undefined });
+  }, [enterPieceSelection, handleSegmentChange, navigation, route.params?.lend, segment]);
+
   const applySelectedCategories = useCallback((next: string[]) => {
     if (shouldClearActiveSubcategory(selectedCategories, next)) setActiveSubcategory(null);
     setSelectedCategories(next);
@@ -690,6 +705,11 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
     exitSelectionMode();
     finishBulkAction(`${pluralCount(selectedIds.size, 'piece')} marked worn today`);
   }, [selectedIds, markWorn, exitSelectionMode, finishBulkAction]);
+
+  const handleBulkLend = useCallback(() => {
+    if (selectedIds.size === 0) return;
+    setLendTargets(items.filter(i => selectedIds.has(i.id)));
+  }, [selectedIds, items]);
 
   const handleCreateOutfit = useCallback(() => {
     if (selectedIds.size === 0) return;
@@ -1322,6 +1342,13 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
         <SelectionActionBar
           count={selectedIds.size}
           noun="piece"
+          primary={lendIntent ? {
+            label: `Lend ${pluralCount(selectedIds.size, 'piece')}`,
+            icon: 'people-outline',
+            onPress: handleBulkLend,
+            disabled: selectedIds.size === 0,
+            hint: 'Choose the pieces to lend',
+          } : undefined}
           actions={[
             { label: 'Stylist', icon: 'sparkles', onPress: handleAskAboutSelected, disabled: selectedIds.size > 80, hint: 'Select up to 80 pieces to discuss with your stylist', accessibilityLabel: 'Ask stylist about selected pieces' },
             { label: 'Outfit', icon: 'layers-outline', onPress: handleCreateOutfit, accessibilityLabel: 'Create outfit from selected pieces' },
@@ -1329,6 +1356,7 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
             { label: 'Log wear', icon: 'shirt-outline', onPress: handleBulkMarkWorn, accessibilityLabel: 'Mark selected pieces as worn today' },
           ]}
           overflow={[
+            ...(lendIntent ? [] : [{ label: 'Lend…', icon: 'people-outline' as const, onPress: handleBulkLend, accessibilityLabel: 'Lend selected pieces to someone' }]),
             allSelectedPiecesFavorite
               ? { label: 'Remove from favourites', icon: 'heart-dislike-outline', onPress: handleBulkFavorite }
               : { label: 'Add to favourites', icon: 'heart-outline', onPress: handleBulkFavorite },
@@ -1352,6 +1380,11 @@ export function ClosetScreen({ navigation, route }: ClosetScreenProps) {
           ]}
         />
       )}
+      <LendItemsSheet
+        items={lendTargets}
+        onClose={() => setLendTargets(null)}
+        onLent={(message) => { exitSelectionMode(); finishBulkAction(message); }}
+      />
       {selectionToast && !selectionMode && !outfitSelectionMode && (
         <UndoToast message={selectionToast} actionLabel="OK" onUndo={() => setSelectionToast(null)} bottom={TAB_BAR_CLEARANCE + spacing.sm} />
       )}

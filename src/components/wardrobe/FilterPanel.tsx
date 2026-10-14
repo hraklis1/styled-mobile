@@ -16,6 +16,10 @@ import Animated, {
   useAnimatedStyle, withTiming,
 } from 'react-native-reanimated';
 import { colors, spacing, typography, radii } from '../../theme';
+import { AVAILABILITY_LABELS, type Availability } from '../../lib/availability';
+
+const AVAILABILITY_FILTER_OPTIONS: Availability[] = ['available', 'lent', 'laundry', 'stored'];
+const AVAILABILITY_FILTER_LABELS: Record<Availability, string> = { available: 'Available', ...AVAILABILITY_LABELS };
 import {
   CATEGORY_ORDER, CATEGORY_LABELS,
   OCCASION_OPTIONS, OCCASION_LABELS,
@@ -478,6 +482,37 @@ export function FilterPanel({
 
                     <Text style={[styles.chipText, active && styles.chipTextActive]}>
                       {OCCASION_LABELS[occ]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </AccordionSection>
+        )}
+
+        {/* ── Availability ── */}
+        {onToggleStatus && (
+          <AccordionSection
+            title="Availability"
+            summary={selectionSummary((selectedStatuses ?? []).map(s => AVAILABILITY_FILTER_LABELS[s as Availability] ?? s))}
+            badge={(selectedStatuses ?? []).length}
+            defaultExpanded={(selectedStatuses ?? []).length > 0}
+          >
+            <View style={styles.chips}>
+              {AVAILABILITY_FILTER_OPTIONS.map(status => {
+                const active = (selectedStatuses ?? []).includes(status);
+                return (
+                  <TouchableOpacity
+                    key={status}
+                    style={[styles.chip, active && styles.chipActive]}
+                    accessibilityLabel={AVAILABILITY_FILTER_LABELS[status]}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: active }}
+                    onPress={() => onToggleStatus(status)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                      {AVAILABILITY_FILTER_LABELS[status]}
                     </Text>
                   </TouchableOpacity>
                 );

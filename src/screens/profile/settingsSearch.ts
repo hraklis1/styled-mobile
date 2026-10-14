@@ -12,7 +12,7 @@ import type { ProfileStackParamList } from './types';
 type IconName = keyof typeof Ionicons.glyphMap;
 
 /** Rows on the Settings root that run something instead of pushing a screen. */
-export type SettingsAction = 'resetTips' | 'support' | 'privacyPolicy' | 'terms';
+export type SettingsAction = 'resetTips' | 'support' | 'privacyPolicy' | 'terms' | 'lentOut';
 
 export type SettingsSearchEntry = {
   id: string;
@@ -27,6 +27,9 @@ export type SettingsSearchEntry = {
 const route = (r: keyof ProfileStackParamList) => ({ route: r });
 
 export const SETTINGS_INDEX: SettingsSearchEntry[] = [
+  // Lending (a Closet screen, findable from here)
+  { id: 'lentOut', title: 'Lent out', path: 'Closet', icon: 'people-outline', target: { action: 'lentOut' },
+    keywords: ['lend', 'lent', 'loan', 'borrow', 'borrowed', 'friend', 'who has', 'return'] },
   // Membership
   { id: 'membership', title: 'Membership & credits', path: 'Settings', icon: 'diamond-outline', target: route('SettingsMembership'),
     keywords: ['plan', 'premium', 'subscription', 'billing', 'upgrade', 'balance', 'pro'] },

@@ -37,6 +37,8 @@ export type ClosetStackParamList = {
     segment?: 'pieces' | 'outfits' | 'boards';
     /** Preselect this category filter on arrival (board gap line deep-links here). */
     category?: ItemCategory;
+    /** Arrive in piece selection with "Lend" as the main action (Lent Out → Lend something). */
+    lend?: boolean;
   } | undefined;
   ItemDetail: {
     returnTo?: 'Home';

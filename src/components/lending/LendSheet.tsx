@@ -26,16 +26,18 @@ const DUE_OPTIONS = [
 
 type Selection = { kind: 'existing'; id: number } | { kind: 'new'; name: string } | null;
 
+export type LendSheetItem = { name: string; uri?: string };
+
 /**
- * Who has this piece, and optionally when it's due back. One "Who has it?"
+ * Who has these pieces (one, or a whole selection), and optionally when
+ * they're due back. One "Who has it?"
  * field: saved people show as avatars and filter as you type; a name that
  * matches nobody becomes "Add …", and only then is the relationship asked.
  * Setting a back-by date is what turns on the lent-item reminder.
  */
-export function LendSheet({ visible, itemName, itemImageUri, currentContactId, currentDueBack, lentAt, onConfirm, onClose }: {
+export function LendSheet({ visible, items, currentContactId, currentDueBack, lentAt, onConfirm, onClose }: {
   visible: boolean;
-  itemName: string;
-  itemImageUri?: string;
+  items: LendSheetItem[];
   currentContactId?: number | null;
   currentDueBack?: string | null;
   /** The open loan's start, when editing one; back-by dates count from it. */
@@ -130,12 +132,18 @@ export function LendSheet({ visible, itemName, itemImageUri, currentContactId, c
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.header}>
-          <View style={styles.thumb}>
-            {itemImageUri ? <Image source={{ uri: itemImageUri }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+          <View style={styles.thumbs}>
+            {items.slice(0, 3).map((item, i) => (
+              <View key={i} style={[styles.thumb, i > 0 && styles.thumbStacked, { zIndex: 3 - i }]}>
+                {item.uri ? <Image source={{ uri: item.uri }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+              </View>
+            ))}
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.title}>{editing ? 'Edit loan' : 'Lend'}</Text>
-            <Text style={styles.subtitle} numberOfLines={1}>{itemName}</Text>
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {items.length === 1 ? items[0].name : `${items.length} pieces`}
+            </Text>
           </View>
           <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button">
             <Text style={styles.headerLink}>Cancel</Text>
@@ -310,7 +318,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
     paddingHorizontal: spacing.page, paddingTop: spacing.lg, paddingBottom: spacing.lg,
   },
+  thumbs: { flexDirection: 'row' },
   thumb: { width: 44, height: 55, borderRadius: radii.sm, overflow: 'hidden', backgroundColor: colors.surfaceSubtle },
+  thumbStacked: { marginLeft: -26, borderWidth: 2, borderColor: colors.background },
   title: { ...typography.text.editorialTitle, fontSize: 24, lineHeight: 30, color: colors.foreground },
   subtitle: { ...typography.text.meta, color: colors.mutedForeground },
   headerLink: { ...typography.text.meta, color: colors.mutedForeground },

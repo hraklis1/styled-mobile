@@ -15,6 +15,7 @@ import { colors, spacing, typography } from '../../theme';
 import type { ProfileStackScreenProps } from './types';
 import { planTierLabel } from './membership';
 import { searchSettings, type SettingsAction, type SettingsSearchEntry } from './settingsSearch';
+import { openLentOut } from './openLentOut';
 
 const PRIVACY_URL = process.env.EXPO_PUBLIC_PRIVACY_URL;
 const TERMS_URL = process.env.EXPO_PUBLIC_TERMS_URL;
@@ -80,6 +81,7 @@ export function SettingsScreen({ navigation }: ProfileStackScreenProps<'Settings
       case 'support': return void openExternalUrl('Contact support', SUPPORT_URL);
       case 'privacyPolicy': return void openExternalUrl('Privacy Policy', PRIVACY_URL);
       case 'terms': return void openExternalUrl('Terms of Service', TERMS_URL);
+      case 'lentOut': return openLentOut(navigation);
     }
   };
 
@@ -109,7 +111,7 @@ export function SettingsScreen({ navigation }: ProfileStackScreenProps<'Settings
           <Group title={`${results.length} ${results.length === 1 ? 'result' : 'results'}`}>
             {results.map((entry) => (
               <NavRow key={entry.id} icon={entry.icon} label={entry.title} detail={entry.path}
-                external={'action' in entry.target && entry.target.action !== 'resetTips'}
+                external={'action' in entry.target && entry.target.action !== 'resetTips' && entry.target.action !== 'lentOut'}
                 onPress={() => openResult(entry)} />
             ))}
           </Group>

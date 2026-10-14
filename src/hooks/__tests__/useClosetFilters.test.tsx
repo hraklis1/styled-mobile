@@ -6,7 +6,7 @@ import type { Outfit } from '../../types/outfit';
 
 const items = [
   { id: 1, name: 'Linen shirt', category: 'top', subcategory: 'T-Shirts', colorNormalized: 'white', createdAt: '2026-01-01', wearCount: 0 },
-  { id: 2, name: 'Black trousers', category: 'bottom', colorNormalized: 'black', createdAt: '2026-01-02', wearCount: 2 },
+  { id: 2, name: 'Black trousers', category: 'bottom', colorNormalized: 'black', createdAt: '2026-01-02', wearCount: 2, availability: 'lent' },
   { id: 3, name: 'Archived shoes', category: 'shoes', isArchived: true, createdAt: '2026-01-03', wearCount: 0 },
 ] as unknown as Item[];
 const outfits = [{ id: 1, name: 'Linen weekend', tags: [], createdAt: '2026-01-01', wearCount: 0 }] as unknown as Outfit[];
@@ -74,4 +74,13 @@ it('computes category recovery under the remaining filters', () => {
   expect(filters.categoryRecoveryCount).toBe(1);
   act(() => filters.setSelectedColors(['white']));
   expect(filters.categoryRecoveryCount).toBe(0);
+});
+it('filters by availability as it stands today', () => {
+  act(() => filters.setSelectedStatuses(['lent']));
+  expect(filters.filteredItems.map(item => item.id)).toEqual([2]);
+  expect(filters.activeFilterCount).toBe(1);
+  act(() => filters.setSelectedStatuses(['available']));
+  expect(filters.filteredItems.map(item => item.id)).toEqual([1]);
+  act(() => filters.clearPieceFilters());
+  expect(filters.selectedStatuses).toEqual([]);
 });

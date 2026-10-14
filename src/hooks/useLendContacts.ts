@@ -111,17 +111,21 @@ function patchItems(qc: QueryClient, itemIds: Iterable<number>, patch: (item: It
     old?.map((i) => (ids.has(i.id) ? { ...i, ...patch(i) } : i)));
 }
 
-/** Lend an item, or edit its open loan (who has it, back-by date). */
-export function useLendItem() {
+/**
+ * Lend one or more items to one person in one request, or edit an open loan
+ * (who has it, back-by date). Items already out move to this person and keep
+ * their lent date.
+ */
+export function useLendItems() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ itemId, ...body }: { itemId: number; contactId: number | null; dueBack: string | null }) =>
-      api.post<ItemLoan>(`/api/items/${itemId}/lend`, { ...body, today: localYmd() }).then((r) => r.data),
-    onMutate: async ({ itemId, contactId, dueBack }) => {
+    mutationFn: (body: { itemIds: number[]; contactId: number | null; dueBack: string | null }) =>
+      api.post<ItemLoan[]>('/api/loans', { ...body, today: localYmd() }).then((r) => r.data),
+    onMutate: async ({ itemIds, contactId, dueBack }) => {
       const snap = await snapshot(qc);
       const contact = contactId == null ? null
         : qc.getQueryData<LendContact[]>(LEND_CONTACTS_QUERY_KEY)?.find((c) => c.id === contactId) ?? null;
-      patchItems(qc, [itemId], (item) => {
+      patchItems(qc, itemIds, (item) => {
         const openLoan: OpenLoanSummary = {
           id: item.openLoan?.id ?? -1,
           contactId,
@@ -134,9 +138,9 @@ export function useLendItem() {
       });
       return snap;
     },
-    onError: (_err, _vars, snap) => {
+    onError: (_err, { itemIds }, snap) => {
       restore(qc, snap);
-      Alert.alert('Error', "Couldn't mark that as lent. Please try again.");
+      Alert.alert('Error', `Couldn't mark ${itemIds.length === 1 ? 'that' : 'those'} as lent. Please try again.`);
     },
     onSettled: () => settle(qc),
   });

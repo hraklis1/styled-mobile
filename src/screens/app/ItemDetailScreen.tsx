@@ -49,7 +49,7 @@ import { useTagScanner } from '../../hooks/useTagScanner';
 import { EditItemModal } from '../../components/item/EditItemModal';
 import { BrandSheet } from '../../components/item/BrandSheet';
 import { LendSheet } from '../../components/lending/LendSheet';
-import { useLendItem, useLoans } from '../../hooks/useLendContacts';
+import { useLendItems, useLoans } from '../../hooks/useLendContacts';
 import { useReturnWithUndo } from '../../components/lending/useReturnWithUndo';
 import { openLoanOf, openLoanStatus, pastLoanRange, relationshipLabel } from '../../lib/lending';
 import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
@@ -155,7 +155,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const updateItem = useUpdateItem();
   // Just this item's loans, for the history section; who has it now is on the item.
   const { data: itemLoans = [] } = useLoans({ itemId: itemId ?? undefined }, !!itemId);
-  const lendItem = useLendItem();
+  const lendItems = useLendItems();
   const { markReturned, toast: returnToast } = useReturnWithUndo();
   const deleteItem = useDeleteItem();
   const markWorn = useMarkItemWorn();
@@ -281,7 +281,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     if (!item) return;
     setLendSheetOpen(false);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    lendItem.mutate({ itemId: item.id, contactId, dueBack });
+    lendItems.mutate({ itemIds: [item.id], contactId, dueBack });
   };
 
   const handleReturn = () => {
@@ -929,6 +929,19 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
               <Text style={styles.actionLabel}>{viewItem.availability === 'laundry' && !available ? 'In the wash' : 'Laundry'}</Text>
             </TouchableOpacity>
           )}
+          {!isCreateMode && !!itemId && (available || isLent) && (
+            <TouchableOpacity
+              style={[styles.actionButton, isBusy && styles.actionDisabled]}
+              onPress={() => setLendSheetOpen(true)}
+              disabled={isBusy}
+              accessibilityRole="button"
+              accessibilityLabel={isLent ? `Edit who has ${viewItem.name}` : `Lend ${viewItem.name} to someone`}
+              accessibilityState={{ selected: isLent, disabled: isBusy }}
+            >
+              <Ionicons name={isLent ? 'people' : 'people-outline'} size={20} color={isLent ? colors.primary : colors.foreground} />
+              <Text style={styles.actionLabel}>{isLent ? 'Lent' : 'Lend'}</Text>
+            </TouchableOpacity>
+          )}
           {!isCreateMode && !!itemId && (
             <>
                   <TouchableOpacity
@@ -988,6 +1001,17 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
               {openLoan?.contactName ? `Lent to ${openLoan.contactName} (${relationshipLabel(openLoan.contactRelationship).toLowerCase()})` : 'Lent out'}
               {loanStatus ? `. ${loanStatus.text}` : ''}. The stylist will leave it out until it's back.
             </Text>
+          ) : null}
+          {isLent ? (
+            <View style={styles.loanActions}>
+              <TouchableOpacity style={[styles.loanPill, styles.loanPillPrimary]} onPress={handleReturn} accessibilityRole="button" accessibilityLabel={`Mark ${viewItem.name} as returned`}>
+                <Ionicons name="checkmark" size={16} color={colors.primaryForeground} />
+                <Text style={[styles.loanPillLabel, styles.loanPillLabelPrimary]}>Returned</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.loanPill} onPress={() => setLendSheetOpen(true)} accessibilityRole="button" accessibilityLabel="Edit loan">
+                <Text style={styles.loanPillLabel}>Edit loan</Text>
+              </TouchableOpacity>
+            </View>
           ) : unavailableLabel ? (
             <Text style={styles.wearSentence}>
               {unavailableLabel}{viewItem.availabilityUntil ? ` until ${formatDate(`${viewItem.availabilityUntil}T12:00:00`)}` : ''}. The stylist will leave it out until then.
@@ -1214,8 +1238,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
       {item ? (
         <LendSheet
           visible={lendSheetOpen}
-          itemName={item.name}
-          itemImageUri={itemThumbUri(item)}
+          items={[{ name: item.name, uri: itemThumbUri(item) }]}
           currentContactId={openLoan?.contactId ?? null}
           currentDueBack={openLoan?.dueBack ?? null}
           lentAt={openLoan?.lentAt ?? null}
@@ -1474,6 +1497,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
   },
   actionDisabled: { opacity: 0.5 },
+  loanActions: { flexDirection: 'row', gap: spacing.sm },
+  loanPill: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: 44, paddingHorizontal: spacing.lg,
+    borderRadius: radii.full, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.card,
+  },
+  loanPillPrimary: { backgroundColor: colors.primary, borderColor: colors.primary },
+  loanPillLabel: { ...typography.text.bodySmall, color: colors.foreground, fontWeight: '600' },
+  loanPillLabelPrimary: { color: colors.primaryForeground },
   actionLabel: {
     fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
