@@ -4,7 +4,8 @@ import type { Item } from '../../types/item';
 import { colors, spacing, typography } from '../../theme';
 import { useHiddenProducts } from '../../lib/productFeedback';
 import { ShoppingStyleVisual } from './ShoppingStyleVisual';
-import { ShoppingOutfitGroup, ShoppingOutfitPreview } from './ShoppingOutfitPreview';
+import { ShoppingOutfitPreview } from './ShoppingOutfitPreview';
+import { OutfitRecipeCard } from './OutfitRecipeCard';
 import { ShoppingRetailerLinks } from './ShoppingRetailerLinks';
 import { ShoppingOfferRail } from './ShoppingOfferRail';
 import { ChapterHero, ChapterOpener, NextChapterLink, SectionKicker, SpecList, StylistAsk } from './ShoppingEditorialParts';
@@ -32,8 +33,10 @@ type Props = {
   onNext?: () => void;
   /** Editorial: asks the stylist about this style; the question is optional. */
   onAsk?: (question?: string) => void;
+  /** Editorial: opens an owned piece from a look. */
+  onOpenItem?: (itemId: number) => void;
 };
-export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTitle, isLast, offerContext, onRetryOffers, editorial = false, headingRef, hideCriteria = false, showBudget = true, nextTitle, onNext, onAsk }: Props) {
+export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTitle, isLast, offerContext, onRetryOffers, editorial = false, headingRef, hideCriteria = false, showBudget = true, nextTitle, onNext, onAsk, onOpenItem }: Props) {
   const hidden = useHiddenProducts();
   const looks = targetOutfitIdeas(target).filter(look => look.itemIds.some(id => wardrobe.has(id)));
   const offers = target.offers ?? [];
@@ -65,8 +68,7 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTit
       {notes.length && !hideCriteria ? <View style={styles.section}><SectionKicker title="What to look for" /><SpecList notes={notes} /></View> : null}
       {looks.length ? <View style={styles.section}>
         <SectionKicker title="Ways to wear it" />
-        {looks.length > 1 ? <ShoppingOutfitGroup looks={looks} target={target} wardrobe={wardrobe} />
-          : <View style={styles.outfits}>{looks.map((look, lookIndex) => <ShoppingOutfitPreview editorial key={`${target.key}-${lookIndex}`} look={look} target={target} wardrobe={wardrobe} />)}</View>}
+        <View style={styles.outfits}>{looks.map((look, lookIndex) => <OutfitRecipeCard key={`${target.key}-${lookIndex}`} look={look} target={target} wardrobe={wardrobe} onOpenItem={onOpenItem} />)}</View>
       </View> : null}
       {hasShop && !productsLead ? <View style={styles.section}>
         <SectionKicker title="Shop this style" />
@@ -102,7 +104,7 @@ export function ShoppingPriorityTargetCard({ target, index, wardrobe, displayTit
 }
 const styles = StyleSheet.create({
   identityGroup: { gap: spacing.lg },
-  outfits: { gap: spacing.xl },
+  outfits: { gap: spacing.md },
   editorialCard: { paddingTop: spacing.chapter, paddingBottom: spacing.xl, gap: spacing.subsection, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   hero: { gap: spacing.sm },
   budget: { ...typography.text.meta, color: colors.inkSubtle },

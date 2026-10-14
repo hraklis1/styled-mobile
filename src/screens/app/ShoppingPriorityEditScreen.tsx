@@ -34,6 +34,7 @@ import { displayBudget, targetShoppingNotes, withoutInlineImages, type ShoppingP
 import { shoppingSurfaces, colors, radii, spacing, typography } from '../../theme';
 import type { ShopOutfit } from '../../types/shop';
 import type { ShoppingPriorityEditScreenProps } from '../../navigation/types';
+import { openClosetItem } from '../../navigation/savedRecommendations';
 
 /** The sticky tab for the closing questions, alongside one per style. */
 const ASK_TAB = '__ask';
@@ -410,6 +411,7 @@ export function ShoppingPriorityEditScreen({ navigation, route }: ShoppingPriori
               hideCriteria={!!sharedNotes}
               showBudget={!sharedBudget}
               onAsk={question => askStylist(question, target.key)}
+              onOpenItem={itemId => openClosetItem(itemId)}
               onSaveFind={() => {
                 track('shopping_brief_save_find_tapped', {
                   category: priority.category,

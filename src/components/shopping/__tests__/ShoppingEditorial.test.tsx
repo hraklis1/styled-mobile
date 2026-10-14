@@ -29,6 +29,7 @@ jest.mock('../WardrobeThumbnail', () => ({ WardrobeThumbnail: 'WardrobeThumbnail
 jest.mock('expo-web-browser', () => ({ openBrowserAsync: jest.fn().mockResolvedValue({}) }));
 import { ShoppingStyleVisual } from '../ShoppingStyleVisual';
 import { ShoppingOutfitPreview } from '../ShoppingOutfitPreview';
+import { OutfitRecipeCard } from '../OutfitRecipeCard';
 import { ShoppingPriorityTargetCard } from '../ShoppingPriorityTargetCard';
 const target: ShoppingPriorityTarget = {
   key: 'charcoal',
@@ -110,15 +111,26 @@ test('missing outfit and retailer data leaves useful guidance without empty sect
   expect(json).toContain('What to look for');
 });
 
-test.each([1, 2, 3])('editorial outfits always show the suggested addition with %s owned pieces', count => {
+test.each([1, 2, 3, 5])('outfit recipes always show the suggested addition inline with %s owned pieces', count => {
   const ids = Array.from({ length: count }, (_, index) => index + 1);
-  render(<ShoppingOutfitPreview editorial look={{ label: 'Weekend walk', itemIds: ids }} target={target}
+  render(<OutfitRecipeCard look={{ label: 'Weekend walk', itemIds: ids }} target={target}
     wardrobe={new Map(ids.map(id => [id, { id, name: `Owned piece ${id}` } as Item]))} />);
   const json = JSON.stringify(renderer.toJSON());
-  expect(json).toContain(`1 new · ${count} you own`);
+  expect(json).toContain(`✓ ${count} in your closet · 1 new`);
+  expect(json).toContain('NEW');
   expect(json).not.toContain('with this piece');
   expect(renderer.root.findAllByType('WardrobeThumbnail' as any)).toHaveLength(count);
   expect(json.indexOf('Recommended piece to add')).toBeLessThan(json.indexOf('Owned piece 1'));
+});
+
+test('outfit recipe tiles show a quick look that can open the full piece', () => {
+  const onOpenItem = jest.fn();
+  render(<OutfitRecipeCard look={{ label: 'Weekend walk', itemIds: [7, 8] }} target={target} onOpenItem={onOpenItem}
+    wardrobe={new Map([7, 8].map(id => [id, { id, name: `Owned piece ${id}` } as Item]))} />);
+  act(() => renderer.root.findByProps({ accessibilityLabel: 'Owned piece 8. In your wardrobe.', accessibilityRole: 'button' }).props.onPress());
+  expect(onOpenItem).not.toHaveBeenCalled();
+  act(() => renderer.root.findByProps({ accessibilityLabel: 'Open Owned piece 8 in Closet' }).props.onPress());
+  expect(onOpenItem).toHaveBeenCalledWith(8);
 });
 
 test('editorial guide teaches selection criteria before outfits and shopping', () => {
@@ -128,7 +140,7 @@ test('editorial guide teaches selection criteria before outfits and shopping', (
   expect(json.indexOf('What to look for')).toBeLessThan(json.indexOf('Ways to wear it'));
   expect(json.indexOf('Ways to wear it')).toBeLessThan(json.indexOf('Shop this style'));
   expect(json).toContain('Smooth wool');
-  expect(json).toContain('1 new · 2 you own');
+  expect(json).toContain('✓ 2 in your closet · 1 new');
 });
 
 test('editorial guide omits absent budgets, criteria, outfits and shopping', () => {
