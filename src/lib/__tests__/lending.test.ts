@@ -1,4 +1,4 @@
-import { addDaysYmd, daysBetween, formatSpan, openLoanStatus, pastLoanRange } from '../lending';
+import { addDaysYmd, daysBetween, formatSpan, lentPiecesIn, lentPiecesLine, openLoanStatus, pastLoanRange, pastLoanSummary } from '../lending';
 
 describe('lending dates', () => {
   it('adds days across month ends', () => {
@@ -22,5 +22,34 @@ describe('lending dates', () => {
 
   it('summarises a returned loan', () => {
     expect(pastLoanRange({ lentAt: '2026-10-01', returnedAt: '2026-10-09' })).toBe('Oct 1 – Oct 9 · 8 days');
+  });
+});
+
+describe('pastLoanSummary', () => {
+  it('adds the note after the range, and leaves it out when there is none', () => {
+    expect(pastLoanSummary({ lentAt: '2026-10-01', returnedAt: '2026-10-09', note: 'for the wedding' }))
+      .toBe(`${pastLoanRange({ lentAt: '2026-10-01', returnedAt: '2026-10-09' })} · for the wedding`);
+    expect(pastLoanSummary({ lentAt: '2026-10-01', returnedAt: '2026-10-09', note: null }))
+      .toBe(pastLoanRange({ lentAt: '2026-10-01', returnedAt: '2026-10-09' }));
+  });
+});
+
+describe('lentPiecesIn / lentPiecesLine', () => {
+  const coat = { id: 1, name: 'Wool Coat', availability: 'lent', openLoan: { id: 9, contactId: 2, contactName: 'Maya', contactRelationship: 'friend', lentAt: '2026-10-01', dueBack: null } };
+  const scarf = { id: 2, name: 'Scarf', availability: 'lent', openLoan: null };
+  const shirt = { id: 3, name: 'Shirt', availability: 'available' };
+  const items = [coat, scarf, shirt] as unknown as import('../../types/item').Item[];
+
+  it('picks out the planned pieces someone else has right now', () => {
+    expect(lentPiecesIn([1, 3], items)).toEqual([{ id: 1, name: 'Wool Coat', contactName: 'Maya' }]);
+    expect(lentPiecesIn([3], items)).toEqual([]);
+    expect(lentPiecesIn(null, items)).toEqual([]);
+  });
+
+  it('says who has one piece, or how many are out', () => {
+    expect(lentPiecesLine([{ name: 'Wool Coat', contactName: 'Maya' }])).toBe('Wool Coat is with Maya');
+    expect(lentPiecesLine([{ name: 'Scarf', contactName: null }])).toBe('Scarf is lent out');
+    expect(lentPiecesLine([{ name: 'A', contactName: null }, { name: 'B', contactName: 'Maya' }])).toBe('2 pieces are lent out');
+    expect(lentPiecesLine([])).toBeNull();
   });
 });

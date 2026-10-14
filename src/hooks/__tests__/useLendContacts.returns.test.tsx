@@ -126,4 +126,15 @@ describe('return / undo hooks', () => {
     expect(qc.getQueryData<Item[]>(ITEMS_QUERY_KEY)![0].openLoan).toBeNull();
     expect(qc.getQueryData<ItemLoan[]>([...LOANS_QUERY_KEY, { itemId: 1 }])![0].returnedAt).not.toBeNull();
   });
+
+  it('a backdated lend with a note shows both before the server answers', async () => {
+    mockPost.mockReturnValue(new Promise(() => {}) as never);
+    const { qc, hooks } = setup();
+    qc.setQueryData<Item[]>(ITEMS_QUERY_KEY, [{ id: 3, name: 'Blazer', availability: 'available', openLoan: null } as Item]);
+
+    await act(async () => { hooks.lend!.mutate({ itemIds: [3], contactId: null, dueBack: null, lentAt: '2026-10-05', note: 'for the wedding' }); });
+
+    expect(mockPost).toHaveBeenCalledWith('/api/loans', expect.objectContaining({ lentAt: '2026-10-05', note: 'for the wedding' }));
+    expect(qc.getQueryData<Item[]>(ITEMS_QUERY_KEY)![0].openLoan).toEqual(expect.objectContaining({ lentAt: '2026-10-05', note: 'for the wedding' }));
+  });
 });

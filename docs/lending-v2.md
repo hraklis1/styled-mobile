@@ -152,6 +152,19 @@ lent, the status sentence gets inline "Returned" and "Edit" buttons.
 
 ## Phase 4 — Loan details (backend + mobile)
 
+**Status (Oct 13 2026):** implemented, uncommitted. 0072 applied on dev and prod.
+- The migration adds both `item_loans.note` and `lend_contacts.device_contact_id`.
+  The contact id is saved when a person is picked from Contacts, ready for
+  Phase 5's "Remind them".
+- "Lent on" offers Today / Yesterday / Earlier… (a date picker that can't go
+  past today). Moving the start clears a back-by date that would fall before
+  it.
+- New people default to "friend". "Change" shows the relationship chips.
+  "Your people" on Lent Out is grouped by relationship.
+- The note shows on the item's status line, in history rows, on Lent Out rows
+  and in the reminder body.
+- Sim-verified: the sheet layout.
+
 **4.1 Lent-on date.**
 - LendSheet gets a "Lent on" row. It defaults to today and is editable, but
   can't be later than today.
@@ -171,6 +184,21 @@ when adding someone new. Group the people in "Your people" by relationship.
 ---
 
 ## Phase 5 — Reminders that follow through (mobile, small backend)
+
+**Status (Oct 13 2026):** implemented, uncommitted. Mobile only: no backend
+change and no migration.
+- Planning lives in `src/lib/loanReminders.ts`, a pure function with unit
+  tests. `syncLoanReminders` only schedules what it returns. The cap is 40.
+- "Remind them" goes through the share sheet (`remindPerson`). The pre-written
+  message names the pieces and the back-by date, or says the date has passed.
+  `device_contact_id` is saved but not used yet: the share sheet needs no
+  contact.
+- There's no notification action button. Tapping a single-loan reminder
+  opens `styled://lent-out?nudge=<loanId>`, which opens the share sheet.
+- Any lend now turns reminders on, asking for notification permission once,
+  because every loan gets at least the month check-in.
+- Sim-verified: the nudge deep link → Lent Out → share sheet with the
+  message; the "Remind Kate" link.
 
 **5.1 Overdue follow-up.** `syncLoanReminders` also schedules a reminder 3 days
 after the back-by date: "Maya has had your blazer 3 days past the date." Then
@@ -197,6 +225,24 @@ date, using the same inline permission flow.
 
 ## Phase 6 — Stylist & calendar awareness (backend + mobile)
 
+**Status (Oct 13 2026):** implemented, uncommitted. No migration.
+- Both stylist paths get the loan, via `server/lendingWords.ts`:
+  - The older prompt context line says "lent to Maya since Oct 2, back by
+    Oct 16".
+  - The conversation tools put `lentTo {name, since, dueBack}` on lent pieces.
+  - The loan's note is never sent.
+- Prompt versions: the client prompt goes v8 → v9, with one rule for
+  `lentTo`. `PROMPT_VERSION` goes v14 → v15 (it's metadata only).
+- The eval harness was not run (it costs real model calls). Run
+  `scripts/eval-stylist-client.ts` before relying on the new rule.
+- Calendar:
+  - An upcoming agenda row whose planned pieces include a lent one shows
+    "Wool Coat is with Maya".
+  - The evening-before event reminder now also fires for planned events with
+    a lent piece ("…Get it back or swap it before then."). It's gated by the
+    Event outfits setting.
+  - Not sim-verified, because there's no such event in dev. Unit-tested.
+
 **6.1 Calendar conflicts.** When a planned outfit for an upcoming event
 contains a lent item:
 - The calendar agenda row shows a "With Maya" chip, using
@@ -213,6 +259,20 @@ evals.
 ---
 
 ## Phase 7 — UI polish
+
+**Status (Oct 13 2026):** implemented, uncommitted. Mobile only.
+- "Returned" is a pill button. A row can also be swiped left to return it,
+  with one row open at a time. Both go through the undo bar.
+- An unnamed loan has an inline "Add a name", which opens the lend sheet in
+  edit mode. Its dates and note are kept.
+- Accessibility:
+  - Settings `Group` titles are now announced as headers. This applies
+    app-wide.
+  - The history toggle says how many loans it holds.
+- Haptics on return and undo were already done (Phase 1). The account export
+  already carries the new columns (Phase 4).
+- Sim-verified: the pill layout. Not verified: the swipe (simulator
+  screenshots lagged), "Add a name" (no unnamed loan in dev).
 
 - Lent Out rows:
   - "Returned" becomes a real pill button, and a trailing swipe action does

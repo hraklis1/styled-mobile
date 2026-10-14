@@ -100,7 +100,7 @@ const linking: LinkingOptions<RootStackParamList> = {
           },
           Calendar: 'calendar',
           Stylist: { screens: { StylistMain: 'stylist' } },
-          Closet: { screens: { ItemDetail: { path: 'wardrobe-item/:itemId', parse: { itemId: Number } }, LentOut: 'lent-out' } },
+          Closet: { screens: { ItemDetail: { path: 'wardrobe-item/:itemId', parse: { itemId: Number } }, LentOut: { path: 'lent-out', parse: { nudge: Number } } } },
           Shop: {
             screens: {
               ShopMain: 'shop',

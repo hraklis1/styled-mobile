@@ -25,7 +25,7 @@ export function useLendContacts(enabled = true) {
 export function useCreateLendContact() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { name: string; relationship: LendRelationship }) =>
+    mutationFn: (input: { name: string; relationship: LendRelationship; deviceContactId?: string | null }) =>
       api.post<LendContact>('/api/lend-contacts', input).then((r) => r.data),
     onSuccess: (contact) => {
       qc.setQueryData<LendContact[]>(LEND_CONTACTS_QUERY_KEY, (old = []) =>
@@ -111,6 +111,9 @@ function patchItems(qc: QueryClient, itemIds: Iterable<number>, patch: (item: It
     old?.map((i) => (ids.has(i.id) ? { ...i, ...patch(i) } : i)));
 }
 
+/** What the lend sheet decides. lentAt/note left out = unchanged (or today / none for a new loan). */
+export type LendInput = { contactId: number | null; dueBack: string | null; lentAt?: string; note?: string | null };
+
 /**
  * Lend one or more items to one person in one request, or edit an open loan
  * (who has it, back-by date). Items already out move to this person and keep
@@ -119,9 +122,9 @@ function patchItems(qc: QueryClient, itemIds: Iterable<number>, patch: (item: It
 export function useLendItems() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { itemIds: number[]; contactId: number | null; dueBack: string | null }) =>
+    mutationFn: (body: LendInput & { itemIds: number[] }) =>
       api.post<ItemLoan[]>('/api/loans', { ...body, today: localYmd() }).then((r) => r.data),
-    onMutate: async ({ itemIds, contactId, dueBack }) => {
+    onMutate: async ({ itemIds, contactId, dueBack, lentAt, note }) => {
       const snap = await snapshot(qc);
       const contact = contactId == null ? null
         : qc.getQueryData<LendContact[]>(LEND_CONTACTS_QUERY_KEY)?.find((c) => c.id === contactId) ?? null;
@@ -131,8 +134,9 @@ export function useLendItems() {
           contactId,
           contactName: contact?.name ?? null,
           contactRelationship: contact?.relationship ?? null,
-          lentAt: item.openLoan?.lentAt ?? localYmd(),
+          lentAt: lentAt ?? item.openLoan?.lentAt ?? localYmd(),
           dueBack,
+          note: note === undefined ? item.openLoan?.note ?? null : note || null,
         };
         return { availability: 'lent', availabilityUntil: null, openLoan };
       });

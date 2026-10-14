@@ -9,6 +9,9 @@
 import * as Notifications from 'expo-notifications';
 import type { AppPreferences } from '../types/profile';
 import type { Event } from '../types/event';
+import { lentPiecesIn, lentPiecesLine, localYmd } from './lending';
+import type { Item } from '../types/item';
+import { LOAN_REMINDER_HOUR, planLoanReminders, type LoanForReminder } from './loanReminders';
 
 const TAG = 'styled-reminder';
 const WEAR_LOG_HOUR = 20;
@@ -44,7 +47,7 @@ function parseTime(value: string): { hour: number; minute: number } {
   return { hour: Number.isFinite(hour) ? hour : 7, minute: Number.isFinite(minute) ? minute : 30 };
 }
 
-export async function syncReminders(prefs: AppPreferences, events: readonly Event[]): Promise<void> {
+export async function syncReminders(prefs: AppPreferences, events: readonly Event[], items: readonly Item[] = []): Promise<void> {
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
   await Promise.all(
     scheduled
@@ -76,18 +79,23 @@ export async function syncReminders(prefs: AppPreferences, events: readonly Even
     const horizon = now + EVENT_LOOKAHEAD_DAYS * 86_400_000;
     for (const event of events) {
       const start = new Date(event.date);
-      if (Number.isNaN(start.getTime()) || event.outfitId) continue;
-      // The evening before, so there is time to plan the outfit.
+      if (Number.isNaN(start.getTime())) continue;
+      // The evening before, so there is time to plan the outfit (or get a
+      // lent piece of it back).
       const remindAt = new Date(start);
       remindAt.setDate(remindAt.getDate() - 1);
       remindAt.setHours(19, 0, 0, 0);
       if (remindAt.getTime() <= now || start.getTime() > horizon) continue;
+      let body: string;
+      if (!event.outfitId) {
+        body = 'No outfit planned yet. Want your stylist to pull one together?';
+      } else {
+        const lent = lentPiecesIn(event.itemIds, items);
+        if (!lent.length) continue;
+        body = `${lentPiecesLine(lent)}. Get ${lent.length > 1 ? 'them' : 'it'} back or swap ${lent.length > 1 ? 'them' : 'it'} before then.`;
+      }
       await Notifications.scheduleNotificationAsync({
-        content: {
-          title: `Tomorrow: ${event.title}`,
-          body: 'No outfit planned yet. Want your stylist to pull one together?',
-          data: { tag: TAG, url: 'styled://calendar' },
-        },
+        content: { title: `Tomorrow: ${event.title}`, body, data: { tag: TAG, url: 'styled://calendar' } },
         trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: remindAt },
       });
     }
@@ -97,16 +105,12 @@ export async function syncReminders(prefs: AppPreferences, events: readonly Even
 // ── Lent items ───────────────────────────────────────────────────────────────
 
 const LOAN_TAG = 'styled-loan';
-const LOAN_REMINDER_HOUR = 10;
-/** iOS keeps at most 64 pending local notifications; leave room for the rest. */
-const MAX_LOAN_REMINDERS = 30;
-
-type LoanForReminder = { itemName: string; contactName: string | null; dueBack: string };
 
 /**
- * One reminder per back-by day, at 10am, naming who has what. Rebuilt from
- * scratch like syncReminders, under its own tag so the two never cancel each
- * other's work.
+ * Lent-item reminders (back-by day, one overdue follow-up, a month-out nudge
+ * for open-ended loans), planned in lib/loanReminders. Rebuilt from scratch
+ * like syncReminders, under its own tag so the two never cancel each other's
+ * work.
  */
 export async function syncLoanReminders(enabled: boolean, loans: readonly LoanForReminder[]): Promise<void> {
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
@@ -118,24 +122,13 @@ export async function syncLoanReminders(enabled: boolean, loans: readonly LoanFo
   if (!enabled || !loans.length) return;
   if ((await getNotificationPermission()) !== 'granted') return;
 
-  const byDay = new Map<string, LoanForReminder[]>();
-  for (const loan of loans) byDay.set(loan.dueBack, [...(byDay.get(loan.dueBack) ?? []), loan]);
   const now = Date.now();
-  const days = [...byDay.keys()].sort().slice(0, MAX_LOAN_REMINDERS);
-  for (const day of days) {
-    const remindAt = new Date(`${day}T00:00:00`);
+  for (const reminder of planLoanReminders(loans, localYmd())) {
+    const remindAt = new Date(`${reminder.day}T00:00:00`);
     remindAt.setHours(LOAN_REMINDER_HOUR, 0, 0, 0);
     if (remindAt.getTime() <= now) continue;
-    const due = byDay.get(day)!;
-    const [first] = due;
-    const title = due.length === 1
-      ? `${first.itemName} is due back today`
-      : `${due.length} lent pieces are due back today`;
-    const body = due.length === 1
-      ? (first.contactName ? `${first.contactName} has it. A quick nudge?` : 'Time to get it back.')
-      : due.map((l) => (l.contactName ? `${l.itemName} (${l.contactName})` : l.itemName)).join(', ');
     await Notifications.scheduleNotificationAsync({
-      content: { title, body, data: { tag: LOAN_TAG, url: 'styled://lent-out' } },
+      content: { title: reminder.title, body: reminder.body, data: { tag: LOAN_TAG, url: reminder.url } },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: remindAt },
     });
   }

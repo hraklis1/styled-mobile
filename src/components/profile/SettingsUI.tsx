@@ -62,7 +62,7 @@ export function Group({ title, footer, children }: { title?: string; footer?: st
   const rows = React.Children.toArray(children).filter(Boolean);
   return (
     <View style={ui.group}>
-      {!!title && <Text style={ui.groupTitle}>{title}</Text>}
+      {!!title && <Text style={ui.groupTitle} accessibilityRole="header">{title}</Text>}
       <View style={ui.groupCard}>
         {rows.map((child, index) => (
           <View key={index}>

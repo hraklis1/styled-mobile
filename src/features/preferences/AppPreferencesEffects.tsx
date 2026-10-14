@@ -9,6 +9,8 @@ import { setHapticsEnabled } from '../../lib/haptics';
 import { posthog } from '../../lib/analytics';
 import { syncLoanReminders, syncReminders } from '../../lib/notifications';
 import { useLoans } from '../../hooks/useLendContacts';
+import { useItems } from '../../hooks/useItems';
+import { isLentNow } from '../../lib/lending';
 
 /**
  * Applies Settings to the running app. Render it once, inside the signed-in
@@ -35,23 +37,30 @@ export function AppPreferencesEffects() {
     else void posthog.optIn();
   }, [loaded, prefs.analyticsOptOut]);
 
+  // Items only matter here for planned outfits with a lent piece in them.
+  const { data: items } = useItems();
   const reminderKey = JSON.stringify(prefs.notifications);
-  const eventKey = (events ?? []).map((event) => `${event.id}:${event.date}:${event.outfitId ?? ''}`).join('|');
+  const eventKey = (events ?? []).map((event) => `${event.id}:${event.date}:${event.outfitId ?? ''}:${(event.itemIds ?? []).join(',')}`).join('|');
+  const lentKey = (items ?? []).filter(isLentNow).map((i) => `${i.id}:${i.openLoan?.contactName ?? ''}`).join('|');
   useEffect(() => {
     if (!loaded) return;
-    syncReminders(prefs, events ?? []).catch(() => {});
+    syncReminders(prefs, events ?? [], items ?? []).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, reminderKey, eventKey]);
+  }, [loaded, reminderKey, eventKey, lentKey]);
 
-  // Lent-item reminders: only loans with a back-by date, and only while the
-  // setting is on, so the queries stay idle for everyone else.
+  // Lent-item reminders for every open loan (back-by day, overdue follow-up,
+  // month-out nudge), only while the setting is on, so the query stays idle
+  // for everyone else.
   const loansOn = loaded && prefs.notifications.loans;
   const { data: loans } = useLoans({ status: 'open' }, loansOn);
-  const dueLoans = (loans ?? []).filter((l) => l.dueBack);
-  const loanKey = dueLoans.map((l) => `${l.id}:${l.dueBack}:${l.contactName ?? ''}`).join('|');
+  const loanKey = (loans ?? [])
+    .map((l) => `${l.id}:${l.lentAt}:${l.dueBack ?? ''}:${l.contactName ?? ''}:${l.note ?? ''}`)
+    .join('|');
   useEffect(() => {
     if (!loaded) return;
-    const due = dueLoans.map((l) => ({ itemName: l.itemName, contactName: l.contactName, dueBack: l.dueBack! }));
+    const due = (loans ?? []).map((l) => ({
+      loanId: l.id, itemName: l.itemName, contactName: l.contactName, note: l.note, lentAt: l.lentAt, dueBack: l.dueBack,
+    }));
     syncLoanReminders(loansOn, due).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded, loansOn, loanKey]);

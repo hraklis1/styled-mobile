@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 
 import { LendSheet } from './LendSheet';
-import { LEND_CONTACTS_QUERY_KEY, useLendItems } from '../../hooks/useLendContacts';
+import { LEND_CONTACTS_QUERY_KEY, useLendItems, type LendInput } from '../../hooks/useLendContacts';
 import { itemThumbUri } from '../../lib/itemImage';
 import type { LendContact } from '../../lib/lending';
 import * as Haptics from '../../lib/haptics';
@@ -21,12 +21,13 @@ export function LendItemsSheet({ items, onClose, onLent }: {
   const qc = useQueryClient();
   const lendItems = useLendItems();
 
-  const confirm = (contactId: number | null, dueBack: string | null) => {
+  const confirm = (input: LendInput) => {
     if (!items?.length) return;
+    const { contactId } = input;
     const name = contactId == null ? null
       : qc.getQueryData<LendContact[]>(LEND_CONTACTS_QUERY_KEY)?.find((c) => c.id === contactId)?.name ?? null;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    lendItems.mutate({ itemIds: items.map((i) => i.id), contactId, dueBack });
+    lendItems.mutate({ ...input, itemIds: items.map((i) => i.id) });
     const what = items.length === 1 ? items[0].name : `${items.length} pieces`;
     onClose();
     onLent?.(name ? `${what} lent to ${name}` : `${what} marked as lent`);

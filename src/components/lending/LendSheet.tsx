@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 import { PersonAvatar } from './PersonAvatar';
-import { useCreateLendContact, useLendContacts } from '../../hooks/useLendContacts';
+import { useCreateLendContact, useLendContacts, type LendInput } from '../../hooks/useLendContacts';
 import { useAppPreferences } from '../../hooks/useAppPreferences';
 import {
   addDaysYmd, formatLoanDate, LEND_RELATIONSHIPS, localYmd, pickNameFromContacts, ymdToDate,
@@ -24,25 +24,27 @@ const DUE_OPTIONS = [
   { key: 'month', label: '1 month', days: 30 },
 ] as const;
 
-type Selection = { kind: 'existing'; id: number } | { kind: 'new'; name: string } | null;
+type Selection = { kind: 'existing'; id: number } | { kind: 'new'; name: string; deviceContactId?: string | null } | null;
 
 export type LendSheetItem = { name: string; uri?: string };
 
 /**
- * Who has these pieces (one, or a whole selection), and optionally when
- * they're due back. One "Who has it?"
+ * Who has these pieces (one, or a whole selection), since when, and
+ * optionally when they're due back and what they're for. One "Who has it?"
  * field: saved people show as avatars and filter as you type; a name that
- * matches nobody becomes "Add …", and only then is the relationship asked.
- * Setting a back-by date is what turns on the lent-item reminder.
+ * matches nobody becomes "Add …" (how you know them is one optional tap).
+ * Lending turns on lent-item reminders (asking for notification permission once).
  */
-export function LendSheet({ visible, items, currentContactId, currentDueBack, lentAt, onConfirm, onClose }: {
+export function LendSheet({ visible, items, currentContactId, currentDueBack, currentNote, lentAt, onConfirm, onClose }: {
   visible: boolean;
   items: LendSheetItem[];
   currentContactId?: number | null;
   currentDueBack?: string | null;
-  /** The open loan's start, when editing one; back-by dates count from it. */
+  currentNote?: string | null;
+  /** The open loan's start, when editing one. */
   lentAt?: string | null;
-  onConfirm: (contactId: number | null, dueBack: string | null) => void;
+  /** lentAt / note are left out when unchanged. */
+  onConfirm: (input: LendInput) => void;
   onClose: () => void;
 }) {
   const { data: contacts = [], isLoading } = useLendContacts(visible);
@@ -53,8 +55,14 @@ export function LendSheet({ visible, items, currentContactId, currentDueBack, le
   const [relationship, setRelationship] = useState<LendRelationship>('friend');
   const [dueBack, setDueBack] = useState<string | null>(null);
   const [pickingDate, setPickingDate] = useState(false);
+  const [startDate, setStartDate] = useState(localYmd());
+  const [pickingStart, setPickingStart] = useState(false);
+  const [note, setNote] = useState('');
+  const [askRelationship, setAskRelationship] = useState(false);
   const editing = !!lentAt;
-  const start = lentAt ?? localYmd();
+  const today = localYmd();
+  // Back-by presets count from the lend date.
+  const start = startDate;
 
   useEffect(() => {
     if (!visible) return;
@@ -63,7 +71,17 @@ export function LendSheet({ visible, items, currentContactId, currentDueBack, le
     setRelationship('friend');
     setDueBack(currentDueBack ?? null);
     setPickingDate(false);
-  }, [visible, currentContactId, currentDueBack]);
+    setStartDate(lentAt ?? localYmd());
+    setPickingStart(false);
+    setNote(currentNote ?? '');
+    setAskRelationship(false);
+  }, [visible, currentContactId, currentDueBack, currentNote, lentAt]);
+
+  const changeStart = (ymd: string) => {
+    setStartDate(ymd);
+    // A back-by date can't come before the loan starts.
+    if (dueBack && dueBack < ymd) setDueBack(null);
+  };
 
   const trimmed = query.replace(/\s+/g, ' ').trim();
   const filtered = useMemo(() => {
@@ -87,7 +105,7 @@ export function LendSheet({ visible, items, currentContactId, currentDueBack, le
   };
 
   const chooseFromContacts = async () => {
-    let picked: string | null;
+    let picked: Awaited<ReturnType<typeof pickNameFromContacts>>;
     try {
       picked = await pickNameFromContacts();
     } catch {
@@ -95,24 +113,35 @@ export function LendSheet({ visible, items, currentContactId, currentDueBack, le
       return;
     }
     if (!picked) return;
-    const existing = contacts.find((c) => c.name.toLowerCase() === picked.toLowerCase());
-    choose(existing ? { kind: 'existing', id: existing.id } : { kind: 'new', name: picked });
+    const existing = contacts.find((c) => c.name.toLowerCase() === picked.name.toLowerCase());
+    choose(existing ? { kind: 'existing', id: existing.id } : { kind: 'new', name: picked.name, deviceContactId: picked.deviceContactId });
   };
 
+  // Every loan now gets a reminder (back-by day, or a check-in after a
+  // month), so lending is what switches them on.
   const turnOnReminders = async () => {
-    if (!dueBack || prefs.notifications.loans) return;
+    if (prefs.notifications.loans) return;
     if (await ensureNotificationPermission()) setPrefs({ notifications: { loans: true } });
   };
 
   const finish = (contactId: number | null) => {
-    onConfirm(contactId, dueBack);
+    const tidyNote = note.replace(/\s+/g, ' ').trim();
+    const originalStart = lentAt ?? today;
+    onConfirm({
+      contactId,
+      dueBack,
+      ...(startDate !== originalStart ? { lentAt: startDate } : {}),
+      ...(tidyNote !== (currentNote ?? '') ? { note: tidyNote || null } : {}),
+    });
     void turnOnReminders();
   };
 
   const save = async () => {
     if (selection?.kind === 'new') {
       try {
-        const contact = await createContact.mutateAsync({ name: selection.name, relationship });
+        const contact = await createContact.mutateAsync({
+          name: selection.name, relationship, deviceContactId: selection.deviceContactId ?? null,
+        });
         finish(contact.id);
       } catch {
         // The mutation already alerted; keep the sheet open to retry.
@@ -206,15 +235,51 @@ export function LendSheet({ visible, items, currentContactId, currentDueBack, le
           ) : null}
 
           {selection?.kind === 'new' ? (
-            <View style={styles.section}>
-              <Text style={styles.label}>How do you know {selection.name.split(' ')[0]}?</Text>
-              <View style={styles.chips}>
-                {LEND_RELATIONSHIPS.map((r) => (
-                  <Chip key={r.id} label={r.label} active={relationship === r.id} onPress={() => setRelationship(r.id)} />
-                ))}
+            askRelationship ? (
+              <View style={styles.section}>
+                <Text style={styles.label}>How do you know {selection.name.split(' ')[0]}?</Text>
+                <View style={styles.chips}>
+                  {LEND_RELATIONSHIPS.map((r) => (
+                    <Chip key={r.id} label={r.label} active={relationship === r.id} onPress={() => setRelationship(r.id)} />
+                  ))}
+                </View>
               </View>
-            </View>
+            ) : (
+              <Pressable onPress={() => setAskRelationship(true)} style={styles.inlineLink} accessibilityRole="button">
+                <Text style={styles.hint}>
+                  {`Saved as a ${LEND_RELATIONSHIPS.find((r) => r.id === relationship)?.label.toLowerCase()}. `}
+                  <Text style={styles.inlineLinkText}>Change</Text>
+                </Text>
+              </Pressable>
+            )
           ) : null}
+
+          <View style={styles.section}>
+            <Text style={styles.label}>Lent on</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+              <Chip label="Today" active={startDate === today} onPress={() => { setPickingStart(false); changeStart(today); }} />
+              <Chip label="Yesterday" active={startDate === addDaysYmd(today, -1)} onPress={() => { setPickingStart(false); changeStart(addDaysYmd(today, -1)); }} />
+              <Chip
+                label={startDate < addDaysYmd(today, -1) ? formatLoanDate(startDate) ?? 'Earlier…' : 'Earlier…'}
+                icon="calendar-outline"
+                active={startDate < addDaysYmd(today, -1)}
+                onPress={() => { if (startDate >= addDaysYmd(today, -1)) changeStart(addDaysYmd(today, -7)); setPickingStart((open) => !open); }}
+              />
+            </ScrollView>
+            {pickingStart ? (
+              <DateTimePicker
+                value={ymdToDate(startDate)}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                maximumDate={ymdToDate(today)}
+                accentColor={colors.primary}
+                onChange={(_, date) => {
+                  if (Platform.OS !== 'ios') setPickingStart(false);
+                  if (date) changeStart(localYmd(date));
+                }}
+              />
+            ) : null}
+          </View>
 
           <View style={styles.section}>
             <Text style={styles.label}>Back by</Text>
@@ -247,12 +312,28 @@ export function LendSheet({ visible, items, currentContactId, currentDueBack, le
                 }}
               />
             ) : null}
-            {dueBack ? (
-              <View style={styles.reminder}>
-                <Ionicons name="notifications-outline" size={14} color={colors.mutedForeground} />
-                <Text style={styles.hint}>{`We'll remind you on ${formatLoanDate(dueBack)}.`}</Text>
-              </View>
-            ) : null}
+            <View style={styles.reminder}>
+              <Ionicons name="notifications-outline" size={14} color={colors.mutedForeground} />
+              <Text style={styles.hint}>
+                {dueBack
+                  ? `We'll remind you on ${formatLoanDate(dueBack)}, and again a few days later if it isn't back.`
+                  : `No date? We'll check in after a month.`}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.label}>Note</Text>
+            <TextInput
+              value={note}
+              onChangeText={setNote}
+              placeholder="What's it for? (optional)"
+              placeholderTextColor={colors.mutedForeground}
+              style={[styles.field, styles.noteInput]}
+              maxLength={140}
+              returnKeyType="done"
+              accessibilityLabel="Note"
+            />
           </View>
         </ScrollView>
 
@@ -348,6 +429,9 @@ const styles = StyleSheet.create({
   chipLabel: { ...typography.text.bodySmall, color: colors.mutedForeground },
   chipLabelActive: { color: colors.foreground, fontWeight: '600' },
   reminder: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  noteInput: { ...typography.text.bodySmall, color: colors.foreground, paddingHorizontal: spacing.md },
+  inlineLink: { minHeight: 32, justifyContent: 'center' },
+  inlineLinkText: { color: colors.foreground, textDecorationLine: 'underline' },
   hint: { ...typography.text.caption, color: colors.mutedForeground },
   footer: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,

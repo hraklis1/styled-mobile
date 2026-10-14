@@ -8,6 +8,7 @@ import { occasionDisplayLabel, presentCalendarEvent } from './calendar-presentat
 import type { Event } from '../../types/event';
 import type { Item } from '../../types/item';
 import type { Outfit } from '../../types/outfit';
+import { lentPiecesIn, lentPiecesLine } from '../../lib/lending';
 
 const SLOT = 60;
 const BANNER_SLOT = 28;
@@ -103,6 +104,8 @@ function rowLabel(event: Event, when: string, past: boolean, worn: boolean): str
 export function AgendaEventRow({ event, allItems, outfit, onPress, onOpenOutfit, onPlan, past = false, wornItemIds = null }: RowProps) {
   const [clock, meridiem] = formatTime(new Date(event.date)).split(/\s/u);
   const meta = [occasionDisplayLabel(event.occasion), event.location].filter(Boolean).join(' · ');
+  // A planned piece someone else has right now: say so before the day comes.
+  const lentLine = past ? null : lentPiecesLine(lentPiecesIn(event.itemIds, allItems));
   return (
     <View style={s.row}>
       <PressableScale
@@ -111,7 +114,7 @@ export function AgendaEventRow({ event, allItems, outfit, onPress, onOpenOutfit,
         onPress={onPress}
         scaleTo={0.98}
         accessibilityRole="button"
-        accessibilityLabel={rowLabel(event, `${clock} ${meridiem ?? ''}`.trim(), past, !!wornItemIds)}
+        accessibilityLabel={[rowLabel(event, `${clock} ${meridiem ?? ''}`.trim(), past, !!wornItemIds), lentLine].filter(Boolean).join(', ')}
         accessibilityHint="Opens event details"
       >
         <View style={s.timeCol}>
@@ -121,6 +124,12 @@ export function AgendaEventRow({ event, allItems, outfit, onPress, onOpenOutfit,
         <View style={s.body}>
           <Text style={[s.title, past && s.muted]} numberOfLines={2}>{event.title}</Text>
           <Text style={s.meta} numberOfLines={1}>{meta}</Text>
+          {lentLine ? (
+            <View style={s.lentLine}>
+              <Ionicons name="people-outline" size={12} color={colors.accentInk} />
+              <Text style={s.lentText} numberOfLines={1}>{lentLine}</Text>
+            </View>
+          ) : null}
         </View>
       </PressableScale>
       <LookSlot event={event} allItems={allItems} outfit={outfit} size={SLOT} past={past} wornItemIds={wornItemIds} onOpenOutfit={onOpenOutfit} onOpenDetail={onPress} onPlan={onPlan} />
@@ -169,6 +178,8 @@ const s = StyleSheet.create({
   body: { flex: 1, minWidth: 0, gap: 3 },
   title: { ...typography.text.editorialCard, color: colors.foreground },
   meta: { ...typography.text.caption, color: colors.mutedForeground },
+  lentLine: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  lentText: { ...typography.text.caption, color: colors.accentInk, flexShrink: 1 },
   slot: {
     alignItems: 'center',
     justifyContent: 'center',

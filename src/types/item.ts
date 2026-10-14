@@ -179,4 +179,6 @@ export type OpenLoanSummary = {
   contactRelationship: string | null;
   lentAt: string;
   dueBack: string | null;
+  /** "For the wedding". */
+  note?: string | null;
 };

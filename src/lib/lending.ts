@@ -9,6 +9,8 @@ export type LendContact = {
   id: number;
   name: string;
   relationship: LendRelationship;
+  /** The address-book id they were picked from, if any. */
+  deviceContactId?: string | null;
   createdAt: string;
 };
 
@@ -22,6 +24,7 @@ export type ItemLoan = {
   lentAt: string;
   dueBack: string | null;
   returnedAt: string | null;
+  note?: string | null;
   itemName: string;
   imageUrl: string | null;
   thumbUrl: string | null;
@@ -37,6 +40,25 @@ export const LEND_RELATIONSHIPS: { id: LendRelationship; label: string }[] = [
   { id: 'colleague', label: 'Colleague' },
   { id: 'other', label: 'Other' },
 ];
+
+/** Planned pieces that are lent out right now, with who has them. */
+export function lentPiecesIn(itemIds: readonly number[] | null | undefined, items: readonly Item[]): { id: number; name: string; contactName: string | null }[] {
+  if (!itemIds?.length) return [];
+  const byId = new Map(items.map((i) => [i.id, i]));
+  return itemIds.flatMap((id) => {
+    const item = byId.get(id);
+    const loan = item ? openLoanOf(item) : null;
+    return item && loan ? [{ id, name: item.name, contactName: loan.contactName }] : [];
+  });
+}
+
+/** "Wool Coat is with Maya" / "Wool Coat is lent out" / "2 pieces are lent out". */
+export function lentPiecesLine(pieces: { name: string; contactName: string | null }[]): string | null {
+  if (!pieces.length) return null;
+  if (pieces.length > 1) return `${pieces.length} pieces are lent out`;
+  const [p] = pieces;
+  return p.contactName ? `${p.name} is with ${p.contactName}` : `${p.name} is lent out`;
+}
 
 export function relationshipLabel(relationship: LendRelationship | string | null | undefined): string {
   return LEND_RELATIONSHIPS.find((r) => r.id === relationship)?.label ?? 'Other';
@@ -104,6 +126,11 @@ export function openLoanStatus(loan: Pick<ItemLoan, 'lentAt' | 'dueBack'>, today
   return { text: `${since} · back by ${formatLoanDate(loan.dueBack)}`, overdue: false };
 }
 
+/** History line for a returned loan, with its note when it has one. */
+export function pastLoanSummary(loan: Pick<ItemLoan, 'lentAt' | 'returnedAt' | 'note'>): string {
+  return loan.note ? `${pastLoanRange(loan)} · ${loan.note}` : pastLoanRange(loan);
+}
+
 /** "Oct 1 – Oct 9 · 8 days" for a returned loan. */
 export function pastLoanRange(loan: Pick<ItemLoan, 'lentAt' | 'returnedAt'>): string {
   const end = loan.returnedAt ?? loan.lentAt;
@@ -126,7 +153,7 @@ export function loanImageFields(loan: ItemLoan) {
  * would need full permission. Resolves null on cancel; throws when the native
  * module is missing (a build from before expo-contacts was added).
  */
-export async function pickNameFromContacts(): Promise<string | null> {
+export async function pickNameFromContacts(): Promise<{ name: string; deviceContactId: string | null } | null> {
   // Required lazily so an older binary without the module only fails here.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { presentContactPickerAsync } = require('expo-contacts/legacy') as typeof import('expo-contacts/legacy');
@@ -134,5 +161,5 @@ export async function pickNameFromContacts(): Promise<string | null> {
   if (!contact) return null;
   const full = [contact.firstName, contact.lastName].filter(Boolean).join(' ');
   const name = (contact.nickname || contact.name || full || contact.company || '').replace(/\s+/g, ' ').trim();
-  return name || null;
+  return name ? { name, deviceContactId: contact.id ?? null } : null;
 }

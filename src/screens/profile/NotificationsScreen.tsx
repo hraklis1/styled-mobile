@@ -95,7 +95,7 @@ export function NotificationsScreen() {
           value={n.events}
           onChange={(value) => toggle(value, () => setPrefs({ notifications: { events: value } }))} />
         <ToggleRow icon="people-outline" label="Lent items"
-          detail="The morning a lent piece is due back, if you gave it a back-by date."
+          detail="When a lent piece is due back, a follow-up if it isn't, and a check-in after a month when there's no date."
           value={n.loans}
           onChange={(value) => toggle(value, () => setPrefs({ notifications: { loans: value } }))} />
       </Group>

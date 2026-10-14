@@ -49,7 +49,8 @@ export type ClosetStackParamList = {
     scanImageUrl?: string;
   };
   ClosetRefresh: undefined;
-  LentOut: undefined;
+  /** nudge: an open loan's id; opens the "remind them" message (reminder taps). */
+  LentOut: { nudge?: number } | undefined;
   OutfitDetail: {
     outfitId: number;
     returnTo?: 'Calendar' | 'Home' | 'Stylist';

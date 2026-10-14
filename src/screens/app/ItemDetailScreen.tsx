@@ -49,9 +49,10 @@ import { useTagScanner } from '../../hooks/useTagScanner';
 import { EditItemModal } from '../../components/item/EditItemModal';
 import { BrandSheet } from '../../components/item/BrandSheet';
 import { LendSheet } from '../../components/lending/LendSheet';
-import { useLendItems, useLoans } from '../../hooks/useLendContacts';
+import { useLendItems, useLoans, type LendInput } from '../../hooks/useLendContacts';
 import { useReturnWithUndo } from '../../components/lending/useReturnWithUndo';
-import { openLoanOf, openLoanStatus, pastLoanRange, relationshipLabel } from '../../lib/lending';
+import { remindPerson } from '../../components/lending/remindPerson';
+import { openLoanOf, openLoanStatus, pastLoanSummary, relationshipLabel } from '../../lib/lending';
 import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
 import { SLEEVE_LENGTH_LABELS } from '../../types/item';
 import { ErrorState } from '../../components/primitives/ErrorState';
@@ -277,11 +278,11 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     updateItem.mutate({ id: item.id, ...availabilityPatch(next) });
   };
 
-  const handleLend = (contactId: number | null, dueBack: string | null) => {
+  const handleLend = (input: LendInput) => {
     if (!item) return;
     setLendSheetOpen(false);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    lendItems.mutate({ itemIds: [item.id], contactId, dueBack });
+    lendItems.mutate({ ...input, itemIds: [item.id] });
   };
 
   const handleReturn = () => {
@@ -598,7 +599,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   // Already newest first from the server.
   const lendingHistoryRows: EditorialDetailRow[] = itemLoans
     .filter((l) => l.returnedAt)
-    .map((l) => ({ key: String(l.id), label: l.contactName ?? 'Someone', value: pastLoanRange(l) }));
+    .map((l) => ({ key: String(l.id), label: l.contactName ?? 'Someone', value: pastLoanSummary(l) }));
   const hasStyleProfile = styleProfileRows.length > 0;
 
   const wearSentence = viewItem.wearCount === 0
@@ -999,7 +1000,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           {isLent ? (
             <Text style={[styles.wearSentence, loanStatus?.overdue && { color: colors.destructive }]}>
               {openLoan?.contactName ? `Lent to ${openLoan.contactName} (${relationshipLabel(openLoan.contactRelationship).toLowerCase()})` : 'Lent out'}
-              {loanStatus ? `. ${loanStatus.text}` : ''}. The stylist will leave it out until it's back.
+              {loanStatus ? `. ${loanStatus.text}` : ''}{openLoan?.note ? ` · ${openLoan.note}` : ''}. The stylist will leave it out until it's back.
             </Text>
           ) : null}
           {isLent ? (
@@ -1008,6 +1009,16 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
                 <Ionicons name="checkmark" size={16} color={colors.primaryForeground} />
                 <Text style={[styles.loanPillLabel, styles.loanPillLabelPrimary]}>Returned</Text>
               </TouchableOpacity>
+              {openLoan?.contactName ? (
+                <TouchableOpacity
+                  style={styles.loanPill}
+                  onPress={() => { void remindPerson(openLoan.contactName, [{ name: viewItem.name, dueBack: openLoan.dueBack }]); }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Send ${openLoan.contactName} a reminder`}
+                >
+                  <Text style={styles.loanPillLabel}>Remind</Text>
+                </TouchableOpacity>
+              ) : null}
               <TouchableOpacity style={styles.loanPill} onPress={() => setLendSheetOpen(true)} accessibilityRole="button" accessibilityLabel="Edit loan">
                 <Text style={styles.loanPillLabel}>Edit loan</Text>
               </TouchableOpacity>
@@ -1241,6 +1252,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           items={[{ name: item.name, uri: itemThumbUri(item) }]}
           currentContactId={openLoan?.contactId ?? null}
           currentDueBack={openLoan?.dueBack ?? null}
+          currentNote={openLoan?.note ?? null}
           lentAt={openLoan?.lentAt ?? null}
           onClose={() => setLendSheetOpen(false)}
           onConfirm={handleLend}
