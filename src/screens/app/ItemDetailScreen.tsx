@@ -49,7 +49,8 @@ import { useTagScanner } from '../../hooks/useTagScanner';
 import { EditItemModal } from '../../components/item/EditItemModal';
 import { BrandSheet } from '../../components/item/BrandSheet';
 import { LendSheet } from '../../components/lending/LendSheet';
-import { useLendContacts, useLendItem, useLoans, useReturnItem } from '../../hooks/useLendContacts';
+import { useLendContacts, useLendItem, useLoans } from '../../hooks/useLendContacts';
+import { useReturnWithUndo } from '../../components/lending/useReturnWithUndo';
 import { openLoanStatus, pastLoanRange, relationshipLabel } from '../../lib/lending';
 import { SaveToBoardSheet } from '../../components/boards/SaveToBoardSheet';
 import { SLEEVE_LENGTH_LABELS } from '../../types/item';
@@ -155,7 +156,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
   const { data: lendContacts = [] } = useLendContacts();
   const { data: loans = [] } = useLoans(!!itemId);
   const lendItem = useLendItem();
-  const returnItem = useReturnItem();
+  const { markReturned, toast: returnToast } = useReturnWithUndo();
   const deleteItem = useDeleteItem();
   const markWorn = useMarkItemWorn();
   const { openStylist, resumeStylist } = useGlobalAIStylist();
@@ -285,8 +286,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
 
   const handleReturn = () => {
     if (!item) return;
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    returnItem.mutate(item.id);
+    markReturned([item.id], item.name);
   };
 
   const handleMarkWorn = () => {
@@ -299,9 +299,18 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
     if (!item) return;
     const outfits = qc.getQueryData<Outfit[]>(OUTFITS_QUERY_KEY) ?? [];
     const affectedCount = outfits.filter(o => o.itemIds.some(e => e.id === item.id)).length;
-    const warningSuffix = affectedCount > 0
+    const outfitWarning = affectedCount > 0
       ? `\n\nThis item appears in ${affectedCount} outfit${affectedCount === 1 ? '' : 's'}. A deleted placeholder will replace it until you clear it.`
       : '';
+    // Deleting the item deletes its loans too (FK cascade), so say so while it's out.
+    const holderId = item.availability === 'lent'
+      ? loans.find((l) => l.itemId === item.id && !l.returnedAt)?.contactId ?? null
+      : null;
+    const holder = holderId == null ? null : lendContacts.find((c) => c.id === holderId)?.name ?? null;
+    const lentWarning = item.availability === 'lent'
+      ? `\n\n${holder ? `${holder} still has it` : "It's lent out right now"}. Its lending history will be deleted too.`
+      : '';
+    const warningSuffix = lentWarning + outfitWarning;
 
     const thumb = itemThumbUri(item);
     confirmSheet({
@@ -1256,6 +1265,7 @@ export function ItemDetailScreen({ route, navigation }: ItemDetailScreenProps) {
           );
         }}
       />
+      {returnToast}
     </View>
   );
 }

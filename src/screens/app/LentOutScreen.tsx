@@ -6,9 +6,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SettingsScaffold, Group, GroupBlock } from '../../components/profile/SettingsUI';
 import { confirmSheet } from '../../components/primitives/ConfirmSheet';
 import { PersonSheet } from '../../components/lending/PersonSheet';
+import { useReturnWithUndo } from '../../components/lending/useReturnWithUndo';
 import { useItems } from '../../hooks/useItems';
 import {
-  useDeleteLendContact, useLendContacts, useLoans, useReturnItem, useUpdateLendContact,
+  useDeleteLendContact, useLendContacts, useLoans, useUpdateLendContact,
 } from '../../hooks/useLendContacts';
 import { itemThumbUri } from '../../lib/itemImage';
 import {
@@ -30,7 +31,7 @@ export function LentOutScreen({ navigation }: LentOutScreenProps) {
   const { data: items = [] } = useItems();
   const { data: contacts = [] } = useLendContacts();
   const { data: loans = [], isLoading } = useLoans();
-  const returnItem = useReturnItem();
+  const { markReturned, toast } = useReturnWithUndo();
   const updateContact = useUpdateLendContact();
   const deleteContact = useDeleteLendContact();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -142,7 +143,7 @@ export function LentOutScreen({ navigation }: LentOutScreenProps) {
                         {status ? <Text style={[s.meta, status.overdue && s.overdue]}>{status.text}</Text> : null}
                       </View>
                     </Pressable>
-                    <Pressable onPress={() => returnItem.mutate(row.itemId)} style={s.action} accessibilityRole="button" accessibilityLabel={`Mark ${row.name} as returned`}>
+                    <Pressable onPress={() => markReturned([row.itemId], row.name)} style={s.action} accessibilityRole="button" accessibilityLabel={`Mark ${row.name} as returned`}>
                       <Text style={s.link}>Returned</Text>
                     </Pressable>
                   </View>
@@ -153,7 +154,12 @@ export function LentOutScreen({ navigation }: LentOutScreenProps) {
             <GroupBlock>
               <View style={s.footerRow}>
                 {rows.length > 1 ? (
-                  <Pressable onPress={() => rows.forEach((r) => returnItem.mutate(r.itemId))} style={s.action} accessibilityRole="button">
+                  <Pressable
+                    onPress={() => markReturned(rows.map((r) => r.itemId), `${rows.length} pieces`)}
+                    style={s.action}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Mark all ${rows.length} pieces${contact ? ` from ${contact.name}` : ''} as returned`}
+                  >
                     <Text style={s.link}>All returned</Text>
                   </Pressable>
                 ) : null}
@@ -210,6 +216,7 @@ export function LentOutScreen({ navigation }: LentOutScreenProps) {
       onSave={(patch) => { if (editing) updateContact.mutate({ id: editing.id, ...patch }); setEditing(null); }}
       onRemove={() => { if (editing) remove(editing); }}
     />
+    {toast}
     </View>
   );
 }

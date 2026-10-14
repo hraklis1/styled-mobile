@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { Alert } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import { api, isNetworkError } from '../lib/api';
+import { localYmd } from '../lib/lending';
 import { FASHION_BRANDS } from '../lib/fashionBrands';
 import { track } from '../lib/analytics';
 import type { CoverImageVariant, Item, ItemCategory, ScanResult } from '../types/item';
@@ -224,8 +225,10 @@ export function useItems() {
 export function useUpdateItem() {
   const qc = useQueryClient();
   return useMutation({
+    // An availability change opens or closes a loan on the server; send the
+    // local day so it isn't dated by the server's UTC clock.
     mutationFn: ({ id, ...patch }: Partial<Item> & { id: number }) =>
-      api.patch<Item>(`/api/items/${id}`, patch).then((r) => r.data),
+      api.patch<Item>(`/api/items/${id}`, 'availability' in patch ? { ...patch, today: localYmd() } : patch).then((r) => r.data),
     onMutate: async ({ id, ...patch }) => {
       await qc.cancelQueries({ queryKey: ITEMS_QUERY_KEY });
       const previous = qc.getQueryData<Item[]>(ITEMS_QUERY_KEY);
@@ -238,7 +241,12 @@ export function useUpdateItem() {
       if (ctx?.previous) qc.setQueryData(ITEMS_QUERY_KEY, ctx.previous);
       Alert.alert('Error', "Couldn't update item. Please try again.");
     },
-    onSettled: () => invalidateItemQueries(qc),
+    onSettled: (_data, _err, { id: _id, ...patch }) => {
+      invalidateItemQueries(qc);
+      // Loans follow availability server-side (useLendContacts' LOANS_QUERY_KEY;
+      // spelled out here to keep the import one-way).
+      if ('availability' in patch) qc.invalidateQueries({ queryKey: ['loans'] });
+    },
   });
 }
 

@@ -96,26 +96,64 @@ export function useLendItem() {
   });
 }
 
-/** Ends the open loan and puts the item back in rotation. */
-export function useReturnItem() {
+/**
+ * Ends the open loans of one or more items and puts them back in rotation,
+ * in one request. Pair with useReopenLoans for undo.
+ */
+export function useReturnItems() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (itemId: number) => api.post(`/api/items/${itemId}/return`, { today: localYmd() }),
-    onMutate: async (itemId) => {
+    mutationFn: (itemIds: number[]) =>
+      api.post<{ returned: number[] }>('/api/loans/return', { itemIds, today: localYmd() }).then((r) => r.data),
+    onMutate: async (itemIds) => {
       await qc.cancelQueries({ queryKey: ITEMS_QUERY_KEY });
       await qc.cancelQueries({ queryKey: LOANS_QUERY_KEY });
       const previous = qc.getQueryData<Item[]>(ITEMS_QUERY_KEY);
       const previousLoans = qc.getQueryData<ItemLoan[]>(LOANS_QUERY_KEY);
-      setItemAvailability(qc, itemId, 'available');
+      const ids = new Set(itemIds);
       const today = localYmd();
+      for (const id of itemIds) setItemAvailability(qc, id, 'available');
       qc.setQueryData<ItemLoan[]>(LOANS_QUERY_KEY, (old) =>
-        old?.map((l) => (l.itemId === itemId && !l.returnedAt ? { ...l, returnedAt: today } : l)));
+        old?.map((l) => (ids.has(l.itemId) && !l.returnedAt ? { ...l, returnedAt: today } : l)));
       return { previous, previousLoans };
     },
-    onError: (_err, _id, ctx) => {
+    onError: (_err, itemIds, ctx) => {
       if (ctx?.previous) qc.setQueryData(ITEMS_QUERY_KEY, ctx.previous);
       if (ctx?.previousLoans) qc.setQueryData(LOANS_QUERY_KEY, ctx.previousLoans);
-      Alert.alert('Error', "Couldn't mark that as returned. Please try again.");
+      Alert.alert('Error', `Couldn't mark ${itemIds.length === 1 ? 'that' : 'those'} as returned. Please try again.`);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+    },
+  });
+}
+
+/** Undo a return made today: the same loans reopen, dates and person intact. */
+export function useReopenLoans() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (itemIds: number[]) =>
+      api.post<{ reopened: number[]; conflicts: number[] }>('/api/loans/reopen', { itemIds, today: localYmd() }).then((r) => r.data),
+    onMutate: async (itemIds) => {
+      await qc.cancelQueries({ queryKey: ITEMS_QUERY_KEY });
+      await qc.cancelQueries({ queryKey: LOANS_QUERY_KEY });
+      const previous = qc.getQueryData<Item[]>(ITEMS_QUERY_KEY);
+      const previousLoans = qc.getQueryData<ItemLoan[]>(LOANS_QUERY_KEY);
+      for (const id of itemIds) setItemAvailability(qc, id, 'lent');
+      // The latest loan of each item (the list is newest first) is the one coming back.
+      const seen = new Set<number>();
+      qc.setQueryData<ItemLoan[]>(LOANS_QUERY_KEY, (old) => old?.map((l) => {
+        if (!itemIds.includes(l.itemId) || seen.has(l.itemId)) return l;
+        seen.add(l.itemId);
+        return { ...l, returnedAt: null };
+      }));
+      return { previous, previousLoans };
+    },
+    onError: (_err, _ids, ctx) => {
+      if (ctx?.previous) qc.setQueryData(ITEMS_QUERY_KEY, ctx.previous);
+      if (ctx?.previousLoans) qc.setQueryData(LOANS_QUERY_KEY, ctx.previousLoans);
+      Alert.alert("Couldn't undo", 'It may have been lent again already.');
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
