@@ -31,8 +31,13 @@ import {
   resolvedActivePieceId,
   reviewSummary,
   sheetGuidance,
+  groupPiecesByPhoto,
+  pieceNumbering,
   type PieceReviewState,
 } from '../../lib/scan-review';
+import { loadBatchReviewLayout, saveBatchReviewLayout, type BatchReviewLayout } from '../../lib/scanReviewLayout';
+import { PhotoSections } from './scan-review/PhotoSections';
+import type { PhotoMark } from './scan-review/MarkedPhoto';
 import { colors, ingestion, spacing, stroke, typography } from '../../theme';
 import { UndoToast } from '../primitives/UndoToast';
 import { ActionBar, type ActionBarMode } from './scan-review/ActionBar';
@@ -164,6 +169,8 @@ export function ScanReviewWorkspace({
   const closeDisabled = stage === 'saving';
 
   const [view, setView] = useState<View_>('sheet');
+  const [batchLayout, setBatchLayout] = useState<BatchReviewLayout>('sections');
+  useEffect(() => { void loadBatchReviewLayout().then(setBatchLayout); }, []);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [footerHeight, setFooterHeight] = useState(0);
   const [filter, setFilter] = useState<SheetFilter>('all');
@@ -202,7 +209,7 @@ export function ScanReviewWorkspace({
     const shown = pieces.filter(piece =>
       preExtract || piece.included !== false || (piece.extraction !== 'not-started' && piece.extraction !== undefined));
     if (preExtract) {
-      const overlaps = overlapDuplicates(shown.map(piece => ({ id: piece.id, category: piece.category, bbox: piece.cropBbox })));
+      const overlaps = overlapDuplicates(shown.map(piece => ({ id: piece.id, category: piece.category, bbox: piece.cropBbox, source: piece.cropSource })));
       return overlaps.size ? shown.map(piece => overlaps.has(piece.id) ? { ...piece, overlap: overlaps.get(piece.id) } : piece) : shown;
     }
     if (!review) return shown;
@@ -224,8 +231,32 @@ export function ScanReviewWorkspace({
   const reviewPhoto = (preExtract || review) && visiblePieces.length > 0 && visiblePieces.every(piece => piece.cropSource === visiblePieces[0].cropSource)
     ? visiblePieces[0].cropSource
     : null;
-  // Numbered once, by detection order, so piece 5 is piece 5 before and after extraction.
-  const numbers = useMemo(() => new Map(pieces.map((piece, index) => [piece.id, index + 1])), [pieces]);
+  // Many photos behind the pieces: one photo-led section per photo, unless
+  // the user prefers the contact sheet.
+  const multiPhoto = (preExtract || review) && visiblePieces.length > 0 && !reviewPhoto;
+  const photoSections = multiPhoto && batchLayout === 'sections';
+  // A grouped batch reads its details in place: the sections stay up and
+  // each row resolves as its piece is read, instead of a separate hero.
+  const readInPlace = stage === 'extracting' && batchLayout === 'sections' && visiblePieces.length > 0
+    && new Set(visiblePieces.map(piece => piece.cropSource)).size > 1;
+  const switchLayout = () => {
+    const next: BatchReviewLayout = batchLayout === 'sections' ? 'grid' : 'sections';
+    setBatchLayout(next);
+    void saveBatchReviewLayout(next);
+    track('scan_review_layout_changed', { layout: next });
+  };
+  // Each finished photo's pieces, for the detection hero's reveal.
+  const detectedMarks = useMemo(() => {
+    const marks = new Map<string, PhotoMark[]>();
+    for (const group of groupPiecesByPhoto(pieces)) {
+      if (!group.source) continue;
+      marks.set(group.source, group.pieces.map((piece, index) => ({ id: piece.id, box: piece.cropBbox, label: piece.name, number: index + 1 })));
+    }
+    return marks;
+  }, [pieces]);
+  // Numbered once, by detection order within each photo, so piece 5 is piece 5
+  // before and after extraction. A batch's references carry the photo ("2·3").
+  const { numbers } = useMemo(() => pieceNumbering(pieces), [pieces]);
   // Strong overlaps start unselected; they wait in a collapsed group instead of crowding the list.
   const duplicateIds = useMemo(
     () => new Set(preExtract ? visiblePieces.filter(piece => piece.overlap?.strong).map(piece => piece.id) : []),
@@ -233,6 +264,7 @@ export function ScanReviewWorkspace({
   );
   const noteFor = useCallback((piece: ScanReviewPiece): string | null => {
     if (preExtract) {
+      // Overlaps are always within one photo, so the plain marker number names the piece.
       const of = piece.overlap ? numbers.get(piece.overlap.of) : undefined;
       return of === undefined ? null : piece.overlap!.strong ? `Looks like #${of}` : `Possibly same as #${of}`;
     }
@@ -271,6 +303,17 @@ export function ScanReviewWorkspace({
 
     gridOffset.current = 0;
   }, [visible, stage, onMinimize]);
+
+  // Back from the one-piece view, the row it showed stays lit for a moment
+  // to say where you were, then lets go so it doesn't read as a selection.
+  const lastView = useRef(effectiveView);
+  useEffect(() => {
+    const before = lastView.current;
+    lastView.current = effectiveView;
+    if (before !== 'loupe' || effectiveView !== 'sheet') return;
+    const timer = setTimeout(() => setActiveId(null), 1500);
+    return () => clearTimeout(timer);
+  }, [effectiveView]);
 
   // Return to the overview when approved extraction finishes.
   const previousStage = useRef(stage);
@@ -563,7 +606,8 @@ export function ScanReviewWorkspace({
             onClose={() => setConfirmClose(true)}
             busy={heroSpeaks}
             onMinimize={onMinimize}
-            heading={reviewPhoto ? (preExtract ? 'Review your pieces' : 'Your pieces are ready') : undefined}
+            // The one-piece view keeps the plain bar: its Back returns to the overview.
+            heading={effectiveView === 'loupe' ? undefined : readInPlace ? 'Reading details' : reviewPhoto || photoSections ? (preExtract ? 'Review your pieces' : 'Your pieces are ready') : undefined}
           />
 
           {failure ? (
@@ -575,7 +619,25 @@ export function ScanReviewWorkspace({
           ) : null}
 
           {stage === 'scanning' ? (
-            <DetectionState previewImage={previewImage} photos={scanPhotos} progress={scanProgress} heroHeight={heroHeight} reduceMotion={reduceMotion} />
+            <DetectionState previewImage={previewImage} photos={scanPhotos} progress={scanProgress} heroHeight={heroHeight} reduceMotion={reduceMotion}
+              detected={detectedMarks} foundCount={pieces.length} />
+          ) : readInPlace ? (
+            <PhotoSections
+              blurb={`Reading details · ${Math.min(extractionProgress.current, extractionProgress.total)} of ${extractionProgress.total}`}
+              progress={extractionProgress.total ? extractionProgress.current / extractionProgress.total : 0}
+              // Queued pieces read as in progress too: they're all being worked on.
+              pieces={visiblePieces.filter(piece => piece.included !== false)
+                .map(piece => piece.extraction === 'not-started' ? { ...piece, extraction: 'running' as const } : piece)}
+              numbers={numbers}
+              noteFor={() => null}
+              activeId={null}
+              disabled
+              reduceMotion={reduceMotion}
+              bottomPadding={contentBottom}
+              onActivate={() => {}}
+              onOpen={() => {}}
+              onToggleIncluded={() => {}}
+            />
           ) : stage === 'extracting' ? (
             <ExtractionState piece={visiblePieces[0] ?? null} pieces={inclusion.included} progress={extractionProgress} heroHeight={heroHeight} reduceMotion={reduceMotion} />
           ) : reviewPhoto ? (
@@ -588,6 +650,25 @@ export function ScanReviewWorkspace({
               isPolished={polishCount > 0 ? polish.isPolished : undefined}
               duplicateIds={duplicateIds}
               compactPhoto={review}
+              activeId={activeId}
+              disabled={stage === 'saving'}
+              reduceMotion={reduceMotion}
+              bottomPadding={contentBottom}
+              onActivate={id => { selectionFeedback(); setActiveId(id); }}
+              onClearActive={() => setActiveId(null)}
+              onOpen={openEditor}
+              onToggleIncluded={toggleIncluded}
+              onBrand={id => { setActiveId(id); openSheet({ kind: 'brand', target: [id] }); }}
+              onAddPiece={onAddPiece ? () => { setActiveId(null); setAdding({ step: 'crop' }); } : undefined}
+            />
+          ) : photoSections && effectiveView === 'sheet' ? (
+            <PhotoSections
+              blurb={preExtract ? reviewBlurb(visiblePieces.length, new Set(visiblePieces.map(piece => piece.cropSource)).size) : readyBlurb(inclusion.included.length, checkCount)}
+              pieces={visiblePieces}
+              numbers={numbers}
+              noteFor={noteFor}
+              isPolished={polishCount > 0 ? polish.isPolished : undefined}
+              duplicateIds={duplicateIds}
               activeId={activeId}
               disabled={stage === 'saving'}
               reduceMotion={reduceMotion}
@@ -652,7 +733,17 @@ export function ScanReviewWorkspace({
           <View onLayout={event => setFooterHeight(event.nativeEvent.layout.height)}>
             {heroSpeaks
               ? <View style={[styles.heroFooter, { height: Math.max(insets.bottom, spacing.md) + spacing.sm + 56 }]}>
-                  <SlowScanHint watchKey={stage} background={onMinimize ? { onPress: onMinimize } : undefined} />
+                  <SlowScanHint watchKey={stage} background={onMinimize ? { onPress: onMinimize } : undefined}>
+                    {/* Reading in place: the footer says the work is happening, where Continue just was. */}
+                    {readInPlace ? (
+                      <View style={styles.readingFooter} accessibilityLiveRegion="polite">
+                        <ActivityIndicator size="small" color={colors.mutedForeground} />
+                        <Text style={styles.readingFooterText}>
+                          Reading details · {Math.min(extractionProgress.current, extractionProgress.total)} of {extractionProgress.total} done
+                        </Text>
+                      </View>
+                    ) : null}
+                  </SlowScanHint>
                 </View>
               : <ActionBar mode={actionMode} bottomInset={insets.bottom} />}
           </View>
@@ -750,9 +841,12 @@ export function ScanReviewWorkspace({
             <PolishExample example={polish.example} />
           </WorkspaceSheet>
         ) : sheet?.kind === 'options' ? (
-          <WorkspaceSheet title={onMinimize ? 'Import options' : 'Scan options'} detent="fit" rows={scanOptionsRowCount(onMinimize ?? keepForLater)} reduceMotion={reduceMotion} dismissed={sheetDismissed} onClose={closeSheet}>
+          <WorkspaceSheet title={onMinimize ? 'Import options' : 'Scan options'} detent="fit" rows={scanOptionsRowCount(onMinimize ?? keepForLater, multiPhoto || undefined)} reduceMotion={reduceMotion} dismissed={sheetDismissed} onClose={closeSheet}>
             <ScanOptionsRows
               onKeep={(onMinimize ?? keepForLater) ? () => thenDismiss((onMinimize ?? keepForLater)!) : undefined}
+              layout={multiPhoto ? (batchLayout === 'sections'
+                ? { label: 'View as grid', icon: 'grid-outline', onPress: () => thenDismiss(switchLayout) }
+                : { label: 'Group by photo', icon: 'images-outline', onPress: () => thenDismiss(switchLayout) }) : undefined}
               discardLabel={onMinimize ? 'Discard import' : 'Discard scan'}
               detail={`${pieceCountLabel(pieces.length)} and your edits`}
               onDiscard={() => thenDismiss(() => {
@@ -933,6 +1027,8 @@ function WorkspaceHeader({ stage, view, canGoBack, position, includedCount, tota
 }
 
 const styles = StyleSheet.create({
+  readingFooter: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  readingFooterText: { ...typography.text.bodySmall, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
   heroFooter: { justifyContent: 'flex-start', paddingTop: spacing.sm },
   inclusionControl: { minHeight: 44, marginHorizontal: spacing.lg, marginVertical: spacing.sm },
   root: { flex: 1, backgroundColor: colors.background },

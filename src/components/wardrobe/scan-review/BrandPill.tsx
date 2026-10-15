@@ -1,32 +1,26 @@
 import { Pressable, StyleSheet, Text } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 
-import { colors, radii, spacing, typography } from '../../../theme';
+import { colors, spacing, typography } from '../../../theme';
 
 /**
- * The brand, attributed right on the card. Empty, it is a dashed "+ Brand"
- * invitation; set, a quiet hairline label that reopens the brand search.
+ * The brand, attributed right on the card, in the same voice as a piece row:
+ * set, the brand itself in small caps; empty, a faint "Add brand" offer.
+ * Either way it reopens the brand search, and never opens the piece.
  */
 export function BrandPill({ brand, name, disabled, onPress }: { brand: string; name: string; disabled?: boolean; onPress: () => void }) {
   const set = Boolean(brand.trim());
   return (
-    <Pressable onPress={onPress} disabled={disabled} hitSlop={{ top: 8, bottom: 6, left: 4, right: 4 }}
-      style={({ pressed }) => [styles.pill, set ? styles.pillSet : styles.pillEmpty, pressed && styles.pressed]}
+    <Pressable onPress={onPress} disabled={disabled} hitSlop={{ top: 10, bottom: 8, left: 8, right: 16 }}
+      style={({ pressed }) => [styles.link, pressed && styles.pressed]}
       accessibilityRole="button" accessibilityLabel={set ? `Brand ${brand}, change` : `Add brand to ${name || 'piece'}`}>
-      {set ? null : <Ionicons name="add" size={12} color={colors.mutedForeground} />}
-      <Text style={[styles.label, !set && styles.labelEmpty]} numberOfLines={1}>{set ? brand : 'Brand'}</Text>
+      <Text style={set ? styles.brand : styles.add} numberOfLines={1}>{set ? brand : 'Add brand'}</Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  pill: {
-    alignSelf: 'flex-start', maxWidth: '100%', flexDirection: 'row', alignItems: 'center', gap: 2,
-    minHeight: 22, paddingHorizontal: spacing.sm, borderRadius: radii.full, borderWidth: StyleSheet.hairlineWidth, marginBottom: 2,
-  },
-  pillEmpty: { borderStyle: 'dashed', borderColor: colors.mutedForeground },
-  pillSet: { borderColor: colors.border },
-  pressed: { backgroundColor: colors.surfaceSelected },
-  label: { ...typography.text.eyebrow, color: colors.foreground, flexShrink: 1 },
-  labelEmpty: { color: colors.mutedForeground },
+  link: { alignSelf: 'flex-start', maxWidth: '100%', minHeight: 18, justifyContent: 'center', marginBottom: spacing.xs / 2 },
+  pressed: { opacity: 0.6 },
+  brand: { ...typography.text.eyebrow, color: colors.foreground },
+  add: { ...typography.text.caption, color: colors.inkSubtle, textDecorationLine: 'underline', textDecorationColor: colors.hairline },
 });

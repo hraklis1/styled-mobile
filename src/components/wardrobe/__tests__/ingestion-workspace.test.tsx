@@ -8,6 +8,10 @@ import type { ScanReviewPiece } from '../scan-review/types';
 jest.mock('../scan-review/PreExtractGrid', () => ({ PreExtractGrid: 'Grid', PieceLine: 'PieceLine' }));
 jest.mock('../scan-review/ItemInspectionModal', () => ({ ItemInspectionModal: 'Inspection' }));
 jest.mock('../scan-review/PhotoReview', () => ({ PhotoReview: 'PhotoReview' }));
+jest.mock('../scan-review/PhotoSections', () => ({ PhotoSections: 'PhotoSections' }));
+// These suites exercise the contact sheet; the grouped layout has its own test below.
+const mockLayout = { current: 'grid' };
+jest.mock('../../../lib/scanReviewLayout', () => ({ loadBatchReviewLayout: () => Promise.resolve(mockLayout.current), saveBatchReviewLayout: jest.fn() }));
 jest.mock('../scan-review/PieceEditorSheet', () => ({ PieceEditorSheet: 'Editor' }));
 jest.mock('../scan-review/PieceDetailSheet', () => ({ PieceDetailSheet: 'PieceDetail' }));
 jest.mock('../scan-review/atoms', () => ({ ChipRow: 'Chips', TextLink: 'TextLink' }));
@@ -42,7 +46,7 @@ const fixture = (): ScanReviewPiece[] => Array.from({ length: 3 }, (_, i) => ({
   material: null, fit: null, sizeProfile: null, sleeveLength: null,
 }));
 const applyCrop = jest.fn(async () => {});
-let stage: 'review' | 'pre-extract' = 'review';
+let stage: 'review' | 'pre-extract' | 'extracting' = 'review';
 let addPiece: jest.Mock | undefined;
 let latest: ScanReviewPiece[];
 let setItems: React.Dispatch<React.SetStateAction<ScanReviewPiece[]>>;
@@ -60,8 +64,8 @@ const node = (name: string) => renderer.root.findByType(name as never);
 const menuRow = (label: string) => renderer.root.findAll(n => n.props.onPress && n.findAll(child => child.type === Text && child.props.children === label).length > 0)[0];
 const toast = () => renderer.root.findAll(n => typeof n.props.message === 'string' && n.props.onUndo)[0];
 const header = () => renderer.root.findAll(n => 'onIncludeAll' in n.props)[0];
-beforeEach(() => { act(() => { renderer = TestRenderer.create(<Harness />); }); });
-afterEach(() => { act(() => renderer.unmount()); stage = 'review'; onePhoto = false; });
+beforeEach(async () => { await act(async () => { renderer = TestRenderer.create(<Harness />); }); });
+afterEach(() => { act(() => renderer.unmount()); stage = 'review'; onePhoto = false; mockLayout.current = 'grid'; });
 
 it('never shows a piece removed before extraction once review begins', () => {
   act(() => setItems(ps => ps.map(p => p.id === '2' ? { ...p, extraction: 'not-started' } : p)));
@@ -263,5 +267,61 @@ describe('after extraction, from one photo', () => {
     expect(node('Sheet').props.title).toBe('Material');
     act(() => node('Sheet').props.onClose());
     expect(node('PieceDetail').props.piece.id).toBe('1');
+  });
+});
+
+describe('a multi-photo review', () => {
+  beforeEach(async () => {
+    act(() => renderer.unmount());
+    mockLayout.current = 'sections';
+    await act(async () => { renderer = TestRenderer.create(<Harness />); });
+  });
+
+  it('groups pieces under their photos, numbered within each photo', () => {
+    const sections = node('PhotoSections');
+    expect(sections.props.pieces.map((p: ScanReviewPiece) => p.id)).toEqual(['0', '1', '2']);
+    expect([...sections.props.numbers.values()]).toEqual([1, 1, 1]);
+    expect(renderer.root.findAllByType('Grid' as never)).toHaveLength(0);
+  });
+});
+
+describe('reading details in a multi-photo batch', () => {
+  beforeEach(async () => {
+    act(() => renderer.unmount());
+    mockLayout.current = 'sections';
+    stage = 'extracting';
+    await act(async () => { renderer = TestRenderer.create(<Harness />); });
+  });
+
+  it('keeps the photo sections up, read-only, instead of the extraction hero', () => {
+    expect(renderer.root.findAllByType('Extraction' as never)).toHaveLength(0);
+    const sections = node('PhotoSections');
+    expect(sections.props.disabled).toBe(true);
+    expect(sections.props.pieces.map((p: ScanReviewPiece) => p.id)).toEqual(['0', '1']);
+  });
+
+  it('shows queued pieces as being read, and says so in the footer', () => {
+    act(() => setItems(ps => ps.map(p => p.id === '1' ? { ...p, extraction: 'not-started' } : p)));
+    expect(node('PhotoSections').props.pieces.find((p: ScanReviewPiece) => p.id === '1').extraction).toBe('running');
+    const texts = renderer.root.findAllByType(Text).map(t => [t.props.children].flat().join(''));
+    expect(texts.some(text => text.startsWith('Reading details · '))).toBe(true);
+  });
+});
+
+describe('the flagged walk from a grouped batch', () => {
+  beforeEach(async () => {
+    act(() => renderer.unmount());
+    mockLayout.current = 'sections';
+    await act(async () => { renderer = TestRenderer.create(<Harness />); });
+  });
+
+  it('drops the heading in the one-piece view, so Back can return to the sections', () => {
+    act(() => setItems(ps => ps.map(p => p.id === '0' ? { ...p, lowConfidenceFields: ['material'] } : p)));
+    expect(header().props.heading).toBeDefined();
+    act(() => renderer.root.findByType('Actions' as never).props.mode.onReviewFlagged());
+    expect(header().props.heading).toBeUndefined();
+    expect(header().props.canGoBack).toBe(true);
+    act(() => header().props.onBack());
+    expect(renderer.root.findAllByType('PhotoSections' as never)).toHaveLength(1);
   });
 });

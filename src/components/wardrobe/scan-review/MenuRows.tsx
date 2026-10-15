@@ -70,16 +70,19 @@ const styles = StyleSheet.create({
  * keep the work running in the background, or discard it with a second tap.
  * Host it in a `WorkspaceSheet` with `detent="fit"` and `rows={scanOptionsRowCount(onKeep)}`.
  */
-export function ScanOptionsRows({ onKeep, discardLabel, detail, onDiscard }: {
+export function ScanOptionsRows({ onKeep, layout, discardLabel, detail, onDiscard }: {
   onKeep?: () => void;
+  /** A multi-photo review's layout switch. */
+  layout?: { label: string; icon: keyof typeof Ionicons.glyphMap; onPress: () => void };
   discardLabel: string;
   detail: string;
   onDiscard: () => void;
 }) {
   return <>
     {onKeep ? <MenuRow icon="chevron-down" label="Keep for later" onPress={onKeep} /> : null}
+    {layout ? <MenuRow icon={layout.icon} label={layout.label} onPress={layout.onPress} /> : null}
     <ArmedDiscardRow label={discardLabel} detail={detail} onConfirm={onDiscard} />
   </>;
 }
 
-export const scanOptionsRowCount = (onKeep?: () => void) => (onKeep ? 2 : 1);
+export const scanOptionsRowCount = (onKeep?: () => void, layout?: unknown) => 1 + (onKeep ? 1 : 0) + (layout ? 1 : 0);

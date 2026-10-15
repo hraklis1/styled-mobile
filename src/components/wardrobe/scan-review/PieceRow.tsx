@@ -1,17 +1,19 @@
+import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 
 import { shortPieceName } from '../../../lib/pieceNames';
 import { NORMALIZED_COLOR_HEX, isColorLight, normalizedColorDisplayName, resolveHex } from '../../../lib/colorUtils';
 import type { NormalizedColor } from '../../../types/item';
 import { colors, radii, spacing, typography } from '../../../theme';
-import { PieceThumb } from './PieceThumb';
+import { PIECE_THUMB, PieceThumb } from './PieceThumb';
 import { pieceRowText } from './pieceRowText';
 import { SelectBadge } from './SelectBadge';
 import type { ScanReviewPiece } from './types';
 
-/** The shared 4:5 plate, scaled to keep long batch lists compact. */
-const THUMB = { width: 56, height: 70 } as const;
+/** The shared 4:5 plate, large enough to tell two navy shirts apart. */
+const THUMB = PIECE_THUMB;
 
 /**
  * One detected piece under the review photo. The body (thumbnail and name)
@@ -43,7 +45,11 @@ export function PieceRow({ piece, number, active, note, polished = false, disabl
   // A brand read from shape alone, not a visible logo: shown as a guess.
   const brandGuess = Boolean(brand) && (piece.lowConfidenceFields ?? []).includes('brand');
   // The colour shows as swatches; words are left for the brand and any note.
-  const detail = [onBrand ? null : brand || null, note].filter(Boolean).join(' · ');
+  // What the swatches can't say: the material, once it's read ("Wool").
+  // Before then the name already says what it is.
+  const kind = piece.material ? capitalize(piece.material) : '';
+  const detail = [onBrand ? null : brand || null, kind || null, note].filter(Boolean).join(' · ');
+  const reading = piece.extraction === 'running';
   return (
     <View style={[styles.row, active && styles.rowActive]}>
       <Pressable
@@ -56,14 +62,14 @@ export function PieceRow({ piece, number, active, note, polished = false, disabl
       >
         <Text style={styles.number}>{number}</Text>
         <PieceThumb uri={piece.photo} width={THUMB.width} height={THUMB.height} dimmed={!included} transition={reduceMotion ? 0 : 150} />
-        <View style={styles.text}>
+        <View style={[styles.text, !included && styles.textOff]}>
           <View style={styles.nameLine}>
-            <Text style={[styles.name, !included && styles.nameOff]} numberOfLines={1}>{name}</Text>
+            <Text style={[styles.name, !included && styles.nameOff]} numberOfLines={2}>{name}</Text>
             {included && polished ? <Ionicons name="sparkles" size={11} color={colors.mutedForeground} style={styles.sparkle} /> : null}
           </View>
           {/* Brand, then colour, each on its own line: neither has to give way to the other. */}
           {onBrand ? <View style={styles.meta}><BrandLink brand={brand} guess={brandGuess} name={name} disabled={disabled} onPress={onBrand} /></View> : null}
-          {swatches.length || detail ? (
+          {reading ? <ReadingLine reduceMotion={reduceMotion} /> : swatches.length || detail ? (
             <View style={styles.colourLine}>
               {swatches.length ? (
                 // Read as one: the colour's name, not each dot.
@@ -85,6 +91,24 @@ export function PieceRow({ piece, number, active, note, polished = false, disabl
         accessibilityLabel={`Include ${name}`}
       />
     </View>
+  );
+}
+
+const capitalize = (word: string) => word.charAt(0).toLocaleUpperCase() + word.slice(1);
+
+/** Stands in for the detail line while the piece's details are being read. */
+function ReadingLine({ reduceMotion }: { reduceMotion: boolean }) {
+  const pulse = useSharedValue(0.5);
+  useEffect(() => {
+    if (reduceMotion) return;
+    pulse.set(withRepeat(withTiming(1, { duration: 800 }), -1, true));
+  }, [pulse, reduceMotion]);
+  const style = useAnimatedStyle(() => ({ opacity: pulse.get() }));
+  return (
+    <Animated.View style={[styles.reading, style]} accessible accessibilityLabel="Reading details">
+      <View style={[styles.readingBar, { width: 64 }]} />
+      <View style={[styles.readingBar, { width: 40 }]} />
+    </Animated.View>
   );
 }
 
@@ -165,6 +189,10 @@ const styles = StyleSheet.create({
   nameLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   name: { flexShrink: 1, ...pieceRowText.name },
   nameOff: { color: colors.mutedForeground },
+  // Not selected: the words recede with the picture.
+  textOff: { opacity: 0.55 },
+  reading: { flexDirection: 'row', gap: spacing.sm, minHeight: 14, alignItems: 'center' },
+  readingBar: { height: 8, borderRadius: 4, backgroundColor: colors.muted },
   // Quieter than the name, and never the thing that gets squeezed out.
   sparkle: { flexShrink: 0 },
   meta: { flexDirection: 'row' },
