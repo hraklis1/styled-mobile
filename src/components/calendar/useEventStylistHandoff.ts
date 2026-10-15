@@ -7,6 +7,14 @@ import type { StylistMissingEssential } from '../../features/stylist/types';
 import type { Event } from '../../types/event';
 import { eventDayKey } from './calendarAgenda';
 
+// Calendar titles are often shorthand (`Regular | VH `). Quoting them verbatim puts
+// stray quotes and pipes into the prompt and the conversation title, so normalise
+// separators and whitespace and let the title read as prose.
+function briefEventTitle(title: string): string {
+  const cleaned = title.replace(/["“”]/g, '').replace(/\s*\|\s*/g, ' · ').replace(/\s+/g, ' ').trim();
+  return cleaned || 'my event';
+}
+
 type TabNavigation = Pick<NavigationProp<AppTabParamList>, 'navigate'>;
 
 /**
@@ -23,7 +31,7 @@ export function useEventStylistHandoff(navigation: TabNavigation) {
     if (now - lastHandoffAt.current < 600) return;
     lastHandoffAt.current = now;
     const details = [
-      `Dress me for "${event.title}"`,
+      `Dress me for ${briefEventTitle(event.title)}`,
       `on ${new Date(`${eventDayKey(event)}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`,
       event.occasion ? `for a ${event.occasion.replaceAll('_', ' ')} occasion` : null,
       event.location ? `at ${event.location}` : null,

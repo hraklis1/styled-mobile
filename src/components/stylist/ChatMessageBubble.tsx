@@ -30,6 +30,8 @@ import { ADVICE_THUMB_HEIGHT, ADVICE_THUMB_WIDTH, ChatMessage, EventContext, isP
 import { OutfitSuggestionCard, pieceTip } from './ChatOutfitCard';
 import { LookCarousel } from './ChatProgress';
 import { styles } from './ChatStyles';
+import { isMessageFresh } from './freshMessages';
+import { sortByWearOrder } from '../../lib/outfitOrder';
 
 // ── MessageBubble ─────────────────────────────────────────────────────────────
 
@@ -52,6 +54,15 @@ type BubbleProps = {
 
 export function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContext, entryContext, onAddToEvent, onToggleAudio, onNavigateToShop, onClarificationSelect, onNavigateToCloset, onStyleAuditItem, onSaveToBoard, onViewSaved }: BubbleProps) {
   const isUser = message.role === 'user';
+  // Frozen at mount: entrance animations only ever run on mount anyway.
+  const [fresh] = useState(() => isMessageFresh(message.id));
+  // Owned pieces for the horizontal strip, in wear order (outer layer, top, bottom, shoes…).
+  const wardrobeStrip = sortByWearOrder(
+    [...new Set(message.role === 'assistant' ? message.suggestedItemIds ?? [] : [])]
+      .map((id) => allItems.find((i) => i.id === id))
+      .filter((i): i is Item => !!i),
+    (item) => item.category,
+  );
   const [detailItem, setDetailItem] = useState<Item | null>(null);
   // Bridges ShopOutfitCard's onSave (which mints the entry) to its onSaved
   // (which offers to board it) without widening the card's public contract.
@@ -113,7 +124,7 @@ export function MessageBubble({ message, allItems, isPlaying, createOutfit, even
 
   if (!isUser && message.wardrobeAudit) {
     return (
-      <EditorialEntrance>
+      <EditorialEntrance fresh={fresh}>
         <View style={styles.editorialResponse}>
           <WardrobeAuditCard
             audit={message.wardrobeAudit}
@@ -130,7 +141,7 @@ export function MessageBubble({ message, allItems, isPlaying, createOutfit, even
   // while streaming, so check before the streaming-text fallback below).
   if (!isUser && message.tripPlan) {
     return (
-      <EditorialEntrance>
+      <EditorialEntrance fresh={fresh}>
         <View style={styles.editorialResponse}>
           <TripPlanCard
             plan={message.tripPlan}
@@ -147,7 +158,7 @@ export function MessageBubble({ message, allItems, isPlaying, createOutfit, even
 
   if (!isUser && message.readinessStatus && message.readinessStatus !== 'ready') {
     return (
-      <EditorialEntrance>
+      <EditorialEntrance fresh={fresh}>
         <View style={styles.editorialResponse}>
           <StylistLookResponseCard
             status={message.readinessStatus}
@@ -155,6 +166,9 @@ export function MessageBubble({ message, allItems, isPlaying, createOutfit, even
             lookName={message.lookName}
             itemIds={message.suggestedItemIds ?? []}
             foundationItemIds={message.foundationItemIds}
+            rationale={message.rationale}
+            completion={message.completion}
+            reveal={fresh}
             missingEssentials={message.missingEssentials}
             clarification={message.clarification}
             allItems={allItems}
@@ -177,7 +191,7 @@ export function MessageBubble({ message, allItems, isPlaying, createOutfit, even
   // wardrobe thumbnails and gap chips. Never an editable outfit card.
   if (!isUser && isProseMode(message.mode)) {
     return (
-      <EditorialEntrance>
+      <EditorialEntrance fresh={fresh}>
         <View style={styles.stylistNote}>
           {(message.responseVersion !== 2 && message.responseVersion !== 3) ? <View style={styles.sectionEyebrow}>
             <Text style={styles.sectionEyebrowText}>{message.boardAction === 'theme' ? 'Board direction' : message.boardAction === 'complete' ? 'Board edit' : message.mode === 'knowledge' ? 'Good to know' : 'My take'}</Text>
@@ -195,9 +209,7 @@ export function MessageBubble({ message, allItems, isPlaying, createOutfit, even
             <View style={styles.responseSection}>
               <Text style={styles.responseSectionTitle}>{entryContext?.kind === 'shopping_brief_edit' ? 'Pairs from your wardrobe' : message.critique ? 'The pieces' : 'From your wardrobe'}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.adviceThumbs}>
-                {[...new Set(message.suggestedItemIds)]
-                  .map((id) => allItems.find((i) => i.id === id))
-                  .filter((i): i is Item => !!i)
+                {wardrobeStrip
                   .map((item) => (
                     <TouchableOpacity
                       key={item.id}
@@ -212,9 +224,8 @@ export function MessageBubble({ message, allItems, isPlaying, createOutfit, even
                   ))}
               </ScrollView>
               {/* Thumbnails are too narrow for a tip, so tips list beneath the rail. */}
-              {message.suggestedItemIds
-                .map((id) => allItems.find((i) => i.id === id))
-                .filter((i): i is Item => !!i && !!pieceTip(message.pieceNotes, i.id))
+              {wardrobeStrip
+                .filter((item) => !!pieceTip(message.pieceNotes, item.id))
                 .map((item) => (
                   <Text key={item.id} style={styles.pieceTipRow}>
                     <Text style={styles.pieceTipName}>{item.name}</Text>
@@ -251,9 +262,10 @@ export function MessageBubble({ message, allItems, isPlaying, createOutfit, even
 
   if (!isUser && message.suggestedItemIds?.length) {
     return (
-      <EditorialEntrance>
+      <EditorialEntrance fresh={fresh}>
         <View style={styles.editorialResponse}>
           <OutfitSuggestionCard
+            reveal={fresh}
             messageText={message.text}
             lookName={message.lookName}
             itemIds={message.suggestedItemIds}
@@ -277,7 +289,7 @@ export function MessageBubble({ message, allItems, isPlaying, createOutfit, even
 
   if (!isUser && message.shopOutfit) {
     return (
-      <EditorialEntrance>
+      <EditorialEntrance fresh={fresh}>
         <View style={styles.shopCardContainer}>
           <View style={styles.sectionEyebrow}>
             <Ionicons name="bag-handle-outline" size={13} color={colors.primary} />
@@ -321,7 +333,7 @@ export function MessageBubble({ message, allItems, isPlaying, createOutfit, even
 
   if (!isUser) {
     return (
-      <EditorialEntrance>
+      <EditorialEntrance fresh={fresh}>
         <View style={styles.stylistNote}>
           <View style={styles.sectionEyebrow}>
             <Text style={styles.sectionEyebrowText}>A note</Text>
@@ -369,7 +381,8 @@ export function MessageBubble({ message, allItems, isPlaying, createOutfit, even
   );
 }
 
-function EditorialEntrance({ children }: { children: React.ReactNode }) {
+// Only a reply that just arrived animates in; history appears already in place.
+function EditorialEntrance({ fresh, children }: { fresh: boolean; children: React.ReactNode }) {
   const reduceMotion = useReducedMotion();
-  return <Reanimated.View entering={reduceMotion ? undefined : FadeInUp.duration(240)}>{children}</Reanimated.View>;
+  return <Reanimated.View entering={fresh && !reduceMotion ? FadeInUp.duration(240) : undefined}>{children}</Reanimated.View>;
 }

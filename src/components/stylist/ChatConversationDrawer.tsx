@@ -7,7 +7,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing } from '../../theme';
-import { Conversation, timeAgo } from './ChatModel';
+import { Conversation } from './ChatModel';
+import { GarmentImage } from '../wardrobe/garment-image';
+import type { Item } from '../../types/item';
 import { styles } from './ChatStyles';
 
 // ── ConversationDrawer ────────────────────────────────────────────────────────
@@ -15,32 +17,73 @@ import { styles } from './ChatStyles';
 // Bucket threads by the user's *local* day. `updatedAt` is a UTC ISO string, so we
 // parse it to an absolute instant and compare against local midnight (setHours on a
 // local Date) rather than diffing raw UTC — otherwise an 11pm-local thread can land
-// in the wrong bucket.
+// in the wrong bucket. Today / Yesterday / weekday for the last week / month after.
+const DAY_MS = 86_400_000;
+
+function startOfLocalDay(t: number): number {
+  const d = new Date(t);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function groupLabel(t: number, todayMs: number): string {
+  if (Number.isNaN(t)) return 'Earlier';
+  const day = startOfLocalDay(t);
+  if (day >= todayMs) return 'Today';
+  if (day >= todayMs - DAY_MS) return 'Yesterday';
+  if (day > todayMs - 7 * DAY_MS) return new Date(t).toLocaleDateString('en', { weekday: 'long' });
+  const date = new Date(t);
+  const sameYear = date.getFullYear() === new Date(todayMs).getFullYear();
+  return date.toLocaleDateString('en', sameYear ? { month: 'long' } : { month: 'long', year: 'numeric' });
+}
+
 function groupConversations(list: Conversation[]): { label: string; items: Conversation[] }[] {
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const todayMs = startOfToday.getTime();
-  const yesterdayMs = todayMs - 86_400_000;
-
-  const today: Conversation[] = [];
-  const yesterday: Conversation[] = [];
-  const earlier: Conversation[] = [];
-  for (const c of list) {
-    const t = new Date(c.updatedAt).getTime();
-    if (!Number.isNaN(t) && t >= todayMs) today.push(c);
-    else if (!Number.isNaN(t) && t >= yesterdayMs) yesterday.push(c);
-    else earlier.push(c);
-  }
-
+  const todayMs = startOfLocalDay(Date.now());
   const groups: { label: string; items: Conversation[] }[] = [];
-  if (today.length) groups.push({ label: 'Today', items: today });
-  if (yesterday.length) groups.push({ label: 'Yesterday', items: yesterday });
-  if (earlier.length) groups.push({ label: 'Earlier', items: earlier });
+  for (const c of list) {
+    const label = groupLabel(new Date(c.updatedAt).getTime(), todayMs);
+    const last = groups[groups.length - 1];
+    if (last?.label === label) last.items.push(c);
+    else groups.push({ label, items: [c] });
+  }
   return groups;
+}
+
+// The group header already says which day; the row only needs the time.
+function rowTime(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return '';
+  if (Date.now() - t < 60_000) return 'Just now';
+  return new Date(t).toLocaleTimeString('en', { hour: 'numeric', minute: '2-digit' });
+}
+
+// Titles come from the first prompt, which may carry a calendar entry verbatim
+// (`Dress me for "Regular | VH " on…`). Drop the quotes and pipes so the list reads
+// as prose.
+export function cleanConversationTitle(title: string | null | undefined): string {
+  const cleaned = (title ?? '')
+    .replace(/["“”]/g, '')
+    .replace(/\s*\|\s*/g, ' · ')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,.])/g, '$1')
+    .trim();
+  return cleaned || 'Conversation';
+}
+
+// Previews are the last message verbatim, so strip markdown emphasis, headings,
+// bullets and links before showing them as one plain line.
+export function plainPreview(text: string | null | undefined): string {
+  return (text ?? '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/(\*\*|__|\*|_|`)/g, '')
+    .replace(/^\s*(#{1,6}|[-•]|\d+\.)\s+/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function ConversationRow({
   conversation,
+  lookItem,
   active,
   onSelect,
   onRename,
@@ -48,6 +91,8 @@ function ConversationRow({
   registerOpenRow,
 }: {
   conversation: Conversation;
+  /** First piece of the thread's latest look; the row's thumbnail. */
+  lookItem?: Item;
   active: boolean;
   onSelect: (id: number) => void;
   onRename: (c: Conversation) => void;
@@ -56,6 +101,8 @@ function ConversationRow({
 }) {
   const swipeRef = useRef<SwipeableMethods>(null);
   const close = () => swipeRef.current?.close();
+  const rawPreview = plainPreview(conversation.preview);
+  const preview = rawPreview ? cleanConversationTitle(rawPreview) : '';
 
   return (
     <ReanimatedSwipeable
@@ -88,21 +135,31 @@ function ConversationRow({
         }}
         delayLongPress={300}
       >
-        <Ionicons
-          name={active ? 'chatbubble-ellipses' : 'chatbubble-outline'}
-          size={16}
-          color={active ? colors.primary : colors.mutedForeground}
-        />
+        {lookItem ? (
+          <GarmentImage item={lookItem} width={40} height={48} placeholderIconSize={14} />
+        ) : (
+          <View style={styles.drawerRowGlyph}>
+            <Ionicons
+              name={active ? 'chatbubble-ellipses' : 'chatbubble-outline'}
+              size={16}
+              color={active ? colors.primary : colors.mutedForeground}
+            />
+          </View>
+        )}
         <View style={styles.drawerRowCopy}>
           <Text style={[styles.drawerRowTitle, active && styles.drawerRowTitleActive]} numberOfLines={1}>
-            {conversation.title || 'Conversation'}
+            {cleanConversationTitle(conversation.title)}
           </Text>
-          {conversation.preview ? (
+          {conversation.lookName ? (
+            <Text style={styles.drawerRowLook} numberOfLines={1}>
+              {conversation.lookName}
+            </Text>
+          ) : preview ? (
             <Text style={styles.drawerRowPreview} numberOfLines={1}>
-              {conversation.preview}
+              {preview}
             </Text>
           ) : null}
-          <Text style={styles.drawerRowMeta}>{timeAgo(conversation.updatedAt)}</Text>
+          <Text style={styles.drawerRowMeta}>{rowTime(conversation.updatedAt)}</Text>
         </View>
       </TouchableOpacity>
     </ReanimatedSwipeable>
@@ -111,6 +168,7 @@ function ConversationRow({
 
 export function ConversationDrawer({
   visible,
+  items,
   conversations,
   loading,
   activeId,
@@ -121,6 +179,7 @@ export function ConversationDrawer({
   onClose,
 }: {
   visible: boolean;
+  items: Item[];
   conversations: Conversation[];
   loading: boolean;
   activeId: number | null;
@@ -159,7 +218,7 @@ export function ConversationDrawer({
 
   const confirmDelete = (c: Conversation) => {
     confirmSheet({
-      title: `Delete “${c.title || 'this conversation'}”?`,
+      title: `Delete “${cleanConversationTitle(c.title)}”?`,
       message: 'This conversation will be removed from History. This can’t be undone.',
       confirmLabel: 'Delete conversation',
       destructive: true,
@@ -167,12 +226,14 @@ export function ConversationDrawer({
     });
   };
 
+  const itemsById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
+
   const groups = useMemo(() => {
     const query = searchText.trim().toLowerCase();
     const matches = query
       ? conversations.filter((conversation) =>
-          (conversation.title || 'Conversation').toLowerCase().includes(query)
-          || (conversation.preview ?? '').toLowerCase().includes(query))
+          cleanConversationTitle(conversation.title).toLowerCase().includes(query)
+          || plainPreview(conversation.preview).toLowerCase().includes(query))
       : conversations;
     return groupConversations(matches);
   }, [conversations, searchText]);
@@ -244,8 +305,8 @@ export function ConversationDrawer({
             )}
           </View>
 
-          <TouchableOpacity style={styles.drawerNewBtn} onPress={onNew}>
-            <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
+          <TouchableOpacity style={styles.drawerNewBtn} onPress={onNew} accessibilityRole="button">
+            <Ionicons name="create-outline" size={18} color={colors.primary} />
             <Text style={styles.drawerNewText}>New conversation</Text>
           </TouchableOpacity>
 
@@ -276,6 +337,7 @@ export function ConversationDrawer({
                     <ConversationRow
                       key={c.id}
                       conversation={c}
+                      lookItem={c.lookItemIds?.map((id) => itemsById.get(id)).find((item) => !!item)}
                       active={c.id === activeId}
                       onSelect={onSelect}
                       onRename={beginRename}

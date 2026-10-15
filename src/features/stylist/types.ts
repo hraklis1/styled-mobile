@@ -171,6 +171,10 @@ export type StylistAssistantMessage = StylistBaseMessage & {
   missingEssentials?: StylistMissingEssential[];
   readinessStatus?: StylistReadinessStatus;
   foundationItemIds?: number[];
+  /** The look's rationale alone, without requirement lines (newer servers). */
+  rationale?: string;
+  /** Wearable look that only lacks a weather layer the closet can't supply. */
+  completion?: 'weather_layer';
   clarification?: StylistClarification;
   tripPlan?: StylistTripPlanData;
   wardrobeAudit?: StylistWardrobeAuditData;
@@ -314,6 +318,8 @@ export type StylistAskDoneEvent = {
   missingEssentials?: StylistMissingEssential[];
   readinessStatus?: StylistReadinessStatus;
   foundationItemIds?: number[];
+  rationale?: string;
+  completion?: 'weather_layer';
   clarification?: StylistClarification;
   missingEssential?: {
     label: string;

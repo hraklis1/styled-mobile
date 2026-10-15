@@ -4,12 +4,15 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, {
   FadeIn,
   FadeOut,
+  ZoomIn,
+  ZoomOut,
   interpolateColor,
   useAnimatedStyle,
   useSharedValue,
   useReducedMotion,
   withTiming,
 } from 'react-native-reanimated';
+import * as Haptics from '../../../lib/haptics';
 import { DictationLevelBars } from './DictationLevelBars';
 import { useDictation } from './useDictation';
 import { imageColors, colors, radii, spacing, typography } from '../../../theme';
@@ -87,6 +90,48 @@ export function StylistComposer({
   }));
   const canSend = !!(value.trim() || attachment) && !isLoading && !isDictating;
   const pressStyle = ({ pressed }: { pressed: boolean }) => [styles.iconBtn, pressed && styles.pressed];
+  // One row (`+ · input · mic`) until the draft wraps, then the input gets the full
+  // width and the controls drop below. Sticky until the draft is cleared: the wider
+  // input could fit the line again and flip the layout back and forth.
+  // Platforms disagree on whether content size includes padding, so compare
+  // against the smallest height seen (one line) rather than a fixed constant.
+  const [wrapped, setWrapped] = useState(false);
+  const oneLineHeightRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (oneLineHeightRef.current === null || contentHeight < oneLineHeightRef.current) oneLineHeightRef.current = contentHeight;
+    if (!value) setWrapped(false);
+    else if (contentHeight > oneLineHeightRef.current + 12) setWrapped(true);
+  }, [value, contentHeight]);
+  const compact = !wrapped && !attachment && !isDictating;
+  const showSend = isLoading || canSend;
+  const sendButton = showSend ? (
+    <Animated.View
+      entering={reducedMotion ? undefined : ZoomIn.duration(160)}
+      exiting={reducedMotion ? undefined : ZoomOut.duration(120)}
+    >
+      <Pressable
+        style={({ pressed }) => [styles.sendBtn, pressed && styles.pressed]}
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+          if (isLoading) onStopGeneration(); else onSend();
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={isLoading ? 'Stop generating' : 'Send message'}
+      >
+        <Ionicons name={isLoading ? 'stop' : 'arrow-up'} size={isLoading ? 15 : 20} color={colors.white} />
+      </Pressable>
+    </Animated.View>
+  ) : null;
+  const micButton = (
+    <Pressable style={pressStyle} onPress={() => { onStartDictation?.(); void dictation.start(value); }} accessibilityRole="button" accessibilityLabel="Dictate a message">
+      <Ionicons name="mic-outline" size={21} color={colors.inkSubtle} />
+    </Pressable>
+  );
+  const addButton = (
+    <Pressable style={pressStyle} onPress={onOpenAttachmentSheet} accessibilityRole="button" accessibilityLabel="Add a photo or wardrobe piece">
+      <Ionicons name="add" size={22} color={colors.inkSubtle} />
+    </Pressable>
+  );
 
   return (
     <View style={styles.inputBar}>
@@ -165,9 +210,11 @@ export function StylistComposer({
             </Text>
           </ScrollView>
         ) : null}
+        <View style={compact ? styles.compactRow : undefined}>
+        {compact ? addButton : null}
         <TextInput
           ref={inputRef}
-          style={[styles.textInput, isDictating && { display: 'none' }, { height: Math.min(Math.max(MIN_INPUT_HEIGHT, contentHeight), MAX_INPUT_HEIGHT * fontScale), maxHeight: MAX_INPUT_HEIGHT * fontScale }]}
+          style={[styles.textInput, compact && styles.textInputCompact, isDictating && { display: 'none' }, { height: Math.min(Math.max(MIN_INPUT_HEIGHT, contentHeight), MAX_INPUT_HEIGHT * fontScale), maxHeight: MAX_INPUT_HEIGHT * fontScale }]}
           onContentSizeChange={(event) => setContentHeight(Math.ceil(event.nativeEvent.contentSize.height))}
           value={value}
           onChangeText={onChangeText}
@@ -182,10 +229,10 @@ export function StylistComposer({
           returnKeyType="default"
           editable={!isDictating}
         />
-        <View style={styles.composerRow}>
-          <Pressable style={pressStyle} onPress={onOpenAttachmentSheet} accessibilityRole="button" accessibilityLabel="Add a photo or wardrobe piece">
-            <Ionicons name="add" size={22} color={colors.inkSubtle} />
-          </Pressable>
+        {compact ? <>{micButton}{sendButton}</> : null}
+        </View>
+        {compact ? null : <View style={styles.composerRow}>
+          {addButton}
           <View style={{ flex: 1 }} />
           {isDictating ? (
             <>
@@ -199,22 +246,11 @@ export function StylistComposer({
             </>
           ) : (
             <>
-              <Pressable style={pressStyle} onPress={() => { onStartDictation?.(); void dictation.start(value); }} accessibilityRole="button" accessibilityLabel="Dictate a message">
-                <Ionicons name="mic-outline" size={21} color={colors.inkSubtle} />
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [styles.sendBtn, !canSend && !isLoading && styles.disabled, pressed && styles.pressed]}
-                onPress={isLoading ? onStopGeneration : onSend}
-                disabled={!isLoading && !canSend}
-                accessibilityRole="button"
-                accessibilityLabel={isLoading ? 'Stop generating' : 'Send message'}
-                accessibilityState={{ disabled: !isLoading && !canSend }}
-              >
-                <Ionicons name={isLoading ? 'stop' : 'arrow-up'} size={isLoading ? 15 : 20} color={colors.white} />
-              </Pressable>
+              {micButton}
+              {sendButton}
             </>
           )}
-        </View>
+        </View>}
         {isDictating && !isListening && (dictation.state === 'requesting' || dictation.state === 'stopping') ? (
           <Text style={styles.statusText} accessibilityLiveRegion="polite">
             {dictation.state === 'requesting' ? 'Starting microphone…' : 'Finishing dictation…'}
@@ -297,8 +333,8 @@ const styles = StyleSheet.create({
     maxWidth: '80%',
   },
   attachmentPillLabel: {
+    ...typography.text.caption,
     flexShrink: 1,
-    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
   },
@@ -327,7 +363,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pressed: { opacity: 0.65 },
-  disabled: { backgroundColor: colors.surfaceSelected },
+  compactRow: { flexDirection: 'row', alignItems: 'center' },
+  textInputCompact: { flex: 1, paddingHorizontal: spacing.xs, paddingTop: 10, paddingBottom: 10 },
   statusText: { ...typography.text.caption, color: colors.mutedForeground, paddingHorizontal: 12, paddingVertical: 8 },
   dictationStatusRow: {
     flexDirection: 'row',
@@ -344,7 +381,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.error,
   },
   dictationTimer: {
-    fontSize: typography.text.caption.fontSize,
+    ...typography.text.caption,
     color: colors.mutedForeground,
     fontVariant: ['tabular-nums'],
   },

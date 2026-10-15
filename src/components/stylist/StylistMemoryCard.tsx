@@ -31,7 +31,7 @@ export function StylistMemoryCard({ memory }: { memory: StylistMemory }) {
 }
 const s = StyleSheet.create({
   card: { padding: spacing.lg, gap: spacing.sm }, source: { ...typography.text.caption, color: colors.mutedForeground },
-  statement: { ...typography.text.body, color: colors.foreground, lineHeight: 25 }, quote: { ...typography.text.bodySmall, color: colors.mutedForeground },
+  statement: { ...typography.text.body, color: colors.foreground }, quote: { ...typography.text.bodySmall, color: colors.mutedForeground },
   input: { ...typography.text.body, color: colors.foreground, backgroundColor: colors.surfaceSubtle, padding: spacing.md, borderRadius: radii.md, minHeight: 88 },
   actions: { flexDirection: 'row', gap: spacing.lg }, action: { minHeight: 44, justifyContent: 'center' },
   label: { ...typography.text.bodySmall, color: colors.foreground, textDecorationLine: 'underline' }, error: { ...typography.text.bodySmall, color: colors.destructive },

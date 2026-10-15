@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as Haptics from '../../lib/haptics';
+import { PressableScale } from '../primitives/PressableScale';
+import { GarmentImage } from '../wardrobe/garment-image';
+import type { Item } from '../../types/item';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Reanimated, { interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
@@ -9,7 +12,7 @@ import type { CurrentWeather } from '../../hooks/useWeather';
 import { compareAskQuestions, styleAskQuestions, styleName } from '../../lib/shoppingEditorial';
 import { displayBudget } from '../../lib/shoppingPriorityEdit';
 import { ShoppingStyleVisual } from '../shopping/ShoppingStyleVisual';
-import { buildStylistStarters, buildTodayPrompt, type StylistStarter } from './stylist-empty-state';
+import { buildStylistStarters, buildTodaySubtitle, TODAY_REQUEST, type StylistStarter } from './stylist-empty-state';
 import { colors, spacing } from '../../theme';
 import type { StylistWorkflow } from '../../features/stylist/types';
 import { GuideContext, guideFocus } from './ChatModel';
@@ -80,6 +83,7 @@ export function EmptyState({
   tempUnit,
   displayName,
   wardrobeCount,
+  previewItems = [],
   onPrompt,
   onWorkflow,
 }: {
@@ -87,6 +91,8 @@ export function EmptyState({
   tempUnit: 'C' | 'F';
   displayName?: string | null;
   wardrobeCount: number;
+  /** A few owned staples shown on the lead card, so the wardrobe is visible before the first ask. */
+  previewItems?: Item[];
   onPrompt: (q: string) => void;
   onWorkflow: (kind: StylistWorkflow['kind']) => void;
 }) {
@@ -97,12 +103,9 @@ export function EmptyState({
   const moreIdeasDragY = useSharedValue(0);
   const moreIdeasCompletionRef = useRef<(() => void) | undefined>(undefined);
   const firstName = displayName?.trim().split(/\s+/)[0];
-  const todayPrompt = buildTodayPrompt(weather, tempUnit);
   const services = buildStylistStarters(wardrobeCount);
-  const visibleStarters: Array<StylistStarter | { title: string; subtitle: string; prompt: string }> = [
-    { title: 'Style me today', subtitle: todayPrompt, prompt: todayPrompt },
-    ...services.slice(0, 2),
-  ];
+  const todayStarter = { title: 'Style me today', subtitle: buildTodaySubtitle(weather, tempUnit), prompt: TODAY_REQUEST };
+  const visibleStarters: Array<StylistStarter | { title: string; subtitle: string; prompt: string }> = services.slice(0, 2);
   const secondaryStarters = services.slice(2);
 
   const completeMoreIdeasDismiss = useCallback(() => {
@@ -182,13 +185,18 @@ export function EmptyState({
           <Text style={styles.emptyTitle}>
             {firstName ? `What are we dressing for, ${firstName}?` : 'What are we dressing for?'}
           </Text>
-          <Text style={styles.emptySubtitle}>
-            Personal styling, grounded in your wardrobe and your day.
-          </Text>
+          {wardrobeCount ? (
+            <Text style={styles.emptySubtitle}>{`Styling from your ${wardrobeCount} pieces`}</Text>
+          ) : null}
         </View>
 
         <View style={styles.promptList}>
-          <Text style={styles.promptSectionLabel}>START WITH AN IDEA</Text>
+          <TodayCard
+            title={todayStarter.title}
+            subtitle={todayStarter.subtitle}
+            items={previewItems}
+            onPress={() => chooseStarter(todayStarter)}
+          />
           <View style={styles.starterRows}>
             {visibleStarters.map((starter) => (
               <StarterRow key={starter.title} starter={starter} onPress={() => chooseStarter(starter)} />
@@ -244,11 +252,45 @@ export function EmptyState({
   );
 }
 
+const TODAY_THUMB = 64;
+
+// The one idea that needs no setup leads as a card: the day's prompt beside a
+// strip of the user's own staples, so the empty state already looks like them.
+function TodayCard({ title, subtitle, items, onPress }: { title: string; subtitle: string; items: Item[]; onPress: () => void }) {
+  return (
+    <PressableScale
+      contentStyle={styles.todayCard}
+      scaleTo={0.98}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}. ${subtitle}`}
+    >
+      {items.length ? (
+        <View style={styles.todayThumbs} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          {items.map((item) => (
+            <GarmentImage key={item.id} item={item} width={TODAY_THUMB} height={TODAY_THUMB * 1.2} placeholderIconSize={16} />
+          ))}
+        </View>
+      ) : null}
+      <View style={styles.todayCopy}>
+        <View style={styles.todayCopyText}>
+          <Text style={styles.todayTitle}>{title}</Text>
+          <Text style={styles.todaySubtitle}>{subtitle}</Text>
+        </View>
+        <View style={styles.todayArrow}>
+          <Ionicons name="arrow-forward" size={16} color={colors.primaryForeground} />
+        </View>
+      </View>
+    </PressableScale>
+  );
+}
+
 function StarterRow({ starter, onPress }: { starter: Pick<StylistStarter, 'title' | 'subtitle'>; onPress: () => void }) {
   return (
-    <TouchableOpacity
-      style={styles.starterRow}
-      activeOpacity={0.65}
+    // A ruled row tints rather than scales on press, so its hairline stays put.
+    <Pressable
+      style={({ pressed }) => [styles.starterRow, pressed && styles.starterRowPressed]}
+      onPressIn={() => { Haptics.selectionAsync().catch(() => {}); }}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${starter.title}. ${starter.subtitle}`}
@@ -258,6 +300,6 @@ function StarterRow({ starter, onPress }: { starter: Pick<StylistStarter, 'title
         <Text style={styles.starterSubtitle}>{starter.subtitle}</Text>
       </View>
       <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />
-    </TouchableOpacity>
+    </Pressable>
   );
 }

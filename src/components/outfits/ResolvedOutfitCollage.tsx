@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -20,6 +20,8 @@ type Props = {
   size: number;
   height?: number;
   borderRadius?: number;
+  /** Makes each photograph tappable (e.g. to open that piece). Omitted, tiles are inert. */
+  onSlotPress?: (key: string) => void;
 };
 
 const EDITORIAL_MIN_SIZE = 260;
@@ -29,6 +31,7 @@ export function ResolvedOutfitCollage({
   size,
   height = size,
   borderRadius = radii.md,
+  onSlotPress,
 }: Props) {
   const total = slots.length;
 
@@ -72,9 +75,12 @@ export function ResolvedOutfitCollage({
         const isOverflowCell = overflow > 0 && i === MAX_OUTFIT_MOSAIC_SLOTS - 1;
 
         return (
-          <View
+          <Pressable
             key={`${slot?.key ?? 'empty'}-${i}`}
             style={[styles.tile, { left, top, width: cellW, height: cellH, borderRadius: tileRadius }]}
+            disabled={!onSlotPress || !slot || isOverflowCell}
+            onPress={slot ? () => onSlotPress?.(slot.key) : undefined}
+            accessibilityRole={onSlotPress && slot && !isOverflowCell ? 'button' : undefined}
           >
             {slot?.uri ? (
               <Image source={{ uri: slot.uri }} style={styles.fill} contentFit={slot.contentFit ?? 'cover'} transition={150} cachePolicy="memory-disk" recyclingKey={slot?.key} />
@@ -92,7 +98,7 @@ export function ResolvedOutfitCollage({
                 </Text>
               </View>
             )}
-          </View>
+          </Pressable>
         );
       })}
     </View>

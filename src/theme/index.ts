@@ -223,6 +223,12 @@ export const typography = {
       fontSize: 19,
       lineHeight: 28,
     },
+    /** Editorial prose one step down, for the stylist speaking inside a card. */
+    editorialBodyCompact: {
+      fontFamily: editorialFamily.editorialRegular,
+      fontSize: 17,
+      lineHeight: 25,
+    },
     /**
      * A single number set as editorial type — the "80" that leads a deck.
      * Regular face and tabular figures so it sits with the hero above it

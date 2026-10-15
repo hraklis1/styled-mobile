@@ -1,4 +1,4 @@
-import { buildStylistStarters, buildTodayPrompt, formatWeatherLead } from '../stylist-empty-state';
+import { buildStylistStarters, buildTodaySubtitle, formatWeatherLead, TODAY_REQUEST } from '../stylist-empty-state';
 import type { CurrentWeather } from '../../../hooks/useWeather';
 
 const mildWeather: CurrentWeather = {
@@ -22,15 +22,13 @@ describe('stylist empty-state prompts', () => {
     expect(formatWeatherLead(mildWeather, 'F')).toBe('Mild and pleasant at 61°F');
   });
 
-  it('builds weather-aware and fallback prompts for today', () => {
-    expect(buildTodayPrompt(mildWeather, 'C')).toBe('Mild and pleasant at 16°C — what should I wear Tuesday?');
-    expect(buildTodayPrompt({ ...mildWeather, condition: 'cold' }, 'C')).toBe(
-      'Mild and pleasant at 16°C — help me stay warm and stylish',
-    );
-    expect(buildTodayPrompt({ ...mildWeather, condition: 'rainy' }, 'F')).toBe(
-      'Mild and pleasant at 61°F — what should I wear?',
-    );
-    expect(buildTodayPrompt(undefined, 'C')).toBe('What should I wear today?');
+  it('builds weather-aware subtitles and a weather-free request', () => {
+    expect(buildTodaySubtitle(mildWeather, 'C')).toBe('Mild and pleasant at 16°C right now');
+    expect(buildTodaySubtitle({ ...mildWeather, condition: 'cold' }, 'C')).toBe('Mild and pleasant at 16°C — warm and put together');
+    expect(buildTodaySubtitle({ ...mildWeather, condition: 'rainy' }, 'F')).toBe('Mild and pleasant at 61°F — dressed for the rain');
+    expect(buildTodaySubtitle(undefined, 'C')).toBe('An outfit for the day ahead');
+    // The request itself never asserts weather; the server reads the forecast.
+    expect(TODAY_REQUEST).toBe('What should I wear today?');
   });
 
   it('keeps all four service payloads and adapts the wardrobe service', () => {

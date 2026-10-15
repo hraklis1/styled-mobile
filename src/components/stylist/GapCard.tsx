@@ -76,16 +76,14 @@ export function GapCard({ item, onPress, ctaLabel = 'Shop', style }: GapCardProp
       </View>
 
       <View style={styles.body}>
-        <View style={styles.titleRow}>
-          <Text style={styles.label} numberOfLines={1}>{humanizeGeneratedCopy(item.label)}</Text>
-          {!!reasonTag && (
-            <View style={styles.tag}>
-              <Text style={styles.tagText}>{reasonTag}</Text>
-            </View>
-          )}
-        </View>
-        {!!item.context && (
-          <Text style={styles.context} numberOfLines={2}>{item.context}</Text>
+        <Text style={styles.label} numberOfLines={1}>{humanizeGeneratedCopy(item.label)}</Text>
+        {/* The reason reads as quiet meta under the label, never beside it as part of the name. */}
+        {!!(reasonTag || item.context) && (
+          <Text style={styles.context} numberOfLines={2}>
+            {reasonTag ? <Text style={styles.tagText}>{reasonTag}</Text> : null}
+            {reasonTag && item.context ? ' · ' : ''}
+            {item.context}
+          </Text>
         )}
         {!!item.unlocks?.length && (
           <View style={styles.unlocksRow}>
@@ -105,10 +103,10 @@ export function GapCard({ item, onPress, ctaLabel = 'Shop', style }: GapCardProp
   );
 }
 
-/** Also protects cached/older replies that predate server-side normalization. */
+/** Also protects cached/older replies that predate server-side normalization. Sentence case. */
 export function humanizeGeneratedCopy(value: string): string {
   const cleaned = value.replace(/\*+/g, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
-  return cleaned.replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
 }
 
 const styles = StyleSheet.create({
@@ -137,19 +135,11 @@ const styles = StyleSheet.create({
     backgroundColor: `${colors.primary}26`,
   },
   body: { flex: 1, gap: 3 },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
   label: {
+    ...typography.text.bodySmall,
     flexShrink: 1,
-    fontSize: typography.text.bodySmall.fontSize,
     color: colors.foreground,
     fontWeight: typography.weight.semibold,
-  },
-  tag: {
-    flexShrink: 0,
   },
   tagText: {
     ...typography.text.caption,
@@ -157,7 +147,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.medium,
   },
   context: {
-    fontSize: typography.text.caption.fontSize,
+    ...typography.text.caption,
     color: colors.mutedForeground,
     lineHeight: typography.text.caption.fontSize * 1.45,
   },
@@ -188,7 +178,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   ctaText: {
-    fontSize: typography.text.caption.fontSize,
+    ...typography.text.caption,
     color: colors.primary,
     fontWeight: typography.weight.medium,
   },

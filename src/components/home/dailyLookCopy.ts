@@ -32,13 +32,7 @@ export function gapOccasion(gap: DailyLookMissingEssential): string | null {
   return context.charAt(0).toLowerCase() + context.slice(1);
 }
 
-const CATEGORY_RANK: Record<string, number> = {
-  outerwear: 0, dress: 1, top: 2, bottom: 3, shoes: 4, bag: 5, accessory: 6, accessories: 6,
-};
-
-export function categoryRank(category: string | null | undefined): number {
-  return CATEGORY_RANK[(category ?? '').toLowerCase()] ?? 7;
-}
+export { categoryRank } from '../../lib/outfitOrder';
 
 /**
  * The piece's chosen cover, except that Today's Look never shows a

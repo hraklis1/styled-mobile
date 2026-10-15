@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   intro: {
-    fontSize: typography.text.sheetTitle.fontSize,
+    ...typography.text.sheetTitle,
     color: colors.foreground,
     lineHeight: typography.text.sheetTitle.fontSize * 1.4,
   },
@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', minHeight: 320,
     borderWidth: stroke.hairline, borderColor: colors.hairline, borderStyle: 'dashed',
   },
-  placeholderText: { color: colors.mutedForeground, fontSize: typography.text.bodySmall.fontSize, marginTop: spacing.xs },
+  placeholderText: { ...typography.text.bodySmall, color: colors.mutedForeground, marginTop: spacing.xs },
   outfitHeader: { minHeight: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   lookIndex: { ...typography.text.eyebrow, color: colors.mutedForeground },
   statusTag: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -370,7 +370,7 @@ const styles = StyleSheet.create({
     marginTop: -spacing.xs,
   },
   outfitNote: {
-    fontSize: typography.text.bodySmall.fontSize,
+    ...typography.text.bodySmall,
     color: colors.inkSubtle,
     lineHeight: typography.text.bodySmall.fontSize * 1.5,
   },
@@ -407,12 +407,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md, gap: spacing.xs,
   },
   packingTitle: {
-    fontSize: typography.text.sectionTitle.fontSize,
+    ...typography.text.sectionTitle,
     color: colors.foreground,
   },
   packingHeader: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  packingMeta: { marginTop: 2, color: colors.mutedForeground, fontSize: typography.text.caption.fontSize },
+  packingMeta: { ...typography.text.caption, marginTop: 2, color: colors.mutedForeground, },
   packingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  packingText: { flex: 1, fontSize: typography.text.bodySmall.fontSize, color: colors.foreground },
+  packingText: { ...typography.text.bodySmall, flex: 1, color: colors.foreground },
   packingTextDone: { textDecorationLine: 'line-through', color: colors.mutedForeground },
 });

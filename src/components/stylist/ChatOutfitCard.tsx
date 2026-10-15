@@ -18,6 +18,9 @@ import type { Item } from '../../types/item';
 import { ItemDetailSheet } from './ChatItemDetailSheet';
 import { EventContext } from './ChatModel';
 import { styles } from './ChatStyles';
+import { Reveal } from './Reveal';
+import { sortByWearOrder } from '../../lib/outfitOrder';
+import { PressableScale } from '../primitives/PressableScale';
 
 // ── OutfitSuggestionCard ──────────────────────────────────────────────────────
 
@@ -43,6 +46,10 @@ function categoryLabel(category: Item['category']): string {
   return category ? category.replace(/_/g, ' ') : 'piece';
 }
 
+function sentenceCase(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 // The stylist's wearing tip for a piece ("half-tuck the front"), if it gave one.
 export function pieceTip(notes: StylistPieceNote[] | undefined, itemId: number): string | undefined {
   const tip = notes?.find((note) => note.itemId === itemId)?.tip;
@@ -58,7 +65,8 @@ function OutfitCompleteLookOverview({
 }: OutfitCompleteLookOverviewProps) {
   const overviewItems = useMemo(
     () =>
-      items.map((item) => ({
+      // The line sheet reads top to bottom in wear order: outer layer, top, bottom, shoes.
+      sortByWearOrder(items, (item) => item.category).map((item) => ({
         item,
         uri: itemImageUri(item),
         contentFit: itemImageContentFit(item),
@@ -97,7 +105,7 @@ function OutfitCompleteLookOverview({
           </View>
           <View style={styles.lineSheetCopy}>
             <Text style={styles.lineSheetCategory} numberOfLines={1}>
-              {categoryLabel(item.category)}
+              {sentenceCase(categoryLabel(item.category))}
             </Text>
             <Text style={styles.lineSheetName} numberOfLines={1}>
               {item.name}
@@ -143,6 +151,8 @@ function OutfitCompleteLookOverview({
 }
 
 type OutfitSuggestionCardProps = {
+  /** Assemble the card section by section — only for a reply that just arrived. */
+  reveal?: boolean;
   messageText: string;
   lookName?: string;
   itemIds: number[];
@@ -178,6 +188,7 @@ export function OutfitSuggestionCard({
   onSaveToBoard,
   pieceNotes,
   stylingMoves,
+  reveal = false,
 }: OutfitSuggestionCardProps) {
   const [saved, setSaved] = useStylistCardState('outfit-saved', false);
   const [saving, setSaving] = useState(false);
@@ -403,6 +414,7 @@ export function OutfitSuggestionCard({
 
   function handleFeedback(rating: 'up' | 'down') {
     if (feedback) return;
+    Haptics.selectionAsync().catch(() => {});
     if (rating === 'down') {
       // Don't finalize yet — let the user say why.
       setChoosingReason(true);
@@ -446,37 +458,6 @@ export function OutfitSuggestionCard({
                 />
               </TouchableOpacity>
             ) : null}
-            <TouchableOpacity
-              style={[styles.headerIconBtn, feedback === 'up' && styles.headerIconBtnActive]}
-              onPress={() => handleFeedback('up')}
-              disabled={!!feedback}
-              accessibilityRole="button"
-              accessibilityLabel="This outfit works for me"
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name="thumbs-up-outline"
-                size={15}
-                color={feedback === 'up' ? colors.primary : colors.mutedForeground}
-              />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.headerIconBtn,
-                (feedback === 'down' || choosingReason) && styles.headerIconBtnActive,
-              ]}
-              onPress={() => handleFeedback('down')}
-              disabled={!!feedback}
-              accessibilityRole="button"
-              accessibilityLabel="This outfit doesn't work for me"
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name="thumbs-down-outline"
-                size={15}
-                color={feedback === 'down' || choosingReason ? colors.primary : colors.mutedForeground}
-              />
-            </TouchableOpacity>
           </View>
         </View>
         <Text style={styles.lookTitle} numberOfLines={2}>{lookTitle}</Text>
@@ -484,20 +465,25 @@ export function OutfitSuggestionCard({
       </View>
 
       {collageSlots.length > 0 && (
-        <ResolvedOutfitCollage
-          slots={collageSlots}
-          size={collageSize}
-          height={Math.round(collageSize * 0.82)}
-          borderRadius={radii.lg}
-        />
+        <Reveal active={reveal} step={1}>
+          <ResolvedOutfitCollage
+            slots={collageSlots}
+            size={collageSize}
+            height={Math.round(collageSize * 0.82)}
+            borderRadius={radii.lg}
+          />
+        </Reveal>
       )}
 
-      <View style={styles.stylistNoteBlock}>
-        <Text style={styles.rationaleLabel}>Why it works</Text>
-        <StylistRichText text={currentMessageText} />
-      </View>
+      <Reveal active={reveal} step={2}>
+        <View style={styles.stylistNoteBlock}>
+          <Text style={styles.rationaleLabel}>Why it works</Text>
+          <StylistRichText text={currentMessageText} />
+        </View>
+      </Reveal>
 
       {matchedItems.length > 0 && (
+        <Reveal active={reveal} step={3}>
         <OutfitCompleteLookOverview
           items={matchedItems}
           pieceNotes={pieceNotes}
@@ -505,6 +491,7 @@ export function OutfitSuggestionCard({
           onSwapItem={(itemId) => setPicker({ swapId: itemId })}
           onAddItem={() => setPicker('add')}
         />
+        </Reveal>
       )}
       {stylingMoves?.length ? (
         <View style={styles.stylingMoves}>
@@ -512,6 +499,7 @@ export function OutfitSuggestionCard({
         </View>
       ) : null}
 
+      <Reveal active={reveal} step={4} style={styles.outfitCard}>
       {onAddToEvent && eventContext && (
         <View style={styles.eventActionGroup}>
           <TouchableOpacity
@@ -582,16 +570,17 @@ export function OutfitSuggestionCard({
         </View>
       ) : (
         <View style={styles.outfitCardActions}>
-          <TouchableOpacity
-            style={[
+          <PressableScale
+            style={styles.saveBtnOuter}
+            contentStyle={[
               styles.saveBtn,
               (saved || saving) && styles.saveBtnDone,
               matchedItems.length === 0 && styles.saveBtnDisabled,
             ]}
+            scaleTo={0.97}
             onPress={handleSaveToggle}
             // A worn look is in the wear log; unsaving would delete that history.
             disabled={saving || unsaving || matchedItems.length === 0 || (saved && wornToday)}
-            activeOpacity={0.8}
             accessibilityRole="button"
             accessibilityLabel={saved ? 'Remove this saved outfit from Closet' : 'Save this outfit to Closet'}
             accessibilityState={{ selected: saved, busy: saving || unsaving }}
@@ -604,12 +593,12 @@ export function OutfitSuggestionCard({
             <Text style={styles.saveBtnText} numberOfLines={1}>
               {saving ? 'Saving…' : unsaving ? 'Removing…' : saved ? 'Saved to Closet → Outfits' : 'Save outfit'}
             </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.woreBtn, wornToday && styles.woreBtnDone]}
+          </PressableScale>
+          <PressableScale
+            contentStyle={[styles.woreBtn, wornToday && styles.woreBtnDone]}
+            scaleTo={0.97}
             onPress={handleWoreToday}
             disabled={wornToday || saving || unsaving || markWorn.isPending || matchedItems.length === 0}
-            activeOpacity={0.8}
             accessibilityRole="button"
             accessibilityLabel={wornToday ? 'Logged as worn today' : 'Log this outfit as worn today'}
             accessibilityState={{ selected: wornToday, busy: markWorn.isPending }}
@@ -618,9 +607,10 @@ export function OutfitSuggestionCard({
             <Text style={styles.woreBtnText} numberOfLines={1}>
               {markWorn.isPending ? 'Logging…' : wornToday ? 'Worn today' : 'Wore it'}
             </Text>
-          </TouchableOpacity>
+          </PressableScale>
         </View>
       )}
+      </Reveal>
 
       {savedOutfitId != null ? (
         <View style={styles.savedOutfitActions}>
@@ -648,6 +638,44 @@ export function OutfitSuggestionCard({
           )}
         </View>
       ) : null}
+
+      {/* Feedback closes the card, after the user has seen the whole look. */}
+      <View style={styles.feedbackFooter}>
+        <Text style={styles.feedbackPrompt}>{feedback ? 'Thanks — noted for next time' : 'Right for you?'}</Text>
+        <View style={styles.headerCardActions}>
+          <TouchableOpacity
+            style={[styles.headerIconBtn, feedback === 'up' && styles.headerIconBtnActive]}
+            onPress={() => handleFeedback('up')}
+            disabled={!!feedback}
+            accessibilityRole="button"
+            accessibilityLabel="This outfit works for me"
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name="thumbs-up-outline"
+              size={15}
+              color={feedback === 'up' ? colors.primary : colors.mutedForeground}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.headerIconBtn,
+              (feedback === 'down' || choosingReason) && styles.headerIconBtnActive,
+            ]}
+            onPress={() => handleFeedback('down')}
+            disabled={!!feedback}
+            accessibilityRole="button"
+            accessibilityLabel="This outfit doesn't work for me"
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name="thumbs-down-outline"
+              size={15}
+              color={feedback === 'down' || choosingReason ? colors.primary : colors.mutedForeground}
+            />
+          </TouchableOpacity>
+        </View>
+      </View>
 
       {choosingReason && !feedback && (
         <View style={styles.reasonChips}>

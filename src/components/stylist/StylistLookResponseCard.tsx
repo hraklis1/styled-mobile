@@ -4,12 +4,14 @@ import { useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import * as Haptics from '../../lib/haptics';
 import { Ionicons } from '@expo/vector-icons';
-import { Image as ExpoImage } from 'expo-image';
 
-import { GapCard, type GapItem } from './GapCard';
+import { GapCard, humanizeGeneratedCopy, type GapItem } from './GapCard';
+import { ItemDetailSheet } from './ChatItemDetailSheet';
+import { Reveal } from './Reveal';
+import { PressableScale } from '../primitives/PressableScale';
 import { ResolvedOutfitCollage } from '../outfits/ResolvedOutfitCollage';
 import { itemImageContentFit, itemImageUri } from '../../lib/itemImage';
-import { imageColors, colors, radii, spacing, typography } from '../../theme';
+import { colors, radii, spacing, typography } from '../../theme';
 import type { Item } from '../../types/item';
 import type { CreateOutfitInput } from '../../hooks/useOutfits';
 import type {
@@ -25,6 +27,10 @@ type Props = {
   lookName?: string;
   itemIds: number[];
   foundationItemIds?: number[];
+  /** The look's rationale alone; falls back to messageText on older servers. */
+  rationale?: string;
+  /** 'weather_layer': wearable now, only a weather layer the closet lacks. */
+  completion?: 'weather_layer';
   missingEssentials?: StylistMissingEssential[];
   clarification?: StylistClarification;
   allItems: Item[];
@@ -37,6 +43,8 @@ type Props = {
   onClarificationSelect?: (value: string) => void;
   onToggleAudio?: () => void;
   isPlaying?: boolean;
+  /** Assemble section by section — only for a reply that just arrived. */
+  reveal?: boolean;
 };
 
 function displayName(items: Item[], fallback = 'Wardrobe foundation') {
@@ -49,6 +57,8 @@ export function StylistLookResponseCard({
   lookName,
   itemIds,
   foundationItemIds,
+  rationale,
+  completion,
   missingEssentials = [],
   clarification,
   allItems,
@@ -61,6 +71,7 @@ export function StylistLookResponseCard({
   onClarificationSelect,
   onToggleAudio,
   isPlaying = false,
+  reveal = false,
 }: Props) {
   const { width } = useWindowDimensions();
   const [savedOutfitId, setSavedOutfitId] = useStylistCardState<number | null>('foundation-id', null);
@@ -69,6 +80,7 @@ export function StylistLookResponseCard({
   const [saving, setSaving] = useState(false);
   const [added, setAdded] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [detailItem, setDetailItem] = useState<Item | null>(null);
 
   const resolvedIds = status === 'incomplete' ? (foundationItemIds?.length ? foundationItemIds : itemIds) : itemIds;
   const items = useMemo(
@@ -92,7 +104,8 @@ export function StylistLookResponseCard({
         description: messageText.slice(0, 240) || null,
         notes: gaps.length ? `Foundation needs: ${gaps.map((gap) => gap.label).join(', ')}` : null,
         tags: ['stylist-foundation'],
-        isDraft: status === 'incomplete',
+        // A weather add-on look is wearable as it stands; only a true foundation is a draft.
+        isDraft: status === 'incomplete' && completion !== 'weather_layer',
         stylistReady: status === 'ready',
         itemIds: items.map((item) => ({ id: item.id, category: item.category ?? 'other' })),
       });
@@ -151,137 +164,151 @@ export function StylistLookResponseCard({
     );
   }
 
-  const isIncomplete = status === 'incomplete';
-  const eyebrow = isIncomplete ? 'LOOK FOUNDATION' : eventContext ? `READY FOR ${eventContext.title}` : 'READY FROM YOUR WARDROBE';
-  const title = isIncomplete ? (lookName || 'Strong Foundation') : (lookName || displayName(items, 'Styled Look'));
+  // A weather add-on is wearable now; only a genuine foundation reads as unfinished.
+  const weatherAddOn = status === 'incomplete' && completion === 'weather_layer';
+  const isFoundation = status === 'incomplete' && !weatherAddOn;
+  const eyebrow = isFoundation ? 'Look foundation' : eventContext ? `Ready for ${eventContext.title}` : 'The look';
+  const title = lookName || (isFoundation ? 'Strong foundation' : displayName(items, 'Styled look'));
+  const meta = weatherAddOn && gaps[0]
+    ? `From your wardrobe · add ${withArticle(gaps[0].label)} if you're out in it`
+    : isFoundation && gaps.length
+      ? `${piecesPhrase(items.length)} · needs ${gaps.slice(0, 2).map((gap) => bareLabel(gap.label)).join(' and ')}`
+      : piecesPhrase(items.length);
+  const body = rationale?.trim() || messageText;
+  // Each gap row already carries its own Find; a summary button only earns its
+  // place when there are several pieces to find.
+  const findAll = isFoundation && gaps.length > 1 && !!onNavigateToShop;
+  const primarySave = !isFoundation && !(eventContext && onAddToEvent);
 
   return (
-    <View style={[styles.card, isIncomplete && styles.incompleteCard]}>
-      <View style={styles.headerRow}>
-        <View style={styles.eyebrowRow}>
-          <Ionicons name={isIncomplete ? 'layers-outline' : 'checkmark-circle-outline'} size={15} color={isIncomplete ? colors.action : colors.success} />
+    <>
+      <View style={styles.card}>
+        <Reveal active={reveal} step={0} style={styles.header}>
           <Text style={styles.eyebrow}>{eyebrow}</Text>
-        </View>
-        {isIncomplete && gaps.length > 0 && <Text style={styles.gapCount}>NEEDS {gaps.length} PIECE{gaps.length === 1 ? '' : 'S'}</Text>}
-      </View>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.meta}>{meta}</Text>
+        </Reveal>
 
-      {items.length > 0 && (
-        <View style={styles.collageWrap}>
-          <ResolvedOutfitCollage slots={slots} size={collageSize} height={Math.round(collageSize * 0.78)} borderRadius={radii.lg} />
-        </View>
-      )}
+        {items.length > 0 && (
+          <Reveal active={reveal} step={1} style={styles.collageWrap}>
+            <ResolvedOutfitCollage
+              slots={slots}
+              size={collageSize}
+              height={Math.round(collageSize * 0.78)}
+              borderRadius={radii.lg}
+              onSlotPress={(key) => setDetailItem(items.find((item) => String(item.id) === key) ?? null)}
+            />
+          </Reveal>
+        )}
 
-      <Text style={styles.title}>{title}</Text>
-      <StylistRichText text={messageText} />
+        <Reveal active={reveal} step={2}>
+          <StylistRichText text={body} />
+        </Reveal>
 
-      {isIncomplete && items.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>WHAT ALREADY WORKS</Text>
-          <View style={styles.itemLedger}>
-            {items.slice(0, 5).map((item) => {
-              const uri = itemImageUri(item);
-              return (
-                <View key={item.id} style={styles.ledgerItem}>
-                  <View style={styles.ledgerThumb}>
-                    {uri ? <ExpoImage source={{ uri }} style={StyleSheet.absoluteFill} contentFit={itemImageContentFit(item)} /> : <Ionicons name="shirt-outline" size={16} color={colors.mutedForeground} />}
-                  </View>
-                  <Text style={styles.ledgerText} numberOfLines={2}>{item.name}</Text>
-                </View>
-              );
-            })}
+        {gaps.length > 0 && (
+          <Reveal active={reveal} step={3} style={styles.section}>
+            {isFoundation ? <Text style={styles.sectionLabel}>Complete the look</Text> : null}
+            <View style={styles.gapList}>
+              {gaps.map((gap) => (
+                <GapCard key={`${gap.category}-${gap.label}`} item={gap as GapItem} ctaLabel="Find" onPress={onNavigateToShop ? () => onNavigateToShop(gap) : undefined} />
+              ))}
+            </View>
+          </Reveal>
+        )}
+
+        <Reveal active={reveal} step={4} style={styles.actions}>
+          {saveError ? <Text style={styles.error} accessibilityRole="alert">Couldn’t save this outfit. Try again.</Text> : null}
+          {status === 'ready' && onAddToEvent && eventContext ? (
+            <PressableScale contentStyle={styles.primaryButton} scaleTo={0.97} onPress={addToEvent} disabled={adding || added} accessibilityRole="button">
+              <Ionicons name={added ? 'checkmark-circle' : 'calendar-outline'} size={17} color={colors.primaryForeground} />
+              <Text style={styles.primaryButtonText}>{adding ? 'Adding…' : added ? 'Added to event' : 'Use this look'}</Text>
+            </PressableScale>
+          ) : null}
+          {findAll ? (
+            <PressableScale contentStyle={styles.primaryButton} scaleTo={0.97} onPress={() => gaps[0] && onNavigateToShop?.(gaps[0])} accessibilityRole="button">
+              <Ionicons name="bag-handle-outline" size={17} color={colors.primaryForeground} />
+              <Text style={styles.primaryButtonText}>{`Find ${gaps.length} missing pieces`}</Text>
+            </PressableScale>
+          ) : null}
+          <View style={styles.actionRow}>
+            <PressableScale
+              style={primarySave ? styles.grow : undefined}
+              contentStyle={primarySave ? styles.primaryButton : styles.outlineButton}
+              scaleTo={0.97}
+              onPress={saveFoundation}
+              disabled={saving || saved || items.length === 0}
+              accessibilityRole="button"
+            >
+              <Ionicons name={saved ? 'checkmark-circle' : 'bookmark-outline'} size={16} color={primarySave ? colors.primaryForeground : colors.primary} />
+              <Text style={primarySave ? styles.primaryButtonText : styles.outlineButtonText}>
+                {saving ? 'Saving…' : saved ? 'Saved to outfits' : isFoundation ? 'Save foundation' : 'Save outfit'}
+              </Text>
+            </PressableScale>
+            {savedOutfitId !== null && onNavigateToCloset ? (
+              <TouchableOpacity style={styles.quietButton} accessibilityRole="button" onPress={() => onNavigateToCloset(savedOutfitId)}>
+                <Text style={styles.quietText}>View outfit</Text>
+              </TouchableOpacity>
+            ) : null}
+            {onToggleAudio ? (
+              <TouchableOpacity style={styles.quietButton} onPress={onToggleAudio} accessibilityRole="button" accessibilityLabel="Read stylist response aloud">
+                <Ionicons name={isPlaying ? 'pause-circle-outline' : 'volume-medium-outline'} size={17} color={colors.mutedForeground} />
+                <Text style={styles.quietText}>{isPlaying ? 'Pause' : 'Listen'}</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
-        </View>
-      )}
-
-      {isIncomplete && gaps.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>COMPLETE THE LOOK</Text>
-          <View style={styles.gapList}>
-            {gaps.map((gap) => (
-              <GapCard key={`${gap.category}-${gap.label}`} item={gap as GapItem} ctaLabel="Find" onPress={onNavigateToShop ? () => onNavigateToShop(gap) : undefined} />
-            ))}
-          </View>
-        </View>
-      )}
-
-      {saveError ? <Text accessibilityRole="alert">Couldn’t save this outfit. Try again.</Text> : null}
-      {savedOutfitId !== null && onNavigateToCloset ? <TouchableOpacity style={styles.secondaryButton} accessibilityRole="button" onPress={() => onNavigateToCloset(savedOutfitId)}><Text style={styles.secondaryButtonText}>View outfit</Text></TouchableOpacity> : null}
-      <View style={styles.actions}>
-        {!isIncomplete && onAddToEvent && eventContext && (
-          <TouchableOpacity style={styles.primaryButton} onPress={addToEvent} disabled={adding || added} activeOpacity={0.8} accessibilityRole="button">
-            <Ionicons name={added ? 'checkmark-circle' : 'calendar-outline'} size={17} color={colors.primaryForeground} />
-            <Text style={styles.primaryButtonText}>{adding ? 'Adding…' : added ? 'Added to event' : `Use this look`}</Text>
-          </TouchableOpacity>
-        )}
-        {!isIncomplete && !eventContext && (
-          <TouchableOpacity style={styles.primaryButton} onPress={saveFoundation} disabled={saving || saved} activeOpacity={0.8} accessibilityRole="button">
-            <Ionicons name={saved ? 'checkmark-circle' : 'bookmark-outline'} size={17} color={colors.primaryForeground} />
-            <Text style={styles.primaryButtonText}>{saving ? 'Saving…' : saved ? 'Saved to outfits' : 'Save outfit'}</Text>
-          </TouchableOpacity>
-        )}
-        {isIncomplete && (
-          <TouchableOpacity style={[styles.primaryButton, (!gaps.length || !onNavigateToShop) && styles.disabledButton]} onPress={() => gaps[0] && onNavigateToShop?.(gaps[0])} disabled={!gaps.length || !onNavigateToShop} activeOpacity={0.8} accessibilityRole="button">
-            <Ionicons name="bag-handle-outline" size={17} color={colors.primaryForeground} />
-            <Text style={styles.primaryButtonText}>Find missing pieces</Text>
-          </TouchableOpacity>
-        )}
-        <View style={styles.secondaryActions}>
-          <TouchableOpacity style={styles.secondaryButton} onPress={saveFoundation} disabled={saving || saved || items.length === 0} accessibilityRole="button">
-            <Ionicons name={saved ? 'checkmark' : 'bookmark-outline'} size={16} color={colors.primary} />
-            <Text style={styles.secondaryButtonText}>{saved ? 'Saved' : isIncomplete ? 'Save foundation' : 'Save outfit'}</Text>
-          </TouchableOpacity>
-          {onToggleAudio && (
-            <TouchableOpacity style={styles.quietButton} onPress={onToggleAudio} accessibilityRole="button" accessibilityLabel="Read stylist response aloud">
-              <Ionicons name={isPlaying ? 'pause-circle-outline' : 'volume-medium-outline'} size={17} color={colors.mutedForeground} />
-              <Text style={styles.quietText}>{isPlaying ? 'Pause' : 'Listen'}</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        </Reveal>
       </View>
-    </View>
+      {/* Outside the card's spaced stack, so the hidden sheet adds no gap. */}
+      <ItemDetailSheet item={detailItem} onClose={() => setDetailItem(null)} />
+    </>
   );
 }
 
+function piecesPhrase(count: number): string {
+  return count === 1 ? '1 piece from your wardrobe' : `${count} pieces from your wardrobe`;
+}
+
+/** "A rain layer" / "Rain layer" → "rain layer": the label as it reads mid-sentence. */
+function bareLabel(label: string): string {
+  const cleaned = humanizeGeneratedCopy(label).replace(/^(a|an|the)\s+/i, '');
+  return cleaned.charAt(0).toLowerCase() + cleaned.slice(1);
+}
+
+function withArticle(label: string): string {
+  const bare = bareLabel(label);
+  return `${/^[aeiou]/i.test(bare) ? 'an' : 'a'} ${bare}`;
+}
+
 const styles = StyleSheet.create({
-  card: {
-    gap: spacing.md,
-  },
-  incompleteCard: {
-
-  },
-  clarificationCard: {
-
-  },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  card: { gap: spacing.lg },
+  clarificationCard: {},
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  header: { gap: spacing.xs },
+  // One label per card, matching the complete-look card's "The look".
   eyebrow: { ...typography.text.eyebrow, color: colors.primary },
-  gapCount: { ...typography.text.eyebrow, color: colors.action },
   title: { ...typography.text.editorialTitle, color: colors.foreground },
-  body: { ...typography.text.editorialBody, fontSize: 17, lineHeight: 25, color: colors.inkSubtle },
+  meta: { ...typography.text.meta, color: colors.mutedForeground },
   collageWrap: { backgroundColor: colors.card, borderRadius: radii.lg, overflow: 'hidden', alignItems: 'center' },
   section: { gap: spacing.sm },
   sectionLabel: { ...typography.text.eyebrow, color: colors.mutedForeground },
-  itemLedger: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  ledgerItem: { width: 76, gap: spacing.xs },
-  ledgerThumb: { width: 76, height: 76, backgroundColor: imageColors.surfaceElevated, borderRadius: radii.md, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
-  ledgerText: { fontSize: typography.text.caption.fontSize, lineHeight: 15, color: colors.secondaryForeground },
   gapList: { gap: spacing.sm },
-  actions: { gap: spacing.sm },
+  actions: { gap: spacing.sm, marginTop: spacing.xs },
+  actionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  grow: { flex: 1 },
   primaryButton: {
-    minHeight: 52, borderRadius: radii.action, borderCurve: 'continuous', backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.page, paddingVertical: 14,
+    minHeight: 48, borderRadius: radii.full, borderCurve: 'continuous', backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg,
   },
-  disabledButton: { opacity: 0.5 },
-  primaryButtonText: {
-    ...typography.text.label, color: colors.primaryForeground,
+  primaryButtonText: { ...typography.text.label, color: colors.primaryForeground },
+  outlineButton: {
+    minHeight: 44, borderRadius: radii.full, borderWidth: 1, borderColor: colors.ghostStroke, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg,
   },
-  secondaryActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  secondaryButton: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm },
-  secondaryButtonText: { color: colors.primary, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold },
+  outlineButtonText: { ...typography.text.bodySmall, color: colors.primary, fontWeight: typography.weight.semibold },
   quietButton: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm },
-  quietText: { color: colors.mutedForeground, fontSize: typography.text.bodySmall.fontSize },
+  quietText: { ...typography.text.bodySmall, color: colors.mutedForeground },
+  error: { ...typography.text.bodySmall, color: colors.error },
   optionGrid: { gap: spacing.sm },
   optionButton: { minHeight: 48, paddingHorizontal: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, borderRadius: radii.md, borderCurve: 'continuous', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surfaceSubtle },
-  optionText: { flex: 1, color: colors.foreground, fontSize: typography.text.body.fontSize, fontWeight: typography.weight.medium },
+  optionText: { ...typography.text.body, flex: 1, color: colors.foreground, fontWeight: typography.weight.medium },
   safestButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  safestText: { color: colors.action, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold },
+  safestText: { ...typography.text.bodySmall, color: colors.action, fontWeight: typography.weight.semibold },
 });

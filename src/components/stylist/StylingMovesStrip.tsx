@@ -20,7 +20,7 @@ export function StylingMovesStrip({ moves }: { moves?: string[] }) {
 const styles = StyleSheet.create({
   wrap: { gap: spacing.xs },
   label: {
-    fontSize: typography.text.caption.fontSize,
+    ...typography.text.caption,
     color: colors.mutedForeground,
     fontWeight: typography.weight.semibold,
     textTransform: 'uppercase',
@@ -28,14 +28,14 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
   index: {
+    ...typography.text.caption,
     width: 14,
-    fontSize: typography.text.caption.fontSize,
     color: colors.accentInk,
     fontWeight: typography.weight.semibold,
   },
   move: {
+    ...typography.text.bodySmall,
     flex: 1,
-    fontSize: typography.text.bodySmall.fontSize,
     lineHeight: typography.text.bodySmall.fontSize * 1.35,
     color: colors.foreground,
   },

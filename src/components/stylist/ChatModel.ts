@@ -24,6 +24,9 @@ export type Conversation = {
   source?: string | null;
   updatedAt: string;
   preview?: string | null;
+  /** The thread's latest look, when it has one (absent from older API builds). */
+  lookName?: string | null;
+  lookItemIds?: number[];
 };
 
 // ── Constants ────────────────────────────────────────────────────────────────

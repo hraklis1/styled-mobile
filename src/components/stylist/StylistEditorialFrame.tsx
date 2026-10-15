@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import type { StylistEditorialUnit } from '../../features/stylist/types';
-import { colors, radii, spacing, typography } from '../../theme';
+import { colors, spacing, typography } from '../../theme';
 
 function originLabel(unit: StylistEditorialUnit): string | null {
   if (unit.kind === 'plan') return 'Packing plan · from your wardrobe';
@@ -32,8 +32,10 @@ export function StylistEditorialFrame({ unit, children, onRefine }: { unit?: Sty
 const s = StyleSheet.create({
   frame: { gap: spacing.sm },
   origin: { ...typography.text.eyebrow, color: colors.mutedForeground },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, paddingTop: spacing.xs },
-  action: { minHeight: 36, paddingHorizontal: spacing.md, justifyContent: 'center', borderRadius: radii.action, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
-  pressed: { backgroundColor: colors.surfaceSubtle },
-  label: { ...typography.text.bodySmall, color: colors.foreground, fontWeight: typography.weight.medium },
+  // Refinements read as quiet text links, like the follow-up chips above the
+  // composer, so a look card carries one filled and one outlined button, not three styles.
+  actions: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.lg, paddingTop: spacing.xs },
+  action: { minHeight: 44, justifyContent: 'center' },
+  pressed: { opacity: 0.6 },
+  label: { ...typography.text.bodySmall, color: colors.action, textDecorationLine: 'underline' },
 });

@@ -138,13 +138,13 @@ const styles = StyleSheet.create({
   listText: { ...typography.text.body, flex: 1, color: colors.foreground },
   bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
   bulletDot: {
-    fontSize: typography.text.body.fontSize,
+    ...typography.text.body,
     color: colors.primary,
     lineHeight: typography.text.body.fontSize * 1.6,
   },
   bulletText: {
+    ...typography.text.body,
     flex: 1,
-    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
     lineHeight: typography.text.body.fontSize * 1.6,
   },

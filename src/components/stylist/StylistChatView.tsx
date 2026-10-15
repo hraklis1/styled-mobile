@@ -1,5 +1,6 @@
 import { appendStylistAttachment } from '../../features/stylist/attachments';
 import { useStylistPhotoAttachment } from './composer/useStylistPhotoAttachment';
+import { useReduceTransparency } from '../../hooks/useReduceTransparency';
 import { confirmSheet } from '../primitives/ConfirmSheet';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { StylistCardStateContext, type StylistCardState } from './StylistCardState';
@@ -13,7 +14,7 @@ import * as onDeviceSpeech from '../../lib/speech';
 import { api } from '../../lib/api';
 import { track } from '../../lib/analytics';
 import { prepareStylistPhoto } from '../../lib/prepareStylistPhoto';
-import { itemImageContentFit, itemImageUri } from '../../lib/itemImage';
+import { itemCoverPresentation, itemImageContentFit, itemImageUri } from '../../lib/itemImage';
 import { useStylingWeatherToday } from '../../hooks/useWeather';
 import { useItems } from '../../hooks/useItems';
 import { useProfile } from '../../hooks/useProfile';
@@ -46,6 +47,7 @@ import { MessageBubble } from './ChatMessageBubble';
 import { ACTIVE_THREAD_KEY, ChatMessage, EventContext, ComposerAttachment, Conversation, LEGACY_SESSION_KEY, MissingEssential, SendOptions, ServerMessage, detectOccasionHint, guideQuestionMode, isProseMode, isRichAssistantMessage, makeId, mapServerMessages, normalizeChatMessage, responseExtras, threadKey, useContextualChips } from './ChatModel';
 import { ConversationLocationPicker, StylistOverlaySheet } from './ChatOverlaySheet';
 import { TypingIndicator } from './ChatProgress';
+import { markMessageFresh } from './freshMessages';
 import { styles } from './ChatStyles';
 
 // ── Main Component ───────────────────────────────────────────────────────────
@@ -125,6 +127,13 @@ export function StylistChatView({
   const skipRestoredAutoScroll = useRef(!!restored);
   const skipRestoredLocation = useRef(!!restored);
   const insets = useSafeAreaInsets();
+  // Header and dock float over the thread so the look scrolls under the blur;
+  // their measured heights pad the scroll content instead of taking layout space.
+  const reduceTransparency = useReduceTransparency();
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const [dockHeight, setDockHeight] = useState(0);
+  const headerHeightRef = useRef(0);
+  headerHeightRef.current = headerHeight;
   const { data: allItems = [] } = useItems();
   const { data: profile } = useProfile();
   const tempUnit = resolveTempUnit(profile?.tempUnit, profile?.location);
@@ -279,7 +288,7 @@ export function StylistChatView({
   const scrollToMessageStart = useCallback((messageId: string, animated = true) => {
     const y = messageLayoutsRef.current[messageId];
     if (typeof y !== 'number') return false;
-    scrollRef.current?.scrollTo({ y: Math.max(y - spacing.md, 0), animated });
+    scrollRef.current?.scrollTo({ y: Math.max(y - headerHeightRef.current - spacing.md, 0), animated });
     return true;
   }, []);
 
@@ -313,6 +322,7 @@ export function StylistChatView({
   } = useStylistTransport({
     onProgress: setProgressStage,
     onAssistantStart: (assistantId) => {
+      markMessageFresh(assistantId);
       setProgressStage(null);
       setMessages((prev) => {
         if (prev.some((m) => m.id === assistantId)) return prev;
@@ -369,6 +379,7 @@ export function StylistChatView({
             ? [{ ...legacyMe, context: '', priority: 1 }]
             : [];
 
+      markMessageFresh(assistantId);
       const finalMsg: ChatMessage = {
         id: assistantId,
         role: 'assistant',
@@ -658,7 +669,9 @@ export function StylistChatView({
 
   async function selectConversation(id: number) {
     setDrawerOpen(false);
-    if (id === conversationIdRef.current) return;
+    // Resume can set the active id before its transcript lands (or after a failed
+    // load), leaving the empty state up; only skip when the thread is on screen.
+    if (id === conversationIdRef.current && messagesRef.current.length > 0) return;
     stopCurrentAudio();
     abortTransport();
     try {
@@ -827,8 +840,10 @@ export function StylistChatView({
   }
 
   function stageSuggestion(text: string) {
-    // Never overwrite an unfinished question when exploring suggestions.
-    setInputText((draft) => draft.trim() ? `${draft.trimEnd()}\n${text}`.slice(0, 2000) : text.slice(0, 2000));
+    // Never overwrite an unfinished question when exploring suggestions, and
+    // don't stack the same suggestion twice (a double tap, or a tap that lags).
+    setInputText((draft) => draft.includes(text.trim()) ? draft
+      : draft.trim() ? `${draft.trimEnd()}\n${text}`.slice(0, 2000) : text.slice(0, 2000));
     setMentionQuery(null);
     composerInputRef.current?.focus();
     Haptics.selectionAsync().catch(() => {});
@@ -917,6 +932,14 @@ export function StylistChatView({
   // ── Render ─────────────────────────────────────────────────────────────────
 
   const isEmpty = messages.length === 0 && !isLoading && !errorMessage;
+  // The most-worn top, bottom and shoes: the user's own staples. Catalog-style
+  // covers first, so a selfie in the piece doesn't sit in a still-life strip.
+  const emptyPreviewItems = useMemo(() => (['top', 'bottom', 'shoes'] as const)
+    .map((category) => allItems
+      .filter((item) => item.category === category && itemCoverPresentation(item).uri)
+      .sort((a, b) => Number(itemCoverPresentation(b).isCatalogStyle) - Number(itemCoverPresentation(a).isCatalogStyle)
+        || (b.wearCount ?? 0) - (a.wearCount ?? 0))[0])
+    .filter((item): item is Item => !!item), [allItems]);
   // Recomputed per render rather than per minute: a thread only crosses midnight
   // while open in the rarest case, and the transcript rerenders on every turn.
   const dividers = useMemo(() => dayDividers(messages), [messages]);
@@ -930,18 +953,30 @@ export function StylistChatView({
       keyboardVerticalOffset={insets.bottom}
     >
       <BlurView
-        intensity={35}
+        intensity={reduceTransparency ? 0 : 35}
         tint="systemThinMaterialLight"
-        style={[styles.header, { paddingTop: insets.top + spacing.xs }]}
+        style={[styles.header, reduceTransparency && styles.chromeSolid, { paddingTop: insets.top + spacing.xs }]}
+        onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}
         {...(Platform.OS === 'android' && { blurMethod: 'dimezisBlurViewSdk31Plus' })}
       >
-        <View style={styles.headerIdentity} accessible accessibilityRole="header" accessibilityLabel={`Your stylist${allItems.length ? `, knows your ${allItems.length} pieces` : ''}`}>
-          <View style={styles.headerMonogram}><Text style={styles.headerMonogramText}>S</Text></View>
-          <View style={styles.headerIdentityText}>
-            <Text style={styles.headerTitle} numberOfLines={1}>Your stylist</Text>
-            {allItems.length ? <Text style={styles.headerSubtitle} numberOfLines={1}>{`Knows your ${allItems.length} pieces`}</Text> : null}
+        {/* One compact masthead everywhere: the page's own headline (or the look)
+            gets the room, and the styling location rides along as its subtitle. */}
+        <TouchableOpacity
+          style={styles.headerIdentityCompact}
+          onPress={() => setLocationPickerVisible(true)}
+          activeOpacity={0.75}
+          accessibilityRole="header"
+          accessibilityLabel={`Your stylist. Styling location: ${activeLocation.label || 'not set'}`}
+          accessibilityHint="Changes the styling location"
+        >
+          <Text style={styles.headerTitleCompact} numberOfLines={1}>Your stylist</Text>
+          <View style={styles.headerCompactMeta}>
+            <Text style={styles.headerSubtitle} numberOfLines={1}>{activeLocation.label || 'Set location'}</Text>
+            {weather.data?.current ? (
+              <Text style={styles.headerWeather}>{` · ${formatTemp(weather.data.current, tempUnit)}`}</Text>
+            ) : null}
           </View>
-        </View>
+        </TouchableOpacity>
         <View style={styles.headerActions}>
           <TouchableOpacity
             style={styles.headerBtn}
@@ -967,6 +1002,7 @@ export function StylistChatView({
 
       <ConversationDrawer
         visible={drawerOpen}
+        items={allItems}
         conversations={conversations}
         loading={conversationsLoading}
         activeId={conversationId}
@@ -988,7 +1024,9 @@ export function StylistChatView({
         contentContainerStyle={[
           styles.messageListContent,
           isEmpty && styles.messageListEmpty,
+          { paddingTop: headerHeight + spacing.xl, paddingBottom: dockHeight + spacing.xxl },
         ]}
+        scrollIndicatorInsets={{ top: headerHeight, bottom: dockHeight }}
         onScroll={(event) => {
           scrollY.current = event.nativeEvent.contentOffset.y;
           if (sessionRef?.current) sessionRef.current.scrollY = scrollY.current;
@@ -1005,22 +1043,6 @@ export function StylistChatView({
         keyboardDismissMode="interactive"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.scrollingContext}>
-          <TouchableOpacity
-            style={styles.headerContextPill}
-            onPress={() => setLocationPickerVisible(true)}
-            activeOpacity={0.75}
-            accessibilityLabel={`Styling location: ${activeLocation.label || 'not set'}`}
-          >
-            <Ionicons name="location-outline" size={12} color={colors.primary} />
-            <Text style={styles.headerSubtitle} numberOfLines={1}>{activeLocation.label || 'Set location'}</Text>
-            {weather.data?.current ? (
-              <Text style={styles.headerWeather}>
-                {formatTemp(weather.data.current, tempUnit)}
-              </Text>
-            ) : null}
-          </TouchableOpacity>
-        </View>
         {isEmpty && composerAttachment?.type === 'items' ? (
           <View style={styles.attachedEmpty}>
             <Text style={styles.attachedEyebrow}>Your pieces</Text>
@@ -1043,6 +1065,7 @@ export function StylistChatView({
             tempUnit={tempUnit}
             displayName={profile?.displayName}
             wardrobeCount={allItems.length}
+            previewItems={emptyPreviewItems}
             onPrompt={stageSuggestion}
             onWorkflow={openStarterWorkflow}
           />
@@ -1148,9 +1171,10 @@ export function StylistChatView({
       />
 
       <BlurView
-        intensity={42}
+        intensity={reduceTransparency ? 0 : 42}
         tint="systemThinMaterialLight"
-        style={[styles.bottomDock, { paddingBottom: embedded ? spacing.sm : insets.bottom + spacing.sm }]}
+        style={[styles.bottomDock, reduceTransparency && styles.chromeSolid, { paddingBottom: embedded ? spacing.sm : insets.bottom + spacing.sm }]}
+        onLayout={(event) => setDockHeight(event.nativeEvent.layout.height)}
         {...(Platform.OS === 'android' && { blurMethod: 'dimezisBlurViewSdk31Plus' })}
       >
         {/* Follow-up chips */}
@@ -1255,7 +1279,7 @@ export function StylistChatView({
           <AttachmentChoice icon="images-outline" label="Photo library" onPress={() => photoPicker.choosePhoto('library')} />
           <AttachmentChoice
             icon="shirt-outline"
-            label="Choose from closet"
+            label="From closet"
             onPress={photoPicker.chooseCloset}
           />
         </View>

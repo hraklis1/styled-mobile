@@ -13,12 +13,17 @@ export const styles = StyleSheet.create({
   // On Android devices that don't support hardware blur, expo-blur renders a
   // semi-transparent tinted surface automatically, so no explicit fallback is needed.
   header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.page,
-    minHeight: 66,
-    paddingBottom: spacing.sm,
+    minHeight: 52,
+    paddingBottom: spacing.xs,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.hairline,
   },
@@ -30,40 +35,21 @@ export const styles = StyleSheet.create({
     borderRadius: radii.full,
     backgroundColor: 'transparent',
   },
-  // The stylist's masthead is the same serif as the other tabs, set one step
-  // down from the hero so it sits inside a sticky blur header.
-  scrollingContext: { marginBottom: spacing.sm },
-  headerTitle: {
-    ...typography.text.editorialTitle,
-    flexShrink: 1,
-    color: colors.foreground,
-  },
-  headerIdentity: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   attachedEmpty: { paddingHorizontal: spacing.page, paddingVertical: spacing.xl, gap: spacing.md },
   attachedEyebrow: { ...typography.text.eyebrow, color: colors.mutedForeground },
-  attachedTitle: { ...typography.text.sheetTitle, color: colors.foreground },
+  attachedTitle: { ...typography.text.editorialSheet, color: colors.foreground },
   attachedBody: { ...typography.text.body, color: colors.mutedForeground },
   attachedList: { marginTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
   attachedRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline },
   attachedRowText: { ...typography.text.body, color: colors.foreground, flex: 1 },
-  headerIdentityText: { flexShrink: 1, gap: 2 },
-  headerMonogram: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.foreground },
-  headerMonogramText: { ...typography.text.editorialCompact, color: colors.background, lineHeight: undefined },
-  headerContextPill: {
-    maxWidth: '96%',
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 0,
-    borderRadius: radii.full,
-    backgroundColor: 'transparent',
-  },
+  headerIdentityCompact: { flex: 1, minHeight: 44, justifyContent: 'center' },
+  headerTitleCompact: { ...typography.text.editorialCard, color: colors.foreground },
+  headerCompactMeta: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 },
   headerSubtitle: { flexShrink: 1, ...typography.text.meta, color: colors.mutedForeground },
   headerWeather: { ...typography.text.meta, color: colors.primary },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   doneBtn: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.surfaceSubtle },
-  doneBtnText: { color: colors.primary, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold },
+  doneBtnText: { ...typography.text.bodySmall, color: colors.primary, fontWeight: typography.weight.semibold },
   // Conversation drawer
   drawerBackdrop: {
     position: 'absolute',
@@ -90,37 +76,34 @@ export const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.sm,
   },
-  drawerTitle: {
-    fontSize: typography.text.sectionTitle.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
+  drawerTitle: { ...typography.text.editorialSheet, color: colors.foreground },
+  // A quiet text action rather than a filled bar: the list is the content.
   drawerNewBtn: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radii.md,
-    backgroundColor: colors.surfaceSelected,
-    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    marginBottom: spacing.xs,
   },
+  // Tinted and borderless, like the system search field.
   drawerSearch: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     paddingLeft: spacing.sm,
     borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderCurve: 'continuous',
+    backgroundColor: colors.surfaceSubtle,
     marginBottom: spacing.sm,
   },
   drawerSearchInput: {
+    ...typography.text.bodySmall,
+    lineHeight: typography.inputLineHeight(typography.text.bodySmall.fontSize),
     flex: 1,
     minWidth: 0,
     minHeight: 44,
     paddingVertical: spacing.sm,
-    fontSize: typography.text.bodySmall.fontSize,
     color: colors.foreground,
   },
   drawerSearchClear: {
@@ -130,7 +113,7 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   drawerNewText: {
-    fontSize: typography.text.bodySmall.fontSize,
+    ...typography.text.bodySmall,
     fontWeight: typography.weight.medium,
     color: colors.primary,
   },
@@ -141,7 +124,7 @@ export const styles = StyleSheet.create({
     paddingVertical: spacing.xxl,
   },
   drawerEmptyText: {
-    fontSize: typography.text.bodySmall.fontSize,
+    ...typography.text.bodySmall,
     color: colors.mutedForeground,
     textAlign: 'center',
   },
@@ -172,19 +155,22 @@ export const styles = StyleSheet.create({
   },
   drawerRowCopy: { flex: 1 },
   drawerRowTitle: {
-    fontSize: typography.text.bodySmall.fontSize,
+    ...typography.text.bodySmall,
     color: colors.foreground,
   },
   drawerRowTitleActive: {
     fontWeight: typography.weight.semibold,
   },
+  drawerRowGlyph: { width: 40, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: radii.photo, backgroundColor: colors.surfaceSubtle },
+  // The look's name is the stylist's own title for the thread — set in the editorial italic.
+  drawerRowLook: { ...typography.text.editorialItalic, fontSize: 15, lineHeight: 20, color: colors.foreground, marginTop: 1 },
   drawerRowPreview: {
-    fontSize: typography.text.caption.fontSize,
+    ...typography.text.caption,
     color: colors.mutedForeground,
     marginTop: 1,
   },
   drawerRowMeta: {
-    fontSize: typography.text.caption.fontSize,
+    ...typography.text.caption,
     color: colors.mutedForeground,
     marginTop: 1,
   },
@@ -198,7 +184,7 @@ export const styles = StyleSheet.create({
     marginLeft: spacing.xs,
   },
   drawerDeleteText: {
-    fontSize: typography.text.caption.fontSize,
+    ...typography.text.caption,
     fontWeight: typography.weight.semibold,
     color: colors.white,
   },
@@ -217,18 +203,15 @@ export const styles = StyleSheet.create({
     gap: spacing.md,
     ...shadows.lg,
   },
-  renameTitle: {
-    fontSize: typography.text.sectionTitle.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-  },
+  renameTitle: { ...typography.text.editorialSheet, color: colors.foreground },
   renameInput: {
+    ...typography.text.body,
+    lineHeight: typography.inputLineHeight(typography.text.body.fontSize),
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
-    fontSize: typography.text.body.fontSize,
     color: colors.foreground,
     backgroundColor: colors.background,
   },
@@ -243,7 +226,7 @@ export const styles = StyleSheet.create({
     borderRadius: radii.full,
   },
   renameCancelText: {
-    fontSize: typography.text.bodySmall.fontSize,
+    ...typography.text.bodySmall,
     fontWeight: typography.weight.medium,
     color: colors.mutedForeground,
   },
@@ -254,7 +237,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   renameSaveText: {
-    fontSize: typography.text.bodySmall.fontSize,
+    ...typography.text.bodySmall,
     fontWeight: typography.weight.semibold,
     color: colors.primaryForeground,
   },
@@ -263,13 +246,20 @@ export const styles = StyleSheet.create({
   messageListContent: {
     paddingHorizontal: spacing.page, paddingTop: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.xl,
   },
+  // flexGrow, not flex: the empty state must still scroll when it's taller than the screen.
   messageListEmpty: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'flex-start',
     paddingTop: spacing.xl,
   },
   // Bottom dock — backgroundColor intentionally omitted; BlurView owns the surface.
+  chromeSolid: { backgroundColor: colors.chromeTint },
   bottomDock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 2,
     paddingTop: 2,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.hairline,
@@ -324,12 +314,12 @@ export const styles = StyleSheet.create({
   },
   mentionInfo: { flex: 1 },
   mentionName: {
-    fontSize: typography.text.bodySmall.fontSize,
+    ...typography.text.bodySmall,
     fontWeight: typography.weight.medium,
     color: colors.foreground,
   },
   mentionCategory: {
-    fontSize: typography.text.caption.fontSize,
+    ...typography.text.caption,
     color: colors.mutedForeground,
     textTransform: 'capitalize',
   },
@@ -349,7 +339,7 @@ export const styles = StyleSheet.create({
     backgroundColor: surfaces.userBubble,
   },
   bubbleText: {
-    fontSize: typography.text.bodySmall.fontSize,
+    ...typography.text.bodySmall,
     lineHeight: typography.text.bodySmall.fontSize * 1.55,
   },
   bubbleTextUser: { color: colors.foreground },
@@ -362,7 +352,7 @@ export const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   stylistNoteText: {
-    fontSize: typography.text.body.fontSize,
+    ...typography.text.body,
     color: colors.foreground,
     lineHeight: typography.text.body.fontSize * 1.6,
   },
@@ -379,7 +369,7 @@ export const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   quietActionText: {
-    fontSize: typography.text.caption.fontSize,
+    ...typography.text.caption,
     color: colors.mutedForeground,
     fontWeight: typography.weight.medium,
   },
@@ -395,6 +385,8 @@ export const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.md,
   },
+  feedbackFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xs },
+  feedbackPrompt: { ...typography.text.meta, color: colors.mutedForeground },
   headerCardActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -414,7 +406,7 @@ export const styles = StyleSheet.create({
     ...typography.text.editorialTitle,
     color: colors.foreground,
   },
-  lookMeta: { fontSize: typography.text.caption.fontSize, color: colors.mutedForeground },
+  lookMeta: { ...typography.text.caption, color: colors.mutedForeground },
   lineSheet: {
     paddingHorizontal: spacing.xs,
   },
@@ -455,18 +447,19 @@ export const styles = StyleSheet.create({
     flex: 1,
     gap: 1,
   },
+  // Category sits under the eyebrows above it as quiet meta; caps stay for section labels.
   lineSheetCategory: {
-    ...typography.text.eyebrow,
-    color: colors.primary,
+    ...typography.text.meta,
+    color: colors.mutedForeground,
   },
   lineSheetTip: {
-    fontSize: typography.text.caption.fontSize,
+    ...typography.text.caption,
     lineHeight: typography.text.caption.fontSize * 1.35,
     color: colors.accentInk,
     marginTop: 2,
   },
   pieceTipRow: {
-    fontSize: typography.text.caption.fontSize,
+    ...typography.text.caption,
     lineHeight: typography.text.caption.fontSize * 1.4,
     color: colors.accentInk,
   },
@@ -478,7 +471,7 @@ export const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   lineSheetName: {
-    fontSize: typography.text.bodySmall.fontSize,
+    ...typography.text.bodySmall,
     color: colors.foreground,
     lineHeight: typography.text.bodySmall.fontSize * 1.3,
     fontWeight: typography.weight.medium,
@@ -500,9 +493,7 @@ export const styles = StyleSheet.create({
   // The note under a look is the stylist speaking — same editorial prose as a
   // "My take" reply, one step smaller so it sits inside the card.
   outfitCardText: {
-    ...typography.text.editorialBody,
-    fontSize: 17,
-    lineHeight: 25,
+    ...typography.text.editorialBodyCompact,
     color: colors.foreground,
   },
   addEventBtn: {
@@ -519,7 +510,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   addEventBtnText: {
-    fontSize: typography.text.bodySmall.fontSize,
+    ...typography.text.bodySmall,
     fontWeight: typography.weight.semibold,
     color: colors.white,
     flexShrink: 1,
@@ -528,7 +519,7 @@ export const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   eventActionMeta: {
-    fontSize: typography.text.caption.fontSize,
+    ...typography.text.caption,
     color: colors.mutedForeground,
     lineHeight: typography.text.caption.fontSize * 1.45,
     textAlign: 'center',
@@ -554,12 +545,12 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.hairline,
   },
   eventUtilityText: {
-    fontSize: typography.text.caption.fontSize,
+    ...typography.text.caption,
     fontWeight: typography.weight.semibold,
     color: colors.primary,
   },
+  saveBtnOuter: { flex: 1 },
   saveBtn: {
-    flex: 1,
     minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
@@ -578,8 +569,8 @@ export const styles = StyleSheet.create({
     opacity: 0.4,
   },
   saveBtnText: {
+    ...typography.text.caption,
     flexShrink: 1,
-    fontSize: typography.text.caption.fontSize,
     fontWeight: typography.weight.semibold,
     color: colors.white,
   },
@@ -599,7 +590,7 @@ export const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
   },
   viewClosetText: {
-    fontSize: typography.text.caption.fontSize,
+    ...typography.text.caption,
     fontWeight: typography.weight.semibold,
     color: colors.primary,
   },
@@ -612,7 +603,7 @@ export const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   sheetOpenItemText: {
-    fontSize: typography.text.bodySmall.fontSize,
+    ...typography.text.bodySmall,
     color: colors.primary,
     fontWeight: typography.weight.semibold,
     textDecorationLine: 'underline',
@@ -633,7 +624,7 @@ export const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   woreBtnText: {
-    fontSize: typography.text.bodySmall.fontSize,
+    ...typography.text.bodySmall,
     color: colors.primary,
     fontWeight: typography.weight.semibold,
   },
@@ -657,7 +648,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.muted,
   },
   reasonChipText: {
-    fontSize: typography.text.caption.fontSize,
+    ...typography.text.caption,
     color: colors.foreground,
     fontWeight: typography.weight.medium,
   },
@@ -680,12 +671,15 @@ export const styles = StyleSheet.create({
   carouselDots: { flexDirection: 'row', justifyContent: 'center', gap: 6, paddingTop: spacing.md },
   carouselDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.hairline },
   carouselDotActive: { width: 16, backgroundColor: colors.foreground },
-  typingText: { ...typography.text.bodySmall, color: colors.mutedForeground },
+  typingText: { ...typography.text.editorialItalic, color: colors.mutedForeground },
   typingLabel: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
+  typingMark: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.accentInk },
+  typingPlaceholder: { gap: spacing.sm, paddingTop: spacing.xs },
+  typingPlaceholderLine: { height: 10, borderRadius: radii.full, backgroundColor: colors.surfaceSelected },
   dayDivider: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -709,10 +703,10 @@ export const styles = StyleSheet.create({
     backgroundColor: '#FFF5F3',
   },
   inlineErrorCopy: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
-  inlineErrorTitle: { color: colors.foreground, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.semibold },
-  inlineErrorText: { color: colors.mutedForeground, fontSize: typography.text.caption.fontSize, lineHeight: 17 },
+  inlineErrorTitle: { ...typography.text.bodySmall, color: colors.foreground, fontWeight: typography.weight.semibold },
+  inlineErrorText: { ...typography.text.caption, color: colors.mutedForeground, },
   retryBtn: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.foreground },
-  retryBtnText: { color: colors.primaryForeground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold },
+  retryBtnText: { ...typography.text.caption, color: colors.primaryForeground, fontWeight: typography.weight.semibold },
   stylistSheetModal: { flex: 1, justifyContent: 'flex-end' },
   stylistSheetBackdrop: {
     ...StyleSheet.absoluteFill,
@@ -736,17 +730,17 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.surfaceElevated,
   },
   sheetGrabber: { width: 38, height: 5, alignSelf: 'center', marginBottom: spacing.lg, borderRadius: radii.full, backgroundColor: colors.border },
-  attachmentSheetTitle: { ...typography.text.sheetTitle, color: colors.foreground },
+  attachmentSheetTitle: { ...typography.text.editorialSheet, color: colors.foreground },
   attachmentSheetSubtitle: { marginTop: spacing.xs, ...typography.text.bodySmall, color: colors.inkSubtle },
   attachmentChoices: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
   attachmentChoice: { flex: 1, minHeight: 104, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radii.lg, backgroundColor: colors.surfaceSubtle },
   attachmentChoiceIcon: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: radii.full, backgroundColor: colors.surfaceSelected },
-  attachmentChoiceLabel: { color: colors.foreground, fontSize: typography.text.caption.fontSize, fontWeight: typography.weight.semibold, textAlign: 'center' },
+  attachmentChoiceLabel: { ...typography.text.caption, color: colors.foreground, fontWeight: typography.weight.semibold, textAlign: 'center' },
   followUpList: { gap: spacing.xs, marginTop: spacing.lg },
   followUpRow: {
     minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline,
   },
-  followUpText: { color: colors.foreground, fontSize: typography.text.bodySmall.fontSize, fontWeight: typography.weight.medium },
+  followUpText: { ...typography.text.bodySmall, color: colors.foreground, fontWeight: typography.weight.medium },
   // Empty state
   guideContextPinned: { paddingBottom: spacing.lg, marginBottom: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   guideCard: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: spacing.md },
@@ -758,11 +752,11 @@ export const styles = StyleSheet.create({
   guideQuestion: { flex: 1 },
   emptyState: {
     paddingHorizontal: spacing.sm,
-    gap: spacing.xxxl,
+    gap: spacing.xxl,
   },
   emptyHero: {
     alignItems: 'flex-start',
-    gap: spacing.md,
+    gap: spacing.sm,
     paddingHorizontal: spacing.xs,
   },
   emptyTitle: {
@@ -789,15 +783,14 @@ export const styles = StyleSheet.create({
   },
   locationPickerHeaderCopy: { flex: 1, gap: 3 },
   locationPickerTitle: {
-    fontSize: typography.text.sheetTitle.fontSize,
+    ...typography.text.editorialSheet,
     color: colors.foreground,
     fontWeight: typography.weight.bold,
   },
   locationPickerSubtitle: {
-    fontSize: typography.text.bodySmall.fontSize,
+    ...typography.text.bodySmall,
     color: colors.mutedForeground,
-    lineHeight: 19,
-  },
+    },
   locationChoice: {
     minHeight: 68,
     flexDirection: 'row',
@@ -812,15 +805,14 @@ export const styles = StyleSheet.create({
   locationChoiceDisabled: { opacity: 0.45 },
   locationChoiceCopy: { flex: 1, gap: 2 },
   locationChoiceTitle: {
-    fontSize: typography.text.body.fontSize,
+    ...typography.text.body,
     color: colors.foreground,
     fontWeight: typography.weight.semibold,
   },
   locationChoiceHint: {
-    fontSize: typography.text.caption.fontSize,
+    ...typography.text.caption,
     color: colors.mutedForeground,
-    lineHeight: 17,
-  },
+    },
   destinationCard: {
     gap: spacing.sm,
     padding: spacing.md,
@@ -836,11 +828,27 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   destinationButtonText: {
-    fontSize: typography.text.bodySmall.fontSize,
+    ...typography.text.bodySmall,
     color: colors.primaryForeground,
     fontWeight: typography.weight.semibold,
   },
   promptList: { width: '100%', gap: spacing.md },
+  todayCard: {
+    gap: spacing.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    borderRadius: radii.lg,
+    borderCurve: 'continuous',
+    backgroundColor: colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairline,
+  },
+  todayThumbs: { flexDirection: 'row', gap: spacing.sm },
+  todayCopy: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  todayCopyText: { flex: 1, gap: spacing.xs },
+  todayTitle: { ...typography.text.editorialCard, fontSize: 20, lineHeight: 26, color: colors.foreground },
+  todaySubtitle: { ...typography.text.bodySmall, color: colors.mutedForeground },
+  todayArrow: { width: 36, height: 36, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary },
   promptSectionLabel: {
     paddingHorizontal: spacing.xs,
     ...typography.text.eyebrow,
@@ -861,17 +869,17 @@ export const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.hairline,
   },
+  starterRowPressed: { backgroundColor: colors.surfaceSubtle },
   starterCopy: { flex: 1, gap: spacing.xs },
   starterTitle: {
-    fontSize: typography.text.body.fontSize,
+    ...typography.text.body,
     color: colors.foreground,
     fontWeight: typography.weight.semibold,
   },
   starterSubtitle: {
-    fontSize: typography.text.caption.fontSize,
+    ...typography.text.caption,
     color: colors.mutedForeground,
-    lineHeight: 17,
-  },
+    },
   moreIdeasButton: {
     minHeight: 44,
     flexDirection: 'row',
@@ -881,7 +889,7 @@ export const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
   },
   moreIdeasText: {
-    fontSize: typography.text.bodySmall.fontSize,
+    ...typography.text.bodySmall,
     color: colors.primary,
     fontWeight: typography.weight.semibold,
   },
@@ -908,7 +916,7 @@ export const styles = StyleSheet.create({
     backgroundColor: 'rgba(40,35,31,0.28)',
   },
   moreIdeasTitle: {
-    ...typography.text.sheetTitle,
+    ...typography.text.editorialSheet,
     color: colors.foreground,
   },
   moreIdeasSubtitle: {
@@ -932,13 +940,7 @@ export const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     gap: spacing.md,
   },
-  sheetTitle: {
-    flex: 1,
-    fontSize: typography.text.sectionTitle.fontSize,
-    fontWeight: typography.weight.semibold,
-    color: colors.foreground,
-    letterSpacing: typography.tracking.none,
-  },
+  sheetTitle: { ...typography.text.editorialSheet, flex: 1, color: colors.foreground },
   sheetCloseBtn: {
     width: 44,
     height: 44,
@@ -993,12 +995,12 @@ export const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   sheetMetaLabel: {
-    fontSize: typography.text.bodySmall.fontSize,
+    ...typography.text.bodySmall,
     color: colors.mutedForeground,
     fontWeight: typography.weight.medium,
   },
   sheetMetaValue: {
-    fontSize: typography.text.bodySmall.fontSize,
+    ...typography.text.bodySmall,
     color: colors.foreground,
     textTransform: 'capitalize',
     maxWidth: '60%',

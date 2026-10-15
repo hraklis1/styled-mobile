@@ -53,9 +53,11 @@ it('allows drafting during a reply and routes Stop only to the active generation
 
 it('prevents empty sends while allowing an attached piece to be submitted', () => {
   act(() => { renderer = TestRenderer.create(<StylistComposer {...props} value="   " />); });
-  expect(button('Send message').props.disabled).toBe(true);
+  // Send only appears once there is something to send.
+  expect(button('Send message')).toBeUndefined();
   act(() => renderer.update(<StylistComposer {...props} value="" attachment={{ type: 'item', label: 'Navy jacket', itemId: 1 }} />));
-  expect(button('Send message').props.disabled).toBe(false);
+  act(() => button('Send message').props.onPress());
+  expect(props.onSend).toHaveBeenCalledTimes(1);
 });
 
 it('explains microphone startup and keeps Stop reachable during dictation', () => {
