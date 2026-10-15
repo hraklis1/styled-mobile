@@ -135,6 +135,17 @@ describe('store actions', () => {
     expect(store().batch?.photos[0]).toMatchObject({ status: 'done', pieceCount: 2 });
   });
 
+  it('starts a strong overlap on the same photo unticked, as the single scan does', () => {
+    store().start(batch({ photos: [photo('a', { status: 'scanning' })] }));
+    const box = { x: 10, y: 10, width: 40, height: 50 };
+    store().completeScan('a', [
+      piece('a-0', 'a', { category: 'tops', bbox: box }),
+      piece('a-1', 'a', { category: 'tops', bbox: { ...box, x: 12 } }),
+      piece('a-2', 'a', { category: 'bottoms', bbox: { x: 10, y: 60, width: 40, height: 30 } }),
+    ]);
+    expect(store().batch?.pieces.map((p) => [p.id, p.included])).toEqual([['a-0', true], ['a-1', false], ['a-2', true]]);
+  });
+
   it('remembers which fields the user edited', () => {
     store().start(batch({ photos: [photo('a', { status: 'done' })], pieces: [piece('a-0', 'a', { status: 'ready' })] }));
     store().editPiece('a-0', { brand: 'COS' });

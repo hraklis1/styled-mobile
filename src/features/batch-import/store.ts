@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { createMMKV } from 'react-native-mmkv';
 import { relocateLocalUris } from '../../lib/relocateLocalUri';
+import { compositePieceIds, overlapDuplicates } from '../../lib/scan-review';
 import type { Batch, BatchPhase, BlockReason, Piece, PieceFields, PhotoJob } from './types';
 
 const mmkv = createMMKV({ id: 'styled.batch-import' });
@@ -100,15 +101,22 @@ export const useBatchImportStore = create<BatchImportState>()(
         ...b,
         photos: b.photos.map((p) => (p.id === id ? { ...p, ...patch } : p)),
       }))),
-      completeScan: (photoId, pieces) => set((s) => update(s, (b) => ({
+      completeScan: (photoId, pieces) => set((s) => update(s, (b) => {
+        // As in the single scan: an outfit-wide box, or one that strongly
+        // repeats another on this photo, starts unticked rather than vanishing.
+        const boxes = pieces.map(piece => ({ id: piece.id, category: piece.category, bbox: piece.bbox }));
+        const unticked = compositePieceIds(boxes);
+        for (const [id, flag] of overlapDuplicates(boxes)) if (flag.strong) unticked.add(id);
+        return {
         ...b,
         photos: b.photos.map((p) =>
           p.id === photoId ? { ...p, status: 'done', error: null, pieceCount: pieces.length } : p),
         // A resumed scan can replay: never add the same photo's pieces twice.
         pieces: b.photos.flatMap(photo => photo.id === photoId
-          ? pieces.map(piece => b.pieces.find(old => old.id === piece.id) ?? { ...piece, included: true, extractionApproved: false })
+          ? pieces.map(piece => b.pieces.find(old => old.id === piece.id) ?? { ...piece, included: !unticked.has(piece.id), extractionApproved: false })
           : b.pieces.filter(piece => piece.photoId === photo.id)),
-      }))),
+        };
+      })),
       patchPiece: (id, patch) => set((s) => update(s, (b) => ({
         ...b,
         pieces: b.pieces.map((p) => (p.id === id ? { ...p, ...patch } : p)),

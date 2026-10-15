@@ -255,7 +255,7 @@ function PhotoSection({ group, first, total, photoHeight, numbers, duplicateIds,
             accessibilityRole="button"
             accessibilityState={{ expanded: showDuplicates }}
           >
-            <Text style={styles.groupTitle}>{duplicates.length === 1 ? '1 possible duplicate' : `${duplicates.length} possible duplicates`}</Text>
+            <Text style={styles.groupTitle}>{duplicateLabel(duplicates)}</Text>
             <Ionicons name={showDuplicates ? 'chevron-up' : 'chevron-down'} size={16} color={colors.mutedForeground} />
           </Pressable>
           {showDuplicates ? rows(duplicates, true) : null}
@@ -263,6 +263,14 @@ function PhotoSection({ group, first, total, photoHeight, numbers, duplicateIds,
       ) : null}
     </View>
   );
+}
+
+/** "1 possible duplicate · not included": says what Continue will do with them. */
+function duplicateLabel(duplicates: ScanReviewPiece[]) {
+  const head = duplicates.length === 1 ? '1 possible duplicate' : `${duplicates.length} possible duplicates`;
+  const included = duplicates.filter(piece => piece.included !== false).length;
+  const tail = included === 0 ? 'not included' : included === duplicates.length ? 'included' : `${included} included`;
+  return `${head} · ${tail}`;
 }
 
 const pieceLabel = (count: number) => (count === 1 ? '1 piece' : `${count} pieces`);
