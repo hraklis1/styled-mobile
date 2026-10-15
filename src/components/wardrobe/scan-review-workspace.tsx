@@ -34,6 +34,8 @@ import {
   pieceNumbering,
   type PieceReviewState,
 } from '../../lib/scan-review';
+import { loadBatchReviewLayout, saveBatchReviewLayout, type BatchReviewLayout } from '../../lib/scanReviewLayout';
+import { PhotoSections } from './scan-review/PhotoSections';
 import { colors, ingestion, spacing, stroke, typography } from '../../theme';
 import { UndoToast } from '../primitives/UndoToast';
 import { ActionBar, type ActionBarMode } from './scan-review/ActionBar';
@@ -165,6 +167,8 @@ export function ScanReviewWorkspace({
   const closeDisabled = stage === 'saving';
 
   const [view, setView] = useState<View_>('sheet');
+  const [batchLayout, setBatchLayout] = useState<BatchReviewLayout>('sections');
+  useEffect(() => { void loadBatchReviewLayout().then(setBatchLayout); }, []);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [footerHeight, setFooterHeight] = useState(0);
   const [filter, setFilter] = useState<SheetFilter>('all');
@@ -225,6 +229,16 @@ export function ScanReviewWorkspace({
   const reviewPhoto = (preExtract || review) && visiblePieces.length > 0 && visiblePieces.every(piece => piece.cropSource === visiblePieces[0].cropSource)
     ? visiblePieces[0].cropSource
     : null;
+  // Many photos behind the pieces: one photo-led section per photo, unless
+  // the user prefers the contact sheet.
+  const multiPhoto = (preExtract || review) && visiblePieces.length > 0 && !reviewPhoto;
+  const photoSections = multiPhoto && batchLayout === 'sections';
+  const switchLayout = () => {
+    const next: BatchReviewLayout = batchLayout === 'sections' ? 'grid' : 'sections';
+    setBatchLayout(next);
+    void saveBatchReviewLayout(next);
+    track('scan_review_layout_changed', { layout: next });
+  };
   // Numbered once, by detection order within each photo, so piece 5 is piece 5
   // before and after extraction. A batch's references carry the photo ("2·3").
   const { numbers, labels } = useMemo(() => pieceNumbering(pieces), [pieces]);
@@ -565,7 +579,7 @@ export function ScanReviewWorkspace({
             onClose={() => setConfirmClose(true)}
             busy={heroSpeaks}
             onMinimize={onMinimize}
-            heading={reviewPhoto ? (preExtract ? 'Review your pieces' : 'Your pieces are ready') : undefined}
+            heading={reviewPhoto || photoSections ? (preExtract ? 'Review your pieces' : 'Your pieces are ready') : undefined}
           />
 
           {failure ? (
@@ -590,6 +604,25 @@ export function ScanReviewWorkspace({
               isPolished={polishCount > 0 ? polish.isPolished : undefined}
               duplicateIds={duplicateIds}
               compactPhoto={review}
+              activeId={activeId}
+              disabled={stage === 'saving'}
+              reduceMotion={reduceMotion}
+              bottomPadding={contentBottom}
+              onActivate={id => { selectionFeedback(); setActiveId(id); }}
+              onClearActive={() => setActiveId(null)}
+              onOpen={openEditor}
+              onToggleIncluded={toggleIncluded}
+              onBrand={id => { setActiveId(id); openSheet({ kind: 'brand', target: [id] }); }}
+              onAddPiece={onAddPiece ? () => { setActiveId(null); setAdding({ step: 'crop' }); } : undefined}
+            />
+          ) : photoSections && effectiveView === 'sheet' ? (
+            <PhotoSections
+              blurb={preExtract ? reviewBlurb(visiblePieces.length) : readyBlurb(inclusion.included.length, checkCount)}
+              pieces={visiblePieces}
+              numbers={numbers}
+              noteFor={noteFor}
+              isPolished={polishCount > 0 ? polish.isPolished : undefined}
+              duplicateIds={duplicateIds}
               activeId={activeId}
               disabled={stage === 'saving'}
               reduceMotion={reduceMotion}
@@ -752,9 +785,12 @@ export function ScanReviewWorkspace({
             <PolishExample example={polish.example} />
           </WorkspaceSheet>
         ) : sheet?.kind === 'options' ? (
-          <WorkspaceSheet title={onMinimize ? 'Import options' : 'Scan options'} detent="fit" rows={scanOptionsRowCount(onMinimize ?? keepForLater)} reduceMotion={reduceMotion} dismissed={sheetDismissed} onClose={closeSheet}>
+          <WorkspaceSheet title={onMinimize ? 'Import options' : 'Scan options'} detent="fit" rows={scanOptionsRowCount(onMinimize ?? keepForLater, multiPhoto || undefined)} reduceMotion={reduceMotion} dismissed={sheetDismissed} onClose={closeSheet}>
             <ScanOptionsRows
               onKeep={(onMinimize ?? keepForLater) ? () => thenDismiss((onMinimize ?? keepForLater)!) : undefined}
+              layout={multiPhoto ? (batchLayout === 'sections'
+                ? { label: 'View as grid', icon: 'grid-outline', onPress: () => thenDismiss(switchLayout) }
+                : { label: 'Group by photo', icon: 'images-outline', onPress: () => thenDismiss(switchLayout) }) : undefined}
               discardLabel={onMinimize ? 'Discard import' : 'Discard scan'}
               detail={`${pieceCountLabel(pieces.length)} and your edits`}
               onDiscard={() => thenDismiss(() => {
