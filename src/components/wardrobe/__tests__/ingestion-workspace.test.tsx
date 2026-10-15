@@ -299,6 +299,13 @@ describe('reading details in a multi-photo batch', () => {
     expect(sections.props.disabled).toBe(true);
     expect(sections.props.pieces.map((p: ScanReviewPiece) => p.id)).toEqual(['0', '1']);
   });
+
+  it('shows queued pieces as being read, and says so in the footer', () => {
+    act(() => setItems(ps => ps.map(p => p.id === '1' ? { ...p, extraction: 'not-started' } : p)));
+    expect(node('PhotoSections').props.pieces.find((p: ScanReviewPiece) => p.id === '1').extraction).toBe('running');
+    const texts = renderer.root.findAllByType(Text).map(t => [t.props.children].flat().join(''));
+    expect(texts.some(text => text.startsWith('Reading details · '))).toBe(true);
+  });
 });
 
 describe('the flagged walk from a grouped batch', () => {

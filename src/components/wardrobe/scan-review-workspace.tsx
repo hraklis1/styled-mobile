@@ -625,7 +625,9 @@ export function ScanReviewWorkspace({
             <PhotoSections
               blurb={`Reading details · ${Math.min(extractionProgress.current, extractionProgress.total)} of ${extractionProgress.total}`}
               progress={extractionProgress.total ? extractionProgress.current / extractionProgress.total : 0}
-              pieces={visiblePieces.filter(piece => piece.included !== false)}
+              // Queued pieces read as in progress too: they're all being worked on.
+              pieces={visiblePieces.filter(piece => piece.included !== false)
+                .map(piece => piece.extraction === 'not-started' ? { ...piece, extraction: 'running' as const } : piece)}
               numbers={numbers}
               noteFor={() => null}
               activeId={null}
@@ -731,7 +733,17 @@ export function ScanReviewWorkspace({
           <View onLayout={event => setFooterHeight(event.nativeEvent.layout.height)}>
             {heroSpeaks
               ? <View style={[styles.heroFooter, { height: Math.max(insets.bottom, spacing.md) + spacing.sm + 56 }]}>
-                  <SlowScanHint watchKey={stage} background={onMinimize ? { onPress: onMinimize } : undefined} />
+                  <SlowScanHint watchKey={stage} background={onMinimize ? { onPress: onMinimize } : undefined}>
+                    {/* Reading in place: the footer says the work is happening, where Continue just was. */}
+                    {readInPlace ? (
+                      <View style={styles.readingFooter} accessibilityLiveRegion="polite">
+                        <ActivityIndicator size="small" color={colors.mutedForeground} />
+                        <Text style={styles.readingFooterText}>
+                          Reading details · {Math.min(extractionProgress.current, extractionProgress.total)} of {extractionProgress.total} done
+                        </Text>
+                      </View>
+                    ) : null}
+                  </SlowScanHint>
                 </View>
               : <ActionBar mode={actionMode} bottomInset={insets.bottom} />}
           </View>
@@ -1015,6 +1027,8 @@ function WorkspaceHeader({ stage, view, canGoBack, position, includedCount, tota
 }
 
 const styles = StyleSheet.create({
+  readingFooter: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  readingFooterText: { ...typography.text.bodySmall, color: colors.mutedForeground, fontVariant: ['tabular-nums'] },
   heroFooter: { justifyContent: 'flex-start', paddingTop: spacing.sm },
   inclusionControl: { minHeight: 44, marginHorizontal: spacing.lg, marginVertical: spacing.sm },
   root: { flex: 1, backgroundColor: colors.background },
