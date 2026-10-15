@@ -95,8 +95,8 @@ export function StylistComposer({
   // One row (`+ · input · mic`) until the draft wraps, then the input gets the full
   // width and the controls drop below. Sticky until the draft is cleared: the wider
   // input could fit the line again and flip the layout back and forth.
-  // Platforms disagree on whether content size includes padding, so compare
-  // against the smallest height seen (one line) rather than a fixed constant.
+  // Compare the measured input height against the smallest seen (one line)
+  // rather than a fixed constant, so padding and font scale don't matter.
   const [wrapped, setWrapped] = useState(false);
   const oneLineHeightRef = useRef<number | null>(null);
   useEffect(() => {
@@ -216,8 +216,10 @@ export function StylistComposer({
         <View style={compact ? styles.compactRow : undefined}>
         <TextInput
           ref={inputRef}
-          style={[styles.textInput, compact && styles.textInputCompact, isDictating && { display: 'none' }, { height: Math.min(Math.max(MIN_INPUT_HEIGHT, contentHeight), MAX_INPUT_HEIGHT * fontScale), maxHeight: MAX_INPUT_HEIGHT * fontScale }]}
-          onContentSizeChange={(event) => setContentHeight(Math.ceil(event.nativeEvent.contentSize.height))}
+          // Sized natively between min and max; a pinned `height` fed by
+          // onContentSizeChange never grew on Fabric (the event doesn't fire reliably).
+          style={[styles.textInput, compact && styles.textInputCompact, isDictating && { display: 'none' }, { maxHeight: MAX_INPUT_HEIGHT * fontScale }]}
+          onLayout={(event) => setContentHeight(Math.ceil(event.nativeEvent.layout.height))}
           value={value}
           onChangeText={onChangeText}
           onFocus={() => { focusProgress.set(withTiming(1, { duration: reducedMotion ? 0 : 160 })); }}
