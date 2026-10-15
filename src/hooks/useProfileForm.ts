@@ -40,7 +40,6 @@ export type ProfileFormSnapshot = {
   sizingRegion: string;
   location: string;
   retailers: string[];
-  stylistVoice: string;
   tempUnit: 'F' | 'C' | 'auto';
   occasions: string[];
   fitNotes: string;
@@ -248,7 +247,6 @@ export function buildProfileUpdatePayload(values: ProfileFormSnapshot): ProfileI
     sizingRegion: values.sizingRegion || null,
     location: values.location.trim() || null,
     favoriteRetailers: uniqueClean(values.retailers).length > 0 ? uniqueClean(values.retailers) : null,
-    stylistVoice: values.stylistVoice || null,
     tempUnit: values.tempUnit === 'auto' ? null : values.tempUnit,
     occasions: normalizeOccasions(values.occasions).length > 0 ? normalizeOccasions(values.occasions) : null,
     fitNotes: values.fitNotes.trim() || null,
@@ -292,7 +290,6 @@ export function parseLoadedProfileForm(profile: Profile): LoadedProfileForm {
     sizingRegion: profile.sizingRegion ?? '',
     location: profile.location ?? '',
     retailers: uniqueClean(profile.favoriteRetailers),
-    stylistVoice: profile.stylistVoice ?? 'shimmer',
     tempUnit: (profile.tempUnit as 'F' | 'C' | null) ?? 'auto',
     occasions: normalizeOccasions(profile.occasions),
     fitNotes: profile.fitNotes ?? '',
@@ -349,7 +346,6 @@ export function useProfileForm() {
   const [location, setLocation] = useState('');
   const [retailers, setRetailers] = useState<string[]>([]);
   const [newRetailer, setNewRetailer] = useState('');
-  const [stylistVoice, setStylistVoice] = useState('shimmer');
   const [tempUnit, setTempUnit] = useState<'F' | 'C' | 'auto'>('auto');
   const [occasions, setOccasions] = useState<string[]>([]);
   const [fitNotes, setFitNotes] = useState('');
@@ -385,7 +381,6 @@ export function useProfileForm() {
     sizingRegion,
     location,
     retailers,
-    stylistVoice,
     tempUnit,
     occasions,
     fitNotes,
@@ -420,7 +415,6 @@ export function useProfileForm() {
     setSizingRegionState(loaded.sizingRegion);
     setLocation(loaded.location);
     setRetailers(loaded.retailers);
-    setStylistVoice(loaded.stylistVoice);
     setTempUnit(loaded.tempUnit);
     setOccasions(loaded.occasions);
     setFitNotes(loaded.fitNotes);
@@ -627,7 +621,6 @@ export function useProfileForm() {
     retailers,
     newRetailer, setNewRetailer,
     addRetailer, removeRetailer,
-    stylistVoice, setStylistVoice,
     tempUnit, setTempUnit,
     fitNotes, setFitNotes,
     completionPct,

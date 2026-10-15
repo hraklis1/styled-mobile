@@ -29,7 +29,6 @@ export type ProfileInput = {
   sizingRegion?: string | null;
   location?: string | null;
   favoriteRetailers?: string[] | null;
-  stylistVoice?: string | null;
   tempUnit?: string | null;
   appPreferences?: AppPreferences | null;
   occasions?: string[] | null;

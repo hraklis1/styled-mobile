@@ -14,7 +14,6 @@ const COST_LABELS: [string, string][] = [
   ['daily_look', "Today's Look"],
   ['outfit_generate', 'Outfit generation'],
   ['flatlay', 'Flat lay image'],
-  ['studio_voice', 'Voice reply'],
 ];
 
 export function MembershipScreen() {
