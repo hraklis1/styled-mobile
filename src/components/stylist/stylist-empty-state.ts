@@ -71,3 +71,10 @@ export function timeOfDayGreeting(date = new Date()): string {
   const hour = date.getHours();
   return hour < 5 ? 'Good evening' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 }
+
+/** "Thursday 15 October": the landing's dateline, matching Home's masthead. */
+export function landingDateline(date = new Date()): string {
+  const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
+  const month = date.toLocaleDateString('en-US', { month: 'long' });
+  return `${weekday} ${date.getDate()} ${month}`;
+}

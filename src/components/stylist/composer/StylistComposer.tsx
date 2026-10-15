@@ -37,6 +37,8 @@ type Props = {
   onOpenAttachmentSheet: () => void;
   placeholder?: string;
   inputRef?: RefObject<TextInput | null>;
+  /** A soft lift off the canvas, for the empty landing where nothing sits behind it. */
+  lifted?: boolean;
 };
 
 const MIN_INPUT_HEIGHT = 44;
@@ -71,6 +73,7 @@ export function StylistComposer({
   onOpenAttachmentSheet,
   placeholder = 'Ask, or describe an occasion…',
   inputRef,
+  lifted = false,
 }: Props) {
   const dictation = useDictation({ onText: onDictatedText, vocabulary });
   const transcriptRef = useRef<ScrollView>(null);
@@ -137,6 +140,7 @@ export function StylistComposer({
 
   return (
     <View style={styles.inputBar}>
+      <View style={[styles.composerShadow, lifted && styles.composerLifted]}>
       <Animated.View style={[styles.composer, cardAnimatedStyle]}>
         <BlurView intensity={30} tint="light" style={StyleSheet.absoluteFill} pointerEvents="none" />
         {attachment?.type === 'items' ? (
@@ -277,6 +281,7 @@ export function StylistComposer({
           </Animated.View>
         ) : null}
       </Animated.View>
+      </View>
     </View>
   );
 }
@@ -291,6 +296,9 @@ const styles = StyleSheet.create({
     // edge, no shadow. The dock behind it blurs the thread as well.
     minHeight: 48, backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: 24, borderCurve: 'continuous', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(0,0,0,0.08)', paddingVertical: 2, paddingHorizontal: spacing.xs,
   },
+  // The shadow lives on a wrapper: the pill clips (overflow hidden) for its blur.
+  composerShadow: { borderRadius: 24 },
+  composerLifted: { shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 1 },
   composerRow: {
     flexDirection: 'row',
     alignItems: 'center',

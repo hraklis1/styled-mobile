@@ -33,6 +33,7 @@ import type { BoardEntryRef } from '../../hooks/useBoards';
 import { OpenItemContext } from './stylistItemContext';
 import { StylistIntakeSheet } from './StylistIntakeSheet';
 import { colors, spacing, typography } from '../../theme';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useStylistTransport } from '../../features/stylist/hooks/useStylistTransport';
 import { buildInitialStylistSendOptions } from '../../features/stylist/initialPrompt';
 import { attachmentItemIds, responseBlockItemIds } from '../../features/stylist/responseBlocks';
@@ -972,7 +973,7 @@ export function StylistChatView({
       <BlurView
         intensity={reduceTransparency ? 0 : 35}
         tint="systemThinMaterialLight"
-        style={[styles.header, reduceTransparency && styles.chromeSolid, { paddingTop: insets.top + spacing.xs }]}
+        style={[styles.header, isEmpty && !entryContext && styles.headerFlush, reduceTransparency && styles.chromeSolid, { paddingTop: insets.top + spacing.xs }]}
         onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}
         {...(Platform.OS === 'android' && { blurMethod: 'dimezisBlurViewSdk31Plus' })}
       >
@@ -1039,6 +1040,14 @@ export function StylistChatView({
         }}
         onClose={() => setDrawerOpen(false)}
       />
+
+      {isEmpty && !entryContext ? (
+        <LinearGradient
+          colors={[colors.background, '#F0EEEA']}
+          style={styles.landingCanvas}
+          pointerEvents="none"
+        />
+      ) : null}
 
       {/* Messages */}
       <ScrollView
@@ -1262,6 +1271,7 @@ export function StylistChatView({
 
         {/* Input bar */}
         <StylistComposer
+          lifted={isEmpty && !entryContext}
           onStartDictation={stopCurrentAudio}
           vocabulary={allItems.flatMap(item => [item.name, item.brand ?? ''])}
           inputRef={composerInputRef}

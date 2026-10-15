@@ -1,11 +1,12 @@
-import { ScrollView, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import Animated, { Easing, FadeInDown, ReduceMotion } from 'react-native-reanimated';
 import * as Haptics from '../../lib/haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { compareAskQuestions, styleAskQuestions, styleName } from '../../lib/shoppingEditorial';
 import { displayBudget } from '../../lib/shoppingPriorityEdit';
 import { ShoppingStyleVisual } from '../shopping/ShoppingStyleVisual';
-import { buildStylistStarters, timeOfDayGreeting } from './stylist-empty-state';
+import { buildStylistStarters, landingDateline, timeOfDayGreeting } from './stylist-empty-state';
 import { colors, spacing } from '../../theme';
 import type { StylistWorkflow } from '../../features/stylist/types';
 import { GuideContext, guideFocus } from './ChatModel';
@@ -89,29 +90,32 @@ export function EmptyState({
   const ideas = buildStylistStarters(wardrobeCount).slice(0, 3);
   // Let the air scale with the screen: roomy on tall phones, never sparse on an SE.
   const air = Math.round(Math.min(Math.max(height * 0.07, spacing.xl), spacing.xxxl * 1.5));
+  // Sit the block a touch below centre, nearer the composer it leads into.
+  const settle = Math.round(height * 0.06);
 
   return (
-    <View style={[styles.landing, { gap: air }]}>
+    <View style={[styles.landing, { gap: air, paddingTop: settle }]}>
       <View style={styles.landingHero}>
-        <Text style={styles.landingGreeting} accessibilityRole="header">{greeting}</Text>
-        <Text style={styles.landingQuestion}>What are we putting together today?</Text>
+        <Animated.Text entering={landingEnter(0)} style={styles.landingDateline}>{landingDateline()}</Animated.Text>
+        <Animated.Text entering={landingEnter(70)} style={styles.landingGreeting} accessibilityRole="header">{greeting}</Animated.Text>
+        <Animated.View entering={landingEnter(140)} style={styles.landingRule} />
+        <Animated.Text entering={landingEnter(210)} style={styles.landingQuestion}>What are we putting together today?</Animated.Text>
       </View>
 
       {/* One row that scrolls edge to edge rather than wrapping into a stagger. */}
-      <View style={styles.landingIdeasRow}>
+      <Animated.View entering={landingEnter(300)} style={styles.landingIdeasRow}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.landingIdeas}>
         {ideas.map((idea) => (
-          <TouchableOpacity
+          <Pressable
             key={idea.workflowKind}
-            style={styles.landingIdea}
-            activeOpacity={0.55}
+            style={({ pressed }) => [styles.landingIdea, pressed && styles.landingIdeaPressed]}
             onPress={() => { Haptics.selectionAsync().catch(() => {}); onWorkflow(idea.workflowKind); }}
             accessibilityRole="button"
             accessibilityLabel={`${idea.title}. ${idea.subtitle}`}
           >
             <Text style={styles.landingIdeaGlyph}>✦</Text>
             <Text style={styles.landingIdeaText}>{idea.title}</Text>
-          </TouchableOpacity>
+          </Pressable>
         ))}
       </ScrollView>
       {/* Chips dissolve into the canvas at the right edge instead of meeting the bezel. */}
@@ -122,7 +126,17 @@ export function EmptyState({
         style={styles.landingIdeasFade}
         pointerEvents="none"
       />
-      </View>
+      </Animated.View>
     </View>
   );
+}
+
+// A slow, staggered rise: each line arrives a beat after the last. Reduce Motion
+// (system or the app's own setting, via ReducedMotionConfig) skips it.
+function landingEnter(delay: number) {
+  return FadeInDown.delay(delay)
+    .duration(520)
+    .easing(Easing.bezier(0.22, 1, 0.36, 1))
+    .withInitialValues({ opacity: 0, transform: [{ translateY: 6 }] })
+    .reduceMotion(ReduceMotion.System);
 }

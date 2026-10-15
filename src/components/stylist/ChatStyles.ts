@@ -857,14 +857,20 @@ export const styles = StyleSheet.create({
   // the composer dock (the list's own padding already clears both).
   landing: { flex: 1, justifyContent: 'center' },
   landingHero: { paddingHorizontal: spacing.md },
+  landingDateline: { ...typography.text.eyebrow, letterSpacing: 1.4, color: colors.inkSubtle, marginBottom: spacing.md },
+  landingRule: { width: 24, height: 1, backgroundColor: colors.inkSubtle, opacity: 0.3, marginTop: spacing.lg },
   landingGreeting: { ...typography.text.editorialHero, fontSize: 38, lineHeight: 41, letterSpacing: -0.5, color: colors.foreground },
-  landingQuestion: { ...typography.text.editorialItalic, fontSize: 20, lineHeight: 28, color: '#666', marginTop: spacing.lg },
+  landingQuestion: { ...typography.text.editorialItalic, fontSize: 20, lineHeight: 28, color: colors.mutedForeground, marginTop: spacing.lg },
   // Bleeds past the list's page margin so chips scroll off the true screen edge.
   landingIdeasRow: { marginHorizontal: -spacing.page },
   landingIdeas: { gap: spacing.sm, paddingLeft: spacing.page + spacing.md, paddingRight: spacing.page + 24 },
   landingIdeasFade: { position: 'absolute', top: 0, bottom: 0, right: 0, width: 48 },
   landingIdea: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(0,0,0,0.08)', backgroundColor: 'transparent' },
-  landingIdeaGlyph: { fontSize: 9, color: colors.inkSubtle },
+  landingIdeaPressed: { backgroundColor: 'rgba(0,0,0,0.035)' },
+  landingIdeaGlyph: { fontSize: 9, color: colors.accentInk },
+  // Barely-there warmth under the empty canvas: ~2% deeper toward the composer.
+  landingCanvas: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
+  headerFlush: { borderBottomWidth: 0 },
   landingIdeaText: { fontSize: 12.5, lineHeight: 17, letterSpacing: 0.2, color: colors.foreground },
   // Item detail sheet
   sheetRoot: {

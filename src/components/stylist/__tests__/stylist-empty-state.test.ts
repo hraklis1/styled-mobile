@@ -1,4 +1,4 @@
-import { buildStylistStarters, buildTodaySubtitle, formatWeatherLead, TODAY_REQUEST } from '../stylist-empty-state';
+import { buildStylistStarters, buildTodaySubtitle, formatWeatherLead, landingDateline, TODAY_REQUEST } from '../stylist-empty-state';
 import type { CurrentWeather } from '../../../hooks/useWeather';
 
 const mildWeather: CurrentWeather = {
@@ -52,5 +52,12 @@ describe('stylist empty-state prompts', () => {
       'trip',
       'wardrobe_audit',
     ]);
+  });
+});
+
+describe('landingDateline', () => {
+  it('names the weekday, day and month without the year', () => {
+    const line = landingDateline(new Date(2026, 9, 15));
+    expect(line).toBe('Thursday 15 October');
   });
 });
