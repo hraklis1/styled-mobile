@@ -162,4 +162,4 @@ grid toggle still works; `ingestion-workspace.test.tsx` updated.
 
 ## Status
 
-- [x] Phase 0 (`groupPiecesByPhoto`, `pieceNumbering`, photo-qualified notes) · [~] Phase 1 (code + tests done; sim check pending) · [~] Phase 2 (code + tests done; sim check pending) · [~] Phase 3 (code + tests done; sim check pending) · [ ] Phase 4 · [ ] Phase 5 · [ ] Phase 6
+- [x] Phase 0 (`groupPiecesByPhoto`, `pieceNumbering`, photo-qualified notes) · [~] Phase 1 (code + tests done; sim check pending) · [~] Phase 2 (code + tests done; sim check pending) · [~] Phase 3 (code + tests done; sim check pending) · [~] Phase 4 (code + tests done; sim check pending; To-check filter not moved) · [ ] Phase 5 · [ ] Phase 6

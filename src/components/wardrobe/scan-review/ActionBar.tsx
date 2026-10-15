@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, TouchableOpacit
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, radii, spacing, stroke, typography } from '../../../theme';
-import { TextLink } from './atoms';
+import { FlagDot, TextLink } from './atoms';
 import { pieceCountLabel } from './types';
 import { GuidedFooter, guidedLabel } from './GuidedFooter';
 import { PrimaryButton } from './PrimaryButton';
@@ -33,13 +33,13 @@ export type PolishRowState = {
   onExample?: () => void;
 };
 
-/** "Add 2 pieces to closet · Polish", or "· Polish 1" when only some will be. */
-export function saveLabel(count: number, polish?: PolishRowState): string {
+/**
+ * "Add 12 pieces to closet": the same words whatever else is decided, so the
+ * button never changes under the thumb. Polish says itself in its own row.
+ */
+export function saveLabel(count: number): string {
   if (count === 0) return 'Choose at least 1 piece';
-  const polishing = polish?.count ?? 0;
-  if (polishing > 0 && polishing < count) return `Add ${pieceCountLabel(count)} · Polish ${polishing}`;
-  const base = count === 1 ? 'Add to closet' : `Add ${pieceCountLabel(count)} to closet`;
-  return polishing > 0 ? `${base} · Polish` : base;
+  return count === 1 ? 'Add to closet' : `Add ${pieceCountLabel(count)} to closet`;
 }
 
 /**
@@ -60,16 +60,10 @@ export function ActionBar({ mode, bottomInset }: { mode: ActionBarMode; bottomIn
       ) : mode.kind === 'save' ? (
         <>
           {mode.polish && mode.count > 0 ? <PolishRow state={mode.polish} /> : null}
+          {mode.flagged > 0 && mode.count > 0 ? <FlagLink count={mode.flagged} onPress={mode.onReviewFlagged} /> : null}
           <WithBatch onBatch={mode.onBatch}>
-            {mode.flagged > 0 && mode.count > 0
-              ? <PrimaryButton label={mode.flagged === 1 ? 'Review 1 flagged piece' : `Review ${mode.flagged} flagged pieces`} onPress={mode.onReviewFlagged} />
-              : <PrimaryButton disabled={mode.count === 0} label={saveLabel(mode.count, mode.polish)} onPress={mode.onSave} />}
+            <PrimaryButton disabled={mode.count === 0} label={saveLabel(mode.count)} onPress={mode.onSave} />
           </WithBatch>
-          {mode.flagged > 0 && mode.count > 0 ? (
-            <View style={styles.secondary}>
-              <TextLink label={mode.count === 1 ? 'Add to closet now' : `Add all ${mode.count} to closet now`} onPress={mode.onSave} />
-            </View>
-          ) : null}
         </>
       ) : mode.kind === 'confirm' ? (
         <GuidedFooter label={guidedLabel({ last: mode.last, lastLabel: 'Done' })} onConfirm={mode.onConfirm} onSkip={mode.onSkip} />
@@ -86,6 +80,21 @@ export function ActionBar({ mode, bottomInset }: { mode: ActionBarMode; bottomIn
 }
 
 /**
+ * Flags, said where the decision is but never in front of it: "1 to check
+ * first" opens the guided walk; the button beside it still saves as is.
+ */
+function FlagLink({ count, onPress }: { count: number; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} hitSlop={8} style={({ pressed }) => [styles.flag, pressed && styles.pressed]}
+      accessibilityRole="button" accessibilityLabel={`${count} ${count === 1 ? 'piece' : 'pieces'} worth checking first`} accessibilityHint="Walks through them one at a time">
+      <FlagDot />
+      <Text style={styles.flagText}>{count === 1 ? '1 to check first' : `${count} to check first`}</Text>
+      <Ionicons name="chevron-forward" size={13} color={colors.mutedForeground} />
+    </Pressable>
+  );
+}
+
+/**
  * Opt-in for polished covers, decided with the save. The polishes run after
  * the pieces land, so the button never waits on a generation. Shared by the
  * closet scan's save bar and the outfit log's, for the pieces it creates.
@@ -97,13 +106,12 @@ export function PolishRow({ state }: { state: PolishRowState }) {
   const next = mixed || !on;
   const short = on && state.balance != null && state.cost > state.balance;
   const price = state.cost > 0 ? `${state.cost} credit${state.cost === 1 ? '' : 's'}` : null;
+  // The balance only speaks when it matters: when it falls short.
   const detail = state.locked
     ? 'Studio-quality covers · Premium'
     : short
       ? `Needs ${state.cost} credits · you have ${state.balance}`
-      : on && price && state.balance != null
-        ? `${price} · ${state.balance} available`
-        : ['Studio-quality covers', price].filter(Boolean).join(' · ');
+      : price ?? 'Studio-quality covers';
   return (
     <View style={styles.polish}>
       <TouchableOpacity
@@ -117,7 +125,7 @@ export function PolishRow({ state }: { state: PolishRowState }) {
         <Ionicons name={state.locked ? 'lock-closed-outline' : 'sparkles-outline'} size={18} color={colors.foreground} />
         <View style={styles.flex}>
           <View style={styles.polishTitleLine}>
-            <Text style={styles.polishTitle}>{mixed ? `Polish ${state.count} of ${state.total}` : 'Polish photos'}</Text>
+            <Text style={styles.polishTitle}>{mixed ? `Polish ${state.count} of ${state.total}` : on ? `Polish ${state.count === 1 ? '1 photo' : `${state.count} photos`}` : 'Polish photos'}</Text>
             {state.onExample ? (
               <Pressable onPress={state.onExample} hitSlop={10} accessibilityRole="button" accessibilityLabel="See an example of a polished photo">
                 <Text style={styles.polishExample}>See example</Text>
@@ -160,7 +168,9 @@ const styles = StyleSheet.create({
   bar: actionBarStyle,
   batch: { height: 56, flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.lg, borderRadius: radii.xl, borderCurve: 'continuous', alignItems: 'center', justifyContent: 'center', borderWidth: stroke.fine, borderColor: colors.foreground },
   batchText: { ...typography.text.label, color: colors.foreground },
-  secondary: { alignItems: 'center', minHeight: 36, justifyContent: 'center' },
+  flag: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: 32, alignSelf: 'flex-start' },
+  flagText: { ...typography.text.bodySmall, color: colors.foreground },
+  pressed: { opacity: 0.6 },
   confirmRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   flex: { flex: 1 },
   polish: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 52, paddingVertical: spacing.xs },

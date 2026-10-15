@@ -24,16 +24,17 @@ it('offers polish off by default with the plain save label', () => {
   expect(tree.root.findByType(Switch).props.value).toBe(false);
 });
 
-it('prices the polishes against the balance and marks the save', () => {
+it('prices the polishes, keeping the save label unchanged', () => {
   const { texts } = render({ count: 5, cost: 20 });
-  expect(texts).toContain('20 credits · 40 available');
-  expect(texts).toContain('Add 5 pieces to closet · Polish');
+  expect(texts).toContain('20 credits');
+  expect(texts).toContain('Polish 5 photos');
+  expect(texts).toContain('Add 5 pieces to closet');
 });
 
 it('names the partial count on the button and shows a shortfall', () => {
   const { texts } = render({ count: 3, cost: 12, balance: 5 });
   expect(texts).toContain('Polish 3 of 5');
-  expect(texts).toContain('Add 5 pieces · Polish 3');
+  expect(texts).toContain('Add 5 pieces to closet');
   expect(texts).toContain('Needs 12 credits · you have 5');
 });
 
@@ -56,4 +57,19 @@ it('reads as Premium when locked, and the switch still asks', () => {
   expect(texts).toContain('Studio-quality covers · Premium');
   act(() => tree.root.findByType(Switch).props.onValueChange(true));
   expect(state.onToggle).toHaveBeenCalledWith(true);
+});
+
+it('keeps saving as the primary action when pieces are flagged, with the walk one tap away', () => {
+  const onSave = jest.fn();
+  const onReviewFlagged = jest.fn();
+  let tree!: ReactTestRenderer;
+  act(() => {
+    tree = create(<ActionBar bottomInset={0} mode={{ kind: 'save', count: 12, flagged: 2, onSave, onReviewFlagged }} />);
+  });
+  const texts = tree.root.findAllByType(Text).map((t) => [t.props.children].flat().join(''));
+  expect(texts).toContain('Add 12 pieces to closet');
+  expect(texts).toContain('2 to check first');
+  act(() => tree.root.findByProps({ accessibilityHint: 'Walks through them one at a time' }).props.onPress());
+  expect(onReviewFlagged).toHaveBeenCalled();
+  expect(onSave).not.toHaveBeenCalled();
 });
