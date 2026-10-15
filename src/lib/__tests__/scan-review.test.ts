@@ -181,3 +181,32 @@ describe('piecesMissingBrand', () => {
     expect(piecesMissingBrand(pieces, 'b').map(p => p.id)).toEqual(['c']);
   });
 });
+
+describe('groupPiecesByPhoto', () => {
+  const { groupPiecesByPhoto, pieceNumbering } = require('../scan-review');
+  const pieces = [
+    { id: 'a', cropSource: 'p1' },
+    { id: 'b', cropSource: 'p2' },
+    { id: 'c', cropSource: null },
+    { id: 'd', cropSource: 'p1' },
+    { id: 'e', cropSource: 'p2' },
+  ];
+
+  it('groups in first-appearance order with sourceless pieces last', () => {
+    const groups = groupPiecesByPhoto(pieces);
+    expect(groups.map((g: any) => [g.source, g.photoIndex, g.pieces.map((p: any) => p.id)])).toEqual([
+      ['p1', 1, ['a', 'd']],
+      ['p2', 2, ['b', 'e']],
+      [null, 3, ['c']],
+    ]);
+  });
+
+  it('numbers within each photo and qualifies labels only across photos', () => {
+    const { numbers, labels } = pieceNumbering(pieces);
+    expect(numbers.get('d')).toBe(2);
+    expect(numbers.get('e')).toBe(2);
+    expect(labels.get('e')).toBe('2·2');
+    const single = pieceNumbering([{ id: 'x', cropSource: 'p' }, { id: 'y', cropSource: 'p' }]);
+    expect(single.labels.get('y')).toBe('2');
+  });
+});

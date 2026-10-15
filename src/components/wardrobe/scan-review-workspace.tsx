@@ -31,6 +31,7 @@ import {
   resolvedActivePieceId,
   reviewSummary,
   sheetGuidance,
+  pieceNumbering,
   type PieceReviewState,
 } from '../../lib/scan-review';
 import { colors, ingestion, spacing, stroke, typography } from '../../theme';
@@ -224,8 +225,9 @@ export function ScanReviewWorkspace({
   const reviewPhoto = (preExtract || review) && visiblePieces.length > 0 && visiblePieces.every(piece => piece.cropSource === visiblePieces[0].cropSource)
     ? visiblePieces[0].cropSource
     : null;
-  // Numbered once, by detection order, so piece 5 is piece 5 before and after extraction.
-  const numbers = useMemo(() => new Map(pieces.map((piece, index) => [piece.id, index + 1])), [pieces]);
+  // Numbered once, by detection order within each photo, so piece 5 is piece 5
+  // before and after extraction. A batch's references carry the photo ("2·3").
+  const { numbers, labels } = useMemo(() => pieceNumbering(pieces), [pieces]);
   // Strong overlaps start unselected; they wait in a collapsed group instead of crowding the list.
   const duplicateIds = useMemo(
     () => new Set(preExtract ? visiblePieces.filter(piece => piece.overlap?.strong).map(piece => piece.id) : []),
@@ -233,13 +235,13 @@ export function ScanReviewWorkspace({
   );
   const noteFor = useCallback((piece: ScanReviewPiece): string | null => {
     if (preExtract) {
-      const of = piece.overlap ? numbers.get(piece.overlap.of) : undefined;
+      const of = piece.overlap ? labels.get(piece.overlap.of) : undefined;
       return of === undefined ? null : piece.overlap!.strong ? `Looks like #${of}` : `Possibly same as #${of}`;
     }
     if (piece.extraction === 'failed') return 'Couldn’t read details';
     if (states[piece.id] !== 'check') return null;
     return piece.possibleDuplicate ? 'Possible repeat' : 'Worth a look';
-  }, [numbers, preExtract, states]);
+  }, [labels, preExtract, states]);
   const effectiveView: View_ = view;
   const sheetPieces = filter === 'check' && review
     ? visiblePieces.filter((piece) => states[piece.id] === 'check')

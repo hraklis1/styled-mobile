@@ -297,3 +297,42 @@ export function readyBlurb(count: number, check: number): string {
   if (check === 0) return `I read the details on ${pieces}. Tap one to fine-tune, or add them as they are.`;
   return `I read the details on ${pieces}. ${check === 1 ? '1 is' : `${check} are`} worth a quick look.`;
 }
+
+export type PhotoGroup<T> = { source: string | null; photoIndex: number; pieces: T[] };
+
+/**
+ * A batch's pieces, one group per source photo, in the order photos first
+ * appear. Pieces without a source photo share one trailing group.
+ */
+export function groupPiecesByPhoto<T extends { cropSource: string | null }>(pieces: readonly T[]): PhotoGroup<T>[] {
+  const bySource = new Map<string | null, T[]>();
+  for (const piece of pieces) {
+    const list = bySource.get(piece.cropSource);
+    if (list) list.push(piece);
+    else bySource.set(piece.cropSource, [piece]);
+  }
+  const sources = [...bySource.keys()].sort((a, b) => (a === null ? 1 : b === null ? -1 : 0));
+  return sources.map((source, index) => ({ source, photoIndex: index + 1, pieces: bySource.get(source)! }));
+}
+
+/**
+ * Marker numbers, fixed at detection. Numbered within each photo, so a
+ * batch's markers read like a single scan's; `label` qualifies the number
+ * with its photo ("2·3") only when the scan spans more than one photo.
+ */
+export function pieceNumbering<T extends { id: string; cropSource: string | null }>(pieces: readonly T[]): {
+  numbers: Map<string, number>;
+  labels: Map<string, string>;
+} {
+  const groups = groupPiecesByPhoto(pieces);
+  const multi = groups.length > 1;
+  const numbers = new Map<string, number>();
+  const labels = new Map<string, string>();
+  for (const group of groups) {
+    group.pieces.forEach((piece, index) => {
+      numbers.set(piece.id, index + 1);
+      labels.set(piece.id, multi ? `${group.photoIndex}·${index + 1}` : `${index + 1}`);
+    });
+  }
+  return { numbers, labels };
+}

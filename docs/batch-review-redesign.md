@@ -146,13 +146,20 @@ grid toggle still works; `ingestion-workspace.test.tsx` updated.
 - Remove dead paths: the tip banner, the batch use of the `extracting` hero, and the "Add all now" link.
 - Update the memory notes and this doc's status.
 
+## Decisions (Oct 15 2026)
+
+- Extraction starts only after **Continue** (no auto-extract while choosing). Phase 3 keeps the
+  single surface; it just doesn't spend credits until the user commits.
+- Numbering is **per photo**; cross-photo references read "2·3".
+- The footer is **unified**: single scan gets the Phase 4 footer too.
+
 ## Risks / open questions
 
-1. **Auto-extract cost** (Phase 3): confirm the policy before building.
+1. ~~Auto-extract cost~~: resolved, extract after Continue.
 2. Per-photo vs global numbering: per-photo is recommended (smaller numbers, matches single scan).
 3. The shared footer change affects single scan; verify the single flow doesn't regress.
 4. The Log Wear flow shares components (`LogOutfitSheet`, `GuidedFooter`); keep its labels intact.
 
 ## Status
 
-- [ ] Phase 0 · [ ] Phase 1 · [ ] Phase 2 · [ ] Phase 3 · [ ] Phase 4 · [ ] Phase 5 · [ ] Phase 6
+- [x] Phase 0 (`groupPiecesByPhoto`, `pieceNumbering`, photo-qualified notes) · [ ] Phase 1 · [ ] Phase 2 · [ ] Phase 3 · [ ] Phase 4 · [ ] Phase 5 · [ ] Phase 6
