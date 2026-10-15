@@ -875,7 +875,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         headingStyle="chapter"
         dividerPlacement="none"
         kicker="01 · Today"
-        style={{ paddingBottom: 0 }}
+        style={{ paddingTop: spacing.lg, paddingBottom: 0 }}
         title={dailyLookPresentation.kind === 'priority' ? 'Today’s Priority' : 'Today’s Look'}
         trailing={hasHomeCollage ? (
           <PressableScale onPress={() => generatedCandidate ? openDailyLookSheet('look') : featuredOutfit && navigation.navigate('Closet', {
