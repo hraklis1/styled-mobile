@@ -15,23 +15,16 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUpdateProfile } from '../../hooks/useProfile';
-import type {
-  LocationOverride,
-  StylingLocationContext,
-} from '../../hooks/useActiveStylingLocation';
+import type { StylingLocationContext } from '../../hooks/useActiveStylingLocation';
 import { colors, radii, spacing, typography } from '../../theme';
 import { LocationAutocompleteInput } from '../primitives/LocationAutocompleteInput';
 
 const WINDOW_HEIGHT = Dimensions.get('window').height;
 
-type OverrideMode = LocationOverride['mode'];
-
 type Props = {
   visible: boolean;
   activeLocation: StylingLocationContext;
   homeLocation?: string;
-  override: LocationOverride | null;
-  onSelectOverride: (override: LocationOverride) => void;
   permissionStatus: 'granted' | 'denied' | 'undetermined';
   permissionCanAskAgain: boolean;
   onRequestCurrent: () => Promise<boolean>;
@@ -46,8 +39,6 @@ export function StylingLocationSheet({
   visible,
   activeLocation,
   homeLocation,
-  override,
-  onSelectOverride,
   permissionStatus,
   permissionCanAskAgain,
   onRequestCurrent,
@@ -62,13 +53,12 @@ export function StylingLocationSheet({
   const [savedHome, setSavedHome] = useState(homeLocation?.trim() ?? '');
   const [home, setHome] = useState(homeLocation ?? '');
   const [editingHome, setEditingHome] = useState(false);
-  const [editingDestination, setEditingDestination] = useState(false);
-  const [destinationDraft, setDestinationDraft] = useState('');
   const [locating, setLocating] = useState(false);
   const [locationFeedback, setLocationFeedback] = useState<LocationFeedback>(null);
 
-  const selected: OverrideMode = override?.mode ?? 'current';
-  const isEditing = editingHome || editingDestination;
+  // Styling follows where you are; Home only steps in when that's unavailable.
+  const usingHome = activeLocation.source === 'home';
+  const isEditing = editingHome;
 
   useEffect(() => {
     if (visible) bottomSheetRef.current?.present();
@@ -93,8 +83,6 @@ export function StylingLocationSheet({
 
   const resetEditing = useCallback(() => {
     setEditingHome(false);
-    setEditingDestination(false);
-    setDestinationDraft('');
   }, []);
 
   const handleDismiss = useCallback(() => {
@@ -141,39 +129,10 @@ export function StylingLocationSheet({
 
   const handleSelectCurrent = useCallback(() => {
     resetEditing();
-    onSelectOverride({ mode: 'current' });
     void refreshCurrent();
-  }, [onSelectOverride, refreshCurrent, resetEditing]);
-
-  const handleSelectHome = useCallback(() => {
-    setEditingDestination(false);
-    setDestinationDraft('');
-    setLocationFeedback(null);
-    if (!savedHome) {
-      // Nothing to select yet — drop the user straight into the editor.
-      setHome('');
-      setEditingHome(true);
-      return;
-    }
-    onSelectOverride({ mode: 'home' });
-  }, [onSelectOverride, savedHome]);
-
-  const handleSelectDestination = useCallback(() => {
-    setEditingHome(false);
-    setLocationFeedback(null);
-    setDestinationDraft(override?.mode === 'destination' ? override.label : '');
-    setEditingDestination(true);
-  }, [override]);
-
-  const handleDestinationChosen = useCallback((label: string) => {
-    const trimmed = label.trim();
-    if (!trimmed) return;
-    onSelectOverride({ mode: 'destination', label: trimmed });
-    resetEditing();
-  }, [onSelectOverride, resetEditing]);
+  }, [refreshCurrent, resetEditing]);
 
   const startEditingHome = useCallback(() => {
-    setEditingDestination(false);
     setHome(savedHome);
     setEditingHome(true);
   }, [savedHome]);
@@ -195,12 +154,10 @@ export function StylingLocationSheet({
           setSavedHome(trimmedHome);
           setHome(trimmedHome);
           setEditingHome(false);
-          // Selecting Home only makes sense once a city is saved.
-          if (trimmedHome) onSelectOverride({ mode: 'home' });
         },
       },
     );
-  }, [homeChanged, onSelectOverride, trimmedHome, updateProfile]);
+  }, [homeChanged, trimmedHome, updateProfile]);
 
   const renderBackdrop = useCallback(
     (props: any) => (
@@ -223,10 +180,6 @@ export function StylingLocationSheet({
       ? 'Enable to use your live location'
       : 'Turn on location access in Settings';
 
-  const destinationSubtitle = override?.mode === 'destination'
-    ? override.label
-    : 'Style for a trip or event';
-
   return (
     <BottomSheetModal
       ref={bottomSheetRef}
@@ -245,8 +198,8 @@ export function StylingLocationSheet({
       <BottomSheetView style={[styles.content, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
         <View style={styles.header}>
           <View style={styles.headerCopy}>
-            <Text style={styles.title}>Style me for</Text>
-            <Text style={styles.subtitle}>Used for weather-aware outfit suggestions.</Text>
+            <Text style={styles.title}>Your location</Text>
+            <Text style={styles.subtitle}>Outfits follow the weather where you are.</Text>
           </View>
           <TouchableOpacity
             style={styles.closeButton}
@@ -262,14 +215,14 @@ export function StylingLocationSheet({
           {/* ── Current location ─────────────────────────────────── */}
           <OptionRow
             icon="navigate-outline"
-            title="Current location"
+            title="Where you are"
             subtitle={currentSubtitle}
-            selected={selected === 'current'}
+            selected={!usingHome}
             loading={locating}
             onPress={handleSelectCurrent}
-            accessibilityLabel="Style for my current location"
+            accessibilityLabel="Update my current location"
           />
-          {selected === 'current' && locationFeedback && (
+          {locationFeedback && (
             <View style={styles.feedbackRow}>
               <Ionicons
                 name={locationFeedback === 'success' ? 'checkmark-circle-outline' : 'alert-circle-outline'}
@@ -288,10 +241,10 @@ export function StylingLocationSheet({
           <OptionRow
             icon="home-outline"
             title="Home city"
-            subtitle={savedHome || 'Set your home city'}
-            selected={selected === 'home'}
-            onPress={handleSelectHome}
-            accessibilityLabel="Style for my home city"
+            subtitle={savedHome ? `${savedHome} · used when location is off` : 'Add a backup for when location is off'}
+            selected={usingHome}
+            onPress={startEditingHome}
+            accessibilityLabel="Edit my home city"
             trailing={
               savedHome && !editingHome ? (
                 <TouchableOpacity
@@ -337,36 +290,6 @@ export function StylingLocationSheet({
                   )}
                 </TouchableOpacity>
               </View>
-            </View>
-          )}
-
-          {/* ── Destination ──────────────────────────────────────── */}
-          <OptionRow
-            icon="airplane-outline"
-            title="Destination"
-            subtitle={destinationSubtitle}
-            selected={selected === 'destination'}
-            onPress={handleSelectDestination}
-            accessibilityLabel="Style for a destination"
-          />
-          {editingDestination && (
-            <View style={styles.editor}>
-              <LocationAutocompleteInput
-                value={destinationDraft}
-                onChangeText={setDestinationDraft}
-                onSelect={handleDestinationChosen}
-                placeholder="Search a city you're heading to"
-                autoFocus
-                showUseMyLocation={false}
-              />
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={resetEditing}
-                accessibilityRole="button"
-                accessibilityLabel="Cancel destination"
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -416,10 +339,9 @@ function OptionRow({
       {loading ? (
         <ActivityIndicator size="small" color={colors.primary} />
       ) : selected ? (
+        // Marks the place styling uses right now; these aren't choices.
         <Ionicons name="checkmark-circle" size={22} color={colors.primary} />
-      ) : (
-        <View style={styles.radioOutline} />
-      )}
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -451,9 +373,6 @@ const styles = StyleSheet.create({
   optionCopy: { flex: 1, gap: 2 },
   optionTitle: { fontSize: typography.text.body.fontSize, color: colors.foreground, fontWeight: typography.weight.semibold },
   optionSubtitle: { fontSize: typography.text.caption.fontSize, lineHeight: 17, color: colors.mutedForeground },
-  radioOutline: {
-    width: 22, height: 22, borderRadius: radii.full, borderWidth: 2, borderColor: colors.border,
-  },
   feedbackRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
     paddingHorizontal: spacing.md,

@@ -794,6 +794,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.surfaceElevated,
   },
   locationChoiceDisabled: { opacity: 0.45 },
+  locationChoiceActive: { borderColor: colors.primary },
   locationChoiceCopy: { flex: 1, gap: 2 },
   locationChoiceTitle: {
     ...typography.text.body,
@@ -808,6 +809,8 @@ export const styles = StyleSheet.create({
     gap: spacing.sm,
     padding: spacing.md,
     borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
     backgroundColor: colors.surfaceElevated,
     ...shadows.sm,
   },

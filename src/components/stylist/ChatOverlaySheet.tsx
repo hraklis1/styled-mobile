@@ -162,17 +162,30 @@ export function ConversationLocationPicker({
   onClose: () => void;
 }) {
   const [destination, setDestination] = useState('');
+  const isElsewhere = activeLocation.source === 'conversation';
+  const hereLabel = everydayLocation.label?.trim();
+  // Home is only worth offering when it is somewhere other than where you are.
+  const homeIsElsewhere = Boolean(
+    homeLocation?.trim()
+    && everydayLocation.source === 'current'
+    && hereLabel
+    && homeLocation.trim().toLowerCase() !== hereLabel.toLowerCase(),
+  );
 
   useEffect(() => {
-    if (visible) setDestination(activeLocation.source === 'conversation' ? activeLocation.label ?? '' : '');
-  }, [activeLocation, visible]);
+    if (visible) setDestination('');
+  }, [visible]);
 
-  const chooseCurrent = async () => {
-    if (permissionStatus !== 'granted') {
+  const chooseHere = async () => {
+    if (!hereLabel && permissionStatus !== 'granted') {
       const status = await onRequestCurrent();
       if (status !== 'granted') return;
     }
     onSelect(null);
+  };
+
+  const chooseElsewhere = (label: string) => {
+    if (label.trim()) onSelect(conversationLocation(label));
   };
 
   return (
@@ -181,51 +194,54 @@ export function ConversationLocationPicker({
         <View style={styles.locationPickerHeader}>
           <View style={styles.locationPickerHeaderCopy}>
             <Text style={styles.locationPickerTitle}>Where are we dressing for?</Text>
-            <Text style={styles.locationPickerSubtitle}>This choice lasts only for this conversation.</Text>
           </View>
           <TouchableOpacity style={styles.headerBtn} onPress={onClose} accessibilityLabel="Close location picker">
             <Ionicons name="close" size={20} color={colors.foreground} />
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.locationChoice} onPress={chooseCurrent}>
+        <TouchableOpacity
+          style={[styles.locationChoice, !isElsewhere && styles.locationChoiceActive]}
+          onPress={chooseHere}
+          accessibilityState={{ selected: !isElsewhere }}
+        >
           <Ionicons name="navigate-outline" size={18} color={colors.primary} />
           <View style={styles.locationChoiceCopy}>
-            <Text style={styles.locationChoiceTitle}>Current location</Text>
+            <Text style={styles.locationChoiceTitle}>{isElsewhere && hereLabel ? `Back to ${hereLabel.split(',')[0]}` : 'Where you are'}</Text>
             <Text style={styles.locationChoiceHint}>
-              {everydayLocation.source === 'current' ? everydayLocation.label : permissionStatus === 'granted' ? 'Refresh current location' : 'Enable current location'}
+              {hereLabel || (permissionStatus === 'granted' ? 'Finding you…' : 'Turn on location')}
             </Text>
           </View>
+          {!isElsewhere ? <Ionicons name="checkmark-circle" size={20} color={colors.primary} /> : null}
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.locationChoice, !homeLocation && styles.locationChoiceDisabled]}
-          onPress={() => homeLocation && onSelect({ source: 'home', label: homeLocation, isFallback: false })}
-          disabled={!homeLocation}
-        >
-          <Ionicons name="home-outline" size={18} color={colors.primary} />
-          <View style={styles.locationChoiceCopy}>
-            <Text style={styles.locationChoiceTitle}>Home</Text>
-            <Text style={styles.locationChoiceHint}>{homeLocation || 'Add a Home city in Profile first'}</Text>
-          </View>
-        </TouchableOpacity>
+        {homeIsElsewhere ? (
+          <TouchableOpacity style={styles.locationChoice} onPress={() => chooseElsewhere(homeLocation!)}>
+            <Ionicons name="home-outline" size={18} color={colors.primary} />
+            <View style={styles.locationChoiceCopy}>
+              <Text style={styles.locationChoiceTitle}>Home</Text>
+              <Text style={styles.locationChoiceHint}>{homeLocation}</Text>
+            </View>
+          </TouchableOpacity>
+        ) : null}
 
-        <View style={styles.destinationCard}>
-          <Text style={styles.locationChoiceTitle}>Choose destination</Text>
-          <Text style={styles.locationChoiceHint}>Useful for trips, packing, or plans somewhere else.</Text>
+        <View style={[styles.destinationCard, isElsewhere && styles.locationChoiceActive]}>
+          <Text style={styles.locationChoiceTitle}>
+            {isElsewhere ? activeLocation.label : 'Somewhere else'}
+          </Text>
+          <Text style={styles.locationChoiceHint}>Just for this chat. You can also mention a trip in your message.</Text>
           <LocationAutocompleteInput
             value={destination}
             onChangeText={setDestination}
-            onSelect={setDestination}
-            placeholder="Search a city or region"
+            onSelect={chooseElsewhere}
+            placeholder={isElsewhere ? 'Search another city' : 'Search a city'}
+            showUseMyLocation={false}
           />
-          <TouchableOpacity
-            style={[styles.destinationButton, !destination.trim() && styles.locationChoiceDisabled]}
-            onPress={() => destination.trim() && onSelect(conversationLocation(destination))}
-            disabled={!destination.trim()}
-          >
-            <Text style={styles.destinationButtonText}>Use destination</Text>
-          </TouchableOpacity>
+          {destination.trim() ? (
+            <TouchableOpacity style={styles.destinationButton} onPress={() => chooseElsewhere(destination)}>
+              <Text style={styles.destinationButtonText}>Style for {destination.trim().split(',')[0]}</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </KeyboardAvoidingView>
     </Modal>

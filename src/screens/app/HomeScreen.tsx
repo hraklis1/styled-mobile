@@ -1175,8 +1175,6 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           visible
           activeLocation={stylingLocation.activeLocation}
           homeLocation={stylingLocation.homeLocation}
-          override={stylingLocation.override}
-          onSelectOverride={stylingLocation.setLocationOverride}
           permissionStatus={stylingLocation.permissionStatus}
           permissionCanAskAgain={stylingLocation.permissionCanAskAgain}
           onRequestCurrent={stylingLocation.requestCurrentLocation}
