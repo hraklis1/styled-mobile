@@ -14,7 +14,7 @@ import * as onDeviceSpeech from '../../lib/speech';
 import { api } from '../../lib/api';
 import { track } from '../../lib/analytics';
 import { prepareStylistPhoto } from '../../lib/prepareStylistPhoto';
-import { itemCoverPresentation, itemImageContentFit, itemImageUri } from '../../lib/itemImage';
+import { itemImageContentFit, itemImageUri } from '../../lib/itemImage';
 import { useStylingWeatherToday } from '../../hooks/useWeather';
 import { useItems } from '../../hooks/useItems';
 import { useProfile } from '../../hooks/useProfile';
@@ -43,6 +43,8 @@ import { BUDGET_OPTIONS, OCCASION_OPTIONS, STYLE_OPTIONS } from '../../lib/profi
 import type { Item } from '../../types/item';
 import { ConversationDrawer } from './ChatConversationDrawer';
 import { EmptyState, GuideContextCard, GuideEmptyState, guidePlaceholder } from './ChatEmptyStates';
+import { EditorialIcon } from '../primitives/EditorialIcon';
+import { weatherDescriptor } from './stylist-empty-state';
 import { MessageBubble } from './ChatMessageBubble';
 import { ACTIVE_THREAD_KEY, ChatMessage, EventContext, ComposerAttachment, Conversation, LEGACY_SESSION_KEY, MissingEssential, SendOptions, ServerMessage, detectOccasionHint, guideQuestionMode, isProseMode, isRichAssistantMessage, makeId, mapServerMessages, normalizeChatMessage, responseExtras, threadKey, useContextualChips } from './ChatModel';
 import { ConversationLocationPicker, StylistOverlaySheet } from './ChatOverlaySheet';
@@ -932,14 +934,6 @@ export function StylistChatView({
   // ── Render ─────────────────────────────────────────────────────────────────
 
   const isEmpty = messages.length === 0 && !isLoading && !errorMessage;
-  // The most-worn top, bottom and shoes: the user's own staples. Catalog-style
-  // covers first, so a selfie in the piece doesn't sit in a still-life strip.
-  const emptyPreviewItems = useMemo(() => (['top', 'bottom', 'shoes'] as const)
-    .map((category) => allItems
-      .filter((item) => item.category === category && itemCoverPresentation(item).uri)
-      .sort((a, b) => Number(itemCoverPresentation(b).isCatalogStyle) - Number(itemCoverPresentation(a).isCatalogStyle)
-        || (b.wearCount ?? 0) - (a.wearCount ?? 0))[0])
-    .filter((item): item is Item => !!item), [allItems]);
   // Recomputed per render rather than per minute: a thread only crosses midnight
   // while open in the rarest case, and the transcript rerenders on every turn.
   const dividers = useMemo(() => dayDividers(messages), [messages]);
@@ -992,6 +986,12 @@ export function StylistChatView({
           accessibilityLabel={`Your stylist. Styling location: ${activeLocation.label || 'not set'}`}
           accessibilityHint="Changes the styling location"
         >
+          {isEmpty && !entryContext ? (
+            // The landing keeps the masthead to one quiet metadata line.
+            <Text style={styles.headerMetaQuiet} numberOfLines={1}>
+              {[activeLocation.label?.split(',')[0] || 'Set location', weather.data?.current ? formatTemp(weather.data.current, tempUnit) : null, weather.data?.current ? weatherDescriptor(weather.data.current) : null].filter(Boolean).join(' · ')}
+            </Text>
+          ) : <>
           <Text style={styles.headerTitleCompact} numberOfLines={1}>Your stylist</Text>
           <View style={styles.headerCompactMeta}>
             <Text style={styles.headerSubtitle} numberOfLines={1}>{activeLocation.label || 'Set location'}</Text>
@@ -999,6 +999,7 @@ export function StylistChatView({
               <Text style={styles.headerWeather}>{` · ${formatTemp(weather.data.current, tempUnit)}`}</Text>
             ) : null}
           </View>
+          </>}
         </TouchableOpacity>
         <View style={styles.headerActions}>
           <TouchableOpacity
@@ -1006,14 +1007,14 @@ export function StylistChatView({
             onPress={openDrawer}
             accessibilityLabel="Conversation history"
           >
-            <Ionicons name="time-outline" size={21} color={colors.foreground} />
+            <EditorialIcon name="history" size={21} color={colors.foreground} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.headerBtn}
             onPress={confirmNewConversation}
             accessibilityLabel="New styling session"
           >
-            <Ionicons name="create-outline" size={21} color={colors.foreground} />
+            <EditorialIcon name="compose" size={21} color={colors.foreground} />
           </TouchableOpacity>
           {onClose && !embedded ? (
             <TouchableOpacity style={styles.doneBtn} onPress={onClose} accessibilityLabel="Done with stylist">
@@ -1084,12 +1085,8 @@ export function StylistChatView({
           <GuideEmptyState context={entryContext} onPrompt={stageSuggestion} />
         ) : isEmpty ? (
           <EmptyState
-            weather={weather.data?.current}
-            tempUnit={tempUnit}
             displayName={profile?.displayName}
             wardrobeCount={allItems.length}
-            previewItems={emptyPreviewItems}
-            onPrompt={stageSuggestion}
             onWorkflow={openStarterWorkflow}
           />
         ) : (

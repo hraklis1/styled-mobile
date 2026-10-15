@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { useWindowDimensions, ActivityIndicator, Image, ScrollView, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import Animated, {
   FadeIn,
   FadeOut,
@@ -13,6 +14,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import * as Haptics from '../../../lib/haptics';
+import { EditorialIcon } from '../../primitives/EditorialIcon';
 import { DictationLevelBars } from './DictationLevelBars';
 import { useDictation } from './useDictation';
 import { imageColors, colors, radii, spacing, typography } from '../../../theme';
@@ -67,7 +69,7 @@ export function StylistComposer({
   onRemoveAttachment,
   onRemoveItem, onRemovePhoto,
   onOpenAttachmentSheet,
-  placeholder = 'What are you dressing for?',
+  placeholder = 'Ask, or describe an occasion…',
   inputRef,
 }: Props) {
   const dictation = useDictation({ onText: onDictatedText, vocabulary });
@@ -118,24 +120,25 @@ export function StylistComposer({
         accessibilityRole="button"
         accessibilityLabel={isLoading ? 'Stop generating' : 'Send message'}
       >
-        <Ionicons name={isLoading ? 'stop' : 'arrow-up'} size={isLoading ? 15 : 20} color={colors.white} />
+        <Ionicons name={isLoading ? 'stop' : 'arrow-up'} size={isLoading ? 13 : 17} color={colors.white} />
       </Pressable>
     </Animated.View>
   ) : null;
   const micButton = (
     <Pressable style={pressStyle} onPress={() => { onStartDictation?.(); void dictation.start(value); }} accessibilityRole="button" accessibilityLabel="Dictate a message">
-      <Ionicons name="mic-outline" size={21} color={colors.inkSubtle} />
+      <EditorialIcon name="mic" size={19} color={colors.inkSubtle} />
     </Pressable>
   );
   const addButton = (
     <Pressable style={pressStyle} onPress={onOpenAttachmentSheet} accessibilityRole="button" accessibilityLabel="Add a photo or wardrobe piece">
-      <Ionicons name="add" size={22} color={colors.inkSubtle} />
+      <EditorialIcon name="image" size={19} color={colors.inkSubtle} />
     </Pressable>
   );
 
   return (
     <View style={styles.inputBar}>
       <Animated.View style={[styles.composer, cardAnimatedStyle]}>
+        <BlurView intensity={30} tint="light" style={StyleSheet.absoluteFill} pointerEvents="none" />
         {attachment?.type === 'items' ? (
           <View style={{ padding: spacing.sm, gap: spacing.sm }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
@@ -211,7 +214,6 @@ export function StylistComposer({
           </ScrollView>
         ) : null}
         <View style={compact ? styles.compactRow : undefined}>
-        {compact ? addButton : null}
         <TextInput
           ref={inputRef}
           style={[styles.textInput, compact && styles.textInputCompact, isDictating && { display: 'none' }, { height: Math.min(Math.max(MIN_INPUT_HEIGHT, contentHeight), MAX_INPUT_HEIGHT * fontScale), maxHeight: MAX_INPUT_HEIGHT * fontScale }]}
@@ -229,7 +231,7 @@ export function StylistComposer({
           returnKeyType="default"
           editable={!isDictating}
         />
-        {compact ? <>{micButton}{sendButton}</> : null}
+        {compact ? <>{addButton}{micButton}{sendButton}</> : null}
         </View>
         {compact ? null : <View style={styles.composerRow}>
           {addButton}
@@ -283,7 +285,9 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xs,
   },
   composer: {
-    minHeight: 52, backgroundColor: colors.surfaceElevated, borderRadius: 24, borderCurve: 'continuous', boxShadow: '0 2px 10px rgba(36,36,34,0.04)', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.controlOutline, padding: spacing.xs,
+    // A whisper-light frosted pill: translucent fill over its own blur, a hairline
+    // edge, no shadow. The dock behind it blurs the thread as well.
+    minHeight: 48, backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: 24, borderCurve: 'continuous', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(0,0,0,0.08)', paddingVertical: 2, paddingHorizontal: spacing.xs,
   },
   composerRow: {
     flexDirection: 'row',
@@ -350,13 +354,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
-    fontSize: 17,
-    lineHeight: 24,
+    fontSize: 16,
+    lineHeight: 22,
+    letterSpacing: 0.1,
     color: colors.foreground,
   },
   sendBtn: {
-    width: 44,
-    height: 44,
+    width: 32,
+    height: 32,
+    marginHorizontal: 6,
     borderRadius: radii.full,
     backgroundColor: colors.primary,
     alignItems: 'center',
@@ -364,7 +370,7 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.65 },
   compactRow: { flexDirection: 'row', alignItems: 'center' },
-  textInputCompact: { flex: 1, paddingHorizontal: spacing.xs, paddingTop: 10, paddingBottom: 10 },
+  textInputCompact: { flex: 1, paddingHorizontal: spacing.md, paddingTop: 10, paddingBottom: 10 },
   statusText: { ...typography.text.caption, color: colors.mutedForeground, paddingHorizontal: 12, paddingVertical: 8 },
   dictationStatusRow: {
     flexDirection: 'row',

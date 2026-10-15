@@ -47,6 +47,7 @@ export const styles = StyleSheet.create({
   headerCompactMeta: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 },
   headerSubtitle: { flexShrink: 1, ...typography.text.meta, color: colors.mutedForeground },
   headerWeather: { ...typography.text.meta, color: colors.primary },
+  headerMetaQuiet: { fontSize: 11, lineHeight: 14, fontWeight: '500', letterSpacing: 1.4, textTransform: 'uppercase', color: colors.inkSubtle },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   doneBtn: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radii.full, backgroundColor: colors.surfaceSubtle },
   doneBtnText: { ...typography.text.bodySmall, color: colors.primary, fontWeight: typography.weight.semibold },
@@ -261,8 +262,6 @@ export const styles = StyleSheet.create({
     bottom: 0,
     zIndex: 2,
     paddingTop: 2,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.hairline,
     overflow: 'hidden',
   },
   // Follow-up chips
@@ -752,21 +751,13 @@ export const styles = StyleSheet.create({
   guideQuestion: { flex: 1 },
   emptyState: {
     paddingHorizontal: spacing.sm,
-    gap: spacing.xxl,
+    paddingTop: spacing.lg,
+    gap: spacing.xxxl,
   },
   emptyHero: {
     alignItems: 'flex-start',
     gap: spacing.sm,
     paddingHorizontal: spacing.xs,
-  },
-  emptyTitle: {
-    ...typography.text.editorialHero,
-    color: colors.foreground,
-  },
-  emptySubtitle: {
-    ...typography.text.bodySmall,
-    color: colors.inkSubtle,
-    maxWidth: 310,
   },
   locationPicker: {
     flex: 1,
@@ -833,22 +824,6 @@ export const styles = StyleSheet.create({
     fontWeight: typography.weight.semibold,
   },
   promptList: { width: '100%', gap: spacing.md },
-  todayCard: {
-    gap: spacing.lg,
-    padding: spacing.lg,
-    marginBottom: spacing.lg,
-    borderRadius: radii.lg,
-    borderCurve: 'continuous',
-    backgroundColor: colors.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairline,
-  },
-  todayThumbs: { flexDirection: 'row', gap: spacing.sm },
-  todayCopy: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  todayCopyText: { flex: 1, gap: spacing.xs },
-  todayTitle: { ...typography.text.editorialCard, fontSize: 20, lineHeight: 26, color: colors.foreground },
-  todaySubtitle: { ...typography.text.bodySmall, color: colors.mutedForeground },
-  todayArrow: { width: 36, height: 36, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary },
   promptSectionLabel: {
     paddingHorizontal: spacing.xs,
     ...typography.text.eyebrow,
@@ -869,62 +844,25 @@ export const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.hairline,
   },
-  starterRowPressed: { backgroundColor: colors.surfaceSubtle },
-  starterCopy: { flex: 1, gap: spacing.xs },
   starterTitle: {
     ...typography.text.body,
     color: colors.foreground,
     fontWeight: typography.weight.semibold,
   },
-  starterSubtitle: {
-    ...typography.text.caption,
-    color: colors.mutedForeground,
-    },
-  moreIdeasButton: {
-    minHeight: 44,
-    flexDirection: 'row',
-    alignSelf: 'flex-start',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.xs,
-  },
-  moreIdeasText: {
-    ...typography.text.bodySmall,
-    color: colors.primary,
-    fontWeight: typography.weight.semibold,
-  },
-  moreIdeasSheet: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.sm,
-    borderTopLeftRadius: radii.xl,
-    borderTopRightRadius: radii.xl,
-    backgroundColor: colors.surfaceElevated,
-  },
-  moreIdeasDragRegion: {
-    width: '100%',
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingTop: spacing.xs,
-  },
-  moreIdeasModal: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  moreIdeasBackdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(40,35,31,0.28)',
-  },
-  moreIdeasTitle: {
-    ...typography.text.editorialSheet,
-    color: colors.foreground,
-  },
-  moreIdeasSubtitle: {
-    marginTop: spacing.xs,
-    ...typography.text.bodySmall,
-    color: colors.inkSubtle,
-  },
-  moreIdeasRows: { marginTop: spacing.lg },
+  // Landing: a metadata line, the day's look laid flat, and quiet text triggers.
+  // Fills the empty list and centres greeting + chips between the masthead and
+  // the composer dock (the list's own padding already clears both).
+  landing: { flex: 1, justifyContent: 'center' },
+  landingHero: { paddingHorizontal: spacing.md },
+  landingGreeting: { ...typography.text.editorialHero, fontSize: 38, lineHeight: 41, letterSpacing: -0.5, color: colors.foreground },
+  landingQuestion: { ...typography.text.editorialItalic, fontSize: 20, lineHeight: 28, color: '#666', marginTop: spacing.lg },
+  // Bleeds past the list's page margin so chips scroll off the true screen edge.
+  landingIdeasRow: { marginHorizontal: -spacing.page },
+  landingIdeas: { gap: spacing.sm, paddingLeft: spacing.page + spacing.md, paddingRight: spacing.page + 24 },
+  landingIdeasFade: { position: 'absolute', top: 0, bottom: 0, right: 0, width: 48 },
+  landingIdea: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(0,0,0,0.08)', backgroundColor: 'transparent' },
+  landingIdeaGlyph: { fontSize: 9, color: colors.inkSubtle },
+  landingIdeaText: { fontSize: 12.5, lineHeight: 17, letterSpacing: 0.2, color: colors.foreground },
   // Item detail sheet
   sheetRoot: {
     flex: 1,

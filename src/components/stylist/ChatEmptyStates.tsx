@@ -1,18 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import * as Haptics from '../../lib/haptics';
-import { PressableScale } from '../primitives/PressableScale';
-import { GarmentImage } from '../wardrobe/garment-image';
-import type { Item } from '../../types/item';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
-import Reanimated, { interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import type { CurrentWeather } from '../../hooks/useWeather';
+import { LinearGradient } from 'expo-linear-gradient';
 import { compareAskQuestions, styleAskQuestions, styleName } from '../../lib/shoppingEditorial';
 import { displayBudget } from '../../lib/shoppingPriorityEdit';
 import { ShoppingStyleVisual } from '../shopping/ShoppingStyleVisual';
-import { buildStylistStarters, buildTodaySubtitle, TODAY_REQUEST, type StylistStarter } from './stylist-empty-state';
+import { buildStylistStarters, timeOfDayGreeting } from './stylist-empty-state';
 import { colors, spacing } from '../../theme';
 import type { StylistWorkflow } from '../../features/stylist/types';
 import { GuideContext, guideFocus } from './ChatModel';
@@ -77,229 +70,59 @@ export function GuideEmptyState({ context, onPrompt }: { context: GuideContext; 
 }
 
 // ── EmptyState ────────────────────────────────────────────────────────────────
+// The landing, set entirely in type: a serif greeting and a few quiet ways in. No garment imagery — whitespace and
+// scale do the work. The header carries name, place and weather; the composer
+// carries the open question.
 
 export function EmptyState({
-  weather,
-  tempUnit,
   displayName,
   wardrobeCount,
-  previewItems = [],
-  onPrompt,
   onWorkflow,
 }: {
-  weather: CurrentWeather | undefined;
-  tempUnit: 'C' | 'F';
   displayName?: string | null;
   wardrobeCount: number;
-  /** A few owned staples shown on the lead card, so the wardrobe is visible before the first ask. */
-  previewItems?: Item[];
-  onPrompt: (q: string) => void;
   onWorkflow: (kind: StylistWorkflow['kind']) => void;
 }) {
-  const insets = useSafeAreaInsets();
-  const [moreIdeasMounted, setMoreIdeasMounted] = useState(false);
-  const moreIdeasSheetProgress = useSharedValue(0);
-  const moreIdeasBackdropProgress = useSharedValue(0);
-  const moreIdeasDragY = useSharedValue(0);
-  const moreIdeasCompletionRef = useRef<(() => void) | undefined>(undefined);
+  const { height } = useWindowDimensions();
   const firstName = displayName?.trim().split(/\s+/)[0];
-  const services = buildStylistStarters(wardrobeCount);
-  const todayStarter = { title: 'Style me today', subtitle: buildTodaySubtitle(weather, tempUnit), prompt: TODAY_REQUEST };
-  const visibleStarters: Array<StylistStarter | { title: string; subtitle: string; prompt: string }> = services.slice(0, 2);
-  const secondaryStarters = services.slice(2);
-
-  const completeMoreIdeasDismiss = useCallback(() => {
-    setMoreIdeasMounted(false);
-    moreIdeasSheetProgress.value = 0;
-    moreIdeasBackdropProgress.value = 0;
-    moreIdeasDragY.value = 0;
-    const afterClose = moreIdeasCompletionRef.current;
-    moreIdeasCompletionRef.current = undefined;
-    afterClose?.();
-  }, [moreIdeasBackdropProgress, moreIdeasDragY, moreIdeasSheetProgress]);
-
-  const dismissMoreIdeas = useCallback((afterClose?: () => void) => {
-    moreIdeasCompletionRef.current = afterClose;
-    moreIdeasSheetProgress.value = withTiming(0, { duration: 220 }, (finished) => {
-      if (finished) runOnJS(completeMoreIdeasDismiss)();
-    });
-    moreIdeasBackdropProgress.value = withTiming(0, { duration: 180 });
-    moreIdeasDragY.value = withTiming(0, { duration: 180 });
-  }, [completeMoreIdeasDismiss, moreIdeasBackdropProgress, moreIdeasDragY, moreIdeasSheetProgress]);
-
-  const dismissMoreIdeasByDrag = useCallback(() => {
-    moreIdeasCompletionRef.current = undefined;
-    moreIdeasDragY.value = withTiming(440, { duration: 220 }, (finished) => {
-      if (finished) runOnJS(completeMoreIdeasDismiss)();
-    });
-    moreIdeasBackdropProgress.value = withTiming(0, { duration: 180 });
-  }, [completeMoreIdeasDismiss, moreIdeasBackdropProgress, moreIdeasDragY]);
-
-  const chooseStarter = (starter: StylistStarter | { title: string; subtitle: string; prompt: string }) => {
-    Haptics.selectionAsync().catch(() => {});
-    const run = () => {
-      if ('prompt' in starter) onPrompt(starter.prompt);
-      else onWorkflow(starter.workflowKind);
-    };
-    if (moreIdeasMounted) dismissMoreIdeas(run);
-    else run();
-  };
-
-  useEffect(() => {
-    if (!moreIdeasMounted) return;
-    moreIdeasSheetProgress.value = 0;
-    moreIdeasBackdropProgress.value = 0;
-    moreIdeasDragY.value = 0;
-    moreIdeasSheetProgress.value = withTiming(1, { duration: 260 });
-    moreIdeasBackdropProgress.value = withTiming(1, { duration: 260 });
-  }, [moreIdeasBackdropProgress, moreIdeasDragY, moreIdeasMounted, moreIdeasSheetProgress]);
-
-  const moreIdeasSheetStyle = useAnimatedStyle(() => ({
-    transform: [{
-      translateY: interpolate(moreIdeasSheetProgress.value, [0, 1], [420, 0]) + moreIdeasDragY.value,
-    }],
-  }));
-  const moreIdeasBackdropStyle = useAnimatedStyle(() => ({ opacity: moreIdeasBackdropProgress.value }));
-
-  const moreIdeasPanGesture = useMemo(
-    () => Gesture.Pan()
-      .activeOffsetY(8)
-      .failOffsetX([-24, 24])
-      .onUpdate((event) => {
-        moreIdeasDragY.value = Math.max(0, event.translationY);
-      })
-      .onEnd((event) => {
-        if (event.translationY > 72 || event.velocityY > 700) {
-          runOnJS(dismissMoreIdeasByDrag)();
-        } else {
-          moreIdeasDragY.value = withSpring(0, { damping: 18, stiffness: 180 });
-        }
-      }),
-    [dismissMoreIdeasByDrag, moreIdeasDragY],
-  );
+  const greeting = `${timeOfDayGreeting()}${firstName ? `, ${firstName}` : ''}.`;
+  const ideas = buildStylistStarters(wardrobeCount).slice(0, 3);
+  // Let the air scale with the screen: roomy on tall phones, never sparse on an SE.
+  const air = Math.round(Math.min(Math.max(height * 0.07, spacing.xl), spacing.xxxl * 1.5));
 
   return (
-    <>
-      <View style={styles.emptyState}>
-        <View style={styles.emptyHero}>
-          <Text style={styles.emptyTitle}>
-            {firstName ? `What are we dressing for, ${firstName}?` : 'What are we dressing for?'}
-          </Text>
-          {wardrobeCount ? (
-            <Text style={styles.emptySubtitle}>{`Styling from your ${wardrobeCount} pieces`}</Text>
-          ) : null}
-        </View>
+    <View style={[styles.landing, { gap: air }]}>
+      <View style={styles.landingHero}>
+        <Text style={styles.landingGreeting} accessibilityRole="header">{greeting}</Text>
+        <Text style={styles.landingQuestion}>What are we putting together today?</Text>
+      </View>
 
-        <View style={styles.promptList}>
-          <TodayCard
-            title={todayStarter.title}
-            subtitle={todayStarter.subtitle}
-            items={previewItems}
-            onPress={() => chooseStarter(todayStarter)}
-          />
-          <View style={styles.starterRows}>
-            {visibleStarters.map((starter) => (
-              <StarterRow key={starter.title} starter={starter} onPress={() => chooseStarter(starter)} />
-            ))}
-          </View>
+      {/* One row that scrolls edge to edge rather than wrapping into a stagger. */}
+      <View style={styles.landingIdeasRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.landingIdeas}>
+        {ideas.map((idea) => (
           <TouchableOpacity
-            style={styles.moreIdeasButton}
-            onPress={() => setMoreIdeasMounted(true)}
+            key={idea.workflowKind}
+            style={styles.landingIdea}
+            activeOpacity={0.55}
+            onPress={() => { Haptics.selectionAsync().catch(() => {}); onWorkflow(idea.workflowKind); }}
             accessibilityRole="button"
-            accessibilityLabel="More styling ideas"
+            accessibilityLabel={`${idea.title}. ${idea.subtitle}`}
           >
-            <Text style={styles.moreIdeasText}>More ideas</Text>
-            <Ionicons name="chevron-forward" size={13} color={colors.primary} />
+            <Text style={styles.landingIdeaGlyph}>✦</Text>
+            <Text style={styles.landingIdeaText}>{idea.title}</Text>
           </TouchableOpacity>
-        </View>
+        ))}
+      </ScrollView>
+      {/* Chips dissolve into the canvas at the right edge instead of meeting the bezel. */}
+      <LinearGradient
+        colors={[`${colors.background}00`, colors.background]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.landingIdeasFade}
+        pointerEvents="none"
+      />
       </View>
-
-      <Modal visible={moreIdeasMounted} transparent animationType="none" onRequestClose={() => dismissMoreIdeas()}>
-        <GestureHandlerRootView style={StyleSheet.absoluteFill}>
-          <View style={styles.moreIdeasModal}>
-          <Reanimated.View
-            style={[styles.moreIdeasBackdrop, moreIdeasBackdropStyle]}
-            pointerEvents="box-none"
-          >
-            <Pressable style={StyleSheet.absoluteFill} onPress={() => dismissMoreIdeas()} />
-          </Reanimated.View>
-          <Reanimated.View
-            style={[styles.moreIdeasSheet, { paddingBottom: insets.bottom + spacing.xl }, moreIdeasSheetStyle]}
-            accessibilityViewIsModal
-          >
-            <GestureDetector gesture={moreIdeasPanGesture}>
-              <Reanimated.View
-                style={styles.moreIdeasDragRegion}
-                accessible
-                accessibilityRole="button"
-                accessibilityLabel="Drag down to close More Ideas"
-              >
-                <View style={styles.sheetGrabber} />
-              </Reanimated.View>
-            </GestureDetector>
-            <Text style={styles.moreIdeasTitle}>More ways to style</Text>
-            <Text style={styles.moreIdeasSubtitle}>Start with a broader wardrobe project.</Text>
-            <View style={styles.moreIdeasRows}>
-              {secondaryStarters.map((starter) => (
-                <StarterRow key={starter.title} starter={starter} onPress={() => chooseStarter(starter)} />
-              ))}
-            </View>
-          </Reanimated.View>
-          </View>
-        </GestureHandlerRootView>
-      </Modal>
-    </>
-  );
-}
-
-const TODAY_THUMB = 64;
-
-// The one idea that needs no setup leads as a card: the day's prompt beside a
-// strip of the user's own staples, so the empty state already looks like them.
-function TodayCard({ title, subtitle, items, onPress }: { title: string; subtitle: string; items: Item[]; onPress: () => void }) {
-  return (
-    <PressableScale
-      contentStyle={styles.todayCard}
-      scaleTo={0.98}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${title}. ${subtitle}`}
-    >
-      {items.length ? (
-        <View style={styles.todayThumbs} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          {items.map((item) => (
-            <GarmentImage key={item.id} item={item} width={TODAY_THUMB} height={TODAY_THUMB * 1.2} placeholderIconSize={16} />
-          ))}
-        </View>
-      ) : null}
-      <View style={styles.todayCopy}>
-        <View style={styles.todayCopyText}>
-          <Text style={styles.todayTitle}>{title}</Text>
-          <Text style={styles.todaySubtitle}>{subtitle}</Text>
-        </View>
-        <View style={styles.todayArrow}>
-          <Ionicons name="arrow-forward" size={16} color={colors.primaryForeground} />
-        </View>
-      </View>
-    </PressableScale>
-  );
-}
-
-function StarterRow({ starter, onPress }: { starter: Pick<StylistStarter, 'title' | 'subtitle'>; onPress: () => void }) {
-  return (
-    // A ruled row tints rather than scales on press, so its hairline stays put.
-    <Pressable
-      style={({ pressed }) => [styles.starterRow, pressed && styles.starterRowPressed]}
-      onPressIn={() => { Haptics.selectionAsync().catch(() => {}); }}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${starter.title}. ${starter.subtitle}`}
-    >
-      <View style={styles.starterCopy}>
-        <Text style={styles.starterTitle}>{starter.title}</Text>
-        <Text style={styles.starterSubtitle}>{starter.subtitle}</Text>
-      </View>
-      <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />
-    </Pressable>
+    </View>
   );
 }

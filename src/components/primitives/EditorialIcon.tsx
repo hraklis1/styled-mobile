@@ -12,6 +12,10 @@ const paths = {
   Stylist: 'M5 4h14a2 2 0 0 1 2 2v12H9l-6 4V6a2 2 0 0 1 2-2Z M8 10h8 M8 14h5',
   Shop: 'M4 8h16l1 13H3Z M8 8V6a4 4 0 0 1 8 0v2',
   Calendar: 'M4 5h16v16H4Z M4 9h16 M8 3v4 M16 3v4',
+  history: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z M12 7.5V12l3 2',
+  compose: 'M12 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7 M17.5 3.5l3 3L12 15H9v-3Z',
+  image: 'M4 5h16v14H4Z M4 16l5-5 4 4 2-2 5 5 M16 9.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z',
+  mic: 'M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3Z M5.5 11a6.5 6.5 0 0 0 13 0 M12 17.5V21',
 };
 
 /** One optical size and stroke for Home actions and persistent navigation. */

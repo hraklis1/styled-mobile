@@ -58,3 +58,16 @@ export function buildStylistStarters(wardrobeCount: number): StylistStarter[] {
         },
   ];
 }
+
+/** "Mostly clear" from a summary like "mostly clear at 13°C", for the masthead. */
+export function weatherDescriptor(weather: CurrentWeather): string {
+  return weather.summary
+    .replace(/\s*(at\s+)?-?\d+\s*°\s*[CF]?\.?\s*$/i, '')
+    .trim()
+    .replace(/^\w/, (c) => c.toUpperCase());
+}
+
+export function timeOfDayGreeting(date = new Date()): string {
+  const hour = date.getHours();
+  return hour < 5 ? 'Good evening' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+}
