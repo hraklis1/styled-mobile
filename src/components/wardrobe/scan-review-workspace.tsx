@@ -209,7 +209,7 @@ export function ScanReviewWorkspace({
     const shown = pieces.filter(piece =>
       preExtract || piece.included !== false || (piece.extraction !== 'not-started' && piece.extraction !== undefined));
     if (preExtract) {
-      const overlaps = overlapDuplicates(shown.map(piece => ({ id: piece.id, category: piece.category, bbox: piece.cropBbox })));
+      const overlaps = overlapDuplicates(shown.map(piece => ({ id: piece.id, category: piece.category, bbox: piece.cropBbox, source: piece.cropSource })));
       return overlaps.size ? shown.map(piece => overlaps.has(piece.id) ? { ...piece, overlap: overlaps.get(piece.id) } : piece) : shown;
     }
     if (!review) return shown;
@@ -256,7 +256,7 @@ export function ScanReviewWorkspace({
   }, [pieces]);
   // Numbered once, by detection order within each photo, so piece 5 is piece 5
   // before and after extraction. A batch's references carry the photo ("2·3").
-  const { numbers, labels } = useMemo(() => pieceNumbering(pieces), [pieces]);
+  const { numbers } = useMemo(() => pieceNumbering(pieces), [pieces]);
   // Strong overlaps start unselected; they wait in a collapsed group instead of crowding the list.
   const duplicateIds = useMemo(
     () => new Set(preExtract ? visiblePieces.filter(piece => piece.overlap?.strong).map(piece => piece.id) : []),
@@ -264,13 +264,14 @@ export function ScanReviewWorkspace({
   );
   const noteFor = useCallback((piece: ScanReviewPiece): string | null => {
     if (preExtract) {
-      const of = piece.overlap ? labels.get(piece.overlap.of) : undefined;
+      // Overlaps are always within one photo, so the plain marker number names the piece.
+      const of = piece.overlap ? numbers.get(piece.overlap.of) : undefined;
       return of === undefined ? null : piece.overlap!.strong ? `Looks like #${of}` : `Possibly same as #${of}`;
     }
     if (piece.extraction === 'failed') return 'Couldn’t read details';
     if (states[piece.id] !== 'check') return null;
     return piece.possibleDuplicate ? 'Possible repeat' : 'Worth a look';
-  }, [labels, preExtract, states]);
+  }, [numbers, preExtract, states]);
   const effectiveView: View_ = view;
   const sheetPieces = filter === 'check' && review
     ? visiblePieces.filter((piece) => states[piece.id] === 'check')
@@ -302,6 +303,17 @@ export function ScanReviewWorkspace({
 
     gridOffset.current = 0;
   }, [visible, stage, onMinimize]);
+
+  // Back from the one-piece view, the row it showed stays lit for a moment
+  // to say where you were, then lets go so it doesn't read as a selection.
+  const lastView = useRef(effectiveView);
+  useEffect(() => {
+    const before = lastView.current;
+    lastView.current = effectiveView;
+    if (before !== 'loupe' || effectiveView !== 'sheet') return;
+    const timer = setTimeout(() => setActiveId(null), 1500);
+    return () => clearTimeout(timer);
+  }, [effectiveView]);
 
   // Return to the overview when approved extraction finishes.
   const previousStage = useRef(stage);

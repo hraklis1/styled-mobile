@@ -210,3 +210,17 @@ describe('groupPiecesByPhoto', () => {
     expect(single.labels.get('y')).toBe('2');
   });
 });
+
+describe('overlapDuplicates across photos', () => {
+  const { overlapDuplicates } = require('../scan-review');
+  const box = { x: 10, y: 10, width: 40, height: 60 };
+  it('only compares boxes on the same photo', () => {
+    const flags = overlapDuplicates([
+      { id: 'a', category: 'bottoms', bbox: box, source: 'p1' },
+      { id: 'b', category: 'bottoms', bbox: box, source: 'p2' },
+      { id: 'c', category: 'bottoms', bbox: box, source: 'p2' },
+    ]);
+    expect(flags.has('b')).toBe(false);
+    expect(flags.get('c')).toEqual({ of: 'b', strong: true });
+  });
+});

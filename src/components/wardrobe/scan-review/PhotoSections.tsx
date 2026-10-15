@@ -49,7 +49,8 @@ export function PhotoSections({ blurb, progress, pieces, numbers, duplicateIds, 
   const groups = useMemo(() => groupPiecesByPhoto(pieces), [pieces]);
   const scroll = useRef<ScrollView>(null);
   const sectionTops = useRef(new Map<number, number>());
-  const rowTops = useRef(new Map<string, number>());
+  // Each row's offset within its section, read late: a row lays out before the block above it.
+  const rowTops = useRef(new Map<string, () => number>());
   const [current, setCurrent] = useState(1);
 
   const scrollTo = (y: number) => scroll.current?.scrollTo({ y: Math.max(0, y), animated: !reduceMotion });
@@ -63,9 +64,22 @@ export function PhotoSections({ blurb, progress, pieces, numbers, duplicateIds, 
   const reveal = (photoIndex: number, id: string) => {
     onActivate(id);
     const sectionTop = sectionTops.current.get(photoIndex);
-    const rowTop = rowTops.current.get(id);
+    const rowTop = rowTops.current.get(id)?.();
     if (sectionTop === undefined || rowTop === undefined) return;
     scrollTo(sectionTop + rowTop - photoHeight * 0.6);
+  };
+  // Coming back from the one-piece view, the list remounts: bring the
+  // piece that was open back into view, once its row has been measured.
+  const restored = useRef(false);
+  const restore = () => {
+    if (restored.current || !activeId) return;
+    const group = groups.find(g => g.pieces.some(piece => piece.id === activeId));
+    const sectionTop = group ? sectionTops.current.get(group.photoIndex) : undefined;
+    const rowTop = rowTops.current.get(activeId)?.();
+    if (!group || sectionTop === undefined || rowTop === undefined) return;
+    restored.current = true;
+    setCurrent(group.photoIndex);
+    scroll.current?.scrollTo({ y: Math.max(0, sectionTop + rowTop - photoHeight * 0.6), animated: false });
   };
   const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (Date.now() - jumpedAt.current < 600) return;
@@ -112,9 +126,10 @@ export function PhotoSections({ blurb, progress, pieces, numbers, duplicateIds, 
       >
         <Text style={styles.blurb}>{blurb}</Text>
         {groups.map(group => (
-          <View key={group.photoIndex} onLayout={event => sectionTops.current.set(group.photoIndex, event.nativeEvent.layout.y)}>
+          <View key={group.photoIndex} onLayout={event => { sectionTops.current.set(group.photoIndex, event.nativeEvent.layout.y); requestAnimationFrame(restore); }}>
             <PhotoSection
               group={group}
+              first={group.photoIndex === 1}
               total={groups.length}
               photoHeight={photoHeight}
               numbers={numbers}
@@ -125,6 +140,7 @@ export function PhotoSections({ blurb, progress, pieces, numbers, duplicateIds, 
               disabled={disabled}
               reduceMotion={reduceMotion}
               rowTops={rowTops.current}
+              onRowMeasured={restore}
               onMarkerPress={id => reveal(group.photoIndex, id)}
               onClearActive={onClearActive}
               onActivate={onActivate}
@@ -144,8 +160,10 @@ export function PhotoSections({ blurb, progress, pieces, numbers, duplicateIds, 
   );
 }
 
-function PhotoSection({ group, total, photoHeight, numbers, duplicateIds, noteFor, isPolished, activeId, disabled, reduceMotion, rowTops, onMarkerPress, onClearActive, onActivate, onOpen, onToggleIncluded, onBrand }: {
+function PhotoSection({ group, first, total, photoHeight, numbers, duplicateIds, noteFor, isPolished, activeId, disabled, reduceMotion, rowTops, onRowMeasured, onMarkerPress, onClearActive, onActivate, onOpen, onToggleIncluded, onBrand }: {
   group: PhotoGroup<ScanReviewPiece>;
+  /** Later photos open on a rule: each photo reads as its own chapter. */
+  first: boolean;
   total: number;
   photoHeight: number;
   numbers: ReadonlyMap<string, number>;
@@ -156,7 +174,8 @@ function PhotoSection({ group, total, photoHeight, numbers, duplicateIds, noteFo
   disabled: boolean;
   reduceMotion: boolean;
   /** Row offsets within the section, shared with the list for marker jumps. */
-  rowTops: Map<string, number>;
+  rowTops: Map<string, () => number>;
+  onRowMeasured: () => void;
   onMarkerPress: (id: string) => void;
   onClearActive?: () => void;
   onActivate: (id: string) => void;
@@ -178,7 +197,7 @@ function PhotoSection({ group, total, photoHeight, numbers, duplicateIds, noteFo
   const duplicatesTop = useRef(0);
 
   const rows = (list: ScanReviewPiece[], duplicate: boolean) => list.map((piece, index) => (
-    <View key={piece.id} onLayout={event => rowTops.set(piece.id, (duplicate ? duplicatesTop.current : mainTop.current) + event.nativeEvent.layout.y)}>
+    <View key={piece.id} onLayout={event => { const y = event.nativeEvent.layout.y; rowTops.set(piece.id, () => (duplicate ? duplicatesTop.current : mainTop.current) + y); requestAnimationFrame(onRowMeasured); }}>
       {index > 0 ? <View style={styles.rule} /> : null}
       <PieceRow
         piece={piece}
@@ -196,7 +215,7 @@ function PhotoSection({ group, total, photoHeight, numbers, duplicateIds, noteFo
   ));
 
   return (
-    <View style={styles.section}>
+    <View style={[styles.section, !first && styles.sectionRuled]}>
       <View style={styles.sectionHeader}>
         <Text style={styles.eyebrow}>{total > 1 ? `Photo ${group.photoIndex} of ${total}` : 'Your photo'}</Text>
         <Text style={styles.count}>{included === group.pieces.length ? pieceLabel(included) : `${included} of ${pieceLabel(group.pieces.length)}`}</Text>
@@ -260,6 +279,7 @@ const styles = StyleSheet.create({
   track: { height: 2, backgroundColor: colors.hairline },
   fill: { height: 2, backgroundColor: colors.foreground },
   section: { gap: spacing.md },
+  sectionRuled: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline, paddingTop: spacing.xl },
   sectionHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   eyebrow: { ...typography.text.masthead, color: colors.foreground },
   count: { ...typography.text.meta, color: colors.mutedForeground },

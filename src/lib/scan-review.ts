@@ -227,13 +227,14 @@ export type OverlapFlag = { of: string; strong: boolean };
  * moderate one (IoU ≥ 0.3) only earns a quiet note. The earlier piece always
  * stays — detection order puts the more confident box first.
  */
-export function overlapDuplicates(pieces: readonly { id: string; category: string | null; bbox: Box | null }[]): Map<string, OverlapFlag> {
+export function overlapDuplicates(pieces: readonly { id: string; category: string | null; bbox: Box | null; source?: string | null }[]): Map<string, OverlapFlag> {
   const flags = new Map<string, OverlapFlag>();
   pieces.forEach((piece, index) => {
     // An unknown category can't vouch for "same garment".
     if (!piece.bbox || !piece.category) return;
     for (const earlier of pieces.slice(0, index)) {
-      if (!earlier.bbox || earlier.category !== piece.category || flags.has(earlier.id)) continue;
+      // Boxes only mean "same garment" on the same photo; across a batch's photos they line up by chance.
+      if (!earlier.bbox || earlier.category !== piece.category || flags.has(earlier.id) || earlier.source !== piece.source) continue;
       const overlap = iou(piece.bbox, earlier.bbox);
       const contained = Math.max(containedShare(piece.bbox, earlier.bbox), containedShare(earlier.bbox, piece.bbox));
       if (contained >= 0.85 || overlap >= 0.5) { flags.set(piece.id, { of: earlier.id, strong: true }); return; }
@@ -288,6 +289,8 @@ export const PIECE_NOUN: Record<string, string> = {
 export function reviewBlurb(count: number, photoCount = 1): string {
   const where = photoCount > 1 ? `across ${photoCount} photos` : 'in this look';
   if (count === 0) return `I couldn’t pick out any pieces ${where}. Add one below.`;
+  // A batch's sections already say what each photo holds; the line only totals them.
+  if (photoCount > 1) return `${count === 1 ? '1 piece' : `${count} pieces`} ${where}`;
   return `I found ${count === 1 ? '1 piece' : `${count} pieces`} ${where}. Tap a piece to make adjustments.`;
 }
 
