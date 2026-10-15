@@ -3,11 +3,10 @@ import { containedShare, iou, type Box } from './cropGeometry';
 // until the single pose-scan request resolves, so this is deliberately
 // vibes-based rather than tied to actual detection events.
 export const SCAN_MESSAGES = [
-  'Analyzing your outfit…',
+  'Looking over your photo…',
   'Identifying clothing items…',
   'Detecting colors & patterns…',
-  'Reading style details…',
-  'Almost there…',
+    'Almost there…',
 ];
 
 export type ReviewCarouselMetrics = {

@@ -31,11 +31,13 @@ import {
   resolvedActivePieceId,
   reviewSummary,
   sheetGuidance,
+  groupPiecesByPhoto,
   pieceNumbering,
   type PieceReviewState,
 } from '../../lib/scan-review';
 import { loadBatchReviewLayout, saveBatchReviewLayout, type BatchReviewLayout } from '../../lib/scanReviewLayout';
 import { PhotoSections } from './scan-review/PhotoSections';
+import type { PhotoMark } from './scan-review/MarkedPhoto';
 import { colors, ingestion, spacing, stroke, typography } from '../../theme';
 import { UndoToast } from '../primitives/UndoToast';
 import { ActionBar, type ActionBarMode } from './scan-review/ActionBar';
@@ -243,6 +245,15 @@ export function ScanReviewWorkspace({
     void saveBatchReviewLayout(next);
     track('scan_review_layout_changed', { layout: next });
   };
+  // Each finished photo's pieces, for the detection hero's reveal.
+  const detectedMarks = useMemo(() => {
+    const marks = new Map<string, PhotoMark[]>();
+    for (const group of groupPiecesByPhoto(pieces)) {
+      if (!group.source) continue;
+      marks.set(group.source, group.pieces.map((piece, index) => ({ id: piece.id, box: piece.cropBbox, label: piece.name, number: index + 1 })));
+    }
+    return marks;
+  }, [pieces]);
   // Numbered once, by detection order within each photo, so piece 5 is piece 5
   // before and after extraction. A batch's references carry the photo ("2·3").
   const { numbers, labels } = useMemo(() => pieceNumbering(pieces), [pieces]);
@@ -595,7 +606,8 @@ export function ScanReviewWorkspace({
           ) : null}
 
           {stage === 'scanning' ? (
-            <DetectionState previewImage={previewImage} photos={scanPhotos} progress={scanProgress} heroHeight={heroHeight} reduceMotion={reduceMotion} />
+            <DetectionState previewImage={previewImage} photos={scanPhotos} progress={scanProgress} heroHeight={heroHeight} reduceMotion={reduceMotion}
+              detected={detectedMarks} foundCount={pieces.length} />
           ) : readInPlace ? (
             <PhotoSections
               blurb={`Reading details · ${Math.min(extractionProgress.current, extractionProgress.total)} of ${extractionProgress.total}`}

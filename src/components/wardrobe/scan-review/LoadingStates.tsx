@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   Easing,
+  FadeIn,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
@@ -14,6 +15,8 @@ import Animated, {
 
 import { SCAN_MESSAGES } from '../../../lib/scan-review';
 import { colors, radii, spacing, surfaces, typography } from '../../../theme';
+import { selectionFeedback } from './feedback';
+import { MarkedPhoto, type PhotoMark } from './MarkedPhoto';
 import type { ScanReviewPiece } from './types';
 
 const SWEEP_BAND_HEIGHT = 90;
@@ -32,7 +35,7 @@ function useCyclingScanStatus(): string {
 // per-item signal yet (pose-scan is a single non-streamed request), so this
 // is deliberately a choreographed effect rather than data-driven, same as
 // the cycling status copy above.
-export function DetectionState({ previewImage, progress, heroHeight, reduceMotion, title = 'Detecting your pieces', stepLabels, photos }: {
+export function DetectionState({ previewImage, progress, heroHeight, reduceMotion, title = 'Detecting your pieces', stepLabels, photos, detected, foundCount }: {
   previewImage: string | null;
   /** A batch's photos: shown as the same filmstrip the extraction screen uses. */
   photos?: FilmFrame[];
@@ -42,8 +45,24 @@ export function DetectionState({ previewImage, progress, heroHeight, reduceMotio
   /** The outfit logger's copy; defaults are the closet scan's. */
   title?: string;
   stepLabels?: [string, string];
+  /** A batch's finished photos, by uri: their pieces pop onto the photo before the strip moves on. */
+  detected?: ReadonlyMap<string, PhotoMark[]>;
+  /** Pieces found so far across the batch. */
+  foundCount?: number;
 }) {
   const statusMsg = useCyclingScanStatus();
+  const reveal = useFinishedPhotoReveal(photos, detected);
+  // The hero takes the photo's own shape: no grey bands beside a portrait.
+  const [natural, setNatural] = useState<{ width: number; height: number } | null>(null);
+  const [frameWidth, setFrameWidth] = useState(0);
+  useEffect(() => setNatural(null), [previewImage]);
+  const fitted = natural && frameWidth > 0
+    ? (() => {
+      const aspect = natural.width / natural.height;
+      const width = Math.min(frameWidth, heroHeight * aspect);
+      return { width, height: Math.min(heroHeight, width / aspect) };
+    })()
+    : null;
   const pulse = useSharedValue(0.08);
   const sweep = useSharedValue(0);
 
@@ -71,15 +90,24 @@ export function DetectionState({ previewImage, progress, heroHeight, reduceMotio
 
   return (
     <View style={styles.extractionState} accessibilityLiveRegion="polite">
-      <View style={[styles.extractionHero, { height: heroHeight }]}>
+      <View style={styles.heroSlot} onLayout={event => setFrameWidth(event.nativeEvent.layout.width)}>
+      {reveal ? (
+        <Animated.View key={reveal.uri} entering={reduceMotion ? undefined : FadeIn.duration(220)} style={{ width: '100%' }}>
+          <MarkedPhoto source={reveal.uri} marks={reveal.marks} activeId={null} height={heroHeight} onMarkerPress={() => {}} />
+        </Animated.View>
+      ) : (
+      <View style={[styles.extractionHero, fitted ?? { height: heroHeight }]}>
         {previewImage ? (
-          <Image source={{ uri: previewImage }} style={styles.heroImage} contentFit="contain" cachePolicy="memory-disk" />
+          <Image source={{ uri: previewImage }} style={styles.heroImage} contentFit={fitted ? 'cover' : 'contain'} cachePolicy="memory-disk"
+            onLoad={event => setNatural({ width: event.source.width, height: event.source.height })} />
         ) : null}
         <Animated.View style={[styles.detectScrim, scrimStyle]} pointerEvents="none" />
         <Animated.View style={[styles.detectSweep, { height: SWEEP_BAND_HEIGHT }, sweepStyle]} pointerEvents="none">
           <LinearGradient colors={[`${colors.accent}00`, `${colors.accent}CC`, `${colors.accent}00`]} style={StyleSheet.absoluteFill} />
         </Animated.View>
         <View style={styles.detectFrame} pointerEvents="none" />
+      </View>
+      )}
       </View>
       <Text style={styles.extractionTitle}>{title}</Text>
       {stepLabels ? <>
@@ -88,11 +116,39 @@ export function DetectionState({ previewImage, progress, heroHeight, reduceMotio
       </> : <>
         {photos && photos.length > 1 ? <Filmstrip frames={photos} reduceMotion={reduceMotion} /> : null}
         <Text style={styles.extractionCopy}>
-          {statusMsg.replace(/…$/, '')}{progress.total > 1 ? ` · photo ${Math.min(progress.current + 1, progress.total)} of ${progress.total}` : '…'}
+          {progress.total > 1 && foundCount
+            ? `${foundCount === 1 ? '1 piece' : `${foundCount} pieces`} found · photo ${Math.min(progress.current + 1, progress.total)} of ${progress.total}`
+            : `${statusMsg.replace(/…$/, '')}${progress.total > 1 ? ` · photo ${Math.min(progress.current + 1, progress.total)} of ${progress.total}` : '…'}`}
         </Text>
       </>}
     </View>
   );
+}
+
+const REVEAL_MS = 1200;
+
+/**
+ * The photo that just finished, held for a beat with its pieces marked on
+ * it, so the user sees what was found before the next photo takes over.
+ * Real data, not choreography: only photos with detected pieces reveal.
+ */
+function useFinishedPhotoReveal(photos: FilmFrame[] | undefined, detected: ReadonlyMap<string, PhotoMark[]> | undefined) {
+  const [reveal, setReveal] = useState<{ uri: string; marks: PhotoMark[] } | null>(null);
+  const seen = useRef<Set<string> | null>(null);
+  const done = (photos ?? []).filter(frame => frame.state === 'done').map(frame => frame.uri);
+  const key = done.join('|');
+  useEffect(() => {
+    if (seen.current === null) { seen.current = new Set(done); return; }
+    const fresh = done.find(uri => !seen.current!.has(uri));
+    done.forEach(uri => seen.current!.add(uri));
+    const marks = fresh ? detected?.get(fresh) : undefined;
+    if (!fresh || !marks?.length) return;
+    selectionFeedback();
+    setReveal({ uri: fresh, marks });
+    const timer = setTimeout(() => setReveal(null), REVEAL_MS);
+    return () => clearTimeout(timer);
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  return reveal;
 }
 
 export function ExtractionState({ piece, pieces, progress, heroHeight, reduceMotion }: { piece: ScanReviewPiece | null; pieces?: ScanReviewPiece[]; progress: { current: number; total: number }; heroHeight: number; reduceMotion: boolean }) {
@@ -219,6 +275,7 @@ function ScanStepTrack({ stage, progress, reduceMotion, labels }: {
 
 const styles = StyleSheet.create({
   heroImage: { width: '100%', height: '100%' },
+  heroSlot: { width: '100%', alignItems: 'center' },
   extractionPlate: { backgroundColor: surfaces.plate },
   extractionImage: { width: '88%', height: '88%' },
   extractionState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl },
