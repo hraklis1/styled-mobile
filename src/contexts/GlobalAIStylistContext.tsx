@@ -34,6 +34,10 @@ type OpenStylistOptions = {
   source: StylistOpenSource;
   eventContext?: StylistEventContext;
   context?: StylistEntryContext;
+  /** Open this saved conversation (e.g. a trip's) instead of applying source's thread mode. */
+  conversationId?: number;
+  /** Staged in the composer once that conversation loads; never sent automatically. */
+  draft?: string;
   /** Kept for existing launchers; outfit navigation now uses the shared Closet route. */
   onNavigateToCloset?: (outfitId: number) => void;
   onNavigateToShop?: (gap?: StylistMissingEssential) => void;
@@ -111,9 +115,11 @@ export function GlobalAIStylistProvider({ children }: Props) {
   const [openRequestId, setOpenRequestId] = useState(0);
   const [source, setSource] = useState<StylistOpenSource | undefined>(undefined);
   const [threadMode, setThreadMode] = useState<'new' | 'resume'>('resume');
+  const [initialConversationId, setInitialConversationId] = useState<number | undefined>(undefined);
+  const [initialDraft, setInitialDraft] = useState<string | undefined>(undefined);
   const { isPremium } = useEntitlement();
 
-  const openStylist = useCallback(async ({ initialQuery: query, initialAttachment: attachment, initialAttachmentUri: attachmentUri, initialMode: mode, destination, source, eventContext: event, context, onNavigateToShop: navigateToShop }: OpenStylistOptions) => {
+  const openStylist = useCallback(async ({ initialQuery: query, initialAttachment: attachment, initialAttachmentUri: attachmentUri, initialMode: mode, destination, source, eventContext: event, context, conversationId, draft, onNavigateToShop: navigateToShop }: OpenStylistOptions) => {
     const entitled = await ensureEntitled(isPremium, {
       title: 'Unlock your AI Stylist',
       message: 'Chat with your personal stylist for daily outfit advice, wardrobe insights, and event planning.',
@@ -130,6 +136,8 @@ export function GlobalAIStylistProvider({ children }: Props) {
     setInitialDestination(destination);
     setEventContext(event);
     setEntryContext(context);
+    setInitialConversationId(conversationId);
+    setInitialDraft(draft);
     setOnNavigateToShop(() => navigateToShop);
     if (query) setPromptRequestId((id) => id + 1);
     setOpenRequestId((id) => id + 1);
@@ -191,6 +199,8 @@ export function GlobalAIStylistProvider({ children }: Props) {
             openRequestId={openRequestId}
             source={source}
             threadMode={threadMode}
+            initialConversationId={initialConversationId}
+            initialDraft={initialDraft}
             onViewSaved={viewSaved}
             onNavigateToCloset={navigateToCloset}
             onOpenItem={openItem}

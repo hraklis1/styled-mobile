@@ -88,6 +88,10 @@ type Props = {
   // Increments on every open() so the view can apply threadMode each time, even
   // though it stays mounted inside the always-rendered modal.
   openRequestId?: number;
+  /** Load this saved conversation on open instead of applying threadMode. */
+  initialConversationId?: number;
+  /** Staged in the composer after initialConversationId loads. */
+  initialDraft?: string;
   onPromptConsumed?: () => void;
   onClose?: () => void;
   /** True when rendered as the permanent Stylist tab rather than a contextual modal. */
@@ -115,6 +119,8 @@ export function StylistChatView({
   source,
   threadMode = 'resume',
   openRequestId = 0,
+  initialConversationId,
+  initialDraft,
   onPromptConsumed,
   onClose,
   embedded = false,
@@ -731,7 +737,9 @@ export function StylistChatView({
   useEffect(() => {
     if (openRequestId <= lastOpenRequestIdRef.current) return;
     lastOpenRequestIdRef.current = openRequestId;
-    if (threadMode === 'new') {
+    if (initialConversationId) {
+      void selectConversation(initialConversationId).then(() => { if (initialDraft) stageSuggestion(initialDraft); });
+    } else if (threadMode === 'new') {
       startFreshThread();
       setComposerAttachment(initialAttachment ?? null);
     } else {
@@ -1132,6 +1140,7 @@ export function StylistChatView({
                     onAddToEvent={onAddToEvent}
                     onNavigateToShop={onNavigateToShop}
                     onClarificationSelect={(value) => sendMessage({ text: value, mode: 'from_closet' })}
+                    onAsk={stageSuggestion}
                     onNavigateToCloset={onNavigateToCloset}
                     onStyleAuditItem={openAuditItemStyling}
                     onSaveToBoard={setBoardTarget}

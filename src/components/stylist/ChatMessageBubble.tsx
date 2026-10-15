@@ -50,9 +50,11 @@ type BubbleProps = {
   onStyleAuditItem?: (itemId: number) => void;
   onSaveToBoard?: (ref: BoardEntryRef) => void;
   onViewSaved?: (id: string) => void;
+  /** Stages a prompt in the composer (trip plan actions). */
+  onAsk?: (prompt: string) => void;
 };
 
-export function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContext, entryContext, onAddToEvent, onToggleAudio, onNavigateToShop, onClarificationSelect, onNavigateToCloset, onStyleAuditItem, onSaveToBoard, onViewSaved }: BubbleProps) {
+export function MessageBubble({ message, allItems, isPlaying, createOutfit, eventContext, entryContext, onAddToEvent, onToggleAudio, onNavigateToShop, onClarificationSelect, onNavigateToCloset, onStyleAuditItem, onSaveToBoard, onViewSaved, onAsk }: BubbleProps) {
   const isUser = message.role === 'user';
   // Frozen at mount: entrance animations only ever run on mount anyway.
   const [fresh] = useState(() => isMessageFresh(message.id));
@@ -90,7 +92,7 @@ export function MessageBubble({ message, allItems, isPlaying, createOutfit, even
                 message={messageForResponseBlock(message, displayBlock, index)}
                 allItems={mergeWardrobeEvidence(allItems, block.wardrobeItems)} isPlaying={isPlaying} createOutfit={createOutfit}
                 eventContext={eventContext} entryContext={entryContext} onAddToEvent={onAddToEvent}
-                onNavigateToShop={onNavigateToShop} onClarificationSelect={onClarificationSelect}
+                onNavigateToShop={onNavigateToShop} onClarificationSelect={onClarificationSelect} onAsk={onAsk}
                 onNavigateToCloset={onNavigateToCloset} onStyleAuditItem={onStyleAuditItem}
                 onSaveToBoard={onSaveToBoard} onViewSaved={onViewSaved}
               />
@@ -150,6 +152,8 @@ export function MessageBubble({ message, allItems, isPlaying, createOutfit, even
             eventContext={eventContext}
             onAddToEvent={onAddToEvent}
             onNavigateToCloset={onNavigateToCloset}
+            onAsk={onAsk}
+            onShopGap={onNavigateToShop}
           />
         </View>
       </EditorialEntrance>

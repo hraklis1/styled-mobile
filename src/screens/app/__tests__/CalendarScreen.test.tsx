@@ -32,6 +32,8 @@ jest.mock('../../../hooks/useEntitlement', () => ({ useEntitlement: () => ({ isP
 jest.mock('../../../hooks/useActiveStylingLocation', () => ({ useActiveStylingLocation: () => ({ activeLocation: null }) }));
 jest.mock('../../../hooks/useItems', () => ({ useItems: () => ({ data: [] }) }));
 jest.mock('../../../hooks/useOutfits', () => ({ useOutfits: () => ({ data: [] }) }));
+jest.mock('../../../hooks/useTrips', () => ({ useTrips: () => ({ data: [] }) }));
+jest.mock('../../../components/trips/TripDetailModal', () => ({ TripDetailModal: 'TripDetailModal' }));
 let mockLogs: { date: string; itemIds: number[] }[] = [];
 const mockCreateLog = jest.fn();
 jest.mock('../../../hooks/useOutfitLogs', () => ({

@@ -36,6 +36,7 @@ import {
   validateStylistWorkflow,
 } from '../../features/stylist/workflows';
 import type { StylistWorkflow } from '../../features/stylist/types';
+import type { TripType } from '../../features/trips/types';
 import type { Item } from '../../types/item';
 import type { Profile } from '../../types/profile';
 import { colors, motion, radii, spacing, stroke, typography } from '../../theme';
@@ -68,6 +69,27 @@ const LUGGAGE_OPTIONS: ProfileOption[] = [
 function toggle(values: string[], value: string): string[] {
   return values.includes(value) ? values.filter((entry) => entry !== value) : [...values, value];
 }
+
+const TRIP_TYPE_OPTIONS: ProfileOption[] = [
+  { value: 'city', label: 'City break' },
+  { value: 'beach', label: 'Beach' },
+  { value: 'business', label: 'Business' },
+  { value: 'wedding', label: 'Wedding' },
+  { value: 'outdoors', label: 'Outdoors' },
+  { value: 'ski', label: 'Ski & snow' },
+];
+
+const EVENING_OPTIONS: ProfileOption[] = [
+  { value: '0', label: 'None' },
+  { value: '1', label: 'One' },
+  { value: '2', label: 'Two' },
+  { value: '3', label: 'Three or more' },
+];
+
+const LAUNDRY_OPTIONS: ProfileOption[] = [
+  { value: 'yes', label: 'I can do laundry' },
+  { value: 'no', label: 'No laundry' },
+];
 
 function Chip({ label, selected, multi, onPress }: { label: string; selected: boolean; multi: boolean; onPress: () => void }) {
   const reduceMotion = useReducedMotion();
@@ -246,6 +268,9 @@ export function StylistIntakeSheet({ visible, kind: kindProp, items, profile, in
   const [endDate, setEndDate] = useState('');
   const [plans, setPlans] = useState('');
   const [luggage, setLuggage] = useState<'carry_on' | 'checked' | 'not_sure'>('not_sure');
+  const [tripTypes, setTripTypes] = useState<TripType[]>([]);
+  const [dressyEvenings, setDressyEvenings] = useState<number | null>(null);
+  const [laundry, setLaundry] = useState<boolean | null>(null);
   const [notes, setNotes] = useState('');
   const [lifestyle, setLifestyle] = useState<string[]>([]);
   const [styleDirection, setStyleDirection] = useState<string[]>([]);
@@ -322,6 +347,9 @@ export function StylistIntakeSheet({ visible, kind: kindProp, items, profile, in
           endDate,
           ...(plans.trim() ? { plans: plans.trim() } : {}),
           luggage,
+          ...(tripTypes.length ? { tripTypes } : {}),
+          ...(dressyEvenings != null ? { dressyEvenings } : {}),
+          ...(laundry != null ? { laundry } : {}),
           ...(notes.trim() ? { notes: notes.trim() } : {}),
         };
       case 'wardrobe_build':
@@ -335,7 +363,7 @@ export function StylistIntakeSheet({ visible, kind: kindProp, items, profile, in
       default:
         return null;
     }
-  }, [budget, destination, dressCode, endDate, feeling, kind, lifestyle, luggage, notes, pieceDirection, pieceOccasion, plan, plans, selectedItemId, startDate, styleDirection]);
+  }, [budget, destination, dressCode, endDate, feeling, kind, lifestyle, luggage, notes, pieceDirection, pieceOccasion, plan, plans, selectedItemId, startDate, styleDirection, tripTypes, dressyEvenings, laundry]);
 
   const validationError = workflow ? validateStylistWorkflow(workflow, items) : 'Choose a piece from your wardrobe.';
   const ready = !validationError && !!workflow;
@@ -506,6 +534,9 @@ export function StylistIntakeSheet({ visible, kind: kindProp, items, profile, in
                     </View>
                     {span?.nights ? <Text style={styles.dateCaption}>{span.nights}</Text> : null}
                   </Field>
+                  <Field label="Kind of trip" index={nextIndex()}>
+                    <ChipGroup multi options={TRIP_TYPE_OPTIONS} selected={tripTypes} onToggle={(value) => setTripTypes((current) => (toggle(current, value) as TripType[]).slice(0, 4))} />
+                  </Field>
                   <Field label="Plans" index={nextIndex()}>
                     <UnderlineInput value={plans} onChangeText={setPlans} placeholder="Walking, dinners, meetings, beach…" maxLength={500} />
                   </Field>
@@ -514,6 +545,20 @@ export function StylistIntakeSheet({ visible, kind: kindProp, items, profile, in
                       options={LUGGAGE_OPTIONS}
                       selected={luggage === 'not_sure' ? [] : [luggage]}
                       onToggle={(value) => setLuggage(value === luggage ? 'not_sure' : value as typeof luggage)}
+                    />
+                  </Field>
+                  <Field label="Dressy evenings" index={nextIndex()}>
+                    <ChipGroup
+                      options={EVENING_OPTIONS}
+                      selected={dressyEvenings == null ? [] : [String(Math.min(dressyEvenings, 3))]}
+                      onToggle={(value) => setDressyEvenings((current) => (current != null && String(Math.min(current, 3)) === value ? null : Number(value)))}
+                    />
+                  </Field>
+                  <Field label="Laundry" index={nextIndex()}>
+                    <ChipGroup
+                      options={LAUNDRY_OPTIONS}
+                      selected={laundry == null ? [] : [laundry ? 'yes' : 'no']}
+                      onToggle={(value) => setLaundry((current) => (current != null && (current ? 'yes' : 'no') === value ? null : value === 'yes'))}
                     />
                   </Field>
                 </>

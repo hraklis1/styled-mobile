@@ -1,3 +1,4 @@
+import type { TripPlanV2Fields, TripType } from '../trips/types';
 import type { Item } from '../../types/item';
 import type { ShopOutfit } from '../../types/shop';
 import type { ShoppingBriefPriority } from '../../lib/shopDecisionWorkspace';
@@ -62,7 +63,7 @@ export type StylistTripOutfit = {
   missingEssentials?: StylistMissingEssential[];
 };
 
-export type StylistTripPlanData = {
+export type StylistTripPlanData = TripPlanV2Fields & {
   intro: string;
   outfits: StylistTripOutfit[];
   packingList: string[];
@@ -110,6 +111,9 @@ export type StylistWorkflow =
       plans?: string;
       luggage?: 'carry_on' | 'checked' | 'not_sure';
       notes?: string;
+      tripTypes?: TripType[];
+      dressyEvenings?: number;
+      laundry?: boolean;
     }
   | { kind: 'wardrobe_audit' }
   | {

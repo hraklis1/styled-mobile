@@ -19,14 +19,14 @@ import { GapCard } from './GapCard';
 import { useCreateOutfit, type CreateOutfitInput } from '../../hooks/useOutfits';
 import { colors, radii, spacing, stroke, typography } from '../../theme';
 import type { Item } from '../../types/item';
+import { TripSummaryCard } from '../trips/TripSummaryCard';
+import { isTripPlanV2, type TripGap, type TripPlanV2Fields } from '../../features/trips/types';
 
 export type TripOutfit = { label: string; note: string; itemIds: number[]; status?: 'ready' | 'incomplete'; foundationItemIds?: number[]; missingEssentials?: Array<{ label: string; category: string; reason: string; context: string; priority: number; unlocks?: string[] }> };
-export type TripPlanData = {
+export type TripPlanData = Omit<TripPlanV2Fields, 'kind'> & {
   intro: string;
   outfits: TripOutfit[];
   packingList: string[];
-  /** Owned pieces in packingList (server v12+). */
-  packingItemIds?: number[];
   kind?: 'trip' | 'board_capsule' | 'style_item';
   /** style_item: the owned piece every look is built around. */
   anchorItemId?: number;
@@ -42,7 +42,7 @@ function outfitName(items: Item[], fallback: string): string {
   return items.slice(0, 2).map((i) => i.name).join(' · ');
 }
 
-function TripOutfitCard({
+export function TripOutfitCard({
   outfit,
   allItems,
   createOutfit,
@@ -203,7 +203,24 @@ function TripOutfitCard({
   );
 }
 
-export function TripPlanCard({
+/**
+ * A v2 trip (saved, day by day) shows as a summary that opens the Trip screen;
+ * capsules, style-item looks, v1 trips and a plan still streaming keep the
+ * carousel. Split so each branch keeps a stable hook order across the switch.
+ */
+export function TripPlanCard(props: Parameters<typeof TripPlanCarousel>[0] & {
+  /** Trip v2: stages a request in the trip's conversation (Swap a day, Pack lighter). */
+  onAsk?: (prompt: string) => void;
+  onShopGap?: (gap: TripGap) => void;
+}) {
+  const { plan, allItems, onAsk, onShopGap, ...rest } = props;
+  if (!plan.pending && (!plan.kind || plan.kind === 'trip') && isTripPlanV2(plan)) {
+    return <TripSummaryCard plan={plan as Parameters<typeof TripSummaryCard>[0]['plan']} allItems={allItems} onAsk={onAsk} onShopGap={onShopGap} />;
+  }
+  return <TripPlanCarousel plan={plan} allItems={allItems} {...rest} />;
+}
+
+function TripPlanCarousel({
   plan,
   allItems,
   createOutfit,

@@ -45,6 +45,9 @@ import { ensureEntitled } from '../../lib/entitlementGate';
 import { useGlobalAIStylist, type StylistOpenSource } from '../../contexts/GlobalAIStylistContext';
 import { useGlobalOutfitLogger } from '../../contexts/GlobalOutfitLoggerContext';
 import { track } from '../../lib/analytics';
+import { useTrips } from '../../hooks/useTrips';
+import { TripDayBand, tripOnDate } from '../../components/calendar/TripDayBand';
+import { TripDetailModal } from '../../components/trips/TripDetailModal';
 import type { CalendarScreenProps } from '../../navigation/types';
 import type { Event } from '../../types/event';
 import {
@@ -125,6 +128,9 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   const { isPremium } = useEntitlement();
   const { activeLocation } = useActiveStylingLocation();
   const { openStylist } = useGlobalAIStylist();
+  const { data: trips = [] } = useTrips();
+  const [openTripId, setOpenTripId] = useState<number | null>(null);
+  const openTrip = trips.find((trip) => trip.id === openTripId);
   const { openLogger } = useGlobalOutfitLogger();
   const { data: events = [], isLoading, refetch, isRefetching, isError } = useEvents();
   const { data: allItems = [] } = useItems();
@@ -507,12 +513,14 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
       case 'day-heading': {
         const heading = agendaDayHeading(item.date);
         const [prefix, rest] = heading.includes(' · ') ? heading.split(' · ') : [null, heading];
-        return (
+        const trip = tripOnDate(trips, item.date);
+        const title = (
           <Text accessibilityRole="header" style={styles.dayHeading}>
             {prefix ? <Text style={item.date === todayStr ? styles.dayHeadingToday : undefined}>{prefix} · </Text> : null}
             {rest}
           </Text>
         );
+        return trip ? <View>{title}<TripDayBand trip={trip} date={item.date} onPress={() => setOpenTripId(trip.id)} /></View> : title;
       }
       case 'loading':
         return <CalendarLoadingSkeleton />;
@@ -778,6 +786,16 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
           { label: 'Calendars & sync', icon: 'calendar-outline', onPress: () => setSyncVisible(true) },
         ]}
         onClose={() => setCalendarMenuVisible(false)}
+      />
+      <TripDetailModal
+        tripId={openTripId}
+        onClose={() => setOpenTripId(null)}
+        onAsk={openTrip?.conversationId != null ? (draft) => {
+          const conversationId = openTrip.conversationId!;
+          setOpenTripId(null);
+          // Let the trip modal finish dismissing; iOS won't present a second modal mid-dismissal.
+          setTimeout(() => openStylist({ source: 'calendar_card', conversationId, draft }), 400);
+        } : undefined}
       />
     </View>
   );
