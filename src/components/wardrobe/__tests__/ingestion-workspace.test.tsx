@@ -46,7 +46,7 @@ const fixture = (): ScanReviewPiece[] => Array.from({ length: 3 }, (_, i) => ({
   material: null, fit: null, sizeProfile: null, sleeveLength: null,
 }));
 const applyCrop = jest.fn(async () => {});
-let stage: 'review' | 'pre-extract' = 'review';
+let stage: 'review' | 'pre-extract' | 'extracting' = 'review';
 let addPiece: jest.Mock | undefined;
 let latest: ScanReviewPiece[];
 let setItems: React.Dispatch<React.SetStateAction<ScanReviewPiece[]>>;
@@ -282,5 +282,21 @@ describe('a multi-photo review', () => {
     expect(sections.props.pieces.map((p: ScanReviewPiece) => p.id)).toEqual(['0', '1', '2']);
     expect([...sections.props.numbers.values()]).toEqual([1, 1, 1]);
     expect(renderer.root.findAllByType('Grid' as never)).toHaveLength(0);
+  });
+});
+
+describe('reading details in a multi-photo batch', () => {
+  beforeEach(async () => {
+    act(() => renderer.unmount());
+    mockLayout.current = 'sections';
+    stage = 'extracting';
+    await act(async () => { renderer = TestRenderer.create(<Harness />); });
+  });
+
+  it('keeps the photo sections up, read-only, instead of the extraction hero', () => {
+    expect(renderer.root.findAllByType('Extraction' as never)).toHaveLength(0);
+    const sections = node('PhotoSections');
+    expect(sections.props.disabled).toBe(true);
+    expect(sections.props.pieces.map((p: ScanReviewPiece) => p.id)).toEqual(['0', '1']);
   });
 });

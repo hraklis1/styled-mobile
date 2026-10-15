@@ -233,6 +233,10 @@ export function ScanReviewWorkspace({
   // the user prefers the contact sheet.
   const multiPhoto = (preExtract || review) && visiblePieces.length > 0 && !reviewPhoto;
   const photoSections = multiPhoto && batchLayout === 'sections';
+  // A grouped batch reads its details in place: the sections stay up and
+  // each row resolves as its piece is read, instead of a separate hero.
+  const readInPlace = stage === 'extracting' && batchLayout === 'sections' && visiblePieces.length > 0
+    && new Set(visiblePieces.map(piece => piece.cropSource)).size > 1;
   const switchLayout = () => {
     const next: BatchReviewLayout = batchLayout === 'sections' ? 'grid' : 'sections';
     setBatchLayout(next);
@@ -579,7 +583,7 @@ export function ScanReviewWorkspace({
             onClose={() => setConfirmClose(true)}
             busy={heroSpeaks}
             onMinimize={onMinimize}
-            heading={reviewPhoto || photoSections ? (preExtract ? 'Review your pieces' : 'Your pieces are ready') : undefined}
+            heading={readInPlace ? 'Reading details' : reviewPhoto || photoSections ? (preExtract ? 'Review your pieces' : 'Your pieces are ready') : undefined}
           />
 
           {failure ? (
@@ -592,6 +596,21 @@ export function ScanReviewWorkspace({
 
           {stage === 'scanning' ? (
             <DetectionState previewImage={previewImage} photos={scanPhotos} progress={scanProgress} heroHeight={heroHeight} reduceMotion={reduceMotion} />
+          ) : readInPlace ? (
+            <PhotoSections
+              blurb={`Reading details · ${Math.min(extractionProgress.current, extractionProgress.total)} of ${extractionProgress.total}`}
+              progress={extractionProgress.total ? extractionProgress.current / extractionProgress.total : 0}
+              pieces={visiblePieces.filter(piece => piece.included !== false)}
+              numbers={numbers}
+              noteFor={() => null}
+              activeId={null}
+              disabled
+              reduceMotion={reduceMotion}
+              bottomPadding={contentBottom}
+              onActivate={() => {}}
+              onOpen={() => {}}
+              onToggleIncluded={() => {}}
+            />
           ) : stage === 'extracting' ? (
             <ExtractionState piece={visiblePieces[0] ?? null} pieces={inclusion.included} progress={extractionProgress} heroHeight={heroHeight} reduceMotion={reduceMotion} />
           ) : reviewPhoto ? (

@@ -23,8 +23,10 @@ export function sectionPhotoHeight(screenHeight: number) {
  * Numbers restart in each photo, so a section reads exactly like a single
  * scan. A strip of the photos jumps between sections.
  */
-export function PhotoSections({ blurb, pieces, numbers, duplicateIds, noteFor, isPolished, activeId, disabled, reduceMotion, bottomPadding, onActivate, onClearActive, onOpen, onToggleIncluded, onBrand, onAddPiece }: {
+export function PhotoSections({ blurb, progress, pieces, numbers, duplicateIds, noteFor, isPolished, activeId, disabled, reduceMotion, bottomPadding, onActivate, onClearActive, onOpen, onToggleIncluded, onBrand, onAddPiece }: {
   blurb: string;
+  /** 0–1 while details are read in place: a hairline under the strip. */
+  progress?: number;
   pieces: ScanReviewPiece[];
   /** Each piece's marker number within its photo. */
   numbers: ReadonlyMap<string, number>;
@@ -86,6 +88,12 @@ export function PhotoSections({ blurb, pieces, numbers, duplicateIds, noteFor, i
             </Pressable>
           ))}
         </ScrollView>
+      ) : null}
+
+      {progress !== undefined ? (
+        <View style={styles.track} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: Math.round(progress * 100) }}>
+          <View style={[styles.fill, { width: `${Math.round(Math.max(0.04, progress) * 100)}%` }]} />
+        </View>
       ) : null}
 
       <ScrollView
@@ -242,6 +250,8 @@ const styles = StyleSheet.create({
   stripFrame: { borderRadius: radii.photo, borderWidth: 1.5, borderColor: 'transparent', padding: 2, opacity: 0.55 },
   stripFrameActive: { borderColor: colors.foreground, opacity: 1 },
   stripImage: { width: STRIP_THUMB, height: STRIP_THUMB, borderRadius: radii.photo - 3, backgroundColor: colors.muted },
+  track: { height: 2, backgroundColor: colors.hairline },
+  fill: { height: 2, backgroundColor: colors.foreground },
   section: { gap: spacing.md },
   sectionHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   eyebrow: { ...typography.text.masthead, color: colors.foreground },
