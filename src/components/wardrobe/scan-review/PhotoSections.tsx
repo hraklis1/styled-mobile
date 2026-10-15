@@ -53,7 +53,10 @@ export function PhotoSections({ blurb, progress, pieces, numbers, duplicateIds, 
   const [current, setCurrent] = useState(1);
 
   const scrollTo = (y: number) => scroll.current?.scrollTo({ y: Math.max(0, y), animated: !reduceMotion });
+  // A jump names its photo even when the list can't scroll that far.
+  const jumpedAt = useRef(0);
   const jumpTo = (photoIndex: number) => {
+    jumpedAt.current = Date.now();
     setCurrent(photoIndex);
     scrollTo((sectionTops.current.get(photoIndex) ?? 0) - spacing.sm);
   };
@@ -65,9 +68,13 @@ export function PhotoSections({ blurb, progress, pieces, numbers, duplicateIds, 
     scrollTo(sectionTop + rowTop - photoHeight * 0.6);
   };
   const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const y = event.nativeEvent.contentOffset.y + photoHeight * 0.5;
+    if (Date.now() - jumpedAt.current < 600) return;
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const y = contentOffset.y + photoHeight * 0.5;
     let next = 1;
     for (const [index, top] of sectionTops.current) if (top <= y && index > next) next = index;
+    // At the end of the list the last photo is the one in view, wherever its top sits.
+    if (contentOffset.y + layoutMeasurement.height >= contentSize.height - 4) next = groups.length;
     if (next !== current) setCurrent(next);
   };
 

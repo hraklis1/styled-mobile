@@ -285,9 +285,10 @@ export const PIECE_NOUN: Record<string, string> = {
 };
 
 /** The review blurb: how many pieces were found, and what a tap does. */
-export function reviewBlurb(count: number): string {
-  if (count === 0) return 'I couldn’t pick out any pieces in this look. Add one below.';
-  return `I found ${count === 1 ? '1 piece' : `${count} pieces`} in this look. Tap a piece to make adjustments.`;
+export function reviewBlurb(count: number, photoCount = 1): string {
+  const where = photoCount > 1 ? `across ${photoCount} photos` : 'in this look';
+  if (count === 0) return `I couldn’t pick out any pieces ${where}. Add one below.`;
+  return `I found ${count === 1 ? '1 piece' : `${count} pieces`} ${where}. Tap a piece to make adjustments.`;
 }
 
 /** The stylist line once details are read: how many, and how many deserve a look. */

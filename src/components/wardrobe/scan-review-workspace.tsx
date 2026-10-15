@@ -648,7 +648,7 @@ export function ScanReviewWorkspace({
             />
           ) : photoSections && effectiveView === 'sheet' ? (
             <PhotoSections
-              blurb={preExtract ? reviewBlurb(visiblePieces.length) : readyBlurb(inclusion.included.length, checkCount)}
+              blurb={preExtract ? reviewBlurb(visiblePieces.length, new Set(visiblePieces.map(piece => piece.cropSource)).size) : readyBlurb(inclusion.included.length, checkCount)}
               pieces={visiblePieces}
               numbers={numbers}
               noteFor={noteFor}

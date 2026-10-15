@@ -45,8 +45,9 @@ export function PieceRow({ piece, number, active, note, polished = false, disabl
   // A brand read from shape alone, not a visible logo: shown as a guess.
   const brandGuess = Boolean(brand) && (piece.lowConfidenceFields ?? []).includes('brand');
   // The colour shows as swatches; words are left for the brand and any note.
-  // The type and material carry what the swatches can't: "Trousers · Wool".
-  const kind = [piece.subcategory || piece.category, piece.material].filter(Boolean).map(word => capitalize(word!)).join(' · ');
+  // What the swatches can't say: the material once it's read ("Wool"),
+  // the broad type before then ("Bottom").
+  const kind = piece.material ? capitalize(piece.material) : piece.category ? capitalize(piece.category) : '';
   const detail = [onBrand ? null : brand || null, kind || null, note].filter(Boolean).join(' · ');
   const reading = piece.extraction === 'running';
   return (

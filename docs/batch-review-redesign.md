@@ -162,4 +162,15 @@ grid toggle still works; `ingestion-workspace.test.tsx` updated.
 
 ## Status
 
-- [x] Phase 0 (`groupPiecesByPhoto`, `pieceNumbering`, photo-qualified notes) · [~] Phase 1 (code + tests done; sim check pending) · [~] Phase 2 (code + tests done; sim check pending) · [~] Phase 3 (code + tests done; sim check pending) · [~] Phase 4 (code + tests done; sim check pending; To-check filter not moved) · [~] Phase 5 (code + tests done; sim check pending; shared-element transition skipped) · [ ] Phase 6
+All phases done (Oct 15 2026). Verified in the iPhone 17 sim with a 3-photo batch: detection with the
+running count → grouped review → reading in place → "Your pieces are ready" with the
+steady save button → "2 to check first" opens the guided walk.
+
+Fixed during QA: the strip highlight at the end of the list, "in this look" in batch copy, and
+"Shirts · Cotton" detail lines (now the material, or the broad type before extraction).
+
+Not done / deferred:
+- Shared-element shrink from the detection hero into section 1.
+- Edits while details are read (read-only for now; needs merging edits into incoming details).
+- The `All / To check` filter in the grouped view's header.
+- Not sim-checked: 10-photo perf, iPhone SE, Dynamic Type XL, VoiceOver order, grid toggle.
