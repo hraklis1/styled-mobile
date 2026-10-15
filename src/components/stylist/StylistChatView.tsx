@@ -4,7 +4,7 @@ import { useReduceTransparency } from '../../hooks/useReduceTransparency';
 import { confirmSheet } from '../primitives/ConfirmSheet';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { StylistCardStateContext, type StylistCardState } from './StylistCardState';
-import { Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
 import * as Haptics from '../../lib/haptics';
@@ -946,12 +946,35 @@ export function StylistChatView({
   const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant');
   const contextualChips = useContextualChips(lastAssistantMsg, entryContext);
 
+  // The composer dock is absolutely positioned, which KeyboardAvoidingView's
+  // padding never moves, so lift it by however much the keyboard overlaps this
+  // view (less than the keyboard's height when embedded above the tab bar).
+  const rootRef = useRef<View>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    const show = Keyboard.addListener('keyboardWillShow', (event) => {
+      rootRef.current?.measureInWindow((_x, y, _w, height) => {
+        Keyboard.scheduleLayoutAnimation(event);
+        setKeyboardHeight(Math.max(0, y + height - event.endCoordinates.screenY));
+      });
+    });
+    const hide = Keyboard.addListener('keyboardWillHide', (event) => {
+      Keyboard.scheduleLayoutAnimation(event);
+      setKeyboardHeight(0);
+    });
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+  const keyboardOpen = keyboardHeight > 0;
+
   return (
     <KeyboardAvoidingView
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={insets.bottom}
     >
+      {/* Measures this view's frame in the window for the keyboard overlap. */}
+      <View ref={rootRef} style={StyleSheet.absoluteFill} pointerEvents="none" />
       <BlurView
         intensity={reduceTransparency ? 0 : 35}
         tint="systemThinMaterialLight"
@@ -1173,7 +1196,7 @@ export function StylistChatView({
       <BlurView
         intensity={reduceTransparency ? 0 : 42}
         tint="systemThinMaterialLight"
-        style={[styles.bottomDock, reduceTransparency && styles.chromeSolid, { paddingBottom: embedded ? spacing.sm : insets.bottom + spacing.sm }]}
+        style={[styles.bottomDock, reduceTransparency && styles.chromeSolid, { bottom: keyboardHeight, paddingBottom: embedded || keyboardOpen ? spacing.sm : insets.bottom + spacing.sm }]}
         onLayout={(event) => setDockHeight(event.nativeEvent.layout.height)}
         {...(Platform.OS === 'android' && { blurMethod: 'dimezisBlurViewSdk31Plus' })}
       >
