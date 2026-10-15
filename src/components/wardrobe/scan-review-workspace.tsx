@@ -594,7 +594,8 @@ export function ScanReviewWorkspace({
             onClose={() => setConfirmClose(true)}
             busy={heroSpeaks}
             onMinimize={onMinimize}
-            heading={readInPlace ? 'Reading details' : reviewPhoto || photoSections ? (preExtract ? 'Review your pieces' : 'Your pieces are ready') : undefined}
+            // The one-piece view keeps the plain bar: its Back returns to the overview.
+            heading={effectiveView === 'loupe' ? undefined : readInPlace ? 'Reading details' : reviewPhoto || photoSections ? (preExtract ? 'Review your pieces' : 'Your pieces are ready') : undefined}
           />
 
           {failure ? (

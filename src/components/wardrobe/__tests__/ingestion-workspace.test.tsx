@@ -300,3 +300,21 @@ describe('reading details in a multi-photo batch', () => {
     expect(sections.props.pieces.map((p: ScanReviewPiece) => p.id)).toEqual(['0', '1']);
   });
 });
+
+describe('the flagged walk from a grouped batch', () => {
+  beforeEach(async () => {
+    act(() => renderer.unmount());
+    mockLayout.current = 'sections';
+    await act(async () => { renderer = TestRenderer.create(<Harness />); });
+  });
+
+  it('drops the heading in the one-piece view, so Back can return to the sections', () => {
+    act(() => setItems(ps => ps.map(p => p.id === '0' ? { ...p, lowConfidenceFields: ['material'] } : p)));
+    expect(header().props.heading).toBeDefined();
+    act(() => renderer.root.findByType('Actions' as never).props.mode.onReviewFlagged());
+    expect(header().props.heading).toBeUndefined();
+    expect(header().props.canGoBack).toBe(true);
+    act(() => header().props.onBack());
+    expect(renderer.root.findAllByType('PhotoSections' as never)).toHaveLength(1);
+  });
+});
