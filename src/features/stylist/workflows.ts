@@ -29,6 +29,19 @@ export function parseLocalCalendarDate(value: string): Date | null {
   return parsed;
 }
 
+const SPAN_DATE = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+
+/** "Thu 12 Nov → Wed 18 Nov" plus "6 nights" for the trip brief's dates row. */
+export function tripSpanLabel(startDate: string, endDate: string): { range: string; nights: string | null } | null {
+  const start = parseLocalCalendarDate(startDate);
+  if (!start) return null;
+  const end = parseLocalCalendarDate(endDate);
+  const range = end ? `${SPAN_DATE.format(start)} → ${SPAN_DATE.format(end)}` : SPAN_DATE.format(start);
+  if (!end || end.getTime() < start.getTime()) return { range, nights: null };
+  const nights = Math.round((end.getTime() - start.getTime()) / 86_400_000);
+  return { range, nights: nights === 0 ? 'Day trip' : `${nights} ${nights === 1 ? 'night' : 'nights'}` };
+}
+
 export function workflowMode(workflow: StylistWorkflow): StylistMode {
   switch (workflow.kind) {
     case 'occasion':

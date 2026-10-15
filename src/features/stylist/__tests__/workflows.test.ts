@@ -2,6 +2,7 @@ import {
   formatLocalCalendarDate,
   parseLocalCalendarDate,
   summarizeStylistWorkflow,
+  tripSpanLabel,
   validateStylistWorkflow,
   workflowMode,
 } from '../workflows';
@@ -10,6 +11,15 @@ import type { Item } from '../../../types/item';
 const item = { id: 42, name: 'Navy Sweater' } as Item;
 
 describe('stylist workflows', () => {
+  it('labels a trip span with nights', () => {
+    expect(tripSpanLabel('2026-11-12', '2026-11-18')).toEqual({ range: 'Thu 12 Nov → Wed 18 Nov', nights: '6 nights' });
+    expect(tripSpanLabel('2026-11-12', '2026-11-13')?.nights).toBe('1 night');
+    expect(tripSpanLabel('2026-11-12', '2026-11-12')?.nights).toBe('Day trip');
+    expect(tripSpanLabel('2026-10-30', '2026-11-02')?.nights).toBe('3 nights');
+    expect(tripSpanLabel('2026-11-12', '')).toEqual({ range: 'Thu 12 Nov', nights: null });
+    expect(tripSpanLabel('', '2026-11-12')).toBeNull();
+  });
+
   it('keeps calendar dates in local calendar space', () => {
     const date = new Date(2026, 11, 31, 23, 30);
     expect(formatLocalCalendarDate(date)).toBe('2026-12-31');

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+  AccessibilityInfo,
   KeyboardAvoidingView,
   Modal,
   Pressable,
@@ -9,20 +10,40 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  type TextInputProps,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import Animated, {
+  FadeInDown,
+  interpolateColor,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import * as Haptics from '../../lib/haptics';
+import { itemCoverPresentation } from '../../lib/itemImage';
 import { BUDGET_OPTIONS, OCCASION_OPTIONS, STYLE_OPTIONS, type ProfileOption } from '../../lib/profileOptions';
-import { formatLocalCalendarDate, parseLocalCalendarDate, validateStylistWorkflow } from '../../features/stylist/workflows';
+import {
+  formatLocalCalendarDate,
+  parseLocalCalendarDate,
+  tripSpanLabel,
+  validateStylistWorkflow,
+} from '../../features/stylist/workflows';
 import type { StylistWorkflow } from '../../features/stylist/types';
 import type { Item } from '../../types/item';
 import type { Profile } from '../../types/profile';
-import { colors, radii, spacing, typography } from '../../theme';
+import { colors, motion, radii, spacing, stroke, typography } from '../../theme';
 import { CalendarPickerSheet } from '../calendar/CalendarPickerSheet';
 import { ItemPickerSheet } from '../outfits/ItemPickerSheet';
 
 type IntakeKind = Exclude<StylistWorkflow['kind'], 'wardrobe_audit'>;
+type FieldKey = 'plan' | 'piece' | 'destination' | 'dates' | 'lifestyle';
 
 type Props = {
   visible: boolean;
@@ -34,34 +55,66 @@ type Props = {
   onSubmit: (workflow: StylistWorkflow) => void;
 };
 
-const DRESS_CODES = ['Casual', 'Smart casual', 'Business', 'Cocktail', 'Formal', 'Not sure'];
-const FEELINGS = ['Comfortable', 'Relaxed', 'Polished', 'Confident', 'Bold'];
-const PIECE_DIRECTIONS = ['Everyday', 'More polished', 'More casual', 'More formal', 'Unexpected'];
+// Ordered so each group breaks into a full row and a shorter one at phone
+// widths. "Not sure" is gone: leaving a group empty already means that.
+const DRESS_CODES = ['Casual', 'Smart casual', 'Business', 'Cocktail', 'Formal'];
+const FEELINGS = ['Relaxed', 'Comfortable', 'Polished', 'Confident', 'Bold'];
+const PIECE_DIRECTIONS = ['Everyday', 'More casual', 'More polished', 'More formal', 'Unexpected'];
+const LUGGAGE_OPTIONS: ProfileOption[] = [
+  { value: 'carry_on', label: 'Carry-on only' },
+  { value: 'checked', label: 'Checked bag' },
+];
 
 function toggle(values: string[], value: string): string[] {
   return values.includes(value) ? values.filter((entry) => entry !== value) : [...values, value];
 }
 
-function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+function Chip({ label, selected, multi, onPress }: { label: string; selected: boolean; multi: boolean; onPress: () => void }) {
+  const reduceMotion = useReducedMotion();
+  const progress = useSharedValue(selected ? 1 : 0);
+  const pressed = useSharedValue(0);
+
+  useEffect(() => {
+    progress.value = withTiming(selected ? 1 : 0, { duration: motion.quick });
+  }, [progress, selected]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(progress.value, [0, 1], ['rgba(36,36,34,0)', colors.primary]),
+    borderColor: interpolateColor(progress.value, [0, 1], [colors.ghostStroke, colors.primary]),
+    opacity: 1 - pressed.value * 0.15,
+    transform: [{ scale: reduceMotion ? 1 : 1 - pressed.value * 0.03 }],
+  }));
+
   return (
-    <TouchableOpacity
-      style={[styles.chip, selected && styles.chipSelected]}
-      onPress={onPress}
+    <Pressable
+      onPress={() => {
+        Haptics.selectionAsync().catch(() => {});
+        onPress();
+      }}
+      onPressIn={() => { pressed.value = withTiming(1, { duration: motion.quick / 2 }); }}
+      onPressOut={() => { pressed.value = withTiming(0, { duration: motion.quick }); }}
+      hitSlop={{ top: 4, bottom: 4 }}
       accessibilityRole="button"
       accessibilityState={{ selected }}
+      accessibilityLabel={label}
     >
-      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
-    </TouchableOpacity>
+      <Animated.View style={[styles.chip, animatedStyle]}>
+        {multi && selected ? <Ionicons name="checkmark" size={12} color={colors.primaryForeground} /> : null}
+        <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
+      </Animated.View>
+    </Pressable>
   );
 }
 
 function ChipGroup({
   options,
   selected,
+  multi = false,
   onToggle,
 }: {
   options: Array<string | ProfileOption>;
   selected: string[];
+  multi?: boolean;
   onToggle: (value: string) => void;
 }) {
   return (
@@ -69,18 +122,70 @@ function ChipGroup({
       {options.map((option) => {
         const value = typeof option === 'string' ? option : option.value;
         const label = typeof option === 'string' ? option : option.label;
-        return <Chip key={value} label={label} selected={selected.includes(value)} onPress={() => onToggle(value)} />;
+        return <Chip key={value} label={label} multi={multi} selected={selected.includes(value)} onPress={() => onToggle(value)} />;
       })}
     </View>
   );
 }
 
-function FieldLabel({ children, optional = false }: { children: string; optional?: boolean }) {
+/**
+ * One brief field: a tracked label over its control. Fades in on open with a
+ * small stagger, reports its offset so a premature submit can scroll to it,
+ * and pulses when it is the field holding the brief back.
+ */
+function Field({
+  label,
+  index,
+  pulse = 0,
+  onY,
+  children,
+}: {
+  label: string;
+  index: number;
+  pulse?: number;
+  onY?: (y: number) => void;
+  children: ReactNode;
+}) {
+  const reduceMotion = useReducedMotion();
+  const scale = useSharedValue(1);
+
+  useEffect(() => {
+    if (!pulse || reduceMotion) return;
+    scale.value = withSequence(
+      withTiming(1.02, { duration: motion.slow / 2 }),
+      withTiming(1, { duration: motion.slow / 2 }),
+    );
+  }, [pulse, reduceMotion, scale]);
+
+  const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
   return (
-    <View style={styles.labelRow}>
-      <Text style={styles.fieldLabel}>{children}</Text>
-      {optional ? <Text style={styles.optionalLabel}>OPTIONAL</Text> : null}
-    </View>
+    <Animated.View
+      entering={reduceMotion ? undefined : FadeInDown.delay(80 + index * 40).duration(motion.base)}
+      onLayout={onY ? (event) => onY(event.nativeEvent.layout.y) : undefined}
+      style={[styles.field, pulseStyle]}
+    >
+      <Text style={styles.fieldLabel}>{label}</Text>
+      {children}
+    </Animated.View>
+  );
+}
+
+function UnderlineInput({ serif = false, flagged = false, style, ...props }: TextInputProps & { serif?: boolean; flagged?: boolean }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <TextInput
+      {...props}
+      onFocus={(event) => { setFocused(true); props.onFocus?.(event); }}
+      onBlur={(event) => { setFocused(false); props.onBlur?.(event); }}
+      placeholderTextColor={colors.mutedForeground}
+      style={[
+        styles.input,
+        serif ? styles.inputSerif : styles.inputSans,
+        (focused || flagged) && styles.inputActive,
+        style,
+      ]}
+    />
   );
 }
 
@@ -94,6 +199,16 @@ function titleForKind(kind: IntakeKind | null): string {
   }
 }
 
+function promptForKind(kind: IntakeKind | null): string {
+  switch (kind) {
+    case 'occasion': return 'Tell me where you’re going.';
+    case 'style_piece': return 'Pick a piece and I’ll build around it.';
+    case 'trip': return 'Where to, and for how long?';
+    case 'wardrobe_build': return 'Tell me how you live, and I’ll fill the gaps.';
+    default: return 'Tell me a little more.';
+  }
+}
+
 function submitLabel(kind: IntakeKind | null): string {
   switch (kind) {
     case 'occasion': return 'Create my look';
@@ -104,8 +219,22 @@ function submitLabel(kind: IntakeKind | null): string {
   }
 }
 
-export function StylistIntakeSheet({ visible, kind, items, profile, initialItemId, onClose, onSubmit }: Props) {
+function itemCaption(item: Item): string | null {
+  const parts = [item.category, item.color].filter(Boolean) as string[];
+  if (!parts.length) return null;
+  const text = parts.join(' · ').replace(/_/g, ' ');
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+export function StylistIntakeSheet({ visible, kind: kindProp, items, profile, initialItemId, onClose, onSubmit }: Props) {
   const insets = useSafeAreaInsets();
+  // Hold the last brief while the modal fades out, so closing never flashes a
+  // generic "Styling brief" when the parent clears `kind` first.
+  const lastKind = useRef<IntakeKind | null>(kindProp);
+  if (kindProp) lastKind.current = kindProp;
+  const kind = kindProp ?? lastKind.current;
+  const scrollRef = useRef<ScrollView>(null);
+  const fieldY = useRef<Partial<Record<FieldKey, number>>>({});
   const [plan, setPlan] = useState('');
   const [dressCode, setDressCode] = useState('');
   const [feeling, setFeeling] = useState('');
@@ -123,6 +252,8 @@ export function StylistIntakeSheet({ visible, kind, items, profile, initialItemI
   const [budget, setBudget] = useState<string[]>([]);
   const [itemPickerVisible, setItemPickerVisible] = useState(false);
   const [datePicker, setDatePicker] = useState<'start' | 'end' | null>(null);
+  const [nudge, setNudge] = useState<{ key: FieldKey; count: number } | null>(null);
+  const [flagged, setFlagged] = useState<FieldKey | null>(null);
 
   useEffect(() => {
     if (!visible) return;
@@ -143,7 +274,15 @@ export function StylistIntakeSheet({ visible, kind, items, profile, initialItemI
     setBudget(profile?.budgetRange ?? []);
     setItemPickerVisible(false);
     setDatePicker(null);
+    setNudge(null);
+    setFlagged(null);
   }, [initialItemId, kind, profile?.budgetRange, profile?.occasions, profile?.stylePreference, visible]);
+
+  useEffect(() => {
+    if (!flagged) return;
+    const timer = setTimeout(() => setFlagged(null), 1400);
+    return () => clearTimeout(timer);
+  }, [flagged, nudge]);
 
   const openDatePicker = (which: 'start' | 'end') => {
     setDatePicker(which);
@@ -154,6 +293,8 @@ export function StylistIntakeSheet({ visible, kind, items, profile, initialItemI
   };
 
   const selectedItem = items.find((item) => item.id === selectedItemId) ?? null;
+  const selectedCover = itemCoverPresentation(selectedItem);
+  const span = tripSpanLabel(startDate, endDate);
 
   const workflow = useMemo<StylistWorkflow | null>(() => {
     switch (kind) {
@@ -196,13 +337,46 @@ export function StylistIntakeSheet({ visible, kind, items, profile, initialItemI
     }
   }, [budget, destination, dressCode, endDate, feeling, kind, lifestyle, luggage, notes, pieceDirection, pieceOccasion, plan, plans, selectedItemId, startDate, styleDirection]);
 
-  const validationError = workflow ? validateStylistWorkflow(workflow, items) : 'Complete the required fields.';
+  const validationError = workflow ? validateStylistWorkflow(workflow, items) : 'Choose a piece from your wardrobe.';
+  const ready = !validationError && !!workflow;
+
+  const missingField = (): FieldKey | null => {
+    switch (kind) {
+      case 'occasion': return 'plan';
+      case 'style_piece': return 'piece';
+      case 'trip': return destination.trim() ? 'dates' : 'destination';
+      case 'wardrobe_build': return 'lifestyle';
+      default: return null;
+    }
+  };
+
+  const handleSubmit = () => {
+    if (ready && workflow) {
+      onSubmit(workflow);
+      return;
+    }
+    const key = missingField();
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+    if (validationError) AccessibilityInfo.announceForAccessibility(validationError);
+    if (!key) return;
+    const y = fieldY.current[key];
+    if (y != null) scrollRef.current?.scrollTo({ y: Math.max(0, y - spacing.lg), animated: true });
+    setNudge((current) => ({ key, count: (current?.count ?? 0) + 1 }));
+    setFlagged(key);
+  };
+
+  const pulseFor = (key: FieldKey) => (nudge?.key === key ? nudge.count : 0);
+  const trackY = (key: FieldKey) => (y: number) => { fieldY.current[key] = y; };
+
   const pickerValue = datePicker === 'end'
     ? parseLocalCalendarDate(endDate) ?? parseLocalCalendarDate(startDate) ?? new Date()
     : parseLocalCalendarDate(startDate) ?? new Date();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const minimumEnd = parseLocalCalendarDate(startDate) ?? today;
+
+  let fieldIndex = 0;
+  const nextIndex = () => fieldIndex++;
 
   return (
     <>
@@ -235,16 +409,18 @@ export function StylistIntakeSheet({ visible, kind, items, profile, initialItemI
             <View style={styles.handle} />
             <View style={styles.header}>
               <View style={styles.headerCopy}>
-                <Text style={styles.eyebrow}>YOUR BRIEF</Text>
+                <Text style={styles.eyebrow}>Your brief</Text>
                 <Text style={styles.title}>{titleForKind(kind)}</Text>
-                <Text style={styles.subtitle}>Nothing is sent until you finish this brief.</Text>
+                <View style={styles.rule} />
+                <Text style={styles.prompt}>{promptForKind(kind)}</Text>
               </View>
-              <TouchableOpacity style={styles.closeButton} onPress={onClose} accessibilityLabel="Close styling brief">
-                <Ionicons name="close" size={20} color={colors.foreground} />
+              <TouchableOpacity style={styles.closeButton} onPress={onClose} accessibilityLabel="Close styling brief" hitSlop={8}>
+                <Ionicons name="close" size={20} color={colors.inkSubtle} />
               </TouchableOpacity>
             </View>
 
             <ScrollView
+              ref={scrollRef}
               style={styles.scroll}
               contentContainerStyle={styles.content}
               keyboardShouldPersistTaps="handled"
@@ -252,140 +428,136 @@ export function StylistIntakeSheet({ visible, kind, items, profile, initialItemI
             >
               {kind === 'occasion' ? (
                 <>
-                  <View style={styles.field}>
-                    <FieldLabel>What’s the plan?</FieldLabel>
-                    <TextInput value={plan} onChangeText={setPlan} placeholder="Dinner and drinks" placeholderTextColor={colors.mutedForeground} style={styles.input} maxLength={300} />
-                  </View>
-                  <View style={styles.field}>
-                    <FieldLabel optional>Dress code</FieldLabel>
+                  <Field label="What’s the plan?" index={nextIndex()} pulse={pulseFor('plan')} onY={trackY('plan')}>
+                    <UnderlineInput serif flagged={flagged === 'plan'} value={plan} onChangeText={setPlan} placeholder="Dinner and drinks" maxLength={300} />
+                  </Field>
+                  <Field label="Dress code" index={nextIndex()}>
                     <ChipGroup options={DRESS_CODES} selected={dressCode ? [dressCode] : []} onToggle={(value) => setDressCode(value === dressCode ? '' : value)} />
-                  </View>
-                  <View style={styles.field}>
-                    <FieldLabel optional>How should it feel?</FieldLabel>
+                  </Field>
+                  <Field label="How should it feel?" index={nextIndex()}>
                     <ChipGroup options={FEELINGS} selected={feeling ? [feeling] : []} onToggle={(value) => setFeeling(value === feeling ? '' : value)} />
-                  </View>
+                  </Field>
                 </>
               ) : null}
 
               {kind === 'style_piece' ? (
                 <>
-                  <View style={styles.field}>
-                    <FieldLabel>Wardrobe piece</FieldLabel>
+                  <Field label="Wardrobe piece" index={nextIndex()} pulse={pulseFor('piece')} onY={trackY('piece')}>
                     <TouchableOpacity
-                      style={styles.selectionRow}
+                      style={styles.pieceRow}
+                      activeOpacity={0.7}
                       onPress={() => setItemPickerVisible(true)}
                       accessibilityRole="button"
                       accessibilityLabel={selectedItem ? `Change wardrobe piece. ${selectedItem.name} selected` : 'Choose a wardrobe piece'}
                     >
-                      <View style={styles.selectionIcon}><Ionicons name="shirt-outline" size={18} color={colors.primary} /></View>
-                      <Text style={[styles.selectionText, !selectedItem && styles.selectionPlaceholder]} numberOfLines={1}>
-                        {selectedItem?.name ?? 'Choose a piece'}
-                      </Text>
-                      <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
+                      <View style={[styles.pieceFrame, selectedItem ? styles.pieceFrameFilled : styles.pieceFrameEmpty, flagged === 'piece' && styles.pieceFrameFlagged]}>
+                        {selectedCover.uri ? (
+                          <Image source={{ uri: selectedCover.uri }} style={selectedCover.contentFit === 'cover' ? styles.pieceImageCover : styles.pieceImage} contentFit={selectedCover.contentFit} transition={motion.quick} />
+                        ) : (
+                          <Ionicons name="shirt-outline" size={24} color={colors.mutedForeground} />
+                        )}
+                      </View>
+                      <View style={styles.pieceCopy}>
+                        <Text style={styles.pieceTitle} numberOfLines={2}>{selectedItem?.name ?? 'Choose from your closet'}</Text>
+                        <Text style={styles.pieceCaption} numberOfLines={1}>
+                          {selectedItem ? itemCaption(selectedItem) ?? 'From your closet' : 'Tap to browse your pieces'}
+                        </Text>
+                        {selectedItem ? <Text style={styles.textAction}>Change</Text> : null}
+                      </View>
                     </TouchableOpacity>
-                  </View>
-                  <View style={styles.field}>
-                    <FieldLabel optional>Occasion</FieldLabel>
-                    <TextInput value={pieceOccasion} onChangeText={setPieceOccasion} placeholder="Weekend dinner, office, everyday…" placeholderTextColor={colors.mutedForeground} style={styles.input} maxLength={120} />
-                  </View>
-                  <View style={styles.field}>
-                    <FieldLabel optional>Direction</FieldLabel>
+                  </Field>
+                  <Field label="Occasion" index={nextIndex()}>
+                    <UnderlineInput value={pieceOccasion} onChangeText={setPieceOccasion} placeholder="Weekend dinner, office, everyday…" maxLength={120} />
+                  </Field>
+                  <Field label="Direction" index={nextIndex()}>
                     <ChipGroup options={PIECE_DIRECTIONS} selected={pieceDirection ? [pieceDirection] : []} onToggle={(value) => setPieceDirection(value === pieceDirection ? '' : value)} />
-                  </View>
+                  </Field>
                 </>
               ) : null}
 
               {kind === 'trip' ? (
                 <>
-                  <View style={styles.field}>
-                    <FieldLabel>Destination</FieldLabel>
-                    <TextInput value={destination} onChangeText={setDestination} placeholder="Tokyo, Japan" placeholderTextColor={colors.mutedForeground} style={styles.input} maxLength={160} />
-                  </View>
-                  <View style={styles.dateRow}>
-                    <View style={styles.dateField}>
-                      <FieldLabel>Departure</FieldLabel>
+                  <Field label="Destination" index={nextIndex()} pulse={pulseFor('destination')} onY={trackY('destination')}>
+                    <UnderlineInput serif flagged={flagged === 'destination'} value={destination} onChangeText={setDestination} placeholder="Tokyo, Japan" maxLength={160} />
+                  </Field>
+                  <Field label="Dates" index={nextIndex()} pulse={pulseFor('dates')} onY={trackY('dates')}>
+                    <View style={[styles.dateRow, flagged === 'dates' && styles.inputActive]}>
                       <TouchableOpacity
-                        style={styles.dateButton}
+                        style={styles.dateHalf}
                         onPress={() => openDatePicker('start')}
                         accessibilityRole="button"
-                        accessibilityLabel="Choose departure date"
+                        accessibilityLabel={span ? `Departure, ${span.range.split(' → ')[0]}. Change` : 'Choose departure date'}
                       >
-                        <Ionicons name="calendar-outline" size={16} color={colors.primary} />
-                        <Text style={[styles.dateText, !startDate && styles.selectionPlaceholder]}>{startDate || 'Choose'}</Text>
+                        <Text style={[styles.dateText, !startDate && styles.placeholder]} numberOfLines={1}>
+                          {span?.range.split(' → ')[0] ?? 'Departure'}
+                        </Text>
                       </TouchableOpacity>
-                    </View>
-                    <View style={styles.dateField}>
-                      <FieldLabel>Return</FieldLabel>
+                      <Text style={styles.dateArrow}>→</Text>
                       <TouchableOpacity
-                        style={styles.dateButton}
+                        style={[styles.dateHalf, styles.dateHalfEnd]}
                         onPress={() => openDatePicker('end')}
                         accessibilityRole="button"
-                        accessibilityLabel="Choose return date"
+                        accessibilityLabel={endDate && span ? `Return, ${span.range.split(' → ')[1]}. Change` : 'Choose return date'}
                       >
-                        <Ionicons name="calendar-outline" size={16} color={colors.primary} />
-                        <Text style={[styles.dateText, !endDate && styles.selectionPlaceholder]}>{endDate || 'Choose'}</Text>
+                        <Text style={[styles.dateText, !endDate && styles.placeholder]} numberOfLines={1}>
+                          {(endDate && span?.range.split(' → ')[1]) || 'Return'}
+                        </Text>
                       </TouchableOpacity>
                     </View>
-                  </View>
-                  <View style={styles.field}>
-                    <FieldLabel optional>Plans</FieldLabel>
-                    <TextInput value={plans} onChangeText={setPlans} placeholder="Walking, dinners, meetings, beach…" placeholderTextColor={colors.mutedForeground} style={styles.input} maxLength={500} />
-                  </View>
-                  <View style={styles.field}>
-                    <FieldLabel optional>Luggage</FieldLabel>
+                    {span?.nights ? <Text style={styles.dateCaption}>{span.nights}</Text> : null}
+                  </Field>
+                  <Field label="Plans" index={nextIndex()}>
+                    <UnderlineInput value={plans} onChangeText={setPlans} placeholder="Walking, dinners, meetings, beach…" maxLength={500} />
+                  </Field>
+                  <Field label="Luggage" index={nextIndex()}>
                     <ChipGroup
-                      options={[
-                        { value: 'carry_on', label: 'Carry-on only' },
-                        { value: 'checked', label: 'Checked bag' },
-                        { value: 'not_sure', label: 'Not sure' },
-                      ]}
-                      selected={[luggage]}
-                      onToggle={(value) => setLuggage(value as typeof luggage)}
+                      options={LUGGAGE_OPTIONS}
+                      selected={luggage === 'not_sure' ? [] : [luggage]}
+                      onToggle={(value) => setLuggage(value === luggage ? 'not_sure' : value as typeof luggage)}
                     />
-                  </View>
+                  </Field>
                 </>
               ) : null}
 
               {kind === 'wardrobe_build' ? (
                 <>
-                  <View style={styles.field}>
-                    <FieldLabel>What do you dress for?</FieldLabel>
-                    <ChipGroup options={OCCASION_OPTIONS} selected={lifestyle} onToggle={(value) => setLifestyle((current) => toggle(current, value))} />
-                  </View>
-                  <View style={styles.field}>
-                    <FieldLabel optional>Style direction</FieldLabel>
-                    <ChipGroup options={STYLE_OPTIONS} selected={styleDirection} onToggle={(value) => setStyleDirection((current) => toggle(current, value))} />
-                  </View>
-                  <View style={styles.field}>
-                    <FieldLabel optional>Budget</FieldLabel>
-                    <ChipGroup options={BUDGET_OPTIONS} selected={budget} onToggle={(value) => setBudget((current) => toggle(current, value))} />
-                  </View>
+                  <Field label="What do you dress for?" index={nextIndex()} pulse={pulseFor('lifestyle')} onY={trackY('lifestyle')}>
+                    <ChipGroup multi options={OCCASION_OPTIONS} selected={lifestyle} onToggle={(value) => setLifestyle((current) => toggle(current, value))} />
+                  </Field>
+                  <Field label="Style direction" index={nextIndex()}>
+                    <ChipGroup multi options={STYLE_OPTIONS} selected={styleDirection} onToggle={(value) => setStyleDirection((current) => toggle(current, value))} />
+                  </Field>
+                  <Field label="Budget" index={nextIndex()}>
+                    <ChipGroup multi options={BUDGET_OPTIONS} selected={budget} onToggle={(value) => setBudget((current) => toggle(current, value))} />
+                  </Field>
                 </>
               ) : null}
 
-              <View style={styles.field}>
-                <FieldLabel optional>Anything else?</FieldLabel>
-                <TextInput
+              <Field label="Anything else?" index={nextIndex()}>
+                <UnderlineInput
                   value={notes}
                   onChangeText={setNotes}
-                  placeholder="Comfort, fit, color, or other context"
-                  placeholderTextColor={colors.mutedForeground}
-                  style={[styles.input, styles.notesInput]}
+                  placeholder="Comfort, fit, colour, or other context"
+                  style={styles.notesInput}
                   multiline
                   maxLength={500}
-                  textAlignVertical="top"
                 />
-              </View>
+              </Field>
             </ScrollView>
 
             <View style={styles.footer}>
-              {validationError ? <Text style={styles.validationText}>{validationError}</Text> : null}
+              <LinearGradient
+                pointerEvents="none"
+                colors={['rgba(246,245,242,0)', colors.background]}
+                style={styles.footerFade}
+              />
               <TouchableOpacity
-                style={[styles.submitButton, !!validationError && styles.submitDisabled]}
-                disabled={!!validationError || !workflow}
-                onPress={() => workflow && onSubmit(workflow)}
+                style={[styles.submitButton, !ready && styles.submitDisabled]}
+                activeOpacity={ready ? 0.85 : 1}
+                onPress={handleSubmit}
                 accessibilityRole="button"
-                accessibilityState={{ disabled: !!validationError }}
+                accessibilityState={{ disabled: !ready }}
+                accessibilityHint={validationError ?? undefined}
               >
                 <Ionicons name="sparkles" size={17} color={colors.primaryForeground} />
                 <Text style={styles.submitText}>{submitLabel(kind)}</Text>
@@ -430,36 +602,76 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   handle: { width: 38, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginTop: spacing.sm },
-  header: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.md, gap: spacing.md },
-  headerCopy: { flex: 1, gap: spacing.xs },
-  eyebrow: { ...typography.text.eyebrowLarge, color: colors.primary },
-  title: { ...typography.text.editorialSheet, color: colors.foreground },
-  subtitle: { ...typography.text.bodySmall, color: colors.inkSubtle },
-  closeButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.muted },
+  header: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: spacing.page, paddingTop: spacing.lg, paddingBottom: spacing.xl, gap: spacing.md },
+  headerCopy: { flex: 1 },
+  eyebrow: { ...typography.text.masthead, color: colors.inkSubtle },
+  title: { ...typography.text.editorialSheet, color: colors.foreground, marginTop: spacing.sm },
+  rule: { width: 24, height: stroke.hairline, backgroundColor: colors.foreground, opacity: 0.35, marginTop: spacing.md },
+  prompt: { ...typography.text.editorialItalic, color: colors.mutedForeground, marginTop: spacing.md },
+  closeButton: { width: 44, height: 44, marginTop: -spacing.sm, marginRight: -spacing.md, alignItems: 'center', justifyContent: 'center' },
   scroll: { flexShrink: 1 },
-  content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, gap: spacing.xl },
-  field: { gap: spacing.sm },
-  labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  fieldLabel: { ...typography.text.bodySmall, fontWeight: typography.weight.semibold, color: colors.foreground },
-  optionalLabel: { ...typography.text.caption, color: colors.mutedForeground },
-  input: { ...typography.text.body, lineHeight: typography.inputLineHeight(typography.text.body.fontSize), minHeight: 48, borderRadius: radii.md, borderCurve: 'continuous', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, paddingHorizontal: spacing.md, color: colors.foreground },
-  notesInput: { lineHeight: typography.text.body.lineHeight, minHeight: 84, paddingTop: spacing.md },
+  content: { paddingHorizontal: spacing.page, paddingTop: spacing.xs, paddingBottom: spacing.xxl, gap: spacing.xxl },
+  field: { gap: spacing.md },
+  fieldLabel: { ...typography.text.eyebrow, color: colors.inkSubtle },
+  input: {
+    paddingHorizontal: 0,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: stroke.hairline,
+    borderBottomColor: colors.controlOutline,
+    color: colors.foreground,
+  },
+  inputSerif: {
+    ...typography.text.editorialBody,
+    fontWeight: undefined,
+    lineHeight: typography.inputLineHeight(typography.text.editorialBody.fontSize),
+    minHeight: 40,
+  },
+  inputSans: {
+    ...typography.text.body,
+    lineHeight: typography.inputLineHeight(typography.text.body.fontSize),
+    minHeight: 36,
+  },
+  inputActive: { borderBottomColor: colors.foreground, borderBottomWidth: stroke.fine },
+  notesInput: { lineHeight: typography.text.body.lineHeight, maxHeight: 4 * typography.text.body.lineHeight + spacing.md, textAlignVertical: 'top' },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip: { minHeight: 44, justifyContent: 'center', borderRadius: 19, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, paddingHorizontal: spacing.md },
-  chipSelected: { borderColor: colors.primary, backgroundColor: colors.primary },
-  chipText: { ...typography.text.bodySmall, color: colors.foreground },
-  chipTextSelected: { color: colors.primaryForeground, fontWeight: typography.weight.semibold },
-  selectionRow: { minHeight: 54, borderRadius: radii.md, borderCurve: 'continuous', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  selectionIcon: { width: 34, height: 34, borderRadius: radii.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.muted },
-  selectionText: { ...typography.text.body, flex: 1, color: colors.foreground },
-  selectionPlaceholder: { color: colors.mutedForeground },
-  dateRow: { flexDirection: 'row', gap: spacing.md },
-  dateField: { flex: 1, gap: spacing.sm },
-  dateButton: { minHeight: 48, borderRadius: radii.md, borderCurve: 'continuous', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  dateText: { ...typography.text.bodySmall, flex: 1, color: colors.foreground, fontVariant: ['tabular-nums'] },
-  footer: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: spacing.sm },
-  validationText: { ...typography.text.caption, color: colors.mutedForeground, textAlign: 'center' },
+  chip: {
+    height: 36,
+    borderRadius: 18,
+    borderWidth: stroke.fine,
+    paddingHorizontal: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  chipText: { ...typography.text.bodySmall, fontWeight: typography.weight.medium, color: colors.foreground },
+  chipTextSelected: { color: colors.primaryForeground },
+  pieceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
+  pieceFrame: { width: 88, height: 110, borderRadius: radii.md, borderCurve: 'continuous', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  pieceFrameEmpty: { borderWidth: stroke.fine, borderStyle: 'dashed', borderColor: colors.controlOutline },
+  pieceFrameFilled: { backgroundColor: colors.imageMat },
+  pieceFrameFlagged: { borderColor: colors.foreground },
+  pieceImage: { width: '86%', height: '86%' },
+  pieceImageCover: { width: '100%', height: '100%' },
+  pieceCopy: { flex: 1, gap: spacing.xs },
+  pieceTitle: { ...typography.text.editorialCard, color: colors.foreground },
+  pieceCaption: { ...typography.text.caption, color: colors.mutedForeground },
+  textAction: { ...typography.text.bodySmall, color: colors.action, textDecorationLine: 'underline', marginTop: spacing.xs },
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: stroke.hairline,
+    borderBottomColor: colors.controlOutline,
+  },
+  dateHalf: { flex: 1, paddingTop: spacing.xs, paddingBottom: spacing.sm, minHeight: 44, justifyContent: 'center' },
+  dateHalfEnd: { alignItems: 'flex-end' },
+  dateText: { ...typography.text.editorialBodyCompact, color: colors.foreground, fontVariant: ['tabular-nums'] },
+  dateArrow: { ...typography.text.body, color: colors.mutedForeground, paddingHorizontal: spacing.md },
+  dateCaption: { ...typography.text.caption, color: colors.mutedForeground },
+  placeholder: { color: colors.mutedForeground },
+  footer: { paddingHorizontal: spacing.page, paddingTop: spacing.sm },
+  footerFade: { position: 'absolute', left: 0, right: 0, top: -spacing.xl, height: spacing.xl },
   submitButton: { minHeight: 54, borderRadius: radii.lg, borderCurve: 'continuous', backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: spacing.sm },
-  submitDisabled: { opacity: 0.42 },
+  submitDisabled: { opacity: 0.35 },
   submitText: { ...typography.text.body, color: colors.primaryForeground, fontWeight: typography.weight.semibold },
 });
