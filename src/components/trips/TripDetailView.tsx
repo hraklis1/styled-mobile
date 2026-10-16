@@ -10,7 +10,6 @@ import { PressableScale } from '../primitives/PressableScale';
 import { StylistRichText } from '../stylist/StylistRichText';
 import { GapCard } from '../stylist/GapCard';
 import { TripOutfitCard } from './TripOutfitCard';
-import { ResolvedOutfitCollage } from '../outfits/ResolvedOutfitCollage';
 import { useItems } from '../../hooks/useItems';
 import { useCreateOutfit } from '../../hooks/useOutfits';
 import { useDeleteTrip, useSetTripPacked, useTrip } from '../../hooks/useTrips';
@@ -18,7 +17,7 @@ import { useTempUnit } from '../../hooks/useTempUnit';
 import * as Haptics from '../../lib/haptics';
 import { itemImageContentFit, itemImageUri } from '../../lib/itemImage';
 import { tripSpanLabel } from '../../features/stylist/workflows';
-import { daysWearingLook, luggageFitCopy, packingGroups, packingProgress, tripDayParts, weatherIcon } from '../../features/trips/presentation';
+import { daysWearingLook, luggageFitCopy, orderLookPieces, packingGroups, packingProgress, tripDayParts, weatherIcon } from '../../features/trips/presentation';
 import type { Trip, TripDayWeather, TripGap, TripPlanDay } from '../../features/trips/types';
 import type { Item } from '../../types/item';
 import { colors, radii, spacing, stroke, typography } from '../../theme';
@@ -196,6 +195,7 @@ function DayRow({ day, index, last, trip, items, onAsk, onShowLooks }: { day: Tr
   const temp = useTemp();
   const parts = tripDayParts(day.date);
   const byId = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
+  const uses = useMemo(() => new Map((trip.plan.capsule ?? []).map((c) => [c.itemId, c.uses])), [trip.plan.capsule]);
   const title = day.title || (day.lookIndexes.length ? 'Your day' : 'A free day');
   return (
     <View style={styles.dayRow}>
@@ -223,18 +223,13 @@ function DayRow({ day, index, last, trip, items, onAsk, onShowLooks }: { day: Tr
               const pieces = lookPieces(look).map((id) => byId.get(id)).filter((item): item is Item => !!item);
               return (
                 <PressableScale key={`${lookIndex}-${slot}`} onPress={onShowLooks} contentStyle={styles.dayLook} accessibilityRole="button" accessibilityLabel={`${look.label}. Show all looks`}>
-                  <ResolvedOutfitCollage
-                    slots={pieces.map((item) => ({ key: String(item.id), uri: itemImageUri(item), contentFit: itemImageContentFit(item) }))}
-                    size={136}
-                    height={120}
-                    borderRadius={radii.photo}
-                  />
                   <View style={styles.dayLookText}>
                     <AppText variant="utility" tone="muted">{slot === 0 ? (day.lookIndexes.length > 1 ? 'Day' : 'Look') : 'Evening'}</AppText>
-                    <AppText variant="productName" numberOfLines={2}>{look.label}</AppText>
+                    <AppText variant="productName" numberOfLines={1}>{look.label}</AppText>
                     {trip.plan.travelLookIndex === lookIndex && (index === 0 || last) ? <AppText variant="meta" style={styles.transitTag}>Worn in transit</AppText> : null}
                     {look.status === 'incomplete' ? <AppText variant="meta" tone="danger">Needs a piece</AppText> : null}
                   </View>
+                  <PieceStrip pieces={orderLookPieces(pieces)} uses={uses} />
                 </PressableScale>
               );
             })}
@@ -252,6 +247,40 @@ function DayRow({ day, index, last, trip, items, onAsk, onShowLooks }: { day: Tr
           </TouchableOpacity>
         ) : null}
       </View>
+    </View>
+  );
+}
+
+const STRIP_MAX = 5;
+
+/**
+ * A look as a row of equal tiles rather than a collage: every piece shows
+ * whole, and a piece re-worn across the trip is the same tile day after day,
+ * marked with its wear count.
+ */
+function PieceStrip({ pieces, uses }: { pieces: Item[]; uses: Map<number, number> }) {
+  const overflow = pieces.length > STRIP_MAX ? pieces.length - (STRIP_MAX - 1) : 0;
+  const shown = overflow ? pieces.slice(0, STRIP_MAX - 1) : pieces;
+  return (
+    <View style={styles.strip}>
+      {shown.map((item) => {
+        const n = uses.get(item.id) ?? 1;
+        return (
+          <View key={item.id} style={styles.stripTile}>
+            <Image source={{ uri: itemImageUri(item) }} contentFit={itemImageContentFit(item)} style={styles.thumbImage} accessibilityLabel={item.name} />
+            {n > 1 ? (
+              <View style={styles.stripBadge}>
+                <AppText variant="meta" style={styles.stripBadgeText}>{`${n}×`}</AppText>
+              </View>
+            ) : null}
+          </View>
+        );
+      })}
+      {overflow ? (
+        <View style={[styles.stripTile, styles.stripMore]}>
+          <AppText variant="meta" tone="muted">{`+${overflow}`}</AppText>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -440,8 +469,13 @@ const styles = StyleSheet.create({
   dayWeather: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   dayNote: { marginTop: spacing.xs },
   dayLooks: { marginTop: spacing.md, gap: spacing.md },
-  dayLook: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
-  dayLookText: { flex: 1, gap: 2 },
+  dayLook: { gap: spacing.sm },
+  dayLookText: { gap: 2 },
+  strip: { flexDirection: 'row', gap: spacing.xs },
+  stripTile: { flex: 1, maxWidth: 64, aspectRatio: 1, borderRadius: radii.photo, backgroundColor: colors.imageMat, overflow: 'hidden' },
+  stripMore: { alignItems: 'center', justifyContent: 'center' },
+  stripBadge: { position: 'absolute', right: 3, bottom: 3, paddingHorizontal: 4, borderRadius: 6, backgroundColor: colors.background },
+  stripBadgeText: { fontSize: 10, lineHeight: 14, color: colors.accentInk },
   transitTag: { color: colors.accentInk },
   swap: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.md, alignSelf: 'flex-start' },
 

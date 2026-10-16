@@ -50,6 +50,15 @@ const GROUPS: Array<{ key: string; title: string; categories: string[] }> = [
   { key: 'accessories', title: 'Accessories', categories: ['accessory', 'valuables'] },
 ];
 
+/** A look's pieces in head-to-toe order, so every day's strip reads the same way. */
+export function orderLookPieces(pieces: Item[]): Item[] {
+  const rank = (item: Item) => {
+    const i = GROUPS.findIndex((g) => g.categories.includes(item.category ?? ''));
+    return i === -1 ? GROUPS.length : i;
+  };
+  return pieces.map((item, i) => ({ item, i })).sort((a, b) => rank(a.item) - rank(b.item) || a.i - b.i).map((x) => x.item);
+}
+
 export type PackingRow = { item: Item; uses: number };
 export type PackingGroup = { key: string; title: string; rows: PackingRow[] };
 
