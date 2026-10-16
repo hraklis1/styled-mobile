@@ -69,6 +69,9 @@ export function useStylistTransport(callbacks: StylistTransportCallbacks = {}) {
       requestIdRef.current += 1;
       abortControllerRef.current?.abort();
       abortControllerRef.current = null;
+      // Fast Refresh re-runs this cleanup but keeps state; without the reset the
+      // aborted request leaves the chat stuck on its progress indicator.
+      setIsLoading(false);
     };
   }, []);
 
