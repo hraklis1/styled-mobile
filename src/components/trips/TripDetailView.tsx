@@ -9,7 +9,7 @@ import { AnimatedProgressBar } from '../primitives/AnimatedProgressBar';
 import { PressableScale } from '../primitives/PressableScale';
 import { StylistRichText } from '../stylist/StylistRichText';
 import { GapCard } from '../stylist/GapCard';
-import { TripOutfitCard } from '../stylist/TripPlanCard';
+import { TripOutfitCard } from './TripOutfitCard';
 import { ResolvedOutfitCollage } from '../outfits/ResolvedOutfitCollage';
 import { useItems } from '../../hooks/useItems';
 import { useCreateOutfit } from '../../hooks/useOutfits';
