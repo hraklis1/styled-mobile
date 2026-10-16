@@ -98,7 +98,10 @@ export function EmptyState({
       <View style={styles.landingHero}>
         <Animated.Text entering={landingEnter(0)} style={styles.landingDateline}>{landingDateline()}</Animated.Text>
         <Animated.Text entering={landingEnter(70)} style={styles.landingGreeting} accessibilityRole="header">{greeting}</Animated.Text>
-        <Animated.View entering={landingEnter(140)} style={styles.landingRule} />
+        <Animated.View entering={landingEnter(140)}>
+          {/* Dim the inner view: the entering animation owns the wrapper's opacity. */}
+          <View style={styles.landingRule} />
+        </Animated.View>
         <Animated.Text entering={landingEnter(210)} style={styles.landingQuestion}>What are we putting together today?</Animated.Text>
       </View>
 
