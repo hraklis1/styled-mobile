@@ -85,6 +85,8 @@ export type Trip = {
   plan: TripPlanV2;
   packedItemIds: number[];
   packedExtras: string[];
+  eventId?: number | null;
+  eventDatesChanged?: boolean;
 };
 
 export type TripSummary = {
@@ -99,6 +101,10 @@ export type TripSummary = {
   packed: number;
   packable: number;
   coverItemIds: number[];
+  /** The calendar event this trip follows, if linked. */
+  eventId?: number | null;
+  /** A calendar sync moved the event's dates since the plan was made. */
+  eventDatesChanged?: boolean;
 };
 
 export function isTripPlanV2(plan: { version?: number; days?: unknown } | null | undefined): plan is TripPlanV2 {

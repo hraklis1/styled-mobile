@@ -58,3 +58,17 @@ export function useDeleteTrip() {
     onError: () => Alert.alert('Error', "Couldn't delete that trip. Please try again."),
   });
 }
+
+/** Links a trip to a calendar event, or unlinks it with null. The server may move the trip to the event's dates. */
+export function useLinkTripEvent(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (eventId: number | null) =>
+      api.put<{ eventId: number | null; eventDatesChanged: boolean }>(`/api/trips/${id}/event`, { eventId }).then((r) => r.data),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: tripQueryKey(id) });
+      void qc.invalidateQueries({ queryKey: TRIPS_QUERY_KEY, exact: true });
+    },
+    onError: () => Alert.alert('Error', "Couldn't update the calendar link. Please try again."),
+  });
+}

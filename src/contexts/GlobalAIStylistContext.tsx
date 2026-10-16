@@ -23,6 +23,10 @@ export type StylistOpenSource =
   | 'closet_selection'
   | 'board_detail';
 
+/** A brief to open on arrival, pre-filled from wherever it was started (a selected day, a calendar event). */
+export type StylistStartWorkflow = { kind: 'trip' } & StylistTripPrefill;
+export type StylistTripPrefill = { destination?: string; startDate?: string; endDate?: string; eventId?: number };
+
 export type StylistEventContext = { id: number; title: string };
 
 type OpenStylistOptions = {
@@ -38,6 +42,8 @@ type OpenStylistOptions = {
   conversationId?: number;
   /** Staged in the composer once that conversation loads; never sent automatically. */
   draft?: string;
+  /** Open a guided brief straight away, e.g. the trip brief from Calendar. */
+  workflow?: StylistStartWorkflow;
   /** Kept for existing launchers; outfit navigation now uses the shared Closet route. */
   onNavigateToCloset?: (outfitId: number) => void;
   onNavigateToShop?: (gap?: StylistMissingEssential) => void;
@@ -117,9 +123,10 @@ export function GlobalAIStylistProvider({ children }: Props) {
   const [threadMode, setThreadMode] = useState<'new' | 'resume'>('resume');
   const [initialConversationId, setInitialConversationId] = useState<number | undefined>(undefined);
   const [initialDraft, setInitialDraft] = useState<string | undefined>(undefined);
+  const [initialWorkflow, setInitialWorkflow] = useState<StylistStartWorkflow | undefined>(undefined);
   const { isPremium } = useEntitlement();
 
-  const openStylist = useCallback(async ({ initialQuery: query, initialAttachment: attachment, initialAttachmentUri: attachmentUri, initialMode: mode, destination, source, eventContext: event, context, conversationId, draft, onNavigateToShop: navigateToShop }: OpenStylistOptions) => {
+  const openStylist = useCallback(async ({ initialQuery: query, initialAttachment: attachment, initialAttachmentUri: attachmentUri, initialMode: mode, destination, source, eventContext: event, context, conversationId, draft, workflow, onNavigateToShop: navigateToShop }: OpenStylistOptions) => {
     const entitled = await ensureEntitled(isPremium, {
       title: 'Unlock your AI Stylist',
       message: 'Chat with your personal stylist for daily outfit advice, wardrobe insights, and event planning.',
@@ -138,6 +145,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
     setEntryContext(context);
     setInitialConversationId(conversationId);
     setInitialDraft(draft);
+    setInitialWorkflow(workflow);
     setOnNavigateToShop(() => navigateToShop);
     if (query) setPromptRequestId((id) => id + 1);
     setOpenRequestId((id) => id + 1);
@@ -201,6 +209,7 @@ export function GlobalAIStylistProvider({ children }: Props) {
             threadMode={threadMode}
             initialConversationId={initialConversationId}
             initialDraft={initialDraft}
+            initialWorkflow={initialWorkflow}
             onViewSaved={viewSaved}
             onNavigateToCloset={navigateToCloset}
             onOpenItem={openItem}

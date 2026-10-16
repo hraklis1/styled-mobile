@@ -1,3 +1,4 @@
+import type { StylistTripPrefill } from '../../contexts/GlobalAIStylistContext';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   AccessibilityInfo,
@@ -52,6 +53,8 @@ type Props = {
   items: Item[];
   profile?: Profile | null;
   initialItemId?: number | null;
+  /** Pre-fills a trip brief, e.g. from the selected day or a calendar event. */
+  tripPrefill?: StylistTripPrefill | null;
   onClose: () => void;
   onSubmit: (workflow: StylistWorkflow) => void;
 };
@@ -248,7 +251,7 @@ function itemCaption(item: Item): string | null {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-export function StylistIntakeSheet({ visible, kind: kindProp, items, profile, initialItemId, onClose, onSubmit }: Props) {
+export function StylistIntakeSheet({ visible, kind: kindProp, items, profile, initialItemId, tripPrefill, onClose, onSubmit }: Props) {
   const insets = useSafeAreaInsets();
   // Hold the last brief while the modal fades out, so closing never flashes a
   // generic "Styling brief" when the parent clears `kind` first.
@@ -288,9 +291,10 @@ export function StylistIntakeSheet({ visible, kind: kindProp, items, profile, in
     setSelectedItemId(kind === 'style_piece' ? initialItemId ?? null : null);
     setPieceOccasion('');
     setPieceDirection('');
-    setDestination('');
-    setStartDate('');
-    setEndDate('');
+    const prefill = kind === 'trip' ? tripPrefill : null;
+    setDestination(prefill?.destination ?? '');
+    setStartDate(prefill?.startDate ?? '');
+    setEndDate(prefill?.endDate ?? '');
     setPlans('');
     setLuggage('not_sure');
     setNotes('');
@@ -301,7 +305,7 @@ export function StylistIntakeSheet({ visible, kind: kindProp, items, profile, in
     setDatePicker(null);
     setNudge(null);
     setFlagged(null);
-  }, [initialItemId, kind, profile?.budgetRange, profile?.occasions, profile?.stylePreference, visible]);
+  }, [initialItemId, tripPrefill, kind, profile?.budgetRange, profile?.occasions, profile?.stylePreference, visible]);
 
   useEffect(() => {
     if (!flagged) return;
@@ -351,6 +355,7 @@ export function StylistIntakeSheet({ visible, kind: kindProp, items, profile, in
           ...(dressyEvenings != null ? { dressyEvenings } : {}),
           ...(laundry != null ? { laundry } : {}),
           ...(notes.trim() ? { notes: notes.trim() } : {}),
+          ...(tripPrefill?.eventId != null ? { eventId: tripPrefill.eventId } : {}),
         };
       case 'wardrobe_build':
         return {
@@ -363,7 +368,7 @@ export function StylistIntakeSheet({ visible, kind: kindProp, items, profile, in
       default:
         return null;
     }
-  }, [budget, destination, dressCode, endDate, feeling, kind, lifestyle, luggage, notes, pieceDirection, pieceOccasion, plan, plans, selectedItemId, startDate, styleDirection, tripTypes, dressyEvenings, laundry]);
+  }, [budget, destination, dressCode, endDate, feeling, kind, lifestyle, luggage, notes, pieceDirection, pieceOccasion, plan, plans, selectedItemId, startDate, styleDirection, tripTypes, dressyEvenings, laundry, tripPrefill?.eventId]);
 
   const validationError = workflow ? validateStylistWorkflow(workflow, items) : 'Choose a piece from your wardrobe.';
   const ready = !validationError && !!workflow;

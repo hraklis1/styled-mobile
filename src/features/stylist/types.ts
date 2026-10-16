@@ -114,6 +114,8 @@ export type StylistWorkflow =
       tripTypes?: TripType[];
       dressyEvenings?: number;
       laundry?: boolean;
+      /** The calendar event this trip was started from; the saved trip links to it. */
+      eventId?: number;
     }
   | { kind: 'wardrobe_audit' }
   | {

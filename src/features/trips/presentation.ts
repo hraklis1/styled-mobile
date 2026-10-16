@@ -96,3 +96,45 @@ export function packingProgress(plan: TripPlanV2, items: Item[], packedItemIds: 
   const total = bagIds.length + plan.packingList.length;
   return { done, total, fraction: total ? done / total : 0 };
 }
+
+const SHORT_DATE = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+
+function daysBetween(from: string, to: string): number | null {
+  const a = parseLocalCalendarDate(from), b = parseLocalCalendarDate(to);
+  return a && b ? Math.round((b.getTime() - a.getTime()) / 86_400_000) : null;
+}
+
+/** Trips still ahead or under way, soonest first. */
+export function upcomingTrips<T extends { startDate: string; endDate: string }>(trips: T[], today: string): T[] {
+  return trips.filter((trip) => trip.endDate >= today).sort((a, b) => a.startDate.localeCompare(b.startDate));
+}
+
+/** Finished trips, most recent first. */
+export function pastTrips<T extends { startDate: string; endDate: string }>(trips: T[], today: string): T[] {
+  return trips.filter((trip) => trip.endDate < today).sort((a, b) => b.startDate.localeCompare(a.startDate));
+}
+
+/** "Day 2 of 5", "Tomorrow", "In 3 days", or a date once it's further out. */
+export function tripCountdown(trip: { startDate: string; endDate: string }, today: string): string {
+  const until = daysBetween(today, trip.startDate);
+  if (until == null) return '';
+  if (until <= 0) {
+    const of = (daysBetween(trip.startDate, trip.endDate) ?? 0) + 1;
+    return `Day ${1 - until} of ${of}`;
+  }
+  if (until === 1) return 'Tomorrow';
+  if (until <= 13) return `In ${until} days`;
+  const start = parseLocalCalendarDate(trip.startDate);
+  return start ? SHORT_DATE.format(start) : '';
+}
+
+/** Days until departure; negative or zero once the trip has started. */
+export function daysUntilTrip(trip: { startDate: string }, today: string): number | null {
+  return daysBetween(today, trip.startDate);
+}
+
+/** "3 of 12 packed", "All packed", or the look count when nothing is packable. */
+export function tripProgressLabel(trip: { looks: number; packed: number; packable: number }): string {
+  if (trip.packable > 0) return trip.packed >= trip.packable ? 'All packed' : `${trip.packed} of ${trip.packable} packed`;
+  return `${trip.looks} ${trip.looks === 1 ? 'look' : 'looks'}`;
+}

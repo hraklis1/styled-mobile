@@ -38,6 +38,7 @@ import { useOutfits } from '../../hooks/useOutfits';
 import { useEvents } from '../../hooks/useEvents';
 import { useOutfitLogs, useDeleteOutfitLog, type OutfitLog } from '../../hooks/useOutfitLogs';
 import { WearWeekStrip } from '../../components/home/WearWeekStrip';
+import { HomeTripCard } from '../../components/trips/HomeTripCard';
 import { WearEntryDetails } from '../../components/home/WearEntryDetails';
 import { HomeCalendarRail } from '../../components/home/HomeCalendarRail';
 import { useEventStylistHandoff } from '../../components/calendar/useEventStylistHandoff';
@@ -1030,6 +1031,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         actionLabel="View all"
         onAction={() => navigation.navigate('Calendar')}
       >
+        <HomeTripCard />
         {upcomingEvents.length === 0 ? (
           <PressableScale
             contentStyle={styles.calendarEmpty}

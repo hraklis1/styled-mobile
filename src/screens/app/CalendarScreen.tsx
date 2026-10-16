@@ -48,6 +48,10 @@ import { track } from '../../lib/analytics';
 import { useTrips } from '../../hooks/useTrips';
 import { TripDayBand, tripOnDate } from '../../components/calendar/TripDayBand';
 import { TripDetailModal } from '../../components/trips/TripDetailModal';
+import { UpcomingTripsRow } from '../../components/trips/UpcomingTripsRow';
+import { pastTrips, tripProgressLabel, upcomingTrips } from '../../features/trips/presentation';
+import { isTripLikeEvent, tripForEvent, tripPrefillFromEvent } from '../../features/trips/eventTrips';
+import { tripSpanLabel } from '../../features/stylist/workflows';
 import type { CalendarScreenProps } from '../../navigation/types';
 import type { Event } from '../../types/event';
 import {
@@ -131,6 +135,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
   const { data: trips = [] } = useTrips();
   const [openTripId, setOpenTripId] = useState<number | null>(null);
   const openTrip = trips.find((trip) => trip.id === openTripId);
+  const [pastTripsVisible, setPastTripsVisible] = useState(false);
   const { openLogger } = useGlobalOutfitLogger();
   const { data: events = [], isLoading, refetch, isRefetching, isError } = useEvents();
   const { data: allItems = [] } = useItems();
@@ -394,6 +399,38 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
     handOffToStylist(event, source, delay);
   };
 
+  // The agenda's one-tap plan button: a trip event's plan is the trip.
+  const planFromAgenda = (event: Event, source: StylistOpenSource) => {
+    if (isTripLikeEvent(event)) openTripForEvent(event);
+    else openStylistForEvent(event, source);
+  };
+
+  // A trip in the calendar gets a trip plan, not an outfit: open the plan linked
+  // to it, or start the trip brief pre-filled from the event.
+  const openTripForEvent = (event: Event, delay = 0) => {
+    const linked = tripForEvent(trips, event.id);
+    track(linked ? 'trip_opened' : 'trip_plan_started', { source: 'calendar_event' });
+    setTimeout(() => {
+      if (linked) setOpenTripId(linked.id);
+      else openStylist({ source: 'calendar_card', workflow: { kind: 'trip', ...tripPrefillFromEvent(event) } });
+    }, delay);
+  };
+
+  const tripActionFor = (event: Event | null) => {
+    if (!event || !isTripLikeEvent(event)) return undefined;
+    const linked = tripForEvent(trips, event.id);
+    const prefill = tripPrefillFromEvent(event);
+    const range = tripSpanLabel(prefill.startDate!, prefill.endDate!);
+    return linked
+      ? { planned: true, title: 'Trip planned', detail: linked.eventDatesChanged ? 'Dates changed · re-plan' : tripProgressLabel(linked), onPress: closeDetailThenOpenTrip }
+      : { planned: false, title: 'Plan this trip', detail: [prefill.destination, range?.range, range?.nights].filter(Boolean).join(' · '), onPress: closeDetailThenOpenTrip };
+  };
+
+  const closeDetailThenOpenTrip = (event: Event) => {
+    setDetailEvent(null);
+    openTripForEvent(event, 400);
+  };
+
   const handleSelectDate = useCallback((date: string) => {
     setCalendarExpanded(false);
     setMonthOffset(0);
@@ -489,6 +526,20 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
       },
     );
   };
+
+  const tripsToday = toDateStr(new Date());
+  const tripShelf = useMemo(() => upcomingTrips(trips, tripsToday), [trips, tripsToday]);
+  const tripArchive = useMemo(() => pastTrips(trips, tripsToday), [trips, tripsToday]);
+
+  // The trip brief opens over a fresh stylist thread; a future selected day
+  // becomes the first day of the trip.
+  const planTrip = useCallback((source: 'calendar_trips' | 'calendar_menu') => {
+    track('trip_plan_started', { source });
+    openStylist({
+      source: 'calendar_card',
+      workflow: { kind: 'trip', startDate: selectedDate > tripsToday ? selectedDate : undefined },
+    });
+  }, [openStylist, selectedDate, tripsToday]);
 
   const openCalendarUtilities = useCallback(() => {
     setCalendarMenuVisible(true);
@@ -639,7 +690,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
             outfit={outfitFor(item.event)}
             weatherFallback={activeLocation}
             onPress={() => setDetailEvent(item.event)}
-            onPlanOutfit={() => openStylistForEvent(item.event, 'calendar_hero')}
+            onPlanOutfit={() => planFromAgenda(item.event, 'calendar_hero')}
             onOpenOutfit={() => openAssignedOutfit(item.event)}
             onWear={() => handleWear(item.event)}
             worn={isWorn(item.event)}
@@ -657,7 +708,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
             outfit={outfitFor(item.event)}
             onPress={() => setDetailEvent(item.event)}
             onOpenOutfit={() => openAssignedOutfit(item.event)}
-            onPlan={() => openStylistForEvent(item.event, 'calendar_card')}
+            onPlan={() => planFromAgenda(item.event, 'calendar_card')}
             past={item.date < todayStr}
             wornItemIds={item.date <= todayStr ? wornItemIdsFor(item.event) : null}
           />
@@ -689,6 +740,16 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
           onMore={openCalendarUtilities}
           dayThumbs={dayThumbs}
         />
+        {trips.length > 0 ? (
+          <UpcomingTripsRow
+            trips={tripShelf}
+            pastCount={tripArchive.length}
+            today={tripsToday}
+            onOpen={(trip) => { track('trip_opened', { source: 'calendar_trips' }); setOpenTripId(trip.id); }}
+            onPlan={() => planTrip('calendar_trips')}
+            onPast={() => setPastTripsVisible(true)}
+          />
+        ) : null}
       </View>
       <View style={styles.listArea}>
         <FlashList
@@ -736,6 +797,7 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
         onOpenOutfit={(ev) => openAssignedOutfit(ev, true)}
         allItems={allItems}
         onOpenStylist={(event) => openStylistForEvent(event, 'event_detail')}
+        tripAction={tripActionFor(detailEvent)}
         weatherFallback={activeLocation}
         onWear={handleWear}
         worn={detailEvent ? isWorn(detailEvent) : false}
@@ -783,9 +845,23 @@ export function CalendarScreen({ navigation, route }: CalendarScreenProps) {
         subtitle="Keep your wardrobe plan up to date."
         options={[
           { label: 'Log wear', icon: 'shirt-outline', onPress: () => handleLogWear(selectedDate) },
+          { label: 'Plan a trip', icon: 'airplane-outline', onPress: () => planTrip('calendar_menu') },
           { label: 'Calendars & sync', icon: 'calendar-outline', onPress: () => setSyncVisible(true) },
         ]}
         onClose={() => setCalendarMenuVisible(false)}
+      />
+      <ActionMenuSheet
+        visible={pastTripsVisible}
+        deferSelectionUntilDismissed
+        compact
+        title="Past trips"
+        options={tripArchive.map((trip) => ({
+          label: trip.destination,
+          subtitle: `${tripSpanLabel(trip.startDate, trip.endDate)?.range ?? trip.startDate} · ${trip.looks} ${trip.looks === 1 ? 'look' : 'looks'}`,
+          icon: 'briefcase-outline',
+          onPress: () => setOpenTripId(trip.id),
+        }))}
+        onClose={() => setPastTripsVisible(false)}
       />
       <TripDetailModal
         tripId={openTripId}

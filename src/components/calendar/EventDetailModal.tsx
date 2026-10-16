@@ -48,6 +48,7 @@ export function EventDetailModal({
   onWear,
   worn = false,
   isWearing = false,
+  tripAction,
 }: {
   event: Event | null;
   visible: boolean;
@@ -70,6 +71,12 @@ export function EventDetailModal({
   onWear?: (event: Event) => void;
   worn?: boolean;
   isWearing?: boolean;
+  /**
+   * Set for trip-like events: plan the event as a trip, or open the plan
+   * already linked to it. Shown above the look, since a stay needs a capsule
+   * rather than one outfit.
+   */
+  tripAction?: { planned: boolean; title: string; detail: string; onPress: (event: Event) => void };
 }) {
   const eventDateStr = event ? eventDayKey(event) : null;
   const forecast = useEventWeatherForecast(
@@ -172,6 +179,24 @@ export function EventDetailModal({
               </Text>
             </View>
           </View>
+
+          {tripAction ? (
+            <PressableScale
+              contentStyle={[s.tripAction, !tripAction.planned && s.tripActionPlan]}
+              onPress={() => handoff(tripAction.onPress)}
+              disabled={handoffPending}
+              scaleTo={0.985}
+              accessibilityRole="button"
+              accessibilityLabel={`${tripAction.title}, ${tripAction.detail}`}
+            >
+              <Ionicons name={tripAction.planned ? 'briefcase-outline' : 'airplane-outline'} size={18} color={tripAction.planned ? colors.accentInk : colors.white} />
+              <View style={s.tripActionText}>
+                <Text style={[s.tripActionTitle, !tripAction.planned && s.tripActionTitlePlan]}>{tripAction.title}</Text>
+                <Text style={[s.tripActionDetail, !tripAction.planned && s.tripActionDetailPlan]}>{tripAction.detail}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={tripAction.planned ? colors.accentInk : colors.white} />
+            </PressableScale>
+          ) : null}
 
           {hasOutfit ? (
             <View style={s.lookBlock}>
@@ -446,6 +471,13 @@ const s = StyleSheet.create({
   },
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxxl },
   titleBlock: { gap: spacing.sm },
+  tripAction: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: radii.lg, backgroundColor: colors.accent, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(111,89,72,0.18)' },
+  tripActionPlan: { backgroundColor: colors.primary, borderColor: colors.primary },
+  tripActionText: { flex: 1, gap: 2 },
+  tripActionTitle: { ...typography.text.label, color: colors.accentInk },
+  tripActionTitlePlan: { color: colors.white },
+  tripActionDetail: { ...typography.text.meta, color: colors.accentInk },
+  tripActionDetailPlan: { color: colors.white, opacity: 0.8 },
   title: { ...typography.text.editorialSheet, color: colors.foreground },
   statusPill: {
     alignSelf: 'flex-start',

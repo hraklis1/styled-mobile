@@ -12,7 +12,9 @@ import { GapCard } from '../stylist/GapCard';
 import { TripOutfitCard } from './TripOutfitCard';
 import { useItems } from '../../hooks/useItems';
 import { useCreateOutfit } from '../../hooks/useOutfits';
-import { useDeleteTrip, useSetTripPacked, useTrip } from '../../hooks/useTrips';
+import { useDeleteTrip, useLinkTripEvent, useSetTripPacked, useTrip, useTrips } from '../../hooks/useTrips';
+import { useEvents } from '../../hooks/useEvents';
+import { linkableEventsForTrip } from '../../features/trips/eventTrips';
 import { useTempUnit } from '../../hooks/useTempUnit';
 import * as Haptics from '../../lib/haptics';
 import { itemImageContentFit, itemImageUri } from '../../lib/itemImage';
@@ -83,6 +85,7 @@ export function TripDetailView({ tripId, onClose, onAsk, onShopGap }: TripDetail
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxxl }} showsVerticalScrollIndicator={false}>
           <TripHero trip={trip} />
+          <CalendarLink trip={trip} onAsk={onAsk} />
           <View style={styles.tabsWrap}>
             <View style={styles.tabs} accessibilityRole="tablist">
               {TABS.map((t) => (
@@ -104,6 +107,84 @@ export function TripDetailView({ tripId, onClose, onAsk, onShopGap }: TripDetail
           {onAsk ? <Refine onAsk={onAsk} /> : null}
         </ScrollView>
       )}
+    </View>
+  );
+}
+
+// ── Calendar link ─────────────────────────────────────────────────────────────
+
+/**
+ * Where the trip stands against the calendar: dates a sync moved (re-plan),
+ * the event it follows (unlink), or an overlapping trip event to link.
+ */
+function CalendarLink({ trip, onAsk }: { trip: Trip; onAsk?: (prompt: string) => void }) {
+  const { data: events = [] } = useEvents();
+  const { data: trips = [] } = useTrips();
+  const link = useLinkTripEvent(trip.id);
+  // Set when the link was made on this screen, so the next tap can take it back.
+  const [justLinked, setJustLinked] = useState(false);
+  const unlink = () => link.mutate(null, { onSuccess: () => setJustLinked(false) });
+  const linked = trip.eventId != null ? events.find((e) => e.id === trip.eventId) : undefined;
+  const candidate = trip.eventId == null ? linkableEventsForTrip(trip, events, trips)[0] : undefined;
+  const range = tripSpanLabel(trip.startDate, trip.endDate)?.range;
+
+  return (
+    <View style={styles.calendarLink}>
+      {trip.eventDatesChanged ? (
+        <View style={styles.datesChanged}>
+          <Ionicons name="calendar-outline" size={16} color={colors.accentInk} />
+          <View style={{ flex: 1, gap: spacing.xs }}>
+            <AppText variant="label" style={{ color: colors.accentInk }}>Your calendar moved this trip{range ? ` to ${range}` : ''}</AppText>
+            <AppText variant="meta" style={{ color: colors.accentInk }}>The days below still follow the old dates.</AppText>
+            <View style={styles.datesChangedActions}>
+            {onAsk ? (
+              <TouchableOpacity
+                onPress={() => onAsk(`My trip dates changed to ${range ?? `${trip.startDate} – ${trip.endDate}`}. Re-plan the days for the new dates, keeping what still works.`)}
+                accessibilityRole="button"
+                style={styles.calendarLinkAction}
+              >
+                <AppText variant="label">Re-plan for the new dates</AppText>
+                <Ionicons name="arrow-forward" size={13} color={colors.foreground} />
+              </TouchableOpacity>
+            ) : null}
+            {/* Right after linking, the Undo below already does this. */}
+            {trip.eventId != null && !justLinked ? (
+              <TouchableOpacity onPress={unlink} disabled={link.isPending} accessibilityRole="button" style={styles.calendarLinkAction}>
+                <AppText variant="label" tone="secondary">Keep the original dates</AppText>
+              </TouchableOpacity>
+            ) : null}
+            </View>
+          </View>
+        </View>
+      ) : null}
+      {linked ? (
+        <View style={styles.calendarLinkRow}>
+          <Ionicons name="link-outline" size={14} color={colors.mutedForeground} />
+          <AppText variant="meta" tone="muted" numberOfLines={1} style={{ flex: 1 }}>Follows "{linked.title}" in your calendar</AppText>
+          {link.isPending ? <ActivityIndicator size="small" color={colors.mutedForeground} /> : justLinked ? (
+            <TouchableOpacity onPress={unlink} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Undo link to ${linked.title}`} style={styles.undoChip}>
+              <Ionicons name="arrow-undo" size={13} color={colors.foreground} />
+              <AppText variant="label">Undo</AppText>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={unlink} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Unlink from ${linked.title}`}>
+              <AppText variant="meta" tone="muted" style={styles.underline}>Unlink</AppText>
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : candidate ? (
+        <TouchableOpacity
+          style={styles.calendarLinkRow}
+          onPress={() => link.mutate(candidate.id, { onSuccess: () => setJustLinked(true) })}
+          disabled={link.isPending}
+          accessibilityRole="button"
+          accessibilityLabel={`Link to ${candidate.title} in your calendar`}
+        >
+          <Ionicons name="link-outline" size={14} color={colors.foreground} />
+          <AppText variant="label" numberOfLines={1} style={{ flex: 1 }}>Link to "{candidate.title}" in your calendar</AppText>
+          {link.isPending ? <ActivityIndicator size="small" color={colors.mutedForeground} /> : <Ionicons name="add" size={16} color={colors.foreground} />}
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }
@@ -441,6 +522,13 @@ const styles = StyleSheet.create({
   hero: { paddingHorizontal: spacing.page, paddingTop: spacing.lg, paddingBottom: spacing.xl },
   heroTitle: { marginTop: spacing.xs },
   intro: { marginTop: spacing.lg },
+  calendarLink: { paddingHorizontal: spacing.page, gap: spacing.sm },
+  datesChanged: { flexDirection: 'row', gap: spacing.sm, padding: spacing.md, borderRadius: radii.lg, backgroundColor: colors.accent },
+  calendarLinkAction: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs },
+  calendarLinkRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline },
+  underline: { textDecorationLine: 'underline' },
+  datesChangedActions: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.lg },
+  undoChip: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radii.action, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   stats: { flexDirection: 'row', alignItems: 'stretch', marginTop: spacing.xl, paddingVertical: spacing.md, borderTopWidth: stroke.hairline, borderBottomWidth: stroke.hairline, borderColor: colors.hairline },
   stat: { flex: 1, alignItems: 'center' },
   statValue: { fontVariant: ['tabular-nums'] },

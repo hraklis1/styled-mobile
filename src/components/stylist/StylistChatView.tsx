@@ -1,3 +1,4 @@
+import type { StylistStartWorkflow, StylistTripPrefill } from '../../contexts/GlobalAIStylistContext';
 import { appendStylistAttachment } from '../../features/stylist/attachments';
 import { useStylistPhotoAttachment } from './composer/useStylistPhotoAttachment';
 import { useReduceTransparency } from '../../hooks/useReduceTransparency';
@@ -92,6 +93,8 @@ type Props = {
   initialConversationId?: number;
   /** Staged in the composer after initialConversationId loads. */
   initialDraft?: string;
+  /** Open this guided brief once the fresh thread is ready. */
+  initialWorkflow?: StylistStartWorkflow;
   onPromptConsumed?: () => void;
   onClose?: () => void;
   /** True when rendered as the permanent Stylist tab rather than a contextual modal. */
@@ -121,6 +124,7 @@ export function StylistChatView({
   openRequestId = 0,
   initialConversationId,
   initialDraft,
+  initialWorkflow,
   onPromptConsumed,
   onClose,
   embedded = false,
@@ -236,6 +240,10 @@ export function StylistChatView({
   const [followUpsOpen, setFollowUpsOpen] = useState(false);
   const [intakeKind, setIntakeKind] = useState<Exclude<StylistWorkflow['kind'], 'wardrobe_audit'> | null>(null);
   const [intakeInitialItemId, setIntakeInitialItemId] = useState<number | null>(null);
+  const [intakeTripPrefill, setIntakeTripPrefill] = useState<StylistTripPrefill | null>(null);
+  // A brief opened straight from another screen: cancelling it should return
+  // there rather than leave an empty chat behind.
+  const intakeFromEntry = useRef(false);
 
   const composerInputRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
@@ -597,6 +605,7 @@ export function StylistChatView({
     setErrorMessage(null);
     setFailedRequest(null);
     setIntakeKind(null);
+    setIntakeTripPrefill(null);
     setIntakeInitialItemId(null);
   }
 
@@ -742,6 +751,13 @@ export function StylistChatView({
     } else if (threadMode === 'new') {
       startFreshThread();
       setComposerAttachment(initialAttachment ?? null);
+      if (initialWorkflow) {
+        track('stylist_starter_opened', { workflow_kind: initialWorkflow.kind });
+        setIntakeInitialItemId(null);
+        setIntakeTripPrefill((({ kind: _kind, ...prefill }) => prefill)(initialWorkflow));
+        setIntakeKind(initialWorkflow.kind);
+        intakeFromEntry.current = true;
+      }
     } else {
       resumeActiveThread();
     }
@@ -896,6 +912,7 @@ export function StylistChatView({
   }
 
   function submitStarterWorkflow(workflow: StylistWorkflow) {
+    intakeFromEntry.current = false;
     const stylesByValue = Object.fromEntries(STYLE_OPTIONS.map((option) => [option.value, option.label]));
     const budgetsByValue = Object.fromEntries(BUDGET_OPTIONS.map((option) => [option.value, option.label]));
     const lifestylesByValue = Object.fromEntries(OCCASION_OPTIONS.map((option) => [option.value, option.label]));
@@ -908,6 +925,7 @@ export function StylistChatView({
       setConversationLocationContext(conversationLocation(workflow.destination));
     }
     setIntakeKind(null);
+    setIntakeTripPrefill(null);
     setIntakeInitialItemId(null);
     track('stylist_starter_submitted', { workflow_kind: workflow.kind });
     sendMessage({ workflow, displayText });
@@ -1200,10 +1218,17 @@ export function StylistChatView({
         items={allItems}
         profile={profile}
         initialItemId={intakeInitialItemId}
+        tripPrefill={intakeTripPrefill}
         onClose={() => {
           if (intakeKind) track('stylist_starter_cancelled', { workflow_kind: intakeKind });
           setIntakeKind(null);
+          setIntakeTripPrefill(null);
           setIntakeInitialItemId(null);
+          if (intakeFromEntry.current) {
+            intakeFromEntry.current = false;
+            // Let the brief finish dismissing; iOS won't dismiss the stylist modal mid-dismissal.
+            setTimeout(() => onClose?.(), 400);
+          }
         }}
         onSubmit={submitStarterWorkflow}
       />
