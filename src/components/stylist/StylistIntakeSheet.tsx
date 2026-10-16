@@ -188,10 +188,12 @@ function Field({
     <Animated.View
       entering={reduceMotion ? undefined : FadeInDown.delay(80 + index * 40).duration(motion.base)}
       onLayout={onY ? (event) => onY(event.nativeEvent.layout.y) : undefined}
-      style={[styles.field, pulseStyle]}
     >
-      <Text style={styles.fieldLabel}>{label}</Text>
-      {children}
+      {/* Pulse an inner view: the entering animation owns the wrapper's transform. */}
+      <Animated.View style={[styles.field, pulseStyle]}>
+        <Text style={styles.fieldLabel}>{label}</Text>
+        {children}
+      </Animated.View>
     </Animated.View>
   );
 }
